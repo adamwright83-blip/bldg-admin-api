@@ -24,11 +24,12 @@ import {
 } from "../../drizzle/schema";
 import {
   DAYFORGE_ENTITLEMENTS,
+  SAAS_ENTITLEMENTS,
   normalizeSaasEmail,
   normalizeSaasTenantSlug,
   onboardingConfigurationIsOperational,
   subscriptionAllowsLegacyDayforgeAccess,
-  type LegacyDayforgeEntitlement,
+  type SaasEntitlement,
   type SaasSubscriptionStatus,
   type SaasTenantMemberRole,
   type SaasTenantOnboardingConfiguration,
@@ -58,14 +59,16 @@ function affectedRows(result: unknown): number {
   );
 }
 
-function allEntitlementsFromEnv(): LegacyDayforgeEntitlement[] {
+function allEntitlementsFromEnv(): SaasEntitlement[] {
   const requested = (process.env.DAYFORGE_STRIPE_ENTITLEMENTS ?? "")
     .split(",")
     .map(value => value.trim())
     .filter(Boolean);
+  // Existing plans retain their prior defaults. The persistent operator is
+  // deliberately opt-in until a plan or manual entitlement explicitly enables it.
   const values = requested.length > 0 ? requested : [...DAYFORGE_ENTITLEMENTS];
-  return values.filter((value): value is LegacyDayforgeEntitlement =>
-    DAYFORGE_ENTITLEMENTS.includes(value as LegacyDayforgeEntitlement)
+  return values.filter((value): value is SaasEntitlement =>
+    SAAS_ENTITLEMENTS.includes(value as SaasEntitlement)
   );
 }
 
@@ -856,7 +859,7 @@ export async function provisionTenantFromSubscription(input: {
         },
       });
 
-    for (const entitlementKey of DAYFORGE_ENTITLEMENTS) {
+    for (const entitlementKey of SAAS_ENTITLEMENTS) {
       await tx
         .insert(legacyDayforgeSaasEntitlements)
         .values({
