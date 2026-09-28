@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import { lanternObjectiveMarksScope } from "./lanternCityRouter";
 
 describe("lanternCityRouter identity mapping", () => {
-  it("keeps Day Director actor id separate from Campaign Run viewer openId", () => {
+  it("uses the canonical Day Director actor id and canonical Campaign Run identity", () => {
     expect(
       lanternObjectiveMarksScope({
         tenantId: "tenant-a",
-        user: { id: 7, openId: "driver-primary" },
+        dayDirectorActorId: "7",
+        campaignOperatorUserId: "canonical-owner",
       })
     ).toEqual({
       tenantId: "tenant-a",
       operatorId: "7",
-      viewerOpenId: "driver-primary",
+      viewerOpenId: "canonical-owner",
     });
   });
 });
