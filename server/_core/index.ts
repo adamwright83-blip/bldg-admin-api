@@ -63,6 +63,7 @@ import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
+import { registerCleanCloudOperatingPulseRoute } from "../cleancloudBrowserSync/operatingPulseRoute";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -304,6 +305,7 @@ async function startServer() {
   app.options("*", cors(corsOptions));
 
   registerCleanCloudImportRoutes(app);
+  registerCleanCloudOperatingPulseRoute(app);
   registerClearentImportRoutes(app);
   registerPaymentReconciliationRoutes(app);
   registerMarketplacePaymentInternalRoutes(app);
