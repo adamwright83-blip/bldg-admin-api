@@ -8,6 +8,7 @@ import {
   ensureCurrentMissionSalesBrief,
   listMissionSalesBriefVersions,
 } from "./missionSalesBriefService";
+import { getClairePreVisitIntel } from "./clairePreVisitIntel";
 
 /**
  * The FIELD BRIEF surface's read of the same artifact Claire consumes.
@@ -24,6 +25,20 @@ export const missionSalesBriefRouter = router({
       });
       return brief ? toFieldMissionSalesBrief(brief) : null;
     }),
+
+  /**
+   * Claire's three pre-visit equips. This is a recommendation surface over the
+   * same authoritative mission brief + accepted Sales Intel corpus; it cannot
+   * create business truth or persist a visit outcome.
+   */
+  preVisitIntel: legacyDayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      getClairePreVisitIntel({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      })
+    ),
 
   // Admin/developer review tooling (Slice 17): inspect every version to
   // confirm Claire and FIELD BRIEF converged on the same artifact and to
