@@ -105,7 +105,7 @@ export function BuildMissionSheet({
     }, 180);
 
     return () => window.clearTimeout(timeout);
-  }, [open, searchNearValue, selectedPlace, targetMode, utils]);
+  }, [open, searchNearValue, selectedPlace, targetMode]);
 
   function close() {
     if (build.isPending) return;
