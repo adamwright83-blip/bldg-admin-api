@@ -373,8 +373,13 @@ if (!globalThis.chrome?.runtime?.id) {
   }
 
   async function recordDashboardWitness(context, range, captureAllowed) {
-    if (!captureAllowed)
-      return "Dashboard screenshot permission was not granted. The order imports were still saved.";
+    if (!captureAllowed) {
+      return {
+        saved: false,
+        reconciliation: null,
+        note: "Dashboard screenshot permission was not granted.",
+      };
+    }
     let tab = null;
     try {
       tab = await openSite(`${CLEANCLOUD}/store`);
@@ -392,9 +397,29 @@ if (!globalThis.chrome?.runtime?.id) {
         screenshotBase64: shot.base64,
         screenshotSha256: shot.screenshotSha256,
       });
-      return null;
+      try {
+        const result = await request("reconcilePeriod", {
+          rangeFrom: range.from,
+          rangeTo: range.to,
+        });
+        return {
+          saved: true,
+          reconciliation: result?.reconciliation?.status ?? "insufficient_evidence",
+          note: null,
+        };
+      } catch (error) {
+        return {
+          saved: true,
+          reconciliation: null,
+          note: `Reconciliation did not complete: ${String(error?.message || error)}`,
+        };
+      }
     } catch (error) {
-      return String(error?.message || error || "Dashboard witness was not saved.");
+      return {
+        saved: false,
+        reconciliation: null,
+        note: String(error?.message || error || "Dashboard witness was not saved."),
+      };
     } finally {
       if (tab) await chrome.tabs.remove(tab).catch(() => {});
     }
@@ -523,21 +548,26 @@ if (!globalThis.chrome?.runtime?.id) {
         await save("completed", { receipt });
         showReceipt(receipt);
         $("approval").hidden = true;
-        let witnessNote = null;
+        let witnessResult = null;
         try {
-          witnessNote = await recordDashboardWitness(
+          witnessResult = await recordDashboardWitness(
             witnessContext,
             witnessRange,
             dashboardCaptureAllowed
           );
         } catch (error) {
-          witnessNote = error?.message || "Dashboard witness was not saved.";
+          witnessResult = {
+            saved: false,
+            reconciliation: null,
+            note: error?.message || "Dashboard witness was not saved.",
+          };
         }
-        status(
-          witnessNote
-            ? `Import confirmed. ${revenueNote} Dashboard witness was not saved: ${witnessNote}`
-            : `Import confirmed. ${revenueNote} Dashboard witness saved.`
-        );
+        const witnessStatus = !witnessResult?.saved
+          ? `Dashboard witness was not saved: ${witnessResult?.note || "unknown error"}`
+          : witnessResult.note
+            ? `Dashboard witness saved. ${witnessResult.note}`
+            : `Dashboard witness saved. Economic reconciliation: ${witnessResult.reconciliation}.`;
+        status(`Import confirmed. ${revenueNote} ${witnessStatus}`);
         if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
