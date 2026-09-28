@@ -66,6 +66,19 @@ function SurfaceFrame(props: {
   );
 }
 
+const TOWER_ENCOUNTER_SKINS = [
+  { key: "mirror", codename: "THE MIRROR SHAFT" },
+  { key: "lift", codename: "THE ENDLESS LIFT" },
+  { key: "signal", codename: "THE SIGNAL FLOOR" },
+  { key: "brass", codename: "THE BRASS ATRIUM" },
+  { key: "glass", codename: "THE GLASS MAZE" },
+  { key: "switchboard", codename: "THE SWITCHBOARD" },
+] as const;
+
+function towerEncounterSkin(missionId: number) {
+  return TOWER_ENCOUNTER_SKINS[Math.abs(missionId) % TOWER_ENCOUNTER_SKINS.length];
+}
+
 function useMountedRef() {
   const mounted = useRef(true);
   useEffect(
@@ -104,6 +117,7 @@ function VisitSurface(
     useState<MissionLinkedDebriefState | null>(null);
   const [debriefAnswer, setDebriefAnswer] = useState("");
   const mounted = useMountedRef();
+  const towerSkin = towerEncounterSkin(props.action.missionId!);
 
   async function refresh() {
     const next = await props.services.loadVisit(props.action.missionId!);
@@ -272,6 +286,7 @@ function VisitSurface(
           className="claire-tower-intel"
           data-testid="claire-tower-intel"
           aria-label="Claire pre-visit sales intelligence"
+          data-tower-skin={towerSkin.key}
         >
           <div className="claire-tower-intel__sigil" aria-hidden="true">
             <span />
@@ -281,7 +296,7 @@ function VisitSurface(
             <small>CLAIRE // TOWER BOSS INTEL</small>
             <strong>THREE THINGS BEFORE YOU GO IN</strong>
             <span>
-              {preVisitIntel.accountName} · loadout locked to this mission
+              {towerSkin.codename} · {preVisitIntel.accountName}
             </span>
           </div>
           <div className="claire-tower-intel__slots">
@@ -413,6 +428,7 @@ function VisitSurface(
           className="tower-debrief"
           data-testid="mission-linked-debrief"
           aria-label="Mission-linked visit debrief"
+          data-tower-skin={towerSkin.key}
         >
           <div className="tower-debrief__mechanism" aria-hidden="true">
             <span className="tower-debrief__door tower-debrief__door--left" />
@@ -420,7 +436,7 @@ function VisitSurface(
             <span className="tower-debrief__signal" />
           </div>
           <div className="tower-debrief__copy">
-            <small>CLAIRE // AFTER-ACTION CHANNEL</small>
+            <small>{towerSkin.codename} // AFTER-ACTION CHANNEL</small>
             <h3>WHAT HAPPENED?</h3>
             <p>
               {props.mission.name} is already locked to this mission. Tell Claire
