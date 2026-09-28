@@ -916,9 +916,21 @@ export async function recordCommercialMissionVisitOutcome(input: {
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
   }
+  const persisted = await getCommercialMissionFieldState({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+  });
+  if (!persisted?.visitOutcome) throw new Error("Visit outcome was not persisted");
+
+  // Admins may record an outcome for an assigned field mission. The durable
+  // visit credit belongs to the assigned operator, not whichever authorized
+  // admin happened to persist the outcome. Retries reconcile the same assignee
+  // through the idempotent score dedupe key.
+  const scoreDriverId = persisted.mission.assignedTo;
+  if (!scoreDriverId) return persisted;
   return reconcileCommercialMissionVisitScore({
     tenantId: input.tenantId,
-    driverId: input.actorId,
+    driverId: scoreDriverId,
     missionId: input.missionId,
     requestId: input.requestId,
   });
