@@ -4086,6 +4086,20 @@ await assertRequiredColumns("persistent_operator_identity_bindings", [
   "createdAt",
   "updatedAt",
 ]);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = CONCAT(tenantId, ':', aliasOpenId)
+     WHERE active = true
+       AND (activeAliasKey IS NULL OR activeAliasKey = '')`,
+  "Backfill active persistent operator alias keys"
+);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = NULL
+     WHERE active = false
+       AND activeAliasKey IS NOT NULL`,
+  "Clear inactive persistent operator alias keys"
+);
 await ensureRequiredIndex(
   "persistent_operator_identity_bindings",
   "uq_persistent_operator_identity_active_alias",
