@@ -39,6 +39,31 @@ describe("bindCustomerToBuilding", () => {
     expect(bound).toMatchObject({ resolved: true, buildingId: "century_park_east" });
   });
 
+  it("places a customer from address evidence when there is no numeric last order id", () => {
+    const bound = bindCustomerToBuilding({
+      lastOrderId: null,
+      order: { address: OPUS_ADDRESS, buildingSlug: null },
+    });
+    expect(bound).toMatchObject({
+      resolved: true,
+      buildingId: "opus_la",
+      basis: "address",
+      evidenceLabel: "Last order at Opus Los Angeles",
+    });
+  });
+
+  it("still declines conflicting address and slug evidence without a numeric id", () => {
+    const bound = bindCustomerToBuilding({
+      lastOrderId: null,
+      order: { address: OPUS_ADDRESS, buildingSlug: "centuryparkeast" },
+    });
+    expect(bound).toEqual({
+      resolved: false,
+      buildingId: null,
+      reason: "conflicting_evidence",
+    });
+  });
+
   /*
     The label is operator-facing and load-bearing. A last order proves where
     somebody was served once; it is not a claim about where they live, and the

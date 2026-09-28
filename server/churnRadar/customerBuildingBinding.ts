@@ -3,16 +3,11 @@
  *
  * WHY THIS IS A JOIN AND NOT A COLUMN
  *
- * `customerChurnSnapshots` carries no building, so a dormant customer cannot be
- * placed in the city at all today. The instinct is to add a column — but the
- * scan already reads `.from(orders)` (`customerChurnService.ts:336`), and orders
- * already carry `buildingSlug`, resolved on insert by
- * `resolveOrderLocationForInsert`. The snapshot also persists `lastOrderId`.
- *
- * So the building is reachable through a foreign key that already exists. A new
- * column would be a second copy of a fact the database can already answer, and
- * copies drift — this one especially, because a customer's building can change
- * with their next order while a persisted snapshot column would not.
+ * `customerChurnSnapshots` carries no building. A native snapshot's `lastOrderId`
+ * reaches `orders.buildingSlug`. A CleanCloud snapshot has no numeric id; the
+ * caller passes that order's address and slug as evidence instead. Neither
+ * path copies the building onto the snapshot, because a customer's building
+ * can change with their next order.
  *
  * EVIDENCE, NOT RESIDENCE
  *
@@ -40,7 +35,7 @@ export type BindingBasis = "address" | "slug";
 export type UnresolvedReason =
   /** The snapshot has no last order — nothing to locate them by. */
   | "no_last_order"
-  /** The order id is present but the row is gone. Data problem, not a quiet gap. */
+  /** A native id or CleanCloud order ref was named, but that row is gone. */
   | "order_not_found"
   /** The order exists but neither its address nor its slug names a known building. */
   | "no_building_evidence"
@@ -60,7 +55,7 @@ export type CustomerBinding =
 
 /** The order fields this needs. A structural subset, so tests need no full row. */
 export type BindingOrderEvidence = {
-  id: number;
+  id?: number | null;
   address: string | null;
   buildingSlug: string | null;
 };
@@ -79,10 +74,10 @@ export type BindingInput = {
  * its own and therefore trivially testable.
  */
 export function bindCustomerToBuilding(input: BindingInput): CustomerBinding {
-  if (input.lastOrderId === null) {
+  if (input.lastOrderId == null && input.order == null) {
     return { resolved: false, buildingId: null, reason: "no_last_order" };
   }
-  if (input.order === null) {
+  if (input.order == null) {
     return { resolved: false, buildingId: null, reason: "order_not_found" };
   }
 

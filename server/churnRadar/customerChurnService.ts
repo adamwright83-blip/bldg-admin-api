@@ -13,12 +13,15 @@ import {
   opsTaskEvents,
   opsTasks,
   orders,
+  cleancloudPaidOrders,
   tenantCustomerRecoveryProfiles,
 } from "../../drizzle/schema";
 import {
   assertGroundedWinBackMessage,
   buildWinBackDraft,
+  churnObservationSourceIds,
   scoreCustomerChurn,
+  serviceLabel,
   type ChurnEvidence,
   type CustomerChurnScore,
   type CustomerHistoryObservation,
@@ -37,6 +40,11 @@ import {
   groupCustomerRecords,
   customerIdentityHashes,
 } from "../customerAssets/customerIdentity";
+import {
+  describeCleanCloudChurnCustomer,
+  groupCleanCloudChurnCustomers,
+  partitionCleanCloudChurnOrders,
+} from "./cleanCloudChurnObservations";
 
 type OrderRow = typeof orders.$inferSelect;
 type Transaction = Parameters<
@@ -77,7 +85,8 @@ function contentHash(message: string): string {
   return createHash("sha256").update(message).digest("hex");
 }
 
-function maskPhone(phone: string): string {
+function maskPhone(phone: string | null | undefined): string {
+  if (!phone?.trim()) return "Unavailable";
   const digits = normalizePhone(phone);
   return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : "Unavailable";
 }
@@ -98,43 +107,58 @@ function isActiveOrder(row: OrderRow): boolean {
   return !row.paid && !["delivered", "cancelled"].includes(row.status);
 }
 
-function serviceLabel(value: OrderRow["serviceType"]): string {
-  return value === "wash_fold" ? "wash & fold" : "dry cleaning";
+function historySourceLabel(history: CustomerHistoryObservation[]): string {
+  const hasNative = history.some(item => item.source === "native");
+  const hasExternal = history.some(item => item.source === "cleancloud");
+  if (hasNative && hasExternal) return "orders and cleancloud_paid_orders";
+  if (hasExternal) return "cleancloud_paid_orders";
+  return "orders";
 }
 
-function evidenceForScore(
+export function evidenceForScore(
   score: CustomerChurnScore,
   history: CustomerHistoryObservation[]
 ): ChurnEvidence[] {
-  const ids = history.map(item => item.orderId);
+  const ids = churnObservationSourceIds(history);
   const withWeight = history.filter(item => item.weightLbs !== null);
+  const weightIds = churnObservationSourceIds(withWeight);
+  const source = historySourceLabel(history);
+  const last = history.at(-1)!;
+  const lastId = churnObservationSourceIds([last]);
+  const lastSource =
+    last.source === "native"
+      ? "orders.paidAt or orders.updatedAt"
+      : "cleancloud_paid_orders.paidDateUtc or paymentDateUtc";
   return [
     {
       kind: "sourced_fact",
       label: "Completed order history",
       value: `${history.length} completed orders`,
-      source: "orders",
+      source,
       sourceIds: ids,
     },
     {
       kind: "sourced_fact",
       label: "Last completed service",
       value: new Date(score.lastServiceAt).toISOString(),
-      source: "orders.paidAt or orders.updatedAt",
-      sourceIds: [history.at(-1)!.orderId],
+      source: lastSource,
+      sourceIds: lastId,
     },
     {
       kind: "calculation",
       label: "Expected cadence",
       value: `${score.expectedCadenceDays} days (median completed-order interval)`,
-      source: "orders",
+      source,
       sourceIds: ids,
     },
     {
       kind: "estimate",
       label: "Monthly revenue impact",
       value: `${score.estimatedMonthlyImpactCents} cents (average order value × inferred monthly cadence)`,
-      source: "orders.total and calculated cadence",
+      source:
+        source === "orders"
+          ? "orders.total and calculated cadence"
+          : `${source} totals and calculated cadence`,
       sourceIds: ids,
     },
     withWeight.length >= 4
@@ -142,15 +166,21 @@ function evidenceForScore(
           kind: "calculation",
           label: "Recent poundage change",
           value: `${score.recentVolumeChangePct ?? 0}%`,
-          source: "orders.weightLbs",
-          sourceIds: withWeight.map(item => item.orderId),
+          source:
+            source === "cleancloud_paid_orders"
+              ? "cleancloud_paid_orders.totalWeightLbs"
+              : "orders.weightLbs",
+          sourceIds: weightIds,
         }
       : {
           kind: "unavailable",
           label: "Recent poundage change",
           value: "Fewer than four completed orders have weight data",
-          source: "orders.weightLbs",
-          sourceIds: withWeight.map(item => item.orderId),
+          source:
+            source === "cleancloud_paid_orders"
+              ? "cleancloud_paid_orders.totalWeightLbs"
+              : "orders.weightLbs",
+          sourceIds: weightIds,
         },
     {
       kind: "unavailable",
@@ -163,9 +193,9 @@ function evidenceForScore(
 }
 
 export type ChurnScanBookCoverage = {
-  scanSource: "native_orders_only";
+  scanSource: "native_orders_and_cleancloud_observations";
   wholeBookCurrent: boolean;
-  claim: "current_native_book" | "known_native_candidates";
+  claim: "current_held_book" | "known_scanned_candidates";
   bookStatus: BusinessSourceCoverageSnapshot["book"]["status"] | null;
   cleanCloudHeld: boolean | null;
   cleanCloudStatus:
@@ -176,32 +206,44 @@ export type ChurnScanBookCoverage = {
   reason: string;
 };
 
+const CHURN_SCAN_INCLUDED_SOURCES = new Set(["laundry_butler", "cleancloud"]);
+
 export function churnScanBookCoverage(
   snapshot: BusinessSourceCoverageSnapshot | null
 ): ChurnScanBookCoverage {
   if (!snapshot) {
     return {
-      scanSource: "native_orders_only",
+      scanSource: "native_orders_and_cleancloud_observations",
       wholeBookCurrent: false,
-      claim: "known_native_candidates",
+      claim: "known_scanned_candidates",
       bookStatus: null,
       cleanCloudHeld: null,
       cleanCloudStatus: null,
       blockingSources: [],
       reason:
-        "Customer-book coverage could not be read. This native-order scan is not the full customer book.",
+        "Customer-book coverage could not be read. Reading native orders and CleanCloud rows is not proof this scan is the full customer book.",
     };
   }
   const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
   const cleanCloudHeld = Boolean(cleancloud?.includedInCombinedBook);
+  const heldSources = snapshot.sources.filter(source => source.includedInCombinedBook);
+  const everyHeldSourceIncluded = heldSources.every(source =>
+    CHURN_SCAN_INCLUDED_SOURCES.has(source.sourceId)
+  );
+  const everyHeldSourceCurrent = heldSources.every(source => source.status === "fresh");
+  // Reading CleanCloud rows is not itself proof. The canonical coverage
+  // snapshot must say the held book is current, and every held source must
+  // be one this scan actually includes.
   const wholeBookCurrent =
     snapshot.book.exhaustiveCurrent &&
     snapshot.book.current &&
-    !cleanCloudHeld;
+    everyHeldSourceIncluded &&
+    everyHeldSourceCurrent &&
+    (!cleanCloudHeld || cleancloud?.status === "fresh");
   return {
-    scanSource: "native_orders_only",
+    scanSource: "native_orders_and_cleancloud_observations",
     wholeBookCurrent,
-    claim: wholeBookCurrent ? "current_native_book" : "known_native_candidates",
+    claim: wholeBookCurrent ? "current_held_book" : "known_scanned_candidates",
     bookStatus: snapshot.book.status,
     cleanCloudHeld,
     cleanCloudStatus: cleancloud
@@ -211,10 +253,12 @@ export function churnScanBookCoverage(
       : null,
     blockingSources: snapshot.blockingSources.map(source => ({ ...source })),
     reason: wholeBookCurrent
-      ? "Laundry Butler is the only held customer source, and the canonical book is current."
-      : cleanCloudHeld
-        ? `This scan scores native Laundry Butler history only. CleanCloud is held (${cleancloud?.status ?? "unknown"}), so this queue is not the full customer book.`
-        : "The canonical customer book is not proven current. Native-order signals are known candidates only.",
+      ? cleanCloudHeld
+        ? "Every held customer source is included in this scan, and the canonical book is current."
+        : "Laundry Butler is the only held customer source, and the canonical book is current."
+      : cleanCloudHeld && cleancloud?.status !== "fresh"
+        ? `CleanCloud is held but its coverage is not current (${cleancloud?.status ?? "unknown"}), so this scan is not the full customer book.`
+        : "The canonical customer book is not proven current. Native orders and CleanCloud observations are known candidates only.",
   };
 }
 
@@ -403,16 +447,38 @@ export async function runCustomerChurnScan(input: {
   }
 
   try {
-    // Native `orders` only. This scorer needs native service/weight/recovery
-    // semantics, so it is deliberately NOT the canonical whole-customer-book
-    // queue. getChurnScanResult attaches B1 coverage and the client must label
-    // this as known native candidates whenever CleanCloud is held or coverage
-    // is not current.
+    // Native orders stay the system of record for Laundry Butler history.
+    // CleanCloud paid rows are scored beside them as observations. They are
+    // not copied into `orders`, and reading them is not proof the whole book
+    // is current — getChurnScanResult still gates that on source coverage.
     const sourceRows = await db
       .select()
       .from(orders)
       .where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`)
       .orderBy(orders.createdAt, orders.id);
+    const cleanCloudRows = await db
+      .select({
+        cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
+        sourceReportType: cleancloudPaidOrders.sourceReportType,
+        paid: cleancloudPaidOrders.paid,
+        customerPhone: cleancloudPaidOrders.customerPhone,
+        customerEmail: cleancloudPaidOrders.customerEmail,
+        cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+        customerName: cleancloudPaidOrders.customerName,
+        totalCents: cleancloudPaidOrders.totalCents,
+        totalWeightLbs: cleancloudPaidOrders.totalWeightLbs,
+        summaryText: cleancloudPaidOrders.summaryText,
+        paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+        paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+      })
+      .from(cleancloudPaidOrders)
+      .where(
+        and(
+          eq(cleancloudPaidOrders.tenantId, input.tenantId),
+          eq(cleancloudPaidOrders.paid, true)
+        )
+      );
+    const cleanCloudObservations = partitionCleanCloudChurnOrders(cleanCloudRows);
     const grouped = new Map(
       groupCustomerRecords(input.tenantId, sourceRows, row => row).map(
         group => [group.key, group.records]
@@ -420,6 +486,7 @@ export async function runCustomerChurnScan(input: {
     );
 
     const snapshots: Array<typeof customerChurnSnapshots.$inferInsert> = [];
+    const nativeSnapshotKeys = new Set<string>();
     for (const [keyHash, group] of Array.from(grouped.entries())) {
       const completed = group
         .filter(isCompletedHistory)
@@ -430,6 +497,7 @@ export async function runCustomerChurnScan(input: {
       if (completed.length < 2) continue;
       const latest = completed.at(-1)!;
       const history: CustomerHistoryObservation[] = completed.map(row => ({
+        source: "native",
         orderId: row.id,
         serviceAt: completedServiceAt(row),
         valueCents: cents(row.total),
@@ -443,6 +511,7 @@ export async function runCustomerChurnScan(input: {
         activeOrderCount: group.filter(isActiveOrder).length,
         now: input.now,
       });
+      nativeSnapshotKeys.add(keyHash);
       snapshots.push({
         id: randomUUID(),
         tenantId: input.tenantId,
@@ -451,6 +520,8 @@ export async function runCustomerChurnScan(input: {
         customerName: displayName(latest),
         customerPhone: latest.phone,
         lastOrderId: latest.id,
+        externalOrderRef: null,
+        orderSource: "native",
         score: score.score,
         grade: score.grade,
         confidence: score.confidence,
@@ -467,7 +538,52 @@ export async function runCustomerChurnScan(input: {
         lastServiceLabel: serviceLabel(latest.serviceType),
         reasonsJson: score.reasons,
         evidenceJson: evidenceForScore(score, history),
-        sourceOrderIdsJson: history.map(item => item.orderId),
+        sourceOrderIdsJson: churnObservationSourceIds(history),
+      });
+    }
+
+    // allowNameComposite: false — CleanCloud display names are not identity.
+    const cleanCloudGroups = groupCleanCloudChurnCustomers(
+      input.tenantId,
+      cleanCloudObservations
+    );
+    for (const group of cleanCloudGroups) {
+      if (nativeSnapshotKeys.has(group.key)) continue;
+      const nativeGroup = grouped.get(group.key);
+      const described = describeCleanCloudChurnCustomer({
+        customerKey: group.key,
+        observations: group.records,
+        activeOrderCount: nativeGroup?.filter(isActiveOrder).length ?? 0,
+        now: input.now,
+      });
+      if (!described) continue;
+      snapshots.push({
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        scanId,
+        customerKeyHash: described.customerKey,
+        customerName: described.customerName,
+        customerPhone: described.customerPhone,
+        lastOrderId: described.lastOrderId,
+        externalOrderRef: described.externalOrderRef,
+        orderSource: "cleancloud",
+        score: described.score.score,
+        grade: described.score.grade,
+        confidence: described.score.confidence,
+        historyOrderCount: described.score.historyOrderCount,
+        expectedCadenceDays: described.score.expectedCadenceDays,
+        lastServiceAt: new Date(described.score.lastServiceAt),
+        daysSinceLastOrder: described.score.daysSinceLastOrder,
+        daysLate: described.score.daysLate,
+        averageOrderValueCents: described.score.averageOrderValueCents,
+        estimatedMonthlyImpactCents: described.score.estimatedMonthlyImpactCents,
+        recentVolumeChangePct: described.score.recentVolumeChangePct,
+        activeOrderCount: described.score.activeOrderCount,
+        recommendedAction: described.score.recommendedAction,
+        lastServiceLabel: described.lastServiceLabel,
+        reasonsJson: described.score.reasons,
+        evidenceJson: evidenceForScore(described.score, described.history),
+        sourceOrderIdsJson: churnObservationSourceIds(described.history),
       });
     }
 
@@ -515,7 +631,7 @@ export async function runCustomerChurnScan(input: {
         .update(customerChurnScans)
         .set({
           status: "completed",
-          sourceOrderCount: sourceRows.length,
+          sourceOrderCount: sourceRows.length + cleanCloudObservations.length,
           customerCount: snapshots.length,
           atRiskCount: snapshots.filter(item => (item.score ?? 0) >= 40).length,
           computedAt: input.now ?? new Date(),
