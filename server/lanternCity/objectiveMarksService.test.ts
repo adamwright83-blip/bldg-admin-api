@@ -53,9 +53,9 @@ function deps(over: Partial<ObjectiveMarksDeps> = {}): ObjectiveMarksDeps {
 describe("loadLanternObjectiveMarks", () => {
   it("calls every reader with the caller's tenant and nobody else's", async () => {
     const d = deps();
-    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7" }, d);
+    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" }, d);
     expect(out.todayStatus).toBe("ok");
-    expect(d.readDayLine).toHaveBeenCalledWith({ tenantId: "tenant-b", operatorId: "7" });
+    expect(d.readDayLine).toHaveBeenCalledWith({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" });
     expect(d.listTenantRuns).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-b" }));
     for (const reader of [d.listRunSlots, d.listTargets, d.listRunEvents]) {
       for (const call of (reader as ReturnType<typeof vi.fn>).mock.calls) {
@@ -66,21 +66,21 @@ describe("loadLanternObjectiveMarks", () => {
 
   it("drops a run a reader returns for another tenant", async () => {
     const d = deps({ listTenantRuns: vi.fn(async () => [run("tenant-a", "run-a")]) });
-    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7" }, d);
+    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" }, d);
     expect(out.today).toBeNull();
     expect(d.listRunEvents).not.toHaveBeenCalled();
   });
 
   it("an unavailable Day Line still returns history, with no today", async () => {
     const d = deps({ readDayLine: vi.fn(async () => { throw new Error("db down"); }) });
-    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7" }, d);
+    const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" }, d);
     expect(out.todayStatus).toBe("day_line_unavailable");
     expect(out.today).toBeNull();
   });
 
   it("a blank tenant reads nothing", async () => {
     const d = deps();
-    const out = await loadLanternObjectiveMarks({ tenantId: "  ", operatorId: "7" }, d);
+    const out = await loadLanternObjectiveMarks({ tenantId: "  ", operatorId: "7", viewerOpenId: "driver-1" }, d);
     expect(out.today).toBeNull();
     expect(d.listTenantRuns).not.toHaveBeenCalled();
   });
