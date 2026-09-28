@@ -125,14 +125,16 @@ export async function getMissionLinkedDebriefState(input: {
   }
 
   if (!journal) return { status: "not_started", missionId: input.missionId };
-  if (journal.processingStatus === "failed") {
+  if (journal.processingStatus === "failed" || journal.processingStatus === "fallback") {
     return {
       status: "failed",
       missionId: input.missionId,
       journalEntryId: journal.id,
       message:
         journal.processingError ??
-        "Claire could not structure this debrief. Your raw recording is still saved.",
+        (journal.processingStatus === "fallback"
+          ? "Claire could not reliably structure this debrief. Your raw recording is still saved; record a correction instead of accepting a guessed outcome."
+          : "Claire could not structure this debrief. Your raw recording is still saved."),
     };
   }
   if (
@@ -148,7 +150,10 @@ export async function getMissionLinkedDebriefState(input: {
   }
 
   const [row] = await db
-    .select({ itemsJson: fieldJournalExtractions.itemsJson })
+    .select({
+      itemsJson: fieldJournalExtractions.itemsJson,
+      status: fieldJournalExtractions.status,
+    })
     .from(fieldJournalExtractions)
     .where(and(
       eq(fieldJournalExtractions.tenantId, input.tenantId),
@@ -161,6 +166,15 @@ export async function getMissionLinkedDebriefState(input: {
       status: "processing",
       missionId: input.missionId,
       journalEntryId: journal.id,
+    };
+  }
+  if (row.status !== "processed") {
+    return {
+      status: "failed",
+      missionId: input.missionId,
+      journalEntryId: journal.id,
+      message:
+        "Claire could not reliably structure this debrief. Your raw recording is still saved; record a correction instead of accepting a guessed outcome.",
     };
   }
 
@@ -191,6 +205,7 @@ export async function finalizeMissionLinkedDebrief(input: {
   journalEntryId: string;
   requestId: string;
   answer?: string;
+  additionalAnswer?: string;
 }): Promise<MissionLinkedDebriefState> {
   const state = await getMissionLinkedDebriefState(input);
   if (state.status === "completed") return state;
@@ -200,14 +215,21 @@ export async function finalizeMissionLinkedDebrief(input: {
 
   let followUpAt: Date | undefined;
   let emailDraft = state.proposal.emailDraft;
-  if (state.proposal.question?.kind === "follow_up_at") {
-    const when = input.answer ? new Date(input.answer) : null;
-    if (!when || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
-      throw new Error("Tell Claire when they asked you to follow up.");
+  const requiredAnswers = [
+    [state.proposal.question, input.answer],
+    [state.proposal.additionalQuestion, input.additionalAnswer],
+  ] as const;
+  for (const [question, rawAnswer] of requiredAnswers) {
+    if (!question) continue;
+    if (question.kind === "follow_up_at") {
+      const when = rawAnswer ? new Date(rawAnswer) : null;
+      if (!when || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        throw new Error("Tell Claire when they asked you to follow up.");
+      }
+      followUpAt = when;
+      continue;
     }
-    followUpAt = when;
-  } else if (state.proposal.question?.kind === "email") {
-    const email = input.answer?.trim() ?? "";
+    const email = rawAnswer?.trim() ?? "";
     if (!EMAIL.test(email)) throw new Error("Enter the email they actually gave you.");
     if (emailDraft) emailDraft = { ...emailDraft, to: email };
   }
