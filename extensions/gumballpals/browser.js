@@ -501,6 +501,55 @@ export async function readMetricsOverview(range) {
       throw new Error(
         "The proven dashboard totals do not fit in the visible screenshot. Nothing was saved."
       );
+
+    // Window bounds are not enough: a sticky/fixed overlay can cover the proof,
+    // and an overflow-clipping ancestor can cut it off while its own rect remains
+    // inside the viewport. Reject unless every required node is both unclipped and
+    // actually hit-test visible at its center and inset corners.
+    const clips = value => /^(?:auto|scroll|hidden|clip)$/i.test(value || "");
+    const fullyUnclippedByAncestors = node => {
+      const rect = node.getBoundingClientRect();
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const parentRect = parent.getBoundingClientRect?.();
+        if (!parentRect) continue;
+        const overflowX = style.overflowX || style.overflow || "visible";
+        const overflowY = style.overflowY || style.overflow || "visible";
+        if (clips(overflowX) && (rect.left < parentRect.left || rect.right > parentRect.right))
+          return false;
+        if (clips(overflowY) && (rect.top < parentRect.top || rect.bottom > parentRect.bottom))
+          return false;
+      }
+      return true;
+    };
+    const notOccluded = node => {
+      const hitTest =
+        typeof document.elementsFromPoint === "function"
+          ? (x, y) => document.elementsFromPoint(x, y)
+          : typeof document.elementFromPoint === "function"
+            ? (x, y) => [document.elementFromPoint(x, y)].filter(Boolean)
+            : null;
+      if (!hitTest) return true;
+      const rect = node.getBoundingClientRect();
+      const insetX = Math.min(2, Math.max(0, (rect.right - rect.left) / 4));
+      const insetY = Math.min(2, Math.max(0, (rect.bottom - rect.top) / 4));
+      const points = [
+        [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2],
+        [rect.left + insetX, rect.top + insetY],
+        [rect.right - insetX, rect.top + insetY],
+        [rect.left + insetX, rect.bottom - insetY],
+        [rect.right - insetX, rect.bottom - insetY],
+      ];
+      return points.every(([x, y]) => {
+        const hits = hitTest(x, y);
+        const top = hits[0];
+        return Boolean(top && (top === node || node.contains?.(top)));
+      });
+    };
+    if (proofNodes.some(node => !fullyUnclippedByAncestors(node) || !notOccluded(node)))
+      throw new Error(
+        "The proven dashboard totals are clipped or covered in the visible screenshot. Nothing was saved."
+      );
     // Do not infer a comparison period from an unrelated second date string.
     // Until the observed Overview DOM gives us a direct relationship between
     // comparison totals and their date control, comparison truth is withheld.
