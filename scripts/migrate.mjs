@@ -4070,7 +4070,8 @@ await runRequired(
 await ensureRequiredColumn(
   "persistent_operator_identity_bindings",
   "activeAliasKey",
-  "VARCHAR(191) NULL"
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD COLUMN activeAliasKey VARCHAR(191) NULL`
 );
 await assertRequiredColumns("persistent_operator_identity_bindings", [
   "id",
