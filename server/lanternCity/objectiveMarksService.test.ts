@@ -55,7 +55,7 @@ describe("loadLanternObjectiveMarks", () => {
     const d = deps();
     const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" }, d);
     expect(out.todayStatus).toBe("ok");
-    expect(d.readDayLine).toHaveBeenCalledWith({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" });
+    expect(d.readDayLine).toHaveBeenCalledWith({ tenantId: "tenant-b", operatorId: "7" });
     expect(d.listTenantRuns).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-b" }));
     for (const reader of [d.listRunSlots, d.listTargets, d.listRunEvents]) {
       for (const call of (reader as ReturnType<typeof vi.fn>).mock.calls) {
