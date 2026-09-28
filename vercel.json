@@ -1,4 +1,12 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false,
+      "chatgpt/**": false,
+      "grok/**": false,
+      "codex/**": false
+    }
+  },
   "rewrites": [
     {
       "source": "/gumballpals",
