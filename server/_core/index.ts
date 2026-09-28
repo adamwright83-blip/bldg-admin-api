@@ -62,6 +62,7 @@ import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
+import { reconcilePendingGeographyMapRefreshes } from "../cleancloudBrowserSync/router";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -859,6 +860,9 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      void reconcilePendingGeographyMapRefreshes().catch(error => {
+        console.error("[gumball] pending map reconcile", error);
+      });
       void import("../claire/conversation/transcriptLog")
         .then(({ emitLatestConfiguredClaireTranscripts }) =>
           emitLatestConfiguredClaireTranscripts()

@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -28,6 +28,7 @@ import {
   formatGumballOperatorStatus,
   gumballObservability,
 } from "./gumballOperatorStatus";
+import { pendingMapRefreshTargets } from "./mapRefresh";
 
 const store = z.object({
   storeId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -116,7 +117,7 @@ function scheduleImportedGeographyMapRefresh(
         );
       if (!row) return;
       const current = (row.receiptJson ?? {}) as Record<string, unknown>;
-      if (current.status === "cancelled") return;
+      if (current.status === "cancelled" || current.map !== "pending") return;
       const next = {
         ...current,
         map: result.map,
@@ -142,6 +143,26 @@ function scheduleImportedGeographyMapRefresh(
       geographyRefreshInFlight.delete(key);
     }
   })();
+}
+
+export async function reconcilePendingGeographyMapRefreshes(limit = 20) {
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db
+    .select({
+      tenantId: browserSyncReceipts.tenantId,
+      requestId: browserSyncReceipts.requestId,
+      receiptJson: browserSyncReceipts.receiptJson,
+    })
+    .from(browserSyncReceipts)
+    .where(
+      sql`JSON_UNQUOTE(JSON_EXTRACT(${browserSyncReceipts.receiptJson}, '$.map')) = 'pending' AND JSON_UNQUOTE(JSON_EXTRACT(${browserSyncReceipts.receiptJson}, '$.customerTruth')) = 'refreshed'`
+    )
+    .orderBy(desc(browserSyncReceipts.createdAt))
+    .limit(limit);
+  for (const row of pendingMapRefreshTargets(rows)) {
+    scheduleImportedGeographyMapRefresh(row.tenantId, row.requestId);
+  }
 }
 
 async function persistImportReceipt(
@@ -312,6 +333,9 @@ async function runRecordedImport<T>(
 
 export const cleancloudBrowserSyncRouter = router({
   context: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    void reconcilePendingGeographyMapRefreshes().catch(error => {
+      console.error("[gumball] pending map reconcile", error);
+    });
     const db = await requireDb();
     const [binding] = await db
       .select()
