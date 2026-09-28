@@ -666,9 +666,8 @@ function VisitSurface(
           </button>
         </div>
       ) : null}
-      {context?.visitOutcome &&
-      !props.services.openMissionDebrief &&
-      !context.parkingLotClerkObservation ? (
+      {context?.visitOutcome && !context.parkingLotClerkObservation &&
+      !props.services.openMissionDebrief ? (
         <div
           className="visit-outcome-fields"
           data-testid="parking-lot-clerk-prompt"
