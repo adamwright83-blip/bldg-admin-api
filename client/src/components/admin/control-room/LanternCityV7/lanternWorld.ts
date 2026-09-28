@@ -100,6 +100,22 @@ const hexv = (c: THREE.Color) => `${c.r.toFixed(3)}, ${c.g.toFixed(3)}, ${c.b.to
 
 const COMMON = /* glsl */ `
   uniform sampler2D uMask; uniform sampler2D uServe; uniform sampler2D uCanal; uniform vec4 uRect; uniform vec4 uBounds; uniform vec3 uSun; uniform float uTime;
+  #define NL 48
+  uniform vec4 uLights[NL];
+  // warm light thrown by the nearest customer lanterns onto everything around them
+  vec3 lanternLight(vec3 p, vec3 n) {
+    vec3 acc = vec3(0.);
+    for (int i = 0; i < NL; i++) {
+      vec4 L = uLights[i];
+      if (L.w <= 0.) continue;
+      vec3 d = L.xyz - p;
+      float d2 = dot(d, d);
+      if (d2 > 90000.) continue;
+      float wrap = .3 + .7 * max(dot(n, d * inversesqrt(d2 + 1.)), 0.);
+      acc += vec3(1., .6, .26) * L.w * wrap * 1600. / (d2 + 500.);
+    }
+    return acc;
+  }
   float canalD(vec2 xz) { vec2 uv = (xz - uBounds.xy) / (uBounds.zw - uBounds.xy);
     if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 255.;
     return texture2D(uCanal, uv).r * 255.; }
@@ -126,7 +142,18 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   renderer.domElement.style.display = "block";
   renderer.domElement.style.touchAction = "none";
   const scene = new THREE.Scene();
-  scene.background = PAPER;
+  // a soft evening sky behind the board: warm at the horizon, the page colour overhead
+  scene.background = (() => {
+    const c = document.createElement("canvas");
+    c.width = 4; c.height = 256;
+    const g = c.getContext("2d")!;
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, "#dfe6f0"); gr.addColorStop(0.45, "#eceef2"); gr.addColorStop(0.75, "#f6e6d6"); gr.addColorStop(1, "#f3d9c2");
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
   scene.fog = new THREE.Fog(PAPER, 5200, 13000);
   const camera = new THREE.PerspectiveCamera(26, 1, 20, 30000);
   const controls = new MapControls(camera, renderer.domElement);
@@ -142,12 +169,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   controls.maxAzimuthAngle = 0;
   const SUN = new THREE.Vector3(-0.55, 0.62, -0.56).normalize();
 
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true }));
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), 0.6, 0.3, 1.05);
   composer.addPass(bloom);
   const tilt = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(2, 2) }, uAmt: { value: 2.0 } },
+    uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(2, 2) }, uAmt: { value: 1.2 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: /* glsl */ `
       uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uAmt; varying vec2 vUv;
@@ -193,6 +220,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   const uniforms: Record<string, THREE.IUniform> = {
     uMask: { value: null }, uServe: { value: null }, uCanal: { value: null }, uRect: { value: new THREE.Vector4() }, uBounds: { value: new THREE.Vector4() },
     uSun: { value: SUN }, uTime: { value: 0 },
+    uLights: { value: Array.from({ length: 48 }, () => new THREE.Vector4(0, -1e5, 0, 0)) },
   };
   const fogChunk = { fogColor: { value: PAPER }, fogNear: { value: 5200 }, fogFar: { value: 13000 } };
   let lanterns: LanternInput[] = [];
@@ -910,6 +938,116 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       cm.setMatrixAt(i, s.r < 0.55 ? M4.compose(V, Q, One) : M4.makeScale(0, 0, 0));
     });
     for (const m of [hm, cm]) { m.computeBoundingSphere(); scene.add(m); }
+    for (const raw of CANALS) { const bp = mkPath(resample(raw, 10)); if (bp) boatPaths.push(bp); }
+    if (boatPaths.length) {
+      movingBoats = new THREE.InstancedMesh(hull, mat(false), BOATS);
+      movingBoats.frustumCulled = false;
+      for (let i = 0; i < BOATS; i++) {
+        const bp = boatPaths[Math.floor(lifeRnd() * boatPaths.length)];
+        boatState.push({ p: bp, s: lifeRnd() * bp.len, v: 2.5 + lifeRnd() * 3, dir: lifeRnd() < 0.5 ? 1 : -1 });
+      }
+      scene.add(movingBoats);
+    }
+  }
+
+  // ----------------------------------------------------------------- life: traffic on the real streets, boats on the canals
+  type Path = { pts: [number, number][]; cum: number[]; len: number };
+  const roadPaths: Path[] = [];
+  function mkPath(pts: [number, number][]): Path | null {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const len = cum[cum.length - 1];
+    return len > 40 ? { pts, cum, len } : null;
+  }
+  function along(p: Path, s: number, off: number, out: { x: number; z: number; yaw: number }) {
+    let i = 1;
+    while (i < p.cum.length - 1 && p.cum[i] < s) i++;
+    const a = p.pts[i - 1], b = p.pts[i], L = p.cum[i] - p.cum[i - 1] || 1, u = Math.max(0, Math.min(1, (s - p.cum[i - 1]) / L));
+    const dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
+    out.x = a[0] + (b[0] - a[0]) * u - dz * off;
+    out.z = a[1] + (b[1] - a[1]) * u + dx * off;
+    out.yaw = Math.atan2(dx, dz);
+  }
+  const CARS = 1600;
+  const carGeo = new THREE.BoxGeometry(1.9, 1.35, 4.4).translate(0, 0.9, 0);
+  const carMat = new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk }, fog: true,
+    vertexShader: /* glsl */ `
+      varying vec3 vN; varying vec3 vW; varying vec3 vL; varying float vSeed;
+      ${FOG_V}
+      void main() { vL = position; vSeed = fract(instanceMatrix[3].x * .173 + instanceMatrix[3].z * .291);
+        vN = normalize(mat3(instanceMatrix) * normal);
+        vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: COMMON + /* glsl */ `
+      varying vec3 vN; varying vec3 vW; varying vec3 vL; varying float vSeed;
+      ${FOG_F}
+      void main() {
+        if (sdMask(vW.xz) > 20. && terrMask(vW.xz) > 0.) discard;
+        vec3 n = normalize(vN); float lam = max(dot(n, uSun), 0.);
+        vec3 paint = vSeed < .3 ? vec3(.92, .92, .9) : vSeed < .5 ? vec3(.08, .08, .09) : vSeed < .7 ? vec3(.62, .64, .66) : vSeed < .82 ? vec3(.2, .3, .55) : vSeed < .92 ? vec3(.6, .1, .1) : vec3(.35, .36, .38);
+        vec3 c = paint * (.35 + .6 * lam + .25 * max(n.y, 0.));
+        if (vL.y > 1.2 && abs(n.y) < .5) c = vec3(.08, .1, .14);                      // glass
+        if (vL.z > 2.15) c = mix(c, vec3(1., .95, .8) * 3., step(.45, abs(vL.x)) * step(vL.y, 1.1));   // headlights
+        if (vL.z < -2.15) c = mix(c, vec3(1., .1, .06) * 2.2, step(.5, abs(vL.x)) * step(vL.y, 1.1));  // tail lights
+        gl_FragColor = vec4(c, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+  const cars = new THREE.InstancedMesh(carGeo, carMat, CARS);
+  cars.frustumCulled = false;
+  cars.count = 0;
+  scene.add(cars);
+  const carState: { p: Path; s: number; v: number; dir: number }[] = [];
+  const boatPaths: Path[] = [];
+  const BOATS = 70;
+  let movingBoats: THREE.InstancedMesh | null = null;
+  const boatState: { p: Path; s: number; v: number; dir: number }[] = [];
+  let lifeSeed = 3;
+  const lifeRnd = () => (lifeSeed = (lifeSeed * 16807) % 2147483647) / 2147483647;
+  function respawnCar(c: { p: Path; s: number; v: number; dir: number }) {
+    const tg = controls.target;
+    // prefer streets near where you are looking
+    for (let tries = 0; tries < 8; tries++) {
+      const p = roadPaths[Math.floor(lifeRnd() * roadPaths.length)];
+      const m = p.pts[Math.floor(p.pts.length / 2)];
+      const reach = Math.min(2400, Math.max(500, camera.position.distanceTo(tg) * 0.9));
+      if (tries < 7 && Math.hypot(m[0] - tg.x, m[1] - tg.z) > reach) continue;
+      c.p = p; c.s = lifeRnd() * p.len; c.v = 9 + lifeRnd() * 7; c.dir = lifeRnd() < 0.5 ? 1 : -1;
+      return;
+    }
+  }
+  const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), V4 = new THREE.Vector3(), ONE = new THREE.Vector3(1, 1, 1), UPV = new THREE.Vector3(0, 1, 0);
+  const tmp = { x: 0, z: 0, yaw: 0 };
+  function updateLife(dt: number, cd: number) {
+    const show = cd < 5200 && roadPaths.length > 0;
+    cars.visible = show;
+    if (show) {
+      while (carState.length < CARS) { const c = { p: roadPaths[0], s: 0, v: 10, dir: 1 }; respawnCar(c); carState.push(c); }
+      cars.count = CARS;
+      carState.forEach((c, i) => {
+        c.s += c.v * dt * c.dir;
+        if (c.s < 0 || c.s > c.p.len) respawnCar(c);
+        along(c.p, c.s, 2.6 * c.dir, tmp);
+        V4.set(tmp.x, ground(tmp.x, tmp.z) + 0.9, tmp.z);
+        Q4.setFromAxisAngle(UPV, tmp.yaw + (c.dir < 0 ? Math.PI : 0));
+        cars.setMatrixAt(i, M4.compose(V4, Q4, ONE));
+      });
+      cars.instanceMatrix.needsUpdate = true;
+    }
+    if (movingBoats) {
+      boatState.forEach((b, i) => {
+        b.s += b.v * dt * b.dir;
+        if (b.s < 0 || b.s > b.p.len) b.dir *= -1;
+        along(b.p, b.s, 9 * b.dir, tmp);
+        V4.set(tmp.x, ground(tmp.x, tmp.z) - WATER_DROP - 0.35, tmp.z);
+        Q4.setFromAxisAngle(UPV, tmp.yaw + (b.dir < 0 ? Math.PI : 0));
+        movingBoats!.setMatrixAt(i, M4.compose(V4, Q4, ONE));
+      });
+      movingBoats.instanceMatrix.needsUpdate = true;
+    }
   }
 
   // ----------------------------------------------------------------- kit
@@ -1013,7 +1151,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           col *= .35 + .65 * uLit;
           ` : /* glsl */ `
           vec3 tint = mix(vec3(${hexv(DUSK_BLDG)}), vec3(${hexv(DUSK_ROOF)}), step(.5, n.y));
-          vec3 dusk = mix(tint * (.45 + .95 * L), c * .7, .22) * (.5 + .62 * lam) * (.9 + .2 * vSeed);
+          float hemi = .5 + .5 * n.y;
+          vec3 amb = mix(vec3(.62, .58, .6), vec3(.78, .84, 1.), hemi);           // warm bounce below, cool sky above
+          vec3 dusk = mix(tint * (.45 + .95 * L), c * .7, .22) * (amb * .62 + vec3(1., .86, .7) * .62 * lam) * (.9 + .2 * vSeed);
+          float baseAO = mix(.5, 1., smoothstep(0., 6., vW.y - vBase));             // darker where walls meet the street
+          dusk *= baseAO;
+          vec3 V = normalize(cameraPosition - vW);
+          dusk += vec3(.55, .62, .85) * pow(1. - max(dot(n, V), 0.), 3.) * .18;      // cool rim that separates the silhouettes
+          dusk += (tint * .8 + .2) * lanternLight(vW, n) * .55;
           float wallK = 1. - smoothstep(.25, .5, abs(n.y));
           dusk = mix(dusk, dusk * .5, win * wallK);
           float lit = step(.6, win) * wallK * step(.975, h21(floor(vW.xz * .4) + floor(vW.y * .3) + vSeed * 13.));
@@ -1153,6 +1298,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         if (q) { const b = pos.length / 3 - 4; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
         if (q % 2 === 0) t.roadPts.push(p[0], p[1]);
       }
+      if (k !== "motorway") { const rp = mkPath(pts); if (rp) roadPaths.push(rp); }
     }
     t.group.add(flatMesh(pos, idx, along, /* glsl */ `
       void main() { float sdR = sdMask(vW.xz); if (served(vW.xz) < .5 || (sdR > 30. && terrMask(vW.xz) > 0.)) discard;
@@ -1181,20 +1327,86 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   function lanternBuildingIds() {
     return new Set(placedLanterns.filter(l => l.b).map(l => l.b!.i));
   }
+  // long evening shadows: each building's footprint swept away from the sun, drawn on the ground
+  const SH = new THREE.Vector2(-SUN.x / SUN.y, -SUN.z / SUN.y);
+  let SHADOW_MAT: THREE.ShaderMaterial | null = null;
+  function shadowMaterial() {
+    SHADOW_MAT ??= new THREE.ShaderMaterial({
+      uniforms: { ...uniforms }, transparent: true, depthWrite: false,
+      stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec3 vW;
+        void main() {
+          if (sdMask(vW.xz) > 10. && terrMask(vW.xz) > 0.) discard;
+          if (canalD(vW.xz) < ${glf(CANAL)}) discard;
+          gl_FragColor = vec4(.05, .07, .16, .42);
+        }`,
+    });
+    return SHADOW_MAT;
+  }
+  function hull(pts: [number, number][]) {
+    const P = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cr = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo: [number, number][] = [], hi: [number, number][] = [];
+    for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+    for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+    return lo.slice(0, -1).concat(hi.slice(0, -1));
+  }
+  function shadowMesh(places: { k: number; m4: THREE.Matrix4 }[], blobs: number[][]) {
+    const pos: number[] = [], idx: number[] = [];
+    const v = new THREE.Vector3();
+    const addPoly = (poly: [number, number][]) => {
+      if (poly.length < 3) return;
+      const b = pos.length / 3;
+      for (const [x, z] of poly) pos.push(x, ground(x, z) + 0.35, z);
+      for (let i = 1; i < poly.length - 1; i++) idx.push(b, b + i + 1, b + i);
+    };
+    for (const pl of places) {
+      const sz = KIT.models[pl.k].size, pts: [number, number][] = [];
+      v.set(0, sz[1], 0).applyMatrix4(pl.m4);
+      const top = v.y;
+      v.set(0, 0, 0).applyMatrix4(pl.m4);
+      const h = Math.max(1, top - v.y);
+      for (const [sx, sz2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        v.set(sx * sz[0] / 2, 0, sz2 * sz[2] / 2).applyMatrix4(pl.m4);
+        pts.push([v.x, v.z], [v.x + SH.x * h, v.z + SH.y * h]);
+      }
+      addPoly(hull(pts));
+    }
+    for (const [x, z, r, h] of blobs) {
+      const cx = x + SH.x * h * 0.5, cz = z + SH.y * h * 0.5, poly: [number, number][] = [];
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; poly.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]); }
+      addPoly(poly);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    const m = new THREE.Mesh(g, shadowMaterial());
+    m.renderOrder = 1;
+    m.name = "shadows";
+    return m;
+  }
   function rebuildTile(t: Tile) {
     if (t.kit) { t.group.remove(t.kit); t.kit.traverse(o => (o as THREE.Mesh).geometry?.dispose()); t.kit = null; }
     if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
     const lit = lanternBuildingIds();
     const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && (sdField(b.cx, b.cz) < 150 || terrField(b.cx, b.cz) < 20) && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
     const nearest = roadNear(t);
-    t.kit = kitInstances(near.map(b => placeKit(b, nearest)), false);
+    const places = near.map(b => placeKit(b, nearest));
+    t.kit = kitInstances(places, false);
     t.box = boxMesh(near);
     t.group.add(t.kit, t.box);
     updateLod(true);
     // street and yard trees
     const old = t.group.getObjectByName("trees");
     if (old) t.group.remove(old);
-    t.group.add(buildTrees(t, near));
+    const blobs: number[][] = [];
+    t.group.add(buildTrees(t, near, blobs));
+    const oldS = t.group.getObjectByName("shadows");
+    if (oldS) { t.group.remove(oldS); (oldS as THREE.Mesh).geometry.dispose(); }
+    t.group.add(shadowMesh(places, blobs));
   }
   let lodAt = new THREE.Vector3(1e9, 0, 0);
   function updateLod(force = false) {
@@ -1236,7 +1448,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     });
   }
   const TREE_MATS = { canopy: null as THREE.ShaderMaterial | null, trunk: null as THREE.ShaderMaterial | null, frond: null as THREE.ShaderMaterial | null };
-  function buildTrees(t: Tile, near: Bldg[]) {
+  function buildTrees(t: Tile, near: Bldg[], blobs: number[][] = []) {
     TREE_MATS.canopy ??= treeMat("#3f5a4a");
     TREE_MATS.trunk ??= treeMat("#6b6a70");
     TREE_MATS.frond ??= treeMat("#4d6b50");
@@ -1301,6 +1513,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     });
     const hm = new THREE.InstancedMesh(treeCanopy, TREE_MATS.canopy, hedges.length);
     hedges.forEach(([x, z, r], k) => { V.set(x, ground(x, z) + 1.3, z); Sc.set(2.6 + r, 1.3, 2.6 + r); Q.setFromAxisAngle(UP, r * 6.28); hm.setMatrixAt(k, Mx.compose(V, Q, Sc)); });
+    for (const [x, z, r] of trees) blobs.push([x, z, 3.2 + r * 3.4, 8]);
+    for (const [x, z] of palms) blobs.push([x, z, 2.6, 20]);
     for (const m of [tm, pt, pc, hm]) m.computeBoundingSphere();
     grp.add(tm, pt, pc, hm);
     return grp;
@@ -1380,6 +1594,15 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 0.22;
   }
   let lastRegionsKey = "";
+  let lightSpots: { x: number; y: number; z: number; k: number }[] = [];
+  function updateLights() {
+    const tg = controls.target, arr = uniforms.uLights.value as THREE.Vector4[];
+    const sorted = lightSpots.map(l => [Math.hypot(l.x - tg.x, l.z - tg.z), l] as const).sort((a, b) => a[0] - b[0]);
+    for (let i = 0; i < arr.length; i++) {
+      const e = sorted[i];
+      if (e) arr[i].set(e[1].x, e[1].y, e[1].z, e[1].k); else arr[i].set(0, -1e5, 0, 0);
+    }
+  }
   const ORB_GEO = new THREE.IcosahedronGeometry(2.6, 2);
   function orbMaterial(k: number) {
     // HDR gold so the bloom makes each customer's lantern glow
@@ -1431,6 +1654,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       groups.get(gk)!.members.push(p);
     }
     placedLanterns = [];
+    lightSpots = [];
     for (const g of groups.values()) {
       const keys = g.members.map(m => m.l.key);
       const k = Math.max(...g.members.map(m => brightness(m.l)));
@@ -1462,13 +1686,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const halo = new THREE.Mesh(new THREE.CircleGeometry(r, 40).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uA: { value: alone ? Math.min(1.6, k * 1.5) : k } },
         vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-        fragmentShader: `uniform float uA; varying vec2 vUv; void main(){ float d = length(vUv - .5) * 2.; float a = pow(1. - clamp(d,0.,1.), 1.8) * .75 * uA; gl_FragColor = vec4(vec3(1., .66, .25) * a, a); }`,
+        fragmentShader: `uniform float uA; varying vec2 vUv; void main(){ float d = length(vUv - .5) * 2.; float a = pow(1. - clamp(d,0.,1.), 2.2) * .5 * uA; gl_FragColor = vec4(vec3(1., .66, .25) * a, a); }`,
       }));
       halo.position.set(g.x, ground(g.x, g.z) + 1.6, g.z);
       halo.userData.halo = true;
       if (!mesh && g.members.length === 1) halo.userData.keys = keys;
       lanternGroup.add(halo);
       for (const m of g.members) placedLanterns.push({ input: m.l, x: g.x, z: g.z, b: g.b, mesh, halo });
+      lightSpots.push({ x: g.x, y: (ground(g.x, g.z) + roofY) / 2 + 4, z: g.z, k: (alone ? 1.5 : 1) * k * Math.min(2, 0.8 + g.members.length * 0.2) });
     }
     // a building that just became a lantern must leave the dim city
     const nowIds = lanternBuildingIds();
@@ -1484,6 +1709,16 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
   function frameHome() {
     framed = true;
+    if (placedLanterns.length) {
+      let best = placedLanterns[0], bs = -1;
+      for (const a of placedLanterns) {
+        let s0 = 0;
+        for (const b of placedLanterns) if (Math.hypot(a.x - b.x, a.z - b.z) < 1800) s0++;
+        if (s0 > bs) { bs = s0; best = a; }
+      }
+      frame(best.x, best.z + 150, 2600, 0, 0.92);
+      return;
+    }
     // open on the whole board: every lantern in view
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
     for (const l of placedLanterns) { x0 = Math.min(x0, l.x); x1 = Math.max(x1, l.x); z0 = Math.min(z0, l.z); z1 = Math.max(z1, l.z); }
@@ -1759,6 +1994,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const o of lanternGroup.children) { if (o.userData.halo) o.scale.setScalar(hs); else if (o.userData.orb) o.scale.setScalar(Math.max(1, hs * 0.7)); }
     camera.updateProjectionMatrix();
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
+    if (M) { updateLights(); updateLife(dt, cd); }
     if (M) { updateLod(); placeLabels(); }
     composer.render();
     raf = requestAnimationFrame(tick);
