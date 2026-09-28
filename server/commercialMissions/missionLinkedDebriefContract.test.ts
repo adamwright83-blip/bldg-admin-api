@@ -66,7 +66,7 @@ describe("approved tower-boss linked debrief contract", () => {
     expect(actionSurface).toContain('data-testid="mission-debrief-answer"');
     expect(actionSurface).toContain("props.services.openMissionDebrief &&");
     expect(actionSurface).toContain("props.services.finalizeMissionDebrief");
-    expect(actionSurface).toContain("!\n        props.services.openMissionDebrief");
+    expect(actionSurface).toContain(`!(\n        props.services.openMissionDebrief &&`);
   });
 
   it("persists requested collateral email as draft-only and contains no transport send path", () => {
