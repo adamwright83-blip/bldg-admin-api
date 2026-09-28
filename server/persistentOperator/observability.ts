@@ -212,7 +212,10 @@ export async function loadPersistentOperatorDiagnostics(input: {
     obligation =>
       obligation.status !== "completed" &&
       obligation.status !== "cancelled" &&
-      obligation.status !== "superseded"
+      obligation.status !== "superseded" &&
+      (obligation.dueDate <= today ||
+        obligation.status === "awaiting_result" ||
+        obligation.status === "draft_prepared")
   );
 
   const openCommitments = db
@@ -240,13 +243,15 @@ export async function loadPersistentOperatorDiagnostics(input: {
       ageDays: daysOld(obligation.dueDate, today),
       status: obligation.status,
     })),
-    ...openCommitments.map(commitment => ({
-      kind: "scheduled_work" as const,
-      id: commitment.id,
-      dueDate: commitment.businessDate,
-      ageDays: daysOld(commitment.businessDate, today),
-      status: "open",
-    })),
+    ...openCommitments
+      .filter(commitment => commitment.businessDate <= today)
+      .map(commitment => ({
+        kind: "scheduled_work" as const,
+        id: commitment.id,
+        dueDate: commitment.businessDate,
+        ageDays: daysOld(commitment.businessDate, today),
+        status: "open",
+      })),
   ].sort((a, b) => b.ageDays - a.ageDays);
 
   const sourceCoverage = await loadBusinessSourceCoverage({
