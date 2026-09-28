@@ -162,6 +162,7 @@ describe("canonical operator identity", () => {
     );
     expect(driver.identity.canonicalOpenId).toBe("admin-owner");
     expect(driver.identity.dayDirectorActorId).toBe("11");
+    expect(driver.identity.dayDirectorActorIds.sort()).toEqual(["11", "22"]);
     expect(driver.identity.weeklyOperatorId).toBe("admin-owner");
     expect(driver.identity.campaignOperatorUserId).toBe("admin-owner");
     expect(driver.identity.aliases.map(alias => alias.openId).sort()).toEqual([
