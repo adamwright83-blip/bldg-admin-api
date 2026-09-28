@@ -9,6 +9,10 @@ const service = readFileSync(
   new URL("./missionLinkedDebriefService.ts", import.meta.url),
   "utf8"
 );
+const fieldService = readFileSync(
+  new URL("./commercialMissionFieldService.ts", import.meta.url),
+  "utf8"
+);
 const controller = readFileSync(
   new URL("../../client/src/pages/driver/GoldlineDriverController.tsx", import.meta.url),
   "utf8"
@@ -87,6 +91,17 @@ describe("approved tower-boss linked debrief contract", () => {
     expect(actionSurface).toContain('data-testid="correct-mission-debrief"');
     expect(actionSurface).toContain("CLAIRE GOT SOMETHING WRONG · RECORD A CORRECTION");
     expect(actionSurface).toContain("props.services.openMissionDebrief?.({");
+  });
+
+  it("reconciles the idempotent score write when an already-completed debrief is retried", () => {
+    expect(service).toContain('if (state.status === "completed") {');
+    expect(service).toContain("await reconcileCommercialMissionVisitScore({");
+    expect(fieldService).toContain("export async function reconcileCommercialMissionVisitScore");
+    expect(fieldService).toContain("state.visitOutcome.outcome");
+    expect(fieldService).toContain('dedupeKey: `score:field-outcome:${input.requestId}`');
+    const writer = fieldService.indexOf("export async function recordCommercialMissionVisitOutcome");
+    const reconcile = fieldService.indexOf("return reconcileCommercialMissionVisitScore({", writer);
+    expect(reconcile).toBeGreaterThan(writer);
   });
 
   it("persists requested collateral email as draft-only and contains no transport send path", () => {
