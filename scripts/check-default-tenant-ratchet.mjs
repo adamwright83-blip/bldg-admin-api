@@ -1,8 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-const base =
-  process.env.DEFAULT_TENANT_RATCHET_BASE?.trim() ||
-  (process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "HEAD^");
+const base = process.env.DEFAULT_TENANT_RATCHET_BASE?.trim() || "HEAD^1";
 
 let diff = "";
 try {
