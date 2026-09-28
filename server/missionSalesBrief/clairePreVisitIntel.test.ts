@@ -295,6 +295,53 @@ describe("Claire pre-visit three", () => {
     expect(result?.items[0].line).not.toMatch(/gym|spa/i);
   });
 
+  it("does not promote an Armory source question into a building fact", async () => {
+    mocks.listWeapons.mockResolvedValue({
+      archetype: "GATEKEEPER",
+      channel: "in_person",
+      weapons: [
+        {
+          ...trainerWeapon,
+          discoveryQuestion: "Does your building have a rooftop pool?",
+        },
+        foundationWeapon,
+      ],
+      trainerIntelligenceAvailable: true,
+    });
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "I have one quick question about resident laundry.",
+              },
+              {
+                slot: "PROBE",
+                line: "Your building has a rooftop pool.",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[1].line).toBe(
+      "Does your building have a rooftop pool?"
+    );
+  });
+
   it("keeps unknown property attributes as questions instead of promoting them to facts", async () => {
     mocks.ensureBrief.mockResolvedValue({
       ...brief,
