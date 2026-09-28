@@ -155,8 +155,9 @@ test("the screenshot permission is optional, user-granted, and target-guarded", 
   const permissionCheck = sync.indexOf("chrome.permissions.contains");
   const permissionRequest = sync.indexOf("chrome.permissions.request");
   assert.ok(manifest.optional_host_permissions.includes("<all_urls>"));
+  assert.ok(permissionRequest !== -1 && permissionRequest < permissionCheck);
   assert.ok(permissionCheck !== -1 && permissionCheck < capture);
-  assert.ok(permissionRequest !== -1 && permissionRequest < capture);
+  assert.ok(permissionRequest < capture);
   assert.ok(guard !== -1 && capture !== -1 && guard < capture);
   assert.match(sync, /if \(scheduled\) return false/);
   assert.match(sync, /Dashboard screenshot permission is required/);
