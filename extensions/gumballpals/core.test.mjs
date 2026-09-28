@@ -6,6 +6,7 @@ import {
   initialRange,
   validateRange,
   validateExportUrl,
+  validateRevenueExportUrl,
   parseCsv,
   assertPairing,
   recoveryState,
@@ -41,6 +42,18 @@ test("only observed report endpoint, dates, and one numeric store are accepted",
     url.replace("group=", "group=all"),
   ])
     assert.throws(() => validateExportUrl(bad, range));
+});
+test("revenue uses the observed endpoint but not the sales type", () => {
+  const revenue = url.replace("type=1", "type=4");
+  assert.equal(validateRevenueExportUrl(revenue, range).reportType, "orders_revenue");
+  assert.throws(() => validateRevenueExportUrl(url, range));
+  assert.throws(() => validateExportUrl(revenue, range));
+  const rows = parseCsv(
+    "Order ID,Customer,Paid,Paid Date,Total\n88,Ada Lovelace,Yes,09/27/2026,51.00\n",
+    "orders_revenue"
+  );
+  assert.equal(rows[0]["Paid Date"], "09/27/2026");
+  assert.throws(() => parseCsv(header + "\n1,a,b,c,d,Yes,e,1\n", "orders_revenue"));
 });
 test("CSV supports BOM, quoted commas, embedded newlines, and escaped quotes", () => {
   const rows = parseCsv(

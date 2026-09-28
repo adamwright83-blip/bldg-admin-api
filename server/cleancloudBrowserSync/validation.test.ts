@@ -21,6 +21,35 @@ describe("browser sync validation", () => {
       "2026-09-03T01:45:00.000Z"
     );
   });
+  it("accepts an older order paid inside an Orders (Revenue) window", () => {
+    const revenueUrl = input.exportUrl.replace("type=1", "type=4");
+    const { normalized, reportType } = validatePayload(
+      {
+        ...input,
+        reportType: "orders_revenue",
+        exportUrl: revenueUrl,
+        csv: "Order ID,Customer,Paid,Paid Date,Total,Placed\n88,Ada Lovelace,Yes,09/27/2026,51.00,08/01/2026",
+      },
+      "example"
+    );
+    expect(reportType).toBe("orders_revenue");
+    expect(normalized[0].sourceReportType).toBe("orders_revenue");
+    expect(normalized[0].paidDateUtc?.toISOString()).toBe("2026-09-27T07:00:00.000Z");
+    expect(normalized[0].paymentDateUtc).toBeNull();
+    expect(normalized[0].cleancloudOrderId).toBe("88");
+  });
+  it("does not let the Orders (Sales) URL count as revenue", () => {
+    expect(() =>
+      validatePayload(
+        {
+          ...input,
+          reportType: "orders_revenue",
+          csv: "Order ID,Customer,Paid,Paid Date,Total\n88,Ada Lovelace,Yes,09/27/2026,51.00",
+        },
+        "example"
+      )
+    ).toThrow(/Sales/);
+  });
   it("preserves payment date, cents and existing canonical building resolver", () => {
     const { normalized } = validatePayload(input, "example");
     expect(normalized[0].paymentDateUtc?.toISOString()).toBe(

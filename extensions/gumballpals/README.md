@@ -34,7 +34,7 @@ The dropdown, calendar selectors and one-store label are grounded in observed DO
 ## Current scope and limitations
 
 - One gumball store per Goldline tenant. Store reassignment requires an administrator migration because existing paid-order keys do not include a store ID.
-- Only **Orders (Sales)**, up to 32 calendar days / 4 MB / 15,000 rows. No invented Revenue endpoint mapping.
+- Orders (Sales) and a second Orders (Revenue) pass. Sales dates are orders created. Revenue dates are payments. The revenue export type is taken from the captured CleanCloud URL and is never hardcoded. A sales span does not prove payment completeness.
 - Re-running the same period performs changed-row reconciliation. This is **not complete incremental coverage of older orders**: a payment/refund/correction on an order created outside the selected period is not captured. Revenue-report support and coverage tracking remain required before claiming full automatic reconciliation.
 - Manual sync plus opt-in daily sync after a successful manual import verifies the pairing. Automatic runs require the saved actor, tenant and store to match, and never prompt for new permissions or pair an unknown account. Chrome/computer and the sync tab must remain open. Failed automatic runs expose their status and wait for attention rather than silently retrying uncertain imports.
 - The Cancel button is available before import only. An interrupted import is marked outcome unknown. **Check interrupted import** waits on the server's transaction lock and either returns the committed receipt or installs a cancellation tombstone, preventing a late original request from executing. Only then is a fresh run allowed.

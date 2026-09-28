@@ -27,7 +27,9 @@ export async function openSite(url) {
 
 // All actions and selectors below were grounded in the visible gumball export
 // UI. No application internals, cookies, localStorage or private API are read.
-export async function prepareSource(range) {
+export async function prepareSource(range, reportType = "orders_sales") {
+  const reportLabel =
+    reportType === "orders_revenue" ? "Orders (Revenue)" : "Orders (Sales)";
   let stage = "opening reporting";
   try {
     if (
@@ -91,7 +93,7 @@ export async function prepareSource(range) {
       reportRoot()?.querySelector('input[placeholder="Export Type"]')
     );
     const reportSelect = input.closest(".multiselect");
-    stage = "selecting Orders (Sales)";
+    stage = `selecting ${reportLabel}`;
     // Vue Multiselect opens on mousedown, not click. HTMLElement.click()
     // skips that event and leaves all options hidden.
     reportSelect.querySelector(".multiselect__select").dispatchEvent(
@@ -102,7 +104,7 @@ export async function prepareSource(range) {
         const es = exact(
           reportSelect,
           ".multiselect__option",
-          "Orders (Sales)"
+          reportLabel
         );
         return es.length ? es : null;
       })
@@ -196,7 +198,7 @@ export async function prepareSource(range) {
       throw new Error("Report export is not available.");
     return {
       ok: true,
-      value: { storeLabel, range, reportType: "orders_sales" },
+      value: { storeLabel, range, reportType },
     };
   } catch (error) {
     return { ok: false, error: error.message };

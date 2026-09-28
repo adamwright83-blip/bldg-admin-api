@@ -7,6 +7,7 @@ import {
 import {
   parseCsv,
   validateExportUrl,
+  validateRevenueExportUrl,
   validateRange,
 } from "../../extensions/gumballpals/core.js";
 import { normalizePropertyTower } from "../../shared/propertyTowers";
@@ -99,15 +100,21 @@ export function validatePayload(
     from: string;
     to: string;
     storeId: string;
+    reportType?: "orders_sales" | "orders_revenue";
   },
   tenantId: string
 ) {
+  const reportType = input.reportType ?? "orders_sales";
   let rows: Record<string, string>[];
   try {
     const range = validateRange(input.from, input.to);
-    if (validateExportUrl(input.exportUrl, range).storeId !== input.storeId)
+    const captured =
+      reportType === "orders_revenue"
+        ? validateRevenueExportUrl(input.exportUrl, range)
+        : validateExportUrl(input.exportUrl, range);
+    if (captured.storeId !== input.storeId)
       invalid("Export store does not match the paired store.");
-    rows = parseCsv(input.csv);
+    rows = parseCsv(input.csv, reportType);
   } catch (error) {
     invalid(error instanceof Error ? error.message : "Invalid report.");
   }
@@ -129,39 +136,50 @@ export function validatePayload(
     )
       invalid(prefix + "amount outside supported range.");
     const result = normalizeCleanCloudPaidOrderRow(row, {
-      sourceReportType: "orders_sales",
+      sourceReportType: reportType,
       sourceFileName: "browser-sync.csv",
       importBatchId: 0,
       tenantId,
     });
     const order = result.normalized;
-    if (order) {
+    if (order && reportType === "orders_sales") {
       order.placedAtUtc = sourceDate(row.Placed);
       order.paymentDateUtc = sourceDate(row["Payment Date"]);
     }
+    if (order && reportType === "orders_revenue") {
+      order.paidDateUtc = sourceDate(row["Paid Date"]);
+      order.paymentDateUtc = null;
+    }
+    if (!order) invalid(prefix + "missing customer or invalid placed date.");
     if (
-      !order ||
-      !order.placedAtUtc ||
-      !Number.isFinite(order.placedAtUtc.getTime())
+      reportType === "orders_sales" &&
+      (!order!.placedAtUtc || !Number.isFinite(order!.placedAtUtc.getTime()))
     )
       invalid(prefix + "missing customer or invalid placed date.");
     if (
-      order.paid &&
-      (!order.paymentDateUtc ||
-        !Number.isFinite(order.paymentDateUtc.getTime()))
+      reportType === "orders_sales" &&
+      order!.paid &&
+      (!order!.paymentDateUtc || !Number.isFinite(order!.paymentDateUtc.getTime()))
     )
       invalid(prefix + "paid order has no valid payment date.");
-    // Never manufacture a source timestamp, infer a payment, or map by customer name.
-    return order;
+    if (
+      reportType === "orders_revenue" &&
+      order!.paid &&
+      (!order!.paidDateUtc || !Number.isFinite(order!.paidDateUtc.getTime()))
+    )
+      invalid(prefix + "paid order has no valid paid date.");
+    return order!;
   });
   return {
     normalized,
+    reportType,
     digest: createHash("sha256")
       .update(
         JSON.stringify({
           storeId: input.storeId,
           from: input.from,
           to: input.to,
+          reportType,
           csv: input.csv,
         })
       )
