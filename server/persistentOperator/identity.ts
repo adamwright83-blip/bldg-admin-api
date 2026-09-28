@@ -6,7 +6,11 @@ import {
 } from "../../drizzle/schema";
 import type { SaasTenantMemberRole } from "../../shared/saasTenant";
 import { getDb } from "../db";
-import { resolveLegacyDayforgeMembership } from "../saas/tenantAccess";
+import { isLegacySharedPasswordOpenId } from "../joystick/tenantIdentity";
+import {
+  isLegacyDayforgeTenant,
+  resolveLegacyDayforgeMembership,
+} from "../saas/tenantAccess";
 import {
   recordPersistentOperatorDiagnosticEvent,
   type PersistentOperatorEmptyReason,
@@ -131,7 +135,7 @@ export type OperatorIdentityResolverDeps = {
 };
 
 async function defaultFindUserByOpenId(
-  tenantId: string,
+  _tenantId: string,
   openId: string
 ): Promise<OperatorIdentityUser | null> {
   const db = await getDb();
@@ -144,13 +148,13 @@ async function defaultFindUserByOpenId(
       role: users.role,
     })
     .from(users)
-    .where(and(eq(users.tenantId, tenantId), eq(users.openId, openId)))
+    .where(eq(users.openId, openId))
     .limit(1);
   return row ?? null;
 }
 
 async function defaultFindUserById(
-  tenantId: string,
+  _tenantId: string,
   userId: number
 ): Promise<OperatorIdentityUser | null> {
   const db = await getDb();
@@ -163,7 +167,7 @@ async function defaultFindUserById(
       role: users.role,
     })
     .from(users)
-    .where(and(eq(users.tenantId, tenantId), eq(users.id, userId)))
+    .where(eq(users.id, userId))
     .limit(1);
   return row ?? null;
 }
@@ -226,6 +230,19 @@ function canonicalOperatorId(tenantId: string, canonicalOpenId: string): string 
   return `tenant:${tenantId}:operator:${canonicalOpenId}`;
 }
 
+export function operatorUserCanResolveOnTenant(
+  user: OperatorIdentityUser,
+  tenantId: string
+): boolean {
+  const persistedTenant = user.tenantId?.trim() || "";
+  if (persistedTenant === tenantId) return true;
+  return (
+    isLegacyDayforgeTenant(tenantId) &&
+    isLegacySharedPasswordOpenId(user.openId) &&
+    (user.role === "admin" || user.role === "driver")
+  );
+}
+
 async function fail(
   deps: OperatorIdentityResolverDeps,
   input: ResolveCanonicalOperatorIdentityInput,
@@ -265,7 +282,7 @@ async function resolveCanonicalOperatorIdentityUnchecked(
       ? await deps.findUserByOpenId(tenantId, input.source.value.trim())
       : await deps.findUserById(tenantId, input.source.value);
 
-  if (!sourceUser || sourceUser.tenantId?.trim() !== tenantId) {
+  if (!sourceUser || !operatorUserCanResolveOnTenant(sourceUser, tenantId)) {
     return fail(
       deps,
       input,
@@ -321,7 +338,7 @@ async function resolveCanonicalOperatorIdentityUnchecked(
   const canonicalOpenId =
     directBindings[0]?.canonicalOpenId.trim() || sourceUser.openId;
   const canonicalUser = await deps.findUserByOpenId(tenantId, canonicalOpenId);
-  if (!canonicalUser || canonicalUser.tenantId?.trim() !== tenantId) {
+  if (!canonicalUser || !operatorUserCanResolveOnTenant(canonicalUser, tenantId)) {
     return fail(
       deps,
       input,
@@ -373,7 +390,7 @@ async function resolveCanonicalOperatorIdentityUnchecked(
   ]);
   for (const openId of aliasOpenIds) {
     const user = await deps.findUserByOpenId(tenantId, openId);
-    if (!user || user.tenantId?.trim() !== tenantId) {
+    if (!user || !operatorUserCanResolveOnTenant(user, tenantId)) {
       return fail(
         deps,
         input,
@@ -488,8 +505,15 @@ export async function bindOperatorIdentityAlias(input: {
     defaultFindUserByOpenId(tenantId, canonicalOpenId),
     defaultFindUserByOpenId(tenantId, aliasOpenId),
   ]);
-  if (!canonicalUser || !aliasUser) {
-    throw new Error("Both identities must be persisted users in the same tenant");
+  if (
+    !canonicalUser ||
+    !aliasUser ||
+    !operatorUserCanResolveOnTenant(canonicalUser, tenantId) ||
+    !operatorUserCanResolveOnTenant(aliasUser, tenantId)
+  ) {
+    throw new Error(
+      "Both identities must be persisted users authorized for the same tenant"
+    );
   }
 
   const [canonicalMembership, aliasMembership] = await Promise.all([
