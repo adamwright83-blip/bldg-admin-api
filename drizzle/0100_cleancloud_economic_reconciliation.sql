@@ -1,3 +1,4 @@
+-- Numbered 0100 so 0098 stays the dashboard witness and 0099 stays the independent churn widening.
 -- Period reconciliation of the overview witness, the Orders (Revenue) total,
 -- and the normalized CleanCloud book. Verified events are inserted only from
 -- a reconciled result. Screenshot bytes are not stored here.
