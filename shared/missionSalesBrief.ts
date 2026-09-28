@@ -106,6 +106,26 @@ export type MissionSalesBrief = {
   supersedesVersion: number | null;
 };
 
+
+export type ClairePreVisitLoadoutItem = {
+  slot: "OPEN" | "PROBE" | "WEAPON";
+  line: string;
+  sourceTeachingId: string | null;
+  sourceCreator: string | null;
+  sourceTitle: string | null;
+  provenance: "reviewed_sales_intel" | "mission_brief";
+};
+
+export type ClairePreVisitLoadout = {
+  missionId: number;
+  briefId: number;
+  briefVersion: number;
+  buildingName: string;
+  buildingAddress: string | null;
+  generatedAt: string;
+  items: ClairePreVisitLoadoutItem[];
+};
+
 /** Compact projection handed to Claire (via ClaireDriveContext) — never the full brief, never raw Sales Intel content. */
 export type CompactMissionSalesBriefForClaire = {
   briefId: number;
