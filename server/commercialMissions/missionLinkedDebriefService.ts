@@ -17,6 +17,7 @@ import { getDb } from "../db";
 import { getCommercialMission } from "./commercialMissionStore";
 import {
   getCommercialMissionFieldState,
+  reconcileCommercialMissionVisitScore,
   recordCommercialMissionVisitOutcome,
 } from "./commercialMissionFieldService";
 
@@ -208,7 +209,18 @@ export async function finalizeMissionLinkedDebrief(input: {
   additionalAnswer?: string;
 }): Promise<MissionLinkedDebriefState> {
   const state = await getMissionLinkedDebriefState(input);
-  if (state.status === "completed") return state;
+  if (state.status === "completed") {
+    // The outcome may have committed before a transient score write failed.
+    // Reconcile the idempotent score event on retry instead of returning early
+    // and permanently dropping the operator's visit credit.
+    await reconcileCommercialMissionVisitScore({
+      tenantId: input.tenantId,
+      driverId: input.driverId,
+      missionId: input.missionId,
+      requestId: input.requestId,
+    });
+    return state;
+  }
   if (state.status !== "ready" || state.journalEntryId !== input.journalEntryId) {
     throw new Error("Claire has not finished structuring this debrief yet.");
   }
