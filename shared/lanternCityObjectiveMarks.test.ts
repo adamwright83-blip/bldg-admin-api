@@ -166,6 +166,42 @@ describe("Lantern City objective marks — today", () => {
     expect(out.todayStatus).toBe("no_coordinates");
     expect(out.today).toBeNull();
   });
+
+  it("fails closed when even one current target lacks coordinates", () => {
+    const out = projectLanternObjectiveMarks({
+      tenantId: TENANT,
+      dayLine: todayLine(),
+      runs: [entry({ targets: [target("t1"), target("t2", null, null)] })],
+    });
+    expect(out.todayStatus).toBe("no_coordinates");
+    expect(out.today).toBeNull();
+  });
+
+  it("offers Driver launch only for the signed-in operator's supported run", () => {
+    const own = projectLanternObjectiveMarks({
+      tenantId: TENANT,
+      operatorId: "driver-1",
+      dayLine: todayLine(),
+      runs: [entry()],
+    });
+    expect(own.today?.driverOpenable).toBe(true);
+
+    const otherOperator = projectLanternObjectiveMarks({
+      tenantId: TENANT,
+      operatorId: "driver-2",
+      dayLine: todayLine(),
+      runs: [entry()],
+    });
+    expect(otherOperator.today?.driverOpenable).toBe(false);
+
+    const unsupportedPack = projectLanternObjectiveMarks({
+      tenantId: TENANT,
+      operatorId: "driver-1",
+      dayLine: todayLine(),
+      runs: [entry({ run: run({ fictionPackId: null }) })],
+    });
+    expect(unsupportedPack.today?.driverOpenable).toBe(false);
+  });
 });
 
 describe("Lantern City objective marks — evidence", () => {
