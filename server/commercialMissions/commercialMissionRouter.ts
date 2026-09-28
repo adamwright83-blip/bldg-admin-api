@@ -313,6 +313,7 @@ export const commercialMissionRouter = router({
         journalEntryId: z.string().uuid(),
         requestId: z.string().uuid(),
         answer: z.string().trim().min(1).max(1000).optional(),
+        additionalAnswer: z.string().trim().min(1).max(1000).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
