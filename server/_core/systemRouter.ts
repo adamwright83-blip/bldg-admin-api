@@ -60,6 +60,7 @@ import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
+import { persistentOperatorRouter } from "../persistentOperator/persistentOperatorRouter";
 
 export const systemRouter = router({
   strategy: strategyRouter,
@@ -116,6 +117,7 @@ export const systemRouter = router({
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
   currentDayLine: currentDayLineRouter,
+  persistentOperator: persistentOperatorRouter,
   lanternCity: lanternCityRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
