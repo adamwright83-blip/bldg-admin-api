@@ -13,8 +13,9 @@ import {
   cleancloudPaidOrders,
   cleancloudImportBatches,
 } from "../../drizzle/schema";
-import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "./schema";
+import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts, dashboardWitnesses, dashboardWitnessScreenshots } from "./schema";
 import { validatePayload, summarizeOrders } from "./validation";
+import { witnessWrite } from "./dashboardWitness";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -66,6 +67,63 @@ async function requireDb() {
       message: "Database unavailable.",
     });
   return db;
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  const value = error as { code?: string; errno?: number; message?: string } | null;
+  return Boolean(
+    value &&
+      (value.code === "ER_DUP_ENTRY" ||
+        value.errno === 1062 ||
+        /duplicate entry/i.test(value.message ?? ""))
+  );
+}
+
+function publicDashboardWitness(row: typeof dashboardWitnesses.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    storeId: row.storeId,
+    storeLabel: row.storeLabel,
+    rangeFrom: row.rangeFrom,
+    rangeTo: row.rangeTo,
+    comparisonFrom: row.comparisonFrom,
+    comparisonTo: row.comparisonTo,
+    salesCents: row.salesCents,
+    comparisonSalesCents: row.comparisonSalesCents,
+    revenueCents: row.revenueCents,
+    comparisonRevenueCents: row.comparisonRevenueCents,
+    orders: row.orders,
+    comparisonOrders: row.comparisonOrders,
+    newCustomers: row.newCustomers,
+    observedAt: row.observedAt.toISOString(),
+    screenshotSha256: row.screenshotSha256,
+    extractionVersion: row.extractionVersion,
+    source: row.source,
+  };
+}
+
+function sameWitnessTotals(
+  row: typeof dashboardWitnesses.$inferSelect,
+  witness: {
+    salesCents: number;
+    revenueCents: number;
+    orders: number;
+    comparisonSalesCents: number | null;
+    comparisonRevenueCents: number | null;
+    comparisonOrders: number | null;
+    newCustomers: number | null;
+  }
+) {
+  return (
+    row.salesCents === witness.salesCents &&
+    row.revenueCents === witness.revenueCents &&
+    row.orders === witness.orders &&
+    row.comparisonSalesCents === witness.comparisonSalesCents &&
+    row.comparisonRevenueCents === witness.comparisonRevenueCents &&
+    row.comparisonOrders === witness.comparisonOrders &&
+    row.newCustomers === witness.newCustomers
+  );
 }
 
 function operatorLineFromReceipt(receipt: Record<string, unknown>) {
@@ -641,5 +699,167 @@ export const cleancloudBrowserSyncRouter = router({
         to: input.to ?? null,
       });
       return { recorded: true as const };
+    }),
+  recordWitness: legacyDayforgeTenantOperatorProcedure
+    .input(
+      account.extend({
+        observedStoreLabel: z.string().trim().min(1).max(255),
+        rangeFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        rangeTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        rangeText: z.string().trim().min(1).max(500),
+        comparisonText: z.string().trim().min(1).max(500).nullable().optional(),
+        fields: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).max(80),
+              valueText: z.string().trim().min(1).max(80),
+            })
+          )
+          .max(40),
+        screenshotBase64: z.string().regex(/^[A-Za-z0-9+/=\s]+$/).max(6_000_000),
+        screenshotSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      assertAccount(ctx, input);
+      const db = await requireDb();
+      const [binding] = await db
+        .select()
+        .from(browserSyncBindings)
+        .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
+      if (!binding) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No source binding." });
+      }
+      let screenshotBytes: Uint8Array;
+      try {
+        screenshotBytes = Buffer.from(input.screenshotBase64.replace(/\s/g, ""), "base64");
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The screenshot could not be read." });
+      }
+      const written = witnessWrite({
+        tenantId: ctx.tenantId,
+        storeId: binding.storeId,
+        input: {
+          expectedStoreLabel: binding.storeLabel,
+          observedStoreLabel: input.observedStoreLabel,
+          rangeFrom: input.rangeFrom,
+          rangeTo: input.rangeTo,
+          rangeText: input.rangeText,
+          comparisonText: input.comparisonText ?? null,
+          fields: input.fields,
+          observedAt: new Date(),
+          screenshotBytes,
+          screenshotSha256: input.screenshotSha256,
+        },
+      });
+      if (!written.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: written.reason });
+      }
+      const witness = written.write.witness;
+      const existing = await db
+        .select()
+        .from(dashboardWitnesses)
+        .where(
+          and(
+            eq(dashboardWitnesses.tenantId, ctx.tenantId),
+            eq(dashboardWitnesses.storeId, binding.storeId),
+            eq(dashboardWitnesses.rangeFrom, witness.rangeFrom),
+            eq(dashboardWitnesses.rangeTo, witness.rangeTo),
+            eq(dashboardWitnesses.screenshotSha256, witness.screenshotSha256)
+          )
+        )
+        .limit(1);
+      if (existing[0]) {
+        if (!sameWitnessTotals(existing[0], witness)) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This screenshot is already stored with different totals.",
+          });
+        }
+        return { witness: publicDashboardWitness(existing[0]) };
+      }
+      const id = randomUUID();
+      try {
+        await db.transaction(async tx => {
+          await tx.insert(dashboardWitnesses).values({
+            id,
+            tenantId: ctx.tenantId,
+            storeId: binding.storeId,
+            storeLabel: witness.storeLabel,
+            rangeFrom: witness.rangeFrom,
+            rangeTo: witness.rangeTo,
+            comparisonFrom: witness.comparisonFrom,
+            comparisonTo: witness.comparisonTo,
+            salesCents: witness.salesCents,
+            comparisonSalesCents: witness.comparisonSalesCents,
+            revenueCents: witness.revenueCents,
+            comparisonRevenueCents: witness.comparisonRevenueCents,
+            orders: witness.orders,
+            comparisonOrders: witness.comparisonOrders,
+            newCustomers: witness.newCustomers,
+            observedAt: new Date(witness.observedAt),
+            screenshotSha256: witness.screenshotSha256,
+            extractionVersion: witness.extractionVersion,
+            source: witness.source,
+          });
+          await tx.insert(dashboardWitnessScreenshots).values({
+            witnessId: id,
+            tenantId: ctx.tenantId,
+            sha256: witness.screenshotSha256,
+            pngBase64: Buffer.from(screenshotBytes).toString("base64"),
+          });
+        });
+      } catch (error) {
+        if (!isDuplicateKey(error)) throw error;
+        const [row] = await db
+          .select()
+          .from(dashboardWitnesses)
+          .where(
+            and(
+              eq(dashboardWitnesses.tenantId, ctx.tenantId),
+              eq(dashboardWitnesses.storeId, binding.storeId),
+              eq(dashboardWitnesses.rangeFrom, witness.rangeFrom),
+              eq(dashboardWitnesses.rangeTo, witness.rangeTo),
+              eq(dashboardWitnesses.screenshotSha256, witness.screenshotSha256)
+            )
+          )
+          .limit(1);
+        if (!row || row.tenantId !== ctx.tenantId || !sameWitnessTotals(row, witness)) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Witness race resolved to different totals or scope.",
+          });
+        }
+        return { witness: publicDashboardWitness(row) };
+      }
+      const [row] = await db
+        .select()
+        .from(dashboardWitnesses)
+        .where(and(eq(dashboardWitnesses.id, id), eq(dashboardWitnesses.tenantId, ctx.tenantId)));
+      return { witness: publicDashboardWitness(row!) };
+    }),
+  latestDashboardWitness: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          rangeFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          rangeTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const filters = [eq(dashboardWitnesses.tenantId, ctx.tenantId)];
+      if (input) {
+        filters.push(eq(dashboardWitnesses.rangeFrom, input.rangeFrom));
+        filters.push(eq(dashboardWitnesses.rangeTo, input.rangeTo));
+      }
+      const [row] = await db
+        .select()
+        .from(dashboardWitnesses)
+        .where(and(...filters))
+        .orderBy(desc(dashboardWitnesses.observedAt))
+        .limit(1);
+      return { witness: row ? publicDashboardWitness(row) : null };
     }),
 });
