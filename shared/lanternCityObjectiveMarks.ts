@@ -221,7 +221,9 @@ function slotMarks(input: LanternRunInput): SlotMark[] {
 export function projectLanternObjectiveMarks(input: {
   tenantId: string;
   operatorId?: string | null;
+  /** Historical compatibility: prefer viewerOpenIds for canonical identity groups. */
   viewerOpenId?: string | null;
+  viewerOpenIds?: readonly string[];
   dayLine: CurrentDayLine | null;
   runs: readonly LanternRunInput[];
 }): LanternObjectiveMarks {
@@ -343,8 +345,10 @@ export function projectLanternObjectiveMarks(input: {
       campaignRunId: entry.run.campaignRunId,
       fictionPackId: entry.run.fictionPackId,
       driverOpenable:
-        Boolean(input.viewerOpenId) &&
-        entry.run.operatorUserId === input.viewerOpenId &&
+        new Set([
+          ...(input.viewerOpenIds ?? []),
+          ...(input.viewerOpenId ? [input.viewerOpenId] : []),
+        ]).has(entry.run.operatorUserId) &&
         entry.run.fictionPackId === "bio_containment",
       targets: todayTargets,
     },
