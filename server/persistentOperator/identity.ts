@@ -245,7 +245,7 @@ async function fail(
   return { ok: false, reason };
 }
 
-export async function resolveCanonicalOperatorIdentity(
+async function resolveCanonicalOperatorIdentityUnchecked(
   input: ResolveCanonicalOperatorIdentityInput,
   deps: OperatorIdentityResolverDeps = defaultDeps
 ): Promise<CanonicalOperatorResolution> {
@@ -418,6 +418,23 @@ export async function resolveCanonicalOperatorIdentity(
       aliases,
     },
   };
+}
+
+export async function resolveCanonicalOperatorIdentity(
+  input: ResolveCanonicalOperatorIdentityInput,
+  deps: OperatorIdentityResolverDeps = defaultDeps
+): Promise<CanonicalOperatorResolution> {
+  try {
+    return await resolveCanonicalOperatorIdentityUnchecked(input, deps);
+  } catch {
+    return fail(
+      deps,
+      input,
+      "identity_unresolved",
+      input.source.type === "open_id" ? "open_id" : "user_id",
+      "canonical_operator"
+    );
+  }
 }
 
 export class CanonicalOperatorIdentityError extends Error {
