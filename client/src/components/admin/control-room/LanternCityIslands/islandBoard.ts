@@ -1617,6 +1617,20 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       return { x: t.x, z: t.z, d, pitch: Math.acos(off.y / d), yaw: Math.atan2(off.x, off.z) };
     },
     renderFrame(dt = 1 / 30) { step(dt); },
+    /**
+     * A real coordinate on screen, in container pixels, placed the same way a
+     * lantern is (stepped onto land). Null until the board has loaded.
+     * `visible` is false when the point is behind the camera or off screen.
+     */
+    project(latitude: number, longitude: number) {
+      if (!ready) return null;
+      const b = lonLatToBoard(M, latitude, longitude);
+      const p = ontoLand(F, b.x, b.z, 30);
+      const v = new THREE.Vector3(p.x, H(p.x, p.z), p.z).project(camera);
+      const w = container.clientWidth || 1, h = container.clientHeight || 1;
+      const x = ((v.x + 1) / 2) * w, y = ((1 - v.y) / 2) * h;
+      return { x, y, visible: v.z < 1 && x >= -40 && y >= -40 && x <= w + 40 && y <= h + 40 };
+    },
     lanternAt(key: string) {
       const p = placed.find(q => q.key === key);
       return p ? { x: p.x, z: p.z } : null;

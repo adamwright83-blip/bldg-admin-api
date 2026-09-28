@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import type { GeographicCustomer } from "../customerGeography";
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
+import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
 
@@ -97,6 +98,7 @@ export default function LanternCityIslands({
           </div>
         ) : null}
       </header>
+      <ObjectiveMarksLayer board={board} ready={ready} onNavigate={onNavigate} />
       <div className={styles.towers}>
         <button type="button" onClick={() => setTower("opus_la")}>OPUS LA floors</button>
         <button type="button" onClick={() => setTower("century_park_east")}>Century Park East floors</button>
