@@ -179,6 +179,53 @@ describe("retrieval planning", () => {
     });
   });
 
+  it("does not give an unrelated new question the previous query's period or source scope", async () => {
+    const priorQuery = {
+      metric: "revenue" as const,
+      period: { kind: "all_time" as const },
+      comparison: null,
+      serviceType: null,
+      minOrders: 1,
+      limit: 5,
+      customerName: null,
+      listMembers: false,
+      filters: { sources: ["cleancloud" as const] },
+      filterUnion: null,
+      groupBy: null,
+      rank: null,
+    };
+    const perceived = perceiveTurn({
+      rawText: "How much revenue did we do?",
+      completeness: "complete",
+    });
+    let previousSeen: unknown = "not-called";
+    await decideTurn(
+      perceived,
+      memory({
+        orderedQuery: {
+          sourceEvidence: null,
+          queryFingerprint: "old",
+          parameters: priorQuery,
+          requestedCardinality: null,
+          ordering: null,
+          anchorEntity: null,
+          exclusions: [],
+          resolved: [],
+          presented: [],
+        },
+      }),
+      {
+        retrieve: async () => [],
+        ctx: INTEGRATION,
+        planBusinessQuery: async input => {
+          previousSeen = input.previous;
+          return null;
+        },
+      }
+    );
+    expect(previousSeen).toBeNull();
+  });
+
   it("falls back to deterministic query parsing when semantic planning fails", async () => {
     const perceived = perceiveTurn({
       rawText: "How much revenue did we do?",
