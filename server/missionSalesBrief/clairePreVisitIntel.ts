@@ -153,9 +153,7 @@ function selectShelbySources(
       shelby.find(
         teaching =>
           !used.has(teaching.id) && preferred.includes(teaching.category)
-      ) ??
-      shelby.find(teaching => !used.has(teaching.id)) ??
-      null;
+      ) ?? null;
     if (match) used.add(match.id);
     return match;
   };
@@ -234,6 +232,100 @@ function deterministicItems(
   ];
 }
 
+const EVIDENCE_SENSITIVE_WORDS = [
+  "provider",
+  "vendor",
+  "incumbent",
+  "contract",
+  "budget",
+  "price",
+  "pricing",
+  "cost",
+  "manager",
+  "owner",
+  "ownership",
+  "hoa",
+  "resident",
+  "residents",
+  "tenant",
+  "tenants",
+  "complaint",
+  "complaints",
+  "pickup",
+  "pickups",
+  "delivery",
+  "deliveries",
+  "approval",
+  "approve",
+  "decision",
+  "interested",
+  "interest",
+  "amenity",
+  "amenities",
+  "staff",
+] as const;
+
+const COMMON_CAPITALIZED_WORDS = new Set([
+  "Ask",
+  "Could",
+  "Can",
+  "Would",
+  "What",
+  "Where",
+  "When",
+  "Why",
+  "How",
+  "If",
+  "Do",
+  "Does",
+  "Is",
+  "Are",
+  "I",
+  "We",
+  "You",
+]);
+
+function hasUnsupportedCompiledFact(input: {
+  brief: MissionSalesBrief;
+  sources: SourceSelection[];
+  lines: string[];
+}): boolean {
+  const corpus = [
+    input.brief.account.name,
+    input.brief.account.accountType ?? "",
+    input.brief.mission.objective,
+    input.brief.recommendedApproach.primaryObjective,
+    ...input.brief.knownFacts.map(fact => fact.text),
+    ...input.brief.priorOutcomes.map(fact => fact.text),
+    ...input.brief.unknowns.map(item => item.question),
+    ...input.sources.flatMap(source => [
+      source.sourceText,
+      source.teaching?.title ?? "",
+      source.teaching?.principle ?? "",
+      ...(source.teaching?.whenToUse ?? []),
+      ...(source.teaching?.whenNotToUse ?? []),
+    ]),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const claims = input.lines.join(" ");
+  const claimsLower = claims.toLowerCase();
+
+  for (const word of EVIDENCE_SENSITIVE_WORDS) {
+    const wordPattern = new RegExp(`\\b${word}\\b`, "i");
+    if (wordPattern.test(claimsLower) && !wordPattern.test(corpus)) return true;
+  }
+
+  const properNouns = claims.match(/\b[A-Z][a-z]{2,}\b/g) ?? [];
+  for (const token of properNouns) {
+    if (COMMON_CAPITALIZED_WORDS.has(token)) continue;
+    if (!corpus.includes(token.toLowerCase())) return true;
+  }
+
+  return false;
+}
+
 async function compileBuildingRelevantLines(input: {
   tenantId: string;
   brief: MissionSalesBrief;
@@ -292,6 +384,15 @@ async function compileBuildingRelevantLines(input: {
       JSON.parse(typeof raw === "string" ? raw : "")
     );
     if (!parsed.success) return fallback;
+    if (
+      hasUnsupportedCompiledFact({
+        brief: input.brief,
+        sources: input.sources,
+        lines: parsed.data.items.map(item => item.line),
+      })
+    ) {
+      return fallback;
+    }
 
     const bySlot = new Map(parsed.data.items.map(item => [item.slot, item]));
     const items = SLOT_ORDER.map((slot, index) => {
