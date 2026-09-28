@@ -76,6 +76,24 @@ function groundedEmail(extraction: FieldJournalExtraction): string | null {
   return null;
 }
 
+const DECISION_MAKER_TITLE =
+  /\b(?:general|property|community|building)\s+manager\b|\b(?:owner|director|decision[- ]maker)\b/i;
+
+function explicitlyMetDecisionMaker(extraction: FieldJournalExtraction): boolean {
+  const entities = new Map(
+    extraction.entities.map(entity => [entity.clientEntityKey, entity])
+  );
+  return extraction.actions.some(action => {
+    if (action.type !== "spoke_with_contact") return false;
+    const spokenEvidence = textOf(action.evidence);
+    if (DECISION_MAKER_TITLE.test(spokenEvidence)) return true;
+    if (!action.entityClientKey) return false;
+    const entity = entities.get(action.entityClientKey);
+    const title = entity?.contactTitle ? textOf(entity.contactTitle) : "";
+    return DECISION_MAKER_TITLE.test(title);
+  });
+}
+
 /**
  * Converts the already-grounded Field Journal extraction into one proposed
  * commercial visit result. This is not a parser and creates no business truth:
@@ -123,7 +141,11 @@ export function deriveMissionLinkedDebriefProposal(input: {
     extraction.followUps.length > 0;
   const collateralDelivered = actions.has("collateral_delivered");
   const decisionMakerStatus =
-    managerUnavailable ? "unavailable" as const : "not_recorded" as const;
+    explicitlyMetDecisionMaker(extraction)
+      ? "met" as const
+      : managerUnavailable
+        ? "unavailable" as const
+        : "not_recorded" as const;
 
   const wantsEmailDraft = requestedEmailMaterial(extraction);
   const email = groundedEmail(extraction) ?? input.knownEmail?.trim() ?? null;
