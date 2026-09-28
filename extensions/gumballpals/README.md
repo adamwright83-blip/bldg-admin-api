@@ -20,8 +20,8 @@ No copying files or cookies. The normal report download may remain in Chrome; th
 - `storage`: local progress and receipts; transient download metadata in session storage. Raw CSV stays in memory, not extension storage.
 - `downloads`: a passive `onCreated` listener for the active report; no history search, file access, deletion, or arbitrary download actions.
 - `alarms`: the daily 6:00 PM America/Los_Angeles target, adjusted for DST. Missed runs catch up on browser startup. This cannot wake a closed browser or sleeping computer.
-- Optional hosts: exactly `https://cleancloudapp.com/*` and `https://admin.bldg.chat/*`.
-- No cookies, debugger, all-sites, browsing history, native messaging, remote executable code, or model API. Source page contents cannot issue extension commands.
+- Optional hosts: `https://cleancloudapp.com/*` and `https://admin.bldg.chat/*`. Chrome also requires `<all_urls>` for `captureVisibleTab`; that broader origin is declared optional, requested only from a manual Confirm gesture, never acquired by scheduled sync, and revoked on Disconnect. The capture code still refuses any target except the active CleanCloud `/store` tab.
+- No required all-sites permission, cookies, debugger, browsing history, native messaging, remote executable code, or model API. Source page contents cannot issue extension commands.
 
 ## Observed source journey
 
