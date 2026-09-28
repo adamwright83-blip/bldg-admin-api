@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
+import { recordPersistentOperatorDiagnosticEvent } from "../persistentOperator/observability";
 import {
   acceptProposal,
   completeDayDirectorCommitment,
@@ -45,6 +46,7 @@ export const dayDirectorRouter = router({
       return getDayDirectorState({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
+        actorIds: identity.dayDirectorActorIds,
         ...input,
       });
     }),
@@ -57,11 +59,22 @@ export const dayDirectorRouter = router({
     .input(z.object({ businessDate: date, proposal }))
     .mutation(async ({ ctx, input }) => {
       const identity = await dayDirectorIdentity(ctx, "day_director.accept");
-      return acceptProposal({
+      const stored = await acceptProposal({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
         ...input,
       });
+      if (stored) {
+        await recordPersistentOperatorDiagnosticEvent({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          subsystem: "day_director.accept",
+          eventKind: "objective_created",
+          objectiveId: stored.id,
+        }).catch(() => undefined);
+      }
+      return stored;
     }),
   dismiss: legacyDayforgeTenantMemberProcedure
     .input(
@@ -83,6 +96,7 @@ export const dayDirectorRouter = router({
       return completeDayDirectorCommitment({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
+        actorIds: identity.dayDirectorActorIds,
         commitmentId: input.commitmentId,
       });
     }),
