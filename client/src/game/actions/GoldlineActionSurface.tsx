@@ -10,6 +10,7 @@ import {
   MapPin,
   Package,
   Radar,
+  Radio,
   Route,
   X,
 } from "lucide-react";
@@ -39,11 +40,12 @@ function SurfaceFrame(props: {
   title: string;
   onClose: () => void;
   closeDisabled?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <section
-      className="goldline-action-surface"
+      className={`goldline-action-surface${props.className ? ` ${props.className}` : ""}`}
       aria-label={`${props.eyebrow} action`}
     >
       <header>
@@ -242,6 +244,7 @@ function VisitSurface(
     <SurfaceFrame
       eyebrow="VISIT · AUTHORITATIVE"
       title={props.mission.name}
+      className="goldline-action-surface--tower"
       onClose={props.onClose}
       closeDisabled={busy}
     >
