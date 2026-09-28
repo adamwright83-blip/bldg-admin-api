@@ -56,6 +56,7 @@ jobs:
           pnpm vitest run
           server/territory/googlePlacesTerritoryProvider.test.ts
           server/commercialMissions/commercialMissionTargetResolution.test.ts
+          client/src/components/driver/__tests__/buildMissionAutocomplete.test.ts
       - name: Prove production migration path against a genuinely clean database
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
