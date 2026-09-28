@@ -240,6 +240,7 @@ export async function ensureAdamBoard(input: {
       customerKey: customer.identityKey,
       customerName: customer.displayName,
       history: Array.from({ length: Math.max(2, customer.paidOrderCount) }, (_, index) => ({
+        source: "native" as const,
         orderId: index + 1,
         serviceAt: `${addDaysYmd(customer.lastPaidOn, -14 * (customer.paidOrderCount - index))}T12:00:00.000Z`,
         valueCents: 5000,

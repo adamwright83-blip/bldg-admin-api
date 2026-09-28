@@ -9,9 +9,9 @@
  *
  * `snapshotResponse` deliberately does not expose `lastOrderId` — the admin
  * console has no use for it and the masked shape is the right public contract.
- * But `lastOrderId` is the only join key to a building, so this reads the
- * snapshots directly rather than widening a response shape other callers rely
- * on.
+ * Native placement joins `lastOrderId` to `orders`. A CleanCloud snapshot has
+ * no numeric id; `externalOrderRef` is loaded from this tenant's
+ * `cleancloud_paid_orders` only.
  *
  * WHY IT RETURNS EVIDENCE AND NOT APPEARANCE
  *
@@ -21,8 +21,9 @@
  * without asking the server again, which it can only do if it holds the
  * timestamps rather than a rendered verdict.
  */
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  cleancloudPaidOrders,
   customerChurnScans,
   customerChurnSnapshots,
   customerRecoveryInterventions,
@@ -34,6 +35,7 @@ import {
   bindCustomerToBuilding,
   describeUnresolved,
   summarizeBindings,
+  type BindingOrderEvidence,
   type CustomerBinding,
   type UnresolvedReason,
 } from "./customerBuildingBinding";
@@ -75,6 +77,81 @@ const EMPTY_UNRESOLVED: Record<UnresolvedReason, number> = {
   conflicting_evidence: 0,
 };
 
+export type CleanCloudBindingRow = {
+  cleancloudOrderId: string;
+  sourceReportType: "orders_sales" | "orders_revenue";
+  address: string | null;
+  buildingSlug: string | null;
+};
+
+function rowHasBuildingEvidence(row: {
+  address: string | null;
+  buildingSlug: string | null;
+}): boolean {
+  return Boolean(row.address?.trim() || row.buildingSlug?.trim());
+}
+
+/**
+ * One address/slug pair per CleanCloud order. Revenue wins when it has
+ * evidence. Sales is used only when the revenue row has none. Rows are not
+ * mixed, so a sales slug cannot contradict a revenue address.
+ */
+export function preferCleanCloudBindingEvidence(
+  rows: readonly CleanCloudBindingRow[]
+): Map<string, { address: string | null; buildingSlug: string | null }> {
+  const grouped = new Map<string, CleanCloudBindingRow[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.cleancloudOrderId) ?? [];
+    list.push(row);
+    grouped.set(row.cleancloudOrderId, list);
+  }
+  const chosen = new Map<string, { address: string | null; buildingSlug: string | null }>();
+  for (const [orderId, list] of grouped) {
+    const revenue = list.find(row => row.sourceReportType === "orders_revenue");
+    const sales = list.find(row => row.sourceReportType === "orders_sales");
+    const preferred =
+      revenue && rowHasBuildingEvidence(revenue)
+        ? revenue
+        : sales && rowHasBuildingEvidence(sales)
+          ? sales
+          : (revenue ?? sales ?? null);
+    if (!preferred) continue;
+    chosen.set(orderId, {
+      address: preferred.address,
+      buildingSlug: preferred.buildingSlug,
+    });
+  }
+  return chosen;
+}
+
+export function resolveLanternCustomerBinding(input: {
+  lastOrderId: number | null;
+  orderSource: string | null;
+  externalOrderRef: string | null;
+  nativeOrder: BindingOrderEvidence | null;
+  cleanCloudOrder: { address: string | null; buildingSlug: string | null } | null;
+}): CustomerBinding {
+  if (typeof input.lastOrderId === "number") {
+    return bindCustomerToBuilding({
+      lastOrderId: input.lastOrderId,
+      order: input.nativeOrder,
+    });
+  }
+  if (input.orderSource === "cleancloud" && input.externalOrderRef?.trim()) {
+    if (!input.cleanCloudOrder) {
+      return { resolved: false, buildingId: null, reason: "order_not_found" };
+    }
+    return bindCustomerToBuilding({
+      lastOrderId: null,
+      order: {
+        address: input.cleanCloudOrder.address,
+        buildingSlug: input.cleanCloudOrder.buildingSlug,
+      },
+    });
+  }
+  return bindCustomerToBuilding({ lastOrderId: null, order: null });
+}
+
 export async function getLanternCityVitality(
   tenantId: string
 ): Promise<LanternCityVitality> {
@@ -114,6 +191,8 @@ export async function getLanternCityVitality(
       activeOrderCount: customerChurnSnapshots.activeOrderCount,
       daysSinceLastOrder: customerChurnSnapshots.daysSinceLastOrder,
       lastOrderId: customerChurnSnapshots.lastOrderId,
+      orderSource: customerChurnSnapshots.orderSource,
+      externalOrderRef: customerChurnSnapshots.externalOrderRef,
     })
     .from(customerChurnSnapshots)
     .where(eq(customerChurnSnapshots.scanId, scanId));
@@ -131,9 +210,45 @@ export async function getLanternCityVitality(
           buildingSlug: orders.buildingSlug,
         })
         .from(orders)
-        .where(inArray(orders.id, orderIds))
+        .where(
+          and(
+            inArray(orders.id, orderIds),
+            sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`
+          )
+        )
     : [];
   const ordersById = new Map(orderRows.map(row => [row.id, row]));
+
+  const cleanCloudRefs = Array.from(
+    new Set(
+      snapshots
+        .filter(
+          row =>
+            row.lastOrderId == null &&
+            row.orderSource === "cleancloud" &&
+            Boolean(row.externalOrderRef?.trim())
+        )
+        .map(row => row.externalOrderRef as string)
+    )
+  );
+  const cleanCloudRows = cleanCloudRefs.length
+    ? await db
+        .select({
+          cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
+          sourceReportType: cleancloudPaidOrders.sourceReportType,
+          address: cleancloudPaidOrders.address,
+          buildingSlug: cleancloudPaidOrders.buildingSlug,
+        })
+        .from(cleancloudPaidOrders)
+        .where(
+          and(
+            eq(cleancloudPaidOrders.tenantId, tenantId),
+            eq(cleancloudPaidOrders.paid, true),
+            inArray(cleancloudPaidOrders.cleancloudOrderId, cleanCloudRefs)
+          )
+        )
+    : [];
+  const cleanCloudByOrderId = preferCleanCloudBindingEvidence(cleanCloudRows);
 
   /*
     Latest outreach per customer. Read straight from the interventions table
@@ -164,11 +279,18 @@ export async function getLanternCityVitality(
   const customersByBuilding = new Map<string, LanternCityCustomer[]>();
 
   for (const snapshot of snapshots) {
-    const binding = bindCustomerToBuilding({
+    const binding = resolveLanternCustomerBinding({
       lastOrderId: snapshot.lastOrderId,
-      order: snapshot.lastOrderId
-        ? ordersById.get(snapshot.lastOrderId) ?? null
-        : null,
+      orderSource: snapshot.orderSource,
+      externalOrderRef: snapshot.externalOrderRef,
+      nativeOrder:
+        typeof snapshot.lastOrderId === "number"
+          ? (ordersById.get(snapshot.lastOrderId) ?? null)
+          : null,
+      cleanCloudOrder:
+        snapshot.orderSource === "cleancloud" && snapshot.externalOrderRef
+          ? (cleanCloudByOrderId.get(snapshot.externalOrderRef) ?? null)
+          : null,
     });
     bindings.push({ customerId: snapshot.id, binding });
     if (!binding.resolved) continue;

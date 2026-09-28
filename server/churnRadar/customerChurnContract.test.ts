@@ -10,6 +10,10 @@ const service = readFileSync(
   new URL("./customerChurnService.ts", import.meta.url),
   "utf8"
 );
+const cleanCloudObservations = readFileSync(
+  new URL("./cleanCloudChurnObservations.ts", import.meta.url),
+  "utf8"
+);
 const router = readFileSync(
   new URL("./churnRadarRouter.ts", import.meta.url),
   "utf8"
@@ -41,6 +45,10 @@ describe("Churn Radar production contract", () => {
 
   it("scores tenant order history and labels unavailable evidence", () => {
     expect(service).toContain(".from(orders)");
+    expect(service).toContain(".from(cleancloudPaidOrders)");
+    expect(service).toContain(
+      "eq(cleancloudPaidOrders.tenantId, input.tenantId)"
+    );
     expect(service).toContain(
       "COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}"
     );
@@ -50,8 +58,13 @@ describe("Churn Radar production contract", () => {
     );
     expect(service).toContain("activeOrderCount");
     expect(service).toContain("churnScanBookCoverage");
-    expect(service).toContain('scanSource: "native_orders_only"');
+    expect(service).toContain(
+      'scanSource: "native_orders_and_cleancloud_observations"'
+    );
     expect(service).toContain("loadBusinessSourceCoverage");
+    expect(service).toContain("groupCleanCloudChurnCustomers");
+    expect(cleanCloudObservations).toContain("allowNameComposite: false");
+    expect(service).not.toContain('scanSource: "native_orders_only"');
   });
 
   it("creates an existing stale-customer ops mission rather than a detached alert", () => {
@@ -82,7 +95,10 @@ describe("Churn Radar production contract", () => {
       "JOYSTICK opens your SMS composer. It never auto-sends"
     );
     expect(client).not.toContain("DAYFORGE CHURN RADAR");
-    expect(client).toContain("Known native-order signals only.");
+    expect(client).toContain(
+      "Known native orders and CleanCloud observations only."
+    );
+    expect(client).not.toContain("Known native-order signals only.");
   });
 
   it("attributes only a later processor-backed paid order as recovered revenue", () => {
