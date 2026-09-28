@@ -1,7 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { ENV } from "../_core/env";
 import { authorizedOperatorPhone } from "../claire/claireTwilio";
-import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity";
 import { isValidTwilioWebhook } from "../claire/conversation/twilioSignature";
 import {
   communicationReceiptEventFromProviderStatus,
@@ -505,22 +504,9 @@ export async function sendOperatorArtifact(
       "tenantId and operatorUserId are required"
     );
   }
-  const identityResolution = await resolveCanonicalOperatorIdentity({
-    tenantId,
-    source: { type: "open_id", value: operatorUserId },
-    subsystem: "operator_artifact_sms",
-  });
-  if (!identityResolution.ok) {
-    throw new OperatorArtifactRequestError(
-      "invalid_payload",
-      identityResolution.reason
-    );
-  }
-  const identity = identityResolution.identity;
-  const canonicalOperatorUserId = identity.communicationOperatorUserId;
   const resolvedTo = await authorizedOperatorPhone({
-    tenantId: identity.tenantId,
-    actorId: canonicalOperatorUserId,
+    tenantId,
+    actorId: operatorUserId,
   });
   const env = options?.env ?? process.env;
   const from = readTwilioPlatformConfig(env).smsFromNumber;
@@ -531,7 +517,7 @@ export async function sendOperatorArtifact(
     sent = await port.send({
       to: resolvedTo,
       body,
-      statusCallback: statusCallbackUrl(identity.tenantId, canonicalOperatorUserId),
+      statusCallback: statusCallbackUrl(tenantId, operatorUserId),
     });
   } catch (error) {
     if (
