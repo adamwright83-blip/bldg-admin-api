@@ -55,7 +55,7 @@ const world = createLanternWorld($("stage"), {
     $("lBody").textContent = ls.map(l => `${l.name} · $${Math.round((l.spendCents ?? 0) / 100).toLocaleString()} lifetime · last order ${new Date(l.lastOrderAt!).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`).join("\n");
   },
   onError: () => { $("loading").textContent = "Lantern City could not load its map. Reload to try again."; },
-}, { assetBase: "assets" });
+}, { assetBase: "assets", capture: new URLSearchParams(location.search).has("capture") });
 let selected: string | null = null;
 ($("lClose") as HTMLButtonElement).onclick = () => { selected = null; $("lantern").hidden = true; $("mission").hidden = false; };
 world.setLanterns(SAMPLE);

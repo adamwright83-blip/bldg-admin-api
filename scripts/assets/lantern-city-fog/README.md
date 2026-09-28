@@ -21,3 +21,8 @@ a Kit / Grey boxes switch for comparison. Kit sources live outside the repo in
 The lit buildings are sample multi-unit buildings, not real customers. Nothing here reads or
 writes the app's data. Changing the bbox in `query.overpass` and `build_district.py` rebuilds
 any US district the same way.
+
+The live board (`client/src/components/admin/control-room/LanternCityV7/`) no longer uses the kit:
+its buildings come from Lantern City's own LA set, generated in code at each footprint's real size
+(`laBuildings.ts`: craftsman, spanish, ranch, estate, dingbat, courtyard, walkup, storefront, office,
+tower, warehouse, garage). The kit tooling above only rebuilds this older single-district proof.
