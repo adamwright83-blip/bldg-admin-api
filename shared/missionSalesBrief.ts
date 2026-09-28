@@ -169,3 +169,33 @@ export function toFieldMissionSalesBrief(
     frameworkId: brief.salesIntel.frameworkId,
   };
 }
+
+
+export type ClairePreVisitIntelSlot = "OPENING" | "PROBE" | "WEAPON";
+
+export type ClairePreVisitIntelItem = {
+  slot: ClairePreVisitIntelSlot;
+  /** A short recommendation for the operator to use in the upcoming encounter. Never business truth. */
+  line: string;
+  /** Why Claire selected this move for this mission. */
+  why: string;
+  provenance: {
+    kind: "trainer_source" | "mission_brief";
+    teachingId: string | null;
+    creatorName: string | null;
+    teachingTitle: string | null;
+  };
+};
+
+export type ClairePreVisitIntel = {
+  missionId: number;
+  accountName: string;
+  briefId: number;
+  briefVersion: number;
+  generatedAt: string;
+  items: [
+    ClairePreVisitIntelItem,
+    ClairePreVisitIntelItem,
+    ClairePreVisitIntelItem,
+  ];
+};
