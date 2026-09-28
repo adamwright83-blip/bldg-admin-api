@@ -17,7 +17,32 @@ describe("Armory J0 outcome accounting", () => {
       associations: 8,
       businessOutcomes: 1,
       wins: 1,
-      it("requires exact lineage before using direct association strengths", () => {
+    });
+  });
+
+  it("keeps different stable outcomes distinct", () => {
+    expect(
+      summarizeArmoryAssociations([
+        {
+          usageId: "u1",
+          outcomeKind: "follow_up_created",
+          outcomeReference: "follow-up:1",
+        },
+        {
+          usageId: "u1",
+          outcomeKind: "account_won",
+          outcomeReference: "account:1",
+        },
+      ])
+    ).toEqual({
+      usages: 1,
+      associations: 2,
+      businessOutcomes: 2,
+      wins: 1,
+    });
+  });
+
+  it("requires exact lineage before using direct association strengths", () => {
     const usages = [
       { decisionPointId: "dp-1", encounterReference: "enc-1" },
       { decisionPointId: "dp-2", encounterReference: "enc-2" },
@@ -48,29 +73,5 @@ describe("Armory J0 outcome accounting", () => {
         associationStrength: "mission_window_legacy",
       })
     ).toEqual(usages);
-  });
-});
-  });
-
-  it("keeps different stable outcomes distinct", () => {
-    expect(
-      summarizeArmoryAssociations([
-        {
-          usageId: "u1",
-          outcomeKind: "follow_up_created",
-          outcomeReference: "follow-up:1",
-        },
-        {
-          usageId: "u1",
-          outcomeKind: "account_won",
-          outcomeReference: "account:1",
-        },
-      ])
-    ).toEqual({
-      usages: 1,
-      associations: 2,
-      businessOutcomes: 2,
-      wins: 1,
-    });
   });
 });
