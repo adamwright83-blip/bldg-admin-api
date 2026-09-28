@@ -7,12 +7,14 @@ const source = readFileSync(
 );
 
 describe("BuildMissionSheet Google Places autocomplete", () => {
-  it("drives Places directly from the typed value instead of a timer-only shadow state", () => {
+  it("drives Places directly from the exact visible input value", () => {
     expect(source).toContain(
-      "const deferredSearch = useDeferredValue(searchNearValue.trim())"
+      "const placesQuery = searchNearValue.trim()"
     );
-    expect(source).toContain("{ query: deferredSearch }");
+    expect(source).toContain("{ query: placesQuery }");
     expect(source).not.toContain("debouncedSearch");
+    expect(source).not.toContain("deferredSearch");
+    expect(source).not.toContain("useDeferredValue");
     expect(source).not.toContain("setTimeout(() =>");
   });
 
@@ -22,7 +24,7 @@ describe("BuildMissionSheet Google Places autocomplete", () => {
       source.indexOf("useEffect(() =>")
     );
     expect(queryBlock).toContain("enabled:");
-    expect(queryBlock).toContain("deferredSearch.length >= 2");
+    expect(queryBlock).toContain("placesQuery.length >= 2");
     expect(queryBlock).not.toContain('targetMode === "exact_property"');
 
     const dropdownBlock = source.slice(
