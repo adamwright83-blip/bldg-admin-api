@@ -33,7 +33,7 @@ export type GoldlineVisitContext = {
   proposal: { id: string; status: string; validThrough: string } | null;
   navigationUrl: string | null;
   /** Claire's three pre-visit recommendations over authoritative mission truth. */
-  preVisitIntel: ClairePreVisitIntel | null;
+  preVisitIntel?: ClairePreVisitIntel | null;
 };
 
 export type VisitOutcomeRequest = {
