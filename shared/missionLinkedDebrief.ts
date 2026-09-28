@@ -143,10 +143,10 @@ export function deriveMissionLinkedDebriefProposal(input: {
       /\b(?:asked|requested|told)\s+me\s+to\b/i.test(text) ||
       /\b(?:asked|requested)\s+(?:for|that)\b/i.test(text)
     );
-  const quoteRequested = hasOutcome(extraction, "proposal_requested") ||
-    evidenceItems.some(text =>
-      customerRequested(text, /\b(?:quote|pricing|proposal)\b/i)
-    );
+  // Quote credit is score-bearing, so it comes only from the explicit
+  // structured proposal_requested outcome. Free-text heuristics are too easy
+  // to invert ("I asked if they wanted a quote") and must fail closed.
+  const quoteRequested = hasOutcome(extraction, "proposal_requested");
   const pilotRequested = evidenceItems.some(text =>
     customerRequested(text, /\b(?:pilot|trial)\b/i)
   );
