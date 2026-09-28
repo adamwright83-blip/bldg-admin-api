@@ -195,6 +195,14 @@ function semanticPlanningEligible(
   );
 }
 
+function plannerMayUsePriorQuery(perceived: PerceivedTurn): boolean {
+  return (
+    perceived.businessIntent === "query_refinement" ||
+    perceived.businessIntent === "query_requery" ||
+    perceived.priorQueryReference
+  );
+}
+
 export async function decideTurn(
   perceived: PerceivedTurn,
   memory: WorkingMemorySnapshot,
@@ -250,7 +258,9 @@ export async function decideTurn(
         semanticBusinessQuery = await deps.planBusinessQuery({
           tenantId: memory.currentCallContext.tenantId,
           utterance: perceived.assembledText,
-          previous: priorBusinessQuery(memory),
+          previous: plannerMayUsePriorQuery(perceived)
+            ? priorBusinessQuery(memory)
+            : null,
           today: deps.ctx.today,
         });
       } catch {
