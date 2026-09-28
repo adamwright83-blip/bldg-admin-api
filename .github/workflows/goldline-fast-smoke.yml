@@ -56,6 +56,8 @@ jobs:
           pnpm vitest run
           server/strategy/verticalTemplates/registry.test.ts
           server/saas/tenantSourceAdapters.test.ts
+          server/analytics/canonicalRevenue.test.ts
+          server/analytics/sourceCoverage.test.ts
           server/executionIntelligence/selectExecutionIntelligence.test.ts
           server/armory/armoryJ0.test.ts
           shared/tenantLearningGovernance.test.ts
