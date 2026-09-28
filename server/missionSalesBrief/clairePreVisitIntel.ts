@@ -1,0 +1,295 @@
+import { z } from "zod";
+import type {
+  ClairePreVisitIntel,
+  ClairePreVisitIntelItem,
+  ClairePreVisitIntelSlot,
+  MissionSalesBrief,
+} from "../../shared/missionSalesBrief";
+import type { SalesIntelTeaching } from "../../shared/salesIntelTeaching";
+import { invokeLLM } from "../_core/llm";
+import { ensureCurrentMissionSalesBrief } from "./missionSalesBriefService";
+import { listEligibleSalesIntel } from "./salesIntelEligibility";
+
+const SLOT_ORDER: ClairePreVisitIntelSlot[] = ["OPENING", "PROBE", "WEAPON"];
+
+const SLOT_CATEGORIES: Record<ClairePreVisitIntelSlot, string[]> = {
+  OPENING: ["opening", "prospecting", "rapport", "positioning"],
+  PROBE: ["discovery", "questioning", "qualification", "sales_psychology"],
+  WEAPON: [
+    "objection_prevention",
+    "objection_handling",
+    "value",
+    "positioning",
+    "pricing",
+    "negotiation",
+  ],
+};
+
+const compiledSchema = z.object({
+  items: z.array(z.object({
+    slot: z.enum(["OPENING", "PROBE", "WEAPON"]),
+    line: z.string().trim().min(1).max(280),
+    why: z.string().trim().min(1).max(180),
+  })).length(3),
+});
+
+const COMPILED_JSON_SCHEMA = {
+  name: "claire_previsit_three",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      items: {
+        type: "array",
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slot: { type: "string", enum: ["OPENING", "PROBE", "WEAPON"] },
+            line: { type: "string", maxLength: 280 },
+            why: { type: "string", maxLength: 180 },
+          },
+          required: ["slot", "line", "why"],
+        },
+      },
+    },
+    required: ["items"],
+  },
+} as const;
+
+type SourceSelection = {
+  slot: ClairePreVisitIntelSlot;
+  teaching: SalesIntelTeaching | null;
+  sourceText: string;
+  fallbackWhy: string;
+};
+
+function normalizedCreator(teaching: SalesIntelTeaching): string {
+  return teaching.creatorName.trim().toLowerCase();
+}
+
+function bestSourceText(teaching: SalesIntelTeaching): string {
+  const exact = teaching.exampleLanguage.find(
+    phrase => phrase.kind === "exact_source_phrase"
+  );
+  const paraphrase = teaching.exampleLanguage.find(
+    phrase => phrase.kind === "paraphrased_principle"
+  );
+  return exact?.text ?? paraphrase?.text ?? teaching.principle;
+}
+
+function rankTeachings(teachings: SalesIntelTeaching[]): SalesIntelTeaching[] {
+  return [...teachings].sort((left, right) => {
+    const confidence =
+      (right.confidence ?? 0) - (left.confidence ?? 0);
+    if (confidence !== 0) return confidence;
+    return right.createdAt.localeCompare(left.createdAt);
+  });
+}
+
+function selectShelbySources(
+  brief: MissionSalesBrief,
+  eligible: SalesIntelTeaching[]
+): SourceSelection[] {
+  const shelby = rankTeachings(
+    eligible.filter(
+      teaching =>
+        normalizedCreator(teaching) === "shelby sapp" ||
+        normalizedCreator(teaching).includes("shelby sapp")
+    )
+  );
+  const used = new Set<string>();
+
+  const choose = (slot: ClairePreVisitIntelSlot): SalesIntelTeaching | null => {
+    const preferred = SLOT_CATEGORIES[slot];
+    const match =
+      shelby.find(
+        teaching =>
+          !used.has(teaching.id) && preferred.includes(teaching.category)
+      ) ??
+      shelby.find(teaching => !used.has(teaching.id)) ??
+      null;
+    if (match) used.add(match.id);
+    return match;
+  };
+
+  const opening = choose("OPENING");
+  const probe = choose("PROBE");
+  const weapon = choose("WEAPON");
+
+  return [
+    {
+      slot: "OPENING",
+      teaching: opening,
+      sourceText:
+        opening
+          ? bestSourceText(opening)
+          : brief.recommendedApproach.recommendedOpening ??
+            brief.recommendedApproach.primaryObjective,
+      fallbackWhy: opening
+        ? `Reviewed Shelby Sapp teaching: ${opening.title}`
+        : "Current mission brief opening",
+    },
+    {
+      slot: "PROBE",
+      teaching: probe,
+      sourceText:
+        probe
+          ? bestSourceText(probe)
+          : brief.recommendedApproach.questionsToAsk[0] ??
+            brief.unknowns[0]?.question ??
+            "Ask one question that identifies the real blocker.",
+      fallbackWhy: probe
+        ? `Reviewed Shelby Sapp teaching: ${probe.title}`
+        : "Current mission brief discovery question",
+    },
+    {
+      slot: "WEAPON",
+      teaching: weapon,
+      sourceText:
+        weapon
+          ? bestSourceText(weapon)
+          : brief.recommendedApproach.actionsToTake[0] ??
+            brief.recommendedApproach.thingsToAvoid[0] ??
+            "Do not force a close; earn a concrete next step.",
+      fallbackWhy: weapon
+        ? `Reviewed Shelby Sapp teaching: ${weapon.title}`
+        : "Current mission brief recommendation",
+    },
+  ];
+}
+
+function deterministicItems(
+  sources: SourceSelection[]
+): [ClairePreVisitIntelItem, ClairePreVisitIntelItem, ClairePreVisitIntelItem] {
+  const items = sources.map(source => ({
+    slot: source.slot,
+    line: source.sourceText,
+    why: source.fallbackWhy,
+    provenance: source.teaching
+      ? {
+          kind: "trainer_source" as const,
+          teachingId: source.teaching.id,
+          creatorName: source.teaching.creatorName,
+          teachingTitle: source.teaching.title,
+        }
+      : {
+          kind: "mission_brief" as const,
+          teachingId: null,
+          creatorName: null,
+          teachingTitle: null,
+        },
+  }));
+  return items as [
+    ClairePreVisitIntelItem,
+    ClairePreVisitIntelItem,
+    ClairePreVisitIntelItem,
+  ];
+}
+
+async function compileBuildingRelevantLines(input: {
+  tenantId: string;
+  brief: MissionSalesBrief;
+  sources: SourceSelection[];
+}): Promise<[ClairePreVisitIntelItem, ClairePreVisitIntelItem, ClairePreVisitIntelItem]> {
+  const fallback = deterministicItems(input.sources);
+  try {
+    const result = await invokeLLM({
+      tenantId: input.tenantId,
+      maxTokens: 700,
+      temperature: 0.15,
+      outputSchema: COMPILED_JSON_SCHEMA,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are Claire equipping a field operator with exactly three short sales moves before a real property visit.",
+            "The three slots are OPENING, PROBE, and WEAPON.",
+            "Adapt the supplied reviewed trainer teaching into natural words the operator can actually say at this specific account.",
+            "Never invent a decision maker, objection, incumbent provider, relationship, prior conversation, amenity, budget, outcome, or any other business fact.",
+            "Account name and account type may be used only as context; do not turn them into unsupported claims.",
+            "If a slot uses mission-brief fallback material, preserve its meaning and do not attribute it to the trainer.",
+            "OPENING should be a short first line. PROBE should be one useful question. WEAPON should be one short reframe or response the operator can remember.",
+            "These are recommendations, never statements about what has already happened.",
+            "Return the slots in OPENING, PROBE, WEAPON order.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            account: {
+              name: input.brief.account.name,
+              accountType: input.brief.account.accountType,
+            },
+            mission: {
+              status: input.brief.mission.currentStatus,
+              objective: input.brief.recommendedApproach.primaryObjective,
+            },
+            knownFacts: input.brief.knownFacts.map(fact => fact.text),
+            unknowns: input.brief.unknowns.map(item => item.question),
+            sourceMoves: input.sources.map(source => ({
+              slot: source.slot,
+              sourceKind: source.teaching ? "reviewed_shelby_sapp_teaching" : "mission_brief",
+              teachingTitle: source.teaching?.title ?? null,
+              principle: source.teaching?.principle ?? null,
+              sourceText: source.sourceText,
+              whenToUse: source.teaching?.whenToUse ?? [],
+              whenNotToUse: source.teaching?.whenNotToUse ?? [],
+            })),
+          }),
+        },
+      ],
+    });
+    const raw = result.choices[0]?.message?.content;
+    const parsed = compiledSchema.safeParse(
+      JSON.parse(typeof raw === "string" ? raw : "")
+    );
+    if (!parsed.success) return fallback;
+
+    const bySlot = new Map(parsed.data.items.map(item => [item.slot, item]));
+    const items = SLOT_ORDER.map((slot, index) => {
+      const compiled = bySlot.get(slot);
+      if (!compiled) return fallback[index];
+      return {
+        ...fallback[index],
+        line: compiled.line,
+        why: compiled.why,
+      };
+    });
+    return items as [
+      ClairePreVisitIntelItem,
+      ClairePreVisitIntelItem,
+      ClairePreVisitIntelItem,
+    ];
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getClairePreVisitIntel(input: {
+  tenantId: string;
+  missionId: number;
+}): Promise<ClairePreVisitIntel | null> {
+  const brief = await ensureCurrentMissionSalesBrief(input);
+  if (!brief) return null;
+
+  const eligible = await listEligibleSalesIntel();
+  const sources = selectShelbySources(brief, eligible);
+  const items = await compileBuildingRelevantLines({
+    tenantId: input.tenantId,
+    brief,
+    sources,
+  });
+
+  return {
+    missionId: input.missionId,
+    accountName: brief.account.name,
+    briefId: brief.id,
+    briefVersion: brief.version,
+    generatedAt: new Date().toISOString(),
+    items,
+  };
+}
