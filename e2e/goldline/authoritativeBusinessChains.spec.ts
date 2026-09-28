@@ -374,19 +374,16 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
   ]);
 
   await page.getByRole("button", { name: /ARRIVED/ }).click({ timeout: 10_000 });
-  // #113 put a DECISION MAKER select beside the result, so a bare
-  // locator("select") is now ambiguous. Name the one under test.
-  await page.getByTestId("visit-outcome-select").selectOption("won", { timeout: 10_000 });
-  await page
-    .locator("textarea")
-    .fill("Real field visit produced a signed result.", { timeout: 10_000 });
-  await page.getByRole("button", { name: "RECORD VISIT RESULT" }).click({ timeout: 10_000 });
+  await expect(page.getByTestId("mission-linked-debrief")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.getByTestId("visit-outcome-select")).toHaveCount(0);
 
-  await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
-  await page
-    .getByTestId("parking-lot-clerk-text")
-    .fill("Decision maker signed; I reported exactly what happened.", { timeout: 10_000 });
-  await page.getByTestId("parking-lot-clerk-save").click({ timeout: 10_000 });
+  await page.getByTestId("open-mission-debrief").click({ timeout: 10_000 });
+  await expect(page.getByTestId("mission-debrief-authoritative-fields")).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByTestId("confirm-mission-debrief").click({ timeout: 10_000 });
 
   await expectControlRestored(page, listenersBefore);
   const proof = await fixtureProof(page);
@@ -395,9 +392,8 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     "FIELD_DEPART",
     "FIELD_ARRIVE",
     "FIELD_OUTCOME",
-    "PARKING_LOT_CLERK",
   ]);
-  expect(proof.refetches).toBeGreaterThanOrEqual(5);
+  expect(proof.refetches).toBeGreaterThanOrEqual(4);
   expect(proof.projectedState).toBe("captured");
   expectStableRequestId(proof);
 });
