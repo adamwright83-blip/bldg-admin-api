@@ -132,6 +132,75 @@ function businessEvidence(overrides: Partial<EvidenceItem> = {}): EvidenceItem {
 }
 
 describe("retrieval planning", () => {
+  it("lets a bounded semantic planner carry period and source scope into the authoritative read", async () => {
+    const perceived = perceiveTurn({
+      rawText: "How much revenue did we do in August through CleanCloud?",
+      completeness: "complete",
+    });
+    const planned = {
+      metric: "revenue" as const,
+      period: {
+        kind: "between" as const,
+        start: "2026-08-01",
+        end: "2026-08-31",
+      },
+      comparison: null,
+      serviceType: null,
+      minOrders: 1,
+      limit: 5,
+      customerName: null,
+      listMembers: false,
+      filters: { sources: ["cleancloud" as const] },
+      filterUnion: null,
+      groupBy: null,
+      rank: null,
+    };
+    const requests: import("../contracts/retrieval").RetrievalRequest[] = [];
+    let plannerCalls = 0;
+    await decideTurn(perceived, memory(), {
+      retrieve: async request => {
+        requests.push(request);
+        return [];
+      },
+      ctx: INTEGRATION,
+      planBusinessQuery: async input => {
+        plannerCalls += 1;
+        expect(input.tenantId).toBe("default");
+        expect(input.today).toBe("2026-09-20");
+        expect(input.utterance).toContain("August");
+        return planned;
+      },
+    });
+    expect(plannerCalls).toBe(1);
+    expect(requests).toContainEqual({
+      compartment: "businessMemory",
+      kind: "business_query",
+      query: planned,
+    });
+  });
+
+  it("falls back to deterministic query parsing when semantic planning fails", async () => {
+    const perceived = perceiveTurn({
+      rawText: "How much revenue did we do?",
+      completeness: "complete",
+    });
+    const requests: import("../contracts/retrieval").RetrievalRequest[] = [];
+    await decideTurn(perceived, memory(), {
+      retrieve: async request => {
+        requests.push(request);
+        return [];
+      },
+      ctx: INTEGRATION,
+      planBusinessQuery: async () => {
+        throw new Error("planner unavailable");
+      },
+    });
+    const request = requests.find(
+      candidate => candidate.compartment === "businessMemory" && candidate.kind === "business_query"
+    );
+    expect(request && "query" in request ? request.query.metric : null).toBe("revenue");
+  });
+
   it("infers a metric explicitly and returns null when it cannot tell", () => {
     expect(inferBusinessMetric("What were my last five sales?")).toBe("latest_sales");
     expect(inferBusinessMetric("How are you feeling today?")).toBeNull();
