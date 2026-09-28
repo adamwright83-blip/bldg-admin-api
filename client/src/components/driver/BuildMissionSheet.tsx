@@ -52,44 +52,58 @@ export function BuildMissionSheet({
   const [missionType, setMissionType] = useState<MissionType | null>(null);
   const [targetMode, setTargetMode] = useState<TargetMode>("exact_property");
   const [searchNearValue, setSearchNearValue] = useState(searchNear);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
+  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [placeSuggestionsLoading, setPlaceSuggestionsLoading] = useState(false);
+  const [lastSuggestionsQuery, setLastSuggestionsQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRequestRef = useRef(0);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
-  const placeSuggestions = trpc.system.commercialMission.placeSuggestions.useQuery(
-    { query: debouncedSearch },
-    {
-      enabled:
-        open &&
-        targetMode === "exact_property" &&
-        !selectedPlace &&
-        debouncedSearch.trim().length >= 2,
-      staleTime: 30_000,
-      retry: 1,
-    }
-  );
 
   useEffect(() => {
     if (open) {
       setSearchNearValue(searchNear);
       setSelectedPlace(null);
+      setPlaceSuggestions([]);
+      setLastSuggestionsQuery("");
     }
   }, [open, searchNear]);
 
   useEffect(() => {
+    const query = searchNearValue.trim();
+    const requestNumber = ++autocompleteRequestRef.current;
+
     if (
       !open ||
       targetMode !== "exact_property" ||
       selectedPlace ||
-      searchNearValue.trim().length < 2
+      query.length < 2
     ) {
-      setDebouncedSearch("");
+      setPlaceSuggestions([]);
+      setPlaceSuggestionsLoading(false);
+      setLastSuggestionsQuery("");
       return;
     }
 
+    setPlaceSuggestionsLoading(true);
     const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchNearValue.trim());
-    }, 220);
+      setLastSuggestionsQuery(query);
+      void utils.system.commercialMission.placeSuggestions
+        .fetch({ query })
+        .then(results => {
+          if (autocompleteRequestRef.current !== requestNumber) return;
+          setPlaceSuggestions(results as PlaceSuggestion[]);
+        })
+        .catch(() => {
+          if (autocompleteRequestRef.current !== requestNumber) return;
+          setPlaceSuggestions([]);
+        })
+        .finally(() => {
+          if (autocompleteRequestRef.current !== requestNumber) return;
+          setPlaceSuggestionsLoading(false);
+        });
+    }, 180);
+
     return () => window.clearTimeout(timeout);
   }, [open, searchNearValue, selectedPlace, targetMode]);
 
@@ -242,7 +256,7 @@ export function BuildMissionSheet({
                     aria-expanded={
                       targetMode === "exact_property" &&
                       !selectedPlace &&
-                      Boolean(placeSuggestions.data?.length)
+                      placeSuggestions.length > 0
                     }
                   />
                 </label>
@@ -268,14 +282,14 @@ export function BuildMissionSheet({
                     role="listbox"
                     aria-label="Google Places property suggestions"
                   >
-                    {placeSuggestions.isFetching ? (
+                    {placeSuggestionsLoading ? (
                       <div className="flex items-center gap-2 px-4 py-3 text-[14px] font-semibold text-white/60">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Finding the property…
                       </div>
-                    ) : placeSuggestions.data?.length ? (
+                    ) : placeSuggestions.length ? (
                       <>
-                        {(placeSuggestions.data as PlaceSuggestion[]).map(suggestion => (
+                        {placeSuggestions.map(suggestion => (
                           <button
                             key={suggestion.placeId}
                             type="button"
@@ -284,7 +298,9 @@ export function BuildMissionSheet({
                             onClick={() => {
                               setSelectedPlace(suggestion);
                               setSearchNearValue(suggestion.text);
-                              setDebouncedSearch("");
+                              autocompleteRequestRef.current += 1;
+                              setPlaceSuggestions([]);
+                              setLastSuggestionsQuery("");
                               sounds.press();
                               haptics.impact();
                             }}
@@ -304,7 +320,7 @@ export function BuildMissionSheet({
                           Powered by Google
                         </div>
                       </>
-                    ) : debouncedSearch ? (
+                    ) : lastSuggestionsQuery ? (
                       <div className="px-4 py-3 text-[13px] font-semibold text-white/45">
                         No Google Places matches yet. Keep typing or enter the full property.
                       </div>
