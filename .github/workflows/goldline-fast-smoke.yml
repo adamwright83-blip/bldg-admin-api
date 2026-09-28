@@ -122,6 +122,12 @@ jobs:
           server/goldlineWorld/futurePressureService.test.ts
           server/field/fieldOpportunityService.test.ts
           server/field/fieldTodayService.test.ts
+      - name: Prove Claire pre-visit sales loadout
+        run: >-
+          pnpm vitest run
+          server/missionSalesBrief/clairePreVisitIntel.test.ts
+          client/src/game/actions/actionSurface.test.ts
+
       - name: Prove Rook CONTACT authority boundary
         run: >-
           pnpm vitest run
