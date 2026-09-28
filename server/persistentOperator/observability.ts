@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
 import {
   dayDirectorCommitments,
   goldlineWorldEvents,
@@ -171,6 +171,7 @@ export async function loadPersistentOperatorDiagnostics(input: {
   canonicalOperatorId: string;
   operatorUserId: string;
   dayDirectorActorId: string;
+  dayDirectorActorIds?: string[];
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -179,26 +180,40 @@ export async function loadPersistentOperatorDiagnostics(input: {
   const today = businessDateInZone(now, timeZone);
   const db = await getDb();
 
-  const tenantEventRows = db
-    ? await db
-        .select()
-        .from(persistentOperatorDiagnosticEvents)
-        .where(
-          and(
-            eq(persistentOperatorDiagnosticEvents.tenantId, input.tenantId),
-            gte(persistentOperatorDiagnosticEvents.occurredAt, since)
+  const [eventRows, identityFailures] = db
+    ? await Promise.all([
+        db
+          .select()
+          .from(persistentOperatorDiagnosticEvents)
+          .where(
+            and(
+              eq(persistentOperatorDiagnosticEvents.tenantId, input.tenantId),
+              eq(
+                persistentOperatorDiagnosticEvents.canonicalOperatorId,
+                input.canonicalOperatorId
+              ),
+              gte(persistentOperatorDiagnosticEvents.occurredAt, since)
+            )
           )
-        )
-        .orderBy(desc(persistentOperatorDiagnosticEvents.occurredAt))
-        .limit(5000)
-    : [];
-
-  const eventRows = tenantEventRows.filter(
-    row => row.canonicalOperatorId === input.canonicalOperatorId
-  );
-  const identityFailures = tenantEventRows.filter(
-    row => row.eventKind === "identity_join_failure"
-  );
+          .orderBy(desc(persistentOperatorDiagnosticEvents.occurredAt))
+          .limit(5000),
+        db
+          .select()
+          .from(persistentOperatorDiagnosticEvents)
+          .where(
+            and(
+              eq(persistentOperatorDiagnosticEvents.tenantId, input.tenantId),
+              eq(
+                persistentOperatorDiagnosticEvents.eventKind,
+                "identity_join_failure"
+              ),
+              gte(persistentOperatorDiagnosticEvents.occurredAt, since)
+            )
+          )
+          .orderBy(desc(persistentOperatorDiagnosticEvents.occurredAt))
+          .limit(5000),
+      ])
+    : [[], []];
   const silentIdle = summarizeSilentIdle(eventRows);
   const initiationFunnel = summarizeInitiationFunnelByBusinessWeek(
     eventRows,
@@ -219,6 +234,14 @@ export async function loadPersistentOperatorDiagnostics(input: {
         obligation.status === "draft_prepared")
   );
 
+  const authorizedActorIds = [...new Set(
+    (input.dayDirectorActorIds?.length
+      ? input.dayDirectorActorIds
+      : [input.dayDirectorActorId]
+    )
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const openCommitments = db
     ? await db
         .select({
@@ -230,7 +253,7 @@ export async function loadPersistentOperatorDiagnostics(input: {
         .where(
           and(
             eq(dayDirectorCommitments.tenantId, input.tenantId),
-            eq(dayDirectorCommitments.actorId, input.dayDirectorActorId),
+            inArray(dayDirectorCommitments.actorId, authorizedActorIds),
             eq(dayDirectorCommitments.status, "open")
           )
         )
