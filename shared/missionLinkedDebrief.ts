@@ -60,16 +60,22 @@ function hasOutcome(extraction: FieldJournalExtraction, type: FieldJournalExtrac
   return extraction.outcomes.some(item => item.type === type && item.explicitlyReported);
 }
 
-function requestedEmailMaterial(extraction: FieldJournalExtraction): boolean {
-  return extraction.followUps.some(item => {
+function requestedEmailMaterial(extraction: FieldJournalExtraction) {
+  return extraction.followUps.find(item => {
     const text = textOf(item.requestedAction);
     return /\b(email|send)\b/i.test(text) &&
       /\b(packet|collateral|proposal|pricing|information|info|materials?)\b/i.test(text);
-  });
+  }) ?? null;
 }
 
-function groundedEmail(extraction: FieldJournalExtraction): string | null {
-  for (const entity of extraction.entities) {
+function groundedEmail(
+  extraction: FieldJournalExtraction,
+  entityClientKey: string | null
+): string | null {
+  const entities = entityClientKey
+    ? extraction.entities.filter(entity => entity.clientEntityKey === entityClientKey)
+    : extraction.entities;
+  for (const entity of entities) {
     const candidate = entity.email?.value?.trim();
     if (candidate && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return candidate;
   }
