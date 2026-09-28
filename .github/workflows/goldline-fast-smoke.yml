@@ -122,12 +122,45 @@ jobs:
           server/goldlineWorld/futurePressureService.test.ts
           server/field/fieldOpportunityService.test.ts
           server/field/fieldTodayService.test.ts
+      - name: Prove Claire pre-visit sales loadout
+        run: >-
+          pnpm vitest run
+          server/missionSalesBrief/clairePreVisitIntel.test.ts
+          server/missionSalesBrief/preVisitIntelAuthorization.test.ts
+          client/src/game/actions/actionSurface.test.ts
+          client/src/pages/commercialSalesMissionClaireIntel.test.ts
+
       - name: Prove Rook CONTACT authority boundary
         run: >-
           pnpm vitest run
           server/goldlineProgression/rookContactGrant.test.ts
           server/rookContact/rookContactAuthorityRepair.test.ts
           client/src/pages/goldline/wayward/waywardTruth.test.ts
+
+  linked-debrief-contracts:
+    name: linked-debrief-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prove mission-linked tower debrief
+        run: >-
+          pnpm vitest run
+          shared/missionLinkedDebrief.test.ts
+          server/commercialMissions/missionLinkedDebriefContract.test.ts
+          server/commercialMissions/driverSalesJournalResilience.test.ts
+          server/commercialMissions/parkingLotDebriefContract.test.ts
+          client/src/components/driver/SalesMomentum.test.ts
 
   fast-browser:
     name: ${{ matrix.name }}

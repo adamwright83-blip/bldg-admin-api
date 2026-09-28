@@ -23,6 +23,7 @@ import type {
   GoldlineActionServices,
   GoldlineVisitContext,
 } from "../actions/actionServices";
+import type { MissionLinkedDebriefState } from "../../../../shared/missionLinkedDebrief";
 
 const FIXTURES = ["CALL", "VISIT", "FOLLOW_UP", "RECOVER", "STALLER"] as const;
 type BusinessLoopFixture = (typeof FIXTURES)[number];
@@ -294,6 +295,10 @@ export default function GoldlineBusinessLoopHarness(props: {
   const [worldMounted, setWorldMounted] = useState(true);
   const pendingTruth = useRef<PendingTruth | null>(null);
   const visit = useRef(visitContext("phone_ready", 1));
+  const missionDebrief = useRef<MissionLinkedDebriefState>({
+    status: "not_started",
+    missionId: MISSION_ID,
+  });
   const proof = useRef<FixtureProof>({
     fixture,
     writes: [],
@@ -401,6 +406,60 @@ export default function GoldlineBusinessLoopHarness(props: {
           },
         };
         return visit.current;
+      },
+      loadMissionDebrief: async () => missionDebrief.current,
+      openMissionDebrief: ({ missionId }) => {
+        missionDebrief.current = {
+          status: "ready",
+          missionId,
+          journalEntryId: "11111111-1111-4111-8111-111111111111",
+          transcript: "Decision maker signed the agreement.",
+          proposal: {
+            outcome: "won",
+            decisionMakerStatus: "met",
+            collateralDelivered: false,
+            quoteRequested: false,
+            pilotRequested: false,
+            followUpRequested: false,
+            summary: "Decision maker signed the agreement.",
+            question: null,
+            additionalQuestion: null,
+            emailDraft: null,
+          },
+        };
+      },
+      finalizeMissionDebrief: async input => {
+        const current = missionDebrief.current;
+        if (
+          current.status !== "ready" ||
+          current.journalEntryId !== input.journalEntryId
+        ) {
+          throw new Error("Fixture debrief is not ready");
+        }
+        recordWrite({
+          kind: "FIELD_OUTCOME",
+          missionId: input.missionId,
+          requestId: input.requestId,
+        });
+        visit.current = visitContext("won", 6, {
+          outcome: "won",
+          followUpAt: null,
+        });
+        stageTruth({
+          missionStatus: "won",
+          visualState: "captured",
+          contestedUntil: null,
+          unlockedPath: null,
+          isHistorical: true,
+        });
+        missionDebrief.current = {
+          status: "completed",
+          missionId: input.missionId,
+          journalEntryId: input.journalEntryId,
+          outcome: "won",
+          emailDraft: null,
+        };
+        return missionDebrief.current;
       },
       loadFollowUp: async () =>
         fixture === "FOLLOW_UP"

@@ -27,4 +27,25 @@ describe("Goldline action surfaces", () => {
     expect(surface).toContain("Scout returned zero new discoveries.");
     expect(surface).not.toContain("Math.random");
   });
+
+
+  it("shows every proposed authoritative debrief field before confirmation", () => {
+    expect(surface).toContain('data-testid="mission-debrief-authoritative-fields"');
+    expect(surface).toContain("DECISION MAKER");
+    expect(surface).toContain("COLLATERAL DELIVERED");
+    expect(surface).toContain("QUOTE REQUESTED");
+    expect(surface).toContain("PILOT REQUESTED");
+    expect(surface).toContain("FOLLOW-UP REQUESTED");
+    expect(surface).toContain("record a correction instead");
+  });
+
+  it("shows Claire's three mission-grounded equips before the visit resolves", () => {
+    expect(surface).toContain('data-testid="claire-tower-intel"');
+    expect(surface).toContain("THREE THINGS BEFORE YOU GO IN");
+    expect(surface).toContain("preVisitIntel.items.map");
+    expect(surface).toContain('item.provenance.kind === "trainer_source"');
+    expect(surface).toContain('item.provenance.kind === "foundation"');
+    expect(surface).toContain("FOUNDATION · ARMORY");
+    expect(surface).toContain("!context?.visitOutcome");
+  });
 });
