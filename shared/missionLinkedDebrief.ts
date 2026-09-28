@@ -24,6 +24,8 @@ export type MissionDebriefProposal = {
   followUpRequested: boolean;
   summary: string;
   question: MissionDebriefQuestion | null;
+  /** A second missing fact is collected only after the first is answered. */
+  additionalQuestion: MissionDebriefQuestion | null;
   emailDraft: MissionDebriefEmailDraft | null;
 };
 
@@ -93,6 +95,8 @@ export function deriveMissionLinkedDebriefProposal(input: {
     ...extraction.followUps.map(item => textOf(item.requestedAction)),
   ].join(" ");
 
+  const managerUnavailable = hasOutcome(extraction, "manager_unavailable");
+  const askedToReturn = hasOutcome(extraction, "asked_to_return");
   let outcome: FieldVisitOutcome = "no_decision";
   let reason: FieldOutcomeReason | undefined;
   if (hasOutcome(extraction, "account_won_reported") || hasOutcome(extraction, "verbal_yes_reported")) {
@@ -100,10 +104,12 @@ export function deriveMissionLinkedDebriefProposal(input: {
   } else if (hasOutcome(extraction, "account_lost_reported") || hasOutcome(extraction, "declined")) {
     outcome = "lost";
     reason = hasOutcome(extraction, "declined") ? "no_interest" : "other";
-  } else if (hasOutcome(extraction, "manager_unavailable")) {
-    outcome = "no_contact";
-  } else if (hasOutcome(extraction, "asked_to_return")) {
+  } else if (askedToReturn) {
+    // A blocked visit can still produce an explicit next move. Preserve that
+    // return request rather than collapsing the encounter to no_contact.
     outcome = "follow_up";
+  } else if (managerUnavailable) {
+    outcome = "no_contact";
   }
 
   const quoteRequested = hasOutcome(extraction, "proposal_requested") ||
@@ -117,7 +123,7 @@ export function deriveMissionLinkedDebriefProposal(input: {
     extraction.followUps.length > 0;
   const collateralDelivered = actions.has("collateral_delivered");
   const decisionMakerStatus =
-    outcome === "no_contact" ? "unavailable" as const : "not_recorded" as const;
+    managerUnavailable ? "unavailable" as const : "not_recorded" as const;
 
   const wantsEmailDraft = requestedEmailMaterial(extraction);
   const email = groundedEmail(extraction) ?? input.knownEmail?.trim() ?? null;
@@ -131,20 +137,23 @@ export function deriveMissionLinkedDebriefProposal(input: {
       }
     : null;
 
-  let question: MissionDebriefQuestion | null = null;
+  const questions: MissionDebriefQuestion[] = [];
   if (outcome === "follow_up") {
-    question = {
+    questions.push({
       kind: "follow_up_at",
       prompt: "When did they ask you to come back or follow up?",
       inputType: "datetime-local",
-    };
-  } else if (emailDraft && !emailDraft.to) {
-    question = {
+    });
+  }
+  if (emailDraft && !emailDraft.to) {
+    questions.push({
       kind: "email",
       prompt: "What email did they give you?",
       inputType: "email",
-    };
+    });
   }
+  const question = questions[0] ?? null;
+  const additionalQuestion = questions[1] ?? null;
 
   const summary =
     outcome === "no_contact"
@@ -169,6 +178,7 @@ export function deriveMissionLinkedDebriefProposal(input: {
     followUpRequested,
     summary,
     question,
+    additionalQuestion,
     emailDraft,
   };
 }
