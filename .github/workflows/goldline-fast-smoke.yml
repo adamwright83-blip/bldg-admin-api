@@ -73,6 +73,7 @@ jobs:
           server/persistentOperator/phase0SchemaContract.test.ts
           server/persistentOperator/identity.test.ts
           server/persistentOperator/observability.test.ts
+          server/persistentOperator/identitySchemaContract.test.ts
           server/lanternCity/lanternCityRouter.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
