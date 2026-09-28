@@ -60,6 +60,7 @@ jobs:
           server/armory/armoryJ0.test.ts
           shared/tenantLearningGovernance.test.ts
           server/persistentOperator/tenantScope.test.ts
+          server/persistentOperator/phase0SchemaContract.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run
