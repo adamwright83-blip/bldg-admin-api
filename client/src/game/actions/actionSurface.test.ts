@@ -32,8 +32,8 @@ describe("Goldline action surfaces", () => {
   it("shows Claire's three mission-grounded equips before the visit resolves", () => {
     expect(surface).toContain('data-testid="claire-tower-intel"');
     expect(surface).toContain("THREE THINGS BEFORE YOU GO IN");
-    expect(surface).toContain("context.preVisitIntel.items.map");
+    expect(surface).toContain("preVisitIntel.items.map");
     expect(surface).toContain('item.provenance.kind === "trainer_source"');
-    expect(surface).toContain("!context.visitOutcome");
+    expect(surface).toContain("!context?.visitOutcome");
   });
 });
