@@ -16,7 +16,7 @@ describe("tenant source adapter contract", () => {
       connectionMode: "csv",
     });
     expect(manifest.providerKey).toBe(provider.key);
-    expect(manifest.entityCapabilities).toEqual(["customers", "orders", "payments"]);
+    expect(manifest.entityCapabilities).toEqual(["customers", "orders"]);
     expect(manifest.connectionModes).toEqual(["csv"]);
     expect(manifest.coverage.semantics).toBe("existing_source_coverage");
     expect(manifest.freshness.clock).toBe("existing_source_binding");
