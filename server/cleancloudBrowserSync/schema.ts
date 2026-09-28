@@ -6,7 +6,14 @@ import {
   int,
   index,
   uniqueIndex,
+  customType,
 } from "drizzle-orm/mysql-core";
+
+const mediumtext = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "mediumtext";
+  },
+});
 
 // Separate schema module: no concurrent edits to drizzle/schema.ts.
 export const browserSyncBindings = mysqlTable(
@@ -65,3 +72,61 @@ export const browserSyncAttempts = mysqlTable(
     ),
   })
 );
+
+/** Control totals read from Metrics → Overview. Screenshot bytes live in a second table. */
+export const dashboardWitnesses = mysqlTable(
+  "cleancloud_dashboard_witnesses",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    storeId: varchar("storeId", { length: 32 }).notNull(),
+    storeLabel: varchar("storeLabel", { length: 255 }).notNull(),
+    rangeFrom: varchar("rangeFrom", { length: 10 }).notNull(),
+    rangeTo: varchar("rangeTo", { length: 10 }).notNull(),
+    comparisonFrom: varchar("comparisonFrom", { length: 10 }),
+    comparisonTo: varchar("comparisonTo", { length: 10 }),
+    salesCents: int("salesCents").notNull(),
+    comparisonSalesCents: int("comparisonSalesCents"),
+    revenueCents: int("revenueCents").notNull(),
+    comparisonRevenueCents: int("comparisonRevenueCents"),
+    orders: int("orders").notNull(),
+    comparisonOrders: int("comparisonOrders"),
+    newCustomers: int("newCustomers"),
+    observedAt: timestamp("observedAt").notNull(),
+    screenshotSha256: varchar("screenshotSha256", { length: 64 }).notNull(),
+    extractionVersion: varchar("extractionVersion", { length: 64 }).notNull(),
+    source: varchar("source", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    observationUnique: uniqueIndex("uq_cc_dashboard_witness_observation").on(
+      table.tenantId,
+      table.storeId,
+      table.rangeFrom,
+      table.rangeTo,
+      table.screenshotSha256
+    ),
+    periodIdx: index("idx_cc_dashboard_witness_period").on(
+      table.tenantId,
+      table.rangeFrom,
+      table.rangeTo,
+      table.observedAt
+    ),
+  })
+);
+
+/** Private PNG for the witness. Never selected by the operator summary. */
+export const dashboardWitnessScreenshots = mysqlTable(
+  "cleancloud_dashboard_witness_screenshots",
+  {
+    witnessId: varchar("witnessId", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    pngBase64: mediumtext("pngBase64").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantIdx: index("idx_cc_dashboard_witness_screenshot_tenant").on(table.tenantId),
+  })
+);
+

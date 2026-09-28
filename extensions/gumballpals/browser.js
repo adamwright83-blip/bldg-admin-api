@@ -292,6 +292,7 @@ export async function goldlineRequest(operation, input) {
       receipt: "GET",
       resolve: "POST",
       reportFailure: "POST",
+      recordWitness: "POST",
     };
     if (!Object.hasOwn(methods, operation))
       throw new Error("Unknown operation.");
@@ -310,7 +311,9 @@ export async function goldlineRequest(operation, input) {
         headers:
           method === "POST" ? { "Content-Type": "application/json" } : {},
         body: method === "POST" ? JSON.stringify({ json: input }) : undefined,
-        signal: AbortSignal.timeout(operation === "import" ? 120000 : 15000),
+        signal: AbortSignal.timeout(
+          operation === "import" || operation === "recordWitness" ? 120000 : 15000
+        ),
       }
     );
     if (!response.ok)
@@ -326,6 +329,160 @@ export async function goldlineRequest(operation, input) {
   } catch (error) {
     return { ok: false, error: error.message };
   }
+}
+
+// Metrics → Overview. Navigation uses the same observed menu as the sales
+// export. Totals are taken from visible text beside an exact label. Date
+// controls that this extension has not observed are not clicked.
+export async function readMetricsOverview(range) {
+  let stage = "opening reporting";
+  try {
+    if (location.origin !== "https://cleancloudapp.com" || location.pathname !== "/store")
+      throw new Error("Open the signed-in gumball store.");
+    const pause = () => new Promise(r => setTimeout(r, 100));
+    const visible = e =>
+      e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
+    const wait = async predicate => {
+      for (let i = 0; i < 100; i++) {
+        const value = predicate();
+        if (value) return value;
+        await pause();
+      }
+      throw new Error(
+        `Overview capture stopped while ${stage}. The expected control did not become available.`
+      );
+    };
+    const exact = (root, selector, text) =>
+      [...root.querySelectorAll(selector)].filter(
+        e => visible(e) && e.textContent.trim() === text
+      );
+    const storeLabel = document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim();
+    if (!storeLabel || !document.title.endsWith("CleanCloud"))
+      throw new Error("Sign into gumball first.");
+    if (!visible(document.querySelector("#metricsContainer"))) {
+      (await wait(() => document.querySelector("#accountShow"))).click();
+      (
+        await wait(
+          () =>
+            visible(document.querySelector("#slide6")) &&
+            document.querySelector("#slide6")
+        )
+      ).click();
+    }
+    const overviewRoot = await wait(
+      () =>
+        visible(document.querySelector("#metricsContainer")) &&
+        document.querySelector("#metricsContainer")
+    );
+    stage = "opening Overview";
+    const overview = exact(overviewRoot, "a, button", "Overview");
+    if (overview.length > 1) throw new Error("Ambiguous Overview control. Capture stopped.");
+    if (overview.length === 1) overview[0].click();
+    const metrics = await wait(
+      () =>
+        visible(document.querySelector("#metricsContainer")) &&
+        document.querySelector("#metricsContainer")
+    );
+    const labels = [
+      "Sales",
+      "Revenue",
+      "Orders",
+      "New Customers",
+      "Comparison Sales",
+      "Comparison Revenue",
+      "Comparison Orders",
+    ];
+    const directText = el =>
+      [...el.childNodes]
+        .filter(node => node.nodeType === 3)
+        .map(node => node.textContent.trim())
+        .filter(Boolean)
+        .join(" ");
+    const fields = [];
+    for (const label of labels) {
+      const nodes = [...metrics.querySelectorAll("*")].filter(
+        el => visible(el) && directText(el) === label
+      );
+      if (nodes.length > 1) throw new Error(`${label} appeared more than once.`);
+      if (nodes.length === 0) continue;
+      const sibling = nodes[0].nextElementSibling;
+      const value = sibling && visible(sibling) ? sibling.textContent.trim().replace(/\s+/g, " ") : "";
+      if (!value || value.length > 40 || labels.includes(value))
+        throw new Error(`${label} had no unambiguous value.`);
+      fields.push({ label, valueText: value });
+    }
+    for (const label of ["Sales", "Revenue", "Orders"]) {
+      if (!fields.some(field => field.label === label))
+        throw new Error(`${label} was not on the page.`);
+    }
+    const months =
+      "January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec";
+    const dateRe = new RegExp(
+      `\\d{4}-\\d{2}-\\d{2}|\\b(?:${months})\\s+\\d{1,2},\\s*\\d{4}|\\b\\d{1,2}/\\d{1,2}/\\d{4}`,
+      "gi"
+    );
+    const mentions = (text, iso) => {
+      const [year, month, day] = iso.split("-").map(Number);
+      const names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+      ];
+      const name = names[month - 1];
+      return [
+        iso,
+        `${month}/${day}/${year}`,
+        `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`,
+        `${name} ${day}, ${year}`,
+        `${name.slice(0, 3)} ${day}, ${year}`,
+      ].some(form => text.includes(form));
+    };
+    const candidates = [...metrics.querySelectorAll("*")].filter(el => {
+      if (!visible(el)) return false;
+      const text = el.textContent.trim().replace(/\s+/g, " ");
+      if (!text || text.length > 180) return false;
+      const childHasDate = [...el.children].some(child => {
+        dateRe.lastIndex = 0;
+        return dateRe.test(child.textContent || "");
+      });
+      if (childHasDate) return false;
+      dateRe.lastIndex = 0;
+      return [...text.matchAll(dateRe)].length === 2;
+    }).map(el => el.textContent.trim().replace(/\s+/g, " "));
+    const unique = [...new Set(candidates)];
+    const primary = unique.filter(
+      text => mentions(text, range.from) && mentions(text, range.to)
+    );
+    if (primary.length !== 1)
+      throw new Error(
+        "The overview is not on the requested dates, and the date control is not one this extension has observed. Nothing was saved."
+      );
+    const others = unique.filter(text => text !== primary[0]);
+    if (others.length > 1) throw new Error("The comparison period is ambiguous. Nothing was saved.");
+    return {
+      ok: true,
+      value: {
+        storeLabel,
+        rangeText: primary[0],
+        comparisonText: others[0] ?? null,
+        fields,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+export function assertCleanCloudScreenshotTarget(tab) {
+  let url;
+  try {
+    url = new URL(tab?.url || "");
+  } catch {
+    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+  }
+  if (url.origin !== "https://cleancloudapp.com" || url.pathname !== "/store")
+    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+  if (!tab.active)
+    throw new Error("Screenshot refused. The store tab is not the visible tab.");
 }
 
 export const sites = { GOLDLINE, CLEANCLOUD, MAX_BYTES };
