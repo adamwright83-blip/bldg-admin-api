@@ -180,7 +180,8 @@ describe("Lantern City objective marks — today", () => {
   it("offers Driver launch only for the signed-in operator's supported run", () => {
     const own = projectLanternObjectiveMarks({
       tenantId: TENANT,
-      operatorId: "driver-1",
+      operatorId: "7",
+      viewerOpenId: "driver-1",
       dayLine: todayLine(),
       runs: [entry()],
     });
@@ -188,7 +189,8 @@ describe("Lantern City objective marks — today", () => {
 
     const otherOperator = projectLanternObjectiveMarks({
       tenantId: TENANT,
-      operatorId: "driver-2",
+      operatorId: "7",
+      viewerOpenId: "driver-2",
       dayLine: todayLine(),
       runs: [entry()],
     });
@@ -196,7 +198,8 @@ describe("Lantern City objective marks — today", () => {
 
     const unsupportedPack = projectLanternObjectiveMarks({
       tenantId: TENANT,
-      operatorId: "driver-1",
+      operatorId: "7",
+      viewerOpenId: "driver-1",
       dayLine: todayLine(),
       runs: [entry({ run: run({ fictionPackId: null }) })],
     });
