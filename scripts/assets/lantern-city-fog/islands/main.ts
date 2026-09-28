@@ -33,6 +33,16 @@ const board = createIslandBoard($("stage"), {
       ? `${info.lanterns} lantern${info.lanterns === 1 ? "" : "s"} lit here. Every customer's home burns gold.`
       : "Still under cloud. Win one customer here and the clouds burn off the whole island.";
   },
+  onHover: h => {
+    const tip = $("tip");
+    tip.hidden = !h;
+    if (!h) return;
+    const who = h.keys.map(k => SAMPLE.find(c => c.key === k) ?? (k === "win-weho" ? { name: "New customer" } : null)).filter(Boolean) as { name?: string }[];
+    $("tipTitle").textContent = who.length === 1 ? who[0].name ?? "Customer" : `${who.length} customers here`;
+    $("tipBody").textContent = who.length > 1 ? who.map(c => c.name).join("\n") : "Lantern lit · sample customer";
+    tip.style.left = `${Math.min(h.x + 16, innerWidth - 260)}px`;
+    tip.style.top = `${Math.max(h.y - 70, 8)}px`;
+  },
   onError: () => { $("loading").textContent = "The island board could not load its map. Reload to try again."; },
 }, { assetBase: "assets", capture: params.has("capture") });
 ($("cClose") as HTMLButtonElement).onclick = () => { $("card").hidden = true; board.board(); };

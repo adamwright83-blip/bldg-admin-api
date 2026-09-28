@@ -26,6 +26,9 @@
   .win { position: fixed; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); appearance: none; border: 2px solid var(--gold); border-radius: 16px; padding: 14px 20px; background: var(--card); color: var(--ink); font: 700 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 14px 40px rgba(30,20,40,.4); }
   .win:disabled { opacity: .5; cursor: default; }
   .sample { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); transform: translateX(-50%); background: rgba(255,243,214,.92); color: #7a5200; border-radius: 999px; padding: 6px 12px; font: 700 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+  .tip { position: fixed; z-index: 5; pointer-events: none; max-width: 240px; background: var(--card); border: 2px solid var(--gold); border-radius: 12px; padding: 8px 12px; box-shadow: 0 10px 30px rgba(30,20,40,.4); }
+  .tip b { display: block; font: 700 17px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: var(--ink); }
+  .tip span { display: block; margin-top: 3px; font-size: 13px; color: var(--ink2); white-space: pre-line; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 16px "Barlow Condensed", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #5d4a3a; background: #f3d6b4; padding: 0 24px; text-align: center; }
   @media (max-width: 640px) { .sample { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 96px); } .win { left: 18px; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); } .card { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); } }
 </style>
@@ -39,6 +42,7 @@
     <div class="pill">Islands open <b id="nO">0</b></div>
   </div>
 </div>
+<div class="tip" id="tip" hidden><b id="tipTitle"></b><span id="tipBody"></span></div>
 <div class="card" id="card" hidden><h2 id="cTitle"></h2><p id="cBody"></p><button id="cClose">Back to the board</button></div>
 <button class="win" id="win">Win a customer in West Hollywood</button>
 <div class="sample">Sample customers</div>

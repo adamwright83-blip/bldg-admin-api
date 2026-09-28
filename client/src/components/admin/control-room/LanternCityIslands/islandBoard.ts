@@ -35,6 +35,8 @@ export type IslandEvents = {
   onError?: (e: unknown) => void;
   onIsland?: (info: IslandInfo | null) => void;
   onStats?: (s: { islands: number; open: number; lanterns: number }) => void;
+  /** the pointer is over a lit home: every customer there, and where to show the card (page px) */
+  onHover?: (h: { keys: string[]; x: number; y: number } | null) => void;
 };
 
 const DEFAULT_BASE = "/assets/goldline/lantern-city";
@@ -1503,8 +1505,26 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       }
     }
   };
+  // hover: the lit home nearest the pointer (within 34px on screen) surfaces its customers, no click
+  let hoverSig = "";
+  const onMove = (e: PointerEvent) => {
+    if (!ready) return;
+    const r = renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3();
+    let best: typeof placed[number] | null = null, bd = 34;
+    for (const p of placed) {
+      v.set(p.x, H(p.x, p.z) + (p.plan ? p.plan.top * S * 0.6 : 0), p.z).project(camera);
+      const d = Math.hypot(r.left + ((v.x + 1) / 2) * r.width - e.clientX, r.top + ((1 - v.y) / 2) * r.height - e.clientY);
+      if (v.z < 1 && d < bd) { bd = d; best = p; }
+    }
+    const keys = best ? placed.filter(q => q.plan && q.plan === best!.plan).map(q => q.key) : [];
+    const sig = keys.join("|");
+    if (sig !== hoverSig || keys.length) events.onHover?.(keys.length ? { keys, x: e.clientX, y: e.clientY } : null);
+    hoverSig = sig;
+    renderer.domElement.style.cursor = keys.length ? "pointer" : "";
+  };
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
+  renderer.domElement.addEventListener("pointermove", onMove);
 
   // ----------------------------------------------------------------- the loop
   let raf = 0;
@@ -1601,6 +1621,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       ro.disconnect();
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointerup", onUp);
+      renderer.domElement.removeEventListener("pointermove", onMove);
       controls.dispose();
       scene.traverse(o => {
         const m = o as THREE.Mesh;
