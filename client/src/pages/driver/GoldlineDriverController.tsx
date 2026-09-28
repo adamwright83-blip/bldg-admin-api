@@ -626,6 +626,8 @@ function LiveGoldlineDriverController({
   const arriveVisit = trpc.system.commercialMission.fieldArrive.useMutation();
   const recordVisitOutcome =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const finalizeMissionDebriefMutation =
+    trpc.system.commercialMission.finalizeMissionDebrief.useMutation();
   const recordParkingLotClerk =
     trpc.system.commercialMission.fieldParkingLotClerk.useMutation();
   const updateFieldChecklist =
@@ -1081,6 +1083,36 @@ function LiveGoldlineDriverController({
     return utils.system.missionSalesBrief.preVisitIntel.fetch({ missionId });
   }
 
+  async function loadMissionDebriefAction(missionId: number) {
+    return utils.system.commercialMission.missionDebriefState.fetch({ missionId });
+  }
+
+  function openMissionDebriefAction(input: {
+    missionId: number;
+    buildingName: string;
+  }) {
+    // The mission already supplies the property identity. Never ask the
+    // operator to identify the building a second time.
+    setDebrief(input);
+    setJournalOpen(true);
+  }
+
+  async function finalizeMissionDebriefAction(
+    input: Parameters<NonNullable<GoldlineActionServices["finalizeMissionDebrief"]>>[0]
+  ) {
+    const state = await finalizeMissionDebriefMutation.mutateAsync(input);
+    await Promise.all([
+      utils.system.commercialMission.fieldState.invalidate({
+        missionId: input.missionId,
+      }),
+      utils.system.commercialMission.missionDebriefState.invalidate({
+        missionId: input.missionId,
+      }),
+      utils.system.commercialMission.mySalesJournals.invalidate(),
+    ]);
+    return state;
+  }
+
   async function startVisitAction(input: {
     missionId: number;
     requestId: string;
@@ -1255,6 +1287,9 @@ function LiveGoldlineDriverController({
     arriveVisit: arriveVisitAction,
     recordVisitOutcome: recordVisitAction,
     recordParkingLotClerkObservation: recordParkingLotClerkAction,
+    loadMissionDebrief: loadMissionDebriefAction,
+    openMissionDebrief: openMissionDebriefAction,
+    finalizeMissionDebrief: finalizeMissionDebriefAction,
     loadFollowUp: loadAuthoritativeFollowUp,
     completeFollowUp: completeFollowUpAction,
     rescheduleFollowUp: rescheduleFollowUpAction,
