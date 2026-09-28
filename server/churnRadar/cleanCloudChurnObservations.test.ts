@@ -203,7 +203,7 @@ describe("CleanCloud churn observations", () => {
     expect(described?.score.confidence).toBe("low");
     expect(described?.score.reasons.join(" ")).not.toMatch(/dry cleaning/i);
     expect(described?.lastServiceLabel).not.toMatch(/dry cleaning/i);
-    expect(described?.history.every(item => item.orderId === null)).toBe(true);
+    expect(described?.history.every(item => item.source === "cleancloud")).toBe(true);
     expect(described?.history.every(item => item.weightLbs === null)).toBe(true);
 
     const evidence = evidenceForScore(described!.score, described!.history);

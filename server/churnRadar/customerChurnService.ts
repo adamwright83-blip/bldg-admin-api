@@ -108,10 +108,8 @@ function isActiveOrder(row: OrderRow): boolean {
 }
 
 function historySourceLabel(history: CustomerHistoryObservation[]): string {
-  const hasNative = history.some(item => typeof item.orderId === "number");
-  const hasExternal = history.some(
-    item => item.orderId == null && Boolean(item.externalOrderId?.trim())
-  );
+  const hasNative = history.some(item => item.source === "native");
+  const hasExternal = history.some(item => item.source === "cleancloud");
   if (hasNative && hasExternal) return "orders and cleancloud_paid_orders";
   if (hasExternal) return "cleancloud_paid_orders";
   return "orders";
@@ -128,7 +126,7 @@ export function evidenceForScore(
   const last = history.at(-1)!;
   const lastId = churnObservationSourceIds([last]);
   const lastSource =
-    typeof last.orderId === "number"
+    last.source === "native"
       ? "orders.paidAt or orders.updatedAt"
       : "cleancloud_paid_orders.paidDateUtc or paymentDateUtc";
   return [
@@ -499,8 +497,8 @@ export async function runCustomerChurnScan(input: {
       if (completed.length < 2) continue;
       const latest = completed.at(-1)!;
       const history: CustomerHistoryObservation[] = completed.map(row => ({
+        source: "native",
         orderId: row.id,
-        externalOrderId: null,
         serviceAt: completedServiceAt(row),
         valueCents: cents(row.total),
         weightLbs: row.weightLbs === null ? null : Number(row.weightLbs),

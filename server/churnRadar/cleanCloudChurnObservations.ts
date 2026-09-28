@@ -230,7 +230,7 @@ export function cleanCloudHistory(
   observations: readonly CleanCloudChurnObservation[]
 ): CustomerHistoryObservation[] {
   return datedObservations(observations).map(observation => ({
-    orderId: null,
+    source: "cleancloud" as const,
     externalOrderId: observation.externalOrderId,
     serviceAt: observation.serviceAt,
     valueCents: observation.valueCents,

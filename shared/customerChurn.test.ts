@@ -13,8 +13,8 @@ const history = (
   valueCents = 6_500
 ): CustomerHistoryObservation[] =>
   dates.map((serviceAt, index) => ({
+    source: "native" as const,
     orderId: index + 1,
-    externalOrderId: null,
     serviceAt,
     valueCents,
     weightLbs: weights ? (weights[index] ?? null) : 20,
@@ -120,7 +120,7 @@ describe("customer churn scoring", () => {
       customerKey: "cc-1",
       customerName: "Ada Lovelace",
       history: dates.map((serviceAt, index) => ({
-        orderId: null,
+        source: "cleancloud" as const,
         externalOrderId: `cc-${index + 1}`,
         serviceAt,
         valueCents: 50_000,

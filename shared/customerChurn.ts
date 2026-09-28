@@ -1,14 +1,31 @@
 export type CustomerChurnGrade = "low" | "medium" | "high";
 export type CustomerChurnConfidence = "low" | "medium" | "high";
 
-export type CustomerHistoryObservation = {
-  orderId: number | null;
-  externalOrderId: string | null;
+type HistoryFacts = {
   serviceAt: string | Date;
   valueCents: number;
   weightLbs: number | null;
   serviceType: "wash_fold" | "dry_cleaning" | null;
 };
+
+/** A Laundry Butler order. The id is the native numeric order id. */
+export type NativeHistoryObservation = HistoryFacts & {
+  source: "native";
+  orderId: number;
+};
+
+/**
+ * A CleanCloud paid observation. The id is the CleanCloud order ref.
+ * There is no native order id, and none is invented.
+ */
+export type CleanCloudHistoryObservation = HistoryFacts & {
+  source: "cleancloud";
+  externalOrderId: string;
+};
+
+export type CustomerHistoryObservation =
+  | NativeHistoryObservation
+  | CleanCloudHistoryObservation;
 
 export type CustomerChurnInput = {
   customerKey: string;
@@ -159,13 +176,15 @@ export function serviceLabel(
   return "service not proven";
 }
 
-/** Numeric native id, otherwise the external order id. Never a made-up number. */
+/** Numeric native id, or the CleanCloud order ref. Never a made-up number. */
 export function churnObservationSourceId(
   item: CustomerHistoryObservation
 ): number | string | null {
-  if (typeof item.orderId === "number") return item.orderId;
-  const external = item.externalOrderId?.trim();
-  return external ? external : null;
+  if (item.source === "cleancloud") {
+    const external = item.externalOrderId.trim();
+    return external ? external : null;
+  }
+  return item.orderId;
 }
 
 export function churnObservationSourceIds(
