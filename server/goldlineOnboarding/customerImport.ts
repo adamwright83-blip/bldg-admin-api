@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { parseCsv } from "../externalSystems/csvIngestion";
 import { GoogleGeocoder } from "../geography/googleGeocoder";
 import { registerTenantImportProvider } from "../saas/tenantImportProviders";
+import { assertTenantSourceManifest } from "../../shared/tenantSourceAdapters";
 import type { TenantImportRequest, TenantImportResult } from "../../shared/tenantImports";
 const norm=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,"");
 export function previewCustomerCsv(payload:string){
@@ -25,6 +26,7 @@ export function previewCustomerCsv(payload:string){
 }
 export class CustomerCsvProvider {
  readonly key="goldline_customer_csv";
+ readonly manifest=assertTenantSourceManifest({providerKey:this.key,version:"1",entityCapabilities:["customers"],connectionModes:["csv"],canonicalIdentityKeys:{customers:["customer_id","email","phone","derived_identity"]},coverage:{bases:["orders_created"],semantics:"existing_source_coverage"},freshness:{clock:"existing_source_binding"},provenance:{providerIdentity:"goldline_customer_csv",adapterVersion:"goldline_customer_csv_v1"},evidenceClass:"operator_attested"});
  readonly capabilities={customers:true,orders:false,connectionMode:"csv" as const};
  async validateConnection(){}
  async importBatch(input:TenantImportRequest):Promise<TenantImportResult>{
