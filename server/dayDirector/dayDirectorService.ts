@@ -1,5 +1,5 @@
 import { enforceTitleContract } from "../claire/briefing/titleContract";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
   dayDirectorCommitments,
@@ -58,8 +58,14 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 export async function getDayDirectorState(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: string[];
   businessDate: string;
 }) {
+  const actorIds = [...new Set(
+    (input.actorIds?.length ? input.actorIds : [input.actorId])
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const db = await getDb();
   if (!db)
     return {
@@ -85,7 +91,7 @@ export async function getDayDirectorState(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          inArray(dayDirectorCommitments.actorId, actorIds),
           eq(dayDirectorCommitments.businessDate, input.businessDate)
         )
       ),
@@ -95,7 +101,7 @@ export async function getDayDirectorState(input: {
       .where(
         and(
           eq(dayDirectorPromptStates.tenantId, input.tenantId),
-          eq(dayDirectorPromptStates.actorId, input.actorId),
+          inArray(dayDirectorPromptStates.actorId, actorIds),
           eq(dayDirectorPromptStates.businessDate, input.businessDate),
           eq(dayDirectorPromptStates.state, "dismissed")
         )
@@ -151,7 +157,7 @@ export async function getDayDirectorState(input: {
           : {}),
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
-    dismissedPromptKeys: prompts.map(row => row.promptKey),
+    dismissedPromptKeys: [...new Set(prompts.map(row => row.promptKey))],
     intelligenceAvailable: Boolean(ENV.anthropicApiKey?.trim()),
   };
 }
@@ -364,8 +370,14 @@ export async function setPromptState(input: {
 export async function completeDayDirectorCommitment(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: string[];
   commitmentId: string;
 }) {
+  const actorIds = [...new Set(
+    (input.actorIds?.length ? input.actorIds : [input.actorId])
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
@@ -375,7 +387,7 @@ export async function completeDayDirectorCommitment(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          inArray(dayDirectorCommitments.actorId, actorIds),
           eq(dayDirectorCommitments.id, input.commitmentId)
         )
       )
