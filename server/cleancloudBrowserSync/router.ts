@@ -967,7 +967,8 @@ export const cleancloudBrowserSyncRouter = router({
             eq(economicReconciliations.tenantId, ctx.tenantId),
             eq(economicReconciliations.storeId, binding.storeId)
           )
-        );
+        )
+        .orderBy(desc(economicReconciliations.createdAt));
       const witness: WitnessControl | null = witnessRow
         ? {
             id: witnessRow.id,
@@ -1049,7 +1050,16 @@ export const cleancloudBrowserSyncRouter = router({
           reconciliationId = winner.id;
         }
       }
-      const prior: PriorReconciliation[] = priorRows
+      // A period can be reconciled repeatedly as stronger evidence arrives.
+      // The query is newest-first; retain only the latest authoritative version
+      // of each period so superseded mismatch/insufficient rows cannot poison
+      // comparison or monthly-record event generation.
+      const latestPriorRows = new Map<string, (typeof priorRows)[number]>();
+      for (const row of priorRows) {
+        const key = `${row.rangeFrom}|${row.rangeTo}`;
+        if (!latestPriorRows.has(key)) latestPriorRows.set(key, row);
+      }
+      const prior: PriorReconciliation[] = [...latestPriorRows.values()]
         .filter(row => row.id !== reconciliationId)
         .map(row => ({
           id: row.id,
