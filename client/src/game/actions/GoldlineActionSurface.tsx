@@ -121,7 +121,11 @@ function VisitSurface(
       const next = await operation();
       await props.services.refetchAuthoritativeTruth(props.action.missionId);
       if (mounted.current) {
-        setContext(next);
+        setContext(current => ({
+          ...next,
+          preVisitIntel:
+            next.preVisitIntel ?? current?.preVisitIntel ?? null,
+        }));
         if (final) props.onPersisted();
       }
     } catch (cause) {
@@ -166,6 +170,48 @@ function VisitSurface(
         <p>
           <Loader2 /> READING FIELD STATE…
         </p>
+      ) : null}
+      {context?.preVisitIntel && !context.visitOutcome ? (
+        <section
+          className="claire-tower-intel"
+          data-testid="claire-tower-intel"
+          aria-label="Claire pre-visit sales intelligence"
+        >
+          <div className="claire-tower-intel__sigil" aria-hidden="true">
+            <span />
+            <i />
+          </div>
+          <div className="claire-tower-intel__heading">
+            <small>CLAIRE // TOWER BOSS INTEL</small>
+            <strong>THREE THINGS BEFORE YOU GO IN</strong>
+            <span>
+              {context.preVisitIntel.accountName} · loadout locked to this mission
+            </span>
+          </div>
+          <div className="claire-tower-intel__slots">
+            {context.preVisitIntel.items.map((item, index) => (
+              <article
+                key={item.slot}
+                className="claire-tower-intel__slot"
+                data-slot={item.slot.toLowerCase()}
+              >
+                <div className="claire-tower-intel__index">
+                  0{index + 1}
+                </div>
+                <div>
+                  <small>{item.slot}</small>
+                  <p>{item.line}</p>
+                  <em>{item.why}</em>
+                  <span>
+                    {item.provenance.kind === "trainer_source"
+                      ? `TRAINER SOURCE · ${item.provenance.creatorName ?? "REVIEWED INTEL"}`
+                      : "MISSION BRIEF · CLAIRE"}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       ) : null}
       {context?.mission.status === "phone_ready" ? (
         <button
