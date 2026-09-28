@@ -5,7 +5,7 @@
  * deleted or overwritten).
  */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   salesIntelSourceArtifacts,
   salesIntelTeachings,
@@ -218,6 +218,42 @@ export async function listAllAcceptedTeachings(): Promise<SalesIntelTeaching[]> 
     )
     .orderBy(desc(salesIntelTeachings.createdAt));
   return rows.map(teachingView);
+}
+
+/**
+ * Strict execution-intelligence read. Unlike the broader admin corpus read,
+ * every row must still be active/accepted/not-superseded, linked to its exact
+ * transcript/source pair, and come from a successfully extracted source.
+ */
+export async function listExecutionEligibleTeachings(): Promise<SalesIntelTeaching[]> {
+  const database = await db();
+  const rows = await database
+    .select({ teaching: salesIntelTeachings })
+    .from(salesIntelTeachings)
+    .innerJoin(
+      salesIntelTranscripts,
+      and(
+        eq(salesIntelTranscripts.id, salesIntelTeachings.transcriptId),
+        eq(
+          salesIntelTranscripts.sourceArtifactId,
+          salesIntelTeachings.sourceArtifactId
+        )
+      )
+    )
+    .innerJoin(
+      salesIntelSourceArtifacts,
+      eq(salesIntelSourceArtifacts.id, salesIntelTeachings.sourceArtifactId)
+    )
+    .where(
+      and(
+        eq(salesIntelTeachings.reviewState, "accepted"),
+        eq(salesIntelTeachings.active, true),
+        isNull(salesIntelTeachings.supersededAt),
+        eq(salesIntelSourceArtifacts.status, "extracted")
+      )
+    )
+    .orderBy(desc(salesIntelTeachings.createdAt));
+  return rows.map(row => teachingView(row.teaching));
 }
 
 export type DriverSafeTeachingCategoryCount = {
