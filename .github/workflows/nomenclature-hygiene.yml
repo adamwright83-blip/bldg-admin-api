@@ -11,8 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Reject ambiguous retired product naming
         run: node scripts/check-nomenclature.mjs
+      - name: Prevent new implicit default-tenant fallbacks
+        env:
+          DEFAULT_TENANT_RATCHET_BASE: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-default-tenant-ratchet.mjs
+      - name: Enforce vertical dependency direction
+        run: node scripts/check-vertical-dependencies.mjs
