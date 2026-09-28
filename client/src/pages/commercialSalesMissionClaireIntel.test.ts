@@ -25,6 +25,7 @@ describe("CommercialSalesMission Claire pre-visit intel", () => {
   it("labels trainer provenance without pretending fallback advice came from Shelby", () => {
     expect(page).toContain('item.provenance.kind === "trainer_source"');
     expect(page).toContain("TRAINER SOURCE");
+    expect(page).toContain("FOUNDATION · ARMORY");
     expect(page).toContain("MISSION BRIEF · CLAIRE");
   });
 });
