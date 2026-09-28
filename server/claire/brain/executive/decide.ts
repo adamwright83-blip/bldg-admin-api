@@ -195,11 +195,25 @@ function semanticPlanningEligible(
   );
 }
 
+function explicitScopedFollowUp(perceived: PerceivedTurn): boolean {
+  const text = perceived.assembledText.trim();
+  // Perception intentionally does not make every short "what about" a re-query.
+  // The semantic planner may inherit prior criteria only when the operator uses
+  // explicit continuation language AND names a business scope/filter dimension.
+  // This covers natural forms such as "And what about through CleanCloud?" while
+  // keeping unrelated fresh questions isolated from stale query context.
+  const continuation = /^(?:(?:and|also|okay|ok|so|then)\b[\s,.-]*)?(?:what|how)\s+about\b|^(?:and|also)\b/i.test(text);
+  const scoped =
+    /\b(?:through|via|from|at|for|inside|within|only|just)\b|\b(?:clean\s?cloud|stripe|clearent|laundry\s+(?:butler|farm)|wash(?:\s*(?:and|&)\s*)?fold|fluff(?:\s*(?:and|&)\s*)?fold|dry[\s-]?clean(?:ing)?)\b|\b(?:building|property|address|there)\b/i.test(text);
+  return continuation && scoped;
+}
+
 function plannerMayUsePriorQuery(perceived: PerceivedTurn): boolean {
   return (
     perceived.businessIntent === "query_refinement" ||
     perceived.businessIntent === "query_requery" ||
-    perceived.priorQueryReference
+    perceived.priorQueryReference ||
+    explicitScopedFollowUp(perceived)
   );
 }
 
