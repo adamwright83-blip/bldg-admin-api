@@ -672,7 +672,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       return "";
     }
     const picture = await deps.weeklyPicture(weeklyScope).catch(() => null);
-    if (!picture || picture.status === "LOCKED") return "";
+    if (!picture || (picture.status !== "IN_PROGRESS" && !picture.canBegin)) return "";
     const turn = await deps.beginWeekly(weeklyScope).catch(() => null);
     return turn?.speech?.trim() ?? "";
   };
