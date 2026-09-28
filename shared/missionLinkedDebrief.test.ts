@@ -76,6 +76,50 @@ describe("mission-linked debrief proposal", () => {
     expect(proposal.summary).toMatch(/no decision/i);
   });
 
+  it("preserves an explicitly reported meeting with the decision maker", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript: "I spoke with Dana, the general manager. She was interested but made no decision.",
+      extraction: extraction({
+        entities: [
+          {
+            clientEntityKey: "person-1",
+            kind: "person",
+            propertyName: null,
+            addressClue: null,
+            neighborhood: null,
+            websiteDomain: null,
+            contactName: evidence("Dana"),
+            contactTitle: evidence("general manager"),
+            email: null,
+            phone: null,
+            amenities: [],
+            architecture: [],
+          },
+        ],
+        actions: [
+          {
+            entityClientKey: "person-1",
+            type: "spoke_with_contact",
+            evidence: evidence("I spoke with Dana, the general manager."),
+            occurredAtText: null,
+          },
+        ],
+        outcomes: [
+          {
+            entityClientKey: "person-1",
+            type: "interested_reported",
+            evidence: evidence("She was interested"),
+            explicitlyReported: true,
+          },
+        ],
+      }),
+    });
+
+    expect(proposal.outcome).toBe("no_decision");
+    expect(proposal.decisionMakerStatus).toBe("met");
+  });
+
   it("turns an explicit return request into follow_up and asks exactly one contextual timing question", () => {
     const proposal = deriveMissionLinkedDebriefProposal({
       buildingName: "Los Feliz Towers",
