@@ -81,6 +81,8 @@ export type LanternToday = {
   title: string;
   campaignRunId: string;
   fictionPackId: string | null;
+  /** True only when the signed-in operator can actually open this run in Driver today. */
+  driverOpenable: boolean;
   targets: LanternTodayTarget[];
 };
 
@@ -215,6 +217,7 @@ function slotMarks(input: LanternRunInput): SlotMark[] {
 
 export function projectLanternObjectiveMarks(input: {
   tenantId: string;
+  operatorId?: string | null;
   dayLine: CurrentDayLine | null;
   runs: readonly LanternRunInput[];
 }): LanternObjectiveMarks {
@@ -297,10 +300,16 @@ export function projectLanternObjectiveMarks(input: {
 
   const entry = active[0];
   const targetById = new Map(entry.targets.map(t => [t.targetId, t]));
+  const currentMarks = marksByRun.get(entry.run.campaignRunId) ?? [];
+  if (
+    currentMarks.length === 0 ||
+    currentMarks.some(mark => !hasCoordinates(targetById.get(mark.targetId)))
+  ) {
+    return { ...base, todayStatus: "no_coordinates", today: null };
+  }
   const todayTargets: LanternTodayTarget[] = [];
-  for (const mark of marksByRun.get(entry.run.campaignRunId) ?? []) {
-    const target = targetById.get(mark.targetId);
-    if (!hasCoordinates(target)) continue;
+  for (const mark of currentMarks) {
+    const target = targetById.get(mark.targetId)!;
     todayTargets.push({
       slotId: mark.slotId,
       targetId: mark.targetId,
@@ -324,6 +333,10 @@ export function projectLanternObjectiveMarks(input: {
       title: item.title,
       campaignRunId: entry.run.campaignRunId,
       fictionPackId: entry.run.fictionPackId,
+      driverOpenable:
+        Boolean(input.operatorId) &&
+        entry.run.operatorUserId === input.operatorId &&
+        entry.run.fictionPackId === "bio_containment",
       targets: todayTargets,
     },
   };
