@@ -8,6 +8,7 @@ import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { RealActionRequest } from "../encounters/RealActionBridge";
 import type { AuthoritativeFollowUp } from "./actionRegistry";
 import type { CommercialFollowUpOutcome } from "../../../../shared/commercialPipeline";
+import type { ClairePreVisitIntel } from "../../../../shared/missionSalesBrief";
 
 export type GoldlineVisitContext = {
   mission: { id: number; version: number; status: CommercialMissionStatus };
@@ -31,6 +32,8 @@ export type GoldlineVisitContext = {
   parkingLotClerkObservation: ParkingLotClerkObservation | null;
   proposal: { id: string; status: string; validThrough: string } | null;
   navigationUrl: string | null;
+  /** Claire's three pre-visit recommendations over authoritative mission truth. */
+  preVisitIntel: ClairePreVisitIntel | null;
 };
 
 export type VisitOutcomeRequest = {
