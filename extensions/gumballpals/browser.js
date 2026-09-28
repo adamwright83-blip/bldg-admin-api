@@ -408,6 +408,7 @@ export async function readMetricsOverview(range) {
       "Comparison Orders",
     ];
     const fields = [];
+    const proofNodes = [];
     for (const label of labels) {
       const nodes = [...metrics.querySelectorAll("*")].filter(
         el => visible(el) && directText(el) === label
@@ -419,6 +420,9 @@ export async function readMetricsOverview(range) {
       if (!value || value.length > 40 || labels.includes(value))
         throw new Error(`${label} had no unambiguous value.`);
       fields.push({ label, valueText: value });
+      if (["Sales", "Revenue", "Orders"].includes(label)) {
+        proofNodes.push(nodes[0], sibling);
+      }
     }
     for (const label of ["Sales", "Revenue", "Orders"]) {
       if (!fields.some(field => field.label === label))
@@ -445,25 +449,57 @@ export async function readMetricsOverview(range) {
         `${name.slice(0, 3)} ${day}, ${year}`,
       ].some(form => text.includes(form));
     };
-    const candidates = [...metrics.querySelectorAll("*")].filter(el => {
-      if (!visible(el)) return false;
-      const text = el.textContent.trim().replace(/\s+/g, " ");
-      if (!text || text.length > 180) return false;
-      const childHasDate = [...el.children].some(child => {
+    const candidates = [...metrics.querySelectorAll("*")]
+      .filter(el => {
+        if (!visible(el)) return false;
+        const text = el.textContent.trim().replace(/\s+/g, " ");
+        if (!text || text.length > 180) return false;
+        const childHasDate = [...el.children].some(child => {
+          dateRe.lastIndex = 0;
+          return dateRe.test(child.textContent || "");
+        });
+        if (childHasDate) return false;
         dateRe.lastIndex = 0;
-        return dateRe.test(child.textContent || "");
-      });
-      if (childHasDate) return false;
-      dateRe.lastIndex = 0;
-      return [...text.matchAll(dateRe)].length === 2;
-    }).map(el => el.textContent.trim().replace(/\s+/g, " "));
-    const unique = [...new Set(candidates)];
-    const primary = unique.filter(
-      text => mentions(text, range.from) && mentions(text, range.to)
+        return [...text.matchAll(dateRe)].length === 2;
+      })
+      .map(el => ({ el, text: el.textContent.trim().replace(/\s+/g, " ") }));
+    const uniqueByText = new Map();
+    for (const candidate of candidates) {
+      if (!uniqueByText.has(candidate.text)) uniqueByText.set(candidate.text, candidate);
+    }
+    const unique = [...uniqueByText.values()];
+    const primary = unique.filter(candidate =>
+      mentions(candidate.text, range.from) && mentions(candidate.text, range.to)
     );
     if (primary.length !== 1)
       throw new Error(
         "The overview is not on the requested dates, and the date control is not one this extension has observed. Nothing was saved."
+      );
+
+    // captureVisibleTab captures only the current viewport. Make the exact date
+    // control and three required metric/value pairs the screenshot proof block,
+    // then refuse the witness if any part of that block is still off-screen.
+    proofNodes.unshift(primary[0].el);
+    primary[0].el.scrollIntoView({ block: "start", inline: "nearest" });
+    await pause();
+    const viewportHeight =
+      window.innerHeight || document.documentElement?.clientHeight || 0;
+    const viewportWidth =
+      window.innerWidth || document.documentElement?.clientWidth || 0;
+    if (!viewportHeight || !viewportWidth)
+      throw new Error("The dashboard viewport could not be verified. Nothing was saved.");
+    const offscreen = proofNodes.some(node => {
+      const rect = node.getBoundingClientRect();
+      return (
+        rect.top < 0 ||
+        rect.left < 0 ||
+        rect.bottom > viewportHeight ||
+        rect.right > viewportWidth
+      );
+    });
+    if (offscreen)
+      throw new Error(
+        "The proven dashboard totals do not fit in the visible screenshot. Nothing was saved."
       );
     // Do not infer a comparison period from an unrelated second date string.
     // Until the observed Overview DOM gives us a direct relationship between
@@ -473,7 +509,7 @@ export async function readMetricsOverview(range) {
       ok: true,
       value: {
         storeLabel,
-        rangeText: primary[0],
+        rangeText: primary[0].text,
         comparisonText: null,
         fields: primaryFields,
       },
