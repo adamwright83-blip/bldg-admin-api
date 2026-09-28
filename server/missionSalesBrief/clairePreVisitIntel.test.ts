@@ -223,6 +223,78 @@ describe("Claire pre-visit three", () => {
     );
   });
 
+  it("rejects novel factual vocabulary even when it avoids the narrow risky-phrase patterns", async () => {
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "Residents complain about missed pickups.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who is the right person to speak with about this?",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+    expect(result?.items[0].line).not.toMatch(/complain|missed pickups/i);
+  });
+
+  it("rejects a complete invented property claim even if generic property words are grounded", async () => {
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "Your building has a rooftop pool.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who is the right person to speak with about this?",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+    expect(result?.items[0].line).not.toMatch(/rooftop pool/i);
+  });
+
   it("rejects a schema-valid adaptation that invents unsupported building facts", async () => {
     mocks.invokeLLM.mockResolvedValue({
       choices: [{
