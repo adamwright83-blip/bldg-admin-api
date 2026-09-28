@@ -145,6 +145,18 @@ export function liveExecutiveDeps(
       ...retrievalDeps,
     }),
     ctx: { timeZone: ctx.timeZone, today: ctx.businessDate, surface: ctx.surface },
+  };
+}
+
+function shadowExecutiveDeps(
+  ctx: ShadowRetrievalContext,
+  retrievalDeps?: LiveRetrievalDeps
+): ExecutiveDeps {
+  return {
+    ...liveExecutiveDeps(ctx, retrievalDeps),
+    // Model-assisted criteria planning remains shadow-only until Brain V2 owns
+    // the business-answer lane. The awaited live fallback path therefore never
+    // blocks on Anthropic before handing the turn back to V1.
     planBusinessQuery: input => planBusinessQuestionWithLLM(input),
   };
 }
@@ -226,7 +238,7 @@ export async function observeShadowTurn(
     const shadowKey = shadowMemoryKey(turn);
     const priorMemory = await memoryStore.load(shadowKey);
 
-    const executive = turn.executive ?? (live ? liveExecutiveDeps(live, options.liveDeps) : undefined);
+    const executive = turn.executive ?? (live ? shadowExecutiveDeps(live, options.liveDeps) : undefined);
     const result = await runClaireBrainTurn({
       ...turn,
       executive: executive ?? { retrieve: noRetrieval, ctx: { timeZone: "UTC", today: new Date().toISOString().slice(0, 10), surface: turn.surface } },
