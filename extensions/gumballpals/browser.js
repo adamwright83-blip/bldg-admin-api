@@ -376,15 +376,28 @@ export async function readMetricsOverview(range) {
         visible(document.querySelector("#metricsContainer")) &&
         document.querySelector("#metricsContainer")
     );
+    const directText = el =>
+      [...el.childNodes]
+        .filter(node => node.nodeType === 3)
+        .map(node => node.textContent.trim())
+        .filter(Boolean)
+        .join(" ");
+    const hasOverviewCore = root =>
+      ["Sales", "Revenue", "Orders"].every(label =>
+        [...root.querySelectorAll("*")].some(
+          el => visible(el) && directText(el) === label
+        )
+      );
     stage = "opening Overview";
     const overview = exact(overviewRoot, "a, button", "Overview");
     if (overview.length > 1) throw new Error("Ambiguous Overview control. Capture stopped.");
     if (overview.length === 1) overview[0].click();
-    const metrics = await wait(
-      () =>
-        visible(document.querySelector("#metricsContainer")) &&
-        document.querySelector("#metricsContainer")
-    );
+    // The click can replace #metricsContainer asynchronously. Do not accept the
+    // still-visible previous panel; wait until the Overview's core labels exist.
+    const metrics = await wait(() => {
+      const root = document.querySelector("#metricsContainer");
+      return visible(root) && hasOverviewCore(root) ? root : null;
+    });
     const labels = [
       "Sales",
       "Revenue",
@@ -394,12 +407,6 @@ export async function readMetricsOverview(range) {
       "Comparison Revenue",
       "Comparison Orders",
     ];
-    const directText = el =>
-      [...el.childNodes]
-        .filter(node => node.nodeType === 3)
-        .map(node => node.textContent.trim())
-        .filter(Boolean)
-        .join(" ");
     const fields = [];
     for (const label of labels) {
       const nodes = [...metrics.querySelectorAll("*")].filter(
