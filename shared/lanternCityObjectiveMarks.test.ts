@@ -196,6 +196,15 @@ describe("Lantern City objective marks — today", () => {
     });
     expect(otherOperator.today?.driverOpenable).toBe(false);
 
+    const canonicalAlias = projectLanternObjectiveMarks({
+      tenantId: TENANT,
+      operatorId: "7",
+      viewerOpenIds: ["admin-owner", "driver-1"],
+      dayLine: todayLine(),
+      runs: [entry()],
+    });
+    expect(canonicalAlias.today?.driverOpenable).toBe(true);
+
     const unsupportedPack = projectLanternObjectiveMarks({
       tenantId: TENANT,
       operatorId: "7",
