@@ -1,4 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import {
@@ -9,6 +10,8 @@ import {
   listMissionSalesBriefVersions,
 } from "./missionSalesBriefService";
 import { getClairePreVisitIntel } from "./clairePreVisitIntel";
+import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
+import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 
 /**
  * The FIELD BRIEF surface's read of the same artifact Claire consumes.
@@ -33,12 +36,37 @@ export const missionSalesBriefRouter = router({
    */
   preVisitIntel: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
-    .query(({ ctx, input }) =>
-      getClairePreVisitIntel({
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
-      })
-    ),
+      });
+      if (!mission) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Commercial mission not found",
+        });
+      }
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Commercial mission is not assigned to this field user",
+        });
+      }
+      return getClairePreVisitIntel({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+    }),
 
   // Admin/developer review tooling (Slice 17): inspect every version to
   // confirm Claire and FIELD BRIEF converged on the same artifact and to
