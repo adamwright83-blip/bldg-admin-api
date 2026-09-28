@@ -69,6 +69,26 @@ describe("approved tower-boss linked debrief contract", () => {
     expect(actionSurface).toContain(`!(\n        props.services.openMissionDebrief &&`);
   });
 
+  it("fails closed when structured extraction fell back instead of proposing business truth", () => {
+    expect(service).toContain('journal.processingStatus === "failed" || journal.processingStatus === "fallback"');
+    expect(service).toContain('row.status !== "processed"');
+    expect(service).toContain("instead of accepting a guessed outcome");
+  });
+
+  it("collects multiple required facts sequentially instead of exposing a multi-field form", () => {
+    expect(actionSurface).toContain('data-testid="continue-mission-debrief"');
+    expect(actionSurface).toContain('data-testid="mission-debrief-additional-answer"');
+    expect(actionSurface).toContain("showAdditionalQuestion");
+    expect(service).toContain("state.proposal.additionalQuestion");
+    expect(service).toContain("input.additionalAnswer");
+  });
+
+  it("lets the operator reject Claire's proposed read and record a correction", () => {
+    expect(actionSurface).toContain('data-testid="correct-mission-debrief"');
+    expect(actionSurface).toContain("CLAIRE GOT SOMETHING WRONG · RECORD A CORRECTION");
+    expect(actionSurface).toContain("props.services.openMissionDebrief?.({");
+  });
+
   it("persists requested collateral email as draft-only and contains no transport send path", () => {
     expect(service).toContain('eventName: "mission_debrief_email_draft"');
     expect(service).toContain('draftStatus: "draft"');
