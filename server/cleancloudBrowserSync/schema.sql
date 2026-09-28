@@ -42,3 +42,35 @@ CREATE TABLE IF NOT EXISTS cleancloud_browser_sync_attempts (
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_cc_browser_sync_attempts_tenant (tenantId, createdAt)
 );
+CREATE TABLE IF NOT EXISTS cleancloud_dashboard_witnesses (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  storeId VARCHAR(32) NOT NULL,
+  storeLabel VARCHAR(255) NOT NULL,
+  rangeFrom VARCHAR(10) NOT NULL,
+  rangeTo VARCHAR(10) NOT NULL,
+  comparisonFrom VARCHAR(10) NULL,
+  comparisonTo VARCHAR(10) NULL,
+  salesCents INT NOT NULL,
+  comparisonSalesCents INT NULL,
+  revenueCents INT NOT NULL,
+  comparisonRevenueCents INT NULL,
+  orders INT NOT NULL,
+  comparisonOrders INT NULL,
+  newCustomers INT NULL,
+  observedAt TIMESTAMP NOT NULL,
+  screenshotSha256 CHAR(64) NOT NULL,
+  extractionVersion VARCHAR(64) NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cc_dashboard_witness_observation (tenantId, storeId, rangeFrom, rangeTo, screenshotSha256),
+  KEY idx_cc_dashboard_witness_period (tenantId, rangeFrom, rangeTo, observedAt)
+);
+CREATE TABLE IF NOT EXISTS cleancloud_dashboard_witness_screenshots (
+  witnessId VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  sha256 CHAR(64) NOT NULL,
+  pngBase64 MEDIUMTEXT NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_cc_dashboard_witness_screenshot_tenant (tenantId)
+);
