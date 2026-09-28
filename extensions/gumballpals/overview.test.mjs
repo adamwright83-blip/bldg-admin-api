@@ -98,6 +98,37 @@ test("withholds comparison totals when their period is not directly bound", asyn
   );
 });
 
+test("waits for Overview content after asynchronous panel navigation", async () => {
+  const sales = element("Sales", { next: element("$3,126.32") });
+  const revenue = element("Revenue", { next: element("$2,984.10") });
+  const orders = element("Orders", { next: element("41") });
+  const range = element("", {
+    textContent: "September 1, 2026 – September 27, 2026",
+    children: [],
+  });
+  let metrics;
+  const overview = element("Overview", {
+    tag: "button",
+    onClick() {
+      setTimeout(() => {
+        metrics.children = [overview, range, sales, revenue, orders];
+      }, 0);
+    },
+  });
+  metrics = element("", {
+    textContent: "Other metrics panel",
+    children: [overview, element("Not Overview")],
+  });
+  install(metrics);
+  const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.fields, [
+    { label: "Sales", valueText: "$3,126.32" },
+    { label: "Revenue", valueText: "$2,984.10" },
+    { label: "Orders", valueText: "41" },
+  ]);
+});
+
 test("does not save an overview that is not on the requested dates", async () => {
   const metrics = element("", {
     textContent: "metrics",
