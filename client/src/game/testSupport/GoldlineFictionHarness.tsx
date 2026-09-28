@@ -16,6 +16,7 @@ import type {
   GoldlineVisitContext,
 } from "../actions/actionServices";
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
+import type { MissionLinkedDebriefState } from "../../../../shared/missionLinkedDebrief";
 import type { Order } from "@shared/types";
 import {
   parseOperatorStopEntityId,
@@ -933,6 +934,9 @@ export default function GoldlineFictionHarness() {
   const clerkObservationRef = useRef<
     Map<number, GoldlineVisitContext["parkingLotClerkObservation"]>
   >(new Map());
+  const missionDebriefRef = useRef<Map<number, MissionLinkedDebriefState>>(
+    new Map()
+  );
   // Mirrors production's genuinely-incomplete-until-completed field prep —
   // starts false the moment a mission enters "preparing" (see
   // startVisitPreparation below), and only becomes true once the in-game
@@ -1039,6 +1043,66 @@ export default function GoldlineFictionHarness() {
           reportedAt: "2026-08-13T16:20:00.000Z",
         });
         return contextFor(missionId);
+      },
+      loadMissionDebrief: async missionId =>
+        missionDebriefRef.current.get(missionId) ?? {
+          status: "not_started",
+          missionId,
+        },
+      openMissionDebrief: ({ missionId }) => {
+        // Deterministic stand-in for the already-covered audio/journal capture
+        // layer. This fixture exercises the in-game visit lifecycle, so opening
+        // Claire comms advances to a grounded proposed result without reviving
+        // the deprecated manual outcome form.
+        missionDebriefRef.current.set(missionId, {
+          status: "ready",
+          missionId,
+          journalEntryId: `fixture-debrief-${missionId}`,
+          transcript: "The manager asked me to come back next week.",
+          proposal: {
+            outcome: "follow_up",
+            decisionMakerStatus: "met",
+            collateralDelivered: false,
+            quoteRequested: false,
+            pilotRequested: false,
+            followUpRequested: true,
+            summary: "The decision maker asked for a follow-up.",
+            question: {
+              kind: "follow_up_at",
+              prompt: "When did they ask you to come back or follow up?",
+              inputType: "datetime-local",
+            },
+            additionalQuestion: null,
+            emailDraft: null,
+          },
+        });
+      },
+      finalizeMissionDebrief: async ({ missionId, journalEntryId, answer }) => {
+        const current = missionDebriefRef.current.get(missionId);
+        if (
+          current?.status !== "ready" ||
+          current.journalEntryId !== journalEntryId
+        ) {
+          throw new Error("Fixture debrief is not ready");
+        }
+        const followUpAt = answer ? new Date(answer) : null;
+        if (!followUpAt || Number.isNaN(followUpAt.getTime())) {
+          throw new Error("Fixture follow-up time is required");
+        }
+        visitOutcomeRef.current.set(missionId, {
+          outcome: "follow_up",
+          followUpAt: followUpAt.toISOString(),
+        });
+        setCoveredCount(count => Math.min(ROUTE_STOP_COUNT, count + 1));
+        const completed: MissionLinkedDebriefState = {
+          status: "completed",
+          missionId,
+          journalEntryId,
+          outcome: "follow_up",
+          emailDraft: null,
+        };
+        missionDebriefRef.current.set(missionId, completed);
+        return completed;
       },
       loadFollowUp: async () => null,
       completeFollowUp: async () => undefined,
