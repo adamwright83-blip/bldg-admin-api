@@ -51,6 +51,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
+      - name: Prove Persistent Growth Operator Phase 0 contracts
+        run: >-
+          pnpm vitest run
+          server/strategy/verticalTemplates/registry.test.ts
+          server/saas/tenantSourceAdapters.test.ts
+          server/executionIntelligence/selectExecutionIntelligence.test.ts
+          server/armory/armoryJ0.test.ts
+          shared/tenantLearningGovernance.test.ts
+          server/persistentOperator/tenantScope.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run
