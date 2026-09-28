@@ -16,6 +16,15 @@ function element(text, options = {}) {
     children,
     nextElementSibling: options.next ?? null,
     getClientRects: () => (options.hidden ? [] : [1]),
+    getBoundingClientRect: () => ({
+      top: options.top ?? 100,
+      bottom: options.bottom ?? 120,
+      left: options.left ?? 10,
+      right: options.right ?? 300,
+    }),
+    scrollIntoView() {
+      options.onScroll?.();
+    },
     click() {
       options.onClick?.();
     },
@@ -36,6 +45,7 @@ function walk(node) {
 function install(metrics) {
   globalThis.location = { origin: "https://cleancloudapp.com", pathname: "/store" };
   globalThis.getComputedStyle = () => ({ visibility: "visible" });
+  globalThis.window = { innerHeight: 800, innerWidth: 1200 };
   globalThis.document = {
     title: "Goldline Laundry | CleanCloud",
     querySelector(selector) {
@@ -127,6 +137,24 @@ test("waits for Overview content after asynchronous panel navigation", async () 
     { label: "Revenue", valueText: "$2,984.10" },
     { label: "Orders", valueText: "41" },
   ]);
+});
+
+test("refuses a witness when required totals would be outside captureVisibleTab", async () => {
+  const sales = element("Sales", { next: element("$3,126.32", { top: 900, bottom: 920 }) });
+  const revenue = element("Revenue", { next: element("$2,984.10") });
+  const orders = element("Orders", { next: element("41") });
+  const range = element("", {
+    textContent: "September 1, 2026 – September 27, 2026",
+    children: [],
+  });
+  const metrics = element("", {
+    textContent: "Overview",
+    children: [range, sales, revenue, orders],
+  });
+  install(metrics);
+  const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /do not fit in the visible screenshot/);
 });
 
 test("does not save an overview that is not on the requested dates", async () => {
