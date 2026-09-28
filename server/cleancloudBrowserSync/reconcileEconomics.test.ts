@@ -300,6 +300,9 @@ describe("reconcilePeriod stays on the session tenant", () => {
     const fn = router.slice(router.indexOf("reconcilePeriod:"), router.indexOf("latestVerifiedGain:"));
     expect(fn).toContain("eq(cleancloudPaidOrders.tenantId, ctx.tenantId)");
     expect(fn).toContain("eq(dashboardWitnesses.tenantId, ctx.tenantId)");
+    expect(fn).toContain("eq(economicReconciliations.storeId, binding.storeId)");
+    expect(fn).toContain("Verified-event race did not resolve to a stored event");
+    expect(fn).toContain("publicEconomicEvent(winner)");
     expect(fn).not.toContain("input.tenantId");
     expect(fn).not.toContain("cleancloudPaidOrders.customerName");
     expect(fn).not.toContain("cleancloudPaidOrders.customerPhone");
