@@ -162,4 +162,7 @@ test("the screenshot permission is optional, user-granted, and target-guarded", 
   assert.match(sync, /if \(scheduled\) return false/);
   assert.match(sync, /Dashboard screenshot permission is required/);
   assert.match(sync, /recordWitness/);
+  assert.match(sync, /request\("reconcilePeriod"/);
+  assert.ok(sync.indexOf('request("recordWitness"') < sync.indexOf('request("reconcilePeriod"'));
+  assert.match(sync, /Economic reconciliation:/);
 });
