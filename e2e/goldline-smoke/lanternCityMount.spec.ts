@@ -116,13 +116,23 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await expect(page.locator(".tw-arena")).toBeVisible();
     }
   });
-  test("the Lantern City route opens the V7 fog-of-war board", async ({ page, isMobile }, testInfo) => {
-    // V7 is the desktop experience, and its 3D world is slow under CI's software GL: prove it mounts once, on desktop
-    test.skip(isMobile || testInfo.project.name === "mobile", "Lantern City V7 is desktop-only");
+  test("the Lantern City route opens the V7 fog-of-war board", async ({ page }, testInfo) => {
+    // V7 is the desktop board (the driver Day Line app is the mobile experience), and its
+    // world bake is too heavy for CI's software-rendered mobile emulation inside the lane budget.
+    test.skip(testInfo.project.name === "mobile", "V7 is desktop-only");
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
-    await page.goto("/growth/lantern-city");
-    await expect(page.locator('[data-lantern-city="v7"]')).toBeVisible({ timeout: 30_000 });
+    // Skip the world's ~18 MB of tiles and its bake: this proves the route and the React board
+    // mount, and that customers arriving before (or without) a world never crash the page.
+    await page.route("**/assets/goldline/lantern-city/v7/**", r => r.abort());
+    const atlas = page.waitForResponse(r => r.url().includes("geographicTruth.atlas"));
+    await page.goto("/growth/lantern-city", { waitUntil: "commit" });
+    const board = page.locator('[data-lantern-city="v7"]');
+    // software GL makes the first frame slow in CI, so allow for it
+    await expect(board).toBeVisible({ timeout: 30_000 });
+    // customers land while the world is still loading; that used to crash the page
+    await atlas;
+    await expect(board).toBeVisible({ timeout: 15_000 });
     expect(errors).toEqual([]);
   });
   test("legacy scene=v5 query still opens the live V6 city", async ({ page }) => {

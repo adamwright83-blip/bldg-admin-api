@@ -10,6 +10,17 @@ import {
 } from "./lanternWorld";
 import styles from "./lantern-city-v7.module.css";
 
+// Fonts load as their own <link>, not an @import in the CSS module: a blocked or failed font
+// request fails the lazy chunk's CSS preload, which took the whole board down to the error page.
+const FONTS_HREF =
+  "https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap";
+if (typeof document !== "undefined" && !document.querySelector(`link[href="${FONTS_HREF}"]`)) {
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = FONTS_HREF;
+  document.head.appendChild(link);
+}
+
 /**
  * Lantern City v7: the neighbourhoods we serve (and the ones between them) as one fog-of-war
  * board. Customer buildings are the lanterns; land around them is charted; everything else is fog.
