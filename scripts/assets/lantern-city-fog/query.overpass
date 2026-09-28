@@ -1,0 +1,9 @@
+[out:json][timeout:120];
+(
+  way["building"](34.0745,-118.2860,34.1010,-118.2530);
+  way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street|trunk)$"](34.0745,-118.2860,34.1010,-118.2530);
+  way["natural"="water"](34.0745,-118.2860,34.1010,-118.2530);
+  relation["natural"="water"](34.0745,-118.2860,34.1010,-118.2530);
+  way["leisure"~"^(park|pitch|playground)$"](34.0745,-118.2860,34.1010,-118.2530);
+);
+out geom;

@@ -351,6 +351,8 @@ export function projectGeographicCustomers(input: {
       unit: latest.unit,
       cadence,
       totalOrders: sorted.length,
+      // lifetime spend: paid, non-cancelled orders only
+      totalSpendCents: sorted.reduce((sum, order) => sum + (order.paid && !order.cancelled ? order.totalCents : 0), 0),
       firstOrderAt: sorted[0]!.createdAt.toISOString(),
       lastOrderAt: latest.createdAt.toISOString(),
       sources,

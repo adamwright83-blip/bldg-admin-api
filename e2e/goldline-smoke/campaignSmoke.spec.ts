@@ -110,7 +110,7 @@ test.describe("Goldline campaign smoke", () => {
     const admin = await readCampaign(page);
     expect(admin.campaign.id).toBe(driver.campaign.id);
     expect(admin.campaign.revision).toBe(driver.campaign.revision);
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expectLanternCityV6(page);
   });
 });

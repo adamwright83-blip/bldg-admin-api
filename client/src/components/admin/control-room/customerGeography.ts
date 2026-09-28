@@ -5,6 +5,7 @@ export type GeographicCustomer = {
   displayName: string;
   phone: string | null;
   totalOrders?: number;
+  totalSpendCents?: number;
   firstOrderAt?: string;
   lastOrderAt?: string;
   cadence: {
