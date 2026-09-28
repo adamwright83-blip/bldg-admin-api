@@ -21,8 +21,8 @@ describe("driver sales motivation contract", () => {
     expect(service).toContain("SALES_SCORE_WINDOW_DAYS = 30");
     expect(service).toContain("SALES_SCORE_MAX = 600");
     expect(call).toContain("attempts.length <= 1 ? 4 : attempts.length === 2 ? 2 : 1");
-    expect(field).toContain('input.outcome === "won" ? 100');
-    expect(field).toContain('input.decisionMakerStatus === "met" ? 10');
+    expect(field).toContain('outcome === "won" ? 100');
+    expect(field).toContain('state.visitOutcome.decisionMakerStatus === "met" ? 10');
     expect(processing).toContain('eventType: "objection_comeback"');
     expect(processing).toContain("points: 15");
   });
