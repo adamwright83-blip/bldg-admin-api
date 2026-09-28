@@ -87,11 +87,13 @@ describe("Admin six-domain shell", () => {
     expect(source).toContain('goldlineEntry.data.session?.status !== "COMPLETE"');
   });
 
-  it("puts one Lantern City (V7) at Home and /growth/lantern-city; old scenes only on request", () => {
-    // the returning-user home and the Growth route mount the same V7 world
-    for (const path of ["/", "/home", "/growth/lantern-city"]) expect(lanternSceneFor(path, "")).toBe("v7");
-    expect(lanternSceneFor("/", "?worldTruth=1")).toBe("v7");
-    // the old cities are QA-only
+  it("puts one Lantern City (the island board) at Home and /growth/lantern-city; the rest only on request", () => {
+    // the returning-user home and the Growth route mount the same world
+    for (const path of ["/", "/home", "/growth/lantern-city"]) expect(lanternSceneFor(path, "")).toBe("islands");
+    expect(lanternSceneFor("/", "?worldTruth=1")).toBe("islands");
+    // the street map and the old cities are QA-only
+    expect(lanternSceneFor("/", "?scene=map")).toBe("map");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=v7")).toBe("map");
     expect(lanternSceneFor("/", "?scene=v6")).toBe("v6");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=atlas")).toBe("atlas");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v5")).toBe("atlas");
@@ -99,7 +101,7 @@ describe("Admin six-domain shell", () => {
     for (const path of ["/customers", "/operations", "/growth/tower-wars"]) expect(lanternSceneFor(path, "")).toBeNull();
     // and the host renders from that one decision
     expect(source).toContain("const lanternScene = lanternSceneFor(path, window.location.search)");
-    expect(source).toContain('lanternScene === "v7" ? (');
+    expect(source).toContain('lanternScene === "islands" ? (');
   });
 
   it("keeps Lantern City the canonical returning-user home after the combat pass", () => {

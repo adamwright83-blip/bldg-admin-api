@@ -59,7 +59,7 @@ for (const check of CHECKS) {
 const THREE_MARKER = "__THREE__";
 const PROOF_PREFIX = "CoastalMarketProofPage";
 // other lazy pages allowed to carry three.js (each must itself be reached only by dynamic import)
-const LAZY_3D_PREFIXES = ["LanternCityV7"];
+const LAZY_3D_PREFIXES = ["LanternCityV7", "LanternCityIslands"];
 const jsFiles = readdirSync(ASSET_DIR).filter(file => file.endsWith(".js"));
 const source = new Map(jsFiles.map(file => [file, readFileSync(resolve(ASSET_DIR, file), "utf8")]));
 const staticImportsOf = file => {

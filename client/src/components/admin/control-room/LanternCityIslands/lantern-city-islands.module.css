@@ -1,0 +1,226 @@
+.scene {
+  --card: rgba(34, 24, 40, 0.88);
+  --ink: #fff4dc;
+  --ink2: #d9c9b4;
+  --gold: #ffc84d;
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100dvh;
+  min-height: 560px;
+  overflow: hidden;
+  background: #1a8fc4;
+  color: var(--ink);
+  font: 15px/1.4 Barlow, system-ui, sans-serif;
+  color-scheme: dark;
+}
+.stage {
+  position: absolute;
+  inset: 0;
+}
+.top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  left: 18px;
+  right: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.brand {
+  background: var(--card);
+  border: 2px solid var(--gold);
+  border-radius: 18px;
+  padding: 10px 16px 11px;
+  box-shadow: 0 10px 30px rgba(30, 20, 40, 0.35);
+}
+.mark {
+  font: 28px/1 Anton, Impact, sans-serif;
+  letter-spacing: 0.03em;
+}
+.sub {
+  font: 600 13px/1.2 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-top: 5px;
+}
+.stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pill {
+  background: var(--card);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: 700 15px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.pill b {
+  color: var(--gold);
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 10px 3px rgba(255, 200, 77, 0.9);
+  margin-right: 8px;
+}
+.towers {
+  position: absolute;
+  left: 18px;
+  top: calc(env(safe-area-inset-top, 0px) + 104px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.towers button,
+.card button,
+.dock button {
+  appearance: none;
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 9px 14px;
+  background: var(--card);
+  color: var(--ink);
+  font: 700 14px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+.towers button:focus-visible,
+.card button:focus-visible,
+.dock button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.card {
+  position: absolute;
+  left: 18px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  width: min(340px, calc(100% - 36px));
+  box-sizing: border-box;
+  background: var(--card);
+  border: 2px solid var(--gold);
+  border-radius: 18px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 14px 40px rgba(30, 20, 40, 0.4);
+}
+.card h2 {
+  margin: 0 0 6px;
+  font: 26px/1 Anton, Impact, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+.card p {
+  margin: 0 0 12px;
+  color: var(--ink2);
+}
+.card button {
+  background: var(--gold);
+  color: #3a2600;
+}
+.tip {
+  position: fixed;
+  z-index: 15;
+  pointer-events: none;
+  max-width: 270px;
+  display: grid;
+  gap: 8px;
+  background: var(--card);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 9px 12px;
+  box-shadow: 0 10px 30px rgba(30, 20, 40, 0.4);
+  font-size: 13px;
+  color: var(--ink2);
+}
+.tipRow {
+  display: grid;
+  gap: 1px;
+}
+.tipRow b {
+  font: 700 17px/1.1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+}
+.tipHint {
+  color: var(--gold);
+  font-weight: 600;
+}
+.dock {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(34, 24, 40, 0.6);
+  border-radius: 18px;
+}
+.dock button {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.dock .primary {
+  background: var(--gold);
+  color: #3a2600;
+}
+.count {
+  background: var(--gold);
+  color: #3a2600;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 13px;
+}
+.sample {
+  position: absolute;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 22px);
+  transform: translateX(-50%);
+  background: rgba(255, 243, 214, 0.92);
+  color: #7a5200;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: 700 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 24px;
+  text-align: center;
+  background: #1a8fc4;
+  color: var(--ink);
+  font: 700 16px "Barlow Condensed", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+@media (max-width: 640px) {
+  .towers {
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  }
+  .dock button {
+    padding: 0 10px;
+    font-size: 14px;
+  }
+}
