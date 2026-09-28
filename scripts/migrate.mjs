@@ -3971,6 +3971,13 @@ await assertRequiredColumns("goldline_rook_contact_sessions", [
   "status",
 ]);
 // Phase 0 — Persistent Growth Operator core contracts.
+// The production boot path does not replay numbered Drizzle migrations, so
+// make the historical Armory tables exist idempotently before Phase 0 alters
+// them. This keeps fresh databases bootable and is safe on existing databases.
+await applyIdempotentSqlFile(
+  "../drizzle/0053_armory_evolution_sales_intel.sql",
+  "Armory Evolution historical tables"
+);
 // Mirrors drizzle/0101_persistent_growth_phase0.sql.
 await ensureRequiredColumn(
   "armory_weapon_usages",
