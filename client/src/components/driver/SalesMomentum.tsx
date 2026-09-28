@@ -194,8 +194,12 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
         utils.system.adaptiveSalesMeter.myMeter.invalidate(),
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
-      celebrate(result.worldEvent);
-      toast.success(debrief ? "Visit debrief saved." : "Field Journal secured. Processing continues safely in the background.");
+      if (!debrief) celebrate(result.worldEvent);
+      toast.success(
+        debrief
+          ? "Raw debrief secured. Claire is decoding the encounter."
+          : "Field Journal secured. Processing continues safely in the background."
+      );
       // Projection refresh is best-effort and may race asynchronous extraction;
       // it is deliberately incapable of turning a successful durable save into
       // a UI failure. Normal polling catches anything that finishes later.
