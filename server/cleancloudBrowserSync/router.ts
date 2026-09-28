@@ -28,6 +28,8 @@ import {
   formatGumballOperatorStatus,
   gumballObservability,
 } from "./gumballOperatorStatus";
+import { assertPulseTenant, loadTenantOperatingPulse } from "./operatingPulse";
+import { loadLatestCleanCloudSales } from "./latestSales";
 
 const store = z.object({
   storeId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -372,6 +374,12 @@ export const cleancloudBrowserSyncRouter = router({
       observability,
     };
   }),
+  operatingPulse: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+    loadTenantOperatingPulse(assertPulseTenant(ctx.tenantId))
+  ),
+  latestSales: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+    loadLatestCleanCloudSales({ tenantId: assertPulseTenant(ctx.tenantId) })
+  ),
   pair: legacyDayforgeTenantAdminProcedure
     .input(store.merge(account))
     .mutation(async ({ ctx, input }) => {
