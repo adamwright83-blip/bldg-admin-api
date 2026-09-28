@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
 import {
   getStrategyActiveCustomers,
   getStrategyGrowthMetrics,
@@ -52,11 +52,11 @@ import {
 
 export const strategyRouter = router({
 
-  activeCustomers: adminProcedure.query(async ({ ctx }) => {
+  activeCustomers: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     return getStrategyActiveCustomers({ tenantId: ctx.tenantId });
   }),
 
-  growthMetrics: adminProcedure
+  growthMetrics: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         startYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -76,7 +76,7 @@ export const strategyRouter = router({
     }),
 
   playground: router({
-    get: adminProcedure.query(async ({ ctx }) => {
+    get: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       const rules = await getActivePlaygroundRules(ctx.tenantId);
       const macroGoal = await getActiveMacroGoal({
         tenantId: ctx.tenantId,
@@ -90,7 +90,7 @@ export const strategyRouter = router({
       };
     }),
 
-    set: adminProcedure
+    set: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           monthlySpendCeilingCents: z.number().int().nonnegative(),
@@ -113,7 +113,7 @@ export const strategyRouter = router({
   }),
 
   spend: router({
-    monthToDate: adminProcedure
+    monthToDate: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessMonth: z.string().regex(/^\d{4}-\d{2}$/).optional(),
@@ -125,7 +125,7 @@ export const strategyRouter = router({
   }),
 
   snapshot: router({
-    latest: adminProcedure.query(async ({ ctx }) => {
+    latest: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       let snapshot = await getLatestStrategySnapshot(ctx.tenantId);
       if (!snapshot) {
         snapshot = await buildStrategySnapshot(ctx.tenantId);
@@ -133,13 +133,13 @@ export const strategyRouter = router({
       return snapshot;
     }),
 
-    byId: adminProcedure
+    byId: legacyDayforgeTenantOperatorProcedure
       .input(z.object({ snapshotId: z.string() }))
       .query(async ({ ctx, input }) => {
         return getStrategySnapshotById(ctx.tenantId, input.snapshotId);
       }),
 
-    provenance: adminProcedure
+    provenance: legacyDayforgeTenantOperatorProcedure
       .input(z.object({ snapshotId: z.string(), path: z.string() }))
       .query(async ({ ctx, input }) => {
         return getSnapshotProvenance(ctx.tenantId, input.snapshotId, input.path);
@@ -147,17 +147,17 @@ export const strategyRouter = router({
   }),
 
   today: router({
-    featured: adminProcedure.query(async ({ ctx }) => {
+    featured: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       return getTodayFeaturedOperation(ctx.tenantId);
     }),
   }),
 
   plays: router({
-    offer: adminProcedure.query(async ({ ctx }) => {
+    offer: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       return getOrCreatePathOffer(ctx.tenantId);
     }),
 
-    choose: adminProcedure
+    choose: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           playId: z.string(),
@@ -176,14 +176,14 @@ export const strategyRouter = router({
         });
       }),
 
-    active: adminProcedure.query(async ({ ctx }) => {
+    active: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       const activePlayId = getActiveStrategicPath(ctx.tenantId);
       return { activePlayId };
     }),
   }),
 
   missions: router({
-    sequence: adminProcedure
+    sequence: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -204,7 +204,7 @@ export const strategyRouter = router({
         });
       }),
 
-    forDate: adminProcedure
+    forDate: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -216,7 +216,7 @@ export const strategyRouter = router({
   }),
 
   permissions: router({
-    check: adminProcedure
+    check: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           subjectType: z.enum(["lead", "contact", "customer", "property"]),
@@ -233,7 +233,7 @@ export const strategyRouter = router({
         });
       }),
 
-    record: adminProcedure
+    record: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           subjectType: z.enum(["lead", "contact", "customer", "property"]),
@@ -257,7 +257,7 @@ export const strategyRouter = router({
         return { success: true };
       }),
 
-    recordOutreach: adminProcedure
+    recordOutreach: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           subjectType: z.enum(["lead", "contact", "customer", "property"]),
@@ -277,13 +277,13 @@ export const strategyRouter = router({
   }),
 
   evidence: router({
-    forPlay: adminProcedure
+    forPlay: legacyDayforgeTenantOperatorProcedure
       .input(z.object({ playId: z.string() }))
       .query(async ({ ctx, input }) => {
         return getPlayEvidence(ctx.tenantId, input.playId);
       }),
 
-    attributeCustomer: adminProcedure
+    attributeCustomer: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           customerId: z.string(),
@@ -302,7 +302,7 @@ export const strategyRouter = router({
         });
       }),
 
-    recordStall: adminProcedure
+    recordStall: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           opportunityId: z.string().optional(),
@@ -330,13 +330,13 @@ export const strategyRouter = router({
         });
       }),
 
-    stalls: adminProcedure
+    stalls: legacyDayforgeTenantOperatorProcedure
       .input(z.object({ opportunityId: z.string().optional() }).optional())
       .query(async ({ ctx, input }) => {
         return getStallReasons(ctx.tenantId, input?.opportunityId);
       }),
 
-    proposeExperiment: adminProcedure
+    proposeExperiment: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           hypothesis: z.string(),
@@ -359,7 +359,7 @@ export const strategyRouter = router({
   }),
 
   triggers: router({
-    morning: adminProcedure
+    morning: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -376,7 +376,7 @@ export const strategyRouter = router({
         });
       }),
 
-    missionCompletion: adminProcedure
+    missionCompletion: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           missionId: z.string(),
@@ -393,7 +393,7 @@ export const strategyRouter = router({
         });
       }),
 
-    missionSkip: adminProcedure
+    missionSkip: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           missionId: z.string(),
@@ -408,7 +408,7 @@ export const strategyRouter = router({
         });
       }),
 
-    businessChange: adminProcedure
+    businessChange: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -427,7 +427,7 @@ export const strategyRouter = router({
         });
       }),
 
-    weeklyDawn: adminProcedure
+    weeklyDawn: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -442,17 +442,17 @@ export const strategyRouter = router({
         });
       }),
 
-    history: adminProcedure.query(async ({ ctx }) => {
+    history: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       return getTriggerRuns(ctx.tenantId);
     }),
   }),
 
   recovery: router({
-    state: adminProcedure.query(async ({ ctx }) => {
+    state: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       return getRecoveryState(ctx.tenantId);
     }),
 
-    recordMissed: adminProcedure
+    recordMissed: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           commitmentRef: z.string(),
@@ -469,7 +469,7 @@ export const strategyRouter = router({
         });
       }),
 
-    resolve: adminProcedure
+    resolve: legacyDayforgeTenantOperatorProcedure
       .input(
         z.object({
           itemId: z.string(),
@@ -492,17 +492,16 @@ export const strategyRouter = router({
         });
       }),
 
-    dropPatterns: adminProcedure.query(async ({ ctx }) => {
+    dropPatterns: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       return evaluateDropPatterns({ tenantId: ctx.tenantId });
     }),
 
-    clairePrompt: adminProcedure.query(async ({ ctx }) => {
+    clairePrompt: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
       const state = getRecoveryState(ctx.tenantId);
       return formatRecoveryClaireUtterance(state.visibleItem);
     }),
   }),
 });
-
 
 
 

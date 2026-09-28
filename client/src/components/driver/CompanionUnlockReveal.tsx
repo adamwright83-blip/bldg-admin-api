@@ -8,10 +8,10 @@ import "./companion-reveal.css";
  * played Rook's baked idle frames. The frame handling is unchanged in spirit:
  * read `<id>.frames.json`, play the idle state's frames at 140ms, fall back to
  * the concept art (captioned as concept art) if the frames never arrive. What
- * changed: the caller now owns when the card shows and what it says — here it
- * is the party card at the end of the Colosseum — and the frames are fully
- * preloaded before the loop starts, so a phone never flickers through
- * half-loaded frames.
+ * changed: the caller now owns when the card shows and what it means. The
+ * component is presentation-only and may be used for a reveal before durable
+ * ownership. Frames are fully preloaded before the loop starts, so a phone
+ * never flickers through half-loaded frames.
  *
  * Presentation only. Showing this card records nothing; whoever renders it
  * decides what, if anything, is persisted.

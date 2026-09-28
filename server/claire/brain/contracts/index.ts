@@ -84,5 +84,5 @@ export type {
   CallControlDecision,
 } from "./executiveDecision";
 
-/** Compile-time flag. Runtime copies live on ExecutiveDecision.productionAuthority. */
+/** Safe default. Guarded Stage C explicitly injects live authority per turn. */
 export const BRAIN_V2_PRODUCTION_AUTHORITY = false as const;

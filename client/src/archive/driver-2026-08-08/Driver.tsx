@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
@@ -6,7 +7,7 @@ import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
+import { WalkInCapture } from "@/components/legacy-dayforge/WalkInCapture";
 
 function getLocalYmd(date = new Date()): string {
   return [

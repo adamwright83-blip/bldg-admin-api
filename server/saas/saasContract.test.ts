@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { roleAllows } from "./tenantAccess";
@@ -16,20 +17,20 @@ describe("DayForge SaaS production contract", () => {
 
   it("requires membership and entitlement procedures on every DayForge domain", () => {
     const files = [
-      ["../territory/territoryRouter.ts", "dayforgeTerritoryProcedure"],
+      ["../territory/territoryRouter.ts", "legacyDayforgeTerritoryProcedure"],
       [
         "../commercialMissions/commercialMissionRouter.ts",
-        "dayforgeMissionFieldProcedure",
+        "legacyDayforgeMissionFieldProcedure",
       ],
       [
         "../commercialProposals/commercialProposalRouter.ts",
-        "dayforgeProposalFieldProcedure",
+        "legacyDayforgeProposalFieldProcedure",
       ],
       [
         "../commercialPipeline/commercialPipelineRouter.ts",
-        "dayforgePipelineProcedure",
+        "legacyDayforgePipelineProcedure",
       ],
-      ["../churnRadar/churnRadarRouter.ts", "dayforgeChurnProcedure"],
+      ["../churnRadar/churnRadarRouter.ts", "legacyDayforgeChurnProcedure"],
     ] as const;
     for (const [path, procedure] of files) {
       const router = source(path);
@@ -55,7 +56,7 @@ describe("DayForge SaaS production contract", () => {
   it("registers the raw Stripe webhook before the global JSON parser", () => {
     const index = source("../_core/index.ts");
     expect(
-      index.indexOf("registerDayforgeBillingWebhookRoute(app)")
+      index.indexOf("registerLegacyDayforgeBillingWebhookRoute(app)")
     ).toBeLessThan(index.indexOf('app.use(express.json({ limit: "50mb" }))'));
   });
 
@@ -82,12 +83,65 @@ describe("DayForge SaaS production contract", () => {
     expect(source("./saasStore.ts")).toContain("claimedSubscriptions} + 1");
   });
 
+  it("keeps required SaaS schema on the production boot path", () => {
+    const migration = source("../../scripts/migrate.mjs");
+    expect(migration).toContain("0042_dayforge_saas_onboarding_billing.sql");
+    expect(migration).toContain("0058_impact_signals.sql");
+    expect(migration).toContain('"debriefMissionId"');
+    expect(migration).toContain("ensureRequiredColumn");
+    expect(migration).toContain("ensureRequiredIndex");
+
+    const workflow = source("../../.github/workflows/saas-schema-release.yml");
+    expect(workflow).toContain("node scripts/schema-drift-fixture.mjs");
+    expect(workflow).toContain("pnpm saas:schema:release-exam");
+    expect(workflow).toContain("pnpm start");
+  });
+
   it("enforces the tenant role matrix", () => {
     expect(roleAllows("owner", ["owner", "admin"])).toBe(true);
     expect(roleAllows("operator", ["owner", "admin"])).toBe(false);
     expect(roleAllows("field", ["owner", "admin", "operator", "field"])).toBe(
       true
     );
+  });
+
+
+  it("quarantines commercial SaaS members from legacy product routes", () => {
+    const app = source("../../client/src/App.tsx");
+    const shell = source("../../client/src/product/ProductShell.tsx");
+    const field = source("../../client/src/product/FieldHome.tsx");
+
+    expect(app).toContain("isSaasCustomerSafePath");
+    expect(app).toContain('user?.role === "user"');
+    expect(app).toContain('<Redirect to="/product" />');
+    expect(shell).not.toContain("Legacy operations");
+    expect(shell).not.toContain('href="/admin"');
+    expect(shell).not.toContain('href="/new-order"');
+    expect(field).not.toContain('href="/new-order"');
+  });
+
+  it("authorizes Strategy through tenant membership rather than platform admin", () => {
+    const strategy = source("../strategy/strategyRouter.ts");
+    expect(strategy).toContain("legacyDayforgeTenantOperatorProcedure");
+    expect(strategy).not.toMatch(/\badminProcedure\b/);
+  });
+
+  it("uses normal email/password sign-in and resolves tenant server-side", () => {
+    const login = source("../../client/src/components/LoginForm.tsx");
+    const alternateLogin = source("../../client/src/pages/LegacyDayforgeLoginPage.tsx");
+    const auth = source("./saasAuthRoute.ts");
+    const cors = source("../_core/corsConfig.ts");
+
+    expect(login).toContain("JSON.stringify({ email, password })");
+    expect(login).not.toContain("Workspace slug");
+    expect(login).not.toContain("!slug");
+    expect(alternateLogin).toContain("JSON.stringify({ email, password })");
+    expect(alternateLogin).not.toContain("Workspace slug");
+    expect(auth).toContain("legacyDayforgeSaasUserCredentials.emailNormalized");
+    expect(auth).toContain("const matches = passwordMatches");
+    expect(auth).toContain("Multiple accounts use this email");
+    expect(cors).toContain("JOYSTICK_ALLOWED_ORIGINS");
+    expect(cors).toContain("RAILWAY_PUBLIC_DOMAIN");
   });
 
   it("does not grant SaaS members the platform admin or driver role", () => {
@@ -97,4 +151,19 @@ describe("DayForge SaaS production contract", () => {
     expect(auth).toContain('role: "user"');
     expect(auth).not.toMatch(/role:\s*platformRole/);
   });
+
+  it("keeps commercial Claire voice behind an explicit tenant entitlement", () => {
+    const shared = source("../../shared/saasTenant.ts");
+    const trpc = source("../_core/trpc.ts");
+    const claire = source("../claire/claireRouter.ts");
+    const twilio = source("../claire/claireTwilio.ts");
+    expect(shared).toContain('"claire_voice"');
+    expect(trpc).toContain("legacyDayforgeClaireVoiceProcedure");
+    expect(trpc).toContain('entitlement: "claire_voice"');
+    expect(claire).toContain("callBeforeDrive: legacyDayforgeClaireVoiceProcedure");
+    expect(claire).toContain("callAfterStop: legacyDayforgeClaireVoiceProcedure");
+    expect(twilio).not.toContain("Adam. Claire here.");
+    expect(twilio).toContain("Claire here.");
+  });
+
 });

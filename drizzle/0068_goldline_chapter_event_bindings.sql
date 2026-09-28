@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- Goldline chapter real-event binding — Slice 5
 --
 -- Records that a qualifying real TowerWarsBusinessEvent unlocked a fictional
@@ -5,7 +6,7 @@
 -- that event — only its id, for idempotent consumption.
 --
 -- NOT YET APPLIED to any database as of authoring. Apply via
--- applyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
+-- applyLegacyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
 
 CREATE TABLE IF NOT EXISTS `goldline_chapter_event_bindings` (
   `id` varchar(36) NOT NULL,

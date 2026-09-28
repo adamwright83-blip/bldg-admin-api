@@ -297,13 +297,26 @@ function askPrimary(day: WeeklyDayDraft, dossier: WeeklyDossier): string {
   const known = dossier.facts.filter(
     fact => fact.businessDate === day.businessDate && fact.scheduleLabel
   );
+  if (
+    dossier.horizon.todayIsRemnant &&
+    dossier.horizon.weekday === "Monday" &&
+    day.businessDate === dossier.horizon.businessDate
+  ) {
+    const later = dossier.horizon.remainingDates
+      .filter(date => date !== day.businessDate)
+      .map(date => weekdayName(date));
+    const knownLine = known.length
+      ? ` ${day.weekday} already has ${known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ")}.`
+      : "";
+    const tail = later.length ? ` We still need ${later.join(", ")}.` : "";
+    return `${day.weekday}\'s already underway; I won\'t treat it like a fresh day.${knownLine}${tail} If there\'s one thing worth keeping for what\'s left today, tell me. Otherwise say "skip ${day.weekday}."`;
+  }
   if (known.length) {
     const listed = known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ");
     return `${day.weekday} already has ${listed}. What is the one mission that owns the rest of ${day.weekday}?`;
   }
   return `What is the one mission for ${day.weekday}?`;
 }
-
 export function speakProposal(draft: WeeklyDraft): string {
   const lines = draft.days.map(day => {
     if (day.disposition === "stand_down") return `${day.weekday}: stood down.`;

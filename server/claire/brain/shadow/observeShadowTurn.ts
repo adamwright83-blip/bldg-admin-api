@@ -26,6 +26,7 @@
  */
 
 import { runClaireBrainTurn, type ClaireBrainTurnInput } from "./runClaireBrainTurn";
+import { counterfactualVoiceCompleteness } from "../perception/completeness";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import {
   liveReadOnlyRetrieval,
@@ -50,6 +51,13 @@ export type V1Outcome = {
   endedCall: boolean;
   mutated: boolean;
   spokeSomething: boolean;
+  turnKind?: string | null;
+  answerPath?: string | null;
+  actionIds?: string[];
+  priorClaimRan?: boolean;
+  completeness?: "complete" | "incomplete" | "forced_flush" | null;
+  release?: string | null;
+  speak?: string | null;
 };
 
 export type ShadowDisagreement =
@@ -243,6 +251,38 @@ export async function observeShadowTurn(
     }
 
     const candidateActionClasses = result.decision.actionGrants.map(grant => grant.actionClass);
+    const v1Completeness = v1?.completeness ?? result.decision.perceivedTurn.completeness;
+    const counterfactual = counterfactualVoiceCompleteness(result.decision.perceivedTurn.assembledText, v1Completeness);
+    const disagreementLabels: string[] = [];
+    const workKind = result.decision.perceivedTurn.workDeclarationKind;
+    const challenged = result.decision.perceivedTurn.businessIntent === "correctness_challenge" || result.decision.perceivedTurn.businessIntent === "provenance_question";
+    if (v1?.priorClaimRan && !challenged && (workKind !== "none" || result.decision.perceivedTurn.attentionRepair !== "none")) {
+      disagreementLabels.push("v1_prior_claim_false_positive");
+    }
+    if (v1?.speak && /should i add|say yes or no/i.test(v1.speak) && (candidateActionClasses.includes("commit_day_line") || candidateActionClasses.includes("propose_day_line"))) {
+      disagreementLabels.push("v1_redundant_confirmation");
+    }
+    if ((v1Completeness === "complete" || v1Completeness === "forced_flush") && counterfactual === "incomplete") {
+      disagreementLabels.push("v1_v2_completeness_disagreement");
+    }
+    if (result.decision.perceivedTurn.businessIntent === "fact_question" && (workKind === "ordinary_work" || workKind === "explicit_day_line" || workKind === "explicit_action")) {
+      disagreementLabels.push("v2_work_misclassified_as_query");
+    }
+    if (v1?.mutated && candidateActionClasses.some(action => action === "commit_day_line" || action === "propose_day_line")) {
+      disagreementLabels.push("v1_action_v2_action_plan_match");
+    }
+    result.comparison.counterfactualCompleteness = counterfactual;
+    result.comparison.disagreementLabels = disagreementLabels;
+    if (v1) {
+      result.comparison.v1 = {
+        turnKind: v1.turnKind ?? null,
+        answerPath: v1.answerPath ?? null,
+        actionIds: v1.actionIds ?? [],
+        priorClaimRan: Boolean(v1.priorClaimRan),
+        completeness: v1.completeness ?? null,
+        release: v1.release ?? null,
+      };
+    }
     const observation: ShadowObservation = {
       observed: true,
       tenantId: turn.tenantId,

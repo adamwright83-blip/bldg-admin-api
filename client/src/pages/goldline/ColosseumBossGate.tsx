@@ -9,7 +9,10 @@ import {
 import Day1FieldMission, {
   type Day1TenDoorsMissionView,
 } from "./Day1FieldMission";
-import { projectColosseumMission } from "./colosseumCampaign";
+import {
+  COLOSSEUM_VILLAIN_TARGET_ID,
+  projectColosseumMission,
+} from "./colosseumCampaign";
 import ClockheadDuel, { ClockheadPrologue } from "./ClockheadDuel";
 import { browserStorage, markPrologueSeen, shouldPlayPrologue } from "./colosseumPrologue";
 import { getAudioManager } from "../../game/audio/AudioManager";
@@ -90,11 +93,12 @@ export default function ColosseumBossGate({
 }: Props) {
   const campaign = useMemo(() => projectColosseumMission(mission), [mission]);
   const [fieldMode, setFieldMode] = useState(false);
+  const [duelStarted, setDuelStarted] = useState(false);
   // Presentation memory only: has this device had its first taste of the fight?
   const [prologue, setPrologue] = useState(() =>
     shouldPlayPrologue(browserStorage(), campaign.missionId, campaign.visitedCount)
   );
-  if (campaign.isComplete) {
+  if (duelStarted) {
     return <ClockheadDuel onDefeated={onBossDefeated} />;
   }
 
@@ -138,6 +142,7 @@ export default function ColosseumBossGate({
     <ColosseumSearchArena
       mission={campaign}
       onBeginHunt={() => setFieldMode(true)}
+      onVillainFound={() => setDuelStarted(true)}
     />
   );
 }
@@ -147,6 +152,13 @@ export default function ColosseumBossGate({
 /* ======================================================================== */
 
 const PORTRAIT_SRC = "/assets/goldline/colosseum/clockhead-portrait.webp";
+const PAINTED_DOOR_IDS: readonly Exclude<ColosseumDoorId, "VI">[] = [
+  "I",
+  "II",
+  "III",
+  "IV",
+  "V",
+];
 
 /**
  * The painted doors, measured from arena-background-hd.webp (percent of the
@@ -215,9 +227,11 @@ function searchMood(state: SearchArena): ConstructMood {
 function ColosseumSearchArena({
   mission,
   onBeginHunt,
+  onVillainFound,
 }: {
   mission: Day1TenDoorsMissionView;
   onBeginHunt: () => void;
+  onVillainFound: () => void;
 }) {
   // READ-ONLY: the real campaign's own counts, turned into scenery.
   const projection = useMemo(
@@ -229,6 +243,27 @@ function ColosseumSearchArena({
       }),
     [mission.visitedCount, mission.totalCount, mission.isComplete]
   );
+
+  const unlockedDoors = useMemo(() => {
+    const access = new Set<ColosseumDoorId>();
+    mission.targets.forEach((target, index) => {
+      const doorId = PAINTED_DOOR_IDS[index];
+      if (
+        doorId &&
+        Object.prototype.hasOwnProperty.call(mission.outcomes, target.id)
+      ) {
+        access.add(doorId);
+      }
+    });
+    return access;
+  }, [mission.outcomes, mission.targets]);
+
+  const villainDoorId = useMemo<ColosseumDoorId | null>(() => {
+    const index = mission.targets.findIndex(
+      target => target.id === COLOSSEUM_VILLAIN_TARGET_ID
+    );
+    return index >= 0 ? PAINTED_DOOR_IDS[index] ?? null : null;
+  }, [mission.targets]);
 
   const [frame, setFrame] = useState(() => ({ arena: createSearchArena(), stride: 0, now: 0 }));
   const arenaRef = useRef(frame.arena);
@@ -264,6 +299,7 @@ function ColosseumSearchArena({
 
   const input = useColosseumInput(!leaving && revealing == null);
   const leavingRef = useRef(false);
+  const villainFoundRef = useRef(false);
   const revealingRef = useRef<typeof revealing>(null);
   revealingRef.current = revealing;
 
@@ -428,8 +464,40 @@ function ColosseumSearchArena({
           stage?.shake(0.6);
           say({ kicker: "RETURN", title: "PROJECTION DISRUPTED", body: "It flickers. He isn’t here to hurt.", tone: "info" });
           break;
+        case "door_locked": {
+          audio.play("arcade_miss");
+          say({
+            kicker: `DOOR ${event.door} SEALED`,
+            title:
+              event.door === "VI"
+                ? "NO REAL-WORLD TRACE EXISTS FOR THIS DOOR."
+                : "REAL-WORLD TRACE REQUIRED.",
+            body:
+              event.door === "VI"
+                ? "The Republic can argue about Door VI forever. It is not one of the five real targets."
+                : "Visit the matching real property first. Then this door can open.",
+            tone: "door",
+          });
+          break;
+        }
         case "door_open": {
           audio.play("door_creak");
+          if (
+            event.door === villainDoorId &&
+            projectionRef.current.located &&
+            !villainFoundRef.current
+          ) {
+            villainFoundRef.current = true;
+            say({
+              kicker: `DOOR ${event.door}`,
+              title: "THE TRACE ENDS HERE.",
+              body: "You found him.",
+              tone: "door",
+            });
+            setHuntAwake(true);
+            window.setTimeout(onVillainFound, reduced.current ? 0 : 420);
+            break;
+          }
           const door = COLOSSEUM_DOORS.find(candidate => candidate.id === event.door)!;
           say({ kicker: `DOOR ${door.id}`, title: door.claim, tone: "door" });
           setHuntAwake(true);
@@ -461,7 +529,7 @@ function ColosseumSearchArena({
           break;
       }
     },
-    [say]
+    [onVillainFound, say, villainDoorId]
   );
 
   useEffect(() => {
@@ -485,7 +553,7 @@ function ColosseumSearchArena({
           }
         } else {
           heldRef.current = false;
-          arena = stepSearchArena(arena, dt, input.consume());
+          arena = stepSearchArena(arena, dt, input.consume(), unlockedDoors);
           arenaRef.current = arena;
           for (const event of arena.events) handleEvent(event, arena);
         }
@@ -560,7 +628,7 @@ function ColosseumSearchArena({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [handleEvent, input]);
+  }, [handleEvent, input, unlockedDoors]);
 
   const beginHunt = () => {
     if (leavingRef.current) return;
@@ -617,12 +685,13 @@ function ColosseumSearchArena({
           const rect = DOOR_LEAVES[id];
           const active = door?.door.id === id;
           const open = active && !door!.closing;
+          const unlocked = unlockedDoors.has(id);
           return (
             <div
               key={id}
               className={`cs-door${open ? " is-open" : ""}${active ? " is-active" : ""}${
                 arena.doorsChecked.includes(id) ? " is-checked" : ""
-              }`}
+              }${unlocked ? " is-unlocked" : " is-locked"}`}
               style={
                 {
                   left: `${rect.x0}%`,
@@ -772,12 +841,21 @@ function ColosseumSearchArena({
         dodgeReady={arena.avatar.dodgeCooldownMs === 0}
       />
 
-      <div className={`colosseum-hunt-call${huntAwake ? " is-awake" : ""}`}>
-        <span>{huntAwake ? "THE ANSWER IS OUTSIDE THE ARENA" : "THE SIGNAL IS BLIND"}</span>
-        <button type="button" onClick={beginHunt} data-testid="colosseum-begin-hunt">
-          <small>SERVICE ENTRANCE ↓</small>
-          {huntLabel}
-        </button>
+      <div className={`colosseum-hunt-call${huntAwake || projection.located ? " is-awake" : ""}`}>
+        {projection.located ? (
+          <>
+            <span>THE FINAL TRACE IS COMPLETE</span>
+            <b>THE VILLAIN IS BEHIND AN UNSEALED DOOR.</b>
+          </>
+        ) : (
+          <>
+            <span>{huntAwake ? "THE ANSWER IS OUTSIDE THE ARENA" : "THE SIGNAL IS BLIND"}</span>
+            <button type="button" onClick={beginHunt} data-testid="colosseum-begin-hunt">
+              <small>SERVICE ENTRANCE ↓</small>
+              {huntLabel}
+            </button>
+          </>
+        )}
       </div>
 
       {leaving && <div className="cs-descend" aria-hidden="true" />}

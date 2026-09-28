@@ -30,7 +30,13 @@ import { confirmLinkedVehicleWork } from "../workdayCargoOrchestrator";
  * create a second copy. The result reports exactly what saved.
  */
 
-export type ExistingWork = { id: string; title: string; businessDate: string; status: "open" | "completed" };
+export type ExistingWork = {
+  id: string;
+  title: string;
+  businessDate: string;
+  status: "open" | "completed";
+  executionType?: import("../../../shared/objectiveExecution").ObjectiveExecutionType | null;
+};
 
 export async function loadExistingWork(
   input: { tenantId: string; dayDirectorActorId: string; dates: string[] },
@@ -49,6 +55,7 @@ export async function loadExistingWork(
       title: commitment.title,
       businessDate: dates[index]!,
       status: commitment.status === "completed" ? ("completed" as const) : ("open" as const),
+      executionType: commitment.executionType,
     }))
   );
 }
@@ -101,13 +108,22 @@ export function reconcileBriefing(
     const match = matchExistingWork(item, existing);
     if (!match) return item;
     if (item.kind === "new_work" && match.status === "open") {
-      return { ...item, existing: { id: match.id, title: match.title, source: "day_line" as const } };
+      return {
+        ...item,
+        existing: { id: match.id, title: match.title, source: "day_line" as const, executionType: match.executionType ?? null },
+      };
     }
     if (item.kind === "completed" && match.status === "open") {
-      return { ...item, existing: { id: match.id, title: match.title, source: "day_line" as const } };
+      return {
+        ...item,
+        existing: { id: match.id, title: match.title, source: "day_line" as const, executionType: match.executionType ?? null },
+      };
     }
     if (item.kind === "completed" && match.status === "completed") {
-      return { ...item, existing: { id: match.id, title: match.title, source: "day_line" as const } };
+      return {
+        ...item,
+        existing: { id: match.id, title: match.title, source: "day_line" as const, executionType: match.executionType ?? null },
+      };
     }
     return item;
   });
@@ -202,7 +218,27 @@ export async function commitBriefing(
   for (const item of parsed.items) {
     try {
       if (item.kind === "new_work") {
-        if (item.existing) continue;
+        if (item.existing) {
+          if (
+            item.executionType &&
+            item.existing.executionType !== item.executionType &&
+            item.existing.source === "day_line"
+          ) {
+            await update({
+              tenantId: input.tenantId,
+              actorId: input.dayDirectorActorId,
+              commitmentId: item.existing.id,
+              patch: { executionType: item.executionType },
+            });
+            result.commitmentIds.push(item.existing.id);
+            result.receipts.push({
+              claimedState: "updated",
+              entityId: item.existing.id,
+              statement: `${item.existing.title} as ${item.executionType}`,
+            });
+          }
+          continue;
+        }
         if (input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
           const linked = await linkVehicleWork({
             tenantId: input.tenantId,
@@ -242,6 +278,7 @@ export async function commitBriefing(
             detailNote: detailNote(item),
             targetBusinessDate: item.businessDate,
             command: commandForItem(item, parsed),
+            ...(item.executionType ? { executionType: item.executionType } : {}),
           },
         });
         const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";

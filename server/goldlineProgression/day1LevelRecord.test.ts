@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { SQL } from "drizzle-orm";
@@ -21,12 +22,12 @@ vi.mock("../openChannel/openChannelService", () => ({
   ensureOpenChannelTables: vi.fn(async () => undefined),
 }));
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: vi.fn(async () => ({
+  resolveLegacyDayforgeMembership: vi.fn(async () => ({
     tenantId: "tenant-a",
     userOpenId: "open-7",
     role: "operator",
   })),
-  hasDayforgeEntitlement: vi.fn(async () => true),
+  hasLegacyDayforgeEntitlement: vi.fn(async () => true),
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 
@@ -720,8 +721,11 @@ describe("Day 1 does not resolve level.colosseum", () => {
     expect(day1).not.toMatch(
       /recordLevelFromOutcomes|recordColosseumLevelFromCommittedEvidence|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved|recordAuthoredColosseumFinale|levelColosseumResolvedAt/
     );
-    expect(router.match(/\.mutation\(/g) ?? []).toHaveLength(1);
     expect(router).toMatch(/acknowledgeColosseumFinale/);
+    expect(router).toMatch(/beginCoastalRookHunt/);
+    expect(router).toMatch(/completeCoastalRookCatch/);
+    expect(router).toMatch(/beginWaywardContactGate/);
+    expect(router).toMatch(/completeWaywardContactGate/);
     expect(router).not.toMatch(/recordLevelFromOutcomes|setLevelColosseumResolvedAt|insertLevelColosseumResolved/);
     const callers = serverSources(join(process.cwd(), "server")).filter(path => {
       if (path.endsWith(`${join("goldlineProgression", "progressionWrites.ts")}`)) return false;

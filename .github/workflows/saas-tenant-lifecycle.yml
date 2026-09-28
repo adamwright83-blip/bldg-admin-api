@@ -1,0 +1,59 @@
+name: SaaS tenant lifecycle gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tenant-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3414:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3414/joystick_tenant_lifecycle
+      APP_SHARED_API_SECRET: tenant-lifecycle-app-secret-000000000000000000
+      JWT_SECRET: tenant-lifecycle-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: tenant-lifecycle-placeholder-not-used
+      DRIVER_PASSWORD: tenant-lifecycle-driver
+      DRIVER_OPEN_ID: tenant-lifecycle-driver
+      ADMIN_PASSWORD: tenant-lifecycle-admin
+      SAAS_TENANT_LIFECYCLE_EXAM: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create disposable lifecycle database
+        run: |
+          node -e "
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3414/');
+              await conn.query('DROP DATABASE IF EXISTS joystick_tenant_lifecycle');
+              await conn.query('CREATE DATABASE joystick_tenant_lifecycle');
+              await conn.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          "
+      - name: Bootstrap production schema
+        run: node scripts/migrate.mjs
+      - name: Prove export delete and protected-tenant safeguards
+        run: pnpm vitest run --config vitest.integration.config.ts server/saas/tenantLifecycle.integration.test.ts

@@ -126,6 +126,13 @@ export async function finishConversationAndMaybeAnalyze(input: {
   callSid?: string;
   reason: string;
 }): Promise<void> {
+  const store = productionConversationStore();
+  const prior = input.callSid
+    ? await store.getSessionByCallSid(input.callSid)
+    : input.claireConversationId
+      ? await store.getSessionByClaireId(input.claireConversationId)
+      : null;
+  if (prior?.status === "complete") return;
   const session = await completeConversationSession(input);
   if (!session) return;
   await emitClaireTranscriptLog(session.id, {

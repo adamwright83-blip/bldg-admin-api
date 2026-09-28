@@ -40,7 +40,12 @@ export function dayLineCandidate(perceived: PerceivedTurn): boolean {
   if (perceived.workDeclarationKind === "explicit_day_line") return true;
   if (perceived.workDeclarationKind === "explicit_action") return false;
   if (perceived.workDeclarationKind === "ordinary_work") {
-    return perceived.operatorWorkCommitment && FIRST_PERSON_PLAN.test(perceived.assembledText);
+    return (
+      perceived.operatorWorkCommitment &&
+      perceived.operatorIntentAttested &&
+      Boolean(perceived.declaredContentLabel) &&
+      FIRST_PERSON_PLAN.test(perceived.assembledText)
+    );
   }
   return false;
 }

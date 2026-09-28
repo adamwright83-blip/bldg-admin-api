@@ -1,10 +1,11 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import type { GoldlineCommEvent } from "@shared/twilioFuture";
 
 /**
  * Domain events for Goldline communications.
  *
  * Inspected and left in place:
- * - shared/dayforgeEvents.ts is product analytics and excludes transcript text.
+ * - shared/legacyDayforgeEvents.ts is product analytics and excludes transcript text.
  * - server/operationsEvents.ts records order pickup and dropoff.
  * - server/agents/agentEvents.ts records agent tool calls.
  * None of those is this bus. Twilio Sync is an optional later transport,

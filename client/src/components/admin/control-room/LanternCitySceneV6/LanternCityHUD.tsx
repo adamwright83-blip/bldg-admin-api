@@ -56,7 +56,8 @@ export type Overview = {
   scoreboard: {
     customers: number;
     districtsLit: { numerator: number; denominator: number };
-    paidRevenueThisWeek: number;
+    paidRevenueThisWeek: number | null;
+    revenueProvenance?: string;
     dormant: { numerator: number; denominator: number };
   };
   featuredOperation: {
@@ -180,12 +181,12 @@ export function LanternCityHUD({
             </b>
           </span>
         </div>
-        <div>
+        <div title={overview?.scoreboard.revenueProvenance}>
           <DollarSign aria-hidden />
           <span>
             PAID REVENUE · THIS WEEK
             <b>
-              {overview
+              {overview?.scoreboard.paidRevenueThisWeek != null
                 ? money.format(overview.scoreboard.paidRevenueThisWeek)
                 : "—"}
             </b>

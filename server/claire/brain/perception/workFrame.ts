@@ -14,6 +14,7 @@ import type {
   WorkDeclarationKind,
   WorkFrameClassifierStatus,
 } from "../contracts/perceivedTurn";
+import { detectConversationControl, findIndependentFirstPersonWorkClause } from "../../turn/interpretTurn";
 
 export type WorkFrameHints = {
   explicitActionRequest?: boolean;
@@ -48,7 +49,7 @@ const STRATEGIC = new RegExp(
 );
 
 const EXPLICIT_DAY_LINE =
-  /\b(?:put|add|log|schedule|track|pencil)\b[\s\S]{0,80}\b(?:on|onto)\s+(?:my\s+|the\s+)?day\s*line\b/i;
+  /\b(?:put|add|log|schedule|track|pencil)\b[\s\S]{0,80}\b(?:on|onto|to)\s+(?:my\s+|the\s+)?day\s*line\b/i;
 
 const EXPLICIT_MISSION_WRITE =
   /\b(?:make|set|mark)\b[\s\S]{0,80}\b(?:today'?s\s+mission|my\s+mission(?:\s+today)?|the\s+mission)\b/i;
@@ -93,9 +94,6 @@ const SUBJECT_CHANGE = new RegExp(
   "i"
 );
 
-const OPERATOR_INTENT =
-  /\b(?:i|we)\s+(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+\w+/i;
-
 const EXTERNAL_FACT =
   /\b(?:owe|owes|owed)\b|\b\$\s?\d|\b\d[\d,]*\s*(?:dollars|bucks|thousand)\b/i;
 
@@ -133,10 +131,9 @@ function strategicContentLabel(text: string): string | null {
 }
 
 function intentionComplement(text: string): string | null {
-  const sentence = text.trim().split(/(?<=[.!?])\s+/)[0] ?? text;
   const match =
-    /\b(?:i|we)\s+(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+(.+)/i.exec(
-      sentence
+    /\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+(.+)/i.exec(
+      text
     );
   if (!match?.[1]) return null;
   const beforeCause = match[1].split(/\b(?:because|since)\b/i)[0] ?? match[1];
@@ -201,16 +198,17 @@ function classifyWorkFrameUnsafe(text: string, hints: WorkFrameHints): WorkFrame
 
   const attentionRepair: AttentionRepairKind = SUBJECT_CHANGE.test(trimmed)
     ? "subject_change"
-    : ATTENTION_REPAIR.test(trimmed)
+    : ATTENTION_REPAIR.test(trimmed) || detectConversationControl(trimmed)
       ? "attention_repair"
       : "none";
-  const operatorIntentAttested = OPERATOR_INTENT.test(trimmed);
+  const independentIntentClause = findIndependentFirstPersonWorkClause(trimmed);
+  const operatorIntentAttested = Boolean(independentIntentClause);
   const embeddedExternalFact = EXTERNAL_FACT.test(trimmed);
   const explicitMissionWriteRequest = EXPLICIT_MISSION_WRITE.test(trimmed);
   const openFragment = endsWithOpenDesire(trimmed);
   const strategic = STRATEGIC.test(trimmed) || explicitMissionWriteRequest;
   const strategicLabel = strategic ? strategicContentLabel(trimmed) : null;
-  const intentLabel = operatorIntentAttested ? intentionComplement(trimmed) : null;
+  const intentLabel = independentIntentClause ? intentionComplement(independentIntentClause) : null;
   const declaredContentLabel = strategicLabel ?? intentLabel;
   const strategicShape: StrategicShape = !strategic ? "none" : declaredContentLabel ? "content" : "unresolved";
 
@@ -223,7 +221,15 @@ function classifyWorkFrameUnsafe(text: string, hints: WorkFrameHints): WorkFrame
     workDeclarationKind = "context_narration";
   } else if (hints.explicitActionRequest) {
     workDeclarationKind = "explicit_action";
-  } else if (hints.operatorWorkCommitment) {
+  } else if (
+    hints.operatorWorkCommitment &&
+    operatorIntentAttested &&
+    declaredContentLabel
+  ) {
+    // V1's broad commitment hint may fire on a question-shaped clause such as
+    // "What should I do about Dana Tuesday?". That hint is descriptive only.
+    // Brain V2 grants ordinary-work status only when the utterance independently
+    // contains a first-person declarative intention with an extractable complement.
     workDeclarationKind = "ordinary_work";
   }
 

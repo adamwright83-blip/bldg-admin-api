@@ -1,6 +1,7 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
 import {
   activeCustomerPopulation,
@@ -303,7 +304,11 @@ export async function getOrderStats(
 export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStats> {
   const db = await requireDb();
   const rows = await db
-    .select({ status: orders.status, paid: orders.paid })
+    .select({
+      status: orders.status,
+      paid: orders.paid,
+      stripePaymentIntentId: orders.stripePaymentIntentId,
+    })
     .from(orders)
     .where(
       and(
@@ -317,7 +322,10 @@ export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStat
 
   for (const row of rows) {
     byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
-    if (!row.paid && ["collected", "processing", "ready"].includes(row.status)) {
+    if (
+      !hasNativePaymentAuthority(row) &&
+      ["collected", "processing", "ready"].includes(row.status)
+    ) {
       awaitingPayment++;
     }
   }

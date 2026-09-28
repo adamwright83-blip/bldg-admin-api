@@ -72,6 +72,10 @@ import {
 } from "./operatorMissionCommand";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
+import {
+  isClaireBrainV2LiveEnabled,
+  runClaireBrainV2LiveTurn,
+} from "./brain/live/runClaireBrainV2LiveTurn";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
@@ -105,8 +109,8 @@ const CONTINUE_PATH = "/api/claire/twilio/pre-drive/continue";
 export const CLAIRE_INBOUND_VOICE_PATH = "/api/claire/twilio/inbound";
 export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
-/** Spoken on inbound pickup only. Outbound still opens with the generated briefing. */
-export const CLAIRE_INBOUND_GREETING = "Hey Adam. What's up?";
+/** Spoken on inbound pickup only. Outbound still opens with the generated briefing. Keep this tenant-neutral: SaaS operators share this route. */
+export const CLAIRE_INBOUND_GREETING = "Claire here. What's up?";
 /** Polly stays as the fail-open fallback when xAI TTS is disabled or unconfigured. */
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;
@@ -392,7 +396,7 @@ function validTwilioRequest(req: Request): boolean {
 }
 
 export function spokenClaireText(text: string, opening = false): string {
-  return opening ? `Adam. Claire here. ${text}` : text;
+  return opening ? `Claire here. ${text}` : text;
 }
 
 /**
@@ -731,6 +735,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       });
 
       let result: ClaireTurnResult;
+      let brainV2LiveHandled = false;
       if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
         if (input.utterance.trim()) {
           conversation.providerFragments = [
@@ -883,36 +888,95 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           tenantId: conversation.tenantId,
           operatorUserId: conversation.actorId,
         });
-        result = await runClaireTurn(
-          {
+
+        const runLegacyAdapter = async () =>
+          await runClaireTurn(
+            {
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              surface: "voice",
+              utterance: turnUtterance,
+              state: conversation,
+              conversationKey: callStateKey(conversationId),
+              brief: conversation.brief,
+              context: conversation.context,
+              allowFragmentWait: input.allowFragmentWait,
+              turnStartedAtMs: input.webhookReceivedAtMs,
+              rookContactResidues,
+            },
+            {
+              confirmPlan: () =>
+                confirmWorkdayPlan({
+                  tenantId: conversation.tenantId,
+                  actorId: conversation.dayDirectorActorId,
+                  businessDate:
+                    conversation.context.clock?.tomorrowBusinessDate ??
+                    conversation.context.businessDate,
+                  items: assembleTomorrowCandidates(conversation.context),
+                }).then(() => undefined),
+              encyclopedia: claireEncyclopediaFor({
+                dayDirectorActorId: conversation.dayDirectorActorId,
+              }),
+            }
+          );
+
+        const liveV2 = await runClaireBrainV2LiveTurn({
+          rawText: turnUtterance,
+          assembledText: conversation.pendingFragment
+            ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
+            : turnUtterance,
+          state: readOnlyWorkingMemorySource(
+            conversation as unknown as Parameters<
+              typeof readOnlyWorkingMemorySource
+            >[0]
+          ),
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+          surface: "voice",
+          conversationKey: callStateKey(conversationId),
+          live: {
             tenantId: conversation.tenantId,
             operatorUserId: conversation.actorId,
+            conversationId,
             dayDirectorActorId: conversation.dayDirectorActorId,
+            timeZone: getDashboardTimeZone(),
+            businessDate:
+              conversation.context.businessDate ??
+              new Date().toISOString().slice(0, 10),
             surface: "voice",
-            utterance: turnUtterance,
-            state: conversation,
-            conversationKey: callStateKey(conversationId),
-            brief: conversation.brief,
-            context: conversation.context,
-            allowFragmentWait: input.allowFragmentWait,
-            turnStartedAtMs: input.webhookReceivedAtMs,
-            rookContactResidues,
+            priorClaimReceipts: conversation.claimReceipts ?? [],
           },
-          {
-            confirmPlan: () =>
-              confirmWorkdayPlan({
-                tenantId: conversation.tenantId,
-                actorId: conversation.dayDirectorActorId,
-                businessDate:
-                  conversation.context.clock?.tomorrowBusinessDate ??
-                  conversation.context.businessDate,
-                items: assembleTomorrowCandidates(conversation.context),
-              }).then(() => undefined),
-            encyclopedia: claireEncyclopediaFor({
-              dayDirectorActorId: conversation.dayDirectorActorId,
-            }),
+          executeLegacyAdapter: async () => runLegacyAdapter(),
+        });
+
+        if (liveV2.active) {
+          brainV2LiveHandled = true;
+          if (liveV2.adapterResult) {
+            result = liveV2.adapterResult;
+          } else {
+            // Call-control authority does not itself write business state. Keep
+            // the existing character/ledger adapter for the spoken close, but V2
+            // is the authority deciding that the call ends.
+            const adapted = await runLegacyAdapter();
+            result = liveV2.result.candidateEndCall
+              ? { ...adapted, endCall: true }
+              : adapted;
           }
-        );
+          console.info("[ClaireBrainV2]", {
+            event: "claire_brain_v2_live",
+            surface: "voice",
+            conversationKey: callStateKey(conversationId),
+            actionClasses: liveV2.actionClasses,
+            endCall: liveV2.result.candidateEndCall,
+            adapterKind: liveV2.adapterResult?.kind ?? null,
+            actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
+            mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
+            receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
+          });
+        } else {
+          result = await runLegacyAdapter();
+        }
       }
       }
       conversation.touchedAt = Date.now();
@@ -929,7 +993,14 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        * raw provider webhook — and skipped entirely for holds and empty semantic turns.
        */
       const observation = observationUtteranceForBrain(result);
-      if (observation.observe) {
+      if (
+        observation.observe &&
+        !brainV2LiveHandled &&
+        !isClaireBrainV2LiveEnabled({
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+        })
+      ) {
         observeShadowTurnDetached({
           rawText: observation.assembledText,
           assembledText: observation.assembledText,
@@ -955,6 +1026,13 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             // Voice records work either as a commitment turn or as linked action ids.
             mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
             spokeSomething: Boolean(result.speak),
+            turnKind: result.kind,
+            answerPath: result.answerPath ?? null,
+            actionIds: result.actionIds ?? [],
+            priorClaimRan: Boolean(result.priorClaimRan),
+            completeness: observation.completeness,
+            release: result.thoughtCompleteness ?? null,
+            speak: result.speak,
           },
         });
       }

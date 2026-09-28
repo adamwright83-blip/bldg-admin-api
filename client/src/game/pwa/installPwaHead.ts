@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
- * This host serves several unrelated products (admin dashboard, Dayforge,
+ * This host serves several unrelated products (admin dashboard, LegacyDayforge,
  * Goldline) from one SPA shell, so the manifest/PWA meta tags are injected
  * only while the Goldline driver route is mounted, not globally in
  * index.html — otherwise every other page on this origin would also

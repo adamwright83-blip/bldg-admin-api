@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +19,7 @@ const fieldHomeSource = readFileSync(
   "utf8"
 );
 const walkInSource = readFileSync(
-  new URL("../../dayforge/WalkInCapture.tsx", import.meta.url),
+  new URL("../../legacy-dayforge/WalkInCapture.tsx", import.meta.url),
   "utf8"
 );
 const globalCss = readFileSync(

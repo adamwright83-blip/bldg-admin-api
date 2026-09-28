@@ -149,7 +149,7 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
       celebrate(result.worldEvent);
-      toast.success("Field Journal secured. Processing continues safely in the background.");
+      toast.success(debrief ? "Visit debrief saved." : "Field Journal secured. Processing continues safely in the background.");
       // Projection refresh is best-effort and may race asynchronous extraction;
       // it is deliberately incapable of turning a successful durable save into
       // a UI failure. Normal polling catches anything that finishes later.
@@ -168,7 +168,19 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
     <motion.div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#17385e6b] p-3 backdrop-blur-sm sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !recording && onOpenChange(false)}>
       <motion.section role="dialog" aria-modal="true" aria-labelledby="sales-journal-title" className="w-full max-w-[760px] overflow-hidden rounded-[26px] border-2 border-[#e0bd63] bg-[linear-gradient(#fffdf2,#f9e6ad)] text-[#17385e] shadow-[0_24px_80px_#31516e55]" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={event => event.stopPropagation()}>
         <header className="flex items-start justify-between border-b-2 border-[#e0bd63] p-[clamp(22px,4vw,38px)]">
-          <div><p className="text-sm font-black uppercase tracking-[.2em] text-[#9b6410]">{debrief ? "Fallback · field journal" : "Field Journal · fallback"}</p><h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">{debrief ? debrief.buildingName : "Review or correct evidence"}</h2><p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">{debrief ? "Claire can take what happened conversationally. Use this only to review, correct, or add a fallback note." : "Claire is the primary way to report what happened. This journal remains for review, correction, and history."}</p></div>
+          <div>
+            <p className="text-sm font-black uppercase tracking-[.2em] text-[#9b6410]">
+              {debrief ? "CLAIRE · PARKING-LOT DEBRIEF" : "FIELD JOURNAL"}
+            </p>
+            <h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">
+              {debrief ? "What did they actually say?" : "Review or correct evidence"}
+            </h2>
+            <p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">
+              {debrief
+                ? `You just left ${debrief.buildingName}. Tell me once while it is still fresh. Your exact words attach to that recorded visit as operator-reported memory; they are not independently verified.`
+                : "Capture what happened in your own words. The raw entry is retained before any interpretation."}
+            </p>
+          </div>
           <button type="button" aria-label="Close journal" disabled={recording} onClick={() => onOpenChange(false)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#17385e33] bg-[#fff9df] disabled:opacity-30"><X /></button>
         </header>
         <div className="grid gap-4 p-[clamp(18px,3.5vw,32px)]">
@@ -176,18 +188,18 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
             {recording ? <><Square className="fill-current" /> Stop recording</> : audioDataUrl ? <><Mic /> Recorded · tap to replace</> : <><Mic /> Start talking</>}
           </button>
           <div className="flex items-center gap-3 text-[14px] font-black uppercase tracking-[.15em] text-[#9b6410]"><span className="h-px flex-1 bg-[#cd9d3d66]" />or type/correct it<span className="h-px flex-1 bg-[#cd9d3d66]" /></div>
-          <textarea data-testid="journal-transcript" value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder="They said they already have laundry machines. I froze and changed the subject…" className="min-h-[130px] resize-none rounded-[18px] border-2 border-[#cd9d3d66] bg-[#fffdf2] p-4 text-[17px] leading-relaxed outline-none placeholder:text-[#8aa0b4] focus:border-[#2b8ca8]" />
+          <textarea data-testid="journal-transcript" value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder={debrief ? "They said…" : "What happened out there?"} className="min-h-[130px] resize-none rounded-[18px] border-2 border-[#cd9d3d66] bg-[#fffdf2] p-4 text-[17px] leading-relaxed outline-none placeholder:text-[#8aa0b4] focus:border-[#2b8ca8]" />
           {location ? <label className="flex min-h-12 items-center justify-between gap-4 rounded-[14px] border border-[#cd9d3d66] bg-[#fffdf2] px-4 text-sm">
             <span><strong className="block text-[#17385e]">Attach current device location</strong><span className="text-[#4a6a86]">{location.status === "available" ? `Available${location.accuracyMeters ? ` · ±${location.accuracyMeters}m` : ""}` : location.status === "requesting" ? "Still requesting location" : "Unavailable — entry can still be saved"}</span></span>
             <input type="checkbox" checked={attachLocation && location.status === "available"} disabled={location.status !== "available"} onChange={event => setAttachLocation(event.target.checked)} className="h-5 w-5 accent-[#edaa26]" />
           </label> : null}
-          <p className="text-sm leading-relaxed text-[#4a6a86]">The original recording and your exact words are retained before processing. Extracted identities and coaching are labeled as interpretation and can be corrected; they never become confirmed outcomes by themselves.</p>
+          <p className="text-sm leading-relaxed text-[#4a6a86]">Your original recording and exact words are retained before processing. This entry is operator-reported evidence attached to the visit; extracted identities, coaching, and reported outcomes remain interpretation until another authoritative source verifies them.</p>
           {saveError ? (
             <p data-testid="journal-save-error" role="alert" className="rounded-[14px] border-2 border-[#c2503a] bg-[#ffe9e2] p-3 text-sm leading-relaxed text-[#8d2f1c]">
               {saveError}
             </p>
           ) : null}
-          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-[#17385e] text-lg font-black text-[#fff8dc] disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Securing evidence…</> : saveError ? "Retry same entry" : debrief ? "Secure debrief · return to the Line" : "Secure Field Journal"}</button>
+          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-[#17385e] text-lg font-black text-[#fff8dc] disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Securing evidence…</> : saveError ? "Retry same entry" : debrief ? "Save what they said" : "Secure Field Journal"}</button>
         </div>
       </motion.section>
     </motion.div>

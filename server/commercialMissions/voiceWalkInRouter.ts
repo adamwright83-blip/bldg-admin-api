@@ -1,7 +1,8 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { dayforgeMissionFieldProcedure, router } from "../_core/trpc";
+import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { storageGet, storagePut } from "../storage";
@@ -172,15 +173,15 @@ async function resolvePlace(input: { businessName: string; locationHint: string 
 }
 
 export const voiceWalkInRouter = router({
-  calendarStatus: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+  calendarStatus: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getGoogleCalendarStatus({ tenantId: ctx.tenantId, userId: ctx.user.openId })
   ),
 
-  calendarConnectUrl: dayforgeMissionFieldProcedure.mutation(({ ctx }) =>
+  calendarConnectUrl: legacyDayforgeMissionFieldProcedure.mutation(({ ctx }) =>
     createGoogleCalendarConnectUrl({ tenantId: ctx.tenantId, userId: ctx.user.openId })
   ),
 
-  calendarComplete: dayforgeMissionFieldProcedure
+  calendarComplete: legacyDayforgeMissionFieldProcedure
     .input(z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(8192) }))
     .mutation(({ ctx, input }) => completeGoogleCalendarConnection({
       ...input,
@@ -188,7 +189,7 @@ export const voiceWalkInRouter = router({
       expectedUserId: ctx.user.openId,
     })),
 
-  parse: dayforgeMissionFieldProcedure
+  parse: legacyDayforgeMissionFieldProcedure
     .input(z.object({
       audioDataUrl: z.string().max(16_500_000),
       nowIso: z.string().datetime(),
@@ -257,7 +258,7 @@ export const voiceWalkInRouter = router({
       };
     }),
 
-  save: dayforgeMissionFieldProcedure
+  save: legacyDayforgeMissionFieldProcedure
     .input(draftSchema.extend({ requestId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       if (input.visitResult === "follow_up" && !input.followUpAt) {

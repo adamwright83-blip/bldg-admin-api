@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- Historical order-routing columns were introduced through schema push before
 -- the repository adopted the numbered production migration discipline. Keep
 -- this migration idempotent so existing Railway databases and fresh release

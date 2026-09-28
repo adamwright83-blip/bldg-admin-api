@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # WEEKLY MISSION READINESS V1 — CURSOR WORK ORDER
 Target repo: `adamwright83-blip/bldg-admin-api`  
 Pass: Slices A–E. Draft PR only. Do not merge.

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gt, ne } from "drizzle-orm";
 import {
@@ -16,9 +17,12 @@ import {
   readCommercialMissionWith,
   type CommercialMissionTransaction,
 } from "../commercialMissions/commercialMissionStore";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
+  // Driver-built missions are activated to game_ready before collateral is
+  // generated. Keep proposal eligibility aligned with that builder contract.
+  "game_ready",
   "phone_ready",
   "preparing",
   "en_route",
@@ -294,7 +298,7 @@ export async function generateCommercialProposal(input: {
         metadataJson: { version, contentHash: contentHash(snapshot) },
       });
       const projectionCorrelationId = `commercial-proposal:${id}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "commercial_proposal",
@@ -435,7 +439,7 @@ export async function approveCommercialProposal(input: {
         metadataJson: { version: target.version },
       });
       const projectionCorrelationId = `commercial-proposal:${input.proposalId}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "commercial_proposal",

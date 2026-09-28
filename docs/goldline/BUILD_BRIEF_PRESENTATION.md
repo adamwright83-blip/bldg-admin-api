@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # GOLDLINE BUILD BRIEF — PRESENTATION & ASSET PIPELINE (Slices A–D)
 
 **Audience:** implementation agent (Claude Code or GPT/Astra).
@@ -134,7 +136,7 @@ timing or simulation state was invented to achieve it.
 
 ## Slice D — Design consistency sweep
 
-**Problem:** pages still wearing Boreslay/Dayforge-era styling inside a Goldline product.
+**Problem:** pages still wearing Boreslay/LegacyDayforge-era styling inside a Goldline product.
 
 - Inventory every route rendering pre-Goldline visual language.
 - Bring them to current Goldline direction: typography, palette, button and card

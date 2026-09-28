@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  dayforgeTerritoryProcedure,
+  legacyDayforgeTerritoryProcedure,
   publicProcedure,
   router,
 } from "../_core/trpc";
@@ -237,7 +238,7 @@ export const publicTerritoryRouter = router({
       })
     ),
 
-  convertPreview: dayforgeTerritoryProcedure
+  convertPreview: legacyDayforgeTerritoryProcedure
     .input(
       candidateInput.extend({
         assignedTo: z.string().trim().min(1).max(128).nullable().optional(),

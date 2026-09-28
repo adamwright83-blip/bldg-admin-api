@@ -77,13 +77,23 @@ describe("a fictional win never borrows the feel of a real one", () => {
 });
 
 describe("the finale is reachable only through the authoritative campaign", () => {
-  it("mounts ClockheadDuel in exactly one place, behind campaign.isComplete", () => {
+  it("mounts ClockheadDuel only after the complete campaign's villain door is opened", () => {
     const gate = read("ColosseumBossGate.tsx");
     expect(gate.match(/<ClockheadDuel\b/g)).toHaveLength(1);
     expect(gate).toMatch(
-      /if\s*\(\s*campaign\.isComplete\s*\)\s*\{\s*return\s*<ClockheadDuel\s+onDefeated=\{onBossDefeated\}\s*\/>;?\s*\}/
+      /if\s*\(\s*duelStarted\s*\)\s*\{\s*return\s*<ClockheadDuel\s+onDefeated=\{onBossDefeated\}\s*\/>;?\s*\}/
     );
+    expect(gate).not.toMatch(/if\s*\(\s*campaign\.isComplete\s*\)\s*\{\s*return\s*<ClockheadDuel/);
+    expect(gate).toMatch(/event\.door === villainDoorId\s*&&\s*projectionRef\.current\.located/);
+    expect(gate).toMatch(/onVillainFound=\{\(\) => setDuelStarted\(true\)\}/);
     expect(gate).toMatch(/const campaign = useMemo\(\(\) => projectColosseumMission\(mission\), \[mission\]\);/);
+  });
+
+  it("derives each painted door's access from its corresponding recorded real outcome", () => {
+    const gate = read("ColosseumBossGate.tsx");
+    expect(gate).toMatch(/const PAINTED_DOOR_IDS:[\s\S]*"I"[\s\S]*"V"/);
+    expect(gate).toMatch(/Object\.prototype\.hasOwnProperty\.call\(mission\.outcomes, target\.id\)/);
+    expect(gate).toMatch(/stepSearchArena\(arena, dt, input\.consume\(\), unlockedDoors\)/);
   });
 
   it("hands the finale nothing but a callback, and calls it from one place", () => {

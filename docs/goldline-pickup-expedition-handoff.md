@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Goldline Pickup Expedition Heartbeat — Handoff
 
 Continue on the EXISTING branch. Do not restart, do not branch, do not
@@ -36,10 +38,10 @@ and do not point anything at production.
 docker run -d --name goldline-verify-db -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=goldline_mobile_gate -p 3399:3306 mysql:8.0
 ```
 
-Then migrations (this is `db:dayforge:release`, **never** `db:push`):
+Then migrations (this is `db:legacy-dayforge:release`, **never** `db:push`):
 
 ```bash
-DATABASE_URL="mysql://root:root@127.0.0.1:3399/goldline_mobile_gate" DAYFORGE_RELEASE_DB=1 npx tsx server/dayforgeRelease/applyReleaseMigrations.ts
+DATABASE_URL="mysql://root:root@127.0.0.1:3399/goldline_mobile_gate" DAYFORGE_RELEASE_DB=1 npx tsx server/legacyDayforgeRelease/applyReleaseMigrations.ts
 ```
 
 Build with the harness flag, then run the real server:

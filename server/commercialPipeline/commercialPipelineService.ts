@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -32,7 +33,7 @@ import {
   transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 
 type Transaction = Parameters<
@@ -1185,7 +1186,7 @@ export async function attributeCommercialOrder(input: {
       });
       if (paidCents > 0) {
         const projectionCorrelationId = `commercial-pipeline:${pipeline.id}:order:${input.requestId}`;
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
           actor: { type: "operator", id: input.actorId },
           entityType: "commercial_pipeline",

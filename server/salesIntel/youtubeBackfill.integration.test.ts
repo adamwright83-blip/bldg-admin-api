@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Slice 47 — proves the YouTube backfill mechanism (Slice 38) is idempotent
  * against real MySQL: checking the same channel's real RSS feed twice must

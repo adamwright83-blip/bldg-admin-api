@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -48,6 +49,9 @@ describe("Churn Radar production contract", () => {
       "No structured unresolved-issue source is configured"
     );
     expect(service).toContain("activeOrderCount");
+    expect(service).toContain("churnScanBookCoverage");
+    expect(service).toContain('scanSource: "native_orders_only"');
+    expect(service).toContain("loadBusinessSourceCoverage");
   });
 
   it("creates an existing stale-customer ops mission rather than a detached alert", () => {
@@ -55,7 +59,7 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain(
       "activeCustomerKeyHash: snapshot.customerKeyHash"
     );
-    expect(service).toContain("dayforgeRecoveryInterventionId");
+    expect(service).toContain("legacyDayforgeRecoveryInterventionId");
     expect(service).toContain("opsTaskEvents");
     expect(service).toContain('eventName: "recovery_mission_created"');
   });
@@ -75,19 +79,22 @@ describe("Churn Radar production contract", () => {
     expect(service).not.toContain("sendSMS(");
     expect(service).toContain("assertGroundedWinBackMessage(input.message)");
     expect(client).toContain(
-      "DayForge opens your SMS composer. It never auto-sends"
+      "JOYSTICK opens your SMS composer. It never auto-sends"
     );
+    expect(client).not.toContain("DAYFORGE CHURN RADAR");
+    expect(client).toContain("Known native-order signals only.");
   });
 
-  it("attributes only a later paid order as recovered revenue", () => {
+  it("attributes only a later processor-backed paid order as recovered revenue", () => {
     expect(service).toContain("refreshCustomerRecoveryAttribution");
     expect(service).toContain("eq(orders.paid, true)");
+    expect(service).toContain("filter(hasNativePaymentAuthority)");
     expect(service).toContain('eventName: "revenue_recovered"');
     expect(service).toContain("recoveredRevenueCents");
   });
 
   it("derives every tenant and actor from the admin session", () => {
-    expect(router).toContain("dayforgeChurnProcedure");
+    expect(router).toContain("legacyDayforgeChurnProcedure");
     expect(router).not.toContain("adminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
     expect(router).toContain("actorId: ctx.user.openId");

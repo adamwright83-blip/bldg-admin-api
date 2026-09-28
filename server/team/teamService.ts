@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   commercialMissions,
-  dayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   employeeOperatingProfileEvents,
   employeeOperatingProfiles,
   users,
@@ -19,8 +20,8 @@ function skills(value: unknown): string[] {
 export async function getTeamProjection(input: { tenantId: string }): Promise<TeamProjection> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const memberships = await db.select().from(dayforgeSaasMemberships).where(and(
-    eq(dayforgeSaasMemberships.tenantId, input.tenantId), eq(dayforgeSaasMemberships.active, true), ne(dayforgeSaasMemberships.role, "owner")
+  const memberships = await db.select().from(legacyDayforgeSaasMemberships).where(and(
+    eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true), ne(legacyDayforgeSaasMemberships.role, "owner")
   ));
   const userIds = memberships.map(member => member.userOpenId);
   const [profiles, userRows, missions] = await Promise.all([
@@ -64,7 +65,7 @@ export async function saveEmployeeOperatingProfile(input: { tenantId: string; us
   if (replay) return replay;
   try {
     return await db.transaction(async tx => {
-      const [membership] = await tx.select().from(dayforgeSaasMemberships).where(and(eq(dayforgeSaasMemberships.tenantId, input.tenantId), eq(dayforgeSaasMemberships.userOpenId, input.userOpenId), eq(dayforgeSaasMemberships.active, true), ne(dayforgeSaasMemberships.role, "owner"))).limit(1);
+      const [membership] = await tx.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.userOpenId, input.userOpenId), eq(legacyDayforgeSaasMemberships.active, true), ne(legacyDayforgeSaasMemberships.role, "owner"))).limit(1);
       if (!membership) throw new Error("Employee operating profiles require a real active non-owner tenant membership");
       const [existing] = await tx.select().from(employeeOperatingProfiles).where(and(eq(employeeOperatingProfiles.tenantId, input.tenantId), eq(employeeOperatingProfiles.userOpenId, input.userOpenId))).limit(1);
       const profileId = existing?.id ?? randomUUID();

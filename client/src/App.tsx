@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import GoldlineOnboarding from "./components/goldline/onboarding/GoldlineOnboarding";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,10 +24,11 @@ import { LegacyLandingFrame } from "./product/LegacyProductNotice";
 
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
-const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
+const LegacyDayforgeLanding = lazy(() => import("./pages/LegacyDayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
+const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -51,18 +53,18 @@ const ChurnRadarPage = lazy(() => import("./pages/ChurnRadarPage"));
 const CommercialPipelinePage = lazy(
   () => import("./pages/CommercialPipelinePage")
 );
-const DayforgeOnboardingPage = lazy(
-  () => import("./pages/DayforgeOnboardingPage")
+const LegacyDayforgeOnboardingPage = lazy(
+  () => import("./pages/LegacyDayforgeOnboardingPage")
 );
-const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
-const DayforgeTodayPage = lazy(() => import("./pages/DayforgeTodayPage"));
-const DayforgeProofPage = lazy(() => import("./pages/DayforgeProofPage"));
-const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
+const LegacyDayforgeLoginPage = lazy(() => import("./pages/LegacyDayforgeLoginPage"));
+const LegacyDayforgeTodayPage = lazy(() => import("./pages/LegacyDayforgeTodayPage"));
+const LegacyDayforgeProofPage = lazy(() => import("./pages/LegacyDayforgeProofPage"));
+const LegacyDayforgeSettingsPage = lazy(() => import("./pages/LegacyDayforgeSettingsPage"));
 const StrategyPlaygroundSettingsPage = lazy(() => import("./pages/StrategyPlaygroundSettingsPage"));
-const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
+const LegacyDayforgeInvitePage = lazy(() => import("./pages/LegacyDayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
-const DayforgeDemoControlPage = lazy(
-  () => import("./pages/DayforgeDemoControlPage")
+const LegacyDayforgeDemoControlPage = lazy(
+  () => import("./pages/LegacyDayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
 // Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
@@ -87,11 +89,11 @@ function BoreslayLandingRoute() {
   );
 }
 
-function DayforgeLandingRoute() {
+function LegacyDayforgeLandingRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <LegacyLandingFrame legacyName="DayForge">
-        <DayforgeLanding />
+        <LegacyDayforgeLanding />
       </LegacyLandingFrame>
     </Suspense>
   );
@@ -117,6 +119,16 @@ function TerritoryPreviewRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <TerritoryPreview />
+    </Suspense>
+  );
+}
+
+function JoystickLandingRoute() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#070905" }} />}
+    >
+      <JoystickLanding />
     </Suspense>
   );
 }
@@ -196,6 +208,27 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
     return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
   }
   return <>{children}</>;
+}
+
+const SAAS_CUSTOMER_SAFE_PATHS = [
+  "/product",
+  "/dayforge-settings",
+  "/billing",
+  "/dayforge-invite",
+  "/dayforge-login",
+  "/dayforge-onboarding",
+  "/onboarding",
+  "/goldline/start",
+  "/receipt/",
+] as const;
+
+function isSaasCustomerSafePath(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return SAAS_CUSTOMER_SAFE_PATHS.some(prefix =>
+    prefix.endsWith("/")
+      ? pathname.startsWith(prefix)
+      : path === prefix || path.startsWith(`${prefix}/`)
+  );
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
@@ -306,42 +339,43 @@ function AdminHostRouter() {
       </Route>
       {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
-      <Route path="/dayforge" component={DayforgeLandingRoute} />
+      <Route path="/dayforge" component={LegacyDayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeOnboardingPage />
+          <LegacyDayforgeOnboardingPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-login">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeLoginPage />
+          <LegacyDayforgeLoginPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-today">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeTodayPage />
+          <LegacyDayforgeTodayPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-proof">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeProofPage />
+          <LegacyDayforgeProofPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-invite">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeInvitePage />
+          <LegacyDayforgeInvitePage />
         </Suspense>
       </Route>
       <Route path="/dayforge-settings">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeSettingsPage />
+          <LegacyDayforgeSettingsPage />
         </Suspense>
       </Route>
       <Route path="/billing">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeSettingsPage />
+          <LegacyDayforgeSettingsPage />
         </Suspense>
       </Route>
       <Route path="/playground-settings">
@@ -404,7 +438,7 @@ function AdminHostRouter() {
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeDemoControlPage />
+          <LegacyDayforgeDemoControlPage />
         </Suspense>
       </Route>
       {/* Kept for backward compatibility with earlier links/bookmarks; /julydemo is canonical. */}
@@ -485,6 +519,7 @@ function Router() {
   const hostname =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
   const { tenant } = useTenant();
+  const { user } = useAuth();
   const isBoreslayHost =
     hostname === "boreslay.com" || hostname === "www.boreslay.com";
   // api.bldg.chat is the real, working backend for this app (Railway); the
@@ -501,6 +536,19 @@ function Router() {
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
+
+  // Commercial SaaS members are intentionally confined to the supported
+  // JOYSTICK surface. Historical Admin/BLDG routes remain available to
+  // platform admins, but a tenant member cannot wander into them and rely on
+  // backend 403s as the product boundary.
+  if (
+    user?.role === "user" &&
+    !isDriverHost &&
+    !isVendorHost &&
+    !isSaasCustomerSafePath(window.location.pathname)
+  ) {
+    return <Redirect to="/product" />;
+  }
 
   // The proof route is answered before host routing so no host redirect or
   // auth gate swallows it, and so it never enters the Goldline route graph.
@@ -577,37 +625,38 @@ function Router() {
         </Suspense>
       </Route>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
-      <Route path="/dayforge" component={DayforgeLandingRoute} />
+      <Route path="/dayforge" component={LegacyDayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeOnboardingPage />
+          <LegacyDayforgeOnboardingPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-login">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeLoginPage />
+          <LegacyDayforgeLoginPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-invite">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeInvitePage />
+          <LegacyDayforgeInvitePage />
         </Suspense>
       </Route>
       <Route path="/dayforge-today">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeTodayPage />
+          <LegacyDayforgeTodayPage />
         </Suspense>
       </Route>
       <Route path="/dayforge-settings">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeSettingsPage />
+          <LegacyDayforgeSettingsPage />
         </Suspense>
       </Route>
       <Route path="/billing">
         <Suspense fallback={<PublicLandingFallback />}>
-          <DayforgeSettingsPage />
+          <LegacyDayforgeSettingsPage />
         </Suspense>
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />

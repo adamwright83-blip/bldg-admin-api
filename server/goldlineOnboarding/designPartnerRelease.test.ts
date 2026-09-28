@@ -249,6 +249,9 @@ describe("truth firewall falsification", () => {
   it("preserves the existing world of a tenant that already has one", () => {
     const store = repo("server", "goldlineOnboarding", "store.ts");
     expect(store).toContain("Existing Goldline world is preserved.");
+    // Established first-party tenants are never eligible for a fresh-customer onboarding session,
+    // even if a canonical-world signal table happens to be empty.
+    expect(store).toContain("if (isLegacyDayforgeTenant(tenantId)) return true;");
     // Both canonical-world signals are consulted, each scoped to the tenant.
     expect(store).toContain('for (const table of ["physical_entities", "goldline_territory_definitions"])');
     expect(store).toContain("FROM ${sql.raw(table)} WHERE tenantId=${tenantId}");

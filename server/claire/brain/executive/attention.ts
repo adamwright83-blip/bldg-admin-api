@@ -14,6 +14,7 @@ import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import type { CompartmentId } from "../contracts/retrieval";
 import { outputAllowed, suppressedSlots } from "./workingMemoryGate";
+import { explicitPendingDayLineCommit } from "../../briefing/titleContract";
 import { dayLineCandidate } from "./dayLineAuthority";
 import { explicitPendingReturn, explicitRefusalStands, heldPending } from "./pendingBinding";
 
@@ -24,6 +25,7 @@ function holding(memory: WorkingMemorySnapshot): boolean {
 /** Bindings for a pending item only — never a reading of a new unrelated utterance. */
 function pendingReply(text: string): "yes" | "no" | "revise" | null {
   const trimmed = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
+  if (explicitPendingDayLineCommit(text)) return "yes";
   if (/^(?:no|nope|nah)$/.test(trimmed)) return "no";
   if (/^(?:yes|yeah|yep|yup|ok|okay|sure|please|do it)$/.test(trimmed)) return "yes";
   if (/^(?:no|nope),?\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\b/.test(trimmed)) {
@@ -59,6 +61,12 @@ export function planAttention(input: {
     if (explicitRefusalStands(perceived, change) && pendingBind !== "revise") {
       pendingDisposition = "reject";
       rationale.push("explicit refusal stands even when the turn also repairs attention");
+    } else if (pendingBind === "yes") {
+      // Explicit authorization of the item already being held wins over the
+      // generic task-switch classifier. "Add all that to the Day Line" is the
+      // answer to the pending proposal, not a new unrelated task.
+      pendingDisposition = "confirm";
+      rationale.push("pending binds explicit authorization");
     } else if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
@@ -69,8 +77,9 @@ export function planAttention(input: {
       pendingDisposition = "revise";
       rationale.push("pending binds a revision");
     } else if (
-      pendingBind === "yes" ||
-      (perceived.acknowledgement && !perceived.hasBusinessQuestion && !perceived.priorQueryReference)
+      perceived.acknowledgement &&
+      !perceived.hasBusinessQuestion &&
+      !perceived.priorQueryReference
     ) {
       pendingDisposition = "confirm";
       rationale.push("pending binds an acknowledgement");

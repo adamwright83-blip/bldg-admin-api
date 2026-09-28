@@ -87,7 +87,14 @@ function compactEvidenceForPrompt(input: {
     priorOutcomes: input.evidence.priorOutcomes.map(fact => fact.text),
     currentVisitOutcome: input.evidence.currentVisitOutcome,
     selectedSalesIntel: input.intel
-      ? { title: input.intel.title, category: input.intel.category }
+      ? {
+          title: input.intel.title,
+          category: input.intel.category,
+          principle: input.intel.principle ?? null,
+          whenToUse: input.intel.whenToUse ?? [],
+          whenNotToUse: input.intel.whenNotToUse ?? [],
+          exampleLanguage: input.intel.exampleLanguage ?? [],
+        }
       : null,
   });
 }
@@ -193,7 +200,7 @@ export async function compileMissionSalesStrategy(input: {
             "A recommendation is a suggestion, never a fact. Do not phrase a recommendation as something that already happened.",
             "If the evidence does not name a real blocker/objection, treat that as unknown and say so in `unknowns` — do not guess one.",
             "If prior outcomes show the account has already heard the introductory pitch, thingsToAvoid must include not repeating it from scratch.",
-            "If a sales intel item was supplied, you may use it to shape the recommendation's style, but it never overrides or invents business facts.",
+            "If a sales intel item was supplied, adapt its reviewed principle and example language to this specific mission when relevant, but it never overrides or invents business facts.",
             "Keep every field short and concrete — this is spoken/read by a field operator, not a report.",
           ].join(" "),
         },

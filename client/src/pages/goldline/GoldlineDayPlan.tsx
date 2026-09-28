@@ -38,6 +38,7 @@ import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
+import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
 import "./goldline-day-plan.css";
 
 function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
@@ -113,6 +114,16 @@ export type GoldlineDayPlanProps = {
   missionPlan?: MissionPlanOutcome | null;
   /** Today's prioritized line, already ordered by Mission Director. */
   currentDayLine?: CurrentDayLine | null;
+  /** Locked-week readiness whose existing completeByDate is today. Read-only. */
+  weeklyReadiness?: Array<{
+    text: string;
+    kind: string;
+    neededForDate: string;
+    completeByDate: string;
+    status: "open" | "ready" | "blocked";
+    missionTitle: string;
+    provenance: "weekly_intent_readiness";
+  }>;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
   /** Compact Campaign Run identity on the Day Line, when a run exists. */
@@ -249,6 +260,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [buildMissionOpen, setBuildMissionOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
@@ -338,6 +350,18 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
+      <button
+        type="button"
+        className="gdp-build-mission-cta"
+        onClick={() => setBuildMissionOpen(true)}
+        data-testid="build-mission-cta"
+      >
+        BUILD MISSION
+      </button>
+      <BuildMissionSheet
+        open={buildMissionOpen}
+        onOpenChange={setBuildMissionOpen}
+      />
       <header className="gdp-header">
         <div className="gdp-brand">
           <Compass />
@@ -394,6 +418,28 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         ) : null}
         {props.currentDayLine ? (
           <CurrentDayLineBlock line={props.currentDayLine} />
+        ) : null}
+        {props.weeklyReadiness?.length ? (
+          <section
+            className="gdp-weekly-readiness"
+            data-testid="weekly-readiness-due-today"
+            aria-label="Readiness due today"
+          >
+            <p><strong>Ready for what's next</strong></p>
+            <ul>
+              {props.weeklyReadiness.map(item => (
+                <li
+                  key={`${item.neededForDate}:${item.text}`}
+                  data-readiness-status={item.status}
+                >
+                  <b>{item.text}</b>
+                  <small>
+                    {item.status.toUpperCase()} · for {item.missionTitle}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
         {props.onEnterChapter ? (
           <button

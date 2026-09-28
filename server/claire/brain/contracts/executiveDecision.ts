@@ -64,8 +64,11 @@ export type ExecutiveDecision = {
   responseSegments: ResponseSegment[];
   actionGrants: ExecutiveActionGrant[];
   callControl: CallControlDecision;
-  /** Always false until an authorized cutover. */
-  productionAuthority: false;
+  /**
+   * True only for the explicitly enabled production-operator cutover path.
+   * Shadow runs remain false.
+   */
+  productionAuthority: boolean;
   /**
    * What this turn resolved and what it actually presented, for the NEXT turn's
    * continuation. Cognitive bookkeeping only — it grants nothing and mutates nothing.

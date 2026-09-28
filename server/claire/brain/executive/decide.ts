@@ -72,6 +72,11 @@ export type ExecutiveDeps = {
   retrieve: RetrievalRunner;
   ctx: IntegrationContext;
   nowMs?: () => number;
+  /**
+   * Production authority is explicit and injected by the live cutover
+   * orchestrator. Ordinary calls and every shadow observer remain false.
+   */
+  productionAuthority?: boolean;
 };
 
 /** Retrieves nothing. Honest default: we have not looked, so we must not assert. */
@@ -154,6 +159,7 @@ export async function decideTurn(
   deps: ExecutiveDeps = defaultExecutiveDeps
 ): Promise<ExecutiveDecision> {
   const nowMs = deps.nowMs?.() ?? Date.now();
+  const productionAuthority = deps.productionAuthority === true;
   const control: ExecutiveControlState = initialControlState();
   const inhibited: InhibitedCandidate[] = [];
 
@@ -280,19 +286,26 @@ export async function decideTurn(
 
     // ── Authority ───────────────────────────────────────────────────────────
     // Work-frame classification informs this choice. It does not mint the grant.
-    const mayPropose = dayLineCandidate(perceived) && attention.pendingDisposition !== "reject";
+    const mayPropose =
+      dayLineCandidate(perceived) &&
+      attention.pendingDisposition !== "reject" &&
+      attention.pendingDisposition !== "confirm";
     if (mayPropose) {
       control.actionRisk = "proposal_only";
       const title = proposedWorkTitle(perceived);
+      const explicitCommit = perceived.workDeclarationKind === "explicit_day_line";
       const grant = mintActionGrant({
-        actionClass: "propose_day_line",
+        actionClass: explicitCommit ? "commit_day_line" : "propose_day_line",
         scope: title ? { titles: [title] } : {},
         authorityBasis: perceived.explicitActionRequest
           ? "current_turn_explicit_request"
           : "current_turn_operator_commitment",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
-        constraints: { mutationAllowed: false, shadowOnly: true },
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
       });
       actionGrants.push(grant);
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
@@ -308,10 +321,14 @@ export async function decideTurn(
         authorityBasis: "pending_lifecycle",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
-        constraints: { mutationAllowed: false, shadowOnly: true },
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
       });
       actionGrants.push(grant);
     }
+
 
     const frameUpdate = nextStrategicFrame({ perceived, memory, nowMs });
     if (frameUpdate) {
@@ -460,7 +477,7 @@ export async function decideTurn(
     responseSegments: segments,
     actionGrants,
     callControl,
-    productionAuthority: false,
+    productionAuthority,
     workingMemoryUpdate,
   };
   assertGovernedDecision(decision);

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -91,11 +92,11 @@ describe("Sales Intel administration is admin-only", () => {
 describe("the driver consumes intelligence but cannot administer it", () => {
   it("serves gameplay Armory reads on driver-reachable procedures", () => {
     expect(armoryRouterSource).toMatch(
-      /strongholdIntel:\s*dayforgeMissionFieldProcedure/
+      /strongholdIntel:\s*legacyDayforgeMissionFieldProcedure/
     );
-    expect(armoryRouterSource).toMatch(/weapons:\s*dayforgeMissionFieldProcedure/);
+    expect(armoryRouterSource).toMatch(/weapons:\s*legacyDayforgeMissionFieldProcedure/);
     expect(armoryRouterSource).toMatch(
-      /recordUsage:\s*dayforgeMissionFieldProcedure/
+      /recordUsage:\s*legacyDayforgeMissionFieldProcedure/
     );
   });
 

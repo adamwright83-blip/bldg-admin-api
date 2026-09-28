@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Goldline tasks
 
 Shared task list for Driver/Admin work, tracked across Claude and ChatGPT (Astra) sessions and Adam. Whoever picks up work here should update this file before finishing — nothing gets marked done or moved without an edit landing in this file.
@@ -62,7 +64,7 @@ Do not build a new agent runtime, tool dispatcher, permission layer, or approval
 - Wayward is the first Road Encounter. Rook is aboard only on the server progression read (`goldlineProgression.get` → `companionRookOwned` earned and true, through the overworld gate's identity guard); anything less fails closed and the outer tether stays sealed.
 
 ## Corrections to earlier notes in this file
-- The claim that drizzle/0067 + 0068 "need hand-written blocks in scripts/migrate.mjs" was wrong. Both files' own header comments say they apply via `applyDayforgeReleaseMigrations` with `DAYFORGE_RELEASE_DB=1` — a deliberately separate, gated path from `scripts/migrate.mjs`. Do not add them there.
+- The claim that drizzle/0067 + 0068 "need hand-written blocks in scripts/migrate.mjs" was wrong. Both files' own header comments say they apply via `applyLegacyDayforgeReleaseMigrations` with `DAYFORGE_RELEASE_DB=1` — a deliberately separate, gated path from `scripts/migrate.mjs`. Do not add them there.
 - The claim that "FirstChapter.tsx is localStorage-only ... persistence.ts sits unused" was wrong. `client/src/pages/GoldlineChapterHost.tsx` already wires `FirstChapter.tsx` to the server via `goldlineChapterState.get/save` and `goldlineChapterEventBinding`, with revision-conflict handling, a 4s sync loop, and graceful fallback to local storage when the server table doesn't exist yet (`state.error` path). The code is done; only applying the migration is outstanding, and that was already correctly recorded as blocked on Adam.
 
 ## Backlog
@@ -94,7 +96,7 @@ Design references: `docs/goldline/DAYPLAY_DRIVER_MISSION_MAP_SYSTEM.md` (histori
 - [adam/chatgpt] Create animal companion image assets — the eccentric-sidekick presentation layer for the existing seven companions (Mara/Sable/Rook/Bront/Ilex/Luma/Orren). (Rook is resolved: approved model, rigged overworld states, visual canon in `docs/goldline/companions/ROOK_CONCEPT_SPEC.md`. The other six and the set-wide palette question remain open.) Decide first whether companions render as animals or stay as named characters; if animals, remap the existing seven rather than inventing a parallel roster. Concept renders exist but use non-canon names (Freddy/Skylar/Brewstin/Widget) and a banned crown motif.
 - [chatgpt] Repo-wide security audit — full pass by GPT/Astra across admin + resident repos.
 - [claude] Repo-wide operational audit — verify every CTA links to what it claims and actually functions. Prompted by a real case: the Opus LA marker silently routed to Tower Wars because the fix was applied to a component that wasn't on the live path.
-- [claude/chatgpt] Repo-wide design matching — pages still styled from the Boreslay/Dayforge era need updating to the current Goldline direction.
+- [claude/chatgpt] Repo-wide design matching — pages still styled from the Boreslay/LegacyDayforge era need updating to the current Goldline direction.
 - [claude] Sales Intelligence feature operational check — confirm `/sales-intel` actually works end to end, not just that the page renders.
 - [claude] Repo-wide naming system — names must make missing code impossible to miss. Prompted by a real failure: the agent permission/approval layer already existed at `server/agents/permissions.ts`, was reported as non-existent, and was only found by way of the resident repo. Nothing discoverable should depend on knowing where to look.
 - [chatgpt] Kingdom game polish — the playable game portions need professional-grade feel (look, motion, sound, game feel). Assigned to GPT/Astra.

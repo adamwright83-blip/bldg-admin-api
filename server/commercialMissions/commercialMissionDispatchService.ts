@@ -1,10 +1,11 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   commercialMissionDispatches,
   commercialMissionPhoneHandoffs,
   commercialMissions,
-  dayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   type CommercialMissionDispatchRow,
   users,
 } from "../../drizzle/schema";
@@ -473,14 +474,14 @@ function drizzleTransaction(
     },
     async isActiveFieldAssignee(input) {
       const [membership] = await tx
-        .select({ id: dayforgeSaasMemberships.id })
-        .from(dayforgeSaasMemberships)
+        .select({ id: legacyDayforgeSaasMemberships.id })
+        .from(legacyDayforgeSaasMemberships)
         .where(
           and(
-            eq(dayforgeSaasMemberships.tenantId, input.tenantId),
-            eq(dayforgeSaasMemberships.userOpenId, input.assignedTo),
-            eq(dayforgeSaasMemberships.role, "field"),
-            eq(dayforgeSaasMemberships.active, true)
+            eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
+            eq(legacyDayforgeSaasMemberships.userOpenId, input.assignedTo),
+            eq(legacyDayforgeSaasMemberships.role, "field"),
+            eq(legacyDayforgeSaasMemberships.active, true)
           )
         )
         .limit(1);

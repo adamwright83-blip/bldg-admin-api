@@ -56,6 +56,25 @@ export const FIELD_VISIT_OUTCOMES = [
 ] as const;
 export type FieldVisitOutcome = (typeof FIELD_VISIT_OUTCOMES)[number];
 
+export const PARKING_LOT_CLERK_EVENT_NAME =
+  "parking_lot_clerk_observation" as const;
+export const PARKING_LOT_CLERK_PROVENANCE = "operator_reported" as const;
+
+export type ParkingLotClerkObservation = {
+  missionId: number;
+  text: string;
+  provenance: typeof PARKING_LOT_CLERK_PROVENANCE;
+  reportedBy: string;
+  reportedAt: string;
+};
+
+export function shouldPromptParkingLotClerk(input: {
+  hasVisitOutcome: boolean;
+  hasObservation: boolean;
+}): boolean {
+  return input.hasVisitOutcome && !input.hasObservation;
+}
+
 /**
  * The second mission transition after `arrived -> visit_completed`, when one
  * is legitimately warranted. Null means the visit stays truthfully completed

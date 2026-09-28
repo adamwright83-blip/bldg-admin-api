@@ -53,6 +53,8 @@ import {
   OperatorTask,
   tenantAiUsage,
   TenantAiUsage,
+  tenantProviderUsage,
+  TenantProviderUsage,
   vendorProfiles,
   InsertVendorProfile,
   VendorProfile,
@@ -1159,11 +1161,100 @@ export async function incrementTenantAiUsage(input: {
         outputTokens: sql`${tenantAiUsage.outputTokens} + ${input.outputTokens}`,
         estimatedCostCents: sql`${tenantAiUsage.estimatedCostCents} + ${input.estimatedCostCents}`,
         requestCount: sql`${tenantAiUsage.requestCount} + 1`,
+        warningLimitCents:
+          input.warningLimitCents ?? sql`${tenantAiUsage.warningLimitCents}`,
+        hardLimitCents:
+          input.hardLimitCents ?? sql`${tenantAiUsage.hardLimitCents}`,
         updatedAt: new Date(),
       },
     });
 
   return getTenantAiUsage(tenantId, month);
+}
+
+export async function incrementTenantProviderUsage(input: {
+  tenantId: string;
+  month?: string;
+  provider: string;
+  category: string;
+  usageUnit: string;
+  usageQuantity: number;
+  estimatedCostCents: number;
+  warningLimitCents?: number | null;
+  hardLimitCents?: number | null;
+}): Promise<TenantProviderUsage | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[ProviderUsage] Database not available; usage not persisted");
+    return null;
+  }
+
+  const month = input.month ?? currentAiUsageMonth();
+  await db
+    .insert(tenantProviderUsage)
+    .values({
+      tenantId: input.tenantId,
+      month,
+      provider: input.provider,
+      category: input.category,
+      usageUnit: input.usageUnit,
+      usageQuantity: Math.max(0, Math.round(input.usageQuantity)),
+      estimatedCostCents: Math.max(0, Math.round(input.estimatedCostCents)),
+      requestCount: 1,
+      warningLimitCents: input.warningLimitCents ?? null,
+      hardLimitCents: input.hardLimitCents ?? null,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        usageQuantity: sql`${tenantProviderUsage.usageQuantity} + ${Math.max(
+          0,
+          Math.round(input.usageQuantity)
+        )}`,
+        estimatedCostCents: sql`${tenantProviderUsage.estimatedCostCents} + ${Math.max(
+          0,
+          Math.round(input.estimatedCostCents)
+        )}`,
+        requestCount: sql`${tenantProviderUsage.requestCount} + 1`,
+        warningLimitCents:
+          input.warningLimitCents ??
+          sql`${tenantProviderUsage.warningLimitCents}`,
+        hardLimitCents:
+          input.hardLimitCents ??
+          sql`${tenantProviderUsage.hardLimitCents}`,
+        updatedAt: new Date(),
+      },
+    });
+
+  const [row] = await db
+    .select()
+    .from(tenantProviderUsage)
+    .where(
+      and(
+        eq(tenantProviderUsage.tenantId, input.tenantId),
+        eq(tenantProviderUsage.month, month),
+        eq(tenantProviderUsage.provider, input.provider),
+        eq(tenantProviderUsage.category, input.category)
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function listTenantProviderUsage(
+  tenantId: string,
+  month = currentAiUsageMonth()
+): Promise<TenantProviderUsage[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(tenantProviderUsage)
+    .where(
+      and(
+        eq(tenantProviderUsage.tenantId, tenantId),
+        eq(tenantProviderUsage.month, month)
+      )
+    );
 }
 
 export async function updateOrderIntake(

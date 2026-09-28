@@ -2,10 +2,13 @@ import { and, desc, eq } from "drizzle-orm";
 import { claireConversationSessions } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { productionConversationStore } from "./ledgerService";
-import { POST_CALL_TRANSCRIPT_SOURCE, type ConversationSession } from "./types";
+import {
+  POST_CALL_TRANSCRIPT_SOURCE,
+  type ConversationSession,
+  type ConversationTurn,
+} from "./types";
 
 const LOG_PREFIX = "[ClaireTranscript]";
-const POST_CALL_CHUNK_SIZE = 3500;
 const MAX_BOOT_BACKFILL_COUNT = 5;
 
 export function transcriptLogBackfillCount(
@@ -62,13 +65,57 @@ function transcriptWarn(message: string, error: unknown): void {
   console.warn(LOG_PREFIX, message, error instanceof Error ? error.message : String(error));
 }
 
-function chunks(text: string): string[] {
-  if (!text) return [];
-  const result: string[] = [];
-  for (let offset = 0; offset < text.length; offset += POST_CALL_CHUNK_SIZE) {
-    result.push(text.slice(offset, offset + POST_CALL_CHUNK_SIZE));
+/**
+ * Runtime logs are an inspection surface, not the authoritative transcript.
+ * Kept only for legacy callers/tests that need redaction before non-log display.
+ * Infrastructure transcript logging itself is metadata-only.
+ */
+export function redactClaireTranscriptText(text: string): string {
+  return text
+    .replace(
+      /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
+      "[REDACTED_PHONE]"
+    )
+    .replace(/\b(?:AC|CA|RE)[0-9a-f]{32}\b/gi, "[REDACTED_PROVIDER_ID]")
+    .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}\b/gi, "[REDACTED_AUTH]")
+    .replace(
+      /https?:\/\/[^\s]*twilio[^\s]*(?:recordings?|recording)[^\s]*/gi,
+      "[REDACTED_RECORDING_URL]"
+    );
+}
+
+/**
+ * Emits metadata for one newly persisted live turn. Conversation Relay can
+ * remain in-progress for the entire socket lifetime, so timing/ordinal metadata
+ * is useful for Railway inspection without copying transcript bodies.
+ *
+ * The same explicit tenant/operator scope gate applies here. Transcript text,
+ * provider ids and providerMetadata are never logged.
+ */
+export async function emitClaireTranscriptTurnLog(
+  turn: Pick<ConversationTurn, "sessionId" | "ordinal" | "speaker" | "text" | "occurredAt">,
+  reason = "live_turn_persisted"
+): Promise<void> {
+  try {
+    const store = productionConversationStore();
+    const session = await store.getSession(turn.sessionId);
+    if (!session || !transcriptLoggingAllowed(session)) return;
+    transcriptLog({
+      event: "claire_transcript_turn",
+      reason,
+      sessionId: session.id,
+      claireConversationId: session.claireConversationId,
+      tenantId: session.tenantId,
+      operatorUserId: session.operatorUserId,
+      ordinal: turn.ordinal,
+      speaker: turn.speaker,
+      textLength: turn.text.length,
+      occurredAt: turn.occurredAt,
+    });
+  } catch (error) {
+    transcriptWarn(`live turn emit failed for session ${turn.sessionId}`, error);
   }
-  return result;
 }
 
 /**
@@ -79,8 +126,9 @@ function chunks(text: string): string[] {
  * This is therefore a narrow, configuration-gated read mirror — not a second
  * transcript store and not a public API.
  *
- * Deliberately omitted from logs: provider call SID, recording SID/URL,
- * provider metadata, phone numbers, auth material, and environment secrets.
+ * Deliberately omitted from logs: transcript bodies, provider call SID,
+ * recording SID/URL, provider metadata, phone numbers, auth material, and
+ * environment secrets.
  */
 export async function emitClaireTranscriptLog(
   sessionId: string,
@@ -120,7 +168,7 @@ export async function emitClaireTranscriptLog(
           operatorUserId: session.operatorUserId,
           ordinal: turn.ordinal,
           speaker: turn.speaker,
-          text: turn.text,
+          textLength: turn.text.length,
           occurredAt: turn.occurredAt,
         });
       }
@@ -132,20 +180,16 @@ export async function emitClaireTranscriptLog(
         POST_CALL_TRANSCRIPT_SOURCE
       );
       if (transcript?.text) {
-        const parts = chunks(transcript.text);
-        for (let index = 0; index < parts.length; index += 1) {
-          transcriptLog({
-            event: "claire_post_call_transcript_chunk",
-            reason: options.reason ?? "unspecified",
-            sessionId: session.id,
-            claireConversationId: session.claireConversationId,
-            tenantId: session.tenantId,
-            operatorUserId: session.operatorUserId,
-            chunkIndex: index,
-            chunkCount: parts.length,
-            text: parts[index],
-          });
-        }
+        transcriptLog({
+          event: "claire_post_call_transcript_summary",
+          reason: options.reason ?? "unspecified",
+          sessionId: session.id,
+          claireConversationId: session.claireConversationId,
+          tenantId: session.tenantId,
+          operatorUserId: session.operatorUserId,
+          textLength: transcript.text.length,
+          source: POST_CALL_TRANSCRIPT_SOURCE,
+        });
       }
     }
   } catch (error) {

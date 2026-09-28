@@ -19,6 +19,7 @@ describe("customer-order truth projections", () => {
         "paid",
         "phone",
         "status",
+        "stripePaymentIntentId",
         "total",
         "unit",
       ].sort()
@@ -27,7 +28,7 @@ describe("customer-order truth projections", () => {
     expect(NATIVE_ORDER_TRUTH_COLUMNS).not.toHaveProperty("heldMetadataJson");
     expect(NATIVE_ORDER_TRUTH_COLUMNS).not.toHaveProperty("paidAt");
     expect(NATIVE_ORDER_TRUTH_COLUMNS).not.toHaveProperty("vendorId");
-    expect(NATIVE_ORDER_TRUTH_COLUMNS).not.toHaveProperty(
+    expect(NATIVE_ORDER_TRUTH_COLUMNS).toHaveProperty(
       "stripePaymentIntentId"
     );
   });

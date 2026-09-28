@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # GOLDLINE V1 WAVE — CURSOR HANDOFF
 
 Practical resume file. No chat history required.
@@ -171,7 +173,7 @@ DRIVER_OPEN_ID=goldline-mobile-driver
 ```
 Bootstrap:
 ```
-pnpm db:dayforge:release
+pnpm db:legacy-dayforge:release
 GOLDLINE_ADMIN_DEV_SETUP=true pnpm goldline:admin:dev-setup
 pnpm tsx scripts/goldline-living-world-proof-seed.ts
 VITE_GOLDLINE_TEST_HARNESS=1 pnpm vite build

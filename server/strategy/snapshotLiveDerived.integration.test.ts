@@ -21,7 +21,7 @@ async function insertPaidOrder(input: {
   await db.execute(sql`
     INSERT INTO orders (
       tenantId, serviceType, pickupDate, pickupTimeWindow, address,
-      firstName, lastName, phone, status, paid, total, createdAt
+      firstName, lastName, phone, status, paid, stripePaymentIntentId, total, createdAt
     ) VALUES (
       ${input.tenantId},
       'wash_fold',
@@ -33,6 +33,7 @@ async function insertPaidOrder(input: {
       ${input.phone},
       'delivered',
       1,
+      ${`pi_test_${input.phone}`},
       '40.00',
       ${created}
     )

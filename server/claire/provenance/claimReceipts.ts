@@ -323,8 +323,23 @@ export async function verifyPriorClaim(receipt: FactualClaimReceipt, deps: Prior
     const moneyOk = moneyClaimed.every(m => numberSupported(m, backing.money));
     const plainNumbers = [...claimed.numbers].filter(n => !moneyClaimed.some(m => m === n || m.startsWith(n)));
     const addition = !moneyOk || [...claimed.names].some(name => !backing.names.has(name)) || plainNumbers.some(n => !numberSupported(n, backing.numbers));
-    if (addition) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
+
+    /**
+     * A correctness challenge must still reread the authoritative source when one
+     * exists, even when the old model synthesis contained an unsupported addition.
+     * The receipt tells us the synthesis overreached; it does not tell us whether
+     * the underlying business state is still the same now.
+     */
     const underlying = await verifyPriorClaim(source, deps);
+    if (addition) {
+      return done({
+        outcome: "unsupported",
+        resolution: underlying.resolution,
+        evidenceChanged: underlying.evidenceChanged,
+        freshnessAffected: underlying.freshnessAffected,
+        timedOut: underlying.timedOut,
+      });
+    }
     /**
      * A CORRECTNESS challenge ("are you sure about those numbers?") is not answered by provenance.
      * Only a fresh authoritative read earns `synthesis_grounded`; a receipt that merely proves the

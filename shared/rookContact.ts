@@ -5,13 +5,17 @@
  * capability.rook.contact is a separate durable grant. Owning Rook does not grant it.
  * rook.outreach_drafting is the implementation capability under CONTACT, not the grant.
  *
- * clockhead_finale.rook_joined_the_party resolves level.colosseum and owns
- * companion.rook. It does not grant CONTACT and does not complete Brass Republic.
+ * Clockhead resolves level.colosseum and reveals Rook, but does not own him.
+ * Coastal Market's authored stealing/catch beat owns companion.rook.
+ * Wayward's server-recorded parley gate separately grants CONTACT.
  *
  * Kingdom 2 / the Last Valet campaign is not decided here. This grant does not
  * complete that kingdom, a mission, or a challenge.
  */
 export const ROOK_CONTACT_CAPABILITY_ID = "capability.rook.contact" as const;
+
+export const ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE =
+  "wayward.server_authoritative_contact_gate" as const;
 
 export const ROOK_OUTREACH_DRAFTING_CAPABILITY_ID = "rook.outreach_drafting" as const;
 

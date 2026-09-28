@@ -31,6 +31,11 @@ export type MissionSalesBriefIntelReference = {
   category: string;
   title: string;
   rationale: string;
+  /** Reviewed source teaching content. Recommendations may adapt this, never promote it to business truth. */
+  principle?: string;
+  whenToUse?: string[];
+  whenNotToUse?: string[];
+  exampleLanguage?: string[];
 };
 
 export type MissionSalesBriefRecommendedApproach = {
@@ -119,6 +124,9 @@ export type FieldMissionSalesBrief = {
   briefId: number;
   version: number;
   primaryObjective: string;
+  recommendedOpening: string | null;
+  actionsToTake: string[];
+  successDefinition: string;
   known: string[];
   keyUnknown: string | null;
   ask: string[];
@@ -150,6 +158,9 @@ export function toFieldMissionSalesBrief(
     briefId: brief.id,
     version: brief.version,
     primaryObjective: brief.recommendedApproach.primaryObjective,
+    recommendedOpening: brief.recommendedApproach.recommendedOpening,
+    actionsToTake: brief.recommendedApproach.actionsToTake.slice(0, 2),
+    successDefinition: brief.recommendedApproach.successDefinition,
     known: brief.knownFacts.map(fact => fact.text),
     keyUnknown: brief.unknowns[0]?.question ?? null,
     ask: brief.recommendedApproach.questionsToAsk,

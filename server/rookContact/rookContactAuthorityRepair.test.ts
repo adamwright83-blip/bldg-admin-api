@@ -91,13 +91,13 @@ const context = {
 } as ClaireDriveContext;
 
 describe("Rook CONTACT authority repair", () => {
-  it("fails closed because Wayward has no server-authoritative CONTACT beat", () => {
-    expect(
+  it("fails closed because Wayward has no server-authoritative CONTACT beat", async () => {
+    await expect(
       findServerAuthoritativeWaywardContactProof({
         tenantId: "tenant-a",
         operatorId: "op-a",
       })
-    ).toEqual({
+    ).resolves.toEqual({
       proven: false,
       reason: "no_server_authoritative_wayward_contact_beat",
     });
@@ -163,7 +163,15 @@ describe("Rook CONTACT authority repair", () => {
       resolve(process.cwd(), "server/rookContact/rookContactRouter.ts"),
       "utf8"
     );
-    expect(router).not.toMatch(/recordIsolatedPreviewRookContactGrant|ROOK_CONTACT_EXECUTION_FIXTURE/);
+    const progressionRouter = readFileSync(
+      resolve(process.cwd(), "server/goldlineProgression/progressionRouter.ts"),
+      "utf8"
+    );
+    for (const source of [router, progressionRouter]) {
+      expect(source).not.toMatch(
+        /recordIsolatedPreviewRookContactGrant|grantRookContactCapability|ROOK_CONTACT_EXECUTION_FIXTURE/
+      );
+    }
     const authority = readFileSync(
       resolve(process.cwd(), "server/goldlineProgression/rookContactAuthority.ts"),
       "utf8"

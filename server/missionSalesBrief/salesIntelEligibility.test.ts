@@ -12,9 +12,11 @@ function teaching(overrides: Partial<SalesIntelTeaching>): SalesIntelTeaching {
     category: "discovery",
     title: "Ask what stopped it",
     principle: "Find the real blocker before repeating the pitch.",
-    whenToUse: "",
-    whenNotToUse: "",
-    exampleLanguage: "",
+    whenToUse: ["When the real blocker is not yet known."],
+    whenNotToUse: ["When the buyer already gave a clear next step."],
+    exampleLanguage: [
+      { kind: "paraphrased_principle", text: "Ask what stopped it before pitching again." },
+    ],
     confidence: 0.9,
     extractionVersion: "v1",
     extractionProvider: "test",
@@ -68,6 +70,10 @@ describe("D — one-framework-maximum relevance selection", () => {
       situationText: "we don't know why the deal stalled, need to find out the blocker",
     });
     expect(result?.teachingId).toBe("t-1");
+    expect(result?.principle).toMatch(/real blocker/i);
+    expect(result?.exampleLanguage).toContain(
+      "Ask what stopped it before pitching again."
+    );
   });
 
   it("never returns more than one, even with several matching candidates", () => {

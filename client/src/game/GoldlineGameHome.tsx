@@ -616,6 +616,22 @@ function MissionFork(props: {
               <span>
                 <small>{mission.state.replaceAll("_", " ")}</small>
                 <b>{mission.name}</b>
+                {mission.realVisitReaction ? (
+                  <small
+                    data-testid={`real-visit-reaction-${mission.missionId}`}
+                    title="Operator-reported visit debrief; not independent business verification."
+                  >
+                    FIELD TRACE · OPERATOR-REPORTED
+                  </small>
+                ) : null}
+                {mission.unresolvedEcho ? (
+                  <i
+                    className="world-echo-filament"
+                    data-testid={`world-echo-${mission.missionId}`}
+                    title="Unresolved real-world thread; clears only when authoritative business state changes."
+                    aria-label="Unresolved real-world thread"
+                  />
+                ) : null}
                 <em>{moneyBandLabel(mission)}</em>
               </span>
               <span>
@@ -4272,7 +4288,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           mission={props.openChannelMission}
           gap={openChannelGap}
           shouldAutoIgnite={
-            !action &&
+            !presentedAction &&
             !activeMission &&
             !nextOrderObjective &&
             !preparedObjective &&

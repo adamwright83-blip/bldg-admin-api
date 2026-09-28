@@ -1,10 +1,11 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { CUSTODY_LOCATION_ORDER } from "../../shared/custodyLocations";
 import { cargoVoiceFieldsSchema } from "../../shared/goldlineCargoVoice";
 import {
   router,
-  dayforgeTenantMemberProcedure as procedure,
+  legacyDayforgeTenantMemberProcedure as procedure,
 } from "../_core/trpc";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { storageDelete, storageGet, storagePut } from "../storage";

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 if (process.env.NODE_ENV !== "production") {
   await import("dotenv/config");
 }
@@ -38,8 +39,8 @@ import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRou
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
 import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/marketplacePaymentReadRoute";
 import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/marketplaceStripeWebhookRoute";
-import { registerDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookRoute";
-import { registerDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
+import { registerLegacyDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookRoute";
+import { registerLegacyDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { registerGoldlineDemoRoutes } from "../goldlineOnboarding/demoAccess";
@@ -54,10 +55,10 @@ import {
 } from "../residentPaymentMethods";
 import {
   configuredTrustProxy,
-  dayforgeSecurityHeaders,
+  legacyDayforgeSecurityHeaders,
   resolveTrustedClientIp,
-} from "../dayforgeSecurity/dayforgeSecurity";
-import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
+} from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
@@ -153,7 +154,7 @@ async function startServer() {
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
-  app.use(dayforgeSecurityHeaders());
+  app.use(legacyDayforgeSecurityHeaders());
   const server = createServer(app);
   attachConversationRelayUpgrade(server);
 
@@ -308,7 +309,7 @@ async function startServer() {
   registerMarketplacePaymentInternalRoutes(app);
   registerMarketplacePaymentReadRoutes(app);
   registerMarketplaceStripeWebhookRoutes(app);
-  registerDayforgeBillingWebhookRoute(app);
+  registerLegacyDayforgeBillingWebhookRoute(app);
   registerMarketplacePaymentDryRunRoutes(app);
   registerAgentMailVendorReplyWebhookRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
@@ -323,8 +324,8 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerDayforgeRetentionRoute(app);
-  registerDayforgeSaasAuthRoute(app);
+  registerLegacyDayforgeRetentionRoute(app);
+  registerLegacyDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
@@ -413,6 +414,52 @@ async function startServer() {
         error: "Vendor onboarding could not be started",
         code: "VENDOR_ONBOARDING_START_FAILED",
       });
+    }
+  });
+
+  // Temporary owner-authorized public Driver access for acceptance testing on the
+  // Railway production host. This bypasses the login screen only; server-side
+  // role/tenant checks still see the configured driver identity.
+  app.post("/api/auth/public-driver", async (req, res) => {
+    const enabled = process.env.JOYSTICK_DRIVER_PUBLIC_ACCESS === "1";
+    const allowedHost =
+      req.hostname === "bldg-admin-api-production.up.railway.app" ||
+      req.hostname === "driver.bldg.chat";
+    if (!enabled || !allowedHost) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    try {
+      const ownerOpenId = process.env.DRIVER_OPEN_ID || "driver-primary";
+      try {
+        await upsertUser({
+          openId: ownerOpenId,
+          name: "Driver",
+          loginMethod: "public_acceptance_test",
+          role: "driver",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbErr) {
+        console.warn(
+          "[Auth] public driver upsert failed (non-fatal):",
+          (dbErr as Error).message
+        );
+      }
+
+      const sessionToken = await sdk.createSessionToken(ownerOpenId, {
+        name: "Driver",
+        role: "driver",
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, {
+        ...cookieOptions,
+        maxAge: ONE_YEAR_MS,
+      });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[Auth] Public driver bootstrap failed:", err);
+      return res.status(500).json({ error: "Driver bootstrap failed" });
     }
   });
 

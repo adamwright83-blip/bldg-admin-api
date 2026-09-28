@@ -1,9 +1,10 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const shared = readFileSync(new URL("../../shared/commercialPipeline.ts", import.meta.url), "utf8");
 const service = readFileSync(new URL("./commercialPipelineService.ts", import.meta.url), "utf8");
-const router = readFileSync(new URL("../dayforgeToday/dayforgeTodayRouter.ts", import.meta.url), "utf8");
+const router = readFileSync(new URL("../legacyDayforgeToday/legacyDayforgeTodayRouter.ts", import.meta.url), "utf8");
 const surface = readFileSync(new URL("../../client/src/game/actions/GoldlineActionSurface.tsx", import.meta.url), "utf8");
 
 describe("Real Workday follow-up truth", () => {

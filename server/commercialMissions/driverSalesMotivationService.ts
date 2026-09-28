@@ -54,6 +54,7 @@ async function ensureMotivationTables() {
     await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS driver_sales_journals (
       id varchar(36) NOT NULL PRIMARY KEY, tenantId varchar(64) NOT NULL, driverId varchar(128) NOT NULL,
       journalDate varchar(10) NOT NULL, clientRequestId varchar(36) NULL,
+      debriefMissionId int NULL,
       audioStorageKey varchar(512) NULL, audioMimeType varchar(96) NULL, rawTranscript text NULL,
       transcript text NOT NULL, insightsJson json NOT NULL,
       processingStatus enum('captured','transcribing','extracting','processed','fallback','failed') NOT NULL DEFAULT 'captured',
@@ -65,6 +66,7 @@ async function ensureMotivationTables() {
       createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_driver_sales_journal_tenant_request (tenantId,clientRequestId),
+      KEY idx_driver_sales_journal_tenant_mission (tenantId,debriefMissionId,createdAt),
       KEY idx_driver_sales_journal_driver_date (tenantId,driverId,journalDate,createdAt),
       KEY idx_driver_sales_journal_processing (tenantId,processingStatus,createdAt),
       KEY idx_driver_sales_journal_tenant_created (tenantId,createdAt)
@@ -255,6 +257,7 @@ export async function saveDriverSalesJournal(input: {
     driverId: input.driverId,
     journalDate: input.journalDate,
     clientRequestId: input.clientRequestId,
+    debriefMissionId: input.debriefMissionId ?? null,
     audioStorageKey,
     audioMimeType,
     rawTranscript: rawTranscript || null,

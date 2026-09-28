@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseExplicitOperatorMissionCommand } from "../server/claire/operatorMissionCommand";
@@ -280,7 +281,7 @@ describe("current day line ranking projection", () => {
       new URL("../server/goldline/dayline/currentDayLineService.ts", import.meta.url),
       "utf8"
     );
-    expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortDayforgeTodayItems|\.sort\(/);
+    expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortLegacyDayforgeTodayItems|\.sort\(/);
     expect(service).toMatch(/planForDate/);
   });
 });

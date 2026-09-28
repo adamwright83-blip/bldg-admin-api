@@ -1,10 +1,11 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissions,
   commercialVisitOutcomes,
-  dayforgeSaasTenants,
+  legacyDayforgeSaasTenants,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
@@ -163,9 +164,9 @@ async function tenantBusinessDate(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [tenant] = await db
-    .select({ timeZone: dayforgeSaasTenants.timeZone })
-    .from(dayforgeSaasTenants)
-    .where(eq(dayforgeSaasTenants.id, input.tenantId))
+    .select({ timeZone: legacyDayforgeSaasTenants.timeZone })
+    .from(legacyDayforgeSaasTenants)
+    .where(eq(legacyDayforgeSaasTenants.id, input.tenantId))
     .limit(1);
   return businessDate(input.now, tenant?.timeZone ?? "America/Los_Angeles");
 }

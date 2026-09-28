@@ -37,10 +37,16 @@ still describes that black rook; it is not canon and was deliberately not brough
 
 ## Where he joins
 
-Rook joins at the end of Kingdom 1's Colosseum level (the Rook-on-the-line sequence),
-not at Kingdom 2 as this page originally said — see the amendment in
-`docs/goldline/campaigns/KINGDOM_2_COMPANION_EVALUATION.md`. Joining the party is the
-story; durable ownership is the server's progression read, not any client cache.
+The Colosseum's Rook-on-the-line sequence **reveals** Rook and points the player toward
+the hunt. It does not grant durable companion ownership.
+
+The existing Coastal Market hunt is the recruitment beat: the player catches Rook
+stealing the dispatch satchel, and completion of that authored beat is the one
+server-authoritative writer for `companion.rook`.
+
+The Wayward is the first actual trip together after that ownership exists. CONTACT is
+separate again: it is granted only after the authored Wayward inspector/parley gate is
+server-recorded. None of these states may be recovered from a client cache.
 
 ## The approved model and what is built from it
 

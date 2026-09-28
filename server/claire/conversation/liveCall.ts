@@ -4,6 +4,7 @@ import {
   persistSpokenTurn,
 } from "./ledgerService";
 import { finishConversationAndMaybeAnalyze } from "./pipeline";
+import { emitClaireTranscriptTurnLog } from "./transcriptLog";
 
 export async function safeClaireLedger(
   work: () => Promise<unknown>
@@ -26,8 +27,9 @@ export async function persistOperatorAndClaire(input: {
   claireMetadata?: Record<string, unknown> | null;
 }): Promise<void> {
   await safeClaireLedger(async () => {
+    const persisted: Array<NonNullable<Awaited<ReturnType<typeof persistSpokenTurn>>>> = [];
     if (input.operatorText?.trim()) {
-      await persistSpokenTurn({
+      const turn = await persistSpokenTurn({
         callSid: input.callSid,
         claireConversationId: input.claireConversationId,
         speaker: "OPERATOR",
@@ -35,9 +37,10 @@ export async function persistOperatorAndClaire(input: {
         turnKey: input.turnKey,
         providerMetadata: input.operatorMetadata ?? null,
       });
+      if (turn) persisted.push(turn);
     }
     if (input.claireText?.trim()) {
-      await persistSpokenTurn({
+      const turn = await persistSpokenTurn({
         callSid: input.callSid,
         claireConversationId: input.claireConversationId,
         speaker: "CLAIRE",
@@ -45,6 +48,12 @@ export async function persistOperatorAndClaire(input: {
         turnKey: input.turnKey,
         providerMetadata: input.claireMetadata ?? null,
       });
+      if (turn) persisted.push(turn);
+    }
+
+    // Relay does not have to finalize before its transcript is inspectable.
+    for (const turn of persisted) {
+      await emitClaireTranscriptTurnLog(turn);
     }
   });
 }

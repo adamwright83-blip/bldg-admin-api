@@ -69,6 +69,7 @@ export default function GoldlineOverworld({
   onEnterOperations,
   onEnterCampaignHost,
   onEnterGreystar,
+  onEnterCoastalMarket,
   onEnterWayward,
   onResolveOrder,
   suppressCampaignChrome = false,
@@ -93,6 +94,7 @@ export default function GoldlineOverworld({
   onEnterOperations?: () => void;
   onEnterCampaignHost?: (hosted: CampaignHostInvocation) => void;
   onEnterGreystar: () => void;
+  onEnterCoastalMarket?: () => void;
   onEnterWayward?: () => void;
   onResolveOrder: (
     orderId: number,
@@ -275,6 +277,11 @@ export default function GoldlineOverworld({
         },
       });
       onEnterGreystar();
+    } else if (
+      result === "entered" &&
+      proximity?.destination.id === "coastal-market-hunt"
+    ) {
+      onEnterCoastalMarket?.();
     } else if (result === "entered" && proximity?.destination.id === "wayward-approach") {
       onEnterWayward?.();
     } else if (result === "locked" || result === "inspected") {

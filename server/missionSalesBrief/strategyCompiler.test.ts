@@ -143,4 +143,45 @@ describe("F/P — strategy compiler: fact/recommendation separation and failure 
     expect(promptPayload.accountName).toBe("Sunset Gardens");
     expect(promptPayload.knownFacts).toContain("Management previously showed interest.");
   });
+
+  it("passes reviewed sales teaching content into the mission-specific compiler", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              primaryObjective: "Learn the blocker.",
+              recommendedOpening: "Great — most properties we work with already have something in place. Let me show you where we fit alongside it.",
+              questionsToAsk: ["What do residents still ask staff for help with?"],
+              actionsToTake: [],
+              thingsToAvoid: [],
+              successDefinition: "A concrete next step is agreed.",
+              unknowns: [],
+            }),
+          },
+        },
+      ],
+    });
+
+    await compileMissionSalesStrategy({
+      tenantId: "tenant-1",
+      evidence: evidence(),
+      knownFacts: evidence().knownFacts,
+      intel: {
+        teachingId: "shelby-1",
+        category: "objection_handling",
+        title: "Do not fight the incumbent",
+        rationale: "Matched the mission situation.",
+        principle: "Validate the existing solution before positioning alongside it.",
+        whenToUse: ["When a prospect says they already use someone."],
+        whenNotToUse: [],
+        exampleLanguage: ["Great — most of our customers already had something in place."],
+      },
+      invoke,
+    });
+
+    const promptPayload = JSON.parse(invoke.mock.calls[0][0].messages[1].content);
+    expect(promptPayload.selectedSalesIntel.principle).toMatch(/existing solution/i);
+    expect(promptPayload.selectedSalesIntel.exampleLanguage).toHaveLength(1);
+  });
 });

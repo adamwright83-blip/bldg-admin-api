@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -14,7 +15,7 @@ const game = readFileSync(
   "utf8"
 );
 const migrationVerifier = readFileSync(
-  new URL("../../scripts/dayforge-migrations-verify.ts", import.meta.url),
+  new URL("../../scripts/legacy-dayforge-migrations-verify.ts", import.meta.url),
   "utf8"
 );
 

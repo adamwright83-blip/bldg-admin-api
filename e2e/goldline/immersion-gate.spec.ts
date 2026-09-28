@@ -215,9 +215,18 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
       .getByRole("button", { name: "RECORD VISIT RESULT" })
       .click();
 
-    // The canonical write completes, the surface closes, and the player is
-    // back at the SAME NEUTRALIZE mission with server-derived coverage
-    // increased by exactly one real stop.
+    // The visit outcome is durable first. Slice 2 deliberately keeps the
+    // same in-game surface open for one operator-reported Clerk observation;
+    // this is not another mission or a substitute for the visit evidence.
+    await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
+    await page
+      .getByTestId("parking-lot-clerk-text")
+      .fill("She said to call next week.");
+    await page.getByTestId("parking-lot-clerk-save").click();
+
+    // Only after the Clerk testimony persists does the action surface close.
+    // The player is back at the SAME NEUTRALIZE mission with server-derived
+    // visit coverage increased by exactly one real stop.
     await expect(surface).not.toBeVisible({ timeout: 5_000 });
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-authoritative-count", "1");

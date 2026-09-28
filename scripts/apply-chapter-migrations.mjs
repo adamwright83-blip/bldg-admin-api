@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 // Applies drizzle/0067_goldline_chapter_states.sql and
 // 0068_goldline_chapter_event_bindings.sql. These are deliberately gated
 // behind DAYFORGE_RELEASE_DB=1 and kept out of scripts/migrate.mjs (see

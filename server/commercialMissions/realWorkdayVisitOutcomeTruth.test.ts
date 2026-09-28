@@ -36,5 +36,7 @@ describe("Real Workday visit outcome truth", () => {
     expect(actionSurface).toContain("setQuoteRequested");
     expect(actionSurface).toContain("setPilotRequested");
     expect(actionSurface).toContain("setFollowUpRequested");
+    expect(actionSurface).toContain("context?.visitOutcome && !context.parkingLotClerkObservation");
+    expect(actionSurface).toContain("recordParkingLotClerkObservation");
   });
 });

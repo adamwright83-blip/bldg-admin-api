@@ -165,7 +165,7 @@ describe("2. the authorized fact must entail the answer", () => {
 describe("3. canonical customer/order truth", () => {
     const native = (id: number, phone: string, slug: string | null, at: Date, extra = {}) => ({
     id, status: "completed", createdAt: at, firstName: "A", lastName: "B", phone, email: null, address: `${id} Main St`, unit: String(id),
-    buildingSlug: slug, bldgUserId: null, paid: true, total: "30", ...extra,
+    buildingSlug: slug, bldgUserId: null, paid: true, stripePaymentIntentId: `pi_test_${id}`, total: "30", ...extra,
   });
   // Imported three days after the order occurred unless a test says otherwise.
   const cc = (orderId: string, report: "orders_sales" | "orders_revenue", at: Date, extra = {}) => ({

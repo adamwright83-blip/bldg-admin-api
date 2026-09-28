@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const RETIRED_ANTHROPIC_MODEL_REPLACEMENTS: Record<string, string> = {
   "claude-sonnet-4-20250514": DEFAULT_ANTHROPIC_MODEL,
@@ -67,8 +68,8 @@ export const ENV = {
   revenueReminderOutboundConfigured:
     process.env.REVENUE_REMINDER_OUTBOUND_CONFIGURED === "true",
   /** Boss-demo operational layer: resettable, isolated demo tenant. Off by default. */
-  dayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
-  dayforgeDemoTenantSlug:
+  legacyDayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
+  legacyDayforgeDemoTenantSlug:
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
   /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
   goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -39,7 +40,7 @@ describe("commercial mission production spine", () => {
   it("derives actor authority from the authenticated procedure", () => {
     expect(router).not.toContain("actorType: actorTypeSchema");
     expect(router).toContain('actor: { type: "operator", id: ctx.user.openId }');
-    expect(router).toContain("dayforgeMissionOperatorProcedure");
-    expect(router).toContain("dayforgeMissionFieldProcedure");
+    expect(router).toContain("legacyDayforgeMissionOperatorProcedure");
+    expect(router).toContain("legacyDayforgeMissionFieldProcedure");
   });
 });

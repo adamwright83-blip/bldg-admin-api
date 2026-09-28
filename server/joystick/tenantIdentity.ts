@@ -1,6 +1,7 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import {
   isLegacyDayforgeTenant,
-  resolveDayforgeMembership,
+  resolveLegacyDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
 
@@ -178,7 +179,7 @@ export type ClaireDeskDecision =
         | "legacy_password_not_saas";
     };
 
-type MembershipLookup = typeof resolveDayforgeMembership;
+type MembershipLookup = typeof resolveLegacyDayforgeMembership;
 
 /**
  * Driver Claire desk: a real member is allowed from their membership.
@@ -190,7 +191,7 @@ export async function authorizeJoystickClaireDesk(
     tenantId: string;
     user: { openId: string; role: PlatformRole } | null;
   },
-  resolveMembership: MembershipLookup = resolveDayforgeMembership
+  resolveMembership: MembershipLookup = resolveLegacyDayforgeMembership
 ): Promise<ClaireDeskDecision> {
   if (!input.user) return { ok: false, reason: "unauthenticated" };
 

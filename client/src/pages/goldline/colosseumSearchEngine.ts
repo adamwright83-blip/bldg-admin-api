@@ -1,15 +1,15 @@
 /**
  * The Colosseum before the real hunt is finished: Clockhead is only a
  * projection here. The arena is a place to learn the fight — shield, perfect
- * block, dodge, Lineblade — and to find out, door by door, that he is not
- * inside it.
+ * block, dodge, Lineblade — while the gate decides which doors the real-world
+ * campaign has earned access to.
  *
  * TRUTH BOUNDARY
  *
  * This simulation cannot advance the real campaign and cannot see it. It has
- * no notion of targets, visits or outcomes. How far the real hunt has got is
- * projected onto Clockhead's seals by the renderer from the authoritative
- * campaign, read-only; nothing here can break a seal, reveal him, or unlock
+ * no notion of targets, visits or outcomes. The gate may pass an abstract set
+ * of door ids that are currently openable; the engine does not know why they
+ * are openable. Nothing here can break a seal, manufacture access, or unlock
  * the finale. Checking doors, blocking bolts and RETURN are play, not proof.
  */
 import {
@@ -71,6 +71,7 @@ export type SearchEvent =
   | { type: "resume"; at: StagePoint }
   | { type: "sweep"; direction: 1 | -1 }
   | { type: "door_open"; door: ColosseumDoorId }
+  | { type: "door_locked"; door: ColosseumDoorId }
   | { type: "door_empty"; door: ColosseumDoorId }
   | { type: "door_close"; door: ColosseumDoorId }
   | { type: "slash"; at: StagePoint }
@@ -320,7 +321,12 @@ function updateRecoil(state: SearchArena) {
   }
 }
 
-function stepOnce(state: SearchArena, ms: number, input: SearchInput) {
+function stepOnce(
+  state: SearchArena,
+  ms: number,
+  input: SearchInput,
+  doorAccess: ReadonlySet<ColosseumDoorId> | null
+) {
   if (state.freezeMs > 0) {
     state.freezeMs = Math.max(0, state.freezeMs - ms);
     return;
@@ -400,6 +406,11 @@ function stepOnce(state: SearchArena, ms: number, input: SearchInput) {
   // Doors trigger by walking into them — but not while dodging through.
   const door = state.avatar.dodgeMs > 0 ? null : doorAt(state.avatar.feet);
   if (door) {
+    if (!door.painted || (doorAccess && !doorAccess.has(door.id))) {
+      stepAwayFrom(state, door);
+      state.events.push({ type: "door_locked", door: door.id });
+      return;
+    }
     clearHazards(state);
     state.stage = "door";
     state.clock = 0;
@@ -438,7 +449,12 @@ function stepOnce(state: SearchArena, ms: number, input: SearchInput) {
   }
 }
 
-export function stepSearchArena(previous: SearchArena, dt: number, input: SearchInput): SearchArena {
+export function stepSearchArena(
+  previous: SearchArena,
+  dt: number,
+  input: SearchInput,
+  doorAccess: ReadonlySet<ColosseumDoorId> | null = null
+): SearchArena {
   const state: SearchArena = {
     ...previous,
     avatar: cloneAvatar(previous.avatar),
@@ -453,7 +469,7 @@ export function stepSearchArena(previous: SearchArena, dt: number, input: Search
   while (remaining > 0.0001) {
     const ms = Math.min(1000 / 60, remaining);
     remaining -= ms;
-    stepOnce(state, ms, first ? input : { ...input, takeShield: false });
+    stepOnce(state, ms, first ? input : { ...input, takeShield: false }, doorAccess);
     first = false;
   }
   return state;

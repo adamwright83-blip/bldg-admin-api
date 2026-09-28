@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -34,10 +35,10 @@ export default defineConfig({
           "client",
           "codexlfinal.html"
         ),
-        dayforgeflagship: path.resolve(
+        "legacy-dayforge-flagship": path.resolve(
           import.meta.dirname,
           "client",
-          "dayforgeflagship.html"
+          "legacy-dayforge-flagship.html"
         ),
       },
     },

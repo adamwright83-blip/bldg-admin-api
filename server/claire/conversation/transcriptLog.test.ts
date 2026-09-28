@@ -11,10 +11,12 @@ import {
 import {
   emitClaireTranscriptLog,
   parseTranscriptLogScopes,
+  redactClaireTranscriptText,
   transcriptLogBackfillCount,
   transcriptLoggingAllowed,
 } from "./transcriptLog";
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
+import { persistOperatorAndClaire } from "./liveCall";
 
 beforeEach(() => {
   setClaireConversationStoreForTesting(createMemoryClaireConversationStore());
@@ -27,6 +29,23 @@ afterEach(() => {
 });
 
 describe("Claire transcript Railway log mirror", () => {
+  it("redacts phone, provider, recording, and auth-shaped content before runtime logging", () => {
+    const raw =
+      "Call 323-555-1212. CA0123456789abcdef0123456789abcdef " +
+      "sk-proj-0123456789abcdefghijklmnop Bearer abcdefghijklmnopqrstuvwxyz " +
+      "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123";
+    const safe = redactClaireTranscriptText(raw);
+
+    expect(safe).toContain("[REDACTED_PHONE]");
+    expect(safe).toContain("[REDACTED_PROVIDER_ID]");
+    expect(safe).toContain("[REDACTED_SECRET]");
+    expect(safe).toContain("[REDACTED_AUTH]");
+    expect(safe).toContain("[REDACTED_RECORDING_URL]");
+    expect(safe).not.toContain("323-555-1212");
+    expect(safe).not.toContain("sk-proj-0123456789abcdefghijklmnop");
+    expect(safe).not.toContain("api.twilio.com");
+  });
+
   it("bounds boot backfill count to a safe recent window", () => {
     expect(transcriptLogBackfillCount("2")).toBe(2);
     expect(transcriptLogBackfillCount("0")).toBe(1);
@@ -98,14 +117,56 @@ describe("Claire transcript Railway log mirror", () => {
     expect(payloads[1]).toMatchObject({
       claireConversationId: "conv-log-1",
       speaker: "OPERATOR",
-      text: "How many sales did I have?",
+      textLength: "How many sales did I have?".length,
     });
     expect(payloads[2]).toMatchObject({
       speaker: "CLAIRE",
-      text: "I can verify the paid sales I have coverage for.",
+      textLength: "I can verify the paid sales I have coverage for.".length,
     });
     const serialized = JSON.stringify(payloads);
+    expect(serialized).not.toContain("How many sales did I have?");
+    expect(serialized).not.toContain("I can verify the paid sales I have coverage for.");
     expect(serialized).not.toContain("CA-secret-call-sid");
+    expect(serialized).not.toContain("providerMetadata");
+  });
+
+  it("mirrors the live persistence path immediately, before a Relay call finalizes", async () => {
+    vi.stubEnv("CLAIRE_TRANSCRIPT_LOG_SCOPES", "default:adam-admin");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    await createConversationSession({
+      tenantId: "default",
+      operatorUserId: "adam-admin",
+      claireConversationId: "conv-relay-live",
+      conversationKind: "pre_drive",
+      recordingEnabled: false,
+      providerCallSid: "CA-relay-live",
+    });
+
+    await persistOperatorAndClaire({
+      callSid: "CA-relay-live",
+      claireConversationId: "conv-relay-live",
+      operatorText: "Are you sure?",
+      claireText: "I rechecked it.",
+      turnKey: 1,
+      operatorMetadata: { provider: "conversation_relay", callSid: "secret" },
+      claireMetadata: { provider: "conversation_relay", recordingUrl: "secret" },
+    });
+
+    const payloads = info.mock.calls
+      .filter(call => call[0] === "[ClaireTranscript]")
+      .map(call => JSON.parse(String(call[1])));
+
+    expect(payloads).toHaveLength(2);
+    expect(payloads.map(row => [row.speaker, row.textLength])).toEqual([
+      ["OPERATOR", "Are you sure?".length],
+      ["CLAIRE", "I rechecked it.".length],
+    ]);
+    const serialized = JSON.stringify(payloads);
+    expect(serialized).not.toContain("Are you sure?");
+    expect(serialized).not.toContain("I rechecked it.");
+    expect(serialized).not.toContain("CA-relay-live");
+    expect(serialized).not.toContain("recordingUrl");
     expect(serialized).not.toContain("providerMetadata");
   });
 
@@ -134,7 +195,7 @@ describe("Claire transcript Railway log mirror", () => {
     ).toHaveLength(0);
   });
 
-  it("chunks the post-call Whisper transcript so Railway log lines stay bounded", async () => {
+  it("logs post-call transcript metadata without transcript bodies", async () => {
     vi.stubEnv("CLAIRE_TRANSCRIPT_LOG_SCOPES", "default:adam-admin");
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
@@ -162,16 +223,18 @@ describe("Claire transcript Railway log mirror", () => {
       reason: "test_post_call",
     });
 
-    const chunks = info.mock.calls
+    const summaries = info.mock.calls
       .filter(call => call[0] === "[ClaireTranscript]")
       .map(call => JSON.parse(String(call[1])))
-      .filter(row => row.event === "claire_post_call_transcript_chunk");
+      .filter(row => row.event === "claire_post_call_transcript_summary");
 
-    expect(chunks).toHaveLength(3);
-    expect(chunks.map(row => row.chunkIndex)).toEqual([0, 1, 2]);
-    expect(chunks.every(row => row.chunkCount === 3)).toBe(true);
-    expect(chunks.map(row => row.text).join("")).toBe(text);
-    expect(JSON.stringify(chunks)).not.toContain("RE-secret");
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      textLength: text.length,
+      source: POST_CALL_TRANSCRIPT_SOURCE,
+    });
+    expect(JSON.stringify(summaries)).not.toContain(text);
+    expect(JSON.stringify(summaries)).not.toContain("RE-secret");
   });
 
   it("is disabled when no transcript log scopes are configured", async () => {

@@ -19,6 +19,7 @@ export const COLOSSEUM_PATH_DESTINATION_IDS = [
   "colosseum-linehook",
   "colosseum-linehook-return",
 ] as const;
+export const COASTAL_MARKET_DESTINATION_ID = "coastal-market-hunt";
 export const POST_ROOK_DESTINATION_ID = "wayward-approach";
 
 const COLOSSEUM_PATH = new Set<string>(COLOSSEUM_PATH_DESTINATION_IDS);
@@ -69,6 +70,14 @@ export function progressionForSignedInOperator(
   return read;
 }
 
+/** The hunt exists only after Colosseum resolves and before durable Rook ownership. */
+export function coastalMarketHuntOpen(read: OverworldProgressionReading): boolean {
+  return (
+    serverProgressionFlagTrue(read?.levelColosseumResolved) &&
+    !serverProgressionFlagTrue(read?.companionRookOwned)
+  );
+}
+
 /** Both server flags earned and true. Unrecorded, unearned, and uncertain stay closed. */
 export function postRookContentOpen(read: OverworldProgressionReading): boolean {
   const level = read?.levelColosseumResolved;
@@ -85,9 +94,12 @@ export function overworldDestinationStates(
   destinationIds: readonly string[]
 ): DestinationStateMap {
   const postRook = postRookContentOpen(read);
+  const coastalHunt = coastalMarketHuntOpen(read);
   const states: DestinationStateMap = {};
   for (const id of destinationIds) {
     if (id === COLOSSEUM_DESTINATION_ID || COLOSSEUM_PATH.has(id)) {
+      states[id] = "active";
+    } else if (id === COASTAL_MARKET_DESTINATION_ID && coastalHunt) {
       states[id] = "active";
     } else if (id === POST_ROOK_DESTINATION_ID && postRook) {
       states[id] = "active";

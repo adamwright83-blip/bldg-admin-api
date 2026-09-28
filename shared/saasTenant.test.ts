@@ -1,9 +1,10 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it } from "vitest";
 import {
   normalizeSaasEmail,
   normalizeSaasTenantSlug,
   onboardingConfigurationIsOperational,
-  subscriptionAllowsDayforgeAccess,
+  subscriptionAllowsLegacyDayforgeAccess,
   type SaasTenantOnboardingConfiguration,
 } from "./saasTenant";
 
@@ -58,14 +59,14 @@ describe("SaaS tenant contract", () => {
 
   it("allows an explicitly bounded past-due grace period", () => {
     expect(
-      subscriptionAllowsDayforgeAccess({
+      subscriptionAllowsLegacyDayforgeAccess({
         status: "past_due",
         now: new Date("2026-01-01T00:00:00.000Z"),
         graceEndsAt: new Date("2026-01-02T00:00:00.000Z"),
       })
     ).toBe(true);
     expect(
-      subscriptionAllowsDayforgeAccess({
+      subscriptionAllowsLegacyDayforgeAccess({
         status: "past_due",
         now: new Date("2026-01-03T00:00:00.000Z"),
         graceEndsAt: new Date("2026-01-02T00:00:00.000Z"),
@@ -74,10 +75,10 @@ describe("SaaS tenant contract", () => {
   });
 
   it("allows product access only for paid or trialing truth", () => {
-    expect(subscriptionAllowsDayforgeAccess("active")).toBe(true);
-    expect(subscriptionAllowsDayforgeAccess("trialing")).toBe(true);
-    expect(subscriptionAllowsDayforgeAccess("past_due")).toBe(false);
-    expect(subscriptionAllowsDayforgeAccess("canceled")).toBe(false);
+    expect(subscriptionAllowsLegacyDayforgeAccess("active")).toBe(true);
+    expect(subscriptionAllowsLegacyDayforgeAccess("trialing")).toBe(true);
+    expect(subscriptionAllowsLegacyDayforgeAccess("past_due")).toBe(false);
+    expect(subscriptionAllowsLegacyDayforgeAccess("canceled")).toBe(false);
   });
 
   it("requires real capacity, radius, turnaround, store, and service data", () => {

@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- Goldline chapter fiction state — cross-device checkpoint/mechanism sync
 --
 -- One row per tenant/operator/chapter. Fiction only (room, checkpoint,
@@ -5,7 +6,7 @@
 -- Additive, tenant-scoped, operator-scoped, restart-safe.
 --
 -- NOT YET APPLIED to any database as of authoring. Apply via
--- applyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
+-- applyLegacyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
 
 CREATE TABLE IF NOT EXISTS `goldline_chapter_states` (
   `id` varchar(36) NOT NULL,

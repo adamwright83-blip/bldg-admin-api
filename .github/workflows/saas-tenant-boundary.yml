@@ -1,0 +1,67 @@
+name: SaaS tenant boundary gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saas-tenant-boundary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tenant-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3412:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3412/joystick_tenant_boundary
+      APP_SHARED_API_SECRET: tenant-boundary-app-secret-000000000000000000
+      JWT_SECRET: tenant-boundary-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: tenant-boundary-placeholder-not-used
+      DRIVER_PASSWORD: tenant-boundary-driver
+      DRIVER_OPEN_ID: tenant-boundary-driver
+      ADMIN_PASSWORD: tenant-boundary-admin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create empty test database
+        run: |
+          node -e "
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3412/');
+              await conn.query('DROP DATABASE IF EXISTS joystick_tenant_boundary');
+              await conn.query('CREATE DATABASE joystick_tenant_boundary');
+              await conn.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          "
+      - name: Bootstrap production schema
+        run: node scripts/migrate.mjs
+      - name: Run tenant identity, customer-surface, hostile-router, and transcript privacy gates
+        run: >
+          pnpm vitest run
+          server/joystick/tenantIdentity.test.ts
+          server/saas/saasCustomerBoundary.test.ts
+          server/saas/hostileTenant.integration.test.ts
+          server/claire/conversation/transcriptLog.test.ts

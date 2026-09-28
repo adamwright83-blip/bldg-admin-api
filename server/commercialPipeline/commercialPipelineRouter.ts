@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { dayforgePipelineProcedure, router } from "../_core/trpc";
+import { legacyDayforgePipelineProcedure, router } from "../_core/trpc";
 import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "../../shared/commercialPipeline";
 import {
   advanceCommercialRelationshipStage,
@@ -16,10 +17,10 @@ import {
 const requestId = z.string().uuid();
 
 export const commercialPipelineRouter = router({
-  list: dayforgePipelineProcedure.query(({ ctx }) =>
+  list: legacyDayforgePipelineProcedure.query(({ ctx }) =>
     listCommercialPipeline(ctx.tenantId)
   ),
-  detail: dayforgePipelineProcedure
+  detail: legacyDayforgePipelineProcedure
     .input(z.object({ pipelineId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       getCommercialPipelineDetail({
@@ -27,7 +28,7 @@ export const commercialPipelineRouter = router({
         pipelineId: input.pipelineId,
       })
     ),
-  advanceRelationship: dayforgePipelineProcedure
+  advanceRelationship: legacyDayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -49,7 +50,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  resolve: dayforgePipelineProcedure
+  resolve: legacyDayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -66,7 +67,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  scheduleFollowUp: dayforgePipelineProcedure
+  scheduleFollowUp: legacyDayforgePipelineProcedure
     .input(
       z
         .object({
@@ -91,7 +92,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  completeFollowUp: dayforgePipelineProcedure
+  completeFollowUp: legacyDayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -109,7 +110,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  approveAgreement: dayforgePipelineProcedure
+  approveAgreement: legacyDayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -135,7 +136,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  attributeOrder: dayforgePipelineProcedure
+  attributeOrder: legacyDayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -155,7 +156,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  reconcileRevenue: dayforgePipelineProcedure.mutation(({ ctx }) =>
+  reconcileRevenue: legacyDayforgePipelineProcedure.mutation(({ ctx }) =>
     reconcileCommercialPipelineRevenue(ctx.tenantId)
   ),
 });

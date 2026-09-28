@@ -125,7 +125,9 @@ export function planRetrievalPassA(
     // The challenged claim comes first: it decides whether anything else is trusted.
     if (attention.priorClaim !== "none") {
       const target = memory.priorClaims[memory.priorClaims.length - 1];
-      if (target) {
+      const receiptReadAllowed =
+        target && (attention.priorClaim === "provenance" || target.recheckable);
+      if (receiptReadAllowed) {
         requests.push({
           compartment: "businessMemory",
           kind: "prior_claim_recheck",

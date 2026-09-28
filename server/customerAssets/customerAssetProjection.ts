@@ -17,6 +17,7 @@ import {
   unknownValue,
 } from "../../shared/businessGame";
 import { getDb } from "../db";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 import {
   customerAssetId,
   customerIdentityHash,
@@ -188,14 +189,16 @@ export async function projectCustomerAssets(input: {
       const paidTotal = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         return (
-          sum + (payment?.netPaidCents ?? (order.paid ? cents(order.total) : 0))
+          sum +
+          (payment?.netPaidCents ??
+            (hasNativePaymentAuthority(order) ? cents(order.total) : 0))
         );
       }, 0);
       const outstanding = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         const isPaid = payment
           ? ["paid", "partially_refunded"].includes(payment.state)
-          : order.paid;
+          : hasNativePaymentAuthority(order);
         return (
           sum +
           (isPaid || order.status === "cancelled" ? 0 : cents(order.total))

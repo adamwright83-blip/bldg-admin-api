@@ -3,6 +3,7 @@ import {
   coolingLabel,
   gameWorldControlPercent,
   visualStateForBusinessStatus,
+  unresolvedEchoForVisit,
 } from "../../../../shared/driverGameWorld";
 import { equipAnchorAbilities } from "./EncounterProjection";
 import {
@@ -80,6 +81,47 @@ describe("driver game truth projection", () => {
   });
 });
 
+describe("world echoes derive from unresolved real state", () => {
+  it("keeps an operator-reported field trace unresolved until authoritative state resolves", () => {
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "visit_completed",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toMatchObject({
+      missionId: 612,
+      provenance: "operator_reported",
+      source: "parking_lot_clerk_observation",
+    });
+
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "won",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toBeNull();
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "lost",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toBeNull();
+  });
+
+  it("does not invent an Echo without its durable real source", () => {
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "visit_completed",
+        clerkReportedAt: null,
+      })
+    ).toBeNull();
+  });
+});
+
 describe("mission source dedup", () => {
   it("retains resolved truth after it leaves the playable mission list", () => {
     const mission = {
@@ -139,6 +181,58 @@ describe("mission source dedup", () => {
     const entriesForMission = projected.filter(m => m.missionId === 501);
     expect(entriesForMission).toHaveLength(1);
     expect(entriesForMission[0].key).toBe("mission:501");
+  });
+
+  it("projects one real stop and its authored field trace with the same mission identity", () => {
+    const mission = {
+      id: 612,
+      status: "follow_up",
+      account: {
+        name: "Greystar fixture",
+        address: "612 Goldline Way",
+        decisionMaker: { phone: null },
+      },
+      opportunity: {
+        estimatedAnnualValueCents: null,
+        estimateConfidence: "low",
+      },
+      expiresAt: null,
+    } as never;
+    const worldNode = {
+      missionId: 612,
+      entityType: "commercial_mission",
+      entityId: "612",
+      visualState: "contested",
+      realVisitReaction: {
+        kind: "completed_visit_trace",
+        missionId: 612,
+        provenance: "operator_reported",
+        reportedBy: "operator-a",
+        reportedAt: "2026-09-25T09:00:00.000Z",
+      },
+      unresolvedEcho: unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "follow_up",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      }),
+    } as never;
+
+    const [projected] = projectPlayableMissions({
+      missions: [mission],
+      worldNodes: [worldNode],
+    });
+
+    expect(projected.missionId).toBe(612);
+    expect(projected.key).toBe("mission:612");
+    expect(projected.realVisitReaction).toMatchObject({
+      missionId: 612,
+      provenance: "operator_reported",
+    });
+    expect(projected.unresolvedEcho).toMatchObject({
+      missionId: 612,
+      source: "parking_lot_clerk_observation",
+      provenance: "operator_reported",
+    });
   });
 
   it("keeps a move without a materialized mission when it is a distinct entity", () => {

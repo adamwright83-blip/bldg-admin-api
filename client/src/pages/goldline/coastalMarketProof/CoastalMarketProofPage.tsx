@@ -9,11 +9,16 @@ import "./coastal-market-proof.css";
  * Phase 2 Rook Hunt candidate. This remains an isolated proof with no business
  * authority: it reads only its static assets and writes no Goldline state.
  */
-type Props = { assetBase: string };
+type Props = {
+  assetBase: string;
+  onRookCaught?: () => void;
+};
 
-export default function CoastalMarketProofPage({ assetBase }: Props) {
+export default function CoastalMarketProofPage({ assetBase, onRookCaught }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<RuntimeHandle | null>(null);
+  const onRookCaughtRef = useRef(onRookCaught);
+  onRookCaughtRef.current = onRookCaught;
   const params = useMemo(() => readProofParams(window.location.search, window.location.hash), []);
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
@@ -28,6 +33,7 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
     createCoastalProof(host, assetBase, params, {
       onLoadProgress: f => setLoaded(f),
       onReachWaterfront: () => setArrived(true),
+      onRookCaught: () => onRookCaughtRef.current?.(),
     })
       .then(handle => {
         if (cancelled) {

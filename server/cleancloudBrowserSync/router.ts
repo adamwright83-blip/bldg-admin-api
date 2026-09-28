@@ -1,11 +1,12 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   router,
-  dayforgeTenantAdminProcedure,
-  dayforgeTenantOperatorProcedure,
+  legacyDayforgeTenantAdminProcedure,
+  legacyDayforgeTenantOperatorProcedure,
 } from "../_core/trpc";
 import { getDb } from "../db";
 import {
@@ -310,7 +311,7 @@ async function runRecordedImport<T>(
 }
 
 export const cleancloudBrowserSyncRouter = router({
-  context: dayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+  context: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     const db = await requireDb();
     const [binding] = await db
       .select()
@@ -371,7 +372,7 @@ export const cleancloudBrowserSyncRouter = router({
       observability,
     };
   }),
-  pair: dayforgeTenantAdminProcedure
+  pair: legacyDayforgeTenantAdminProcedure
     .input(store.merge(account))
     .mutation(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -402,7 +403,7 @@ export const cleancloudBrowserSyncRouter = router({
         });
       return binding;
     }),
-  receipt: dayforgeTenantOperatorProcedure
+  receipt: legacyDayforgeTenantOperatorProcedure
     .input(account.extend({ requestId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -418,7 +419,7 @@ export const cleancloudBrowserSyncRouter = router({
         );
       return { receipt: receipt?.receiptJson ?? null };
     }),
-  resolve: dayforgeTenantOperatorProcedure
+  resolve: legacyDayforgeTenantOperatorProcedure
     .input(account.extend({ requestId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -465,7 +466,7 @@ export const cleancloudBrowserSyncRouter = router({
         return { receipt };
       });
     }),
-  import: dayforgeTenantOperatorProcedure
+  import: legacyDayforgeTenantOperatorProcedure
     .input(importInput)
     .mutation(({ ctx, input }) => runRecordedImport(ctx, input, async () => {
       assertAccount(ctx, input);
@@ -610,7 +611,7 @@ export const cleancloudBrowserSyncRouter = router({
       );
     })),
   /** The extension reports failures that happen before an import reaches Goldline. */
-  reportFailure: dayforgeTenantOperatorProcedure
+  reportFailure: legacyDayforgeTenantOperatorProcedure
     .input(
       account.extend({
         requestId: z.string().uuid().optional(),

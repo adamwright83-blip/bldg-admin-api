@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq, gte, sql } from "drizzle-orm";
-import { dayforgeSaasMemberships, dayforgeSaasTenantLocations, orders } from "../../drizzle/schema";
+import { legacyDayforgeSaasMemberships, legacyDayforgeSaasTenantLocations, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact, unknownValue } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
@@ -56,8 +57,8 @@ export async function getCapabilityEvaluations(input: { tenantId: string }): Pro
   const since = new Date(Date.now() - 30 * 86_400_000);
   const [orderMetrics, locations, members, assets, pnl] = await Promise.all([
     db.select({ count: sql<number>`count(*)`, revenue: sql<number>`coalesce(sum(${orders.total}),0)`, weight: sql<number>`sum(${orders.weightLbs})`, weightedCount: sql<number>`sum(case when ${orders.weightLbs} is not null then 1 else 0 end)` }).from(orders).where(and(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`, gte(orders.createdAt, since))),
-    db.select().from(dayforgeSaasTenantLocations).where(eq(dayforgeSaasTenantLocations.tenantId, input.tenantId)),
-    db.select().from(dayforgeSaasMemberships).where(and(eq(dayforgeSaasMemberships.tenantId, input.tenantId), eq(dayforgeSaasMemberships.active, true))),
+    db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
+    db.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true))),
     listCustomerAssets({ tenantId: input.tenantId }),
     input.tenantId === "default" ? getTruePnlCockpitSummary({ period: "month" }) : Promise.resolve(null),
   ]);

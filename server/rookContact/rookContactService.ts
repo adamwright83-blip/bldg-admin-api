@@ -15,7 +15,11 @@ import type { RookContactEvidenceRef } from "../../shared/rookContact";
 import { authorizedOperatorPhone, claireTwilioFromNumber } from "../claire/claireTwilio";
 import { getDb } from "../db";
 import { findRookContactGrant } from "../goldlineProgression/capabilityGrantStore";
-import { rookContactGrantAllowsExecution, rookContactGrantIsProductionAuthority } from "../goldlineProgression/rookContactAuthority";
+import {
+  findServerAuthoritativeWaywardContactProof,
+  rookContactGrantAllowsExecution,
+  rookContactGrantIsProductionAuthority,
+} from "../goldlineProgression/rookContactAuthority";
 import {
   ProgressionNotPermittedError,
 } from "../goldlineProgression/progressionContract";
@@ -95,13 +99,20 @@ async function requireContactReady(input: { tenantId: string; operatorId: string
       "capability.rook.contact is not granted. Owning Rook does not grant CONTACT."
     );
   }
-  if (
-    !rookContactGrantIsProductionAuthority(grant.grant) &&
-    !rookContactGrantAllowsExecution(grant.grant)
-  ) {
+  const productionAuthority = rookContactGrantIsProductionAuthority(grant.grant);
+  const executionFixture = rookContactGrantAllowsExecution(grant.grant);
+  if (!productionAuthority && !executionFixture) {
     throw new ProgressionNotPermittedError(
       "capability.rook.contact is not granted. Owning Rook does not grant CONTACT."
     );
+  }
+  if (productionAuthority) {
+    const proof = await findServerAuthoritativeWaywardContactProof(input);
+    if (!proof.proven) {
+      throw new ProgressionNotPermittedError(
+        "capability.rook.contact grant row has no matching durable Wayward CONTACT gate proof"
+      );
+    }
   }
 }
 

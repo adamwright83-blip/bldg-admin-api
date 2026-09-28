@@ -93,6 +93,11 @@ export type InterpretedTurn = {
   correctnessChallenge: boolean;
   /** A question about where a number came from; provenance may answer it. */
   provenanceQuestion: boolean;
+  /**
+   * Conversation control: a vocative or a presence check. Not a fact query.
+   * A later clause can still be a real challenge or an action.
+   */
+  conversationControl: boolean;
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
 };
@@ -267,7 +272,7 @@ const EXCLUSION =
  * one ("What sales happen before Thomas? ... don't tell me about Thomas").
  */
 const WORK_VERB =
-  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder)\b/i;
+  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|driving|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder|do|doing|make|making|create|creating|process|processing|design|designing|draft|drafting|build|building|write|writing|finish|finishing|prepare|preparing)\b/i;
 
 /**
  * The operator describing THEIR OWN work — either committing to it in first person ("I need to
@@ -281,12 +286,48 @@ const WORK_VERB =
  */
 const FIRST_PERSON_COMMITMENT = new RegExp(
   [
-    String.raw`\b(?:i|we)\s+(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
+    String.raw`\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
     String.raw`\b(?:i'm|i\s+am|we're|we\s+are)\s+\w+ing\b`,
     String.raw`\b(?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?]{0,40}\b(?:i|we)\s+(?:'m|am|'ll|will|have|need|got)\b`,
   ].join("|"),
   "i"
 );
+
+const QUESTION_CLAUSE_HEAD =
+  /^(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has|tell\s+me|remind\s+me)\b/i;
+
+/**
+ * Split only at boundaries that can carry independent speech acts. This keeps a work object such
+ * as "Dana and Thomas" together while separating "I need to call Dana, and what were my sales?".
+ */
+function independentWorkClauses(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+|;\s*|\s+[—–-]\s+|,\s+(?=(?:and|but|also|then)\s+)/i)
+    .flatMap(part =>
+      part.split(
+        /\s+(?=(?:and|but)\s+(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has)\b)/i
+      )
+    )
+    .map(clause => clause.replace(/^(?:and|but|also|then)\s+/i, "").trim())
+    .filter(Boolean);
+}
+
+function isQuestionWorkClause(clause: string): boolean {
+  return /\?\s*$/.test(clause) || QUESTION_CLAUSE_HEAD.test(clause);
+}
+
+/**
+ * A first-person work declaration must exist as its own declarative clause. An embedded phrase
+ * such as "Can you tell me what I should do about Dana?" is not authority just because it contains
+ * the words "I should do".
+ */
+export function findIndependentFirstPersonWorkClause(text: string): string | null {
+  for (const clause of independentWorkClauses(text)) {
+    if (isQuestionWorkClause(clause)) continue;
+    if (FIRST_PERSON_COMMITMENT.test(clause)) return clause;
+  }
+  return null;
+}
 
 /**
  * A clause that is NOT a question and contains a real work verb. Position is deliberately not the
@@ -296,17 +337,12 @@ const FIRST_PERSON_COMMITMENT = new RegExp(
  * Claire, not work), so it cannot mint a task under any phrasing.
  */
 function hasWorkClause(text: string): boolean {
-  return text
-    .split(/(?<=[.!?])\s+|\n+/)
-    .some(sentence => {
-      const clause = sentence.trim();
-      if (!clause || /\?\s*$/.test(clause)) return false;
-      return WORK_VERB.test(clause);
-    });
+  return independentWorkClauses(text).some(clause => !isQuestionWorkClause(clause) && WORK_VERB.test(clause));
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
+  const firstPersonClause = findIndependentFirstPersonWorkClause(text);
+  if (firstPersonClause && WORK_VERB.test(firstPersonClause)) return true;
   return hasWorkClause(text);
 }
 
@@ -356,15 +392,58 @@ const BUSINESS_SUBSTANCE =
 
 /** Explicit correctness challenge — must outrank refinement wording and force a fresh reread. */
 const CORRECTNESS_CHALLENGE =
-  /\b(?:are\s+you\s+(?:sure|certain|positive)|are\s+(?:those|these|the)\s+(?:numbers?|figures?|totals?)\s+(?:right|correct|accurate)|is\s+that\s+(?:right|correct|accurate)|check\s+(?:that|it|those)\s+again|double[-\s]?check|verify\s+(?:that|it|those)|can\s+you\s+confirm|you\s+sure\b)/i;
+  /\b(?:are\s+you\s+(?:sure|certain|positive)|are\s+(?:those|these|the)\s+(?:numbers?|figures?|totals?)\s+(?:right|correct|accurate)|is\s+that\s+(?:right|correct|accurate)|check\s+(?:that|it|those|this)(?:\s+[a-z0-9'-]+){0,6}\s+again|double[-\s]?check|verify\s+(?:that|it|those)|can\s+you\s+confirm|you\s+sure\b)/i;
+
+const CONTROL_CLAUSE =
+  /^(?:(?:hey|hi|hello|ok|okay|um|uh)[, ]+)?claire$|^(?:(?:hey|hi|hello)[, ]+)?(?:claire[, ]+)?(?:are you there|are you still there|can you hear me|you there|are you with me|hello)(?:[, ]+claire)?$|^(?:hey|hi|hello)(?:[, ]+claire)?$/i;
+
+/** A vocative or a presence check. One clause is enough; the rest of the turn can be something else. */
+export function detectConversationControl(utterance: string): boolean {
+  const parts = utterance
+    .split(/(?<=[.!?])\s+|\s+(?:also|and)\s+/i)
+    .map(part => part.replace(/[.!?]+$/g, "").trim())
+    .filter(Boolean);
+  return parts.some(part => CONTROL_CLAUSE.test(part));
+}
+
+function withoutConversationControl(utterance: string): string {
+  return utterance
+    .split(/(?<=[.!?])\s+|\s+(?:also|and)\s+/i)
+    .map(part => part.trim())
+    .filter(part => part && !CONTROL_CLAUSE.test(part.replace(/[.!?]+$/g, "").trim()))
+    .join(" ")
+    .trim();
+}
+
+/**
+ * Prior-claim adjudication is for a challenge to something already said.
+ * Work, an explicit action, attention repair, and a bare acknowledgement are
+ * not that challenge. A real correctness or provenance challenge stays open
+ * even when the same turn also does work.
+ */
+export function priorClaimLaneOpen(turn: InterpretedTurn): boolean {
+  if (turn.correctnessChallenge || turn.provenanceQuestion) return true;
+  if (turn.conversationControl || turn.acknowledgement || turn.actionRefused) return false;
+  if (turn.hasExplicitActionRequest || turn.operatorWorkCommitment) return false;
+  if (turn.queryRefinement || turn.queryParameterChange) return false;
+  return true;
+}
+
+function looksLikeBusinessQuestion(text: string): boolean {
+  if (QUESTION_MARK.test(text)) return true;
+  return text.split(/(?<=[.!?])\s+|\s+[—–-]\s+/).some(clause => {
+    const head = clause.trim().replace(/^(?:(?:and|so|okay|ok|well|um|uh|also|hey)[, ]+)+/i, "");
+    return /^(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has|tell me|remind me)\b/i.test(
+      head
+    );
+  });
+}
 
 /** Provenance question — where a number came from. Receipt may answer this. */
 const PROVENANCE_QUESTION =
   /\b(?:where\s+(?:did|does)\s+(?:that|those|it|this|the)(?:\s+\w+){0,2}\s+(?:come|came)\s+from|where(?:'s| is)\s+that\s+from|what(?:'s| is)\s+(?:that|this)(?:\s+\w+){0,2}\s+based\s+on|what\s+are\s+you\s+basing|which\s+(?:source|record|order))\b/i;
 
 const QUESTION_MARK = /\?/;
-const BUSINESS_QUESTION_LEAD =
-  /\b(?:what|how\s+(?:much|many)|who|when|which|did|does|do|is|are|was|were|has|have)\b/i;
 
 export type InterpretTurnOptions = {
   /**
@@ -390,6 +469,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
 
   let cardinality = parseCardinality(text);
   const { entities, temporal } = extractEntities(text);
+  const conversationControl = detectConversationControl(text);
   const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
   // Same-set continuation and parameter-changing re-query are distinct acts.
   // "the other four" walks the resolved set; "just the most recent, not the five" does not.
@@ -432,12 +512,16 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     BUSINESS_SUBSTANCE.test(text) ||
     exclusions.length > 0 ||
     Boolean(anchorEntity);
-  const looksLikeQuestion =
-    QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" "));
+  const looksLikeQuestion = looksLikeBusinessQuestion(text);
+  const besideControl = withoutConversationControl(text);
   // A standalone personal-biography question is not a business question just because it opens
   // with "Were" or "Have". Mixed utterances that also carry business substance stay mixed.
+  // A pure presence check is not a question. A later challenge in the same turn still is.
   const hasBusinessQuestion =
-    !acknowledgement && looksLikeQuestion && !(personalProbe && !businessSubstance);
+    !acknowledgement &&
+    !(conversationControl && !besideControl && !correctnessChallenge && !provenanceQuestion) &&
+    looksLikeQuestion &&
+    !(personalProbe && !businessSubstance);
 
   if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
@@ -468,6 +552,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     !aboutClaireCapability &&
     !acknowledgement &&
     callControl !== "end" &&
+    !(conversationControl && !hasExplicitActionRequest && !operatorWorkCommitment) &&
     (hasExplicitActionRequest || operatorWorkCommitment);
 
   return {
@@ -492,5 +577,6 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     broadBriefingRequest,
     correctnessChallenge,
     provenanceQuestion,
+    conversationControl,
   };
 }

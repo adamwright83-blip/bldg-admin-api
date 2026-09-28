@@ -139,6 +139,16 @@ export async function getDayDirectorState(input: {
         sourceText: row.sourceText,
         command,
         operatorMission: readOperatorMissionMetadata(metadata),
+        ...("executionType" in metadata
+          ? {
+              executionType:
+                metadata.executionType === "mission" ||
+                metadata.executionType === "challenge" ||
+                metadata.executionType === "hybrid_objective"
+                  ? metadata.executionType
+                  : null,
+            }
+          : {}),
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
@@ -292,6 +302,7 @@ export async function acceptProposal(input: {
       detailNote: input.proposal.detailNote ?? null,
       command,
       ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
+      ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
     },
   };
   await db
@@ -421,6 +432,7 @@ export async function updateDayDirectorCommitment(input: {
     detailNote?: string | null;
     scheduleKind?: string;
     scheduleLabel?: string | null;
+    executionType?: "mission" | "challenge" | "hybrid_objective" | null;
   };
 }) {
   const db = await getDb();

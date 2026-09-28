@@ -1,0 +1,118 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+const MAX_INTERNAL_RETURN_LENGTH = 2_048;
+const INTERNAL_ORIGIN = "https://dayforge.internal";
+const DISALLOWED_DESTINATIONS = new Set([
+  "/dayforge-login",
+  "/dayforge-onboarding",
+  "/julydemo",
+]);
+const SECRET_QUERY_KEYS = new Set([
+  "handoff",
+  "preview",
+  "previewtoken",
+  "resumetoken",
+  "continuation",
+  "continuationtoken",
+  "token",
+  "code",
+  "state",
+]);
+
+export type LegacyDayforgeAuthenticatedDestinationKind =
+  | "secure_mission_handoff"
+  | "preview_continuation"
+  | "internal_return_to"
+  | "dayforge_today";
+
+export type LegacyDayforgeAuthenticatedDestination = {
+  destination: string;
+  destinationKind: LegacyDayforgeAuthenticatedDestinationKind;
+};
+
+function containsControlCharacters(value: string): boolean {
+  return /[\u0000-\u001f\u007f]/.test(value);
+}
+
+function hasEncodedSeparator(value: string): boolean {
+  return /%(?:2f|5c)/i.test(value);
+}
+
+export function validateInternalReturnTo(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  if (
+    !candidate ||
+    candidate.length > MAX_INTERNAL_RETURN_LENGTH ||
+    !candidate.startsWith("/") ||
+    candidate.startsWith("//") ||
+    candidate.includes("\\") ||
+    containsControlCharacters(candidate) ||
+    hasEncodedSeparator(candidate)
+  ) {
+    return null;
+  }
+
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(candidate);
+  } catch {
+    return null;
+  }
+  if (
+    decoded.startsWith("//") ||
+    decoded.includes("\\") ||
+    containsControlCharacters(decoded)
+  ) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate, INTERNAL_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== INTERNAL_ORIGIN || DISALLOWED_DESTINATIONS.has(parsed.pathname)) {
+    return null;
+  }
+
+  for (const key of Array.from(parsed.searchParams.keys())) {
+    if (SECRET_QUERY_KEYS.has(key.toLowerCase())) parsed.searchParams.delete(key);
+  }
+  if (
+    parsed.hash &&
+    Array.from(SECRET_QUERY_KEYS).some(key =>
+      new RegExp(`(?:^|[&#])${key}=`, "i").test(parsed.hash.slice(1))
+    )
+  ) {
+    parsed.hash = "";
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+export function defaultLegacyDayforgeDestination(): LegacyDayforgeAuthenticatedDestination {
+  return {
+    destination: "/dayforge-today",
+    destinationKind: "dayforge_today",
+  };
+}
+
+export function resolveLegacyDayforgeAuthenticatedDestination(input: {
+  missionHandoffPath?: unknown;
+  previewSessionId?: unknown;
+  returnTo?: unknown;
+}): LegacyDayforgeAuthenticatedDestination {
+  const handoff = validateInternalReturnTo(input.missionHandoffPath);
+  if (handoff?.startsWith("/driver/sales-mission/")) {
+    return { destination: handoff, destinationKind: "secure_mission_handoff" };
+  }
+  if (typeof input.previewSessionId === "string" && /^[a-f0-9-]{16,64}$/i.test(input.previewSessionId)) {
+    return {
+      destination: `/territory-preview?resume=${encodeURIComponent(input.previewSessionId)}`,
+      destinationKind: "preview_continuation",
+    };
+  }
+  const returnTo = validateInternalReturnTo(input.returnTo);
+  if (returnTo) return { destination: returnTo, destinationKind: "internal_return_to" };
+  return defaultLegacyDayforgeDestination();
+}

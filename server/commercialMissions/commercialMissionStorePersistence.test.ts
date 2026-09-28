@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it, vi } from "vitest";
 import {
   commercialAccountContacts,
@@ -17,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   createCommercialPipelineForMissionWith: vi.fn(async () => 1),
   syncCommercialPipelineForMissionTransitionWith: vi.fn(),
-  writeDayforgeEventWith: vi.fn(async () => undefined),
+  writeLegacyDayforgeEventWith: vi.fn(async () => undefined),
 }));
 
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
@@ -26,8 +27,8 @@ vi.mock("../commercialPipeline/commercialPipelineCore", async importOriginal => 
   createCommercialPipelineForMissionWith: mocks.createCommercialPipelineForMissionWith,
   syncCommercialPipelineForMissionTransitionWith: mocks.syncCommercialPipelineForMissionTransitionWith,
 }));
-vi.mock("../dayforgeEvents/dayforgeEventStore", () => ({
-  writeDayforgeEventWith: mocks.writeDayforgeEventWith,
+vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
+  writeLegacyDayforgeEventWith: mocks.writeLegacyDayforgeEventWith,
 }));
 
 import {

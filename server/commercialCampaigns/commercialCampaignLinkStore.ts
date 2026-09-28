@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq } from "drizzle-orm";
 import {
   commercialAccountContacts,
@@ -6,7 +7,7 @@ import {
   commercialMissions,
   commercialOpportunities,
   commercialPipelineRecords,
-  dayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   users,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -77,13 +78,13 @@ export const commercialCampaignLinkRepository: CommercialCampaignLinkRepository 
       }
 
       const [membership] = await db
-        .select({ id: dayforgeSaasMemberships.id })
-        .from(dayforgeSaasMemberships)
+        .select({ id: legacyDayforgeSaasMemberships.id })
+        .from(legacyDayforgeSaasMemberships)
         .where(
           and(
-            eq(dayforgeSaasMemberships.tenantId, input.tenantId),
-            eq(dayforgeSaasMemberships.userOpenId, input.salespersonId),
-            eq(dayforgeSaasMemberships.active, true)
+            eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
+            eq(legacyDayforgeSaasMemberships.userOpenId, input.salespersonId),
+            eq(legacyDayforgeSaasMemberships.active, true)
           )
         )
         .limit(1);

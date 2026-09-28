@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { NOT_ADMIN_ERR_MSG } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { isLegacySharedPasswordOpenId } from "./tenantIdentity";
 import {
   listDriverOrdersByDateForMember,
@@ -26,9 +27,9 @@ const listStatus = z.enum([
  * membership, never from the request body. The shared driver password is
  * not authority for a SaaS tenant. platformOrVendorProcedure stays closed.
  */
-const driverOrderProcedure = dayforgeTenantMemberProcedure.use(async opts => {
+const driverOrderProcedure = legacyDayforgeTenantMemberProcedure.use(async opts => {
   const user = opts.ctx.user;
-  const membership = opts.ctx.dayforgeMembership;
+  const membership = opts.ctx.legacyDayforgeMembership;
   if (!user || !membership) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: NOT_ADMIN_ERR_MSG });
   }

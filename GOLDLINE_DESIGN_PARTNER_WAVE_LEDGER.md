@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Goldline design-partner wave ledger
 
 START_SHA: 522de90fa0e57d208c05a01fbd5edd15b00b813f
@@ -17,7 +19,7 @@ Working directory: /Users/adamwrightpfi/Desktop/goldline-v1 (existing main workt
 - Cargo: authoritativeCargo.test.ts tests expedition pickup evidence. No physical Vehicle Cargo UI found. Orders have new/collected/processing/ready/delivered statuses; ready alone does not establish in-vehicle custody. Explicit transfer evidence required.
 - Admin: App.tsx, AdminHostApp.tsx, admin/adminPaths.ts; /new-order /customers /operations portals.
 - Tower Wars: shared/towerWars.ts and server/towerWars; existing hardcoded comparable building rules need careful bypass preservation.
-- Existing onboarding: SaaS setup in DayforgeOnboardingPage, not five-question world onboarding.
+- Existing onboarding: SaaS setup in LegacyDayforgeOnboardingPage, not five-question world onboarding.
 
 ### Asset audit
 Found supplied archive on Desktop. Installed at client/public/assets/goldline/procedural-world-v1. All 11 PNGs decoded with Pillow; exact dimensions, nonzero-alpha bounds, transparent/partial counts in audit.json. Production pack is 2:1 dimetric-style strategic art; supplied projection.json has proposed normalized pivots/sockets. Contact sheet visually inspected. Scale is reusable presentation, never literal geographic scale.

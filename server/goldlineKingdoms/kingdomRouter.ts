@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { adminProcedure, dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { adminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getKingdom,
   selectKingdomCampaign,
@@ -13,10 +14,10 @@ import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 
 export const kingdomRouter = router({
   /** Self-healing: derives real Kingdom-completion status on every read. */
-  list: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+  list: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     deriveKingdomStatuses({ tenantId: ctx.tenantId, operatorId: dayDirectorActorId(ctx) })
   ),
-  get: dayforgeTenantMemberProcedure
+  get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ kingdomId: z.string() }))
     .query(({ ctx, input }) => getKingdom({ tenantId: ctx.tenantId, ...input })),
   seedDefaults: adminProcedure.mutation(async ({ ctx }) => {

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { afterEach, describe, expect, it } from "vitest";
 import { resolvePublicPreviewProvider } from "./publicPreviewProvider";
 
@@ -22,7 +23,7 @@ describe("public preview provider selection", () => {
     delete process.env.GOOGLE_MAPS_API_KEY;
     delete process.env.GOOGLE_PLACES_API_KEY;
     const provider = resolvePublicPreviewProvider();
-    expect(provider.name).toBe("dayforge-release-fixture");
+    expect(provider.name).toBe("legacy-dayforge-release-fixture");
     await expect(
       provider.geocode("123 Main St, Los Angeles, CA")
     ).resolves.toMatchObject({

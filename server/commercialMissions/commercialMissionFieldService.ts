@@ -11,8 +11,11 @@ import {
 } from "../../drizzle/schema";
 import {
   DEFAULT_FIELD_CHECKLIST,
+  PARKING_LOT_CLERK_EVENT_NAME,
+  PARKING_LOT_CLERK_PROVENANCE,
   navigationUrl,
   type FieldOutcomeReason,
+  type ParkingLotClerkObservation,
 } from "@shared/commercialMissionField";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
@@ -53,6 +56,62 @@ function asIso(value: Date | null): string | null {
   return value?.toISOString() ?? null;
 }
 
+function decodeParkingLotClerkObservation(row: {
+  missionId: number;
+  actorId: string | null;
+  metadataJson: unknown;
+  createdAt: Date;
+} | undefined): ParkingLotClerkObservation | null {
+  if (!row || !row.actorId) return null;
+  const metadata =
+    row.metadataJson &&
+    typeof row.metadataJson === "object" &&
+    !Array.isArray(row.metadataJson)
+      ? (row.metadataJson as Record<string, unknown>)
+      : null;
+  const text = metadata?.text;
+  const provenance = metadata?.provenance;
+  if (
+    typeof text !== "string" ||
+    !text.trim() ||
+    provenance !== PARKING_LOT_CLERK_PROVENANCE
+  ) {
+    return null;
+  }
+  return {
+    missionId: row.missionId,
+    text,
+    provenance: PARKING_LOT_CLERK_PROVENANCE,
+    reportedBy: row.actorId,
+    reportedAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function getParkingLotClerkObservation(input: {
+  tenantId: string;
+  missionId: number;
+}): Promise<ParkingLotClerkObservation | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({
+      missionId: commercialMissionEvents.missionId,
+      actorId: commercialMissionEvents.actorId,
+      metadataJson: commercialMissionEvents.metadataJson,
+      createdAt: commercialMissionEvents.createdAt,
+    })
+    .from(commercialMissionEvents)
+    .where(
+      and(
+        eq(commercialMissionEvents.tenantId, input.tenantId),
+        eq(commercialMissionEvents.missionId, input.missionId),
+        eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
+      )
+    )
+    .limit(1);
+  return decodeParkingLotClerkObservation(rows[0]);
+}
+
 export async function getCommercialMissionFieldState(input: {
   tenantId: string;
   missionId: number;
@@ -61,7 +120,7 @@ export async function getCommercialMissionFieldState(input: {
   if (!db) throw new Error("Database not available");
   const mission = await getCommercialMission(input);
   if (!mission) return null;
-  const [states, checklist, outcomes, proposals] = await Promise.all([
+  const [states, checklist, outcomes, proposals, clerkEvents] = await Promise.all([
     db
       .select()
       .from(commercialMissionFieldStates)
@@ -110,6 +169,22 @@ export async function getCommercialMissionFieldState(input: {
       )
       .orderBy(sql`${commercialProposals.version} DESC`)
       .limit(1),
+    db
+      .select({
+        missionId: commercialMissionEvents.missionId,
+        actorId: commercialMissionEvents.actorId,
+        metadataJson: commercialMissionEvents.metadataJson,
+        createdAt: commercialMissionEvents.createdAt,
+      })
+      .from(commercialMissionEvents)
+      .where(
+        and(
+          eq(commercialMissionEvents.tenantId, input.tenantId),
+          eq(commercialMissionEvents.missionId, input.missionId),
+          eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
+        )
+      )
+      .limit(1),
   ]);
   const state = states[0] ?? null;
   const outcome = outcomes[0] ?? null;
@@ -137,6 +212,7 @@ export async function getCommercialMissionFieldState(input: {
       status: item.status,
       completedAt: asIso(item.completedAt),
     })),
+    parkingLotClerkObservation: decodeParkingLotClerkObservation(clerkEvents[0]),
     visitOutcome: outcome
       ? {
           id: outcome.id,
@@ -163,6 +239,112 @@ export async function getCommercialMissionFieldState(input: {
       : null,
     navigationUrl: navigationUrl(mission.account.address),
   };
+}
+
+export async function recordParkingLotClerkObservation(input: {
+  tenantId: string;
+  missionId: number;
+  actorId: string;
+  requestId: string;
+  text: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const idempotencyKey = `parking-lot-clerk:${input.missionId}`;
+  try {
+    await db.transaction(async tx => {
+      const replay = await tx
+        .select({ missionId: commercialMissionEvents.missionId })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.idempotencyKey, idempotencyKey)
+          )
+        )
+        .limit(1);
+      if (replay[0]) {
+        if (replay[0].missionId !== input.missionId) {
+          throw new Error(
+            "Parking-lot Clerk idempotency key is bound to a different mission"
+          );
+        }
+        return;
+      }
+
+      const [mission, fieldRows, outcomeRows] = await Promise.all([
+        readCommercialMissionWith(tx, input),
+        tx
+          .select({
+            arrivedAt: commercialMissionFieldStates.arrivedAt,
+          })
+          .from(commercialMissionFieldStates)
+          .where(
+            and(
+              eq(commercialMissionFieldStates.tenantId, input.tenantId),
+              eq(commercialMissionFieldStates.missionId, input.missionId)
+            )
+          )
+          .limit(1),
+        tx
+          .select({
+            id: commercialVisitOutcomes.id,
+            recordedBy: commercialVisitOutcomes.recordedBy,
+          })
+          .from(commercialVisitOutcomes)
+          .where(
+            and(
+              eq(commercialVisitOutcomes.tenantId, input.tenantId),
+              eq(commercialVisitOutcomes.missionId, input.missionId)
+            )
+          )
+          .limit(1),
+      ]);
+
+      if (!mission) throw new Error("Commercial mission not found");
+      if (!fieldRows[0]?.arrivedAt) {
+        throw new Error(
+          "Parking-lot Clerk requires the persisted real visit arrival."
+        );
+      }
+      const outcome = outcomeRows[0];
+      if (!outcome) {
+        throw new Error(
+          "Parking-lot Clerk requires the persisted real visit outcome."
+        );
+      }
+      if (outcome.recordedBy !== input.actorId) {
+        throw new Error(
+          "Parking-lot Clerk testimony must be written by the operator who recorded the visit."
+        );
+      }
+
+      await tx.insert(commercialMissionEvents).values({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        eventName: PARKING_LOT_CLERK_EVENT_NAME,
+        fromStatus: mission.status,
+        toStatus: mission.status,
+        actorType: "driver",
+        actorId: input.actorId,
+        idempotencyKey,
+        metadataJson: {
+          text: input.text,
+          provenance: PARKING_LOT_CLERK_PROVENANCE,
+          visitOutcomeId: outcome.id,
+          requestId: input.requestId,
+        },
+      });
+    });
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+  }
+
+  const state = await getCommercialMissionFieldState(input);
+  if (!state?.parkingLotClerkObservation) {
+    throw new Error("Parking-lot Clerk observation was not persisted");
+  }
+  return state;
 }
 
 export async function startCommercialMissionFieldPreparation(input: {

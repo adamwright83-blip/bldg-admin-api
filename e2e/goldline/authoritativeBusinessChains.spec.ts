@@ -319,7 +319,7 @@ test("CALL drives the full chain but a perfect arcade result cannot capture", as
   page,
 }) => {
   await login(page, "CALL");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveAnchorPerfectly(page);
 
@@ -343,7 +343,7 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
   page,
 }) => {
   await login(page, "VISIT");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGatekeeperPerfectly(page);
   await openBusinessAction(page);
@@ -372,6 +372,12 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     .fill("Real field visit produced a signed result.");
   await page.getByRole("button", { name: "RECORD VISIT RESULT" }).click();
 
+  await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
+  await page
+    .getByTestId("parking-lot-clerk-text")
+    .fill("Decision maker signed; I reported exactly what happened.");
+  await page.getByTestId("parking-lot-clerk-save").click();
+
   await expectControlRestored(page, listenersBefore);
   const proof = await fixtureProof(page);
   expect(proof.writes.map(write => write.kind)).toEqual([
@@ -379,6 +385,7 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     "FIELD_DEPART",
     "FIELD_ARRIVE",
     "FIELD_OUTCOME",
+    "PARKING_LOT_CLERK",
   ]);
   expect(proof.refetches).toBeGreaterThanOrEqual(5);
   expect(proof.projectedState).toBe("captured");
@@ -389,7 +396,7 @@ test("FOLLOW_UP only resolves after the linked authoritative completion", async 
   page,
 }) => {
   await login(page, "FOLLOW_UP");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGhostPerfectly(page);
   await openBusinessAction(page);
@@ -419,7 +426,7 @@ test("RECOVER becomes active only after authoritative recovery persistence", asy
   page,
 }) => {
   await login(page, "RECOVER");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGhostPerfectly(page);
   await openBusinessAction(page);

@@ -1,0 +1,62 @@
+name: SaaS billing lifecycle gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  billing-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3413:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3413/joystick_billing_lifecycle
+      APP_SHARED_API_SECRET: billing-lifecycle-app-secret-000000000000000000
+      JWT_SECRET: billing-lifecycle-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: billing-lifecycle-placeholder-not-used
+      DRIVER_PASSWORD: billing-lifecycle-driver
+      DRIVER_OPEN_ID: billing-lifecycle-driver
+      ADMIN_PASSWORD: billing-lifecycle-admin
+      SAAS_BILLING_LIFECYCLE_EXAM: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create disposable billing database
+        run: |
+          node -e "
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3413/');
+              await conn.query('DROP DATABASE IF EXISTS joystick_billing_lifecycle');
+              await conn.query('CREATE DATABASE joystick_billing_lifecycle');
+              await conn.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          "
+      - name: Bootstrap production schema
+        run: node scripts/migrate.mjs
+      - name: Run billing boundary and full lifecycle exams
+        run: >
+          pnpm vitest run
+          server/saas/saasBilling.test.ts
+          server/saas/saasBilling.lifecycle.integration.test.ts

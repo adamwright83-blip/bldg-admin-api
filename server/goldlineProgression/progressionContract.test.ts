@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
+import {
+  COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
+  COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+} from "../../shared/colosseumAuthoredFinale";
 import { overworldPostRookOpen } from "../../shared/goldlineDomainProgression";
 import {
   colosseumKingdomBindingNewlySatisfied,
@@ -184,18 +187,18 @@ describe("progression write gates", () => {
       assertCompanionRookRecordPermitted({
         ...satisfied,
         levelColosseumResolvedAt: null,
-        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+        authoredConsequence: COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
       })
     ).toThrow(/level\.colosseum/);
   });
 
-  it("does not treat a resolved level or five visits as the authored finale", () => {
+  it("does not treat Colosseum, a resolved level, or five visits as the Coastal ownership beat", () => {
     expect(() =>
       assertCompanionRookRecordPermitted({
         ...satisfied,
         levelColosseumResolvedAt: new Date(),
       })
-    ).toThrow(/authored Clockhead finale/);
+    ).toThrow(/authored Coastal Market/);
     expect(() =>
       assertCompanionRookRecordPermitted({
         ...satisfied,
@@ -208,16 +211,23 @@ describe("progression write gates", () => {
         outcomes: outcomesFor(TARGETS().slice(0, 4)),
         outcomesAvailable: true,
         levelColosseumResolvedAt: new Date(),
-        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+        authoredConsequence: COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
       })
     ).toThrow(/not satisfied/);
     expect(() =>
       assertCompanionRookRecordPermitted({
         ...satisfied,
         levelColosseumResolvedAt: new Date(),
-        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+        authoredConsequence: COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
       })
     ).not.toThrow();
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: new Date(),
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      })
+    ).toThrow(/Coastal Market/);
   });
 
   it("never permits kingdom.brass_republic completion from the Colosseum binding", () => {

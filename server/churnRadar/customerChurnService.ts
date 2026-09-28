@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash, randomUUID } from "node:crypto";
 import type { ArsenalToolId } from "../../shared/rekindlingArsenal";
 import { arsenalOutreachEventFields } from "../../shared/rekindlingEvents";
@@ -23,8 +24,13 @@ import {
   type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
+import {
+  loadBusinessSourceCoverage,
+  type BusinessSourceCoverageSnapshot,
+} from "../analytics/sourceCoverage";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -156,6 +162,62 @@ function evidenceForScore(
   ];
 }
 
+export type ChurnScanBookCoverage = {
+  scanSource: "native_orders_only";
+  wholeBookCurrent: boolean;
+  claim: "current_native_book" | "known_native_candidates";
+  bookStatus: BusinessSourceCoverageSnapshot["book"]["status"] | null;
+  cleanCloudHeld: boolean | null;
+  cleanCloudStatus:
+    | BusinessSourceCoverageSnapshot["sources"][number]["status"]
+    | "not_held"
+    | null;
+  blockingSources: BusinessSourceCoverageSnapshot["blockingSources"];
+  reason: string;
+};
+
+export function churnScanBookCoverage(
+  snapshot: BusinessSourceCoverageSnapshot | null
+): ChurnScanBookCoverage {
+  if (!snapshot) {
+    return {
+      scanSource: "native_orders_only",
+      wholeBookCurrent: false,
+      claim: "known_native_candidates",
+      bookStatus: null,
+      cleanCloudHeld: null,
+      cleanCloudStatus: null,
+      blockingSources: [],
+      reason:
+        "Customer-book coverage could not be read. This native-order scan is not the full customer book.",
+    };
+  }
+  const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
+  const cleanCloudHeld = Boolean(cleancloud?.includedInCombinedBook);
+  const wholeBookCurrent =
+    snapshot.book.exhaustiveCurrent &&
+    snapshot.book.current &&
+    !cleanCloudHeld;
+  return {
+    scanSource: "native_orders_only",
+    wholeBookCurrent,
+    claim: wholeBookCurrent ? "current_native_book" : "known_native_candidates",
+    bookStatus: snapshot.book.status,
+    cleanCloudHeld,
+    cleanCloudStatus: cleancloud
+      ? cleancloud.includedInCombinedBook
+        ? cleancloud.status
+        : "not_held"
+      : null,
+    blockingSources: snapshot.blockingSources.map(source => ({ ...source })),
+    reason: wholeBookCurrent
+      ? "Laundry Butler is the only held customer source, and the canonical book is current."
+      : cleanCloudHeld
+        ? `This scan scores native Laundry Butler history only. CleanCloud is held (${cleancloud?.status ?? "unknown"}), so this queue is not the full customer book.`
+        : "The canonical customer book is not proven current. Native-order signals are known candidates only.",
+  };
+}
+
 function snapshotResponse(row: typeof customerChurnSnapshots.$inferSelect) {
   return {
     id: row.id,
@@ -254,7 +316,7 @@ export async function getChurnScanResult(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [scans, snapshots] = await Promise.all([
+  const [scans, snapshots, coverageSnapshot] = await Promise.all([
     db
       .select()
       .from(customerChurnScans)
@@ -275,6 +337,13 @@ export async function getChurnScanResult(input: {
         )
       )
       .orderBy(desc(customerChurnSnapshots.score)),
+    loadBusinessSourceCoverage({ tenantId: input.tenantId }).catch(error => {
+      console.warn(
+        "[ChurnRadar] canonical customer-book coverage unavailable",
+        error instanceof Error ? error.message : error
+      );
+      return null;
+    }),
   ]);
   const scan = scans[0];
   if (!scan) return null;
@@ -286,6 +355,7 @@ export async function getChurnScanResult(input: {
     atRiskCount: scan.atRiskCount,
     errorMessage: scan.errorMessage,
     computedAt: scan.computedAt?.toISOString() ?? null,
+    coverage: churnScanBookCoverage(coverageSnapshot),
     customers: snapshots.map(snapshotResponse),
   };
 }
@@ -333,8 +403,11 @@ export async function runCustomerChurnScan(input: {
   }
 
   try {
-    // Native `orders` only. CleanCloud paid history is intentionally out of
-    // scope here (service/weight/recovery semantics). Next sidebench item.
+    // Native `orders` only. This scorer needs native service/weight/recovery
+    // semantics, so it is deliberately NOT the canonical whole-customer-book
+    // queue. getChurnScanResult attaches B1 coverage and the client must label
+    // this as known native candidates whenever CleanCloud is held or coverage
+    // is not current.
     const sourceRows = await db
       .select()
       .from(orders)
@@ -405,9 +478,9 @@ export async function runCustomerChurnScan(input: {
         item => (item.score ?? 0) >= 40
       )) {
         const correlationId = `churn-scan:${scanId}`;
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
-          actor: { type: "system", id: "dayforge-churn-radar" },
+          actor: { type: "system", id: "legacy-dayforge-churn-radar" },
           entityType: "customer_churn_snapshot",
           entityId: snapshot.id,
           eventName: "churn_risk_detected",
@@ -771,7 +844,7 @@ export async function createCustomerRecoveryIntervention(input: {
         revenueRecoveredCents: 0,
         orderId: snapshot.lastOrderId,
         metadataJson: {
-          dayforgeRecoveryInterventionId: id,
+          legacyDayforgeRecoveryInterventionId: id,
           churnSnapshotId: snapshot.id,
           score: snapshot.score,
           confidence: snapshot.confidence,
@@ -810,7 +883,7 @@ export async function createCustomerRecoveryIntervention(input: {
         metadataJson: { opsTaskId, churnSnapshotId: snapshot.id, draftId },
       });
       const projectionCorrelationId = `recovery-intervention:${id}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -836,7 +909,7 @@ export async function createCustomerRecoveryIntervention(input: {
         taskId: opsTaskId,
         eventType: "agent_suggested",
         actorType: "system",
-        actorId: "dayforge-churn-radar",
+        actorId: "legacy-dayforge-churn-radar",
         afterJson: { recoveryInterventionId: id, draftId },
         note: "Churn Radar created a fact-grounded draft. No outreach sent.",
       });
@@ -1091,7 +1164,7 @@ export async function approveCustomerRecoveryDraft(input: {
         },
       });
       const projectionCorrelationId = `recovery-intervention:${input.interventionId}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -1624,7 +1697,7 @@ async function markRecoveredWith(
       status: "completed",
       revenueRecoveredCents: recoveredRevenueCents,
       completedAt: recoveredAt,
-      completedBy: "dayforge-attribution",
+      completedBy: "legacy-dayforge-attribution",
       outcome: `Recovered by paid order ${input.order.id}`,
     })
     .where(
@@ -1637,7 +1710,7 @@ async function markRecoveredWith(
     tenantId: input.tenantId,
     interventionId: input.intervention.id,
     eventName: "revenue_recovered",
-    actorId: "dayforge-attribution",
+    actorId: "legacy-dayforge-attribution",
     idempotencyKey: `recovery-order:${input.intervention.id}:${input.order.id}`,
     metadataJson: {
       orderId: input.order.id,
@@ -1646,9 +1719,9 @@ async function markRecoveredWith(
     },
   });
   const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
-    actor: { type: "system", id: "dayforge-attribution" },
+    actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",
     entityId: input.intervention.id,
     eventName: "customer_returned",
@@ -1662,9 +1735,9 @@ async function markRecoveredWith(
       properties: { attributionConfidence: "paid_order_after_contact" },
     },
   });
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
-    actor: { type: "system", id: "dayforge-attribution" },
+    actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",
     entityId: input.intervention.id,
     eventName: "recovered_revenue_realized",
@@ -1686,7 +1759,7 @@ async function markRecoveredWith(
     taskId: input.intervention.opsTaskId,
     eventType: "revenue_recovered",
     actorType: "system",
-    actorId: "dayforge-attribution",
+    actorId: "legacy-dayforge-attribution",
     afterJson: { orderId: input.order.id, recoveredRevenueCents },
     note: "A subsequent paid order was attributed to this recovery mission.",
   });
@@ -1711,17 +1784,19 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
       ...contacted.map(item => item.contactedAt?.getTime() ?? Date.now())
     )
   );
-  const paidOrders = await db
-    .select()
-    .from(orders)
-    .where(
-      and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-        eq(orders.paid, true),
-        gt(orders.createdAt, earliest)
+  const paidOrders = (
+    await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+          eq(orders.paid, true),
+          gt(orders.createdAt, earliest)
+        )
       )
-    )
-    .orderBy(orders.createdAt, orders.id);
+      .orderBy(orders.createdAt, orders.id)
+  ).filter(hasNativePaymentAuthority);
   let recovered = 0;
   for (const intervention of contacted) {
     const match = paidOrders.find(

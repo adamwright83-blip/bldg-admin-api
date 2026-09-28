@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { Request } from "express";
@@ -6,7 +7,7 @@ import { createContext } from "../_core/context";
 import { sdk } from "../_core/sdk";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
-import { resolveDayforgeMembership } from "../saas/tenantAccess";
+import { resolveLegacyDayforgeMembership } from "../saas/tenantAccess";
 import {
   authorizeJoystickClaireDesk,
   claireOperatorScope,
@@ -97,7 +98,7 @@ describe("JOYSTICK tenant identity", () => {
 
   it("denies a missing membership for a non-legacy tenant", async () => {
     expect(
-      await resolveDayforgeMembership({
+      await resolveLegacyDayforgeMembership({
         tenantId: "tenant-missing",
         userOpenId: "dayforge:nobody",
         platformRole: "user",
@@ -161,7 +162,7 @@ describe("JOYSTICK tenant identity", () => {
     ).toEqual({ ok: false, reason: "legacy_password_not_saas" });
     expect(lookup).not.toHaveBeenCalled();
     expect(
-      await resolveDayforgeMembership({
+      await resolveLegacyDayforgeMembership({
         tenantId: "tenant-victim",
         userOpenId: "driver-primary",
         platformRole: "driver",
@@ -219,7 +220,7 @@ describe("JOYSTICK tenant identity", () => {
       "utf8"
     );
     const dayforge = readFileSync(
-      new URL("../../client/src/pages/DayforgeLoginPage.tsx", import.meta.url),
+      new URL("../../client/src/pages/LegacyDayforgeLoginPage.tsx", import.meta.url),
       "utf8"
     );
     const claire = readFileSync(

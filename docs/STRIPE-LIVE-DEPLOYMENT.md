@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Stripe Live Mode — Deployment Notes (bldg-admin-api)
 
 ## 1) Env vars (names only — set in Railway; never commit values)

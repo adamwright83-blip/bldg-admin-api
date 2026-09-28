@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { CommercialMission } from "@shared/commercialMission";
 import { getTerritoryOperatorProfile } from "../territory/territoryStore";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { discoverLaundryTerritory } from "../territory/territoryDiscovery";
+import {
+  discoverLaundryTerritory,
+  rankTerritoryCandidate,
+  type LaundryTerritoryOperatorContext,
+  type RankedTerritoryOpportunity,
+  type TerritoryBusinessCandidate,
+  type TerritoryBusinessProvider,
+} from "../territory/territoryDiscovery";
 import {
   createCommercialMission,
   listCommercialMissions,
@@ -12,6 +19,7 @@ import {
   approveCommercialProposal,
   generateCommercialProposal,
   getCommercialProposalProfile,
+  getLatestCommercialProposalForMission,
 } from "../commercialProposals/commercialProposalService";
 import { selectMissionDiamond } from "./driverSalesMotivationService";
 
@@ -26,6 +34,19 @@ export const DRIVER_MISSION_VENUES = [
 ] as const;
 export type DriverMissionVenue = (typeof DRIVER_MISSION_VENUES)[number];
 
+export const DRIVER_MISSION_TARGET_MODES = [
+  "exact_property",
+  "nearby_discovery",
+] as const;
+export type DriverMissionTargetMode = (typeof DRIVER_MISSION_TARGET_MODES)[number];
+
+export type DriverMissionPlacesProvider = TerritoryBusinessProvider & {
+  resolveBusiness(query: string): Promise<TerritoryBusinessCandidate | null>;
+  resolveBusinessByPlaceId?(
+    placeId: string
+  ): Promise<TerritoryBusinessCandidate | null>;
+};
+
 const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
   luxury_living: [
     "luxury apartment building",
@@ -38,10 +59,25 @@ const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
 };
 
 function provider() {
-  const apiKey =
-    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
-  if (!apiKey) throw new Error("Google Places is not configured for mission building");
-  return new GooglePlacesTerritoryProvider(apiKey);
+  const placesApiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
+  const geocodingApiKey = process.env.GOOGLE_GEOCODING_API_KEY ?? "";
+  if (!placesApiKey) {
+    throw new Error("Google Places is not configured for mission building");
+  }
+  if (!geocodingApiKey) {
+    throw new Error("Google Geocoding is not configured for mission building");
+  }
+  return new GooglePlacesTerritoryProvider({
+    placesApiKey,
+    geocodingApiKey,
+  });
+}
+
+export async function autocompleteDriverMissionPlaces(input: {
+  query: string;
+  limit?: number;
+}) {
+  return provider().autocompleteBusinesses(input.query, input.limit ?? 6);
 }
 
 function builderMetadata(mission: CommercialMission) {
@@ -68,12 +104,92 @@ export async function listDriverBuiltMissions(input: {
   );
 }
 
+async function ensureApprovedBuilderProposal(input: {
+  tenantId: string;
+  mission: CommercialMission;
+  actorId: string;
+}) {
+  const approved = await getLatestCommercialProposalForMission({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    approvedOnly: true,
+  });
+  if (approved) return approved;
+
+  const proposal = await generateCommercialProposal({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    actorId: input.actorId,
+    requestId: randomUUID(),
+  });
+  return approveCommercialProposal({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    proposalId: proposal.id,
+    actorId: input.actorId,
+    requestId: randomUUID(),
+  });
+}
+
+export async function resolveDriverMissionTargets(input: {
+  targetMode: DriverMissionTargetMode;
+  searchNear: string;
+  placeId?: string | null;
+  venueType: DriverMissionVenue;
+  count: number;
+  operator: LaundryTerritoryOperatorContext;
+  places: DriverMissionPlacesProvider;
+}): Promise<{
+  opportunities: RankedTerritoryOpportunity[];
+  exactTarget: TerritoryBusinessCandidate | null;
+}> {
+  if (input.targetMode === "exact_property") {
+    const exactTarget =
+      input.placeId && input.places.resolveBusinessByPlaceId
+        ? await input.places.resolveBusinessByPlaceId(input.placeId)
+        : await input.places.resolveBusiness(input.searchNear);
+    if (!exactTarget) {
+      throw new Error(
+        "Could not identify this property. Check the exact property name or address, or choose Find prospects near this location."
+      );
+    }
+    return {
+      exactTarget,
+      opportunities: [
+        rankTerritoryCandidate({
+          candidate: exactTarget,
+          center: {
+            lat: exactTarget.lat,
+            lng: exactTarget.lng,
+            formattedAddress: exactTarget.formattedAddress,
+          },
+          operator: input.operator,
+        }),
+      ],
+    };
+  }
+
+  const discovery = await discoverLaundryTerritory({
+    addressOrBusiness: input.searchNear,
+    provider: input.places,
+    operator: input.operator,
+    categories: SEARCH_CATEGORIES[input.venueType],
+    limit: 20,
+  });
+  return {
+    exactTarget: null,
+    opportunities: discovery.opportunities.slice(0, input.count),
+  };
+}
+
 export async function buildDriverMissions(input: {
   tenantId: string;
   driverId: string;
   missionType: DriverMissionType;
   venueType: DriverMissionVenue;
+  targetMode: DriverMissionTargetMode;
   searchNear: string;
+  placeId?: string;
   requestId: string;
   count: number;
 }) {
@@ -92,26 +208,55 @@ export async function buildDriverMissions(input: {
     turnaroundCompatibleByDefault: true,
     pickupDaysCompatibleByDefault: true,
   };
-  const discovery = await discoverLaundryTerritory({
-    addressOrBusiness: input.searchNear,
-    provider: provider(),
+  const places = provider();
+  const { opportunities, exactTarget } = await resolveDriverMissionTargets({
+    targetMode: input.targetMode,
+    searchNear: input.searchNear,
+    placeId: input.placeId,
+    venueType: input.venueType,
+    count: input.count,
     operator,
-    categories: SEARCH_CATEGORIES[input.venueType],
-    limit: 20,
+    places,
   });
   const existing = await listCommercialMissions({ tenantId: input.tenantId, limit: 250 });
+  const activeMissions = existing.filter(
+    mission => !["won", "lost"].includes(mission.status)
+  );
   const activeProviderIds = new Set(
-    existing
-      .filter(mission => !["won", "lost"].includes(mission.status))
+    activeMissions
       .map(mission => mission.account.providerAccountId)
       .filter((value): value is string => Boolean(value))
   );
-  const eligible = discovery.opportunities.filter(
-    opportunity =>
+  const reusableByProviderId = new Map(
+    activeMissions
+      .filter(
+        mission =>
+          mission.assignedTo === input.driverId &&
+          driverMissionBuilderMode(mission) === input.missionType &&
+          Boolean(mission.account.providerAccountId)
+      )
+      .map(mission => [mission.account.providerAccountId as string, mission])
+  );
+  const eligible = opportunities.filter(opportunity => {
+    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
+    if (reusable) return true;
+    return (
       !activeProviderIds.has(opportunity.providerAccountId) &&
       (input.missionType !== "cold_call" || Boolean(opportunity.account.phone))
-  );
+    );
+  });
   if (!eligible.length) {
+    if (input.targetMode === "exact_property" && exactTarget) {
+      if (activeProviderIds.has(exactTarget.providerId)) {
+        throw new Error("An active mission already exists for this property.");
+      }
+      if (input.missionType === "cold_call") {
+        throw new Error(
+          "This property does not have a public phone number for a cold-call mission."
+        );
+      }
+      throw new Error("This property is not eligible for a new mission.");
+    }
     throw new Error(
       input.missionType === "cold_call"
         ? "No new venues with public phone numbers were found near this route"
@@ -120,9 +265,34 @@ export async function buildDriverMissions(input: {
   }
 
   const created: CommercialMission[] = [];
-  const selected = eligible.slice(0, input.count);
+  const selected = eligible.slice(
+    0,
+    input.targetMode === "exact_property" ? 1 : input.count
+  );
   for (let index = 0; index < selected.length; index += 1) {
     const opportunity = selected[index]!;
+    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
+    if (reusable) {
+      const recovered =
+        reusable.status === "candidate" || reusable.status === "selected"
+          ? await activateCommercialMissionForField({
+              tenantId: input.tenantId,
+              missionId: reusable.id,
+              expectedVersion: reusable.version,
+              assignedTo: input.driverId,
+              actorId: input.driverId,
+              requestId: randomUUID(),
+            })
+          : reusable;
+      await ensureApprovedBuilderProposal({
+        tenantId: input.tenantId,
+        mission: recovered,
+        actorId: input.driverId,
+      });
+      created.push(recovered);
+      continue;
+    }
+
     const diamond = await selectMissionDiamond({
       tenantId: input.tenantId,
       driverId: input.driverId,
@@ -167,6 +337,9 @@ export async function buildDriverMissions(input: {
             venueType: input.venueType,
             builtBy: input.driverId,
             requestId: input.requestId,
+            targetMode: input.targetMode,
+            targetQuery: input.searchNear,
+            ...(input.placeId ? { targetPlaceId: input.placeId } : {}),
           },
           {
             source: "driver_sales_diamond",
@@ -209,18 +382,10 @@ export async function buildDriverMissions(input: {
         actorId: input.driverId,
         requestId: randomUUID(),
       });
-    const proposal = await generateCommercialProposal({
+    await ensureApprovedBuilderProposal({
       tenantId: input.tenantId,
-      missionId: activated.id,
+      mission: activated,
       actorId: input.driverId,
-      requestId: randomUUID(),
-    });
-    await approveCommercialProposal({
-      tenantId: input.tenantId,
-      missionId: activated.id,
-      proposalId: proposal.id,
-      actorId: input.driverId,
-      requestId: randomUUID(),
     });
     created.push(activated);
   }

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -20,7 +21,7 @@ const migration = readFileSync(
 
 describe("Open Channel production contract", () => {
   it("uses authenticated tenant membership for every read and mutation", () => {
-    expect(router.match(/dayforgeTenantMemberProcedure/g)).toHaveLength(8);
+    expect(router.match(/legacyDayforgeTenantMemberProcedure/g)).toHaveLength(8);
     expect(router).toContain("ctx.tenantId");
     expect(router).toContain("ctx.user.openId");
     expect(system).toContain("openChannel: openChannelRouter");

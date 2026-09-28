@@ -11,10 +11,12 @@ import { goldlineDomainCapabilityGrants } from "../../drizzle/schema";
 import {
   ROOK_CONTACT_CAPABILITY_ID,
   ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
+  ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
 } from "../../shared/rookContact";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError, isMysqlMissingTableError } from "../mysqlErrors";
-import { ProgressionSchemaBlockedError } from "./progressionContract";
+import { ProgressionNotPermittedError, ProgressionSchemaBlockedError } from "./progressionContract";
+import { hasServerAuthoritativeWaywardContactGate } from "./progressionStore";
 
 export type RookContactGrant = {
   capabilityId: typeof ROOK_CONTACT_CAPABILITY_ID;
@@ -82,18 +84,35 @@ export async function findRookContactGrant(input: {
 export async function grantRookContactCapability(input: {
   tenantId: string;
   operatorId: string;
-  grantSource: typeof ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE;
+  grantSource:
+    | typeof ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE
+    | typeof ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE;
   grantedAt: Date;
 }): Promise<void> {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "capability.rook.contact has no production grant writer"
-    );
-  }
-  if (input.grantSource !== ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE) {
+  const productionWayward =
+    input.grantSource === ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE;
+  const isolatedPreview =
+    input.grantSource === ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE;
+  if (!productionWayward && !isolatedPreview) {
     throw new Error(
       "capability.rook.contact refuses client and replacement grant sources"
     );
+  }
+  if (process.env.NODE_ENV === "production" && !productionWayward) {
+    throw new Error(
+      "capability.rook.contact preview grant is not production authority"
+    );
+  }
+  if (productionWayward) {
+    const proven = await hasServerAuthoritativeWaywardContactGate({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+    });
+    if (!proven) {
+      throw new ProgressionNotPermittedError(
+        "capability.rook.contact requires the durable server-authored Wayward CONTACT gate before a grant row may be written"
+      );
+    }
   }
   const existing = await findRookContactGrant(input);
   if (!existing.readable) {
@@ -111,7 +130,7 @@ export async function grantRookContactCapability(input: {
       operatorId: input.operatorId,
       capabilityId: ROOK_CONTACT_CAPABILITY_ID,
       grantedAt: input.grantedAt,
-      grantSource: ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
+      grantSource: input.grantSource,
     });
   } catch (error) {
     if (isMysqlDuplicateKeyError(error)) return;

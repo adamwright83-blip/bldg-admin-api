@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { Archive, ArrowRight, Backpack, Binoculars, BookOpenCheck, RadioTower, Shield, UsersRound } from "lucide-react";
 import { Link } from "wouter";
 

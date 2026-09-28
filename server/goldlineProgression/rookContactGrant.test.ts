@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import type { SQL } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
@@ -6,18 +7,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import {
   ROOK_CONTACT_CAPABILITY_ID,
+  ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
   WAYWARD_ROOK_CONTACT_CONSEQUENCE,
 } from "../../shared/rookContact";
 import type { TrpcContext } from "../_core/context";
 import { rookContactRouter } from "../rookContact/rookContactRouter";
+import { prepareRookContactSession } from "../rookContact/rookContactService";
 import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
+import { grantRookContactCapability } from "./capabilityGrantStore";
 import { ProgressionNotPermittedError } from "./progressionContract";
+import { progressionRouter } from "./progressionRouter";
 import {
   acknowledgeWaywardRookContact,
+  completeWaywardContactGate,
   readGoldlineProgression,
 } from "./progressionService";
 import { acknowledgeColosseumAuthoredFinale } from "./progressionService";
 import { recordLevelFromOutcomes } from "./progressionWrites";
+import {
+  beginCoastalMarketRookHunt,
+  beginWaywardContactGate,
+  recordAuthoredCoastalMarketRookCatch,
+} from "./progressionStore";
 
 const access = vi.hoisted(() => ({ resolveMembership: vi.fn() }));
 const mocks = vi.hoisted(() => ({
@@ -27,8 +38,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: access.resolveMembership,
-  hasDayforgeEntitlement: vi.fn(),
+  resolveLegacyDayforgeMembership: access.resolveMembership,
+  hasLegacyDayforgeEntitlement: vi.fn(),
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 vi.mock("../openChannel/day1TenDoorsService", () => ({
@@ -204,6 +215,19 @@ async function ownRook(tenantId = "tenant-a", operatorId = "op-a") {
     tenantId,
     operatorId,
     authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+  });
+  const runId = "11111111-1111-4111-8111-111111111111";
+  await beginCoastalMarketRookHunt({
+    tenantId,
+    operatorId,
+    runId,
+    startedAt: new Date("2026-09-25T08:00:00.000Z"),
+  });
+  await recordAuthoredCoastalMarketRookCatch({
+    tenantId,
+    operatorId,
+    runId,
+    at: new Date("2026-09-25T08:00:06.000Z"),
   });
 }
 
@@ -557,6 +581,157 @@ describe("capability.rook.contact grant", () => {
     expect(db.challenges[0]?.status).toBe("open");
     const store = readFileSync(new URL("./capabilityGrantStore.ts", import.meta.url), "utf8");
     expect(store).not.toMatch(/levelColosseumResolvedAt|companionRookOwnedAt|kingdomBrassRepublicCompletedAt/);
+  });
+
+  it("grants CONTACT only after the server-started authored Wayward gate completes", async () => {
+    await ownRook();
+    const runId = "22222222-2222-4222-8222-222222222222";
+    await beginWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+      startedAt: new Date("2026-09-25T09:00:00.000Z"),
+    });
+
+    const granted = await completeWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+    });
+
+    expect(granted.companionRookOwned.value).toBe(true);
+    expect(granted.capabilityRookContact).toMatchObject({
+      granted: true,
+      readable: true,
+      status: "granted",
+      grantsCompanionOwnership: false,
+    });
+    expect(db.grants).toHaveLength(1);
+    expect(db.grants[0]).toMatchObject({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantSource: "wayward.server_authoritative_contact_gate",
+    });
+
+    const again = await completeWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+    });
+    expect(again.capabilityRookContact.granted).toBe(true);
+    expect(db.grants).toHaveLength(1);
+  });
+
+
+  it("rejects a production-looking grant row when the durable Wayward gate proof is absent", async () => {
+    await ownRook();
+    db.grants.push({
+      id: "forged-production-looking-grant",
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+    });
+
+    const read = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: null,
+    });
+    expect(read.capabilityRookContact).toMatchObject({
+      granted: false,
+      readable: true,
+      status: "ungranted",
+    });
+
+    await expect(
+      prepareRookContactSession({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        accountId: 10,
+        contactId: 20,
+      })
+    ).rejects.toThrow(/no matching durable Wayward CONTACT gate proof/);
+  });
+
+  it("refuses direct server grant writes before the Wayward gate proof exists", async () => {
+    await ownRook();
+    await expect(
+      grantRookContactCapability({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+        grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      })
+    ).rejects.toThrow(/requires the durable server-authored Wayward CONTACT gate/);
+    expect(db.grants).toHaveLength(0);
+
+    db.progression[0]!.overworldUnlocksJson = {
+      waywardContactGate: {
+        runId: "33333333-3333-4333-8333-333333333333",
+        startedAt: "2026-09-25T09:00:00.000Z",
+        completedAt: "2026-09-25T09:00:01.000Z",
+      },
+    };
+    await expect(
+      grantRookContactCapability({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+        grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      })
+    ).rejects.toThrow(/requires the durable server-authored Wayward CONTACT gate/);
+    expect(db.grants).toHaveLength(0);
+  });
+
+  it("hostile direct API calls cannot skip the server-started Wayward gate", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-25T10:00:00.000Z"));
+      await ownRook("tenant-a", "open-7");
+      const caller = progressionRouter.createCaller(context("tenant-a", 7));
+
+      await expect(
+        caller.completeWaywardContactGate({
+          runId: "44444444-4444-4444-8444-444444444444",
+        })
+      ).rejects.toThrow(/server-started gate run/);
+
+      await expect(
+        caller.completeWaywardContactGate({
+          runId: "44444444-4444-4444-8444-444444444444",
+          contactGranted: true,
+          tenantId: "tenant-b",
+          operatorId: "open-8",
+          localStorage: { contactGranted: true },
+        } as never)
+      ).rejects.toThrow();
+
+      const begun = await caller.beginWaywardContactGate({});
+      await expect(
+        caller.completeWaywardContactGate({ runId: begun.runId })
+      ).rejects.toThrow(/cannot precede the authored gate/);
+      expect(db.grants).toHaveLength(0);
+
+      vi.advanceTimersByTime(6_000);
+      const completed = await caller.completeWaywardContactGate({ runId: begun.runId });
+      expect(completed.capabilityRookContact.granted).toBe(true);
+      expect(db.grants).toHaveLength(1);
+
+      await expect(caller.beginWaywardContactGate({})).rejects.toThrow(
+        /already durably completed/
+      );
+      const afterRestartAttempt = await readGoldlineProgression({
+        tenantId: "tenant-a",
+        operatorId: "open-7",
+        capabilityOperatorId: "7",
+      });
+      expect(afterRestartAttempt.capabilityRookContact.granted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps an unreadable grant table uncertain and does not fall back to companion unlocks", async () => {

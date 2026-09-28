@@ -20,7 +20,8 @@ function truthProgress(orders: Array<{ id: number; phone: string; slug: string |
   const records = mergeCustomerOrderTruth({
     native: orders.map(o => ({
       id: o.id, status: "completed", createdAt: o.at, firstName: "R", lastName: String(o.id), phone: o.phone,
-      email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug, bldgUserId: null, paid: true, total: "30",
+      email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug, bldgUserId: null, paid: true,
+      stripePaymentIntentId: `pi_test_${o.id}`, total: "30",
     })),
   });
   return deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", records));
