@@ -23,5 +23,6 @@ describe("Claire pre-visit intel authorization", () => {
     const intelIndex = procedure.indexOf("getClairePreVisitIntel({");
     expect(authIndex).toBeGreaterThan(-1);
     expect(intelIndex).toBeGreaterThan(authIndex);
+    expect(procedure).toContain("actorId: ctx.user.openId");
   });
 });
