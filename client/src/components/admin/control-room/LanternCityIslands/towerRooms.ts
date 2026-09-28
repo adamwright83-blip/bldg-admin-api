@@ -1,8 +1,9 @@
 /**
  * The tower cutaway, in rooms: each tower opened like a dollhouse and shot straight on, every
- * unit a real little room (back wall, floor, furniture, lamps). A customer's home has its lights
- * on, warm, sometimes with someone home; every other unit is dark behind glass at dusk. Floors
- * with no customer are counted so the dark ones read at a glance.
+ * unit a real little room (back wall, floor, furniture, lamps). The furniture is authored scenery.
+ * What is data: a unit whose customer we know has its lights on, warm; every other unit is dark
+ * behind glass at dusk. No figures are drawn: a lit room says a customer lives here, never that
+ * someone is home. Floors with no customer are counted so the dark ones read at a glance.
  *
  * Three.js with an oblique projection (every floor shows the same sliver of floor and ceiling,
  * like a cutaway drawing), so the view is identical at the top and bottom of a 22-storey tower.
@@ -31,7 +32,6 @@ const FLOORS = ["#9a6a44", "#b98458", "#7a5236", "#c9a27a", "#d8cbb8", "#8e7f72"
 const FABRIC = ["#e8d9b8", "#3f5f7a", "#c9a14a", "#8a4e3b", "#6f8f76", "#d7cfc4", "#2f3b4a", "#b56a5a"].map(hex);
 const ART = ["#e4b04a", "#3b6ea8", "#d9534f", "#2f8f8a", "#f2efe6", "#1f2a3a"].map(hex);
 const BOOKS = ["#b8453a", "#3b6ea8", "#e0a22f", "#2f8f8a", "#efe7d2", "#5b3f6b", "#2b2f36"].map(hex);
-const SKIN = ["#f1c7a5", "#d49a74", "#a8704f", "#6f4a35", "#e8b896"].map(hex);
 const WOOD = hex("#8a5a3a"), DARKWOOD = hex("#5a3a28"), WHITE = hex("#f4f1ea"), METAL = hex("#3a3d42"), CEIL = hex("#efe9df");
 const LEAF = [hex("#4f8a3c"), hex("#3c6f34"), hex("#6aa04a")];
 
@@ -98,15 +98,6 @@ function art(k: Kit, x: number, y: number, w: number, h: number, r: () => number
   k.box(x - w / 2, x + w / 2, y - h / 2, y + h / 2, -UD + 0.09, -UD + 0.11, ART[Math.floor(r() * ART.length)]);
   if (r() < 0.6) k.box(x - w / 4, x + w / 5, y - h / 4, y + h / 5, -UD + 0.11, -UD + 0.12, ART[Math.floor(r() * ART.length)]);
 }
-function person(k: Kit, x: number, z: number, r: () => number, sitting = false) {
-  const shirt = FABRIC[Math.floor(r() * FABRIC.length)], pants = hex(r() < 0.5 ? "#2f3b4a" : "#6b5a48"), skin = SKIN[Math.floor(r() * SKIN.length)];
-  const hip = sitting ? 0.48 : 0.9;
-  if (!sitting) { k.box(x - 0.14, x - 0.02, 0, hip, z - 0.08, z + 0.08, pants); k.box(x + 0.02, x + 0.14, 0, hip, z - 0.08, z + 0.08, pants); }
-  else k.box(x - 0.15, x + 0.15, hip - 0.12, hip, z - 0.1, z + 0.35, pants);
-  k.box(x - 0.2, x + 0.2, hip, hip + 0.62, z - 0.1, z + 0.1, shirt);
-  k.blob(x, hip + 0.8, z, 0.13, 0.16, 0.13, skin);
-  k.box(x - 0.13, x + 0.13, hip + 0.9, hip + 0.98, z - 0.1, z + 0.08, hex(r() < 0.5 ? "#2b2320" : "#6a4a2a"));
-}
 function living(k: Kit, r: () => number, on: boolean) {
   const fab = FABRIC[Math.floor(r() * FABRIC.length)], rug = FABRIC[Math.floor(r() * FABRIC.length)];
   k.box(0.5, UW - 0.6, 0.01, 0.03, -UD + 0.8, -0.6, rug);
@@ -124,7 +115,6 @@ function living(k: Kit, r: () => number, on: boolean) {
   k.box(lx - 0.2, lx + 0.2, 1.5, 1.8, -UD + 0.32, -UD + 0.72, hex("#f6e7c4"), on ? 1.6 : 0);
   plant(k, 0.35, -1.0, 1, r);
   art(k, sx + 1.05, 1.9, 1.1, 0.7, r);
-  if (on && r() < 0.5) person(k, sx + 1.5, -UD + 0.8, r, true);
 }
 function bedroom(k: Kit, r: () => number, on: boolean) {
   const blanket = FABRIC[Math.floor(r() * FABRIC.length)];
@@ -140,7 +130,6 @@ function bedroom(k: Kit, r: () => number, on: boolean) {
   }
   art(k, bx + 1.0, 1.85, 1.3, 0.55, r);
   if (r() < 0.6) plant(k, UW - 0.35, -0.9, 0.9, r);
-  if (on && r() < 0.35) person(k, bx + 2.6, -1.4, r);
 }
 function kitchen(k: Kit, r: () => number, on: boolean) {
   const cab = [hex("#2f4f5f"), hex("#e9e4da"), hex("#6f7f6b"), hex("#c9a27a")][Math.floor(r() * 4)];
@@ -155,7 +144,6 @@ function kitchen(k: Kit, r: () => number, on: boolean) {
   for (const lx of [tx + 0.05, tx + 1.2]) for (const lz of [-1.95, -1.3]) k.box(lx, lx + 0.05, 0, 0.72, lz, lz + 0.05, DARKWOOD);
   for (const cx of [tx - 0.35, tx + 1.35]) { k.box(cx, cx + 0.35, 0.42, 0.47, -1.8, -1.4, DARKWOOD); k.box(cx + (cx < tx ? 0 : 0.3), cx + (cx < tx ? 0.05 : 0.35), 0.47, 0.95, -1.8, -1.4, DARKWOOD); }
   pendant(k, tx + 0.35, -1.6, on); pendant(k, tx + 0.95, -1.6, on);
-  if (on && r() < 0.5) person(k, tx + 0.65, -UD + 1.2, r);
 }
 function study(k: Kit, r: () => number, on: boolean) {
   const dx = 0.3 + r() * 0.3;
@@ -173,7 +161,6 @@ function study(k: Kit, r: () => number, on: boolean) {
     while (x < bx + 1.0) { const w = 0.05 + r() * 0.07, h = 0.3 + r() * 0.15; k.box(x, x + w, 0.1 + s * 0.52, 0.1 + s * 0.52 + h, -UD + 0.12, -UD + 0.42, BOOKS[Math.floor(r() * BOOKS.length)]); x += w + 0.01; }
   }
   plant(k, dx + 1.9, -1.1, 0.8, r);
-  if (on && r() < 0.55) person(k, dx + 0.8, -UD + 1.3, r, true);
 }
 const ROOMS = [living, bedroom, kitchen, study];
 
@@ -445,7 +432,7 @@ export function createTowerRooms(host: HTMLElement, events: { onHover?: (h: Room
     }
     const hit = unitAt(e.clientX, e.clientY);
     const who = hit ? hit.tw.t.floors[hit.f - 1][hit.u] : [];
-    const label = hit ? `${hit.tw.t.spec.label} · unit ${hit.f}${String(hit.u + 1).padStart(2, "0")}` : "";
+    const label = hit ? `${hit.tw.t.spec.label} · floor ${hit.f} · unit ${[...new Set(who.map(r => r.unit))].join(", ")}` : "";
     const key = who.length ? label : "";
     if (key !== hoverKey || who.length) events.onHover?.(who.length ? { residents: who, label, x: e.clientX, y: e.clientY } : null);
     hoverKey = key;

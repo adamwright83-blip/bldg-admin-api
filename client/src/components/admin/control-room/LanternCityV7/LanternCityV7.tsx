@@ -9,6 +9,7 @@ import {
   type WorldStats,
 } from "./lanternWorld";
 import styles from "./lantern-city-v7.module.css";
+import TowerFloors from "../LanternCityIslands/TowerFloors";
 
 // Fonts load as their own <link>, not an @import in the CSS module: a blocked or failed font
 // request fails the lazy chunk's CSS preload, which took the whole board down to the error page.
@@ -55,6 +56,18 @@ function devSampleCustomers(): GeographicCustomer[] {
       });
     }
   }
+  // a few sample residents of our towers, so the tower view has something to show locally
+  const towers: [string, string][] = [
+    ["3545 Wilshire Blvd", "1507"], ["3545 Wilshire Blvd", "2204"], ["3545 Wilshire Blvd", "812"], ["3650 W 6th St", "902"],
+    ["2160 Century Park East", "1804"], ["2170 Century Park East", "1001"], ["3545 Wilshire Blvd", "Lobby"],
+  ];
+  for (const [address, unit] of towers) {
+    n++;
+    out.push({
+      identityKey: `dev-sample-${n}`, displayName: `Sample Resident ${n}`, phone: null, address, unit,
+      cadence: { state: "active", daysSinceLastOrder: 3 }, location: null,
+    });
+  }
   return out;
 }
 
@@ -100,14 +113,16 @@ export default function LanternCityV7({
   const [stats, setStats] = useState<WorldStats | null>(null);
   const [mission, setMission] = useState<Mission | null>(null);
   const [selected, setSelected] = useState<string[] | null>(null);
+  const [tower, setTower] = useState<string | null>(null);
 
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 10_000, refetchInterval: 15_000, retry: 1 });
   const usingSample = import.meta.env.DEV && atlas.isError;
-  // every customer is their own lantern
-  const customers = useMemo<GeographicCustomer[]>(() => {
-    if (usingSample) return devSampleCustomers();
-    return ((atlas.data?.customers ?? []) as GeographicCustomer[]).filter(c => c.location);
-  }, [atlas.data, usingSample]);
+  // every customer is their own lantern; the tower view also counts residents not yet on the map
+  const allCustomers = useMemo<GeographicCustomer[]>(
+    () => (usingSample ? devSampleCustomers() : ((atlas.data?.customers ?? []) as GeographicCustomer[])),
+    [atlas.data, usingSample],
+  );
+  const customers = useMemo(() => allCustomers.filter(c => c.location), [allCustomers]);
   const byKey = useMemo(() => new Map(customers.map(c => [c.identityKey, c])), [customers]);
 
   useEffect(() => {
@@ -119,6 +134,7 @@ export default function LanternCityV7({
       onStats: setStats,
       onMission: setMission,
       onSelect: setSelected,
+      onTower: setTower,
       onError: e => {
         console.error("Lantern City failed to load", e);
         setFailed(true);
@@ -184,7 +200,20 @@ export default function LanternCityV7({
             </div>
           </div>
         ) : null}
+        <div className={styles.towerBtns}>
+          <button type="button" onClick={() => setTower("opus_la")}>OPUS LA floors</button>
+          <button type="button" onClick={() => setTower("century_park_east")}>Century Park East floors</button>
+        </div>
       </header>
+
+      {tower ? (
+        <TowerFloors
+          buildingId={tower}
+          customers={allCustomers}
+          onClose={() => setTower(null)}
+          onOpenCustomer={phone => onOpenCustomer(phone)}
+        />
+      ) : null}
 
       {usingSample ? <div className={styles.sample}>Sample lanterns · dev build, no database</div> : null}
 

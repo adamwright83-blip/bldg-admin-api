@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import {
   adminPathToTab,
   isAdminCommandCenterPath,
+  lanternSceneFor,
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
@@ -192,6 +193,8 @@ export default function AdminHostApp() {
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
   const isWorldHome = isHome || isLanternCity;
+  // one Lantern City (V7) at Home and /growth/lantern-city; old scenes only behind ?scene=
+  const lanternScene = lanternSceneFor(path, window.location.search);
   const worldDebugChrome =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("worldTruth") === "1";
@@ -382,15 +385,15 @@ export default function AdminHostApp() {
         {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
-          {isLanternCity && !["v5", "v6"].includes(new URLSearchParams(window.location.search).get("scene") ?? "") ? (
+          {lanternScene === "v7" ? (
             <Suspense fallback={<div className="cr-route-loading">Lifting the fog…</div>}>
               <LanternCityV7 onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
             </Suspense>
-          ) : isLanternCity && new URLSearchParams(window.location.search).get("scene") === "v6" ? (
+          ) : lanternScene === "v6" ? (
             <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
-          ) : (
+          ) : lanternScene === "atlas" ? (
             <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
-          )}
+          ) : null}
           {!isLanternCity ? (
           <>
           {/*

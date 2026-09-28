@@ -45,6 +45,8 @@ export type WorldEvents = {
   onStats?: (s: WorldStats) => void;
   onMission?: (m: Mission | null) => void;
   onSelect?: (keys: string[] | null) => void;
+  /** one of our towers was clicked: open its floors */
+  onTower?: (id: "opus_la" | "century_park_east") => void;
   onError?: (e: unknown) => void;
 };
 
@@ -1790,7 +1792,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     { id: "century_park_east" as const, src: `${ASSETS}/v4/tower-century-park-east.png`, h: 290 },
   ];
   const hidden = new Set<number>();            // footprints the landmark art replaces
-  const landmarks: { mesh: THREE.Mesh; x: number; z: number }[] = [];
+  const landmarks: { id: "opus_la" | "century_park_east"; mesh: THREE.Mesh; x: number; z: number }[] = [];
   function buildLandmarks() {
     for (const L of LANDMARKS) {
       const geo = CANONICAL_BUILDING_GEOGRAPHY[L.id];
@@ -1825,7 +1827,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       mesh.position.set(x, ground(x, z) - 2, z);
       mesh.renderOrder = 3;
       scene.add(mesh);
-      landmarks.push({ mesh, x, z });
+      landmarks.push({ id: L.id, mesh, x, z });
     }
   }
   function nearLandmark(x: number, z: number) {
@@ -2173,6 +2175,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
+    const tower = ray.intersectObjects(landmarks.map(l => l.mesh), false)[0];
+    if (tower && events.onTower) {
+      const l = landmarks.find(q => q.mesh === tower.object);
+      if (l) { events.onTower(l.id); return; }
+    }
     events.onSelect?.(pickKeys(e));
   }
   const pv = new THREE.Vector3();

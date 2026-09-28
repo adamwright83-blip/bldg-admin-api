@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { northDomainForPath } from "@/admin/adminPaths";
+import { lanternSceneFor, northDomainForPath } from "@/admin/adminPaths";
 import { damageStateForIncomingAttacks } from "@/components/admin/control-room/TowerWars";
 import {
   inferCustomerCadence,
@@ -85,6 +85,21 @@ describe("Admin six-domain shell", () => {
     expect(source).toContain("isTowerWars ? (");
     expect(source).toContain("<TowerWars onNavigate=");
     expect(source).toContain('goldlineEntry.data.session?.status !== "COMPLETE"');
+  });
+
+  it("puts one Lantern City (V7) at Home and /growth/lantern-city; old scenes only on request", () => {
+    // the returning-user home and the Growth route mount the same V7 world
+    for (const path of ["/", "/home", "/growth/lantern-city"]) expect(lanternSceneFor(path, "")).toBe("v7");
+    expect(lanternSceneFor("/", "?worldTruth=1")).toBe("v7");
+    // the old cities are QA-only
+    expect(lanternSceneFor("/", "?scene=v6")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=atlas")).toBe("atlas");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=v5")).toBe("atlas");
+    // other pages mount no world at all (no hidden 3D board running behind them)
+    for (const path of ["/customers", "/operations", "/growth/tower-wars"]) expect(lanternSceneFor(path, "")).toBeNull();
+    // and the host renders from that one decision
+    expect(source).toContain("const lanternScene = lanternSceneFor(path, window.location.search)");
+    expect(source).toContain('lanternScene === "v7" ? (');
   });
 
   it("keeps Lantern City the canonical returning-user home after the combat pass", () => {

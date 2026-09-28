@@ -8,9 +8,13 @@
  *   the same and flagged `unitsAssumed` so the drawing can say so.
  * - Century Park East: two 21-storey towers, 2160 and 2170, 12 units a floor.
  *
- * A unit string only places a customer when it reads unambiguously: "1507" is floor 15, unit 7;
- * "12A" is floor 12, unit A; "PH3" is the top floor. Anything else stays in the tower's
- * `unplaced` list rather than being guessed into a window.
+ * What is fact and what is drawing:
+ * - The tower is fact: the street number on the customer's own address picks it.
+ * - The floor is read from the unit number the customer gave ("1507" and "15G" read as floor 15,
+ *   "PH3" as the top floor). That floor-first numbering is the usual convention but has not been
+ *   confirmed for either building, so each building carries `numberingConfirmed` and the view says so.
+ * - Where along the floor the lit room sits is illustrative: the door order is not known.
+ * Anything that doesn't read cleanly stays in the tower's `unplaced` list, never guessed into a window.
  */
 import type { CanonicalGeographyId } from "@shared/canonicalGeography";
 
@@ -22,12 +26,19 @@ export type TowerSpec = {
   unitsPerFloor: number;
   unitsAssumed?: boolean;
 };
-export type BuildingSpec = { id: CanonicalGeographyId; name: string; towers: TowerSpec[] };
+export type BuildingSpec = {
+  id: CanonicalGeographyId;
+  name: string;
+  towers: TowerSpec[];
+  /** has anyone confirmed this building numbers units floor-first (1507 = floor 15)? */
+  numberingConfirmed: boolean;
+};
 
 export const TOWER_BUILDINGS: BuildingSpec[] = [
   {
     id: "opus_la",
     name: "OPUS LA",
+    numberingConfirmed: false,
     towers: [
       { id: "south", label: "South tower · 3545 Wilshire", address: /\b3545\s+wilshire\b/i, floors: 22, unitsPerFloor: 18 },
       { id: "north", label: "North tower · 3650 W 6th", address: /\b3650\s+(?:w\.?|west)?\s*6th\b/i, floors: 14, unitsPerFloor: 18, unitsAssumed: true },
@@ -36,6 +47,7 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
   {
     id: "century_park_east",
     name: "Century Park East",
+    numberingConfirmed: false,
     towers: [
       { id: "2160", label: "2160 Century Park East", address: /\b2160\s+century\s+(?:park|pk)\b/i, floors: 21, unitsPerFloor: 12 },
       { id: "2170", label: "2170 Century Park East", address: /\b2170\s+century\s+(?:park|pk)\b/i, floors: 21, unitsPerFloor: 12 },
@@ -46,6 +58,13 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
 export type Resident = { key: string; name: string; address: string; unit: string | null };
 /** where a unit string lands: floor 1..floors, slot 1..unitsPerFloor (null when the floor is known but the door isn't) */
 export type UnitSpot = { floor: number; slot: number | null };
+
+/** the unit a customer gave: the unit field, or failing that the apartment written into the address ("3545 Wilshire Blvd Apt#1607") */
+export function unitOf(unit: string | null | undefined, address: string): string | null {
+  if (unit && unit.trim()) return unit.trim();
+  const m = /(?:\b(?:apt|apartment|unit|ste|suite)\.?\s*#?\s*|#\s*)([a-z0-9-]+)\b/i.exec(address);
+  return m ? m[1] : null;
+}
 
 export function parseUnit(unit: string | null, t: Pick<TowerSpec, "floors" | "unitsPerFloor">): UnitSpot | null {
   if (!unit) return null;

@@ -1386,7 +1386,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const halo = new THREE.Mesh(new THREE.PlaneGeometry(300, 300).rotateX(-Math.PI / 2), haloMat);
       halo.position.set(p.x, H(p.x, p.z) + 3, p.z);
       halo.layers.set(INK_SKIP);
-      beams.add(beam, halo);
+      // no beam: a lit home and its warm pool of light are the marker, not a searchlight
+      void beam;
+      beams.add(halo);
     }
     const open = new Set<number>([...counts.keys()]);
     setClouds(open, immediate);

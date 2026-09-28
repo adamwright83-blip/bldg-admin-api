@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTowerModel, darkFloors, parseUnit, TOWER_BUILDINGS } from "./towerStack";
+import { buildTowerModel, darkFloors, parseUnit, TOWER_BUILDINGS, unitOf } from "./towerStack";
 
 const south = { floors: 22, unitsPerFloor: 18 };
 
@@ -47,5 +47,16 @@ describe("tower stack", () => {
     ]);
     expect(m.towers[0].floors[20][11][0].key).toBe("x");
     expect(m.towers[1].floors[2][0][0].key).toBe("y");
+  });
+
+  it("finds the unit written into the address when the unit field is empty", () => {
+    expect(unitOf(null, "3545 Wilshire Boulevard Apt#1607")).toBe("1607");
+    expect(unitOf("", "2170 Century Park E Unit 1409, Los Angeles")).toBe("1409");
+    expect(unitOf("  904 ", "3545 Wilshire Blvd")).toBe("904");
+    expect(unitOf(null, "3545 Wilshire Blvd")).toBeNull();
+    // a different street number is a different building: never matched into OPUS by resemblance
+    const opus = TOWER_BUILDINGS.find(b => b.id === "opus_la")!;
+    const m = buildTowerModel(opus, [{ key: "t", name: "T", address: "3454 Wilshire Boulevard Apt#1607", unit: "1607" }]);
+    expect(m.unmatched.map(r => r.key)).toEqual(["t"]);
   });
 });
