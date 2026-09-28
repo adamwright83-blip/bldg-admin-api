@@ -352,7 +352,24 @@ if (!globalThis.chrome?.runtime?.id) {
     void startSync();
   });
 
-  async function recordDashboardWitness(context, range) {
+  const DASHBOARD_CAPTURE_ORIGINS = ["<all_urls>"];
+
+  async function prepareDashboardCapturePermission() {
+    if (await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS }))
+      return true;
+    // Only a manual Confirm click may prompt. Automatic syncs never acquire
+    // broader permission on their own; they simply skip the witness.
+    if (scheduled) return false;
+    try {
+      return await chrome.permissions.request({ origins: DASHBOARD_CAPTURE_ORIGINS });
+    } catch {
+      return false;
+    }
+  }
+
+  async function recordDashboardWitness(context, range, captureAllowed) {
+    if (!captureAllowed)
+      return "Dashboard screenshot permission was not granted. The order imports were still saved.";
     let tab = null;
     try {
       tab = await openSite(`${CLEANCLOUD}/store`);
@@ -379,10 +396,9 @@ if (!globalThis.chrome?.runtime?.id) {
   }
 
   async function captureCleanCloudPng(tabId) {
-    const cleanCloudOrigin = `${new URL(CLEANCLOUD).origin}/*`;
-    if (!(await chrome.permissions.contains({ origins: [cleanCloudOrigin] }))) {
+    if (!(await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS }))) {
       throw new Error(
-        "CleanCloud site access is required before the dashboard screenshot can be captured."
+        "Dashboard screenshot permission is required before totals can be witnessed."
       );
     }
     const tab = await chrome.tabs.get(tabId);
@@ -418,6 +434,9 @@ if (!globalThis.chrome?.runtime?.id) {
 
   async function confirmSync() {
     if (!staged) return;
+    // Keep this first: runtime permission requests must be initiated by the
+    // operator's Confirm gesture. A refusal never blocks the actual imports.
+    const dashboardCaptureAllowed = await prepareDashboardCapturePermission();
     busy(true);
     $("confirm").disabled = true;
     try {
@@ -499,7 +518,11 @@ if (!globalThis.chrome?.runtime?.id) {
         $("approval").hidden = true;
         let witnessNote = null;
         try {
-          witnessNote = await recordDashboardWitness(witnessContext, witnessRange);
+          witnessNote = await recordDashboardWitness(
+            witnessContext,
+            witnessRange,
+            dashboardCaptureAllowed
+          );
         } catch (error) {
           witnessNote = error?.message || "Dashboard witness was not saved.";
         }
