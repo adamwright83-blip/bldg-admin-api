@@ -7,11 +7,19 @@ import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 import { loadLanternObjectiveMarks } from "./objectiveMarksService";
 
+export function lanternObjectiveMarksScope(ctx: {
+  tenantId: string;
+  user: { id?: unknown; openId: string };
+}) {
+  return {
+    tenantId: ctx.tenantId,
+    operatorId: dayDirectorActorId(ctx),
+    viewerOpenId: ctx.user.openId,
+  };
+}
+
 export const lanternCityRouter = router({
   objectiveMarks: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
-    loadLanternObjectiveMarks({
-      tenantId: ctx.tenantId,
-      operatorId: dayDirectorActorId(ctx),
-    })
+    loadLanternObjectiveMarks(lanternObjectiveMarksScope(ctx))
   ),
 });
