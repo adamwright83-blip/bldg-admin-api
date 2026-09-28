@@ -348,8 +348,8 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
   await resolveGatekeeperPerfectly(page);
   await openBusinessAction(page);
 
-  await page.getByRole("button", { name: /PREPARE VISIT/ }).click();
-  await page.getByRole("button", { name: /DEPART/ }).click();
+  await page.getByRole("button", { name: /PREPARE VISIT/ }).click({ timeout: 10_000 });
+  await page.getByRole("button", { name: /DEPART/ }).click({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: /ARRIVED/ })).toBeVisible();
 
   await page.evaluate(() => {
@@ -363,20 +363,20 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     "FIELD_DEPART",
   ]);
 
-  await page.getByRole("button", { name: /ARRIVED/ }).click();
+  await page.getByRole("button", { name: /ARRIVED/ }).click({ timeout: 10_000 });
   // #113 put a DECISION MAKER select beside the result, so a bare
   // locator("select") is now ambiguous. Name the one under test.
-  await page.getByTestId("visit-outcome-select").selectOption("won");
+  await page.getByTestId("visit-outcome-select").selectOption("won", { timeout: 10_000 });
   await page
     .locator("textarea")
-    .fill("Real field visit produced a signed result.");
-  await page.getByRole("button", { name: "RECORD VISIT RESULT" }).click();
+    .fill("Real field visit produced a signed result.", { timeout: 10_000 });
+  await page.getByRole("button", { name: "RECORD VISIT RESULT" }).click({ timeout: 10_000 });
 
   await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
   await page
     .getByTestId("parking-lot-clerk-text")
-    .fill("Decision maker signed; I reported exactly what happened.");
-  await page.getByTestId("parking-lot-clerk-save").click();
+    .fill("Decision maker signed; I reported exactly what happened.", { timeout: 10_000 });
+  await page.getByTestId("parking-lot-clerk-save").click({ timeout: 10_000 });
 
   await expectControlRestored(page, listenersBefore);
   const proof = await fixtureProof(page);
