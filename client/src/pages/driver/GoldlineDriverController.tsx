@@ -548,8 +548,10 @@ function LiveGoldlineDriverController({
     goldlineProgression.isSuccess ? goldlineProgression.data : null,
     identity.data
   );
-  const recordDay1Outcome =
-    trpc.system.day1TenDoors.recordOutcome.useMutation();
+  const recordDay1Outcome = trpc.system.day1TenDoors.recordOutcome.useMutation({
+    // the fifth qualifying Colosseum result unlocks Kingdom 2: refresh so the entry appears now
+    onSuccess: () => void utils.system.goldlineKingdoms.list.invalidate(),
+  });
   const acknowledgeColosseumFinale =
     trpc.system.goldlineProgression.acknowledgeColosseumFinale.useMutation();
   const beginCoastalRookHunt =

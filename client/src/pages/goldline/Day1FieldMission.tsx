@@ -76,7 +76,9 @@ export default function Day1FieldMission({
 }) {
   const utils = trpc.useUtils();
   const recordEvidence = trpc.system.day1TenDoors.recordEvidence.useMutation();
-  const recordOutcome = trpc.system.day1TenDoors.recordOutcome.useMutation();
+  const recordOutcome = trpc.system.day1TenDoors.recordOutcome.useMutation({
+    onSuccess: () => void utils.system.goldlineKingdoms.list.invalidate(),
+  });
   const [location, setLocation] = useState<GoldlineLocationSnapshot>({
     status: "requesting",
     coordinates: null,

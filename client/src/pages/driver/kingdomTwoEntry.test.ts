@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 */
 const controller = readFileSync(new URL("./GoldlineDriverController.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+const host = readFileSync(new URL("../GoldlineChapterHost.tsx", import.meta.url), "utf8");
 
 describe("Kingdom Two entry on the Driver", () => {
   it("opens the chapter as a scene, never by navigating to the admin route", () => {
@@ -25,5 +26,21 @@ describe("Kingdom Two entry on the Driver", () => {
   it("still keeps the driver host to its one product URL (the fix does not widen it)", () => {
     const driverBlock = app.slice(app.indexOf("if (isDriverHost) {"), app.indexOf("if (isBoreslayHost &&"));
     expect(driverBlock).not.toContain("goldline-chapter");
+  });
+
+  it("refreshes the kingdoms as soon as an outcome is recorded, so the fifth result shows Kingdom 2 at once", () => {
+    const mutation = controller.slice(controller.indexOf("const recordDay1Outcome ="), controller.indexOf("const recordDay1Outcome =") + 400);
+    expect(mutation).toContain("onSuccess");
+    expect(mutation).toContain("goldlineKingdoms.list.invalidate()");
+  });
+
+  it("flushes chapter progress when the scene unmounts, and never re-adopts an older checkpoint over it", () => {
+    const cleanup = host.slice(host.indexOf("return()=>{"), host.indexOf("},[seeded,state.error]);"));
+    expect(cleanup).toContain("pushLocal(true");
+    expect(cleanup).toContain("UNSYNCED_KEY");
+    expect(host).toContain("goldlineChapterState.get.setData");
+    const mount = host.slice(host.indexOf("if(state.isLoading)return;"), host.indexOf("setSeeded(true);"));
+    expect(mount.indexOf("keepUnsyncedLocal")).toBeGreaterThan(-1);
+    expect(mount.indexOf("keepUnsyncedLocal")).toBeLessThan(mount.indexOf("adopt(state.data.state"));
   });
 });
