@@ -238,6 +238,25 @@ describe("mission-linked debrief proposal", () => {
     expect(proposal.pilotRequested).toBe(false);
   });
 
+  it("does not treat the operator offering a quote as a customer quote request", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript: "I asked whether they wanted a quote.",
+      extraction: extraction({
+        actions: [
+          {
+            entityClientKey: null,
+            type: "spoke_with_contact",
+            evidence: evidence("I asked whether they wanted a quote."),
+            occurredAtText: null,
+          },
+        ],
+      }),
+    });
+
+    expect(proposal.quoteRequested).toBe(false);
+  });
+
   it("does not address one contact's requested draft to another contact", () => {
     const proposal = deriveMissionLinkedDebriefProposal({
       buildingName: "Los Feliz Towers",
