@@ -175,7 +175,8 @@ export async function loadPersistentOperatorDiagnostics(input: {
 }) {
   const now = input.now ?? new Date();
   const since = new Date(now.getTime() - 30 * 86_400_000);
-  const today = now.toISOString().slice(0, 10);
+  const timeZone = getDashboardTimeZone();
+  const today = businessDateInZone(now, timeZone);
   const db = await getDb();
 
   const tenantEventRows = db
@@ -201,7 +202,7 @@ export async function loadPersistentOperatorDiagnostics(input: {
   const silentIdle = summarizeSilentIdle(eventRows);
   const initiationFunnel = summarizeInitiationFunnelByBusinessWeek(
     eventRows,
-    getDashboardTimeZone()
+    timeZone
   );
 
   const obligations = await loadObligations(
@@ -303,7 +304,7 @@ export async function loadPersistentOperatorDiagnostics(input: {
     silentIdle,
     initiationFunnel: {
       byBusinessWeek: initiationFunnel,
-      timeZone: getDashboardTimeZone(),
+      timeZone,
       basis: "persisted_diagnostic_objective_transition_events" as const,
     },
     oldestDueWork: oldestCandidates[0] ?? null,
