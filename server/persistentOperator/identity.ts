@@ -491,14 +491,28 @@ export async function bindOperatorIdentityAlias(input: {
     throw new Error("Both identities must have active tenant authority");
   }
 
-  const active = await defaultBindingsForAlias(tenantId, aliasOpenId);
+  if (aliasOpenId === canonicalOpenId) {
+    throw new Error("A canonical identity does not need a self-alias binding");
+  }
+
+  const [active, canonicalAsAlias, aliasAsCanonical] = await Promise.all([
+    defaultBindingsForAlias(tenantId, aliasOpenId),
+    defaultBindingsForAlias(tenantId, canonicalOpenId),
+    defaultBindingsForCanonical(tenantId, aliasOpenId),
+  ]);
   if (
     active.some(
       binding =>
         binding.canonicalOpenId !== canonicalOpenId ||
         binding.surface !== input.surface
-    )
+    ) ||
+    canonicalAsAlias.some(
+      binding => binding.canonicalOpenId !== canonicalOpenId
+    ) ||
+    aliasAsCanonical.length > 0
   ) {
+    // Canonical groups are deliberately one level deep. Chained aliases make
+    // ownership order-dependent, so they fail closed rather than being followed.
     throw new CanonicalOperatorIdentityError("identity_ambiguous");
   }
   if (active[0]) return active[0];
