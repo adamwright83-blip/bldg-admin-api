@@ -379,6 +379,12 @@ if (!globalThis.chrome?.runtime?.id) {
   }
 
   async function captureCleanCloudPng(tabId) {
+    const cleanCloudOrigin = `${new URL(CLEANCLOUD).origin}/*`;
+    if (!(await chrome.permissions.contains({ origins: [cleanCloudOrigin] }))) {
+      throw new Error(
+        "CleanCloud site access is required before the dashboard screenshot can be captured."
+      );
+    }
     const tab = await chrome.tabs.get(tabId);
     await chrome.tabs.update(tabId, { active: true });
     if (tab.windowId !== undefined)
