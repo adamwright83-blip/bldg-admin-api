@@ -34,6 +34,8 @@ describe("Goldline action surfaces", () => {
     expect(surface).toContain("THREE THINGS BEFORE YOU GO IN");
     expect(surface).toContain("preVisitIntel.items.map");
     expect(surface).toContain('item.provenance.kind === "trainer_source"');
+    expect(surface).toContain('item.provenance.kind === "foundation"');
+    expect(surface).toContain("FOUNDATION · ARMORY");
     expect(surface).toContain("!context?.visitOutcome");
   });
 });
