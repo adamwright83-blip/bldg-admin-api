@@ -106,7 +106,7 @@ async function main() {
     const cta = page.getByTestId("game-log-signal");
     await cta.waitFor({ state: "visible", timeout: 15000 });
     check("LOG A SIGNAL is reachable from the operating bar", true);
-  
+
     // 2. It must be a real thumb target, and it must not be sitting under
     //    anything. Four separate overlap bugs have shipped on this screen, so
     //    this is measured rather than eyeballed.
@@ -128,7 +128,7 @@ async function main() {
       topmost === "game-log-signal",
       `elementFromPoint → ${topmost}`
     );
-  
+
     // 3. The operating bar itself must still fit its fixed height with the new
     //    item — the previous grid had a hardcoded column count.
     const barBox = await boxOf(page, ".game-utility-bar");
@@ -137,11 +137,11 @@ async function main() {
       Boolean(barBox) && barBox.height <= 72,
       barBox ? `height ${Math.round(barBox.height)}` : "no bar"
     );
-  
+
     await cta.click();
     await sheet.waitFor({ state: "visible", timeout: 8000 });
     check("capture sheet opens", true);
-  
+
     // Nowhere yet. The app has offered a stop but the operator has not walked to
     // it, and an assignment is not a position — attaching a building here would
     // put a wrong place in the permanent record.
@@ -149,7 +149,7 @@ async function main() {
       "no location is claimed before arriving anywhere",
       (await page.getByTestId("log-signal-where").count()) === 0
     );
-  
+
     // 4. Voice is the primary control and is offered first, but a browser with no
     //    speech recognition must not dead-end the operator.
     const micBox = await boxOf(page, '[data-testid="log-signal-mic"]');
@@ -162,17 +162,17 @@ async function main() {
         micBox.height >= 88,
       micBox ? `mic height ${Math.round(micBox.height)}` : "no mic"
     );
-  
+
     // 5. Capture by typing what Adam would actually say at a building.
     await page
       .getByTestId("log-signal-speech")
       .fill("I left 35 door hangers at this building");
     await page.getByTestId("log-signal-structure").click();
-  
+
     const proposed = page.getByTestId("proposed-signal");
     await proposed.first().waitFor({ state: "visible", timeout: 8000 });
     check("speech becomes a proposed structure", (await proposed.count()) >= 1);
-  
+
     // 6. Nothing is authoritative before confirmation.
     const preSave = await page.getByTestId("fixture-signal-count").textContent();
     check(
@@ -180,7 +180,7 @@ async function main() {
       preSave?.trim() === "0",
       `recorded=${preSave?.trim()}`
     );
-  
+
     // 7. The class is visible and correctable — this is the field that decides
     //    whether a day of walking reads as effort or as pipeline.
     const classValue = await page
@@ -202,7 +202,7 @@ async function main() {
       options.length >= 6,
       `${options.length} classes offered`
     );
-  
+
     // 8. Provenance is stated as the operator's own observation.
     const provenance = await page
       .getByTestId("log-signal-provenance")
@@ -213,7 +213,7 @@ async function main() {
         /system/i.test(provenance ?? "") === false,
       provenance?.trim()
     );
-  
+
     // 9. SAVE — a real tap, and the sheet closes.
     const saveBox = await boxOf(page, '[data-testid="log-signal-save"]');
     check(
@@ -224,14 +224,14 @@ async function main() {
     await page.getByTestId("log-signal-save").click();
     await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
     check("sheet closes after saving", (await sheet.count()) === 0);
-  
+
     const postSave = await page.getByTestId("fixture-signal-count").textContent();
     check(
       "the confirmed signal is recorded",
       postSave?.trim() === "1",
       `recorded=${postSave?.trim()}`
     );
-  
+
     // Captured before arriving anywhere: no authoritative linkage, and none
     // invented from the label the model produced.
     const linkageBefore = await page
@@ -242,7 +242,7 @@ async function main() {
       linkageBefore?.trim() === "none",
       `entityId=${linkageBefore?.trim()}`
     );
-  
+
     // 10. Reload. The sheet stores nothing, so anything still here came back from
     //     outside the component.
     await page.reload({ waitUntil: "networkidle" });
@@ -265,7 +265,7 @@ async function main() {
       classesAfter?.trim() === "field_activity",
       classesAfter?.trim()
     );
-  
+
     // 11. Empty speech cannot be submitted at all — a blank row in the ledger is
     //     worse than no row.
     await page.getByTestId("game-log-signal").click();
@@ -274,8 +274,8 @@ async function main() {
       .getByTestId("log-signal-structure")
       .isDisabled();
     check("empty speech cannot be structured", structureDisabled);
-  
-  
+
+
   }
 
   if (PHASE !== "basic") {
@@ -283,9 +283,9 @@ async function main() {
     // 12. ARRIVAL is the one moment the app genuinely knows where he is, so it
     //     is the only moment a location may ride along with an observation.
     await page.getByTestId("log-signal-back").click().catch(() => {});
-    await page.locator('[data-testid="log-signal-sheet"] header button').click();
+    await page.locator('[data-testid="log-signal-sheet"] header button').click().catch(() => {});
     await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
-  
+
     const settle = async (frames = 6) =>
       page.evaluate(
         count =>
@@ -302,7 +302,7 @@ async function main() {
       );
     const snapshot = () =>
       page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
-  
+
     const cdp = await context.newCDPSession(page);
     const pt = (x, y) => ({
       x: Math.round(x),
@@ -313,13 +313,13 @@ async function main() {
     });
     const touch = (type, points) =>
       cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
-  
+
     await page.getByTestId("expedition-enter").click();
     await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10000 });
     const destination = await page.evaluate(
       () => window.__goldlineGame.getExpedition().plan.destination
     );
-  
+
     const stickBox = await boxOf(page, '[data-testid="goldline-joystick"]');
     const stick = {
       x: stickBox.x + stickBox.width / 2,
@@ -340,7 +340,7 @@ async function main() {
     }
     await touch("touchEnd", []);
     await settle(8);
-  
+
     // The climax Shieldbearer guards the cache; clearing it is not the subject of
     // this test, so remove the obstacle the same way the external-order proof
     // does and recover first if it landed a killing blow.
@@ -370,10 +370,10 @@ async function main() {
       await touch("touchEnd", []);
       await settle(8);
     }
-  
+
     const arrived = (await snapshot()).outcome === "arrived";
     check("the cache is reached on foot", arrived);
-  
+
     if (arrived) {
       // The operating bar is hidden for the duration of a run, so the doorstep
       // needs its own way in. Without this the capture surface is unreachable at
@@ -418,7 +418,7 @@ async function main() {
         "capture still starts from the operator's own words",
         provenanceAtStop === 1
       );
-  
+
       // And the linkage that gets stored is namespace-qualified, and says what it
       // really is. This fixture day is a CleanCloud job, so it must claim an
       // external order — never a building or an account, neither of which any
@@ -433,7 +433,7 @@ async function main() {
         .waitFor({ state: "visible", timeout: 8000 });
       await page.getByTestId("log-signal-save").click();
       await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
-  
+
       const linkage = (
         await page.getByTestId("fixture-signal-entity-ids").textContent()
       )?.trim();
@@ -449,27 +449,28 @@ async function main() {
         !/^(building|account):/.test(atStop) && !/^\d+$/.test(atStop),
         atStop
       );
-      check(
-        "the earlier unlinked capture is still unlinked",
-        recorded[0] === "none",
-        recorded.join(",")
-      );
+      if (PHASE === "all") {
+        check(
+          "the earlier unlinked capture is still unlinked",
+          recorded[0] === "none",
+          recorded.join(",")
+        );
+      }
     }
-  
-    
-  
-    const failed = results.filter(r => !r.ok);
-    console.log(
-      `\n${results.length - failed.length}/${results.length} checks passed`
-    );
-    if (failed.length > 0) process.exit(1);
-  }
-  
-  main().catch(error => {
-    console.error(error);
-    process.exit(1);
-  });
-  
+
+
   }
 
   await browser.close();
+
+  const failed = results.filter(r => !r.ok);
+  console.log(
+    `\n${results.length - failed.length}/${results.length} checks passed`
+  );
+  if (failed.length > 0) process.exit(1);
+}
+
+main().catch(error => {
+  console.error(error);
+  process.exit(1);
+});
