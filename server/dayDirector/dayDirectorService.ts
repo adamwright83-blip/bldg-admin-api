@@ -402,7 +402,7 @@ export async function completeDayDirectorCommitment(input: {
         .where(
           and(
             eq(dayDirectorCommitments.tenantId, input.tenantId),
-            eq(dayDirectorCommitments.actorId, input.actorId),
+            inArray(dayDirectorCommitments.actorId, actorIds),
             eq(dayDirectorCommitments.id, input.commitmentId)
           )
         );
