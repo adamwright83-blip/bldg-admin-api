@@ -29,6 +29,16 @@ describe("Goldline action surfaces", () => {
   });
 
 
+  it("shows every proposed authoritative debrief field before confirmation", () => {
+    expect(surface).toContain('data-testid="mission-debrief-authoritative-fields"');
+    expect(surface).toContain("DECISION MAKER");
+    expect(surface).toContain("COLLATERAL DELIVERED");
+    expect(surface).toContain("QUOTE REQUESTED");
+    expect(surface).toContain("PILOT REQUESTED");
+    expect(surface).toContain("FOLLOW-UP REQUESTED");
+    expect(surface).toContain("record a correction instead");
+  });
+
   it("shows Claire's three mission-grounded equips before the visit resolves", () => {
     expect(surface).toContain('data-testid="claire-tower-intel"');
     expect(surface).toContain("THREE THINGS BEFORE YOU GO IN");
