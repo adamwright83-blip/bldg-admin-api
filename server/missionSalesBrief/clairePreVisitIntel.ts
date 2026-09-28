@@ -213,6 +213,8 @@ const RISKY_ASSERTIONS = [
   /\bsince your\b/i,
   /\bbecause your\b/i,
   /\byour current\b/i,
+  /\byour (?:building|property|team|residents?|provider|vendor|budget|contract|staff|manager|owner|amenit(?:y|ies))\b/i,
+  /\bthis (?:building|property) (?:has|uses|needs|wants|gets|pays|spends)\b/i,
   /\byou already\b/i,
   /\bthey already\b/i,
   /\byou (?:said|told|asked|requested)\b/i,
@@ -231,6 +233,14 @@ function hasUnsupportedCompiledFact(input: {
   for (const pattern of RISKY_ASSERTIONS) {
     const match = claims.match(pattern)?.[0]?.toLowerCase();
     if (match && !corpus.includes(match)) return true;
+  }
+
+  // A newly introduced number is especially likely to be a fabricated unit
+  // count, price, timing claim, or other building fact. Source-grounded
+  // numbers are allowed; new ones fail closed to the unadapted source move.
+  const claimNumbers = claims.match(/\b\d[\d,.]*\b/g) ?? [];
+  for (const number of claimNumbers) {
+    if (!corpus.includes(number.toLowerCase())) return true;
   }
   return false;
 }
