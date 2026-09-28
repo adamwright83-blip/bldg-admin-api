@@ -1007,23 +1007,47 @@ export const cleancloudBrowserSyncRouter = router({
           )
         )
         .limit(1);
-      const reconciliationId = existing?.id ?? randomUUID();
+      let reconciliationId = existing?.id ?? randomUUID();
       if (!existing) {
-        await db.insert(economicReconciliations).values({
-          id: reconciliationId,
-          tenantId: ctx.tenantId,
-          storeId: binding.storeId,
-          rangeFrom: input.rangeFrom,
-          rangeTo: input.rangeTo,
-          status: draft.status,
-          dashboardWitnessId: draft.dashboardWitnessId,
-          dashboardRevenueCents: draft.dashboardRevenueCents,
-          revenueReportCents: draft.revenueReportCents,
-          bookCents: draft.bookCents,
-          discrepancyCents: draft.discrepancyCents,
-          evidenceIdsJson: draft.evidenceIds,
-          evidenceHash,
-        });
+        try {
+          await db.insert(economicReconciliations).values({
+            id: reconciliationId,
+            tenantId: ctx.tenantId,
+            storeId: binding.storeId,
+            rangeFrom: input.rangeFrom,
+            rangeTo: input.rangeTo,
+            status: draft.status,
+            dashboardWitnessId: draft.dashboardWitnessId,
+            dashboardRevenueCents: draft.dashboardRevenueCents,
+            revenueReportCents: draft.revenueReportCents,
+            bookCents: draft.bookCents,
+            discrepancyCents: draft.discrepancyCents,
+            evidenceIdsJson: draft.evidenceIds,
+            evidenceHash,
+          });
+        } catch (error) {
+          if (!isDuplicateKey(error)) throw error;
+          const [winner] = await db
+            .select()
+            .from(economicReconciliations)
+            .where(
+              and(
+                eq(economicReconciliations.tenantId, ctx.tenantId),
+                eq(economicReconciliations.storeId, binding.storeId),
+                eq(economicReconciliations.rangeFrom, input.rangeFrom),
+                eq(economicReconciliations.rangeTo, input.rangeTo),
+                eq(economicReconciliations.evidenceHash, evidenceHash)
+              )
+            )
+            .limit(1);
+          if (!winner) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Reconciliation race did not resolve to stored evidence.",
+            });
+          }
+          reconciliationId = winner.id;
+        }
       }
       const prior: PriorReconciliation[] = priorRows
         .filter(row => row.id !== reconciliationId)
