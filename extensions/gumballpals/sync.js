@@ -463,13 +463,15 @@ if (!globalThis.chrome?.runtime?.id) {
   }
 
   async function confirmSync() {
-    if (!staged) return;
-    // Keep this first: runtime permission requests must be initiated by the
-    // operator's Confirm gesture. A refusal never blocks the actual imports.
-    const dashboardCaptureAllowed = await prepareDashboardCapturePermission();
-    busy(true);
+    if (!staged || $("confirm").disabled) return;
+    // Disable synchronously so a double-click cannot start a second import while
+    // the browser permission prompt is open. This does not consume the user gesture.
     $("confirm").disabled = true;
+    busy(true);
     try {
+      // Runtime permission requests must stay inside the operator's Confirm gesture.
+      // A refusal never blocks the actual imports.
+      const dashboardCaptureAllowed = await prepareDashboardCapturePermission();
       await withLock(async () => {
         const { run: pending } = await chrome.storage.local.get("run");
         if (
@@ -668,7 +670,9 @@ if (!globalThis.chrome?.runtime?.id) {
     staged = null;
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
-    await chrome.permissions.remove({ origins: HOSTS });
+    await chrome.permissions.remove({
+      origins: [...HOSTS, ...DASHBOARD_CAPTURE_ORIGINS],
+    });
     location.reload();
   });
   const { run: saved } = await chrome.storage.local.get("run");
