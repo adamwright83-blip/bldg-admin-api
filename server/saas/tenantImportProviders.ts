@@ -16,12 +16,11 @@ class CleanCloudCsvImportProvider implements OrderCustomerImportProvider {
   readonly manifest = assertTenantSourceManifest({
     providerKey: this.key,
     version: "1",
-    entityCapabilities: ["customers", "orders", "payments"],
+    entityCapabilities: ["customers", "orders"],
     connectionModes: ["csv"],
     canonicalIdentityKeys: {
       customers: ["cleancloud_customer_id", "email", "phone", "legacy_name_fallback"],
       orders: ["cleancloud_order_id"],
-      payments: ["cleancloud_order_id", "payment_date"],
     },
     coverage: {
       bases: ["economic_event", "orders_created"],
