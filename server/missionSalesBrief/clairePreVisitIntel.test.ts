@@ -295,6 +295,50 @@ describe("Claire pre-visit three", () => {
     expect(result?.items[0].line).not.toMatch(/gym|spa/i);
   });
 
+  it("rejects an adaptation that reverses a grounded negated fact", async () => {
+    mocks.ensureBrief.mockResolvedValue({
+      ...brief,
+      knownFacts: [
+        {
+          text: "The property does not have a laundry contract.",
+          sourceReference: "fixture",
+        },
+      ],
+    });
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "The property has a laundry contract.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who is the right person to speak with about this?",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+  });
+
   it("does not promote an Armory source question into a building fact", async () => {
     mocks.listWeapons.mockResolvedValue({
       archetype: "GATEKEEPER",
