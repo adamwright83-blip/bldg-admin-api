@@ -101,7 +101,9 @@ export default function LanternCityV7({
 
   useEffect(() => {
     if (!host.current) return;
-    const w = createLanternWorld(host.current, {
+    let w: LanternWorld;
+    try {
+      w = createLanternWorld(host.current, {
       onReady: () => setReady(true),
       onStats: setStats,
       onMission: setMission,
@@ -111,6 +113,12 @@ export default function LanternCityV7({
         setFailed(true);
       },
     });
+    } catch (e) {
+      // no WebGL (old browser, locked-down device): say so instead of a blank screen
+      console.warn("Lantern City needs WebGL", e);
+      setFailed(true);
+      return;
+    }
     world.current = w;
     if (import.meta.env.DEV) (window as unknown as { __lanternV7?: LanternWorld }).__lanternV7 = w;
     return () => {
@@ -254,8 +262,8 @@ export default function LanternCityV7({
         <div><i className={styles.kFog} /> Uncharted. Win a first customer to break it open.</div>
         <small>Map data © OpenStreetMap contributors · Neighbourhoods: Mapping L.A.</small>
       </aside>
-      {!ready && !failed ? <div className={styles.loading}>Lifting the fog…</div> : null}
-      {failed ? <div className={styles.loading}>Lantern City could not load its map. Reload to try again.</div> : null}
+      {!ready && !failed ? <div className={styles.loading} data-lantern-state="loading">Lifting the fog…</div> : null}
+      {failed ? <div className={styles.loading} data-lantern-state="failed">Lantern City could not load its map. Reload to try again.</div> : null}
     </div>
   );
 }
