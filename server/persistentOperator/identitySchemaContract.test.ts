@@ -17,6 +17,8 @@ describe("Persistent operator PR1 schema contract", () => {
       expect(source).toContain("persistent_operator_identity_bindings");
       expect(source).toContain("canonicalOpenId");
       expect(source).toContain("aliasOpenId");
+      expect(source).toContain("activeAliasKey");
+      expect(source).toContain("uq_persistent_operator_identity_active_alias");
       expect(source).toContain("idx_persistent_operator_identity_alias");
       expect(source).toContain("idx_persistent_operator_identity_canonical");
       expect(source).toContain("persistent_operator_diagnostic_events");
