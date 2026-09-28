@@ -17,6 +17,7 @@ const NEVER_WORK = [
   "Planning the week with you isn't something I want added.",
   "I said Dana hasn't replied; I didn't ask you to add anything.",
   "No, I meant I want to talk through it with you.",
+  "By the way, you're supposed to guide me through each day of the week's missions on Monday.",
 ];
 
 describe("A. a parser finding task-like words is not action intent", () => {
@@ -30,6 +31,16 @@ describe("A. a parser finding task-like words is not action intent", () => {
     const { result } = await h.say(utterance, model("Noted."));
     expect(result.kind).not.toBe("briefing_proposed");
     expect(result.speak).not.toMatch(/on the Day Line\?|put (?:both|all of that|that) on/i);
+  });
+
+
+
+  it("treats a correction about Claire's Monday responsibility as meta-instruction, never Day Line work", () => {
+    const turn = interpretTurn(
+      "You're supposed to be guiding me through each day of the week's missions on Monday."
+    );
+    expect(turn.aboutClaireCapability).toBe(true);
+    expect(turn.mayProposeWork).toBe(false);
   });
 
   it("a genuine directive may activate the action path", () => {

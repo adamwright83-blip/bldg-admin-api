@@ -27,7 +27,14 @@ import {
 } from "../../../shared/weeklyMissionReadiness";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
-import { clearWeeklySession, normalizeWeeklySession, saveWeeklySession, type WeeklyPlanningSession } from "./session";
+import {
+  clearWeeklySession,
+  loadWeeklySurface,
+  normalizeWeeklySession,
+  saveWeeklySession,
+  saveWeeklySurface,
+  type WeeklyPlanningSession,
+} from "./session";
 
 export type WeeklyAdvanceDeps = {
   /**
@@ -59,6 +66,21 @@ export async function advanceWeeklySession(
     return finish(session, "CANCEL", "The weekday week is already over. I won't invent another one.", input.dossier);
   }
   if (utterance && isWeeklyCancel(utterance)) {
+    const nowIso = new Date().toISOString();
+    const surface = await loadWeeklySurface({
+      tenantId: session.tenantId,
+      operatorId: session.operatorId,
+      weekStart: session.weekStart,
+    });
+    await saveWeeklySurface({
+      tenantId: session.tenantId,
+      operatorId: session.operatorId,
+      weekStart: session.weekStart,
+      receipt: {
+        surfacedAt: surface.surfacedAt ?? nowIso,
+        declinedAt: nowIso,
+      },
+    });
     await clearWeeklySession(session);
     return {
       act: "CANCEL",

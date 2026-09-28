@@ -175,6 +175,7 @@ const ACTION_REFUSAL = new RegExp(
 const ABOUT_CLAIRE_CAPABILITY = new RegExp(
   [
     String.raw`\byou\s+(?:already\s+)?(?:know|knew|have|had|can|could|would|should|do)\b`,
+    String.raw`\byou(?:'re| are| were)\s+supposed\s+to\b`,
     String.raw`\bof\s+course\s+you\b`,
     String.raw`\byou\s+(?:would|will|can)\s+be\s+able\s+to\b`,
     String.raw`\bif\s+i\s+asked\s+you\b`,
