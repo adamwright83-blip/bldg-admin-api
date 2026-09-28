@@ -1,8 +1,9 @@
-import { and, desc, eq, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import { tenantLearningGovernance } from "../../drizzle/schema";
-import type {
-  TenantLearningGovernanceRecord,
-  TenantLearningGovernanceScope,
+import {
+  tenantGovernanceAllowsAggregation,
+  type TenantLearningGovernanceRecord,
+  type TenantLearningGovernanceScope,
 } from "../../shared/tenantLearningGovernance";
 import { getDb } from "../db";
 
@@ -15,6 +16,9 @@ export async function loadActiveTenantLearningGovernance(input: {
   const db = await getDb();
   if (!db) return null;
   const at = input.at ?? new Date();
+
+  // Select the latest effective governance version first. A revoked newest
+  // version must fail closed; it must never expose an older still-unrevoked row.
   const [row] = await db
     .select()
     .from(tenantLearningGovernance)
@@ -22,14 +26,14 @@ export async function loadActiveTenantLearningGovernance(input: {
       and(
         eq(tenantLearningGovernance.tenantId, input.tenantId),
         eq(tenantLearningGovernance.scope, input.scope),
-        lte(tenantLearningGovernance.effectiveAt, at),
-        isNull(tenantLearningGovernance.revokedAt)
+        lte(tenantLearningGovernance.effectiveAt, at)
       )
     )
     .orderBy(desc(tenantLearningGovernance.version))
     .limit(1);
   if (!row) return null;
-  return {
+
+  const record: TenantLearningGovernanceRecord = {
     id: row.id,
     tenantId: row.tenantId,
     scope: row.scope as TenantLearningGovernanceScope,
@@ -41,4 +45,6 @@ export async function loadActiveTenantLearningGovernance(input: {
     effectiveAt: row.effectiveAt.toISOString(),
     revokedAt: row.revokedAt?.toISOString() ?? null,
   };
+
+  return tenantGovernanceAllowsAggregation(record, at) ? record : null;
 }
