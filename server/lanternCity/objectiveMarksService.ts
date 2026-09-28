@@ -89,7 +89,12 @@ const defaultDeps: ObjectiveMarksDeps = {
 };
 
 export async function loadLanternObjectiveMarks(
-  input: { tenantId: string; operatorId: string; viewerOpenId: string },
+  input: {
+    tenantId: string;
+    operatorId: string;
+    viewerOpenId?: string;
+    viewerOpenIds?: readonly string[];
+  },
   deps: ObjectiveMarksDeps = defaultDeps
 ): Promise<LanternObjectiveMarks> {
   const tenantId = input.tenantId.trim();
@@ -98,6 +103,7 @@ export async function loadLanternObjectiveMarks(
       tenantId: "",
       operatorId: input.operatorId,
       viewerOpenId: input.viewerOpenId,
+      viewerOpenIds: input.viewerOpenIds,
       dayLine: null,
       runs: [],
     });
@@ -131,6 +137,7 @@ export async function loadLanternObjectiveMarks(
     tenantId,
     operatorId: input.operatorId,
     viewerOpenId: input.viewerOpenId,
+    viewerOpenIds: input.viewerOpenIds,
     dayLine,
     runs: inputs,
   });
