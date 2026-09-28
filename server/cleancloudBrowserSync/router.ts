@@ -13,9 +13,16 @@ import {
   cleancloudPaidOrders,
   cleancloudImportBatches,
 } from "../../drizzle/schema";
-import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts, dashboardWitnesses, dashboardWitnessScreenshots } from "./schema";
+import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts, dashboardWitnesses, dashboardWitnessScreenshots, economicReconciliations, verifiedEconomicEvents } from "./schema";
 import { validatePayload, summarizeOrders } from "./validation";
 import { witnessWrite } from "./dashboardWitness";
+import {
+  reconcileControlTotals,
+  reconciliationEvidenceHash,
+  verifiedEventsFromReconciliation,
+  type PriorReconciliation,
+  type WitnessControl,
+} from "./reconcileEconomics";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -124,6 +131,45 @@ function sameWitnessTotals(
     row.comparisonOrders === witness.comparisonOrders &&
     row.newCustomers === witness.newCustomers
   );
+}
+
+function receiptCovers(
+  receipts: { receiptJson: unknown }[],
+  from: string,
+  to: string,
+  revenue: boolean
+) {
+  return receipts.some(row => {
+    const json =
+      row.receiptJson && typeof row.receiptJson === "object"
+        ? (row.receiptJson as Record<string, unknown>)
+        : null;
+    if (!json || json.status === "cancelled") return false;
+    if (typeof json.from !== "string" || typeof json.to !== "string") return false;
+    if (json.from > from || json.to < to) return false;
+    return revenue ? json.reportType === "orders_revenue" : json.reportType !== "orders_revenue";
+  });
+}
+
+function publicEconomicEvent(row: typeof verifiedEconomicEvents.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    eventType: row.eventType,
+    periodFrom: row.periodFrom,
+    periodTo: row.periodTo,
+    comparisonFrom: row.comparisonFrom,
+    comparisonTo: row.comparisonTo,
+    currentRevenueCents: row.currentRevenueCents,
+    comparisonRevenueCents: row.comparisonRevenueCents,
+    deltaCents: row.deltaCents,
+    deltaPercentHundredths: row.deltaPercentHundredths,
+    evidenceIds: Array.isArray(row.evidenceIdsJson)
+      ? row.evidenceIdsJson.filter((id): id is string => typeof id === "string")
+      : [],
+    idempotencyKey: row.idempotencyKey,
+    verifiedAt: row.verifiedAt.toISOString(),
+  };
 }
 
 function operatorLineFromReceipt(receipt: Record<string, unknown>) {
@@ -862,4 +908,270 @@ export const cleancloudBrowserSyncRouter = router({
         .limit(1);
       return { witness: row ? publicDashboardWitness(row) : null };
     }),
+  reconcilePeriod: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        rangeFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        rangeTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.rangeFrom > input.rangeTo) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The requested date range is not valid." });
+      }
+      const db = await requireDb();
+      const [binding] = await db
+        .select()
+        .from(browserSyncBindings)
+        .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
+      if (!binding) throw new TRPCError({ code: "NOT_FOUND", message: "No source binding." });
+      const [witnessRow] = await db
+        .select()
+        .from(dashboardWitnesses)
+        .where(
+          and(
+            eq(dashboardWitnesses.tenantId, ctx.tenantId),
+            eq(dashboardWitnesses.storeId, binding.storeId),
+            eq(dashboardWitnesses.rangeFrom, input.rangeFrom),
+            eq(dashboardWitnesses.rangeTo, input.rangeTo)
+          )
+        )
+        .orderBy(desc(dashboardWitnesses.observedAt))
+        .limit(1);
+      const orders = await db
+        .select({
+          cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
+          cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+          sourceReportType: cleancloudPaidOrders.sourceReportType,
+          paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+          paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+          paid: cleancloudPaidOrders.paid,
+          totalCents: cleancloudPaidOrders.totalCents,
+        })
+        .from(cleancloudPaidOrders)
+        .where(
+          and(
+            eq(cleancloudPaidOrders.tenantId, ctx.tenantId),
+            eq(cleancloudPaidOrders.paid, true)
+          )
+        );
+      const receipts = await db
+        .select({ receiptJson: browserSyncReceipts.receiptJson })
+        .from(browserSyncReceipts)
+        .where(eq(browserSyncReceipts.tenantId, ctx.tenantId));
+      const priorRows = await db
+        .select()
+        .from(economicReconciliations)
+        .where(
+          and(
+            eq(economicReconciliations.tenantId, ctx.tenantId),
+            eq(economicReconciliations.storeId, binding.storeId)
+          )
+        );
+      const witness: WitnessControl | null = witnessRow
+        ? {
+            id: witnessRow.id,
+            rangeFrom: witnessRow.rangeFrom,
+            rangeTo: witnessRow.rangeTo,
+            revenueCents: witnessRow.revenueCents,
+            comparisonFrom: witnessRow.comparisonFrom,
+            comparisonTo: witnessRow.comparisonTo,
+            comparisonRevenueCents: witnessRow.comparisonRevenueCents,
+          }
+        : null;
+      const draft = reconcileControlTotals({
+        periodFrom: input.rangeFrom,
+        periodTo: input.rangeTo,
+        witness,
+        rows: orders.map(order => ({
+          ...order,
+          customerName: null,
+          customerPhone: null,
+          customerEmail: null,
+          storeLabel: binding.storeLabel,
+        })),
+        revenueReportCovered: receiptCovers(receipts, input.rangeFrom, input.rangeTo, true),
+        orderCreatedCoverage: receiptCovers(receipts, input.rangeFrom, input.rangeTo, false),
+      });
+      const evidenceHash = reconciliationEvidenceHash(draft);
+      const [existing] = await db
+        .select()
+        .from(economicReconciliations)
+        .where(
+          and(
+            eq(economicReconciliations.tenantId, ctx.tenantId),
+            eq(economicReconciliations.storeId, binding.storeId),
+            eq(economicReconciliations.rangeFrom, input.rangeFrom),
+            eq(economicReconciliations.rangeTo, input.rangeTo),
+            eq(economicReconciliations.evidenceHash, evidenceHash)
+          )
+        )
+        .limit(1);
+      let reconciliationId = existing?.id ?? randomUUID();
+      if (!existing) {
+        try {
+          await db.insert(economicReconciliations).values({
+            id: reconciliationId,
+            tenantId: ctx.tenantId,
+            storeId: binding.storeId,
+            rangeFrom: input.rangeFrom,
+            rangeTo: input.rangeTo,
+            status: draft.status,
+            dashboardWitnessId: draft.dashboardWitnessId,
+            dashboardRevenueCents: draft.dashboardRevenueCents,
+            revenueReportCents: draft.revenueReportCents,
+            bookCents: draft.bookCents,
+            discrepancyCents: draft.discrepancyCents,
+            evidenceIdsJson: draft.evidenceIds,
+            evidenceHash,
+          });
+        } catch (error) {
+          if (!isDuplicateKey(error)) throw error;
+          const [winner] = await db
+            .select()
+            .from(economicReconciliations)
+            .where(
+              and(
+                eq(economicReconciliations.tenantId, ctx.tenantId),
+                eq(economicReconciliations.storeId, binding.storeId),
+                eq(economicReconciliations.rangeFrom, input.rangeFrom),
+                eq(economicReconciliations.rangeTo, input.rangeTo),
+                eq(economicReconciliations.evidenceHash, evidenceHash)
+              )
+            )
+            .limit(1);
+          if (!winner) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Reconciliation race did not resolve to stored evidence.",
+            });
+          }
+          reconciliationId = winner.id;
+        }
+      }
+      const prior: PriorReconciliation[] = priorRows
+        .filter(row => row.id !== reconciliationId)
+        .map(row => ({
+          id: row.id,
+          rangeFrom: row.rangeFrom,
+          rangeTo: row.rangeTo,
+          status: row.status,
+          dashboardRevenueCents: row.dashboardRevenueCents,
+          evidenceIds: Array.isArray(row.evidenceIdsJson)
+            ? row.evidenceIdsJson.filter((id): id is string => typeof id === "string")
+            : [],
+        }));
+      const events = verifiedEventsFromReconciliation({
+        tenantId: ctx.tenantId,
+        current: draft,
+        witness,
+        prior,
+      });
+      const verifiedAt = new Date();
+      const storedEvents = [];
+      for (const event of events) {
+        const [already] = await db
+          .select()
+          .from(verifiedEconomicEvents)
+          .where(
+            and(
+              eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+              eq(verifiedEconomicEvents.idempotencyKey, event.idempotencyKey)
+            )
+          )
+          .limit(1);
+        if (already) {
+          storedEvents.push(publicEconomicEvent(already));
+          continue;
+        }
+        const id = randomUUID();
+        try {
+          await db.insert(verifiedEconomicEvents).values({
+            id,
+            tenantId: ctx.tenantId,
+            eventType: event.eventType,
+            periodFrom: event.periodFrom,
+            periodTo: event.periodTo,
+            comparisonFrom: event.comparisonFrom,
+            comparisonTo: event.comparisonTo,
+            currentRevenueCents: event.currentRevenueCents,
+            comparisonRevenueCents: event.comparisonRevenueCents,
+            deltaCents: event.deltaCents,
+            deltaPercentHundredths: event.deltaPercentHundredths,
+            evidenceIdsJson: event.evidenceIds,
+            idempotencyKey: event.idempotencyKey,
+            verifiedAt,
+          });
+        } catch (error) {
+          if (!isDuplicateKey(error)) throw error;
+          const [winner] = await db
+            .select()
+            .from(verifiedEconomicEvents)
+            .where(
+              and(
+                eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+                eq(verifiedEconomicEvents.idempotencyKey, event.idempotencyKey)
+              )
+            )
+            .limit(1);
+          if (!winner) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Verified-event race did not resolve to a stored event.",
+            });
+          }
+          storedEvents.push(publicEconomicEvent(winner));
+          continue;
+        }
+        const [inserted] = await db
+          .select()
+          .from(verifiedEconomicEvents)
+          .where(
+            and(
+              eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+              eq(verifiedEconomicEvents.idempotencyKey, event.idempotencyKey)
+            )
+          )
+          .limit(1);
+        if (!inserted) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Verified event was not readable after insert.",
+          });
+        }
+        storedEvents.push(publicEconomicEvent(inserted));
+      }
+      return {
+        reconciliation: {
+          id: reconciliationId,
+          tenantId: ctx.tenantId,
+          storeId: binding.storeId,
+          rangeFrom: input.rangeFrom,
+          rangeTo: input.rangeTo,
+          status: draft.status,
+          discrepancyCents: draft.discrepancyCents,
+          dashboardRevenueCents: draft.dashboardRevenueCents,
+          revenueReportCents: draft.revenueReportCents,
+          bookCents: draft.bookCents,
+          evidenceIds: draft.evidenceIds,
+          coverage: draft.coverage,
+        },
+        events: storedEvents,
+      };
+    }),
+  latestVerifiedGain: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const db = await requireDb();
+    const [row] = await db
+      .select()
+      .from(verifiedEconomicEvents)
+      .where(
+        and(
+          eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+          eq(verifiedEconomicEvents.eventType, "economic.mom_revenue_gain_verified")
+        )
+      )
+      .orderBy(desc(verifiedEconomicEvents.verifiedAt))
+      .limit(1);
+    return { event: row ? publicEconomicEvent(row) : null };
+  }),
 });

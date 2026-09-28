@@ -53,7 +53,8 @@ export type SourceBindingState =
 
 export type SourceCoverageBasis =
   | "economic_event"
-  | "orders_created";
+  | "orders_created"
+  | "dashboard_control_total";
 
 export type SourceCoverageRange = {
   /** Inclusive business-local dates. */
@@ -61,7 +62,11 @@ export type SourceCoverageRange = {
   to: string;
   completedAt: Date;
   basis: SourceCoverageBasis;
-  provenance: "browser_sync_receipt" | "reconciled_import" | "test_fixture";
+  provenance:
+    | "browser_sync_receipt"
+    | "reconciled_import"
+    | "dashboard_witness"
+    | "test_fixture";
 };
 
 export type SourceAttempt = {
@@ -196,6 +201,21 @@ export function coverageRangesFromReceiptRows(rows: readonly Row[]): SourceCover
     });
   }
   return ranges;
+}
+
+/** A Metrics Overview witness covers only the control-total dates it directly proved. */
+export function dashboardControlCoverageRange(witness: {
+  rangeFrom: string;
+  rangeTo: string;
+  observedAt: Date;
+}): SourceCoverageRange {
+  return {
+    from: witness.rangeFrom,
+    to: witness.rangeTo,
+    completedAt: witness.observedAt,
+    basis: "dashboard_control_total",
+    provenance: "dashboard_witness",
+  };
 }
 
 /** `providerKey` values in `dayforge_saas_import_connections` that map to a ledger source. */
