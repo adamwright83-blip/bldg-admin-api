@@ -4,22 +4,34 @@
  * not be one. Lantern City projects business records; it never writes them.
  */
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
+import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
 import { loadLanternObjectiveMarks } from "./objectiveMarksService";
 
-export function lanternObjectiveMarksScope(ctx: {
+export function lanternObjectiveMarksScope(input: {
   tenantId: string;
-  user: { id?: unknown; openId: string };
+  dayDirectorActorId: string;
+  campaignOperatorUserId: string;
 }) {
   return {
-    tenantId: ctx.tenantId,
-    operatorId: dayDirectorActorId(ctx),
-    viewerOpenId: ctx.user.openId,
+    tenantId: input.tenantId,
+    operatorId: input.dayDirectorActorId,
+    viewerOpenId: input.campaignOperatorUserId,
   };
 }
 
 export const lanternCityRouter = router({
-  objectiveMarks: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
-    loadLanternObjectiveMarks(lanternObjectiveMarksScope(ctx))
-  ),
+  objectiveMarks: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+    const identity = await requireCanonicalOperatorIdentityForUser({
+      tenantId: ctx.tenantId,
+      user: ctx.user,
+      subsystem: "lantern_city",
+    });
+    return loadLanternObjectiveMarks(
+      lanternObjectiveMarksScope({
+        tenantId: identity.tenantId,
+        dayDirectorActorId: identity.dayDirectorActorId,
+        campaignOperatorUserId: identity.campaignOperatorUserId,
+      })
+    );
+  }),
 });
