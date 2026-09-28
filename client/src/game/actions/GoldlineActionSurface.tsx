@@ -516,6 +516,41 @@ function VisitSurface(
                   {missionDebrief.proposal.outcome.replaceAll("_", " ").toUpperCase()}
                 </strong>
                 <p>{missionDebrief.proposal.summary}</p>
+                <dl
+                  className="tower-debrief__authoritative-fields"
+                  data-testid="mission-debrief-authoritative-fields"
+                >
+                  <div>
+                    <dt>DECISION MAKER</dt>
+                    <dd>{missionDebrief.proposal.decisionMakerStatus.replaceAll("_", " ").toUpperCase()}</dd>
+                  </div>
+                  <div>
+                    <dt>COLLATERAL DELIVERED</dt>
+                    <dd>{missionDebrief.proposal.collateralDelivered ? "YES" : "NO"}</dd>
+                  </div>
+                  <div>
+                    <dt>QUOTE REQUESTED</dt>
+                    <dd>{missionDebrief.proposal.quoteRequested ? "YES" : "NO"}</dd>
+                  </div>
+                  <div>
+                    <dt>PILOT REQUESTED</dt>
+                    <dd>{missionDebrief.proposal.pilotRequested ? "YES" : "NO"}</dd>
+                  </div>
+                  <div>
+                    <dt>FOLLOW-UP REQUESTED</dt>
+                    <dd>{missionDebrief.proposal.followUpRequested ? "YES" : "NO"}</dd>
+                  </div>
+                  {missionDebrief.proposal.reason ? (
+                    <div>
+                      <dt>LOSS REASON</dt>
+                      <dd>{missionDebrief.proposal.reason.replaceAll("_", " ").toUpperCase()}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <p className="tower-debrief__truth-warning">
+                  These are the fields Claire will write if you confirm. If any
+                  field is wrong, record a correction instead.
+                </p>
               </div>
               {!showAdditionalQuestion && missionDebrief.proposal.question ? (
                 <label className="tower-debrief__question">
