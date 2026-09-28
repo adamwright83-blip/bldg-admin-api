@@ -81,7 +81,10 @@ export type LanternToday = {
   title: string;
   campaignRunId: string;
   fictionPackId: string | null;
-  /** True only when the signed-in operator can actually open this run in Driver today. */
+  /**
+   * True when the current viewer owns this supported Campaign Run by openId.
+   * A later Driver navigation may still use a different signed-in session.
+   */
   driverOpenable: boolean;
   targets: LanternTodayTarget[];
 };
@@ -218,6 +221,7 @@ function slotMarks(input: LanternRunInput): SlotMark[] {
 export function projectLanternObjectiveMarks(input: {
   tenantId: string;
   operatorId?: string | null;
+  viewerOpenId?: string | null;
   dayLine: CurrentDayLine | null;
   runs: readonly LanternRunInput[];
 }): LanternObjectiveMarks {
@@ -339,8 +343,8 @@ export function projectLanternObjectiveMarks(input: {
       campaignRunId: entry.run.campaignRunId,
       fictionPackId: entry.run.fictionPackId,
       driverOpenable:
-        Boolean(input.operatorId) &&
-        entry.run.operatorUserId === input.operatorId &&
+        Boolean(input.viewerOpenId) &&
+        entry.run.operatorUserId === input.viewerOpenId &&
         entry.run.fictionPackId === "bio_containment",
       targets: todayTargets,
     },
