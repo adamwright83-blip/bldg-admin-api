@@ -49,6 +49,7 @@ export type OperatorIdentityBinding = {
   tenantId: string;
   canonicalOpenId: string;
   aliasOpenId: string;
+  activeAliasKey?: string | null;
   surface: string;
   active: boolean;
   createdByOpenId: string | null;
@@ -563,13 +564,28 @@ export async function bindOperatorIdentityAlias(input: {
     tenantId,
     canonicalOpenId,
     aliasOpenId,
+    activeAliasKey: `${tenantId}:${aliasOpenId}`,
     surface: input.surface,
     active: true,
     createdByOpenId: input.createdByOpenId,
     revokedAt: null,
   };
-  await db.insert(persistentOperatorIdentityBindings).values(row);
-  return row;
+  try {
+    await db.insert(persistentOperatorIdentityBindings).values(row);
+    return row;
+  } catch {
+    // The unique activeAliasKey is the concurrency authority. If another
+    // identical request won the race, return that durable binding; if it
+    // points elsewhere, fail closed as an ambiguity instead of creating two.
+    const raced = await defaultBindingsForAlias(tenantId, aliasOpenId);
+    const exact = raced.find(
+      binding =>
+        binding.canonicalOpenId === canonicalOpenId &&
+        binding.surface === input.surface
+    );
+    if (exact && raced.length === 1) return exact;
+    throw new CanonicalOperatorIdentityError("identity_ambiguous");
+  }
 }
 
 export async function revokeOperatorIdentityAlias(input: {
@@ -580,7 +596,11 @@ export async function revokeOperatorIdentityAlias(input: {
   if (!db) throw new Error("Database unavailable");
   const result = await db
     .update(persistentOperatorIdentityBindings)
-    .set({ active: false, revokedAt: new Date() })
+    .set({
+      active: false,
+      activeAliasKey: null,
+      revokedAt: new Date(),
+    })
     .where(
       and(
         eq(persistentOperatorIdentityBindings.tenantId, input.tenantId),
