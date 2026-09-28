@@ -125,11 +125,22 @@ export const campaignRunRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const identity = await campaignIdentity(ctx, "campaign_runs.start");
-      return startCampaignRun({
+      const run = await startCampaignRun({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
         ...input,
       });
+      if (run) {
+        await recordPersistentOperatorDiagnosticEvent({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          subsystem: "campaign_runs.start",
+          eventKind: "objective_started",
+          objectiveId: run.campaignId,
+        }).catch(() => undefined);
+      }
+      return run;
     }),
 
   projection: legacyDayforgeTenantMemberProcedure
@@ -168,11 +179,28 @@ export const campaignRunRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const identity = await campaignIdentity(ctx, "campaign_runs.placement");
-      return recordPlacement({
+      const result = await recordPlacement({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
         ...input,
       });
+      if (result) {
+        const projection = await getRunProjection({
+          tenantId: identity.tenantId,
+          campaignRunId: input.campaignRunId,
+        });
+        if (projection?.progress.complete) {
+          await recordPersistentOperatorDiagnosticEvent({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            operatorUserId: identity.canonicalOpenId,
+            subsystem: "campaign_runs.placement",
+            eventKind: "objective_verified",
+            objectiveId: projection.run.campaignId,
+          }).catch(() => undefined);
+        }
+      }
+      return result;
     }),
 
   replaceTarget: legacyDayforgeTenantMemberProcedure
