@@ -1,18 +1,18 @@
-import { listAllAcceptedTeachings } from "../salesIntel/salesIntelTeachingStore";
+import { listAcceptedTeachingsWithSourceIntegrity } from "../salesIntel/salesIntelTeachingStore";
 import type { SalesIntelTeaching } from "../../shared/salesIntelTeaching";
 import type { MissionSalesBriefIntelReference } from "../../shared/missionSalesBrief";
 
 /**
  * Eligibility gate (Slice 4): "Is this intelligence allowed to influence
  * this mission brief?" Fails closed — anything not explicitly accepted and
- * active is excluded. `listAllAcceptedTeachings` already filters on
+ * active is excluded. `listAcceptedTeachingsWithSourceIntegrity` already filters on
  * reviewState === "accepted" && active === true; this function is a second,
  * explicit line of defense so a change to that store function can't
  * silently widen what reaches a mission brief, and it is the single call
  * site the rest of this domain must go through.
  */
 export async function listEligibleSalesIntel(): Promise<SalesIntelTeaching[]> {
-  const teachings = await listAllAcceptedTeachings();
+  const teachings = await listAcceptedTeachingsWithSourceIntegrity();
   return teachings.filter(
     teaching => teaching.reviewState === "accepted" && teaching.active
   );
