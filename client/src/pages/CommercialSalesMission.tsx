@@ -25,6 +25,7 @@ import {
   FIELD_OUTCOME_REASONS,
   type FieldOutcomeReason,
 } from "@shared/commercialMissionField";
+import type { ClairePreVisitIntel } from "@shared/missionSalesBrief";
 import "./commercial-sales-mission.css";
 
 function money(cents: number | null): string {
@@ -81,6 +82,59 @@ function ActionButton({
   );
 }
 
+function ClaireTowerIntelPanel({
+  intel,
+  loading,
+}: {
+  intel: ClairePreVisitIntel | null | undefined;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <section className="csm-claire-intel is-loading" role="status">
+        <Loader2 />
+        <span>CLAIRE IS LOADING THE TOWER DOSSIER…</span>
+      </section>
+    );
+  }
+  if (!intel) return null;
+  return (
+    <section
+      className="csm-claire-intel"
+      data-testid="csm-claire-previsit-intel"
+      aria-label="Claire pre-visit sales intelligence"
+    >
+      <div className="csm-claire-intel__head">
+        <span className="csm-claire-intel__sigil" aria-hidden="true">
+          <i />
+        </span>
+        <div>
+          <small>CLAIRE // TOWER BOSS INTEL</small>
+          <h2>THREE THINGS BEFORE YOU GO IN</h2>
+          <p>{intel.accountName} · mission-specific loadout</p>
+        </div>
+      </div>
+      <div className="csm-claire-intel__slots">
+        {intel.items.map((item, index) => (
+          <article key={item.slot} data-slot={item.slot.toLowerCase()}>
+            <b>0{index + 1}</b>
+            <div>
+              <small>{item.slot}</small>
+              <blockquote>“{item.line}”</blockquote>
+              <p>{item.why}</p>
+              <em>
+                {item.provenance.kind === "trainer_source"
+                  ? `TRAINER SOURCE · ${item.provenance.creatorName ?? "REVIEWED INTEL"}`
+                  : "MISSION BRIEF · CLAIRE"}
+              </em>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function CommercialSalesMission() {
   const [, params] = useRoute("/driver/sales-mission/:missionId");
   const missionId = Number(params?.missionId);
@@ -100,6 +154,20 @@ export default function CommercialSalesMission() {
         isAuthenticated &&
         validMissionId &&
         Boolean(stateQuery.data?.mission),
+      retry: false,
+    }
+  );
+  const preVisitIntelQuery = trpc.system.missionSalesBrief.preVisitIntel.useQuery(
+    { missionId: validMissionId ? missionId : 1 },
+    {
+      enabled:
+        isAuthenticated &&
+        validMissionId &&
+        Boolean(stateQuery.data?.mission) &&
+        !["visit_completed", "follow_up", "won", "lost"].includes(
+          stateQuery.data?.mission.status ?? ""
+        ),
+      staleTime: 5 * 60_000,
       retry: false,
     }
   );
@@ -616,6 +684,10 @@ export default function CommercialSalesMission() {
                   <small>EST. ANNUAL VALUE</small>
                 </strong>
               </article>
+              <ClaireTowerIntelPanel
+                intel={preVisitIntelQuery.data}
+                loading={preVisitIntelQuery.isLoading}
+              />
               {diamond ? (
                 <article className="mb-5 overflow-hidden rounded-3xl border border-fuchsia-300/40 bg-gradient-to-br from-violet-950 via-slate-950 to-fuchsia-950 p-5 text-white shadow-[0_18px_50px_rgba(168,85,247,.28)]">
                   <div className="flex items-center gap-3">
@@ -830,6 +902,10 @@ export default function CommercialSalesMission() {
                 title="Walk in ready."
                 body="Every check is persisted. Required items must be complete before departure."
               />
+              <ClaireTowerIntelPanel
+                intel={preVisitIntelQuery.data}
+                loading={preVisitIntelQuery.isLoading}
+              />
               <div className="csm-checklist">
                 {state.checklist.map(item => (
                   <button
@@ -915,6 +991,10 @@ export default function CommercialSalesMission() {
                 eyebrow="EN ROUTE"
                 title="Finish the mission in the real world."
                 body="Navigation opens outside DayForge. Return here to check in."
+              />
+              <ClaireTowerIntelPanel
+                intel={preVisitIntelQuery.data}
+                loading={preVisitIntelQuery.isLoading}
               />
               <div className="csm-route-card">
                 <MapPin />
