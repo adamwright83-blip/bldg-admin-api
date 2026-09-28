@@ -294,6 +294,7 @@ export async function goldlineRequest(operation, input) {
       receipt: "GET",
       resolve: "POST",
       reportFailure: "POST",
+      recordWitness: "POST",
     };
     if (!Object.hasOwn(methods, operation))
       throw new Error("Unknown operation.");
@@ -312,7 +313,9 @@ export async function goldlineRequest(operation, input) {
         headers:
           method === "POST" ? { "Content-Type": "application/json" } : {},
         body: method === "POST" ? JSON.stringify({ json: input }) : undefined,
-        signal: AbortSignal.timeout(operation === "import" ? 120000 : 15000),
+        signal: AbortSignal.timeout(
+          operation === "import" || operation === "recordWitness" ? 120000 : 15000
+        ),
       }
     );
     if (!response.ok)
@@ -328,6 +331,254 @@ export async function goldlineRequest(operation, input) {
   } catch (error) {
     return { ok: false, error: error.message };
   }
+}
+
+// Metrics → Overview. Navigation uses the same observed menu as the sales
+// export. Totals are taken from visible text beside an exact label. Date
+// controls that this extension has not observed are not clicked.
+export async function readMetricsOverview(range) {
+  let stage = "opening reporting";
+  try {
+    if (location.origin !== "https://cleancloudapp.com" || location.pathname !== "/store")
+      throw new Error("Open the signed-in gumball store.");
+    const pause = () => new Promise(r => setTimeout(r, 100));
+    const visible = e =>
+      e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
+    const wait = async predicate => {
+      for (let i = 0; i < 100; i++) {
+        const value = predicate();
+        if (value) return value;
+        await pause();
+      }
+      throw new Error(
+        `Overview capture stopped while ${stage}. The expected control did not become available.`
+      );
+    };
+    const exact = (root, selector, text) =>
+      [...root.querySelectorAll(selector)].filter(
+        e => visible(e) && e.textContent.trim() === text
+      );
+    const storeLabel = document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim();
+    if (!storeLabel || !document.title.endsWith("CleanCloud"))
+      throw new Error("Sign into gumball first.");
+    if (!visible(document.querySelector("#metricsContainer"))) {
+      (await wait(() => document.querySelector("#accountShow"))).click();
+      (
+        await wait(
+          () =>
+            visible(document.querySelector("#slide6")) &&
+            document.querySelector("#slide6")
+        )
+      ).click();
+    }
+    const overviewRoot = await wait(
+      () =>
+        visible(document.querySelector("#metricsContainer")) &&
+        document.querySelector("#metricsContainer")
+    );
+    const directText = el =>
+      [...el.childNodes]
+        .filter(node => node.nodeType === 3)
+        .map(node => node.textContent.trim())
+        .filter(Boolean)
+        .join(" ");
+    const hasOverviewCore = root =>
+      ["Sales", "Revenue", "Orders"].every(label =>
+        [...root.querySelectorAll("*")].some(
+          el => visible(el) && directText(el) === label
+        )
+      );
+    stage = "opening Overview";
+    const overview = exact(overviewRoot, "a, button", "Overview");
+    if (overview.length > 1) throw new Error("Ambiguous Overview control. Capture stopped.");
+    if (overview.length === 1) overview[0].click();
+    // The click can replace #metricsContainer asynchronously. Do not accept the
+    // still-visible previous panel; wait until the Overview's core labels exist.
+    const metrics = await wait(() => {
+      const root = document.querySelector("#metricsContainer");
+      return visible(root) && hasOverviewCore(root) ? root : null;
+    });
+    const labels = [
+      "Sales",
+      "Revenue",
+      "Orders",
+      "New Customers",
+      "Comparison Sales",
+      "Comparison Revenue",
+      "Comparison Orders",
+    ];
+    const fields = [];
+    const proofNodes = [];
+    for (const label of labels) {
+      const nodes = [...metrics.querySelectorAll("*")].filter(
+        el => visible(el) && directText(el) === label
+      );
+      if (nodes.length > 1) throw new Error(`${label} appeared more than once.`);
+      if (nodes.length === 0) continue;
+      const sibling = nodes[0].nextElementSibling;
+      const value = sibling && visible(sibling) ? sibling.textContent.trim().replace(/\s+/g, " ") : "";
+      if (!value || value.length > 40 || labels.includes(value))
+        throw new Error(`${label} had no unambiguous value.`);
+      fields.push({ label, valueText: value });
+      if (["Sales", "Revenue", "Orders"].includes(label)) {
+        proofNodes.push(nodes[0], sibling);
+      }
+    }
+    for (const label of ["Sales", "Revenue", "Orders"]) {
+      if (!fields.some(field => field.label === label))
+        throw new Error(`${label} was not on the page.`);
+    }
+    const months =
+      "January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec";
+    const dateRe = new RegExp(
+      `\\d{4}-\\d{2}-\\d{2}|\\b(?:${months})\\s+\\d{1,2},\\s*\\d{4}|\\b\\d{1,2}/\\d{1,2}/\\d{4}`,
+      "gi"
+    );
+    const mentions = (text, iso) => {
+      const [year, month, day] = iso.split("-").map(Number);
+      const names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+      ];
+      const name = names[month - 1];
+      return [
+        iso,
+        `${month}/${day}/${year}`,
+        `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`,
+        `${name} ${day}, ${year}`,
+        `${name.slice(0, 3)} ${day}, ${year}`,
+      ].some(form => text.includes(form));
+    };
+    const candidates = [...metrics.querySelectorAll("*")]
+      .filter(el => {
+        if (!visible(el)) return false;
+        const text = el.textContent.trim().replace(/\s+/g, " ");
+        if (!text || text.length > 180) return false;
+        const childHasDate = [...el.children].some(child => {
+          dateRe.lastIndex = 0;
+          return dateRe.test(child.textContent || "");
+        });
+        if (childHasDate) return false;
+        dateRe.lastIndex = 0;
+        return [...text.matchAll(dateRe)].length === 2;
+      })
+      .map(el => ({ el, text: el.textContent.trim().replace(/\s+/g, " ") }));
+    const uniqueByText = new Map();
+    for (const candidate of candidates) {
+      if (!uniqueByText.has(candidate.text)) uniqueByText.set(candidate.text, candidate);
+    }
+    const unique = [...uniqueByText.values()];
+    const primary = unique.filter(candidate =>
+      mentions(candidate.text, range.from) && mentions(candidate.text, range.to)
+    );
+    if (primary.length !== 1)
+      throw new Error(
+        "The overview is not on the requested dates, and the date control is not one this extension has observed. Nothing was saved."
+      );
+
+    // captureVisibleTab captures only the current viewport. Make the exact date
+    // control and three required metric/value pairs the screenshot proof block,
+    // then refuse the witness if any part of that block is still off-screen.
+    proofNodes.unshift(primary[0].el);
+    primary[0].el.scrollIntoView({ block: "start", inline: "nearest" });
+    await pause();
+    const viewportHeight =
+      window.innerHeight || document.documentElement?.clientHeight || 0;
+    const viewportWidth =
+      window.innerWidth || document.documentElement?.clientWidth || 0;
+    if (!viewportHeight || !viewportWidth)
+      throw new Error("The dashboard viewport could not be verified. Nothing was saved.");
+    const offscreen = proofNodes.some(node => {
+      const rect = node.getBoundingClientRect();
+      return (
+        rect.top < 0 ||
+        rect.left < 0 ||
+        rect.bottom > viewportHeight ||
+        rect.right > viewportWidth
+      );
+    });
+    if (offscreen)
+      throw new Error(
+        "The proven dashboard totals do not fit in the visible screenshot. Nothing was saved."
+      );
+
+    // Window bounds are not enough: a sticky/fixed overlay can cover the proof,
+    // and an overflow-clipping ancestor can cut it off while its own rect remains
+    // inside the viewport. Reject unless every required node is both unclipped and
+    // actually hit-test visible at its center and inset corners.
+    const clips = value => /^(?:auto|scroll|hidden|clip)$/i.test(value || "");
+    const fullyUnclippedByAncestors = node => {
+      const rect = node.getBoundingClientRect();
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const parentRect = parent.getBoundingClientRect?.();
+        if (!parentRect) continue;
+        const overflowX = style.overflowX || style.overflow || "visible";
+        const overflowY = style.overflowY || style.overflow || "visible";
+        if (clips(overflowX) && (rect.left < parentRect.left || rect.right > parentRect.right))
+          return false;
+        if (clips(overflowY) && (rect.top < parentRect.top || rect.bottom > parentRect.bottom))
+          return false;
+      }
+      return true;
+    };
+    const notOccluded = node => {
+      const hitTest =
+        typeof document.elementsFromPoint === "function"
+          ? (x, y) => document.elementsFromPoint(x, y)
+          : typeof document.elementFromPoint === "function"
+            ? (x, y) => [document.elementFromPoint(x, y)].filter(Boolean)
+            : null;
+      if (!hitTest) return true;
+      const rect = node.getBoundingClientRect();
+      const insetX = Math.min(2, Math.max(0, (rect.right - rect.left) / 4));
+      const insetY = Math.min(2, Math.max(0, (rect.bottom - rect.top) / 4));
+      const points = [
+        [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2],
+        [rect.left + insetX, rect.top + insetY],
+        [rect.right - insetX, rect.top + insetY],
+        [rect.left + insetX, rect.bottom - insetY],
+        [rect.right - insetX, rect.bottom - insetY],
+      ];
+      return points.every(([x, y]) => {
+        const hits = hitTest(x, y);
+        const top = hits[0];
+        return Boolean(top && (top === node || node.contains?.(top)));
+      });
+    };
+    if (proofNodes.some(node => !fullyUnclippedByAncestors(node) || !notOccluded(node)))
+      throw new Error(
+        "The proven dashboard totals are clipped or covered in the visible screenshot. Nothing was saved."
+      );
+    // Do not infer a comparison period from an unrelated second date string.
+    // Until the observed Overview DOM gives us a direct relationship between
+    // comparison totals and their date control, comparison truth is withheld.
+    const primaryFields = fields.filter(field => !field.label.startsWith("Comparison "));
+    return {
+      ok: true,
+      value: {
+        storeLabel,
+        rangeText: primary[0].text,
+        comparisonText: null,
+        fields: primaryFields,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+export function assertCleanCloudScreenshotTarget(tab) {
+  let url;
+  try {
+    url = new URL(tab?.url || "");
+  } catch {
+    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+  }
+  if (url.origin !== "https://cleancloudapp.com" || url.pathname !== "/store")
+    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+  if (!tab.active)
+    throw new Error("Screenshot refused. The store tab is not the visible tab.");
 }
 
 export const sites = { GOLDLINE, CLEANCLOUD, MAX_BYTES };
