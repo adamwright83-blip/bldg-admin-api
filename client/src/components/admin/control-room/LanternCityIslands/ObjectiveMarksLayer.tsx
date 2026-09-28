@@ -65,9 +65,14 @@ export default function ObjectiveMarksLayer({
     return () => cancelAnimationFrame(raf);
   }, [board, ready, markers]);
 
-  // A marker that disappears from the records closes its panel.
+  // Keep an open receipt bound to the current server projection. If its
+  // evidence changes on refetch, replace the stale marker object in-place; if
+  // it disappears, close the panel.
   useEffect(() => {
-    if (open && !markers.some(m => m.key === open.key)) setOpen(null);
+    if (!open) return;
+    const current = markers.find(m => m.key === open.key) ?? null;
+    if (!current) setOpen(null);
+    else if (current !== open) setOpen(current);
   }, [markers, open]);
 
   const today = marks.data?.today ?? null;
@@ -114,9 +119,11 @@ export default function ObjectiveMarksLayer({
             {today.targets.length} target{today.targets.length === 1 ? "" : "s"} ·{" "}
             {today.targets.filter(t => t.level === "completed").length} complete
           </span>
-          <button type="button" onClick={() => onNavigate?.(driverLinkForRun(today.campaignRunId))}>
-            Open in Driver
-          </button>
+          {today.driverOpenable ? (
+            <button type="button" onClick={() => onNavigate?.(driverLinkForRun(today.campaignRunId))}>
+              Open in Driver
+            </button>
+          ) : null}
         </div>
       ) : statusLine ? (
         <div className={styles.todayBar} data-lantern-today="empty">
@@ -158,7 +165,7 @@ export default function ObjectiveMarksLayer({
                   ))}
                 </ul>
               ) : null}
-              {open.today ? (
+              {open.today && today?.driverOpenable ? (
                 <button type="button" onClick={() => onNavigate?.(driverLinkForRun(open.campaignRunId))}>
                   Open in Driver
                 </button>
