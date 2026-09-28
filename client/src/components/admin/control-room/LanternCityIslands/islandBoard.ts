@@ -36,7 +36,9 @@ export type IslandEvents = {
   onIsland?: (info: IslandInfo | null) => void;
   onStats?: (s: { islands: number; open: number; lanterns: number }) => void;
   /** the pointer is over a lit home: every customer there, and where to show the card (page px) */
-  onHover?: (h: { keys: string[]; x: number; y: number } | null) => void;
+  onHover?: (h: { keys: string[]; x: number; y: number; tower?: string } | null) => void;
+  /** one of our towers was clicked: open its floors */
+  onTower?: (id: string) => void;
 };
 
 const DEFAULT_BASE = "/assets/goldline/lantern-city";
@@ -360,13 +362,23 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   }
 
   // ----------------------------------------------------------------- landmarks: our two towers, the observatory
-  const LANDMARKS: { name: string; lat: number; lon: number; kind: "tower" | "observatory" | "round"; h?: number }[] = [
-    { name: "OPUS LA", lat: 34.0618, lon: -118.3011, kind: "tower", h: 78 },
-    { name: "Century Park East", lat: 34.0591, lon: -118.4147, kind: "tower", h: 96 },
+  const LANDMARKS: { id?: string; name: string; lat: number; lon: number; kind: "tower" | "observatory" | "round"; h?: number }[] = [
+    { id: "opus_la", name: "OPUS LA", lat: 34.0618, lon: -118.3011, kind: "tower", h: 78 },
+    { id: "century_park_east", name: "Century Park East", lat: 34.0591, lon: -118.4147, kind: "tower", h: 96 },
     { name: "Observatory", lat: 34.1184, lon: -118.3004, kind: "observatory" },
     { name: "Round tower", lat: 34.1032, lon: -118.3267, kind: "round" },
   ];
   const extraMeshes: THREE.BufferGeometry[] = [];
+  const ourTowers: { id: string; planId: number; x: number; z: number; h: number }[] = [];
+  /** the tower of ours under the pointer (within 40px of its shaft on screen) */
+  function towerAt(cx: number, cy: number) {
+    const r = renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3();
+    for (const t of ourTowers) for (const f of [0.3, 0.6, 0.9]) {
+      v.set(t.x, H(t.x, t.z) + t.h * f, t.z).project(camera);
+      if (v.z < 1 && Math.hypot(r.left + ((v.x + 1) / 2) * r.width - cx, r.top + ((1 - v.y) / 2) * r.height - cy) < 40) return t;
+    }
+    return null;
+  }
   function addLandmarks() {
     // landmark towers are ordinary buildings (customers live in them); only the kit pieces sit at 900000+
     let id = 800000;
@@ -380,6 +392,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       isl.plans = isl.plans.filter(p => Math.hypot(p.x - x / S, p.z - z / S) > (L.kind === "tower" ? 30 : 26));
       isl.trees = isl.trees.filter(t => Math.hypot(t.x - x / S, t.z - z / S) > 22);
       if (L.kind === "tower") {
+        ourTowers.push({ id: L.id!, planId: id, x, z, h: L.h! * VS * S });
         isl.plans.push({ i: id, cx: id, cz: 0, h: L.h!, u: 0, type: "office", hood: isl.name, x: x / S, z: z / S, fx: 0, fz: 1, W: 30, D: 34, fill: 1 });
         id++;
       } else extraMeshes.push(L.kind === "observatory" ? observatory(x / S, z / S) : roundTower(x / S, z / S));
@@ -1489,6 +1502,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   const onDown = (e: PointerEvent) => { downAt = [e.clientX, e.clientY]; };
   const onUp = (e: PointerEvent) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || !ready) return;
+    const tw = towerAt(e.clientX, e.clientY);
+    if (tw) { events.onTower?.(tw.id); return; }
     const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     // march the ray until it meets an island top
@@ -1517,10 +1532,11 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       if (v.z < 1 && d < bd) { bd = d; best = p; }
     }
     const keys = best ? placed.filter(q => q.plan && q.plan === best!.plan).map(q => q.key) : [];
-    const sig = keys.join("|");
-    if (sig !== hoverSig || keys.length) events.onHover?.(keys.length ? { keys, x: e.clientX, y: e.clientY } : null);
+    const tw = towerAt(e.clientX, e.clientY);
+    const sig = keys.join("|") + (tw ? tw.id : "");
+    if (sig !== hoverSig || keys.length || tw) events.onHover?.(keys.length || tw ? { keys, x: e.clientX, y: e.clientY, tower: tw?.id } : null);
     hoverSig = sig;
-    renderer.domElement.style.cursor = keys.length ? "pointer" : "";
+    renderer.domElement.style.cursor = keys.length || tw ? "pointer" : "";
   };
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
