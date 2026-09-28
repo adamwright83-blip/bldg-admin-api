@@ -241,6 +241,18 @@ export class GooglePlacesTerritoryProvider
           includedRegionCodes: ["us"],
           regionCode: "US",
           languageCode: "en",
+          // This mission builder currently serves the Los Angeles operating area.
+          // Autocomplete runs server-side, so without an explicit bias Google would
+          // rank by the Railway server IP rather than the operator's service area.
+          locationBias: {
+            circle: {
+              center: {
+                latitude: 34.0522,
+                longitude: -118.2437,
+              },
+              radius: 50_000,
+            },
+          },
         }),
         signal: AbortSignal.timeout(8_000),
       }
