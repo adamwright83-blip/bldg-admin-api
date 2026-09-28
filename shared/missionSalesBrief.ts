@@ -180,10 +180,12 @@ export type ClairePreVisitIntelItem = {
   /** Why Claire selected this move for this mission. */
   why: string;
   provenance: {
-    kind: "trainer_source" | "mission_brief";
+    kind: "trainer_source" | "foundation" | "mission_brief";
     teachingId: string | null;
+    frameworkId: string | null;
     creatorName: string | null;
     teachingTitle: string | null;
+    sourceReference: string | null;
   };
 };
 
