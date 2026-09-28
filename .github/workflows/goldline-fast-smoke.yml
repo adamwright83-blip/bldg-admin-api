@@ -127,6 +127,7 @@ jobs:
           pnpm vitest run
           server/missionSalesBrief/clairePreVisitIntel.test.ts
           client/src/game/actions/actionSurface.test.ts
+          client/src/pages/commercialSalesMissionClaireIntel.test.ts
 
       - name: Prove Rook CONTACT authority boundary
         run: >-
