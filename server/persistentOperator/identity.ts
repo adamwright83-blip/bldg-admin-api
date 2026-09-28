@@ -65,6 +65,7 @@ export type CanonicalOperatorIdentity = {
   sourceUserId: number;
   sourceRole: PlatformRole;
   dayDirectorActorId: string;
+  dayDirectorActorIds: string[];
   weeklyOperatorId: string;
   campaignOperatorUserId: string;
   communicationOperatorUserId: string;
@@ -415,6 +416,12 @@ async function resolveCanonicalOperatorIdentityUnchecked(
     });
   }
 
+  const dayDirectorActorIds = [...new Set([
+    String(canonicalUser.id),
+    String(sourceUser.id),
+    ...aliases.map(alias => String(alias.userId)),
+  ])];
+
   return {
     ok: true,
     identity: {
@@ -426,6 +433,7 @@ async function resolveCanonicalOperatorIdentityUnchecked(
       sourceUserId: sourceUser.id,
       sourceRole: sourceUser.role,
       dayDirectorActorId: String(canonicalUser.id),
+      dayDirectorActorIds,
       weeklyOperatorId: canonicalOpenId,
       campaignOperatorUserId: canonicalOpenId,
       communicationOperatorUserId: canonicalOpenId,
