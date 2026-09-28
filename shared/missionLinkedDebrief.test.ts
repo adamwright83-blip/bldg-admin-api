@@ -102,6 +102,63 @@ describe("mission-linked debrief proposal", () => {
     expect(Array.isArray(proposal.question)).toBe(false);
   });
 
+  it("preserves an explicit return request even when the manager was unavailable", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript: "The manager was unavailable, and the front desk asked me to return Tuesday.",
+      extraction: extraction({
+        outcomes: [
+          {
+            entityClientKey: null,
+            type: "manager_unavailable",
+            evidence: evidence("The manager was unavailable"),
+            explicitlyReported: true,
+          },
+          {
+            entityClientKey: null,
+            type: "asked_to_return",
+            evidence: evidence("asked me to return Tuesday"),
+            explicitlyReported: true,
+          },
+        ],
+      }),
+    });
+
+    expect(proposal.outcome).toBe("follow_up");
+    expect(proposal.decisionMakerStatus).toBe("unavailable");
+    expect(proposal.followUpRequested).toBe(true);
+    expect(proposal.question?.kind).toBe("follow_up_at");
+  });
+
+  it("collects return timing and a missing collateral email one question at a time", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript: "The front desk asked me to return Tuesday and email the packet.",
+      extraction: extraction({
+        outcomes: [
+          {
+            entityClientKey: null,
+            type: "asked_to_return",
+            evidence: evidence("asked me to return Tuesday"),
+            explicitlyReported: true,
+          },
+        ],
+        followUps: [
+          {
+            entityClientKey: null,
+            requestedAction: evidence("email the packet"),
+            explicitDateText: "Tuesday",
+          },
+        ],
+      }),
+    });
+
+    expect(proposal.outcome).toBe("follow_up");
+    expect(proposal.question?.kind).toBe("follow_up_at");
+    expect(proposal.additionalQuestion?.kind).toBe("email");
+    expect(proposal.emailDraft).toMatchObject({ to: null, sendAuthorized: false });
+  });
+
   it("recognizes explicitly reported wins and losses without upgrading an undecided visit", () => {
     const won = deriveMissionLinkedDebriefProposal({
       buildingName: "Tower A",
