@@ -18,6 +18,8 @@ import {
   clickExport,
   fetchReport,
   goldlineRequest,
+  readMetricsOverview,
+  assertCleanCloudScreenshotTarget,
 } from "./browser.js";
 import { nextDailyRun } from "./schedule.js";
 let scheduled = false;
@@ -290,6 +292,64 @@ if (!globalThis.chrome?.runtime?.id) {
     void startSync();
   });
 
+  async function recordDashboardWitness(context, range) {
+    let tab = null;
+    try {
+      tab = await openSite(`${CLEANCLOUD}/store`);
+      const reading = await runInTab(tab, readMetricsOverview, [range]);
+      const shot = await captureCleanCloudPng(tab);
+      await request("recordWitness", {
+        tenantId: context.tenantId,
+        actorId: context.actorId,
+        observedStoreLabel: reading.storeLabel,
+        rangeFrom: range.from,
+        rangeTo: range.to,
+        rangeText: reading.rangeText,
+        comparisonText: reading.comparisonText,
+        fields: reading.fields,
+        screenshotBase64: shot.base64,
+        screenshotSha256: shot.screenshotSha256,
+      });
+      return null;
+    } catch (error) {
+      return String(error?.message || error || "Dashboard witness was not saved.");
+    } finally {
+      if (tab) await chrome.tabs.remove(tab).catch(() => {});
+    }
+  }
+
+  async function captureCleanCloudPng(tabId) {
+    const tab = await chrome.tabs.get(tabId);
+    await chrome.tabs.update(tabId, { active: true });
+    if (tab.windowId !== undefined)
+      await chrome.windows.update(tab.windowId, { focused: true });
+    const visible = await chrome.tabs.get(tabId);
+    assertCleanCloudScreenshotTarget(visible);
+    let dataUrl;
+    try {
+      dataUrl = await chrome.tabs.captureVisibleTab(visible.windowId, { format: "png" });
+    } catch {
+      throw new Error(
+        "Screenshot was not granted for the CleanCloud store. Totals were not saved."
+      );
+    }
+    const after = await chrome.tabs.get(tabId);
+    assertCleanCloudScreenshotTarget(after);
+    if (after.url !== visible.url)
+      throw new Error("The store tab changed before the screenshot. Totals were not saved.");
+    const match = /^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl || "");
+    if (!match) throw new Error("Screenshot was not a PNG. Totals were not saved.");
+    const base64 = match[1].replace(/\s/g, "");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const screenshotSha256 = [...new Uint8Array(digest)]
+      .map(byte => byte.toString(16).padStart(2, "0"))
+      .join("");
+    return { base64, screenshotSha256 };
+  }
+
   async function confirmSync() {
     if (!staged) return;
     busy(true);
@@ -349,11 +409,26 @@ if (!globalThis.chrome?.runtime?.id) {
             storeLabel: staged.storeLabel,
           },
         });
+        const witnessContext = {
+          tenantId: staged.tenantId,
+          actorId: staged.actorId,
+        };
+        const witnessRange = { from: staged.from, to: staged.to };
         staged = null;
         await save("completed", { receipt });
         showReceipt(receipt);
         $("approval").hidden = true;
-        status("Import confirmed. Your source records are saved in Goldline.");
+        let witnessNote = null;
+        try {
+          witnessNote = await recordDashboardWitness(witnessContext, witnessRange);
+        } catch (error) {
+          witnessNote = error?.message || "Dashboard witness was not saved.";
+        }
+        status(
+          witnessNote
+            ? `Import confirmed. Dashboard witness was not saved: ${witnessNote}`
+            : "Import confirmed. Your source records are saved in Goldline."
+        );
         if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
