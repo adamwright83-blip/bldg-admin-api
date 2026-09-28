@@ -74,7 +74,9 @@ jobs:
           server/persistentOperator/identity.test.ts
           server/persistentOperator/observability.test.ts
           server/persistentOperator/identitySchemaContract.test.ts
+          server/campaignRuns/canonicalOwnership.test.ts
           server/lanternCity/lanternCityRouter.test.ts
+          shared/lanternCityObjectiveMarks.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run
