@@ -98,6 +98,7 @@ export type GoldlineActionServices = {
     journalEntryId: string;
     requestId: string;
     answer?: string;
+    additionalAnswer?: string;
   }) => Promise<MissionLinkedDebriefState>;
   loadFollowUp: (missionId: number) => Promise<AuthoritativeFollowUp | null>;
   completeFollowUp: (input: {
