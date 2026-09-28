@@ -14,6 +14,7 @@ export const currentDayLineRouter = router({
     const line = await readCurrentDayLine({
       tenantId: identity.tenantId,
       operatorId: identity.dayDirectorActorId,
+      operatorIds: identity.dayDirectorActorIds,
     });
 
     const reason =
