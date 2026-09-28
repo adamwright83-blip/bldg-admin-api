@@ -74,3 +74,75 @@ CREATE TABLE IF NOT EXISTS cleancloud_dashboard_witness_screenshots (
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_cc_dashboard_witness_screenshot_tenant (tenantId)
 );
+CREATE TABLE IF NOT EXISTS cleancloud_economic_reconciliations (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  storeId VARCHAR(32) NOT NULL,
+  rangeFrom VARCHAR(10) NOT NULL,
+  rangeTo VARCHAR(10) NOT NULL,
+  status ENUM('reconciled', 'mismatch', 'insufficient_evidence') NOT NULL,
+  dashboardWitnessId VARCHAR(36) NULL,
+  dashboardRevenueCents INT NULL,
+  revenueReportCents INT NULL,
+  bookCents INT NULL,
+  discrepancyCents INT NULL,
+  evidenceIdsJson JSON NOT NULL,
+  evidenceHash CHAR(64) NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cc_economic_reconciliation_evidence (tenantId, storeId, rangeFrom, rangeTo, evidenceHash),
+  KEY idx_cc_economic_reconciliation_period (tenantId, rangeFrom, rangeTo, createdAt)
+);
+CREATE TABLE IF NOT EXISTS cleancloud_verified_economic_events (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  eventType VARCHAR(64) NOT NULL,
+  periodFrom VARCHAR(10) NOT NULL,
+  periodTo VARCHAR(10) NOT NULL,
+  comparisonFrom VARCHAR(10) NULL,
+  comparisonTo VARCHAR(10) NULL,
+  currentRevenueCents INT NOT NULL,
+  comparisonRevenueCents INT NULL,
+  deltaCents INT NOT NULL,
+  deltaPercentHundredths INT NULL,
+  evidenceIdsJson JSON NOT NULL,
+  idempotencyKey CHAR(64) NOT NULL,
+  verifiedAt TIMESTAMP NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cc_verified_economic_event (tenantId, idempotencyKey)
+);
+CREATE TABLE IF NOT EXISTS cleancloud_economic_reconciliations (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  storeId VARCHAR(32) NOT NULL,
+  rangeFrom VARCHAR(10) NOT NULL,
+  rangeTo VARCHAR(10) NOT NULL,
+  status ENUM('reconciled', 'mismatch', 'insufficient_evidence') NOT NULL,
+  dashboardWitnessId VARCHAR(36) NULL,
+  dashboardRevenueCents INT NULL,
+  revenueReportCents INT NULL,
+  bookCents INT NULL,
+  discrepancyCents INT NULL,
+  evidenceIdsJson JSON NOT NULL,
+  evidenceHash CHAR(64) NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cc_economic_reconciliation_evidence (tenantId, storeId, rangeFrom, rangeTo, evidenceHash),
+  KEY idx_cc_economic_reconciliation_period (tenantId, rangeFrom, rangeTo, createdAt)
+);
+CREATE TABLE IF NOT EXISTS cleancloud_verified_economic_events (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  eventType VARCHAR(64) NOT NULL,
+  periodFrom VARCHAR(10) NOT NULL,
+  periodTo VARCHAR(10) NOT NULL,
+  comparisonFrom VARCHAR(10) NULL,
+  comparisonTo VARCHAR(10) NULL,
+  currentRevenueCents INT NOT NULL,
+  comparisonRevenueCents INT NULL,
+  deltaCents INT NOT NULL,
+  deltaPercentHundredths INT NULL,
+  evidenceIdsJson JSON NOT NULL,
+  idempotencyKey CHAR(64) NOT NULL,
+  verifiedAt TIMESTAMP NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cc_verified_economic_event (tenantId, idempotencyKey)
+);
