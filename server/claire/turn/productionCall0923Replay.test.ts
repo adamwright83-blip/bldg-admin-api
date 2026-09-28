@@ -463,3 +463,90 @@ describe("prior-claim truth still holds when the turn is actually a challenge", 
     expect(mixed.speak).toMatch(/Done\./);
   });
 });
+
+
+describe("Monday morning voice handoff into Weekly Mission Readiness", () => {
+  it("starts or resumes weekly planning immediately after today's reconciliation is saved", async () => {
+    const monday = new Date("2026-09-28T17:00:00Z");
+    const store: Store = { rows: [] };
+    const markReconciliation = vi.fn(async () => ({
+      status: "complete" as const,
+      askedAt: null,
+      completedAt: monday.toISOString(),
+    }));
+    const weeklyPicture = vi.fn(async () => ({ status: "UNPLANNED" } as never));
+    const beginWeekly = vi.fn(async () => ({
+      speech: "We still need to lock the week. Let's set the remaining days now.",
+      resumed: false,
+      card: {} as never,
+    }));
+    const state: ClaireTurnState = {
+      sessionKind: "morning_reconciliation",
+      pendingBriefing: {
+        createdAt: monday.getTime(),
+        parsed: {
+          items: [
+            {
+              kind: "new_work",
+              title: "Morning admin",
+              quote: "Morning admin",
+              businessDate: "2026-09-28",
+              timing: { kind: "none" },
+              quantity: null,
+              people: [],
+              place: null,
+              needs: null,
+              existing: null,
+            },
+          ],
+          context: [],
+          questions: [],
+          unparsed: [],
+          source: "deterministic",
+        },
+      },
+    };
+
+    const result = await runClaireTurn(
+      {
+        ...base,
+        businessDate: undefined,
+        utterance: "yes",
+        state,
+        allowFragmentWait: false,
+        context: {
+          ...base.context,
+          businessDate: "2026-09-28",
+          workday: {
+            session: "morning_reconciliation",
+            eveningSpeak: "",
+            morningSpeak: "",
+            tomorrowCount: 0,
+            deltaCount: 0,
+            hasConfirmedPlan: true,
+          },
+          clock: {
+            localTime: "10:00 AM",
+            weekday: "Monday",
+            businessDate: "2026-09-28",
+            timeZone: "America/Los_Angeles",
+          },
+        } as never,
+      },
+      turnDeps(store, {
+        now: () => monday,
+        markReconciliation: markReconciliation as never,
+        weeklyPicture: weeklyPicture as never,
+        beginWeekly: beginWeekly as never,
+      })
+    );
+
+    expect(result.kind).toBe("briefing_saved");
+    expect(markReconciliation).toHaveBeenCalledWith(
+      expect.objectContaining({ businessDate: "2026-09-28", status: "complete" })
+    );
+    expect(weeklyPicture).toHaveBeenCalledTimes(1);
+    expect(beginWeekly).toHaveBeenCalledTimes(1);
+    expect(result.speak).toMatch(/lock the week|remaining days/i);
+  });
+});
