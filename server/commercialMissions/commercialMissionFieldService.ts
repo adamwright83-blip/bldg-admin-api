@@ -791,9 +791,13 @@ export async function reconcileCommercialMissionVisitScore(input: {
     missionId: input.missionId,
     eventType: outcome === "won" ? "deal_closed" : "in_person_visit",
     points: 10 + outcomePoints + proofPoints,
-    dedupeKey: `score:field-outcome:${input.requestId}`,
+    // The score belongs to the durable visit outcome, not to whichever
+    // request happened to reconcile it. A lost response followed by a fresh
+    // request UUID must not award the same visit twice.
+    dedupeKey: `score:field-outcome:${state.visitOutcome.id}`,
     metadata: {
       outcome,
+      reconciledFromRequestId: input.requestId,
       decisionMakerStatus: state.visitOutcome.decisionMakerStatus,
       quoteRequested: state.visitOutcome.quoteRequested,
       pilotRequested: state.visitOutcome.pilotRequested,
