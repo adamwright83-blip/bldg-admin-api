@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: this test intentionally verifies the retained legacy entitlement boundary; canonical product is JOYSTICK. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
