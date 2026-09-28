@@ -115,7 +115,8 @@ function wantsOperations(text: string): boolean {
 export function planRetrievalPassA(
   perceived: PerceivedTurn,
   memory: WorkingMemorySnapshot,
-  attention: AttentionPlan
+  attention: AttentionPlan,
+  semanticBusinessQuery: BusinessQuery | null = null
 ): RetrievalRequest[] {
   const requests: RetrievalRequest[] = [{ compartment: "workingMemory", kind: "snapshot" }];
   const may = (compartment: RetrievalRequest["compartment"]): boolean =>
@@ -161,7 +162,12 @@ export function planRetrievalPassA(
       ) {
         requests.push({ compartment: "businessMemory", kind: "workday_command" });
       }
-      const query = buildBusinessQuery(perceived) ?? requeryUsingPriorParameters(perceived, memory);
+      // A bounded semantic planner may choose query CRITERIA, never facts or numbers.
+      // If it is absent or fails, the deterministic parser remains the fallback.
+      const query =
+        semanticBusinessQuery ??
+        buildBusinessQuery(perceived) ??
+        requeryUsingPriorParameters(perceived, memory);
       if (query) requests.push({ compartment: "businessMemory", kind: "business_query", query });
     }
   }
