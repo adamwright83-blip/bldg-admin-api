@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Building2,
@@ -55,14 +55,14 @@ export function BuildMissionSheet({
   const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
-  const deferredSearch = useDeferredValue(searchNearValue.trim());
+  const placesQuery = searchNearValue.trim();
   const placeSuggestions = trpc.system.commercialMission.placeSuggestions.useQuery(
-    { query: deferredSearch },
+    { query: placesQuery },
     {
       enabled:
         open &&
         !selectedPlace &&
-        deferredSearch.length >= 2,
+        placesQuery.length >= 2,
       staleTime: 30_000,
       retry: 1,
       refetchOnWindowFocus: false,
@@ -290,7 +290,7 @@ export function BuildMissionSheet({
                           Powered by Google
                         </div>
                       </>
-                    ) : deferredSearch.length >= 2 ? (
+                    ) : placesQuery.length >= 2 ? (
                       <div className="px-4 py-3 text-[13px] font-semibold text-white/45">
                         No Google Places matches yet. Keep typing.
                       </div>
