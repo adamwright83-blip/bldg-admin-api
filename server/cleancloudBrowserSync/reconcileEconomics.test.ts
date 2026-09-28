@@ -82,6 +82,22 @@ describe("reconcileControlTotals", () => {
     expect(result.discrepancyCents).toBe(14222);
   });
 
+  it("does not certify non-empty revenue rows without an exact-period receipt", () => {
+    const result = reconcileControlTotals({
+      periodFrom: "2026-09-01",
+      periodTo: "2026-09-30",
+      witness: witness(),
+      rows: [row()],
+      revenueReportCovered: false,
+      orderCreatedCoverage: true,
+    });
+    expect(result.status).toBe("insufficient_evidence");
+    expect(result.revenueReportCents).toBeNull();
+    expect(result.coverage.paymentEventCoverage).toBe(false);
+    expect(result.dashboardRevenueCents).toBe(312632);
+    expect(result.bookCents).toBe(312632);
+  });
+
   it("does not treat a sales-only book as payment coverage", () => {
     const result = reconcileControlTotals({
       periodFrom: "2026-09-01",
@@ -301,6 +317,8 @@ describe("reconcilePeriod stays on the session tenant", () => {
     expect(fn).toContain("eq(cleancloudPaidOrders.tenantId, ctx.tenantId)");
     expect(fn).toContain("eq(dashboardWitnesses.tenantId, ctx.tenantId)");
     expect(fn).toContain("eq(economicReconciliations.storeId, binding.storeId)");
+    expect(fn).toContain("orderBy(desc(economicReconciliations.createdAt))");
+    expect(fn).toContain("latestPriorRows.has(key)");
     expect(fn).toContain("Verified-event race did not resolve to a stored event");
     expect(fn).toContain("publicEconomicEvent(winner)");
     expect(fn).not.toContain("input.tenantId");
