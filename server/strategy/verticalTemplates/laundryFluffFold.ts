@@ -5,9 +5,7 @@
 
 import type { VerticalTemplate } from "./types";
 
-export const laundryFluffFoldTemplate: VerticalTemplate = {
-  verticalKey: "laundry_fluff_fold",
-  displayName: "Wash & Fold Residential Service",
+const legacyStrategy = {
   funnelStages: [
     "Property Discovery",
     "Property Approval",
@@ -141,4 +139,28 @@ export const laundryFluffFoldTemplate: VerticalTemplate = {
       },
     },
   ],
+} as const;
+
+export const laundryFluffFoldTemplate: VerticalTemplate = {
+  verticalKey: "laundry_fluff_fold",
+  displayName: "Wash & Fold Residential Service",
+  metricCatalog: [
+    { metricKey: "new_paying_customers", authoritativeReaderId: "strategy.new_paying_customers.v1" },
+    { metricKey: "active_customers", authoritativeReaderId: "strategy.active_customers.v1" },
+  ],
+  opportunityKinds: ["property_account", "customer_reactivation"],
+  campaignSeeds: [],
+  obligationKinds: ["dormant_recovery", "sales_follow_up", "data_health"],
+  outcomeDefinitions: [
+    { outcomeDefinitionId: "paid_order", authoritativeTransitionId: "economic.paid_order.v1" },
+    { outcomeDefinitionId: "customer_reactivated", authoritativeTransitionId: "customer.reactivated.v1" },
+  ],
+  workFamilies: ["property_visit", "manager_outreach", "follow_up", "reactivation"],
+  executionIntelligenceDoctrineFamilies: ["sales"],
+  expectedSourceCapabilities: ["customers", "orders", "payments"],
+  presentationDefaults: {},
+  legacyStrategy,
 };
+
+/** Compatibility export for the existing StrategyEngine only. */
+export const laundryFluffFoldLegacyStrategy = legacyStrategy;
