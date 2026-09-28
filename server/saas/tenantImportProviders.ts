@@ -3,6 +3,7 @@ import type {
   TenantImportRequest,
   TenantImportResult,
 } from "../../shared/tenantImports";
+import { assertTenantSourceManifest } from "../../shared/tenantSourceAdapters";
 import {
   importCleanCloudPaidOrders,
   normalizeCleanCloudPaidOrderRow,
@@ -12,6 +13,27 @@ import { parseCsv } from "../externalSystems/csvIngestion";
 
 class CleanCloudCsvImportProvider implements OrderCustomerImportProvider {
   readonly key = "cleancloud_csv" as const;
+  readonly manifest = assertTenantSourceManifest({
+    providerKey: this.key,
+    version: "1",
+    entityCapabilities: ["customers", "orders", "payments"],
+    connectionModes: ["csv"],
+    canonicalIdentityKeys: {
+      customers: ["cleancloud_customer_id", "email", "phone", "legacy_name_fallback"],
+      orders: ["cleancloud_order_id"],
+      payments: ["cleancloud_order_id", "payment_date"],
+    },
+    coverage: {
+      bases: ["economic_event", "orders_created"],
+      semantics: "existing_source_coverage",
+    },
+    freshness: { clock: "existing_source_binding" },
+    provenance: {
+      providerIdentity: "cleancloud",
+      adapterVersion: "cleancloud_csv_v1",
+    },
+    evidenceClass: "authoritative_external",
+  });
   readonly capabilities = {
     customers: true,
     orders: true,
@@ -103,6 +125,14 @@ export function getTenantImportProvider(
   const provider = providers.get(key);
   if (!provider) throw new Error(`Unsupported tenant import provider: ${key}`);
   return provider;
+}
+
+export function getTenantSourceAdapterManifest(key: string) {
+  return getTenantImportProvider(key).manifest;
+}
+
+export function listTenantSourceAdapterManifests() {
+  return [...providers.values()].map(provider => provider.manifest);
 }
 
 registerTenantImportProvider(new CleanCloudCsvImportProvider());
