@@ -113,11 +113,11 @@ export function deriveMissionLinkedDebriefProposal(input: {
 }): MissionDebriefProposal {
   const { extraction, buildingName } = input;
   const actions = new Set(extraction.actions.map(item => item.type));
-  const allEvidence = [
+  const evidenceItems = [
     ...extraction.outcomes.map(item => textOf(item.evidence)),
     ...extraction.actions.map(item => textOf(item.evidence)),
     ...extraction.followUps.map(item => textOf(item.requestedAction)),
-  ].join(" ");
+  ];
 
   const managerUnavailable = hasOutcome(extraction, "manager_unavailable");
   const askedToReturn = hasOutcome(extraction, "asked_to_return");
@@ -137,10 +137,14 @@ export function deriveMissionLinkedDebriefProposal(input: {
   }
 
   const quoteRequested = hasOutcome(extraction, "proposal_requested") ||
-    /\b(quote|pricing|proposal)\b/i.test(allEvidence) &&
-      /\b(asked|requested|send|email|wants?)\b/i.test(allEvidence);
-  const pilotRequested = /\bpilot\b/i.test(allEvidence) &&
-    /\b(asked|requested|wants?|try|trial)\b/i.test(allEvidence);
+    evidenceItems.some(text =>
+      /\b(quote|pricing|proposal)\b/i.test(text) &&
+      /\b(asked|requested|send|email|wants?)\b/i.test(text)
+    );
+  const pilotRequested = evidenceItems.some(text =>
+    /\bpilot\b/i.test(text) &&
+    /\b(asked|requested|wants?|try|trial)\b/i.test(text)
+  );
   const followUpRequested =
     outcome === "follow_up" ||
     quoteRequested ||
