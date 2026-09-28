@@ -417,6 +417,52 @@ async function startServer() {
     }
   });
 
+  // Temporary owner-authorized public Driver access for acceptance testing on the
+  // Railway production host. This bypasses the login screen only; server-side
+  // role/tenant checks still see the configured driver identity.
+  app.post("/api/auth/public-driver", async (req, res) => {
+    const enabled = process.env.JOYSTICK_DRIVER_PUBLIC_ACCESS === "1";
+    const allowedHost =
+      req.hostname === "bldg-admin-api-production.up.railway.app" ||
+      req.hostname === "driver.bldg.chat";
+    if (!enabled || !allowedHost) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    try {
+      const ownerOpenId = process.env.DRIVER_OPEN_ID || "driver-primary";
+      try {
+        await upsertUser({
+          openId: ownerOpenId,
+          name: "Driver",
+          loginMethod: "public_acceptance_test",
+          role: "driver",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbErr) {
+        console.warn(
+          "[Auth] public driver upsert failed (non-fatal):",
+          (dbErr as Error).message
+        );
+      }
+
+      const sessionToken = await sdk.createSessionToken(ownerOpenId, {
+        name: "Driver",
+        role: "driver",
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, {
+        ...cookieOptions,
+        maxAge: ONE_YEAR_MS,
+      });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[Auth] Public driver bootstrap failed:", err);
+      return res.status(500).json({ error: "Driver bootstrap failed" });
+    }
+  });
+
   // Direct password login — bypasses OAuth portal entirely.
   // Production driver and admin credentials are distinct. Development may
   // fall back to the existing admin/shared secret to preserve local workflows.

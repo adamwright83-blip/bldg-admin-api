@@ -31,9 +31,20 @@ export const ADMIN_ALLOWED_HEADERS = [
   "x-app-shared-secret",
 ];
 
+function configuredAdminOrigins(): string[] {
+  const configured = (process.env.JOYSTICK_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean);
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (railwayDomain) configured.push(`https://${railwayDomain}`);
+  return configured;
+}
+
 export function isAllowedAdminOrigin(origin?: string): boolean {
   if (!origin) return true;
   if (ADMIN_ALLOWED_ORIGINS.includes(origin)) return true;
+  if (configuredAdminOrigins().includes(origin)) return true;
   if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   return false;

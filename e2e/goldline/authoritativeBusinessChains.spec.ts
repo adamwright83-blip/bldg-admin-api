@@ -319,7 +319,7 @@ test("CALL drives the full chain but a perfect arcade result cannot capture", as
   page,
 }) => {
   await login(page, "CALL");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveAnchorPerfectly(page);
 
@@ -343,7 +343,7 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
   page,
 }) => {
   await login(page, "VISIT");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGatekeeperPerfectly(page);
   await openBusinessAction(page);
@@ -396,7 +396,7 @@ test("FOLLOW_UP only resolves after the linked authoritative completion", async 
   page,
 }) => {
   await login(page, "FOLLOW_UP");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGhostPerfectly(page);
   await openBusinessAction(page);
@@ -426,7 +426,7 @@ test("RECOVER becomes active only after authoritative recovery persistence", asy
   page,
 }) => {
   await login(page, "RECOVER");
-  const listenersBefore = await listenerSnapshot(page);
+  const listenersBefore = await stableListenerSnapshot(page);
   await reachPhysicalEncounter(page);
   await resolveGhostPerfectly(page);
   await openBusinessAction(page);

@@ -112,6 +112,14 @@ describe("DayForge Field production contract", () => {
     expect(app.match(/\/driver\/sales-mission\/:missionId/g)).toHaveLength(2);
     expect(client).toContain("fieldState.useQuery");
     expect(client).toContain("fieldOutcome.useMutation");
+    // Critical mission state must render before slower brief/call-history reads
+    // are allowed to join a tRPC batch and hold the page on a spinner.
+    expect(client).toMatch(
+      /missionSalesBrief\.fieldBrief\.useQuery[\s\S]*Boolean\(stateQuery\.data\?\.mission\)/
+    );
+    expect(client).toMatch(
+      /commercialMission\.callAttempts\.useQuery[\s\S]*Boolean\(stateQuery\.data\?\.mission\)/
+    );
     expect(client).not.toContain("localStorage");
     expect(client).not.toContain("DEMO_MISSION");
   });

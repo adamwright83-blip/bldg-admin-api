@@ -16,11 +16,6 @@ function legacyDayforgeApiBase(): string {
 
 export default function LegacyDayforgeLoginPage() {
   const continuation = new URLSearchParams(window.location.search);
-  const [slug, setSlug] = useState(
-    import.meta.env.VITE_DAYFORGE_DEMO_MODE === "true"
-      ? "sunset-laundry-demo"
-      : ""
-  );
   const [email, setEmail] = useState(
     import.meta.env.VITE_DAYFORGE_DEMO_MODE === "true"
       ? "demo-owner@sunsetlaundry.example"
@@ -39,7 +34,7 @@ export default function LegacyDayforgeLoginPage() {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug, email, password }),
+        body: JSON.stringify({ email, password }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Sign in failed");
@@ -66,7 +61,7 @@ export default function LegacyDayforgeLoginPage() {
         <h1>Return to the mission.</h1>
         {import.meta.env.VITE_DAYFORGE_DEMO_MODE === "true" ? (
           <p className="df-onboarding__hint">
-            Demo workspace and email are prefilled. Enter the demo password to continue.
+            Demo email is prefilled. Enter the demo password to continue.
           </p>
         ) : null}
         {error ? (
@@ -75,15 +70,6 @@ export default function LegacyDayforgeLoginPage() {
           </p>
         ) : null}
         <form onSubmit={submit} className="df-onboarding__form">
-          <label>
-            Workspace slug
-            <input
-              autoComplete="organization"
-              value={slug}
-              onChange={event => setSlug(event.target.value)}
-              required
-            />
-          </label>
           <label>
             Email
             <input

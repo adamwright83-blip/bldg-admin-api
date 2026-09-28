@@ -102,7 +102,14 @@ export default function LegacyDayforgeTodayPage() {
         ) : null)}
       </div>
       <button type="button" onClick={() => setWalkInOpen(true)} className="fixed bottom-5 left-1/2 z-30 inline-flex min-h-16 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center justify-center gap-3 rounded-2xl bg-orange-500 px-6 text-lg font-black text-white shadow-2xl shadow-orange-950/50"><Plus /> LOG A WALK-IN</button>
-      <WalkInCapture open={walkInOpen} onClose={() => setWalkInOpen(false)} />
+      <WalkInCapture
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onSaved={() => {
+          setWalkInOpen(false);
+          void Promise.all([queue.refetch(), dayLine.refetch()]);
+        }}
+      />
     </main>
   );
 }

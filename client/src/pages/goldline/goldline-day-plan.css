@@ -1480,3 +1480,27 @@
 .gdp-garage .gl-cargo-cta--hero.has-cargo .gl-cargo-car {
   filter: drop-shadow(0 0 16px #71ff9c99);
 }
+
+
+/* Live Day Line mission-builder entry. This must remain reachable even when
+ * dashboard-era menu chrome is intentionally hidden by the mobile world shell. */
+.gdp-build-mission-cta {
+  position: fixed;
+  right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 120;
+  min-height: 46px;
+  padding: 0 16px;
+  border: 1px solid #7e5f2b;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fff3bd, #d7aa49);
+  box-shadow: 0 8px 24px rgba(31, 26, 10, 0.28);
+  color: #3c2b0f;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.gdp-build-mission-cta:active {
+  transform: translateY(1px);
+}

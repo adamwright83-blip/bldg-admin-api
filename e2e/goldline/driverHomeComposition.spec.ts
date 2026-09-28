@@ -17,6 +17,18 @@ test.describe("driver home playable-world composition", () => {
     await expect(page.locator(".gdp-summary")).toBeHidden();
     await expect(page.locator(".gdp-chapter-invite")).toBeHidden();
 
+    // BUILD MISSION must remain reachable on the live Day Line even though
+    // the old dashboard menu is deliberately hidden on phone.
+    await expect(page.getByTestId("build-mission-cta")).toBeVisible();
+
+    // Venue taps must never fail silently when the required target is missing.
+    await page.getByTestId("build-mission-cta").click();
+    await page.getByRole("button", { name: /In-person mission/i }).click();
+    await page.getByRole("button", { name: /Luxury living/i }).click();
+    await expect(page.getByText("Enter the property name or street address first.")).toBeVisible();
+    await expect(page.getByLabel("Mission search location")).toBeFocused();
+    await page.getByLabel("Close mission builder").click();
+
     const shellBox = await shell.boundingBox();
     expect(shellBox).not.toBeNull();
     expect(shellBox!.width).toBeGreaterThanOrEqual(PHONE.width * 0.98);

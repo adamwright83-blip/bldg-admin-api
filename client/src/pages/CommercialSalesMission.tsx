@@ -95,7 +95,13 @@ export default function CommercialSalesMission() {
   // never independently regenerated here, only rendered.
   const salesBriefQuery = trpc.system.missionSalesBrief.fieldBrief.useQuery(
     { missionId: validMissionId ? missionId : 1 },
-    { enabled: isAuthenticated && validMissionId, retry: false }
+    {
+      enabled:
+        isAuthenticated &&
+        validMissionId &&
+        Boolean(stateQuery.data?.mission),
+      retry: false,
+    }
   );
   const startPreparation =
     trpc.system.commercialMission.fieldStartPreparation.useMutation();
@@ -116,7 +122,13 @@ export default function CommercialSalesMission() {
   const proofMutation = trpc.system.commercialMission.submitProof.useMutation();
   const callAttempts = trpc.system.commercialMission.callAttempts.useQuery(
     { missionId: validMissionId ? missionId : 1 },
-    { enabled: isAuthenticated && validMissionId, retry: false }
+    {
+      enabled:
+        isAuthenticated &&
+        validMissionId &&
+        Boolean(stateQuery.data?.mission),
+      retry: false,
+    }
   );
   const callAttemptMutation =
     trpc.system.commercialMission.logCallAttempt.useMutation();

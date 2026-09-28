@@ -20,6 +20,9 @@ import {
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
+  // Driver-built missions are activated to game_ready before collateral is
+  // generated. Keep proposal eligibility aligned with that builder contract.
+  "game_ready",
   "phone_ready",
   "preparing",
   "en_route",
