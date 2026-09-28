@@ -651,7 +651,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   // Unearned land sits under a sea of cartoon cumulus: thousands of cel-shaded, ink-outlined puffs
   // on a jittered grid over the served area. A puff over charted land collapses, so winning a
   // customer opens a hole in the clouds; over a door-hanger run the sea is torn into islands.
-  const PUFF_STEP = 72;
+  const PUFF_STEP = 92;
   let puffs: THREE.InstancedMesh | null = null;
   let puffSpots: Float32Array = new Float32Array(0);   // x, z, radius, seed
   // animation: each puff eases from its current size to its target; a collapsing puff first swells
@@ -666,17 +666,16 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (let z = rect.z0; z < rect.z1; z += PUFF_STEP) for (let x = rect.x0; x < rect.x1; x += PUFF_STEP) {
       const px = x + (rnd() - 0.5) * PUFF_STEP * 0.9, pz = z + (rnd() - 0.5) * PUFF_STEP * 0.9;
       if (!servedAt(px, pz) || canalAt(px, pz) < CANAL + COPE + 30) continue;
-      spots.push(px, pz, 30 + rnd() * 26, rnd());
+      spots.push(px, pz, 36 + rnd() * 30, rnd());
     }
     puffSpots = new Float32Array(spots);
     // one cumulus: a big dome, shoulders either side, a crown on top, and a flat, shaded base
     const lobeC = (r: number, x: number, y: number, z: number) => {
-      const g = mergeVertices(new THREE.IcosahedronGeometry(r, 2).deleteAttribute("uv").deleteAttribute("normal"));
+      const g = mergeVertices(new THREE.IcosahedronGeometry(r, 1).deleteAttribute("uv").deleteAttribute("normal"));
       return g.translate(x, y, z);
     };
     const geo = mergeVertices(mergeGeometries([
-      lobeC(1, 0, 0.05, 0), lobeC(0.72, 0.78, -0.08, 0.12), lobeC(0.66, -0.74, -0.1, -0.1),
-      lobeC(0.58, 0.18, 0.52, -0.08), lobeC(0.5, -0.3, 0.02, 0.62), lobeC(0.46, 0.34, -0.04, -0.6),
+      lobeC(1, 0, 0.05, 0), lobeC(0.72, 0.8, -0.08, 0.1), lobeC(0.68, -0.76, -0.1, -0.08), lobeC(0.56, 0.16, 0.54, -0.06),
     ])!);
     const pp = geo.attributes.position;
     for (let k = 0; k < pp.count; k++) { const y = pp.getY(k); if (y < -0.18) pp.setY(k, -0.18 + (y + 0.18) * 0.22); }
@@ -719,6 +718,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     puffGlow = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
     geo.setAttribute("aGlow", puffGlow);
     puffs = new THREE.InstancedMesh(geo, mat, n);
+    if (opts.capture) console.log(`[lantern] cloud puffs: ${n} x ${geo.index!.count / 3} tris`);
     puffs.frustumCulled = false;
     puffs.renderOrder = 3;
     scene.add(puffs);
