@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lantern City Islands</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+  :root { --card: rgba(34,24,40,.88); --ink: #fff4dc; --ink2: #d9c9b4; --gold: #ffc84d; color-scheme: dark; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #f3d6b4; color: var(--ink); font: 15px/1.4 Barlow, system-ui, sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  .top { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 18px); left: 18px; right: 18px; display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; pointer-events: none; }
+  .brand { background: var(--card); border: 2px solid var(--gold); border-radius: 18px; padding: 10px 16px 11px; box-shadow: 0 10px 30px rgba(30,20,40,.35); }
+  .mark { font: 28px/1 Anton, Impact, sans-serif; letter-spacing: .03em; color: var(--ink); }
+  .sub { font: 600 13px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin-top: 5px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { background: var(--card); border-radius: 999px; padding: 8px 14px; font: 700 15px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; display: flex; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+  .pill b { color: var(--gold); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px 3px rgba(255,200,77,.9); }
+  .card { position: fixed; left: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); width: min(340px, calc(100% - 36px)); box-sizing: border-box; background: var(--card); border: 2px solid var(--gold); border-radius: 18px; padding: 14px 16px 16px; box-shadow: 0 14px 40px rgba(30,20,40,.4); }
+  .card h2 { margin: 0 0 6px; font: 26px/1 Anton, Impact, sans-serif; letter-spacing: .02em; text-transform: uppercase; }
+  .card p { margin: 0; color: var(--ink2); }
+  .card button { margin-top: 12px; appearance: none; border: 0; border-radius: 10px; padding: 9px 14px; font: 700 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; background: var(--gold); color: #3a2600; cursor: pointer; }
+  .win { position: fixed; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); appearance: none; border: 2px solid var(--gold); border-radius: 16px; padding: 14px 20px; background: var(--card); color: var(--ink); font: 700 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 14px 40px rgba(30,20,40,.4); }
+  .win:disabled { opacity: .5; cursor: default; }
+  .sample { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); transform: translateX(-50%); background: rgba(255,243,214,.92); color: #7a5200; border-radius: 999px; padding: 6px 12px; font: 700 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+  .tip { position: fixed; z-index: 5; pointer-events: none; max-width: 240px; background: var(--card); border: 2px solid var(--gold); border-radius: 12px; padding: 8px 12px; box-shadow: 0 10px 30px rgba(30,20,40,.4); }
+  .tip b { display: block; font: 700 17px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: var(--ink); }
+  .tip span { display: block; margin-top: 3px; font-size: 13px; color: var(--ink2); white-space: pre-line; }
+  .towers { position: fixed; left: 18px; top: calc(env(safe-area-inset-top, 0px) + 100px); display: flex; flex-direction: column; gap: 8px; }
+  .towers button { appearance: none; border: 2px solid var(--gold); border-radius: 12px; padding: 9px 14px; background: var(--card); color: var(--ink); font: 700 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-align: left; }
+  .towerView { position: fixed; inset: 0; z-index: 4; background: #141a33; display: grid; grid-template-rows: auto 1fr; }
+  .towerView header { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px; }
+  .towerView h2 { margin: 0; font: 30px/1 Anton, Impact, sans-serif; letter-spacing: .03em; color: var(--ink); }
+  .towerView p { margin: 4px 0 0; font: 600 14px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); }
+  .towerView button { appearance: none; border: 0; border-radius: 10px; padding: 10px 16px; font: 700 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; background: var(--gold); color: #3a2600; cursor: pointer; }
+  #twStage { min-height: 0; position: relative; overflow: hidden; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 16px "Barlow Condensed", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #5d4a3a; background: #f3d6b4; padding: 0 24px; text-align: center; }
+  @media (max-width: 640px) { .sample { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 96px); } .win { left: 18px; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); } .card { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); } }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="top">
+  <div class="brand"><div class="mark">LANTERN CITY</div><div class="sub">The island board</div></div>
+  <div class="stats" id="stats" hidden>
+    <div class="pill"><i class="dot"></i><b id="nL">0</b> lanterns</div>
+    <div class="pill">Islands open <b id="nO">0</b></div>
+  </div>
+</div>
+<div class="tip" id="tip" hidden><b id="tipTitle"></b><span id="tipBody"></span></div>
+<div class="towers"><button data-tower="opus_la">OPUS LA floors</button><button data-tower="century_park_east">Century Park East floors</button></div>
+<div class="towerView" id="tower" hidden><header><div><h2 id="twName"></h2><p id="twStats"></p></div><button id="twClose">Back to the board</button></header><div id="twStage"></div></div>
+<div class="card" id="card" hidden><h2 id="cTitle"></h2><p id="cBody"></p><button id="cClose">Back to the board</button></div>
+<button class="win" id="win">Win a customer in West Hollywood</button>
+<div class="sample">Sample customers</div>
+<div id="loading">Raising the islands…</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

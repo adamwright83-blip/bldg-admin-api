@@ -3,7 +3,8 @@
  *
  * - The land is real (OpenStreetMap footprints, heights and unit counts, baked into static tiles by
  *   scripts/assets/lantern-city-fog/bake_service_area.py). OSM decides where things are; the
- *   buildings you see are CC0 kit buildings recoloured to the Lantern City palette.
+ *   buildings you see are Lantern City's own LA building set, generated at each footprint's real
+ *   size (laBuildings.ts).
  * - Every customer building is a lantern. Land around lanterns is charted (dusk-dim); everything
  *   else inside the service area is under white plaster fog with gold cracks at the frontier.
  * - Outside the served neighbourhoods there is no land at all: the page is the edge of the world.
@@ -17,7 +18,9 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
+import { buildLA, K, LABuilder, planCorners, planLA, VS, type Plan } from "./laBuildings";
 
 const DEFAULT_BASE = "/assets/goldline/lantern-city";
 
@@ -42,6 +45,8 @@ export type WorldEvents = {
   onStats?: (s: WorldStats) => void;
   onMission?: (m: Mission | null) => void;
   onSelect?: (keys: string[] | null) => void;
+  /** one of our towers was clicked: open its floors */
+  onTower?: (id: "opus_la" | "century_park_east") => void;
   onError?: (e: unknown) => void;
 };
 
@@ -61,20 +66,13 @@ type Manifest = {
   major: Record<string, [number, number][]>;
   attribution: string;
 };
-type Kit = {
-  models: { name: string; cls: "house" | "mid" | "brick"; atlas: number; size: [number, number, number]; nv: number; ni: number; p: [number, string]; n: [number, string]; uv: [number, string]; i: [number, string] }[];
-  atlases: string[];
-  blob: string;
-};
 type Bldg = { i: number; p: [number, number][]; cx: number; cz: number; h: number; u: number; t: number; name?: string };
 type TileData = { o: [number, number]; b: [number[], number, number, number, string?][]; r: [string, string, number[]][] };
 
 const VEX = 1.35;
-const DUSK_GROUND = new THREE.Color("#5b6680");
-const DUSK_BLDG = new THREE.Color("#7a86a3");
-const DUSK_ROOF = new THREE.Color("#8b95b0");
+const DUSK_GROUND = new THREE.Color("#5a6b66");
 const PAPER = new THREE.Color("#e9ecf0");
-const KIT_RADIUS = 1150;
+const DETAIL_RADIUS = 1150;          // tiles this close to the camera get the full building set
 const TYPES = ["house", "apartments", "residential", "retail", "commercial", "yes", "garage", "office", "school", "hotel", "industrial", "church", "other"];
 
 function hash2(x: number, y: number) {
@@ -130,12 +128,13 @@ const COMMON = /* glsl */ `
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
 const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 
-export function createLanternWorld(container: HTMLElement, events: WorldEvents = {}, opts: { assetBase?: string } = {}) {
-  // assetBase holds v7/ (world + kit) and v4/ (tower art); the app serves it from /assets/goldline/lantern-city
+export function createLanternWorld(container: HTMLElement, events: WorldEvents = {}, opts: { assetBase?: string; capture?: boolean } = {}) {
+  // assetBase holds v7/ (world) and v4/ (tower art); the app serves it from /assets/goldline/lantern-city
   const ASSETS = opts.assetBase ?? DEFAULT_BASE;
   const WORLD_BASE = `${ASSETS}/v7`;
   let disposed = false;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  // capture: frames are stepped by the caller (renderFrame) and stay readable, for stills and clips
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: !!opts.capture });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.NeutralToneMapping;
   container.appendChild(renderer.domElement);
@@ -159,7 +158,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   const controls = new MapControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 350;
+  controls.minDistance = 170;
   controls.maxDistance = 26000;
   controls.minPolarAngle = 0.3;
   controls.maxPolarAngle = 1.15;
@@ -167,10 +166,67 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   // north stays up: the map can tilt and zoom, never spin
   controls.minAzimuthAngle = 0;
   controls.maxAzimuthAngle = 0;
-  const SUN = new THREE.Vector3(-0.55, 0.62, -0.56).normalize();
+  // the sun sets in the west, over the ocean: street faces catch it, shadows stretch east
+  const SUN = new THREE.Vector3(-0.8, 0.56, 0.36).normalize();
 
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true }));
   composer.addPass(new RenderPass(scene, camera));
+  // Ink: a normal + depth pre-pass, then an edge pass that draws warm ink along every crease and
+  // silhouette. Charted land reads as an inked illustration; land under the fog as a pencil sketch.
+  // Objects on INK_SKIP (the fog sheet, water, halos, ground shadows) are left out of the pre-pass.
+  const INK_SKIP = 1;
+  camera.layers.enable(INK_SKIP);
+  const inkTarget = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
+  inkTarget.depthTexture = new THREE.DepthTexture(2, 2);
+  const inkNormals = new THREE.MeshNormalMaterial();
+  const ink = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null }, tNormal: { value: inkTarget.texture }, tDepth: { value: inkTarget.depthTexture },
+      uPx: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 1000 }, uStrength: { value: 1 },
+    },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse; uniform sampler2D tNormal; uniform sampler2D tDepth;
+      uniform vec2 uPx; uniform float uNear; uniform float uFar; uniform float uStrength; varying vec2 vUv;
+      float lin(vec2 uv) { float z = texture2D(tDepth, uv).x * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+      vec3 nrm(vec2 uv) { return texture2D(tNormal, uv).xyz * 2. - 1.; }
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        float d0 = lin(vUv); vec3 n0 = nrm(vUv);
+        float dd = 0., nd = 0.;
+        for (int i = 0; i < 4; i++) {
+          vec2 o = (i == 0 ? vec2(1., 0.) : i == 1 ? vec2(-1., 0.) : i == 2 ? vec2(0., 1.) : vec2(0., -1.)) * uPx;
+          float di = lin(vUv + o);
+          dd = max(dd, (d0 - di) / d0);          // only the nearer side of an edge draws the line
+          nd = max(nd, 1. - dot(n0, nrm(vUv + o)));
+        }
+        float e = max(smoothstep(.012, .03, dd), smoothstep(.18, .42, nd));
+        e *= 1. - smoothstep(uFar * .45, uFar * .8, d0);   // lines fade out toward the horizon haze
+        // warm sepia ink, darker over colour, lighter over the white fog: pencil there, ink here
+        float lum = dot(c.rgb, vec3(.299, .587, .114));
+        vec3 inkCol = mix(c.rgb * .22 + vec3(.06, .035, .03), c.rgb * .62, smoothstep(.72, .95, lum));
+        gl_FragColor = vec4(mix(c.rgb, inkCol, e * uStrength), c.a);
+      }`,
+  });
+  // ShaderPass clones texture uniforms; point them back at the live pre-pass buffers
+  ink.uniforms.tNormal.value = inkTarget.texture;
+  ink.uniforms.tDepth.value = inkTarget.depthTexture;
+  composer.addPass(ink);
+  function renderInkPrepass() {
+    const bg = scene.background, fog = scene.fog;
+    scene.background = null; scene.fog = null; scene.overrideMaterial = inkNormals;
+    camera.layers.disable(INK_SKIP);
+    renderer.setRenderTarget(inkTarget);
+    renderer.setClearColor(0x8080ff, 1);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    camera.layers.enable(INK_SKIP);
+    scene.background = bg; scene.fog = fog; scene.overrideMaterial = null;
+    ink.uniforms.uNear.value = camera.near;
+    ink.uniforms.uFar.value = camera.far;
+  }
+  const skipInk = (o: THREE.Object3D) => { o.layers.set(INK_SKIP); return o; };
   const bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), 0.6, 0.3, 1.05);
   composer.addPass(bloom);
   const tilt = new ShaderPass({
@@ -198,6 +254,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     renderer.domElement.style.height = "100%";
     composer.setSize(w, h);
     bloom.setSize(w, h);
+    const db = renderer.getDrawingBufferSize(new THREE.Vector2());
+    inkTarget.setSize(db.x, db.y);
+    ink.uniforms.uPx.value.set(1 / db.x, 1 / db.y);
     tilt.uniforms.uRes.value.set(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -208,7 +267,6 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   // ----------------------------------------------------------------- state filled once data loads
   let M: Manifest;
-  let KIT: Kit;
   let ground = (_x: number, _z: number) => 0;
   let sdField = (_x: number, _z: number) => 1e4;
   const terrField = (x: number, z: number) => {
@@ -244,14 +302,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   const ll = (lat: number, lon: number) => ({ x: (lon - M.origin[1]) * M.kx, z: -(lat - M.origin[0]) * M.kz });
 
   async function load() {
-    const [m, k, cn] = await Promise.all([
+    const [m, cn] = await Promise.all([
       fetch(`${WORLD_BASE}/world/manifest.json`).then(r => r.json()),
-      fetch(`${WORLD_BASE}/kit.json`).then(r => r.json()),
       fetch(`${WORLD_BASE}/world/canals.json`).then(r => r.json()),
     ]);
     CANALS = (cn.canals as { p: [number, number][] }[]).map(c => c.p);
     M = m;
-    KIT = k;
     const T = M.terrain;
     ground = (x, z) => {
       const fx = Math.min(Math.max((x - M.bounds[0]) / T.cell, 0), T.nx - 1.001);
@@ -318,7 +374,6 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     buildTerrain();
     buildFlats();
     buildFog();
-    buildKitGeometry();
     buildCanals();
     buildLandmarks();
     buildLabels();
@@ -415,6 +470,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const c of clearings) stamp(c, 0, 400);
     for (const r of runs) stamp(r, 1, 300);
     maskTex.needsUpdate = true;
+    updatePuffs();
   }
 
   // ----------------------------------------------------------------- terrain, flats, fog
@@ -529,7 +585,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           float cv = smoothstep(${(CANAL + COPE).toFixed(1)}, ${CANAL + 130}., canalD(p));
           float rise = cv * cv * (3. - 2. * cv);
           float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
-          float h = mix(.85, 30. + billow * 1.9, rise);
+          float h = mix(.85, 16. + billow * 1.1, rise);
           float inRun = 1. - smoothstep(-60., 0., terrMask(p));
           h *= mix(1., .3, inRun);
           return body * h - (1. - body) * 30.;
@@ -587,9 +643,144 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           #include <fog_fragment>
         }`,
     });
-    fogMesh = new THREE.Mesh(g, m);
+    fogMesh = skipInk(new THREE.Mesh(g, m)) as THREE.Mesh;
     fogMesh.renderOrder = 2;
     scene.add(fogMesh);
+    buildPuffs();
+  }
+
+  // ----------------------------------------------------------------- the cloud sea
+  // Unearned land sits under a sea of cartoon cumulus: thousands of cel-shaded, ink-outlined puffs
+  // on a jittered grid over the served area. A puff over charted land collapses, so winning a
+  // customer opens a hole in the clouds; over a door-hanger run the sea is torn into islands.
+  const PUFF_STEP = 92;
+  let puffs: THREE.InstancedMesh | null = null;
+  let puffSpots: Float32Array = new Float32Array(0);   // x, z, radius, seed
+  // animation: each puff eases from its current size to its target; a collapsing puff first swells
+  // and glows gold, then pops, so a win rolls a wave of light through the cloud sea
+  let puffCur = new Float32Array(0), puffFrom = new Float32Array(0), puffTo = new Float32Array(0), puffT = new Float32Array(0), puffDelay = new Float32Array(0);
+  let puffGlow: THREE.InstancedBufferAttribute | null = null;
+  let puffAnimating = false;
+  function buildPuffs() {
+    const spots: number[] = [];
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let z = rect.z0; z < rect.z1; z += PUFF_STEP) for (let x = rect.x0; x < rect.x1; x += PUFF_STEP) {
+      const px = x + (rnd() - 0.5) * PUFF_STEP * 0.9, pz = z + (rnd() - 0.5) * PUFF_STEP * 0.9;
+      if (!servedAt(px, pz) || canalAt(px, pz) < CANAL + COPE + 30) continue;
+      spots.push(px, pz, 36 + rnd() * 30, rnd());
+    }
+    puffSpots = new Float32Array(spots);
+    // one cumulus: a big dome, shoulders either side, a crown on top, and a flat, shaded base
+    const lobeC = (r: number, x: number, y: number, z: number) => {
+      const g = mergeVertices(new THREE.IcosahedronGeometry(r, 1).deleteAttribute("uv").deleteAttribute("normal"));
+      return g.translate(x, y, z);
+    };
+    const geo = mergeVertices(mergeGeometries([
+      lobeC(1, 0, 0.05, 0), lobeC(0.72, 0.8, -0.08, 0.1), lobeC(0.68, -0.76, -0.1, -0.08), lobeC(0.56, 0.16, 0.54, -0.06),
+    ])!);
+    const pp = geo.attributes.position;
+    for (let k = 0; k < pp.count; k++) { const y = pp.getY(k); if (y < -0.18) pp.setY(k, -0.18 + (y + 0.18) * 0.22); }
+    geo.computeVertexNormals();
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk }, fog: true,
+      vertexShader: /* glsl */ `
+        attribute float aGlow; varying vec3 vN; varying vec3 vW; varying float vH; varying float vGlow;
+        ${FOG_V}
+        void main() { vN = normalize(mat3(instanceMatrix) * normal); vH = position.y; vGlow = aGlow;
+          vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec3 vN; varying vec3 vW; varying float vH; varying float vGlow;
+        ${FOG_F}
+        void main() {
+          vec3 n = normalize(vN);
+          float lam = dot(n, uSun);
+          // three cel bands: sunlit white, lilac mid-tone, blue-violet shade; bellies go cooler
+          float band = smoothstep(-.12, -.06, lam) * .45 + smoothstep(.34, .4, lam) * .55;
+          vec3 shade = vec3(.6, .63, .82), mid = vec3(.84, .83, .93), lit = vec3(1., .98, .95);
+          vec3 c = mix(shade, mid, smoothstep(0., .45, band));
+          c = mix(c, lit, smoothstep(.5, 1., band));
+          c = mix(c, shade * .92, smoothstep(0., -.7, vH) * .5);
+          // a thin warm sunset rim on the edges facing the sun, and gold light leaking from below
+          vec3 V = normalize(cameraPosition - vW);
+          float rim = pow(1. - max(dot(n, V), 0.), 3.) * max(lam, 0.);
+          c += vec3(1., .72, .42) * smoothstep(.25, .35, rim) * .35;
+          float sd = sdMask(vW.xz);
+          c = mix(c, vec3(1., .78, .42) * 1.25, (1. - smoothstep(0., 120., sd)) * smoothstep(-.2, -.9, vH) * .6);
+          c = mix(c, vec3(1., .74, .34) * 2.2, vGlow);
+          gl_FragColor = vec4(c, 1.);
+          #include <fog_fragment>
+        }`,
+    });
+    const n = puffSpots.length / 4;
+    puffCur = new Float32Array(n); puffFrom = new Float32Array(n); puffTo = new Float32Array(n); puffT = new Float32Array(n).fill(1); puffDelay = new Float32Array(n);
+    puffGlow = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+    geo.setAttribute("aGlow", puffGlow);
+    puffs = new THREE.InstancedMesh(geo, mat, n);
+    if (opts.capture) console.log(`[lantern] cloud puffs: ${n} x ${geo.index!.count / 3} tris`);
+    puffs.frustumCulled = false;
+    puffs.renderOrder = 3;
+    scene.add(puffs);
+    updatePuffs(true);
+  }
+  /** size every puff from the reveal field: charted land collapses, the frontier thins, runs tear */
+  function updatePuffs(immediate = false) {
+    if (!puffs || !M) return;
+    for (let k = 0; k < puffSpots.length / 4; k++) {
+      const x = puffSpots[k * 4], z = puffSpots[k * 4 + 1], r0 = puffSpots[k * 4 + 2], sd0 = puffSpots[k * 4 + 3];
+      const sd = sdField(x, z), tr = terrField(x, z);
+      let r = r0 * THREE.MathUtils.smoothstep(sd, 30, 190);                    // thin toward the frontier, gone on charted land
+      if (tr < 0 && (Math.sin(x * 0.013 + z * 0.009) + Math.sin(z * 0.017 - x * 0.006)) * 0.5 + sd0 * 0.6 < 0.55) r = 0;   // torn over a run
+      if (r < 4) r = 0;
+      if (immediate) { puffCur[k] = puffTo[k] = r; puffT[k] = 1; continue; }
+      if (Math.abs(r - puffTo[k]) < 0.5) continue;
+      puffFrom[k] = puffCur[k]; puffTo[k] = r; puffT[k] = 0;
+      puffDelay[k] = sd0 * 0.9 + Math.max(0, -sd) / 900;                          // a rolling wave, not a blink
+      puffAnimating = true;
+    }
+    writePuffs();
+  }
+  function writePuffs() {
+    if (!puffs) return;
+    const Mx = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+    for (let k = 0; k < puffSpots.length / 4; k++) {
+      const x = puffSpots[k * 4], z = puffSpots[k * 4 + 1], sd0 = puffSpots[k * 4 + 3], r = puffCur[k];
+      if (r < 0.5) { Mx.makeScale(0, 0, 0); puffs.setMatrixAt(k, Mx); continue; }
+      V.set(x, ground(x, z) + 14 + r * 0.25, z);
+      Q.setFromAxisAngle(UP, sd0 * 6.28);
+      Sc.set(r, r * (0.7 + sd0 * 0.25), r * (0.8 + sd0 * 0.3));
+      puffs.setMatrixAt(k, Mx.compose(V, Q, Sc));
+    }
+    puffs.instanceMatrix.needsUpdate = true;
+  }
+  function animatePuffs(dt: number) {
+    if (!puffAnimating || !puffGlow) return;
+    let busy = false;
+    const glow = puffGlow.array as Float32Array;
+    for (let k = 0; k < puffCur.length; k++) {
+      if (puffT[k] >= 1) continue;
+      busy = true;
+      if (puffDelay[k] > 0) { puffDelay[k] -= dt; continue; }
+      puffT[k] = Math.min(1, puffT[k] + dt / 1.1);
+      const t = puffT[k], a = puffFrom[k], b = puffTo[k];
+      if (b < a) {
+        // swell, glow, pop: ease-in-back to nothing
+        const c1 = 2.2, e = (c1 + 1) * t * t * t - c1 * t * t;
+        puffCur[k] = Math.max(0, a + (b - a) * e);
+        glow[k] = Math.sin(Math.min(1, t * 1.3) * Math.PI) * 0.85;
+      } else {
+        // clouds rolling back in: ease-out
+        puffCur[k] = a + (b - a) * (1 - Math.pow(1 - t, 3));
+        glow[k] = 0;
+      }
+      if (t >= 1) glow[k] = 0;
+    }
+    puffGlow.needsUpdate = true;
+    writePuffs();
+    puffAnimating = busy;
   }
 
   // ----------------------------------------------------------------- canals: sunken water between stone walls
@@ -790,7 +981,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         }`,
     });
     water.side = THREE.DoubleSide;
-    scene.add(new THREE.Mesh(wg, water));
+    scene.add(skipInk(new THREE.Mesh(wg, water)));
     const walls = new THREE.BufferGeometry();
     walls.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
     walls.setAttribute("normal", new THREE.Float32BufferAttribute(sn, 3));
@@ -1051,30 +1242,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     }
   }
 
-  // ----------------------------------------------------------------- kit
-  const kitGeo: THREE.BufferGeometry[] = [];
-  const atlasTex: THREE.Texture[] = [];
-  const byCls: Record<string, number[]> = { house: [], mid: [], brick: [] };
-  function buildKitGeometry() {
-    const bin = Uint8Array.from(atob(KIT.blob), ch => ch.charCodeAt(0)).buffer;
-    const TA: Record<string, any> = { float32: Float32Array, int8: Int8Array, uint16: Uint16Array, uint32: Uint32Array };
-    const view = (spec: [number, string], n: number) => new TA[spec[1]](bin, spec[0], n);
-    KIT.models.forEach((m, k) => {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.BufferAttribute(view(m.p, m.nv * 3), 3));
-      g.setAttribute("normal", new THREE.BufferAttribute(view(m.n, m.nv * 3), 3, true));
-      g.setAttribute("uv", new THREE.BufferAttribute(view(m.uv, m.nv * 2), 2));
-      g.setIndex(new THREE.BufferAttribute(view(m.i, m.ni), 1));
-      kitGeo.push(g);
-      byCls[m.cls].push(k);
-    });
-    for (const src of KIT.atlases) {
-      const t = new THREE.TextureLoader().load(src);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.flipY = false;
-      atlasTex.push(t);
-    }
-  }
+  // ----------------------------------------------------------------- the LA building set
   function obb(pts: [number, number][]) {
     let best: any = null;
     for (let k = 0; k < pts.length; k++) {
@@ -1088,14 +1256,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     best.z = best.cu * best.s + best.cv * best.c;
     return best as { A: number; c: number; s: number; U: number; V: number; x: number; z: number };
   }
-  function kitClass(b: Bldg, area: number) {
-    const t = TYPES[b.t] ?? "other";
-    if (t === "house" || t === "garage" || (b.u <= 2 && b.h < 9)) return "house";
-    if (t === "apartments" || t === "residential") return hash2(b.i, 91) < 0.55 && area < 900 && b.h < 26 ? "brick" : "mid";
-    return "mid";
+  function polyArea(pts: [number, number][]) {
+    let a = 0;
+    for (let k = 0; k < pts.length; k++) { const p = pts[k], q = pts[(k + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; }
+    return Math.abs(a / 2);
   }
-  function placeKit(b: Bldg, road: (x: number, z: number) => [number, number] | null) {
-    const o = obb(b.p), area = o.U * o.V, cls = kitClass(b, area);
+  /** what the building is and which way its front door faces (toward the nearest street) */
+  function planFor(b: Bldg, road: (x: number, z: number) => [number, number] | null, blocked: (x: number, z: number) => boolean): Plan {
+    const o = obb(b.p);
     const rd = road(o.x, o.z) ?? [o.x + 1, o.z];
     let vx = rd[0] - o.x, vz = rd[1] - o.z;
     const vl = Math.hypot(vx, vz) || 1;
@@ -1103,96 +1271,119 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const axes: [number, number, string][] = [[o.c, o.s, "u"], [-o.c, -o.s, "u"], [-o.s, o.c, "v"], [o.s, -o.c, "v"]];
     let f = axes[0], fd = -2;
     for (const a of axes) { const d = a[0] * vx + a[1] * vz; if (d > fd) { fd = d; f = a; } }
-    const depth = f[2] === "u" ? o.U : o.V, width = f[2] === "u" ? o.V : o.U;
-    const H = b.h * (cls === "house" ? 1.75 : 1.6);
-    const cand = byCls[cls].map(k => {
-      const sz = KIT.models[k].size;
-      return [Math.abs(Math.log((width / depth) / (sz[0] / sz[2]))) + 0.5 * Math.abs(Math.log((H / width) / (sz[1] / sz[0]))), k];
-    }).sort((a, c) => a[0] - c[0]);
-    const k = cand[Math.floor(hash2(b.i, 7) * Math.min(3, cand.length))][1];
-    const sz = KIT.models[k].size;
-    const m4 = new THREE.Matrix4().compose(new THREE.Vector3(o.x, ground(o.x, o.z) - 0.3, o.z),
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(f[0], f[1])),
-      new THREE.Vector3(Math.max(width * 0.94, 2) / sz[0], H / sz[1], Math.max(depth * 0.94, 2) / sz[2]));
-    return { k, m4, cx: b.cx, cz: b.cz };
+    const D = f[2] === "u" ? o.U : o.V, W = f[2] === "u" ? o.V : o.U;
+    return planLA({ i: b.i, cx: b.cx, cz: b.cz, h: b.h, u: b.u, type: TYPES[b.t] ?? "other", hood: hoodAt(b.cx, b.cz),
+      x: o.x, z: o.z, fx: f[0], fz: f[1], W, D, fill: polyArea(b.p) / Math.max(1, o.A) }, blocked);
   }
-  function kitMaterial(atlas: number, isLantern: boolean) {
+  function laMaterial(isLantern: boolean) {
+    const k = (n: number) => `${n}.`;
     return new THREE.ShaderMaterial({
-      uniforms: { ...uniforms, ...fogChunk, uAtlas: { value: atlasTex[atlas] }, uLit: { value: 1 } }, fog: true,
+      uniforms: { ...uniforms, ...fogChunk, uLit: { value: 1 } }, fog: true,
       vertexShader: /* glsl */ `
-        attribute vec2 aCen; attribute float aSeed;
-        varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec2 vCen; varying float vSeed; varying float vBase;
+        attribute vec3 aCol; attribute float aK; attribute vec4 aC;
+        // flat: the per-building seed feeds a hash, and interpolation wobble would turn it to noise
+        varying vec3 vCol; flat varying float vK; flat varying vec4 vC; varying vec3 vN; varying vec3 vW;
         ${FOG_V}
-        void main() { vUv = uv; vCen = aCen; vSeed = aSeed; vBase = instanceMatrix[3].y;
-          vN = normalize(transpose(inverse(mat3(instanceMatrix))) * normal);
-          vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+        void main() { vCol = aCol; vK = aK; vC = aC; vN = normalize(mat3(modelMatrix) * normal);
+          vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
           vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
         }`,
       fragmentShader: COMMON + /* glsl */ `
-        uniform sampler2D uAtlas; uniform float uLit;
-        varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec2 vCen; varying float vSeed; varying float vBase;
+        uniform float uLit;
+        varying vec3 vCol; flat varying float vK; flat varying vec4 vC; varying vec3 vN; varying vec3 vW;
         ${FOG_F}
+        // anti-aliased window cell: soft edges sized to the pixel, fading to an average far away
+        float box2(vec2 c, vec2 lo, vec2 hi) { vec2 w = fwidth(c) * .8 + 1e-4;
+          vec2 a = smoothstep(lo - w, lo + w, c) * (1. - smoothstep(hi - w, hi + w, c));
+          float far = smoothstep(.18, .4, max(w.x, w.y));
+          return mix(a.x * a.y, (hi.x - lo.x) * (hi.y - lo.y), far); }
         void main() {
-          vec3 c = texture2D(uAtlas, vUv).rgb;
-          float L = dot(c, vec3(.2126, .7152, .0722));
-          float win = smoothstep(.03, .12, c.b - max(c.r, c.g));
           vec3 n = normalize(vN);
+          float k = floor(vK + .5);
+          vec3 alb = vCol;
+          float hgt = vW.y - vC.z;
+          // patterns run in building-local coordinates: world-sized numbers wreck float precision
+          vec2 lp = vW.xz - vC.xy;
+          vec3 tng = normalize(cross(vec3(0., 1., 0.), n) + vec3(1e-4, 0., 0.));
+          float fu = dot(vec3(lp.x, 0., lp.y), tng);
+          float wallish = 1. - step(.6, abs(n.y));
           float lam = max(dot(n, uSun), 0.);
-          float sd = sdMask(vCen);
-          ${isLantern ? /* glsl */ `
-          vec3 facade = mix(vec3(1., .5, .14), vec3(1., .76, .38), smoothstep(.1, .7, L)) * (.55 + .7 * lam) * 1.45;
-          float flick = .9 + .1 * sin(uTime * 2. + vSeed * 40.);
-          float wall = 1. - smoothstep(.3, .6, abs(n.y));
-          vec3 tng = normalize(cross(n, vec3(0., 1., 0.)) + 1e-4);
-          vec2 cell = vec2(fract(dot(vW, tng) / 2.9), fract((vW.y - vBase) / 3.2));
-          float pw = wall * step(.24, cell.x) * step(cell.x, .76) * step(.28, cell.y) * step(cell.y, .78) * step(1.6, vW.y - vBase);
-          vec3 col = facade + vec3(1., .86, .52) * max(pw, win) * 4.6 * flick * uLit;
-          if (n.y > .6) col = mix(facade, vec3(1., .8, .42) * (1. + 1.1 * uLit), .7);
-          col *= .35 + .65 * uLit;
-          ` : /* glsl */ `
-          vec3 tint = mix(vec3(${hexv(DUSK_BLDG)}), vec3(${hexv(DUSK_ROOF)}), step(.5, n.y));
-          float hemi = .5 + .5 * n.y;
-          vec3 amb = mix(vec3(.62, .58, .6), vec3(.78, .84, 1.), hemi);           // warm bounce below, cool sky above
-          vec3 dusk = mix(tint * (.45 + .95 * L), c * .7, .22) * (amb * .62 + vec3(1., .86, .7) * .62 * lam) * (.9 + .2 * vSeed);
-          float baseAO = mix(.5, 1., smoothstep(0., 6., vW.y - vBase));             // darker where walls meet the street
-          dusk *= baseAO;
           vec3 V = normalize(cameraPosition - vW);
-          dusk += vec3(.55, .62, .85) * pow(1. - max(dot(n, V), 0.), 3.) * .18;      // cool rim that separates the silhouettes
-          dusk += (tint * .8 + .2) * lanternLight(vW, n) * .55;
-          float wallK = 1. - smoothstep(.25, .5, abs(n.y));
-          dusk = mix(dusk, dusk * .5, win * wallK);
-          float lit = step(.6, win) * wallK * step(.975, h21(floor(vW.xz * .4) + floor(vW.y * .3) + vSeed * 13.));
-          dusk += vec3(.95, .78, .5) * lit * .45;
+          float fres = pow(1. - max(dot(n, V), 0.), 2.);
+          // procedural windows on the big facades; geometric ones elsewhere
+          float gm = 0., cell = 0.;
+          if (k == ${k(K.GRID)}) { vec2 c = vec2(fract(fu / 3.2), fract(hgt / ${glf(3.1 * VS)})); gm = box2(c, vec2(.24, .3), vec2(.76, .8)) * step(1.5, hgt) * wallish; cell = h21(vec2(floor(fu / 3.2), floor(hgt / ${glf(3.1 * VS)})) + vC.w * 31.); }
+          else if (k == ${k(K.RIBBON)}) { vec2 c = vec2(fract(fu / 1.6), fract(hgt / ${glf(3.1 * VS)})); gm = box2(c, vec2(.07, .34), vec2(.93, .86)) * wallish; cell = h21(vec2(floor(fu / 1.6), floor(hgt / ${glf(3.1 * VS)})) + vC.w * 17.); }
+          else if (k == ${k(K.CURTAIN)}) { vec2 c = vec2(fract(fu / 1.7), fract(hgt / ${glf(2.9 * VS)})); gm = box2(c, vec2(.06, .14), vec2(.94, 1.)) * wallish; cell = h21(vec2(floor(fu / 1.7), floor(hgt / ${glf(2.9 * VS)})) + vC.w * 7.); }
+          else if (k == ${k(K.GLASS)}) { gm = 1.; cell = h21(floor(lp * .45) + floor(hgt * .35) + vC.w * 13.); }
+          vec3 surf = alb;
+          if (k == ${k(K.TILE)}) surf *= (.78 + .22 * abs(sin(fu * 8.5))) * (.88 + .12 * step(.18, fract(hgt * 2.2)));
+          else if (k == ${k(K.AWNING)}) surf = mix(surf, vec3(.96, .95, .92), step(.5, fract(fu / 1.1)));
+          else if (k == ${k(K.BREEZE)}) { vec2 c = fract(vec2(fu, hgt) / .62) - .5; surf *= mix(.32, 1., smoothstep(.2, .27, length(c))); }
+          else if (k == ${k(K.SHUTTER)}) surf *= .8 + .2 * step(.3, fract(hgt * 3.2));
+          else if (k == ${k(K.CORRUGATED)}) surf *= .84 + .16 * sin(fu * 11.);
+          else if (k == ${k(K.SOLAR)}) { vec2 c = fract(lp * .9); surf = mix(vec3(.07, .11, .24), vec3(.5, .6, .76), step(.9, max(c.x, c.y))); }
+          else if (k == ${k(K.ROOF)}) surf *= .88 + .14 * vn(lp * .8 + vC.w * 40.);
+          else if (k == ${k(K.LAWN)}) surf *= .82 + .24 * vn(lp * 1.3 + vC.w * 40.);
+          else if (k == ${k(K.DARK)}) surf *= .5;
+          else if (k == ${k(K.WALL)} || k == ${k(K.GRID)}) surf *= .94 + .08 * vn(vec2(fu, hgt) * 1.7 + vC.w * 40.);
+          // blue hour: violet bounce from below, cool sky above, a low warm sun
+          float hemi = .5 + .5 * n.y;
+          vec3 amb = mix(vec3(.34, .3, .46), vec3(.5, .56, .82), step(.5, hemi) * .7 + hemi * .3);
+          float ao = mix(.55, 1., smoothstep(0., 3.5, hgt));
+          // cel bands: shade, lit, and a hot rim of sunset where the sun hits square on
+          float band = smoothstep(.16, .2, lam) * .55 + smoothstep(.52, .56, lam) * .3 + smoothstep(.8, .83, lam) * .15;
+          vec3 col = surf * (amb * .62 + vec3(1., .68, .42) * 1.25 * band) * ao;
+          col += vec3(.55, .62, .85) * pow(1. - max(dot(n, V), 0.), 3.) * .1;
+          if (gm > .01) {
+            vec3 sky = mix(vec3(.14, .18, .3), vec3(.62, .66, .78), fres);
+            vec3 g = k == ${k(K.CURTAIN)} ? mix(alb * .55, sky, .55) : vec3(.09, .12, .19) + sky * .35;
+            float office = step(.5, float(k == ${k(K.CURTAIN)} || k == ${k(K.RIBBON)}));
+            float lit = step(mix(.66, .72, office), cell);
+            vec3 warm = mix(vec3(1., .72, .4), vec3(1., .93, .8), office);
+            g = mix(g, warm * .95, lit);
+            g = mix(g, vec3(.45, .62, 1.) * .7, step(.965, cell) * (1. - lit) * (1. - office));
+            col = mix(col, g, gm);
+          }
+          if (k == ${k(K.POOL)}) { float c = sin(lp.x * 1.7 + uTime * 1.3) * sin(lp.y * 1.9 - uTime * 1.1); col = vec3(.12, .78, .92) * (1. + .2 * c); }
+          if (k == ${k(K.NEON)}) { float fl = .93 + .07 * sin(uTime * 23. + vC.w * 50.); col = alb * (1.5 + 1.1 * step(.35, fract(fu * .8))) * fl; }
+          if (k == ${k(K.LAMP)}) col = vec3(1., .82, .52) * 2.1;
+          if (k == ${k(K.BEACON)}) col = vec3(1., .16, .08) * (.35 + 2.6 * step(.55, fract(uTime * .7 + vC.w * 3.)));
+          col += (alb * .6 + .15) * lanternLight(vW, n) * .28 * (1. - gm * .6);
+          ${isLantern ? /* glsl */ `
+          // the customer's own building: gold stucco, every window lit
+          float flick = .9 + .1 * sin(uTime * 2. + vC.w * 40.);
+          vec3 gold = mix(vec3(1., .5, .12), vec3(1., .72, .32), smoothstep(.3, .9, dot(alb, vec3(.33))));
+          vec3 facade = mix(alb, gold, .8) * (.72 + .5 * lam + .15 * hemi) + gold * .22;
+          // small windows burn bright; a tower's whole curtain wall glows softer so it never whites out
+          float glow = max(gm, float(k == ${k(K.GLASS)}));
+          float burn = k == ${k(K.GLASS)} ? 2.1 : 1.05;
+          vec3 c2 = facade;
+          if (k == ${k(K.POOL)} || k == ${k(K.NEON)} || k == ${k(K.LAMP)} || k == ${k(K.BEACON)}) c2 = col;
+          c2 = mix(c2, vec3(1., .78, .42) * burn * flick * uLit, glow);
+          col = c2 * (.55 + .45 * uLit);
+          ` : /* glsl */ `
+          float sd = sdMask(vC.xy);
           vec3 plaster = vec3(.93, .93, .92) * (.78 + .24 * lam);
-          vec3 col = mix(dusk, plaster, smoothstep(-6., 10., sd));
+          col = mix(col, plaster, smoothstep(-6., 10., sd));
           `}
           gl_FragColor = vec4(col, 1.);
           #include <fog_fragment>
         }`,
     });
   }
-  function kitInstances(places: { k: number; m4: THREE.Matrix4; cx: number; cz: number }[], isLantern: boolean) {
-    const group = new THREE.Group();
-    const byModel = new Map<number, number[]>();
-    places.forEach((pl, j) => { if (!byModel.has(pl.k)) byModel.set(pl.k, []); byModel.get(pl.k)!.push(j); });
-    for (const [k, idx] of byModel) {
-      const geo = kitGeo[k].clone();
-      const cen = new Float32Array(idx.length * 2), seed = new Float32Array(idx.length);
-      idx.forEach((j, q) => { cen[q * 2] = places[j].cx; cen[q * 2 + 1] = places[j].cz; seed[q] = hash2(q, k); });
-      geo.setAttribute("aCen", new THREE.InstancedBufferAttribute(cen, 2));
-      geo.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seed, 1));
-      const im = new THREE.InstancedMesh(geo, kitMaterial(KIT.models[k].atlas, isLantern), idx.length);
-      idx.forEach((j, q) => im.setMatrixAt(q, places[j].m4));
-      im.computeBoundingSphere();
-      group.add(im);
-    }
-    return group;
+  let LA_MAT: THREE.ShaderMaterial | null = null;
+  function laMesh(plans: Plan[], isLantern: boolean) {
+    const g = buildLA(plans, ground, p => hoodAt(p.cx, p.cz));
+    const mesh = new THREE.Mesh(g, isLantern ? laMaterial(true) : (LA_MAT ??= laMaterial(false)));
+    mesh.name = "la";
+    return mesh;
   }
   function boxMesh(list: Bldg[]) {
     const pos: number[] = [], nrm: number[] = [], cen: number[] = [], idx: number[] = [];
     for (const b of list) {
-      const base = ground(b.cx, b.cz), y0 = base - 8, y1 = base + b.h * 1.6;
+      const base = ground(b.cx, b.cz), y0 = base - 8, y1 = base + Math.max(b.h, 3.5) * VS;
       const ring = b.p;
       for (let i = 0; i < ring.length; i++) {
         const a = ring[i], c = ring[(i + 1) % ring.length], dx = c[0] - a[0], dz = c[1] - a[1], L = Math.hypot(dx, dz);
@@ -1227,7 +1418,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         void main() {
           float sd = sdMask(vCen);
           vec3 n = normalize(vN); float lam = max(dot(n, uSun), 0.);
-          vec3 dusk = mix(vec3(${hexv(DUSK_BLDG)}), vec3(${hexv(DUSK_ROOF)}), step(.5, n.y)) * (.5 + .62 * lam) * (.85 + .3 * h21(vCen * .013));
+          float hv = h21(vCen * .013);
+          vec3 alb = hv < .33 ? vec3(.95, .9, .84) : hv < .6 ? vec3(.95, .85, .76) : hv < .8 ? vec3(.86, .9, .85) : vec3(.84, .88, .92);
+          if (n.y > .5) alb = mix(alb, vec3(.72, .42, .3), step(.55, h21(vCen * .031)));
+          vec3 amb = mix(vec3(.4, .36, .5), vec3(.56, .62, .86), .5 + .5 * n.y);
+          vec3 dusk = alb * (amb * .66 + vec3(1., .7, .44) * 1.05 * lam);
           vec3 plaster = vec3(.93, .93, .92) * (.78 + .24 * lam);
           gl_FragColor = vec4(mix(dusk, plaster, smoothstep(-6., 10., sd)), 1.);
           #include <fog_fragment>
@@ -1237,7 +1432,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
 
   // ----------------------------------------------------------------- tiles (streamed where land is charted)
-  type Tile = { key: string; state: "loading" | "ready"; bldgs: Bldg[]; idMin: number; idMax: number; roadPts: number[]; group: THREE.Group; kit: THREE.Group | null; box: THREE.Mesh | null; cx: number; cz: number };
+  type Tile = { key: string; state: "loading" | "ready"; bldgs: Bldg[]; idMin: number; idMax: number; roadPts: number[]; group: THREE.Group;
+    plans: Plan[]; detail: THREE.Mesh | null; building: LABuilder | null; box: THREE.Mesh | null; blocked: (x: number, z: number) => boolean; cx: number; cz: number };
   const tiles = new Map<string, Tile>();
   let bid = 0;
   function tileKeyAt(x: number, z: number) {
@@ -1258,7 +1454,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
   async function loadTile(key: string) {
     const [ti, tj] = key.split("_").map(Number);
-    const t: Tile = { key, state: "loading", bldgs: [], idMin: 0, idMax: -1, roadPts: [], group: new THREE.Group(), kit: null, box: null,
+    const t: Tile = { key, state: "loading", bldgs: [], idMin: 0, idMax: -1, roadPts: [], group: new THREE.Group(), plans: [], detail: null, building: null, box: null, blocked: () => true,
       cx: M.bounds[0] + (ti + 0.5) * M.tile, cz: M.bounds[1] + (tj + 0.5) * M.tile };
     tiles.set(key, t);
     const data: TileData = await fetch(`${WORLD_BASE}/world/tiles/${key}.json`).then(r => r.json());
@@ -1355,25 +1551,17 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
     return lo.slice(0, -1).concat(hi.slice(0, -1));
   }
-  function shadowMesh(places: { k: number; m4: THREE.Matrix4 }[], blobs: number[][]) {
+  function shadowMesh(plans: Plan[], blobs: number[][]) {
     const pos: number[] = [], idx: number[] = [];
-    const v = new THREE.Vector3();
     const addPoly = (poly: [number, number][]) => {
       if (poly.length < 3) return;
       const b = pos.length / 3;
       for (const [x, z] of poly) pos.push(x, ground(x, z) + 0.35, z);
       for (let i = 1; i < poly.length - 1; i++) idx.push(b, b + i + 1, b + i);
     };
-    for (const pl of places) {
-      const sz = KIT.models[pl.k].size, pts: [number, number][] = [];
-      v.set(0, sz[1], 0).applyMatrix4(pl.m4);
-      const top = v.y;
-      v.set(0, 0, 0).applyMatrix4(pl.m4);
-      const h = Math.max(1, top - v.y);
-      for (const [sx, sz2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-        v.set(sx * sz[0] / 2, 0, sz2 * sz[2] / 2).applyMatrix4(pl.m4);
-        pts.push([v.x, v.z], [v.x + SH.x * h, v.z + SH.y * h]);
-      }
+    for (const pl of plans) {
+      const h = Math.max(1, pl.top * 0.92), pts: [number, number][] = [];
+      for (const [x, z] of planCorners(pl)) pts.push([x, z], [x + SH.x * h, z + SH.y * h]);
       addPoly(hull(pts));
     }
     for (const [x, z, r, h] of blobs) {
@@ -1387,72 +1575,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const m = new THREE.Mesh(g, shadowMaterial());
     m.renderOrder = 1;
     m.name = "shadows";
+    skipInk(m);
     return m;
   }
-  function rebuildTile(t: Tile) {
-    if (t.kit) { t.group.remove(t.kit); t.kit.traverse(o => (o as THREE.Mesh).geometry?.dispose()); t.kit = null; }
-    if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
-    const lit = lanternBuildingIds();
-    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && (sdField(b.cx, b.cz) < 150 || terrField(b.cx, b.cz) < 20) && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
-    const nearest = roadNear(t);
-    const places = near.map(b => placeKit(b, nearest));
-    t.kit = kitInstances(places, false);
-    t.box = boxMesh(near);
-    t.group.add(t.kit, t.box);
-    updateLod(true);
-    // street and yard trees
-    const old = t.group.getObjectByName("trees");
-    if (old) t.group.remove(old);
-    const blobs: number[][] = [];
-    t.group.add(buildTrees(t, near, blobs));
-    const oldS = t.group.getObjectByName("shadows");
-    if (oldS) { t.group.remove(oldS); (oldS as THREE.Mesh).geometry.dispose(); }
-    t.group.add(shadowMesh(places, blobs));
-  }
-  let lodAt = new THREE.Vector3(1e9, 0, 0);
-  function updateLod(force = false) {
-    const tg = controls.target;
-    if (!force && tg.distanceTo(lodAt) < 120) return;
-    lodAt.copy(tg);
-    const far = camera.position.distanceTo(tg) > 4200;
-    for (const t of tiles.values()) {
-      if (t.state !== "ready" || !t.kit || !t.box) continue;
-      const d = Math.hypot(t.cx - tg.x, t.cz - tg.z);
-      const kit = !far && d < KIT_RADIUS;
-      t.kit.visible = kit;
-      t.box.visible = !kit;
-    }
-  }
-  const treeCanopy = new THREE.IcosahedronGeometry(1, 1);
-  const palmTrunk = new THREE.CylinderGeometry(0.35, 0.55, 1, 5).translate(0, 0.5, 0);
-  const palmFrond = new THREE.ConeGeometry(1, 0.6, 7).translate(0, -0.3, 0);
-  function treeMat(col: string) {
-    return new THREE.ShaderMaterial({
-      uniforms: { ...uniforms, ...fogChunk, uCol: { value: new THREE.Color(col) } }, fog: true,
-      vertexShader: /* glsl */ `
-        varying vec3 vN; varying vec3 vW;
-        ${FOG_V}
-        void main() { vN = normalize(mat3(instanceMatrix) * normal);
-          vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
-          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
-          #include <fog_vertex>
-        }`,
-      fragmentShader: COMMON + /* glsl */ `
-        uniform vec3 uCol; varying vec3 vN; varying vec3 vW;
-        ${FOG_F}
-        void main() { float sdT = sdMask(vW.xz); if ((sdT > 6. && terrMask(vW.xz) > 0.) || served(vW.xz) < .5) discard;
-          float lam = max(dot(normalize(vN), uSun), 0.);
-          vec3 col = uCol * (.55 + .7 * lam) * (.8 + .4 * h21(floor(vW.xz)));
-          gl_FragColor = vec4(mix(col, vec3(.92, .93, .95) * (.8 + .25 * lam), smoothstep(0., 30., sdT)), 1.);
-          #include <fog_fragment>
-        }`,
-    });
-  }
-  const TREE_MATS = { canopy: null as THREE.ShaderMaterial | null, trunk: null as THREE.ShaderMaterial | null, frond: null as THREE.ShaderMaterial | null };
-  function buildTrees(t: Tile, near: Bldg[], blobs: number[][] = []) {
-    TREE_MATS.canopy ??= treeMat("#3f5a4a");
-    TREE_MATS.trunk ??= treeMat("#6b6a70");
-    TREE_MATS.frond ??= treeMat("#4d6b50");
+  /** footprint occupancy for a tile: keeps pools and trees off the neighbours' buildings */
+  function occupancy(t: Tile) {
     const PX = 2, x0 = t.cx - M.tile / 2 - 20, z0 = t.cz - M.tile / 2 - 20, cw = Math.ceil((M.tile + 40) / PX);
     const cv = document.createElement("canvas");
     cv.width = cv.height = cw;
@@ -1460,7 +1587,145 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     g.fillStyle = "#000";
     for (const b of t.bldgs) { g.beginPath(); b.p.forEach((q, k) => { const X = (q[0] - x0) / PX, Y = (q[1] - z0) / PX; k ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.closePath(); g.fill(); }
     const occ = g.getImageData(0, 0, cw, cw).data;
-    const blocked = (x: number, z: number) => { const i = Math.floor((x - x0) / PX), j = Math.floor((z - z0) / PX); if (i < 1 || j < 1 || i >= cw - 1 || j >= cw - 1) return true; return occ[(j * cw + i) * 4 + 3] > 0 || occ[(j * cw + i + 1) * 4 + 3] > 0; };
+    return (x: number, z: number) => { const i = Math.floor((x - x0) / PX), j = Math.floor((z - z0) / PX); if (i < 1 || j < 1 || i >= cw - 1 || j >= cw - 1) return true; return occ[(j * cw + i) * 4 + 3] > 0 || occ[(j * cw + i + 1) * 4 + 3] > 0; };
+  }
+  function dropDetail(t: Tile) {
+    t.building = null;
+    if (!t.detail) return;
+    t.group.remove(t.detail);
+    t.detail.geometry.dispose();
+    t.detail = null;
+  }
+  function rebuildTile(t: Tile) {
+    dropDetail(t);
+    if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
+    const lit = lanternBuildingIds();
+    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && (sdField(b.cx, b.cz) < 150 || terrField(b.cx, b.cz) < 20) && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
+    const nearest = roadNear(t);
+    t.blocked = occupancy(t);
+    t.plans = near.map(b => planFor(b, nearest, t.blocked));
+    t.box = boxMesh(near);
+    t.group.add(t.box);
+    updateLod(true);
+    // street and yard trees, kept out of the backyard pools
+    const old = t.group.getObjectByName("trees");
+    if (old) t.group.remove(old);
+    const blobs: number[][] = [];
+    t.group.add(buildTrees(t, t.plans, blobs));
+    const oldS = t.group.getObjectByName("shadows");
+    if (oldS) { t.group.remove(oldS); (oldS as THREE.Mesh).geometry.dispose(); }
+    t.group.add(shadowMesh(t.plans, blobs));
+  }
+  let lodAt = new THREE.Vector3(1e9, 0, 0);
+  let detailFar = true;
+  function updateLod(force = false) {
+    const tg = controls.target;
+    if (!force && tg.distanceTo(lodAt) < 120) return;
+    lodAt.copy(tg);
+    detailFar = camera.position.distanceTo(tg) > 4200;
+    for (const t of tiles.values()) {
+      if (t.state !== "ready" || !t.box) continue;
+      const d = Math.hypot(t.cx - tg.x, t.cz - tg.z);
+      // far tiles give their detail back to the GPU
+      if (t.detail && (detailFar || d > DETAIL_RADIUS + 900)) dropDetail(t);
+      const show = !detailFar && d < DETAIL_RADIUS && !!t.detail;
+      if (t.detail) t.detail.visible = show;
+      t.box.visible = !show;
+    }
+  }
+  /** build the full building set for the nearest tiles that need it, a slice per frame */
+  function pumpDetail(budgetMs: number) {
+    if (detailFar) return;
+    const tg = controls.target, t0 = performance.now();
+    const todo = [...tiles.values()]
+      .filter(t => t.state === "ready" && !t.detail && t.box && Math.hypot(t.cx - tg.x, t.cz - tg.z) < DETAIL_RADIUS)
+      .sort((a, b) => Math.hypot(a.cx - tg.x, a.cz - tg.z) - Math.hypot(b.cx - tg.x, b.cz - tg.z));
+    for (const t of todo) {
+      t.building ??= new LABuilder(t.plans, ground, p => hoodAt(p.cx, p.cz));
+      if (!t.building.step(budgetMs - (performance.now() - t0))) return;
+      t.detail = new THREE.Mesh(t.building.geometry(), LA_MAT ??= laMaterial(false));
+      t.detail.name = "la";
+      t.building = null;
+      t.group.add(t.detail);
+      t.box!.visible = false;
+      if (performance.now() - t0 > budgetMs) return;
+    }
+  }
+  // a street tree is a soft cluster of lobes, not one faceted ball
+  const lobe = (r: number, x: number, y: number, z: number) => {
+    const g = mergeVertices(new THREE.IcosahedronGeometry(r, 2).deleteAttribute("uv").deleteAttribute("normal"));
+    g.computeVertexNormals();
+    return g.translate(x, y, z);
+  };
+  const treeCanopy = mergeGeometries([lobe(1, 0, 0, 0), lobe(0.72, 0.62, -0.18, 0.3), lobe(0.66, -0.5, -0.1, -0.42), lobe(0.6, 0.1, 0.42, -0.2)])!;
+  const hedgeBlob = lobe(1, 0, 0, 0);
+  const palmTrunk = new THREE.CylinderGeometry(0.22, 0.42, 1, 6).translate(0, 0.5, 0);
+  // a palm crown: blades drooping out from the top, like the ones that line every LA boulevard
+  const palmFrond = (() => {
+    const pos: number[] = [], idx: number[] = [];
+    const blades = 9;
+    for (let b = 0; b < blades; b++) {
+      const a = (b / blades) * Math.PI * 2 + (b % 2) * 0.2, ca = Math.cos(a), sa = Math.sin(a);
+      const base = pos.length / 3, segs = 4;
+      for (let q = 0; q <= segs; q++) {
+        const t = q / segs, r = t * 1.0, y = 0.35 * Math.sin(t * Math.PI * 0.9) - t * t * 0.55, w = 0.22 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.08));
+        pos.push(ca * r - sa * w, y, sa * r + ca * w, ca * r + sa * w, y, sa * r - ca * w);
+        if (q) { const k = base + (q - 1) * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  })();
+  function treeMat(col: string, col2: string, foliage: boolean, doubleSided = false) {
+    return new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk, uCol: { value: new THREE.Color(col) }, uCol2: { value: new THREE.Color(col2) } }, fog: true,
+      side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+      vertexShader: /* glsl */ `
+        varying vec3 vN; varying vec3 vW; varying vec3 vL; flat varying float vH;
+        ${FOG_V}
+        void main() { vN = normalize(mat3(instanceMatrix) * normal); vL = position;
+          vec3 ip = instanceMatrix[3].xyz; vH = fract(sin(dot(floor(ip.xz * 3.), vec2(12.9898, 78.233))) * 43758.5453);
+          vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        uniform vec3 uCol; uniform vec3 uCol2; varying vec3 vN; varying vec3 vW; varying vec3 vL; flat varying float vH;
+        ${FOG_F}
+        void main() { float sdT = sdMask(vW.xz); if ((sdT > 6. && terrMask(vW.xz) > 0.) || served(vW.xz) < .5) discard;
+          vec3 n = normalize(vN);
+          if (!gl_FrontFacing) n = -n;
+          float lam = max(dot(n, uSun), 0.), wrap = max(dot(n, uSun) * .6 + .4, 0.);
+          vec3 base = mix(uCol, uCol2, vH);
+          vec3 col;
+          ${foliage ? /* glsl */ `
+          // soft leaf clumps, sun-warmed tops, cool undersides, a warm rim where the sunset comes through
+          float clump = vn(vL.xz * 2.3 + vL.y * 1.7 + vH * 20.);
+          vec3 amb = mix(vec3(.3, .32, .42), vec3(.5, .58, .72), .5 + .5 * n.y);
+          float band = smoothstep(.34, .4, wrap) * .6 + smoothstep(.7, .75, wrap) * .4;
+          col = base * (amb * .75 + vec3(1., .78, .5) * 1.05 * band) * (.84 + .26 * step(.5, clump));
+          vec3 V = normalize(cameraPosition - vW);
+          col += vec3(1., .72, .4) * pow(1. - max(dot(n, V), 0.), 2.5) * max(dot(-V, uSun), 0.) * .35;
+          ` : /* glsl */ `
+          col = base * (.5 + .7 * lam);
+          `}
+          col += base * lanternLight(vW, n) * .45;
+          gl_FragColor = vec4(mix(col, vec3(.92, .93, .95) * (.8 + .25 * lam), smoothstep(0., 30., sdT)), 1.);
+          #include <fog_fragment>
+        }`,
+    });
+  }
+  const TREE_MATS = { canopy: null as THREE.ShaderMaterial | null, trunk: null as THREE.ShaderMaterial | null, frond: null as THREE.ShaderMaterial | null };
+  function buildTrees(t: Tile, plans: Plan[], blobs: number[][] = []) {
+    TREE_MATS.canopy ??= treeMat("#5b7a4e", "#7f8f52", true);
+    TREE_MATS.trunk ??= treeMat("#8b7d6b", "#9a8a74", false);
+    TREE_MATS.frond ??= treeMat("#6f8a55", "#8a9a5a", true, true);
+    const x0 = t.cx - M.tile / 2 - 20, z0 = t.cz - M.tile / 2 - 20;
+    const pools = plans.filter(p => p.pool).map(p => [p.x + p.pool!.x * p.fz + p.pool!.z * p.fx, p.z - p.pool!.x * p.fx + p.pool!.z * p.fz, Math.max(p.pool!.w, p.pool!.d) / 2 + 2.5]);
+    const blocked = (x: number, z: number) => t.blocked(x, z) || pools.some(([px, pz, r]) => (x - px) ** 2 + (z - pz) ** 2 < r * r);
     let seed = (hash2(t.cx | 0, t.cz | 0) * 2147483646 + 1) | 0;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const trees: number[][] = [], palms: number[][] = [], hedges: number[][] = [];
@@ -1504,17 +1769,17 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     grp.name = "trees";
     const Mx = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
     const tm = new THREE.InstancedMesh(treeCanopy, TREE_MATS.canopy, trees.length);
-    trees.forEach(([x, z, r], k) => { const s = 3.2 + r * 3.4; V.set(x, ground(x, z) + s * 1.35, z); Sc.set(s, s * 1.15, s); Q.setFromAxisAngle(UP, r * 6.28); tm.setMatrixAt(k, Mx.compose(V, Q, Sc)); });
+    trees.forEach(([x, z, r], k) => { const s = 2.5 + r * 2.6; V.set(x, ground(x, z) + s * 1.5, z); Sc.set(s, s * 0.95, s); Q.setFromAxisAngle(UP, r * 6.28); tm.setMatrixAt(k, Mx.compose(V, Q, Sc)); });
     const pt = new THREE.InstancedMesh(palmTrunk, TREE_MATS.trunk, palms.length);
     const pc = new THREE.InstancedMesh(palmFrond, TREE_MATS.frond, palms.length);
     palms.forEach(([x, z, r], k) => {
       const h = 18 + r * 12, y = ground(x, z);
       V.set(x, y, z); Sc.set(1, h, 1); Q.identity(); pt.setMatrixAt(k, Mx.compose(V, Q, Sc));
-      V.set(x, y + h + 1.2, z); Sc.set(4.2, 2.4, 4.2); Q.setFromAxisAngle(UP, r * 6.28); pc.setMatrixAt(k, Mx.compose(V, Q, Sc));
+      V.set(x, y + h, z); Sc.set(4.6, 4.2, 4.6); Q.setFromAxisAngle(UP, r * 6.28); pc.setMatrixAt(k, Mx.compose(V, Q, Sc));
     });
-    const hm = new THREE.InstancedMesh(treeCanopy, TREE_MATS.canopy, hedges.length);
+    const hm = new THREE.InstancedMesh(hedgeBlob, TREE_MATS.canopy, hedges.length);
     hedges.forEach(([x, z, r], k) => { V.set(x, ground(x, z) + 1.3, z); Sc.set(2.6 + r, 1.3, 2.6 + r); Q.setFromAxisAngle(UP, r * 6.28); hm.setMatrixAt(k, Mx.compose(V, Q, Sc)); });
-    for (const [x, z, r] of trees) blobs.push([x, z, 3.2 + r * 3.4, 8]);
+    for (const [x, z, r] of trees) blobs.push([x, z, 2.5 + r * 2.6, 8]);
     for (const [x, z] of palms) blobs.push([x, z, 2.6, 20]);
     for (const m of [tm, pt, pc, hm]) m.computeBoundingSphere();
     grp.add(tm, pt, pc, hm);
@@ -1527,7 +1792,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     { id: "century_park_east" as const, src: `${ASSETS}/v4/tower-century-park-east.png`, h: 290 },
   ];
   const hidden = new Set<number>();            // footprints the landmark art replaces
-  const landmarks: { mesh: THREE.Mesh; x: number; z: number }[] = [];
+  const landmarks: { id: "opus_la" | "century_park_east"; mesh: THREE.Mesh; x: number; z: number }[] = [];
   function buildLandmarks() {
     for (const L of LANDMARKS) {
       const geo = CANONICAL_BUILDING_GEOGRAPHY[L.id];
@@ -1562,7 +1827,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       mesh.position.set(x, ground(x, z) - 2, z);
       mesh.renderOrder = 3;
       scene.add(mesh);
-      landmarks.push({ mesh, x, z });
+      landmarks.push({ id: L.id, mesh, x, z });
     }
   }
   function nearLandmark(x: number, z: number) {
@@ -1648,7 +1913,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     }
     // lantern meshes: each customer lights their building; a building with several customers also
     // carries one floating lantern per customer above its roof, so every customer can be hovered
-    // release the previous generation's GPU buffers (kit geometry clones, halos, per-lantern materials)
+    // release the previous generation's GPU buffers (lantern buildings, halos, per-lantern materials)
     for (const o of [...lanternGroup.children]) {
       lanternGroup.remove(o);
       o.traverse(n => {
@@ -1675,12 +1940,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const tile = tiles.get(tileKeyAt(g.x, g.z));
       let roofY = ground(g.x, g.z) + 14;
       if (g.b && tile && !hidden.has(g.b.i)) {
-        const placed = placeKit(g.b, roadNear(tile));
-        mesh = kitInstances([placed], true);
-        mesh.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined; if (mm?.uniforms?.uLit) mm.uniforms.uLit.value = k; });
-        mesh.userData.keys = keys;
-        lanternGroup.add(mesh);
-        roofY = ground(g.x, g.z) + g.b.h * (kitClass(g.b, 1) === "house" ? 1.75 : 1.6);
+        // the customer's own building, same LA archetype as its neighbours, lit gold
+        const plan = planFor(g.b, roadNear(tile), tile.blocked);
+        const lm = laMesh([plan], true);
+        (lm.material as THREE.ShaderMaterial).uniforms.uLit.value = k;
+        lm.userData.keys = keys;
+        mesh = lm;
+        lanternGroup.add(lm);
+        roofY = ground(g.x, g.z) + plan.top;
       }
       if (g.members.length > 1 || !mesh) {
         // floating lanterns, one per customer, in a small grid above the roof
@@ -1703,6 +1970,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }));
       halo.position.set(g.x, ground(g.x, g.z) + 1.6, g.z);
       halo.userData.halo = true;
+      skipInk(halo);
       if (!mesh && g.members.length === 1) halo.userData.keys = keys;
       lanternGroup.add(halo);
       for (const m of g.members) placedLanterns.push({ input: m.l, x: g.x, z: g.z, b: g.b, mesh, halo });
@@ -1898,6 +2166,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   // ----------------------------------------------------------------- picking
   const ray = new THREE.Raycaster();
+  ray.layers.enableAll();
   const ndc = new THREE.Vector2();
   let downAt: [number, number] | null = null;
   function onDown(e: PointerEvent) { downAt = [e.clientX, e.clientY]; }
@@ -1906,6 +2175,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
+    const tower = ray.intersectObjects(landmarks.map(l => l.mesh), false)[0];
+    if (tower && events.onTower) {
+      const l = landmarks.find(q => q.mesh === tower.object);
+      if (l) { events.onTower(l.id); return; }
+    }
     events.onSelect?.(pickKeys(e));
   }
   const pv = new THREE.Vector3();
@@ -1983,10 +2257,15 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   // ----------------------------------------------------------------- loop
   const clock = new THREE.Clock();
   let raf = 0;
+  let simTime = 0;
   function tick() {
     if (disposed) return;
-    const dt = Math.min(clock.getDelta(), 0.05);
-    uniforms.uTime.value = clock.elapsedTime;
+    step(Math.min(clock.getDelta(), 0.05));
+    raf = requestAnimationFrame(tick);
+  }
+  function step(dt: number) {
+    simTime += dt;
+    uniforms.uTime.value = simTime;
     if (fly) {
       fly.t += dt / fly.dur;
       const e = fly.t >= 1 ? 1 : 1 - Math.pow(1 - fly.t, 3);
@@ -2008,11 +2287,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     camera.updateProjectionMatrix();
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
     if (M) { updateLights(); updateLife(dt, cd); }
-    if (M) { updateLod(); placeLabels(); }
+    if (M) { updateLod(); pumpDetail(opts.capture ? 1e9 : 8); animatePuffs(dt); placeLabels(); }
+    renderInkPrepass();
     composer.render();
-    raf = requestAnimationFrame(tick);
   }
-  raf = requestAnimationFrame(tick);
+  if (!opts.capture) raf = requestAnimationFrame(tick);
   load().catch(e => events.onError?.(e));
 
   return {
@@ -2040,6 +2319,22 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     },
     focusPoint(x: number, z: number, dist = 1600) {
       flyTo(x, z, dist);
+    },
+    /** capture mode: put the camera somewhere at once (no flight); pitch 0 looks straight down */
+    jump(x: number, z: number, dist: number, pitch = 0.95) {
+      fly = null;
+      frame(x, z, dist, 0, pitch);
+      updateLod(true);
+      pumpDetail(1e9);
+    },
+    /** capture mode: advance the world by dt seconds and draw one frame */
+    renderFrame(dt = 1 / 30) {
+      step(dt);
+    },
+    /** where a lantern stands, in world units */
+    lanternAt(key: string) {
+      const l = placedLanterns.find(p => p.input.key === key);
+      return l ? { x: l.x, z: l.z } : null;
     },
     attribution() {
       return M?.attribution ?? "";
