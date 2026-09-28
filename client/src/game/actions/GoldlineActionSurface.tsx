@@ -331,7 +331,9 @@ function VisitSurface(
                   <span>
                     {item.provenance.kind === "trainer_source"
                       ? `TRAINER SOURCE · ${item.provenance.creatorName ?? "REVIEWED INTEL"}`
-                      : "MISSION BRIEF · CLAIRE"}
+                      : item.provenance.kind === "foundation"
+                        ? "FOUNDATION · ARMORY"
+                        : "MISSION BRIEF · CLAIRE"}
                   </span>
                 </div>
               </article>
