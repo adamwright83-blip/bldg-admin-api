@@ -259,6 +259,88 @@ describe("Claire pre-visit three", () => {
     expect(result?.items[0].line).not.toMatch(/complain|missed pickups/i);
   });
 
+  it("rejects unsupported short factual words instead of filtering them out", async () => {
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "They own a gym and spa.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who is the right person to speak with about this?",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+    expect(result?.items[0].line).not.toMatch(/gym|spa/i);
+  });
+
+  it("keeps unknown property attributes as questions instead of promoting them to facts", async () => {
+    mocks.ensureBrief.mockResolvedValue({
+      ...brief,
+      unknowns: [
+        ...brief.unknowns,
+        {
+          question: "Does your building have a rooftop pool?",
+          reason: "No amenity record exists.",
+        },
+      ],
+    });
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "Your building has a rooftop pool.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who is the right person to speak with about this?",
+              },
+              {
+                slot: "WEAPON",
+                line: "A time is a real, recordable fact.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      actorId: "operator-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+    expect(result?.items[0].line).not.toMatch(/rooftop pool/i);
+  });
+
   it("rejects a complete invented property claim even if generic property words are grounded", async () => {
     mocks.invokeLLM.mockResolvedValue({
       choices: [{
