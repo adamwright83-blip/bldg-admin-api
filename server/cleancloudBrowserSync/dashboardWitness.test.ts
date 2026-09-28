@@ -123,6 +123,21 @@ describe("projectDashboardWitness", () => {
     expect(proven.witness.newCustomers).toBe(4);
   });
 
+  it("does not attribute comparison orders without a proven comparison period", () => {
+    const result = projectDashboardWitness(input({
+      fields: [
+        { label: "Sales", valueText: "$3,126.32" },
+        { label: "Revenue", valueText: "$2,984.10" },
+        { label: "Orders", valueText: "41" },
+        { label: "Comparison Orders", valueText: "999" },
+      ],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.witness.comparisonFrom).toBeNull();
+    expect(result.witness.comparisonOrders).toBeNull();
+  });
+
   it("does not invent new customers and rejects a duplicate", () => {
     const missing = projectDashboardWitness(input());
     expect(missing.ok && missing.witness.newCustomers).toBe(null);
@@ -171,5 +186,10 @@ describe("projectDashboardWitness", () => {
     expect(fn).toContain("screenshotSha256");
     expect(router).toContain("eq(dashboardWitnesses.tenantId, ctx.tenantId)");
     expect(router).toContain("expectedStoreLabel: binding.storeLabel");
+    expect(router).toContain("row.comparisonOrders === witness.comparisonOrders");
+    expect(router).toContain("eq(dashboardWitnesses.storeId, binding.storeId)");
+    expect(router).toContain("eq(dashboardWitnesses.rangeFrom, witness.rangeFrom)");
+    expect(router).toContain("eq(dashboardWitnesses.rangeTo, witness.rangeTo)");
+    expect(router).toContain("!sameWitnessTotals(row, witness)");
   });
 });
