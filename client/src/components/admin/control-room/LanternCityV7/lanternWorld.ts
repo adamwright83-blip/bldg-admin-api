@@ -323,6 +323,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     buildLandmarks();
     buildLabels();
     if (disposed) return;
+    worldReady = true;
     applyLanterns();
     events.onReady?.();
   }
@@ -1594,6 +1595,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 0.22;
   }
   let lastRegionsKey = "";
+  let worldReady = false;
   let lastInputSig = "";
   let lightSpots: { x: number; y: number; z: number; k: number }[] = [];
   function updateLights() {
@@ -1626,7 +1628,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 650;
   }
   function applyLanterns() {
-    if (!M) return;
+    // customers can arrive before the world has finished loading; load() applies them once it has
+    if (!worldReady) return;
     // regions from where lanterns are, even before their tile loads
     const inside = lanterns.map(l => ({ l, ...ll(l.latitude, l.longitude) })).filter(p => servedAt(p.x, p.z));
     // 0 customer buildings: fog. 1: a clearing around the lantern and a door-hanger territory.
