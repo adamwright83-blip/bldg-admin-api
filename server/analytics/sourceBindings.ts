@@ -181,15 +181,17 @@ export function coverageRangesFromReceiptRows(rows: readonly Row[]): SourceCover
     const completedAt = toDate(receipt.completedAt ?? row.createdAt);
     if (!validYmd(from) || !validYmd(to) || !completedAt || to < from) continue;
 
-    // Browser sync currently imports Orders (Sales). Its selected date interval is an
-    // ORDER-CREATED interval. It is deliberately NOT labelled economic_event coverage:
-    // the receipt itself warns that older orders/later corrections outside the selection
-    // can be missed even when their payment date falls inside a revenue question.
+    // Orders (Sales) receipts prove the order-created window. Orders (Revenue)
+    // receipts prove a payment window. Historical receipts have no reportType
+    // and stay orders-created. A sales span is never relabeled as payment coverage.
+    const reportType = receipt.reportType;
+    const basis =
+      reportType === "orders_revenue" ? "economic_event" : "orders_created";
     ranges.push({
       from,
       to,
       completedAt,
-      basis: "orders_created",
+      basis,
       provenance: "browser_sync_receipt",
     });
   }

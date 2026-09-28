@@ -7,6 +7,7 @@ import {
   pacificToday,
   validateRange,
   validateExportUrl,
+  validateRevenueExportUrl,
   parseCsv,
   assertPairing,
   recoveryState,
@@ -49,6 +50,65 @@ const request = (operation, input) =>
     input === undefined ? [operation] : [operation, input]
   );
 const uuid = () => crypto.randomUUID();
+
+async function captureRevenue(sales) {
+  const requestId = uuid();
+  const range = { from: sales.from, to: sales.to };
+  const tab = await openSite(`${CLEANCLOUD}/store`);
+  try {
+    const source = await runInTab(tab, prepareSource, [range, "orders_revenue"]);
+    if (source.storeLabel !== sales.storeLabel)
+      throw new Error("gumball store changed before the revenue export.");
+    await chrome.storage.session.set({
+      pendingExport: {
+        requestId,
+        range,
+        startedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+      },
+    });
+    await runInTab(tab, clickExport, [source.storeLabel]).catch(() => {});
+    let captured;
+    for (let i = 0; i < 300; i++) {
+      const { pendingExport } = await chrome.storage.session.get("pendingExport");
+      if (pendingExport?.requestId === requestId && pendingExport.capture) {
+        captured = pendingExport.capture;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+    await chrome.storage.session.remove("pendingExport");
+    if (!captured)
+      throw new Error("Chrome did not provide the Orders (Revenue) download.");
+    const checked = validateRevenueExportUrl(captured.url, range);
+    if (checked.storeId !== sales.storeId)
+      throw new Error("Revenue export belongs to a different store.");
+    const readTab = await openSite(`${CLEANCLOUD}/store`);
+    try {
+      const report = await runInTab(readTab, fetchReport, [
+        checked.url,
+        source.storeLabel,
+        MAX_BYTES,
+      ]);
+      parseCsv(report.csv, "orders_revenue");
+      return {
+        requestId,
+        tenantId: sales.tenantId,
+        actorId: sales.actorId,
+        storeId: checked.storeId,
+        storeLabel: source.storeLabel,
+        from: range.from,
+        to: range.to,
+        exportUrl: checked.url,
+        csv: report.csv,
+      };
+    } finally {
+      await chrome.tabs.remove(readTab).catch(() => {});
+    }
+  } finally {
+    await chrome.tabs.remove(tab).catch(() => {});
+  }
+}
 // Failures before an import reaches Goldline are otherwise invisible to
 // "is GUMBALL working?". Best effort only: never changes the sync outcome.
 async function reportFailure(stage, error) {
@@ -340,7 +400,20 @@ if (!globalThis.chrome?.runtime?.id) {
         const receipt = await request("import", {
           ...staged,
           bindingId: binding.id,
+          reportType: "orders_sales",
         });
+        let revenueNote = "Payment coverage was not captured.";
+        try {
+          const revenue = await captureRevenue(staged);
+          const revenueReceipt = await request("import", {
+            ...revenue,
+            bindingId: binding.id,
+            reportType: "orders_revenue",
+          });
+          revenueNote = `Orders (Revenue) imported ${revenueReceipt.totalRows ?? 0} rows.`;
+        } catch (error) {
+          revenueNote = `Orders (Sales) saved. Orders (Revenue) did not import: ${error.message}`;
+        }
         await chrome.storage.local.set({
           verifiedPairing: {
             tenantId: staged.tenantId,
@@ -353,7 +426,7 @@ if (!globalThis.chrome?.runtime?.id) {
         await save("completed", { receipt });
         showReceipt(receipt);
         $("approval").hidden = true;
-        status("Import confirmed. Your source records are saved in Goldline.");
+        status(`Import confirmed. ${revenueNote}`);
         if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
