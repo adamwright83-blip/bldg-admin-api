@@ -85,9 +85,10 @@ async function loadPersonalEvidence(input: {
   const outcomeRows = await db
     .select({
       weaponId: armoryWeaponOutcomes.weaponId,
-      outcomes: sql<number>`COUNT(*)`,
-      followUps: sql<number>`SUM(CASE WHEN ${armoryWeaponOutcomes.outcomeKind} = 'follow_up_created' THEN 1 ELSE 0 END)`,
-      wins: sql<number>`SUM(CASE WHEN ${armoryWeaponOutcomes.outcomeKind} = 'account_won' THEN 1 ELSE 0 END)`,
+      associations: sql<number>`COUNT(*)`,
+      outcomes: sql<number>`COUNT(DISTINCT CONCAT(${armoryWeaponOutcomes.outcomeKind}, ':', ${armoryWeaponOutcomes.outcomeReference}))`,
+      followUps: sql<number>`COUNT(DISTINCT CASE WHEN ${armoryWeaponOutcomes.outcomeKind} = 'follow_up_created' THEN ${armoryWeaponOutcomes.outcomeReference} END)`,
+      wins: sql<number>`COUNT(DISTINCT CASE WHEN ${armoryWeaponOutcomes.outcomeKind} = 'account_won' THEN ${armoryWeaponOutcomes.outcomeReference} END)`,
     })
     .from(armoryWeaponOutcomes)
     .where(
