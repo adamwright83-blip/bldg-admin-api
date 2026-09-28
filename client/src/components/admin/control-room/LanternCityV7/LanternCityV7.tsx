@@ -90,7 +90,7 @@ export default function LanternCityV7({
   const [mission, setMission] = useState<Mission | null>(null);
   const [selected, setSelected] = useState<string[] | null>(null);
 
-  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 60_000, retry: 1 });
+  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 10_000, refetchInterval: 15_000, retry: 1 });
   const usingSample = import.meta.env.DEV && atlas.isError;
   // every customer is their own lantern
   const customers = useMemo<GeographicCustomer[]>(() => {

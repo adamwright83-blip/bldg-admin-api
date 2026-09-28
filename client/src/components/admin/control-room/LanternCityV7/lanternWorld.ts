@@ -1594,6 +1594,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 0.22;
   }
   let lastRegionsKey = "";
+  let lastInputSig = "";
   let lightSpots: { x: number; y: number; z: number; k: number }[] = [];
   function updateLights() {
     const tg = controls.target, arr = uniforms.uLights.value as THREE.Vector4[];
@@ -1644,7 +1645,16 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     }
     // lantern meshes: each customer lights their building; a building with several customers also
     // carries one floating lantern per customer above its roof, so every customer can be hovered
-    for (const o of [...lanternGroup.children]) lanternGroup.remove(o);
+    // release the previous generation's GPU buffers (kit geometry clones, halos, per-lantern materials)
+    for (const o of [...lanternGroup.children]) {
+      lanternGroup.remove(o);
+      o.traverse(n => {
+        const m = n as THREE.Mesh;
+        if (m.geometry && m.geometry !== ORB_GEO) m.geometry.dispose();
+        const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+        (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach(x => x.dispose());
+      });
+    }
     const prevIds = lanternBuildingIds();
     const groups = new Map<string, { b: Bldg | null; x: number; z: number; members: typeof inside }>();
     for (const p of inside) {
@@ -2004,6 +2014,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   return {
     setLanterns(next: LanternInput[]) {
+      const sig = JSON.stringify(next);
+      if (sig === lastInputSig) return;
+      lastInputSig = sig;
       lanterns = next;
       applyLanterns();
     },
