@@ -962,7 +962,12 @@ export const cleancloudBrowserSyncRouter = router({
       const priorRows = await db
         .select()
         .from(economicReconciliations)
-        .where(eq(economicReconciliations.tenantId, ctx.tenantId));
+        .where(
+          and(
+            eq(economicReconciliations.tenantId, ctx.tenantId),
+            eq(economicReconciliations.storeId, binding.storeId)
+          )
+        );
       const witness: WitnessControl | null = witnessRow
         ? {
             id: witnessRow.id,
@@ -1075,23 +1080,42 @@ export const cleancloudBrowserSyncRouter = router({
           });
         } catch (error) {
           if (!isDuplicateKey(error)) throw error;
+          const [winner] = await db
+            .select()
+            .from(verifiedEconomicEvents)
+            .where(
+              and(
+                eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+                eq(verifiedEconomicEvents.idempotencyKey, event.idempotencyKey)
+              )
+            )
+            .limit(1);
+          if (!winner) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Verified-event race did not resolve to a stored event.",
+            });
+          }
+          storedEvents.push(publicEconomicEvent(winner));
+          continue;
         }
-        storedEvents.push({
-          id,
-          tenantId: ctx.tenantId,
-          eventType: event.eventType,
-          periodFrom: event.periodFrom,
-          periodTo: event.periodTo,
-          comparisonFrom: event.comparisonFrom,
-          comparisonTo: event.comparisonTo,
-          currentRevenueCents: event.currentRevenueCents,
-          comparisonRevenueCents: event.comparisonRevenueCents,
-          deltaCents: event.deltaCents,
-          deltaPercentHundredths: event.deltaPercentHundredths,
-          evidenceIds: event.evidenceIds,
-          idempotencyKey: event.idempotencyKey,
-          verifiedAt: verifiedAt.toISOString(),
-        });
+        const [inserted] = await db
+          .select()
+          .from(verifiedEconomicEvents)
+          .where(
+            and(
+              eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+              eq(verifiedEconomicEvents.idempotencyKey, event.idempotencyKey)
+            )
+          )
+          .limit(1);
+        if (!inserted) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Verified event was not readable after insert.",
+          });
+        }
+        storedEvents.push(publicEconomicEvent(inserted));
       }
       return {
         reconciliation: {
