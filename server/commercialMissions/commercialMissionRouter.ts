@@ -302,7 +302,7 @@ export const commercialMissionRouter = router({
       });
       return getMissionLinkedDebriefState({
         tenantId: ctx.tenantId,
-        driverId: ctx.user.openId,
+        driverId: mission.assignedTo ?? ctx.user.openId,
         missionId: input.missionId,
       });
     }),
@@ -330,7 +330,7 @@ export const commercialMissionRouter = router({
       return finalizeMissionLinkedDebrief({
         ...input,
         tenantId: ctx.tenantId,
-        driverId: ctx.user.openId,
+        driverId: mission.assignedTo ?? ctx.user.openId,
       });
     }),
   salesJournalsAdmin: legacyDayforgeTenantAdminProcedure
