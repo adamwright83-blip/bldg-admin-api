@@ -125,6 +125,9 @@ test("the screenshot is captured only after the store-tab guard", () => {
   const sync = readFileSync(new URL("./sync.js", import.meta.url), "utf8");
   const guard = sync.indexOf("assertCleanCloudScreenshotTarget(visible)");
   const capture = sync.indexOf("captureVisibleTab");
+  const permission = sync.indexOf("chrome.permissions.contains");
+  assert.ok(permission !== -1 && permission < capture);
   assert.ok(guard !== -1 && capture !== -1 && guard < capture);
+  assert.match(sync, /CleanCloud site access is required/);
   assert.match(sync, /recordWitness/);
 });
