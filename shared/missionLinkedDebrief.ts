@@ -136,14 +136,19 @@ export function deriveMissionLinkedDebriefProposal(input: {
     outcome = "no_contact";
   }
 
+  const customerRequested = (text: string, object: RegExp) =>
+    object.test(text) &&
+    (
+      /\b(?:they|he|she|manager|owner|director|contact)\s+(?:asked|requested|wanted|wants)\b/i.test(text) ||
+      /\b(?:asked|requested|told)\s+me\s+to\b/i.test(text) ||
+      /\b(?:asked|requested)\s+(?:for|that)\b/i.test(text)
+    );
   const quoteRequested = hasOutcome(extraction, "proposal_requested") ||
     evidenceItems.some(text =>
-      /\b(quote|pricing|proposal)\b/i.test(text) &&
-      /\b(asked|requested|send|email|wants?)\b/i.test(text)
+      customerRequested(text, /\b(?:quote|pricing|proposal)\b/i)
     );
   const pilotRequested = evidenceItems.some(text =>
-    /\bpilot\b/i.test(text) &&
-    /\b(asked|requested|wants?|try|trial)\b/i.test(text)
+    customerRequested(text, /\b(?:pilot|trial)\b/i)
   );
   const followUpRequested =
     outcome === "follow_up" ||
