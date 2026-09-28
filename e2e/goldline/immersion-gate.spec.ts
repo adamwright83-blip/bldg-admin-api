@@ -145,6 +145,10 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
   test("CASE A — PREP INCOMPLETE: required field prep is completed in-game, with no fallback to the legacy sales-mission page anywhere in the VISIT lifecycle", async ({
     page,
   }) => {
+    // The whole lifecycle (login, a shell that may take up to 30s to load, prep, depart, arrive,
+    // debrief) runs in this one test; the default 30s budget left no room and it timed out at
+    // ~36s on CI.
+    test.setTimeout(60_000);
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await enterNeutralizeMission(page);
