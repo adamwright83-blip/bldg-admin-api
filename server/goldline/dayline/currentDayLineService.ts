@@ -75,6 +75,7 @@ export async function readCurrentDayLine(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: string[];
     timeZone?: string;
     now?: Date;
   },
@@ -122,6 +123,7 @@ export async function readCurrentDayLine(
       state = await readState({
         tenantId,
         actorId: operatorId,
+        actorIds: input.operatorIds,
         businessDate,
       });
     } catch (error) {
