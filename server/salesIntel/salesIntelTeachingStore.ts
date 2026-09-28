@@ -204,6 +204,48 @@ export async function listTeachingsPendingReview(): Promise<SalesIntelTeaching[]
   return rows.map(teachingView);
 }
 
+/**
+ * Accepted teachings that still have intact source evidence.
+ *
+ * This is the content-bearing sibling of the narrow driver-safe category
+ * count query below. A teaching is eligible only while its exact transcript
+ * still belongs to its source artifact and that source is still successfully
+ * extracted. Failed, orphaned, unlinked, pending, rejected, or superseded
+ * material therefore fails closed before it can reach a mission brief or
+ * pre-visit loadout.
+ */
+export async function listAcceptedTeachingsWithSourceIntegrity(): Promise<
+  SalesIntelTeaching[]
+> {
+  const database = await db();
+  const rows = await database
+    .select({ teaching: salesIntelTeachings })
+    .from(salesIntelTeachings)
+    .innerJoin(
+      salesIntelTranscripts,
+      and(
+        eq(salesIntelTranscripts.id, salesIntelTeachings.transcriptId),
+        eq(
+          salesIntelTranscripts.sourceArtifactId,
+          salesIntelTeachings.sourceArtifactId
+        )
+      )
+    )
+    .innerJoin(
+      salesIntelSourceArtifacts,
+      eq(salesIntelSourceArtifacts.id, salesIntelTeachings.sourceArtifactId)
+    )
+    .where(
+      and(
+        eq(salesIntelTeachings.reviewState, "accepted"),
+        eq(salesIntelTeachings.active, true),
+        eq(salesIntelSourceArtifacts.status, "extracted")
+      )
+    )
+    .orderBy(desc(salesIntelTeachings.createdAt));
+  return rows.map(row => teachingView(row.teaching));
+}
+
 /** Every accepted, active teaching — the general-corpus coverage input. */
 export async function listAllAcceptedTeachings(): Promise<SalesIntelTeaching[]> {
   const database = await db();
