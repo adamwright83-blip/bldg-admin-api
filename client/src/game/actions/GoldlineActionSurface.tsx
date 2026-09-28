@@ -11,6 +11,7 @@ import {
   Package,
   Radar,
   Route,
+  Sparkles,
   X,
 } from "lucide-react";
 import type { PlayableMission } from "../state/GameState";
@@ -22,6 +23,7 @@ import type {
   VisitOutcomeRequest,
 } from "./actionServices";
 import { useAuthoritativeActionResume } from "./useAuthoritativeActionResume";
+import { trpc } from "@/lib/trpc";
 
 type SurfaceProps = {
   action: GoldlineActionDescriptor;
@@ -94,6 +96,14 @@ function VisitSurface(
   const [pilotRequested, setPilotRequested] = useState(false);
   const [followUpRequested, setFollowUpRequested] = useState(false);
   const mounted = useMountedRef();
+  const claireLoadout = trpc.system.missionSalesBrief.preVisitLoadout.useQuery(
+    { missionId: props.action.missionId! },
+    {
+      enabled: Boolean(props.action.missionId),
+      staleTime: 30_000,
+      retry: 1,
+    }
+  );
 
   async function refresh() {
     const next = await props.services.loadVisit(props.action.missionId!);
@@ -166,6 +176,46 @@ function VisitSurface(
         <p>
           <Loader2 /> READING FIELD STATE…
         </p>
+      ) : null}
+      {context &&
+      !["arrived", "visit_completed", "won", "lost"].includes(context.mission.status) ? (
+        <section
+          className="claire-tower-loadout"
+          aria-label="Claire pre-visit sales intelligence"
+          data-testid="claire-previsit-loadout"
+        >
+          <div className="claire-tower-loadout__sigil" aria-hidden="true">
+            <Sparkles />
+          </div>
+          <div className="claire-tower-loadout__heading">
+            <small>CLAIRE // TOWER BOSS LOADOUT</small>
+            <strong>Three things before you go in.</strong>
+            <span>{props.mission.name}</span>
+          </div>
+          {claireLoadout.isLoading ? (
+            <p className="claire-tower-loadout__loading">
+              <Loader2 /> Claire is loading the encounter.
+            </p>
+          ) : claireLoadout.data ? (
+            <div className="claire-tower-loadout__slots">
+              {claireLoadout.data.items.map(item => (
+                <article key={item.slot} data-slot={item.slot.toLowerCase()}>
+                  <b>{item.slot}</b>
+                  <p>{item.line}</p>
+                  <small>
+                    {item.sourceCreator
+                      ? `INTEL: ${item.sourceCreator}`
+                      : "MISSION BRIEF"}
+                  </small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="claire-tower-loadout__loading">
+              No reviewed encounter intel is available yet.
+            </p>
+          )}
+        </section>
       ) : null}
       {context?.mission.status === "phone_ready" ? (
         <button

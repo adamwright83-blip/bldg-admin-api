@@ -16,6 +16,7 @@ import { chromium } from "@playwright/test";
 
 const BASE = process.env.GOLDLINE_VERIFY_URL ?? "http://127.0.0.1:5186";
 const PHONE = { width: 393, height: 852 };
+const PHASE = process.env.GOLDLINE_FIELD_INTEL_PHASE ?? "all";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -100,354 +101,364 @@ async function main() {
     .waitFor({ state: "detached", timeout: 30000 })
     .catch(() => {});
 
-  const cta = page.getByTestId("game-log-signal");
-  await cta.waitFor({ state: "visible", timeout: 15000 });
-  check("LOG A SIGNAL is reachable from the operating bar", true);
-
-  // 2. It must be a real thumb target, and it must not be sitting under
-  //    anything. Four separate overlap bugs have shipped on this screen, so
-  //    this is measured rather than eyeballed.
-  const ctaBox = await cta.boundingBox();
-  check(
-    "capture control is at least 44px tall",
-    Boolean(ctaBox) && ctaBox.height >= 44,
-    ctaBox ? `${Math.round(ctaBox.width)}x${Math.round(ctaBox.height)}` : "no box"
-  );
-  const topmost = await page.evaluate(box => {
-    const el = document.elementFromPoint(
-      box.x + box.width / 2,
-      box.y + box.height / 2
-    );
-    return el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null;
-  }, ctaBox);
-  check(
-    "nothing covers the capture control",
-    topmost === "game-log-signal",
-    `elementFromPoint → ${topmost}`
-  );
-
-  // 3. The operating bar itself must still fit its fixed height with the new
-  //    item — the previous grid had a hardcoded column count.
-  const barBox = await boxOf(page, ".game-utility-bar");
-  check(
-    "operating bar did not wrap into a second row",
-    Boolean(barBox) && barBox.height <= 72,
-    barBox ? `height ${Math.round(barBox.height)}` : "no bar"
-  );
-
-  await cta.click();
   const sheet = page.getByTestId("log-signal-sheet");
-  await sheet.waitFor({ state: "visible", timeout: 8000 });
-  check("capture sheet opens", true);
+  if (PHASE !== "arrival") {
+    const cta = page.getByTestId("game-log-signal");
+    await cta.waitFor({ state: "visible", timeout: 15000 });
+    check("LOG A SIGNAL is reachable from the operating bar", true);
 
-  // Nowhere yet. The app has offered a stop but the operator has not walked to
-  // it, and an assignment is not a position — attaching a building here would
-  // put a wrong place in the permanent record.
-  check(
-    "no location is claimed before arriving anywhere",
-    (await page.getByTestId("log-signal-where").count()) === 0
-  );
-
-  // 4. Voice is the primary control and is offered first, but a browser with no
-  //    speech recognition must not dead-end the operator.
-  const micBox = await boxOf(page, '[data-testid="log-signal-mic"]');
-  const speechBox = await boxOf(page, '[data-testid="log-signal-speech"]');
-  check(
-    "voice control is the largest, topmost control",
-    Boolean(micBox) &&
-      Boolean(speechBox) &&
-      micBox.y < speechBox.y &&
-      micBox.height >= 88,
-    micBox ? `mic height ${Math.round(micBox.height)}` : "no mic"
-  );
-
-  // 5. Capture by typing what Adam would actually say at a building.
-  await page
-    .getByTestId("log-signal-speech")
-    .fill("I left 35 door hangers at this building");
-  await page.getByTestId("log-signal-structure").click();
-
-  const proposed = page.getByTestId("proposed-signal");
-  await proposed.first().waitFor({ state: "visible", timeout: 8000 });
-  check("speech becomes a proposed structure", (await proposed.count()) >= 1);
-
-  // 6. Nothing is authoritative before confirmation.
-  const preSave = await page.getByTestId("fixture-signal-count").textContent();
-  check(
-    "a proposal is not yet recorded",
-    preSave?.trim() === "0",
-    `recorded=${preSave?.trim()}`
-  );
-
-  // 7. The class is visible and correctable — this is the field that decides
-  //    whether a day of walking reads as effort or as pipeline.
-  const classValue = await page
-    .getByTestId("proposed-signal-class")
-    .first()
-    .inputValue();
-  check(
-    "35 door hangers is classed as field activity, not a lead",
-    classValue === "field_activity",
-    classValue
-  );
-  const options = await page
-    .getByTestId("proposed-signal-class")
-    .first()
-    .locator("option")
-    .allTextContents();
-  check(
-    "the operator can correct the class",
-    options.length >= 6,
-    `${options.length} classes offered`
-  );
-
-  // 8. Provenance is stated as the operator's own observation.
-  const provenance = await page
-    .getByTestId("log-signal-provenance")
-    .textContent();
-  check(
-    "provenance reads as an operator observation",
-    provenance?.includes("OPERATOR") === true &&
-      /system/i.test(provenance ?? "") === false,
-    provenance?.trim()
-  );
-
-  // 9. SAVE — a real tap, and the sheet closes.
-  const saveBox = await boxOf(page, '[data-testid="log-signal-save"]');
-  check(
-    "SAVE is a real thumb target",
-    Boolean(saveBox) && saveBox.height >= 44,
-    saveBox ? `height ${Math.round(saveBox.height)}` : "no button"
-  );
-  await page.getByTestId("log-signal-save").click();
-  await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
-  check("sheet closes after saving", (await sheet.count()) === 0);
-
-  const postSave = await page.getByTestId("fixture-signal-count").textContent();
-  check(
-    "the confirmed signal is recorded",
-    postSave?.trim() === "1",
-    `recorded=${postSave?.trim()}`
-  );
-
-  // Captured before arriving anywhere: no authoritative linkage, and none
-  // invented from the label the model produced.
-  const linkageBefore = await page
-    .getByTestId("fixture-signal-entity-ids")
-    .textContent();
-  check(
-    "a capture with no arrival records no entity linkage",
-    linkageBefore?.trim() === "none",
-    `entityId=${linkageBefore?.trim()}`
-  );
-
-  // 10. Reload. The sheet stores nothing, so anything still here came back from
-  //     outside the component.
-  await page.reload({ waitUntil: "networkidle" });
-  await page
-    .getByTestId("fixture-signal-count")
-    .waitFor({ state: "attached", timeout: 15000 });
-  const afterReload = await page
-    .getByTestId("fixture-signal-count")
-    .textContent();
-  const classesAfter = await page
-    .getByTestId("fixture-signal-classes")
-    .textContent();
-  check(
-    "the capture survives a reload",
-    afterReload?.trim() === "1",
-    `recorded=${afterReload?.trim()}`
-  );
-  check(
-    "and it is still field activity, not an outcome",
-    classesAfter?.trim() === "field_activity",
-    classesAfter?.trim()
-  );
-
-  // 11. Empty speech cannot be submitted at all — a blank row in the ledger is
-  //     worse than no row.
-  await page.getByTestId("game-log-signal").click();
-  await sheet.waitFor({ state: "visible", timeout: 8000 });
-  const structureDisabled = await page
-    .getByTestId("log-signal-structure")
-    .isDisabled();
-  check("empty speech cannot be structured", structureDisabled);
-
-  // ------------------------------------------------------------------------
-  // 12. ARRIVAL is the one moment the app genuinely knows where he is, so it
-  //     is the only moment a location may ride along with an observation.
-  await page.getByTestId("log-signal-back").click().catch(() => {});
-  await page.locator('[data-testid="log-signal-sheet"] header button').click();
-  await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
-
-  const settle = async (frames = 6) =>
-    page.evaluate(
-      count =>
-        new Promise(resolve => {
-          let seen = 0;
-          const tick = () => {
-            seen += 1;
-            if (seen >= count) resolve();
-            else requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        }),
-      frames
+    // 2. It must be a real thumb target, and it must not be sitting under
+    //    anything. Four separate overlap bugs have shipped on this screen, so
+    //    this is measured rather than eyeballed.
+    const ctaBox = await cta.boundingBox();
+    check(
+      "capture control is at least 44px tall",
+      Boolean(ctaBox) && ctaBox.height >= 44,
+      ctaBox ? `${Math.round(ctaBox.width)}x${Math.round(ctaBox.height)}` : "no box"
     );
-  const snapshot = () =>
-    page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
+    const topmost = await page.evaluate(box => {
+      const el = document.elementFromPoint(
+        box.x + box.width / 2,
+        box.y + box.height / 2
+      );
+      return el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null;
+    }, ctaBox);
+    check(
+      "nothing covers the capture control",
+      topmost === "game-log-signal",
+      `elementFromPoint → ${topmost}`
+    );
 
-  const cdp = await context.newCDPSession(page);
-  const pt = (x, y) => ({
-    x: Math.round(x),
-    y: Math.round(y),
-    radiusX: 12,
-    radiusY: 12,
-    force: 1,
-  });
-  const touch = (type, points) =>
-    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+    // 3. The operating bar itself must still fit its fixed height with the new
+    //    item — the previous grid had a hardcoded column count.
+    const barBox = await boxOf(page, ".game-utility-bar");
+    check(
+      "operating bar did not wrap into a second row",
+      Boolean(barBox) && barBox.height <= 72,
+      barBox ? `height ${Math.round(barBox.height)}` : "no bar"
+    );
 
-  await page.getByTestId("expedition-enter").click();
-  await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10000 });
-  const destination = await page.evaluate(
-    () => window.__goldlineGame.getExpedition().plan.destination
-  );
+    await cta.click();
+    await sheet.waitFor({ state: "visible", timeout: 8000 });
+    check("capture sheet opens", true);
 
-  const stickBox = await boxOf(page, '[data-testid="goldline-joystick"]');
-  const stick = {
-    x: stickBox.x + stickBox.width / 2,
-    y: stickBox.y + stickBox.height / 2,
-  };
-  await touch("touchStart", [pt(stick.x, stick.y)]);
-  const walkStarted = Date.now();
-  let last = 0;
-  let stalled = 0;
-  while (Date.now() - walkStarted < 25000) {
-    await touch("touchMove", [pt(stick.x, stick.y - 46)]);
-    await settle(6);
-    const now = await page.evaluate(() => window.__goldlineGame.progress);
-    if (now >= destination - 0.004) break;
-    stalled = Math.abs(now - last) < 0.0005 ? stalled + 1 : 0;
-    if (stalled > 14) break;
-    last = now;
+    // Nowhere yet. The app has offered a stop but the operator has not walked to
+    // it, and an assignment is not a position — attaching a building here would
+    // put a wrong place in the permanent record.
+    check(
+      "no location is claimed before arriving anywhere",
+      (await page.getByTestId("log-signal-where").count()) === 0
+    );
+
+    // 4. Voice is the primary control and is offered first, but a browser with no
+    //    speech recognition must not dead-end the operator.
+    const micBox = await boxOf(page, '[data-testid="log-signal-mic"]');
+    const speechBox = await boxOf(page, '[data-testid="log-signal-speech"]');
+    check(
+      "voice control is the largest, topmost control",
+      Boolean(micBox) &&
+        Boolean(speechBox) &&
+        micBox.y < speechBox.y &&
+        micBox.height >= 88,
+      micBox ? `mic height ${Math.round(micBox.height)}` : "no mic"
+    );
+
+    // 5. Capture by typing what Adam would actually say at a building.
+    await page
+      .getByTestId("log-signal-speech")
+      .fill("I left 35 door hangers at this building");
+    await page.getByTestId("log-signal-structure").click();
+
+    const proposed = page.getByTestId("proposed-signal");
+    await proposed.first().waitFor({ state: "visible", timeout: 8000 });
+    check("speech becomes a proposed structure", (await proposed.count()) >= 1);
+
+    // 6. Nothing is authoritative before confirmation.
+    const preSave = await page.getByTestId("fixture-signal-count").textContent();
+    check(
+      "a proposal is not yet recorded",
+      preSave?.trim() === "0",
+      `recorded=${preSave?.trim()}`
+    );
+
+    // 7. The class is visible and correctable — this is the field that decides
+    //    whether a day of walking reads as effort or as pipeline.
+    const classValue = await page
+      .getByTestId("proposed-signal-class")
+      .first()
+      .inputValue();
+    check(
+      "35 door hangers is classed as field activity, not a lead",
+      classValue === "field_activity",
+      classValue
+    );
+    const options = await page
+      .getByTestId("proposed-signal-class")
+      .first()
+      .locator("option")
+      .allTextContents();
+    check(
+      "the operator can correct the class",
+      options.length >= 6,
+      `${options.length} classes offered`
+    );
+
+    // 8. Provenance is stated as the operator's own observation.
+    const provenance = await page
+      .getByTestId("log-signal-provenance")
+      .textContent();
+    check(
+      "provenance reads as an operator observation",
+      provenance?.includes("OPERATOR") === true &&
+        /system/i.test(provenance ?? "") === false,
+      provenance?.trim()
+    );
+
+    // 9. SAVE — a real tap, and the sheet closes.
+    const saveBox = await boxOf(page, '[data-testid="log-signal-save"]');
+    check(
+      "SAVE is a real thumb target",
+      Boolean(saveBox) && saveBox.height >= 44,
+      saveBox ? `height ${Math.round(saveBox.height)}` : "no button"
+    );
+    await page.getByTestId("log-signal-save").click();
+    await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+    check("sheet closes after saving", (await sheet.count()) === 0);
+
+    const postSave = await page.getByTestId("fixture-signal-count").textContent();
+    check(
+      "the confirmed signal is recorded",
+      postSave?.trim() === "1",
+      `recorded=${postSave?.trim()}`
+    );
+
+    // Captured before arriving anywhere: no authoritative linkage, and none
+    // invented from the label the model produced.
+    const linkageBefore = await page
+      .getByTestId("fixture-signal-entity-ids")
+      .textContent();
+    check(
+      "a capture with no arrival records no entity linkage",
+      linkageBefore?.trim() === "none",
+      `entityId=${linkageBefore?.trim()}`
+    );
+
+    // 10. Reload. The sheet stores nothing, so anything still here came back from
+    //     outside the component.
+    await page.reload({ waitUntil: "networkidle" });
+    await page
+      .getByTestId("fixture-signal-count")
+      .waitFor({ state: "attached", timeout: 15000 });
+    const afterReload = await page
+      .getByTestId("fixture-signal-count")
+      .textContent();
+    const classesAfter = await page
+      .getByTestId("fixture-signal-classes")
+      .textContent();
+    check(
+      "the capture survives a reload",
+      afterReload?.trim() === "1",
+      `recorded=${afterReload?.trim()}`
+    );
+    check(
+      "and it is still field activity, not an outcome",
+      classesAfter?.trim() === "field_activity",
+      classesAfter?.trim()
+    );
+
+    // 11. Empty speech cannot be submitted at all — a blank row in the ledger is
+    //     worse than no row.
+    await page.getByTestId("game-log-signal").click();
+    await sheet.waitFor({ state: "visible", timeout: 8000 });
+    const structureDisabled = await page
+      .getByTestId("log-signal-structure")
+      .isDisabled();
+    check("empty speech cannot be structured", structureDisabled);
+
+
   }
-  await touch("touchEnd", []);
-  await settle(8);
 
-  // The climax Shieldbearer guards the cache; clearing it is not the subject of
-  // this test, so remove the obstacle the same way the external-order proof
-  // does and recover first if it landed a killing blow.
-  if ((await snapshot()).outcome !== "arrived") {
-    const dropGuard = () =>
-      page.evaluate(() => {
-        // Every hostile. The ranged Slingers stay live behind the player and
-        // kill a fixture that stands still, which is not what this proves.
-        for (const hostile of window.__goldlineGame.getExpedition().hostiles) {
-          hostile.hp = 0;
-        }
-      });
-    await dropGuard();
-    if ((await snapshot()).outcome === "down") {
-      await page.getByTestId("expedition-redeploy").click();
-      await settle(20);
-      await dropGuard();
-    }
+  if (PHASE !== "basic") {
+    // ------------------------------------------------------------------------
+    // 12. ARRIVAL is the one moment the app genuinely knows where he is, so it
+    //     is the only moment a location may ride along with an observation.
+    await page.getByTestId("log-signal-back").click().catch(() => {});
+    await page.locator('[data-testid="log-signal-sheet"] header button').click().catch(() => {});
+    await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+
+    const settle = async (frames = 6) =>
+      page.evaluate(
+        count =>
+          new Promise(resolve => {
+            let seen = 0;
+            const tick = () => {
+              seen += 1;
+              if (seen >= count) resolve();
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }),
+        frames
+      );
+    const snapshot = () =>
+      page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
+
+    const cdp = await context.newCDPSession(page);
+    const pt = (x, y) => ({
+      x: Math.round(x),
+      y: Math.round(y),
+      radiusX: 12,
+      radiusY: 12,
+      force: 1,
+    });
+    const touch = (type, points) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+
+    await page.getByTestId("expedition-enter").click();
+    await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10000 });
+    const destination = await page.evaluate(
+      () => window.__goldlineGame.getExpedition().plan.destination
+    );
+
+    const stickBox = await boxOf(page, '[data-testid="goldline-joystick"]');
+    const stick = {
+      x: stickBox.x + stickBox.width / 2,
+      y: stickBox.y + stickBox.height / 2,
+    };
     await touch("touchStart", [pt(stick.x, stick.y)]);
-    const retryStarted = Date.now();
-    while (Date.now() - retryStarted < 25000) {
+    const walkStarted = Date.now();
+    let last = 0;
+    let stalled = 0;
+    while (Date.now() - walkStarted < 25000) {
       await touch("touchMove", [pt(stick.x, stick.y - 46)]);
       await settle(6);
       const now = await page.evaluate(() => window.__goldlineGame.progress);
       if (now >= destination - 0.004) break;
+      stalled = Math.abs(now - last) < 0.0005 ? stalled + 1 : 0;
+      if (stalled > 14) break;
+      last = now;
     }
     await touch("touchEnd", []);
     await settle(8);
-  }
 
-  const arrived = (await snapshot()).outcome === "arrived";
-  check("the cache is reached on foot", arrived);
+    // The climax Shieldbearer guards the cache; clearing it is not the subject of
+    // this test, so remove the obstacle the same way the external-order proof
+    // does and recover first if it landed a killing blow.
+    if ((await snapshot()).outcome !== "arrived") {
+      const dropGuard = () =>
+        page.evaluate(() => {
+          // Every hostile. The ranged Slingers stay live behind the player and
+          // kill a fixture that stands still, which is not what this proves.
+          for (const hostile of window.__goldlineGame.getExpedition().hostiles) {
+            hostile.hp = 0;
+          }
+        });
+      await dropGuard();
+      if ((await snapshot()).outcome === "down") {
+        await page.getByTestId("expedition-redeploy").click();
+        await settle(20);
+        await dropGuard();
+      }
+      await touch("touchStart", [pt(stick.x, stick.y)]);
+      const retryStarted = Date.now();
+      while (Date.now() - retryStarted < 25000) {
+        await touch("touchMove", [pt(stick.x, stick.y - 46)]);
+        await settle(6);
+        const now = await page.evaluate(() => window.__goldlineGame.progress);
+        if (now >= destination - 0.004) break;
+      }
+      await touch("touchEnd", []);
+      await settle(8);
+    }
 
-  if (arrived) {
-    // The operating bar is hidden for the duration of a run, so the doorstep
-    // needs its own way in. Without this the capture surface is unreachable at
-    // the one moment the app knows both that he is standing somewhere and
-    // exactly where — which is when everything worth capturing is noticed.
-    const doorstep = page.getByTestId("expedition-log-signal");
-    check(
-      "capture is reachable from the doorstep itself",
-      (await doorstep.count()) === 1
-    );
-    const doorstepBox = await boxOf(page, '[data-testid="expedition-log-signal"]');
-    check(
-      "the doorstep control is a real thumb target",
-      Boolean(doorstepBox) && doorstepBox.height >= 44,
-      doorstepBox ? `height ${Math.round(doorstepBox.height)}` : "no box"
-    );
-    // It must not sit on top of the action that actually records the work.
-    const secureBox = await boxOf(page, '[data-testid="secure-cargo"]');
-    check(
-      "it does not overlap SECURE CARGO",
-      Boolean(secureBox) &&
-        Boolean(doorstepBox) &&
-        doorstepBox.y >= secureBox.y + secureBox.height,
-      secureBox
-        ? `secure ends ${Math.round(secureBox.y + secureBox.height)}, signal starts ${Math.round(doorstepBox.y)}`
-        : "no secure button"
-    );
-    await doorstep.click();
-    await sheet.waitFor({ state: "visible", timeout: 8000 });
-    const where = page.getByTestId("log-signal-where");
-    const shown = (await where.count()) > 0 ? await where.textContent() : null;
-    check(
-      "arriving attaches the real customer the app already pinned",
-      shown?.trim() === "Miso",
-      shown?.trim() ?? "absent"
-    );
-    // The location came from the app; the observation is still the operator's.
-    const provenanceAtStop = await page
-      .getByTestId("log-signal-speech")
-      .count();
-    check(
-      "capture still starts from the operator's own words",
-      provenanceAtStop === 1
-    );
+    const arrived = (await snapshot()).outcome === "arrived";
+    check("the cache is reached on foot", arrived);
 
-    // And the linkage that gets stored is namespace-qualified, and says what it
-    // really is. This fixture day is a CleanCloud job, so it must claim an
-    // external order — never a building or an account, neither of which any
-    // arrival in this app can honestly reach.
-    await page
-      .getByTestId("log-signal-speech")
-      .fill("Residents complain about no in-unit laundry");
-    await page.getByTestId("log-signal-structure").click();
-    await page
-      .getByTestId("proposed-signal")
-      .first()
-      .waitFor({ state: "visible", timeout: 8000 });
-    await page.getByTestId("log-signal-save").click();
-    await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+    if (arrived) {
+      // The operating bar is hidden for the duration of a run, so the doorstep
+      // needs its own way in. Without this the capture surface is unreachable at
+      // the one moment the app knows both that he is standing somewhere and
+      // exactly where — which is when everything worth capturing is noticed.
+      const doorstep = page.getByTestId("expedition-log-signal");
+      check(
+        "capture is reachable from the doorstep itself",
+        (await doorstep.count()) === 1
+      );
+      const doorstepBox = await boxOf(page, '[data-testid="expedition-log-signal"]');
+      check(
+        "the doorstep control is a real thumb target",
+        Boolean(doorstepBox) && doorstepBox.height >= 44,
+        doorstepBox ? `height ${Math.round(doorstepBox.height)}` : "no box"
+      );
+      // It must not sit on top of the action that actually records the work.
+      const secureBox = await boxOf(page, '[data-testid="secure-cargo"]');
+      check(
+        "it does not overlap SECURE CARGO",
+        Boolean(secureBox) &&
+          Boolean(doorstepBox) &&
+          doorstepBox.y >= secureBox.y + secureBox.height,
+        secureBox
+          ? `secure ends ${Math.round(secureBox.y + secureBox.height)}, signal starts ${Math.round(doorstepBox.y)}`
+          : "no secure button"
+      );
+      await doorstep.click();
+      await sheet.waitFor({ state: "visible", timeout: 8000 });
+      const where = page.getByTestId("log-signal-where");
+      const shown = (await where.count()) > 0 ? await where.textContent() : null;
+      check(
+        "arriving attaches the real customer the app already pinned",
+        shown?.trim() === "Miso",
+        shown?.trim() ?? "absent"
+      );
+      // The location came from the app; the observation is still the operator's.
+      const provenanceAtStop = await page
+        .getByTestId("log-signal-speech")
+        .count();
+      check(
+        "capture still starts from the operator's own words",
+        provenanceAtStop === 1
+      );
 
-    const linkage = (
-      await page.getByTestId("fixture-signal-entity-ids").textContent()
-    )?.trim();
-    const recorded = (linkage ?? "").split(",");
-    const atStop = recorded[recorded.length - 1] ?? "";
-    check(
-      "arriving records a namespace-qualified stop identity",
-      /^external_order:.+/.test(atStop),
-      atStop || "absent"
-    );
-    check(
-      "the identity never claims a building or an account",
-      !/^(building|account):/.test(atStop) && !/^\d+$/.test(atStop),
-      atStop
-    );
-    check(
-      "the earlier unlinked capture is still unlinked",
-      recorded[0] === "none",
-      recorded.join(",")
-    );
+      // And the linkage that gets stored is namespace-qualified, and says what it
+      // really is. This fixture day is a CleanCloud job, so it must claim an
+      // external order — never a building or an account, neither of which any
+      // arrival in this app can honestly reach.
+      await page
+        .getByTestId("log-signal-speech")
+        .fill("Residents complain about no in-unit laundry");
+      await page.getByTestId("log-signal-structure").click();
+      await page
+        .getByTestId("proposed-signal")
+        .first()
+        .waitFor({ state: "visible", timeout: 8000 });
+      await page.getByTestId("log-signal-save").click();
+      await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+
+      const linkage = (
+        await page.getByTestId("fixture-signal-entity-ids").textContent()
+      )?.trim();
+      const recorded = (linkage ?? "").split(",");
+      const atStop = recorded[recorded.length - 1] ?? "";
+      check(
+        "arriving records a namespace-qualified stop identity",
+        /^external_order:.+/.test(atStop),
+        atStop || "absent"
+      );
+      check(
+        "the identity never claims a building or an account",
+        !/^(building|account):/.test(atStop) && !/^\d+$/.test(atStop),
+        atStop
+      );
+      if (PHASE === "all") {
+        check(
+          "the earlier unlinked capture is still unlinked",
+          recorded[0] === "none",
+          recorded.join(",")
+        );
+      }
+    }
+
+
   }
 
   await browser.close();

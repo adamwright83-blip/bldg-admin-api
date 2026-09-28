@@ -380,8 +380,10 @@ jobs:
               node scripts/verifyGoldlineExternalOrder.mjs
           - name: mobile-real-touch-local-target
             command: node scripts/verifyGoldlineLocalTargetRunGate.mjs
-          - name: mobile-real-touch-field-intel
-            command: node scripts/verifyGoldlineFieldIntel.mjs
+          - name: mobile-real-touch-field-intel-basic
+            command: GOLDLINE_FIELD_INTEL_PHASE=basic node scripts/verifyGoldlineFieldIntel.mjs
+          - name: mobile-real-touch-field-intel-arrival
+            command: GOLDLINE_FIELD_INTEL_PHASE=arrival node scripts/verifyGoldlineFieldIntel.mjs
     services:
       mysql:
         image: mysql:8.0

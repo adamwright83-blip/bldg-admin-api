@@ -8,6 +8,7 @@ import {
   ensureCurrentMissionSalesBrief,
   listMissionSalesBriefVersions,
 } from "./missionSalesBriefService";
+import { getClairePreVisitLoadout } from "./preVisitClaireLoadout";
 
 /**
  * The FIELD BRIEF surface's read of the same artifact Claire consumes.
@@ -28,6 +29,15 @@ export const missionSalesBriefRouter = router({
   // Admin/developer review tooling (Slice 17): inspect every version to
   // confirm Claire and FIELD BRIEF converged on the same artifact and to
   // see why a strategy changed between versions.
+  preVisitLoadout: legacyDayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      getClairePreVisitLoadout({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      })
+    ),
+
   versions: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
