@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { strategyPathOffers, strategyPlays } from "../../drizzle/schema";
-import { laundryFluffFoldTemplate } from "./verticalTemplates/laundryFluffFold";
+import { defaultVerticalRegistry } from "./verticalTemplates/defaultRegistry";
 import { scoreStrategyPlay, type ScoreBreakdown } from "./decisionPolicy";
 import { buildStrategySnapshot, getLatestStrategySnapshot } from "./snapshotBuilder";
 import type { StrategySnapshot } from "./snapshotTypes";
@@ -68,13 +68,15 @@ export async function generateCandidatePlays(
   tenantId: string,
   snapshot: StrategySnapshot
 ): Promise<StrategyPlay[]> {
-  const template = laundryFluffFoldTemplate;
+  const template = defaultVerticalRegistry.get("laundry_fluff_fold");
+  const legacyStrategy = template.legacyStrategy;
+  if (!legacyStrategy) throw new Error("laundry_fluff_fold legacy StrategyEngine scenario is unavailable");
   const { payload } = snapshot;
   const nowIso = new Date().toISOString();
 
   const plays: StrategyPlay[] = [];
 
-  for (const pt of template.playTemplates) {
+  for (const pt of legacyStrategy.playTemplates) {
     const playId = `play_${pt.templateKey}_${tenantId.slice(0, 8)}`;
     const spendCents = pt.defaultEstimatedSpendCents;
     const isApprovalCategory = payload.playgroundRules.approvalCategories.includes(pt.spendCategory);

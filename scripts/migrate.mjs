@@ -3970,6 +3970,82 @@ await assertRequiredColumns("goldline_rook_contact_sessions", [
   "callAttemptId",
   "status",
 ]);
+// Phase 0 — Persistent Growth Operator core contracts.
+// The production boot path does not replay numbered Drizzle migrations, so
+// make the historical Armory tables exist idempotently before Phase 0 alters
+// them. This keeps fresh databases bootable and is safe on existing databases.
+await applyIdempotentSqlFile(
+  "../drizzle/0053_armory_evolution_sales_intel.sql",
+  "Armory Evolution historical tables"
+);
+// Mirrors drizzle/0101_persistent_growth_phase0.sql.
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "decisionPointId",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN decisionPointId VARCHAR(191) NULL AFTER provenanceKind"
+);
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "encounterReference",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN encounterReference VARCHAR(191) NULL AFTER decisionPointId"
+);
+await ensureRequiredColumn(
+  "armory_weapon_outcomes",
+  "associationStrength",
+  "ALTER TABLE armory_weapon_outcomes ADD COLUMN associationStrength ENUM('decision_point','encounter','mission_window_legacy') NOT NULL DEFAULT 'mission_window_legacy' AFTER outcomeReference"
+);
+await assertEnumContainsValues("armory_weapon_outcomes", "associationStrength", [
+  "decision_point",
+  "encounter",
+  "mission_window_legacy",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tenant_learning_governance (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    scope VARCHAR(96) NOT NULL,
+    version INT NOT NULL,
+    termsVersion VARCHAR(96) NOT NULL,
+    policyVersion VARCHAR(96) NOT NULL,
+    permittedAggregationUse BOOLEAN NOT NULL DEFAULT false,
+    authorizedByUserId VARCHAR(128) NOT NULL,
+    effectiveAt TIMESTAMP NOT NULL,
+    revokedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version),
+    KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)
+  )`,
+  "CREATE TABLE tenant_learning_governance"
+);
+await assertRequiredColumns("tenant_learning_governance", [
+  "id",
+  "tenantId",
+  "scope",
+  "version",
+  "termsVersion",
+  "policyVersion",
+  "permittedAggregationUse",
+  "authorizedByUserId",
+  "effectiveAt",
+  "revokedAt",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "uq_tenant_learning_governance_scope_version",
+  ["tenantId", "scope", "version"],
+  `ALTER TABLE tenant_learning_governance
+     ADD UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version)`
+);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "idx_tenant_learning_governance_active",
+  ["tenantId", "scope", "effectiveAt", "revokedAt"],
+  `ALTER TABLE tenant_learning_governance
+     ADD KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)`
+);
+
 // END schema-path-normalized
 
 await conn.end();
