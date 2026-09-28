@@ -11,7 +11,7 @@
  * business's map. The tenant is the isolation boundary, and every reader is
  * called with the caller's tenant.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { goldlineCampaignRuns } from "../../drizzle/schema";
 import type { CampaignRun, CampaignRunStatus } from "../../shared/campaignRun";
 import {
@@ -41,12 +41,30 @@ export async function listTenantCampaignRuns(input: {
 }): Promise<CampaignRun[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db
-    .select()
-    .from(goldlineCampaignRuns)
-    .where(eq(goldlineCampaignRuns.tenantId, input.tenantId))
-    .orderBy(desc(goldlineCampaignRuns.startedAt))
-    .limit(input.limit);
+  const [activeRows, historicalRows] = await Promise.all([
+    db
+      .select()
+      .from(goldlineCampaignRuns)
+      .where(
+        and(
+          eq(goldlineCampaignRuns.tenantId, input.tenantId),
+          eq(goldlineCampaignRuns.status, "active")
+        )
+      )
+      .orderBy(desc(goldlineCampaignRuns.startedAt)),
+    db
+      .select()
+      .from(goldlineCampaignRuns)
+      .where(
+        and(
+          eq(goldlineCampaignRuns.tenantId, input.tenantId),
+          ne(goldlineCampaignRuns.status, "active")
+        )
+      )
+      .orderBy(desc(goldlineCampaignRuns.startedAt))
+      .limit(input.limit),
+  ]);
+  const rows = [...activeRows, ...historicalRows];
   return rows.map(row => ({
     campaignRunId: row.id,
     tenantId: row.tenantId,
@@ -76,7 +94,7 @@ export async function loadLanternObjectiveMarks(
 ): Promise<LanternObjectiveMarks> {
   const tenantId = input.tenantId.trim();
   if (!tenantId) {
-    return projectLanternObjectiveMarks({ tenantId: "", dayLine: null, runs: [] });
+    return projectLanternObjectiveMarks({ tenantId: "", operatorId: input.operatorId, dayLine: null, runs: [] });
   }
 
   let dayLine: CurrentDayLine | null = null;
@@ -103,5 +121,5 @@ export async function loadLanternObjectiveMarks(
       })
   );
 
-  return projectLanternObjectiveMarks({ tenantId, dayLine, runs: inputs });
+  return projectLanternObjectiveMarks({ tenantId, operatorId: input.operatorId, dayLine, runs: inputs });
 }
