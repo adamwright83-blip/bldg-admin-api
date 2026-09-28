@@ -3943,6 +3943,30 @@ await assertRequiredColumns("goldline_rook_contact_sessions", [
   "callAttemptId",
   "status",
 ]);
+// CleanCloud churn observations. Native columns stay. No fake order ids or phones.
+await run(
+  "ALTER TABLE customer_churn_snapshots ADD COLUMN externalOrderRef VARCHAR(128) NULL",
+  "customer_churn_snapshots.externalOrderRef"
+);
+await run(
+  "ALTER TABLE customer_churn_snapshots ADD COLUMN orderSource VARCHAR(32) NOT NULL DEFAULT 'native'",
+  "customer_churn_snapshots.orderSource"
+);
+await runRequired(
+  "ALTER TABLE customer_churn_snapshots MODIFY COLUMN lastOrderId INT NULL",
+  "customer_churn_snapshots.lastOrderId nullable"
+);
+await runRequired(
+  "ALTER TABLE customer_churn_snapshots MODIFY COLUMN customerPhone VARCHAR(30) NULL",
+  "customer_churn_snapshots.customerPhone nullable"
+);
+await assertRequiredColumns("customer_churn_snapshots", [
+  "lastOrderId",
+  "customerPhone",
+  "externalOrderRef",
+  "orderSource",
+]);
+
 // END schema-path-normalized
 
 await conn.end();

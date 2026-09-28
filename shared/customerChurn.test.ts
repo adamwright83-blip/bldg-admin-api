@@ -3,19 +3,21 @@ import {
   assertGroundedWinBackMessage,
   buildWinBackDraft,
   scoreCustomerChurn,
+  serviceLabel,
   type CustomerHistoryObservation,
 } from "./customerChurn";
 
 const history = (
   dates: string[],
-  weights?: number[],
+  weights?: Array<number | null>,
   valueCents = 6_500
 ): CustomerHistoryObservation[] =>
   dates.map((serviceAt, index) => ({
+    source: "native" as const,
     orderId: index + 1,
     serviceAt,
     valueCents,
-    weightLbs: weights?.[index] ?? 20,
+    weightLbs: weights ? (weights[index] ?? null) : 20,
     serviceType: "wash_fold",
   }));
 
@@ -103,5 +105,59 @@ describe("customer churn scoring", () => {
         "Feel free to reply if you would like help scheduling a pickup."
       )
     ).not.toThrow();
+  });
+
+  it("caps confidence at low for null weight and null service without calling it dry cleaning", () => {
+    const dates = [
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-15T00:00:00.000Z",
+      "2026-01-29T00:00:00.000Z",
+      "2026-02-12T00:00:00.000Z",
+      "2026-02-26T00:00:00.000Z",
+      "2026-03-12T00:00:00.000Z",
+    ];
+    const unknown = scoreCustomerChurn({
+      customerKey: "cc-1",
+      customerName: "Ada Lovelace",
+      history: dates.map((serviceAt, index) => ({
+        source: "cleancloud" as const,
+        externalOrderId: `cc-${index + 1}`,
+        serviceAt,
+        valueCents: 50_000,
+        weightLbs: null,
+        serviceType: null,
+      })),
+      now: new Date("2026-05-01T00:00:00.000Z"),
+    });
+    const proven = scoreCustomerChurn({
+      customerKey: "cc-1",
+      customerName: "Ada Lovelace",
+      history: history(dates, undefined, 50_000),
+      now: new Date("2026-05-01T00:00:00.000Z"),
+    });
+    expect(unknown.confidence).toBe("low");
+    expect(proven.confidence).toBe("high");
+    expect(unknown.score).toBe(proven.score);
+    expect(unknown.reasons.join(" ")).not.toMatch(/dry cleaning/i);
+    expect(serviceLabel(null)).toBe("service not proven");
+    expect(serviceLabel(null)).not.toMatch(/dry cleaning/i);
+  });
+
+  it("caps confidence at medium when only some weights are missing", () => {
+    const dates = [
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-15T00:00:00.000Z",
+      "2026-01-29T00:00:00.000Z",
+      "2026-02-12T00:00:00.000Z",
+      "2026-02-26T00:00:00.000Z",
+      "2026-03-12T00:00:00.000Z",
+    ];
+    const score = scoreCustomerChurn({
+      customerKey: "customer-1",
+      customerName: "Marisol Vega",
+      history: history(dates, [null, 20, 20, 20, 20, 20], 50_000),
+      now: new Date("2026-05-01T00:00:00.000Z"),
+    });
+    expect(score.confidence).toBe("medium");
   });
 });
