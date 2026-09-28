@@ -28,6 +28,7 @@ import {
   formatGumballOperatorStatus,
   gumballObservability,
 } from "./gumballOperatorStatus";
+import { loadLatestCleanCloudSales } from "./latestSales";
 
 const store = z.object({
   storeId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -633,4 +634,18 @@ export const cleancloudBrowserSyncRouter = router({
       });
       return { recorded: true as const };
     }),
+  latestSales: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(50).optional(),
+        })
+        .optional()
+    )
+    .query(({ ctx, input }) =>
+      loadLatestCleanCloudSales({
+        tenantId: ctx.tenantId,
+        limit: input?.limit,
+      })
+    ),
 });

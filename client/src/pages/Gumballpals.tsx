@@ -1,10 +1,28 @@
 import { trpc } from "@/lib/trpc";
 
+function money(cents: number) {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function pacific(value: string | null) {
+  if (!value) return "time unknown";
+  return `${new Date(value).toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
+  })} Pacific`;
+}
+
 export default function Gumballpals() {
   const status = trpc.system.gumball.context.useQuery(undefined, {
     retry: false,
     refetchInterval: 60000,
   });
+  const sales = trpc.system.gumball.latestSales.useQuery(
+    { limit: 20 },
+    { retry: false, enabled: Boolean(status.data) }
+  );
   const last = status.data?.binding?.lastSuccessAt;
   const stale = !last || Date.now() - new Date(last).getTime() > 26 * 3600000;
   return (
@@ -98,7 +116,40 @@ export default function Gumballpals() {
           <button onClick={() => void status.refetch()} style={{ padding: 12 }}>
             Refresh status
           </button>
+          <p>
+            Anyone can read whether this is functioning, with no customer names,
+            at <a href="/api/cleancloud/pulse">/api/cleancloud/pulse</a>.
+          </p>
         </section>
+        {status.data ? (
+          <section
+            style={{
+              background: "#fff",
+              borderRadius: 24,
+              padding: 24,
+              margin: "24px 0",
+            }}
+          >
+            <h2>Latest CleanCloud sales</h2>
+            {sales.isLoading ? <p>Loading sales…</p> : null}
+            {sales.error ? (
+              <p role="alert">Latest sales could not be read.</p>
+            ) : null}
+            {sales.data && sales.data.sales.length === 0 ? (
+              <p>No paid CleanCloud sales are stored for this account.</p>
+            ) : null}
+            {sales.data && sales.data.sales.length > 0 ? (
+              <ol style={{ lineHeight: 1.8, paddingLeft: 24 }}>
+                {sales.data.sales.map(sale => (
+                  <li key={`${sale.at}-${sale.ingestedAt}-${sale.customerName}-${sale.amountCents}`}>
+                    {pacific(sale.at)} · {sale.customerName} · {money(sale.amountCents)} · imported{" "}
+                    {pacific(sale.ingestedAt)}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </section>
+        ) : null}
         <h2>Install once. Then let it run.</h2>
         <p>
           <a
