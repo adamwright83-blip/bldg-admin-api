@@ -32,6 +32,13 @@ export function selectValidatedAuthorityEvent<
   });
 }
 
+export function selectedObligationRef(input: {
+  selectionKind: string;
+  selectedRef: string | null;
+}): string | null {
+  return input.selectionKind === "obligation" ? input.selectedRef : null;
+}
+
 export async function operationReceipt(input: {
   tenantId: string;
   decisionId: string;
@@ -65,14 +72,17 @@ export async function operationReceipt(input: {
         )
       )
       .orderBy(asc(communicationReceipts.createdAt)),
-    decision.selectionKind === "obligation" && decision.selectedRef
+    selectedObligationRef(decision)
       ? db
           .select()
           .from(claireProactiveObligations)
           .where(
             and(
               eq(claireProactiveObligations.tenantId, input.tenantId),
-              eq(claireProactiveObligations.id, decision.selectedRef)
+              eq(
+                claireProactiveObligations.id,
+                selectedObligationRef(decision)!
+              )
             )
           )
       : Promise.resolve([]),
