@@ -97,6 +97,7 @@ async function routeLoadedSession(
         readWeeklyDossierFacts({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
           dayDirectorActorIds: input.dayDirectorActorIds,
           dates,
@@ -107,6 +108,7 @@ async function routeLoadedSession(
         readWeeklyGrowthCandidatesForDossier({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
           dayDirectorActorIds: input.dayDirectorActorIds,
           dates: horizon.remainingDates,
