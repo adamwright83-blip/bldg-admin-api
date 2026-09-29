@@ -10,6 +10,8 @@ import { GoalCycleStore } from "../persistentOperator/goalCycleStore";
 import { GoalCycleWorker } from "../persistentOperator/goalCycleWorker";
 import { evaluateMacroGoalRunAndScheduleNext } from "../persistentOperator/goalCycleService";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
+import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
+import { OperatorAppointmentWorker } from "../persistentOperator/operatorAppointmentWorker";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the procurement worker");
@@ -71,6 +73,21 @@ const goalCycleWorker = new GoalCycleWorker(
   }
 );
 
+const operatorAppointmentStore = new OperatorAppointmentStore(pool);
+const operatorAppointmentWorker = new OperatorAppointmentWorker(
+  operatorAppointmentStore,
+  {
+    leaseOwner: `${leaseOwner}:operator-appointment`,
+    leaseMs: numberFromEnv("OPERATOR_APPOINTMENT_WORKER_LEASE_MS", 60_000),
+    pollMs: numberFromEnv("OPERATOR_APPOINTMENT_WORKER_POLL_MS", 30_000),
+    concurrency: numberFromEnv("OPERATOR_APPOINTMENT_WORKER_CONCURRENCY", 1),
+    retryBaseMs: numberFromEnv(
+      "OPERATOR_APPOINTMENT_WORKER_RETRY_BASE_MS",
+      30_000
+    ),
+  }
+);
+
 const port = numberFromEnv("PORT", 8081);
 const server = http.createServer((request, response) => {
   if (request.url !== "/healthz") {
@@ -79,10 +96,12 @@ const server = http.createServer((request, response) => {
   }
   const procurement = worker.health;
   const goalCycles = goalCycleWorker.health;
+  const operatorAppointments = operatorAppointmentWorker.health;
   const health = {
-    ok: procurement.ok && goalCycles.ok,
+    ok: procurement.ok && goalCycles.ok && operatorAppointments.ok,
     procurement,
     goalCycles,
+    operatorAppointments,
   };
   response.writeHead(health.ok ? 200 : 503, { "content-type": "application/json" });
   response.end(JSON.stringify(health));
@@ -91,13 +110,18 @@ const server = http.createServer((request, response) => {
 server.listen(port, () => console.log(`[ProcurementWorker] health listening on ${port}`));
 void worker.start();
 void goalCycleWorker.start();
+void operatorAppointmentWorker.start();
 
 let shuttingDown = false;
 const shutdown = async (signal: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[ProcurementWorker] received ${signal}; draining`);
-  await Promise.all([worker.stop(), goalCycleWorker.stop()]);
+  await Promise.all([
+    worker.stop(),
+    goalCycleWorker.stop(),
+    operatorAppointmentWorker.stop(),
+  ]);
   await new Promise<void>(resolve => server.close(() => resolve()));
   await pool.end();
 };
