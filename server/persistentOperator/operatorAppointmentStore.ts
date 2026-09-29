@@ -372,7 +372,16 @@ export class OperatorAppointmentStore
     tenantId: string;
     canonicalOperatorId: string;
     weekStart: string;
+    excludeIdempotencyKey?: string | null;
   }): Promise<number> {
+    const params: unknown[] = [
+      input.tenantId,
+      input.canonicalOperatorId,
+      input.weekStart,
+    ];
+    const exclude = input.excludeIdempotencyKey?.trim();
+    const exclusionSql = exclude ? " AND idempotencyKey <> ?" : "";
+    if (exclude) params.push(exclude);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE operator_appointments
           SET status = 'cancelled',
@@ -384,8 +393,8 @@ export class OperatorAppointmentStore
           AND canonicalOperatorId = ?
           AND weekStart = ?
           AND appointmentKind = 'weekly_planning_callback'
-          AND status IN ('scheduled','retry_scheduled')`,
-      [input.tenantId, input.canonicalOperatorId, input.weekStart]
+          AND status IN ('scheduled','retry_scheduled')${exclusionSql}`,
+      params
     );
     return result.affectedRows;
   }
