@@ -23,7 +23,8 @@ import {
   resolveCanonicalOperatorIdentity,
   type CanonicalOperatorIdentity,
 } from "./identity";
-import type { OperatorAppointmentStore } from "./operatorAppointmentStore";
+import { getDefaultGoalCyclePool } from "./goalCycleStore";
+import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 
 export const SUNDAY_WEEKLY_PLANNING_ACTION = "claire.weekly_planning.call";
 export const SUNDAY_WEEKLY_PLANNING_SOURCE =
@@ -432,4 +433,36 @@ export async function scheduleWeeklyPlanningCallback(input: {
     ...result,
     readback: formatInTimeZone(input.scheduledFor, input.timeZone, "h:mm a"),
   };
+}
+
+
+export function createDefaultOperatorAppointmentStore(): OperatorAppointmentStore {
+  return new OperatorAppointmentStore(getDefaultGoalCyclePool());
+}
+
+export async function scheduleWeeklyPlanningCallbackForOperator(input: {
+  tenantId: string;
+  operatorUserId: string;
+  timeZone: string;
+  weekStart: string;
+  scheduledFor: Date;
+  sourceReference: string;
+  store?: OperatorAppointmentStore;
+}) {
+  const resolution = await resolveCanonicalOperatorIdentity({
+    tenantId: input.tenantId,
+    source: { type: "open_id", value: input.operatorUserId },
+    subsystem: "persistent_operator.weekly_planning_callback",
+  });
+  if (!resolution.ok) {
+    throw new Error(`Unable to resolve callback operator identity: ${resolution.reason}`);
+  }
+  return scheduleWeeklyPlanningCallback({
+    identity: resolution.identity,
+    timeZone: input.timeZone,
+    weekStart: input.weekStart,
+    scheduledFor: input.scheduledFor,
+    sourceReference: input.sourceReference,
+    store: input.store ?? createDefaultOperatorAppointmentStore(),
+  });
 }
