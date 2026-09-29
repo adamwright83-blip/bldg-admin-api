@@ -68,7 +68,12 @@ export const salesExecutionIntelligenceProvider: ExecutionIntelligenceProvider =
     );
     const suppressed = new Map(
       deltas
-        .filter(d => d.deltaType === "suppress")
+        .filter(
+          d =>
+            d.deltaType === "suppress" ||
+            d.deltaType === "constraint" ||
+            (d.afterState && typeof d.afterState === "object" && (d.afterState as Record<string, unknown>).constrained === true)
+        )
         .map(d => [d.targetKey, d])
     );
 
@@ -79,7 +84,7 @@ export const salesExecutionIntelligenceProvider: ExecutionIntelligenceProvider =
 
     return teachings
       .map(teaching => {
-        const isSuppressed = suppressed.has(teaching.teachingKey);
+        const isSuppressed = suppressed.get(teaching.teachingKey);
         const boostDelta = boosted.get(teaching.teachingKey);
         const baseFit = applicabilityScore({
           context,
@@ -89,16 +94,25 @@ export const salesExecutionIntelligenceProvider: ExecutionIntelligenceProvider =
         if (isSuppressed) {
           return {
             teaching,
-            fit: { eligible: false, score: 0, reason: "suppressed by learned outcome constraint" },
+            fit: {
+              eligible: false,
+              score: 0,
+              reason: `suppressed by learned outcome constraint: ${isSuppressed.explanation}`,
+            },
           };
         }
         if (boostDelta && baseFit.eligible) {
+          const weight =
+            typeof boostDelta.afterState?.doctrineWeight === "number"
+              ? boostDelta.afterState.doctrineWeight
+              : 1.5;
+          const boostAmount = Number(Math.max(0.2, (weight - 1.0) * (baseFit.score > 0 ? baseFit.score : 1.0)).toFixed(3));
           return {
             teaching,
             fit: {
               eligible: true,
-              score: baseFit.score + 1.0,
-              reason: `${baseFit.reason}; boosted by verified outcome: ${boostDelta.explanation}`,
+              score: Number((baseFit.score + boostAmount).toFixed(3)),
+              reason: `${baseFit.reason}; boosted by verified outcome (${weight}x weight): ${boostDelta.explanation}`,
             },
           };
         }
