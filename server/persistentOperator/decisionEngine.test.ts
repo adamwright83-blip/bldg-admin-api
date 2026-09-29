@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates";
 import type { PersistentObligation } from "./obligationStore";
-import { selectDeterministicCycleChoice } from "./decisionEngine";
+import {
+  inactiveGoalRunWaitReason,
+  selectDeterministicCycleChoice,
+} from "./decisionEngine";
 
 function candidate(
   id: string,
@@ -74,6 +77,16 @@ function obligation(id: string): PersistentObligation {
     agentEventId: null,
   };
 }
+
+describe("PR4 inactive goal-run gating", () => {
+  it("withholds actionable selection for every non-active run", () => {
+    expect(inactiveGoalRunWaitReason("active")).toBeNull();
+    expect(inactiveGoalRunWaitReason("completed")).toBe("GOAL_RUN_COMPLETED");
+    expect(inactiveGoalRunWaitReason("paused")).toBe("GOAL_RUN_INACTIVE");
+    expect(inactiveGoalRunWaitReason("superseded")).toBe("GOAL_RUN_INACTIVE");
+    expect(inactiveGoalRunWaitReason("cancelled")).toBe("GOAL_RUN_INACTIVE");
+  });
+});
 
 describe("PR4 deterministic goal-cycle selection", () => {
   it("does not manufacture a new candidate objective when the week is unplanned", () => {
