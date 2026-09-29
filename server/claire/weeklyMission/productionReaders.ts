@@ -197,6 +197,7 @@ export async function readWeeklyGrowthCandidatesForDossier(input: {
   tenantId: string;
   operatorId: string;
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
   now: Date;
   timeZone: string;
