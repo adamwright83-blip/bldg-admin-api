@@ -1198,6 +1198,7 @@ async function persistClaireVoiceConversation(input: {
   /** Outbound already has assembled context. Inbound pickup bootstraps and waits until the first turn. */
   inboundContextReady?: boolean;
   sessionKindOverride?: PreDriveConversation["sessionKind"];
+  weeklyPlanningWeekStart?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -1215,6 +1216,7 @@ async function persistClaireVoiceConversation(input: {
     turns: 0,
     touchedAt: now,
     sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
+    weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
@@ -1249,6 +1251,7 @@ export async function startClairePreDriveCall(input: {
   /** Reuses the authorized Claire dialer while supplying a bounded authored opening. */
   openingOverride?: string;
   sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
 }): Promise<{ callSid: string; brief: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1269,6 +1272,7 @@ export async function startClairePreDriveCall(input: {
     spokenOpening: spokenClaireText(brief, true),
     missionId: input.missionId,
     sessionKindOverride: input.sessionKindOverride,
+    weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
   });
   try {
     const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });
