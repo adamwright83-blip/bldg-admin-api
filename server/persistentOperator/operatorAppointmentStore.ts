@@ -390,6 +390,26 @@ export class OperatorAppointmentStore
     return result.affectedRows;
   }
 
+  async recordCalendarResult(input: {
+    tenantId: string;
+    appointmentId: string;
+    status: string;
+    eventId?: string | null;
+  }): Promise<void> {
+    await this.pool.execute(
+      `UPDATE operator_appointments
+          SET calendarStatus = ?,
+              calendarEventId = COALESCE(?, calendarEventId)
+        WHERE tenantId = ? AND id = ?`,
+      [
+        input.status,
+        input.eventId ?? null,
+        input.tenantId,
+        input.appointmentId,
+      ]
+    );
+  }
+
   async markMissedByCallSid(callSid: string): Promise<AppointmentRow | null> {
     const connection = await this.pool.getConnection();
     try {
