@@ -8,7 +8,9 @@ import {
   EXECUTIVE_ACTION_GRANT_BRAND,
   NARRATIVE_REVEAL_GRANT_BRAND,
   PERSONAL_DISCLOSURE_GRANT_BRAND,
+  actionGrantSourceIsBackground,
   type ActionGrantDraft,
+  type ActionGrantSource,
   type CallControlGrant,
   type CallControlGrantDraft,
   type ExecutiveActionGrant,
@@ -42,9 +44,37 @@ export function mintActionGrant(draft: ActionGrantDraft): ExecutiveActionGrant {
   if (draft.constraints.shadowOnly === draft.constraints.mutationAllowed) {
     throw new Error("Brain V2 action grant must be either shadow-only or live-mutation authority");
   }
+
+  const source: ActionGrantSource =
+    draft.source ?? {
+      type: "operator_turn",
+      assembledText: draft.sourceTurnAssembledText,
+    };
+
+  if (source.type === "operator_turn") {
+    if (!source.assembledText.trim() || !draft.sourceTurnAssembledText.trim()) {
+      throw new Error("Conversational action authority requires the actual operator turn");
+    }
+  } else {
+    if (draft.sourceTurnAssembledText.trim()) {
+      throw new Error("Background action grants may not fabricate conversational source text");
+    }
+    if (
+      !source.tenantId.trim() ||
+      !source.canonicalOperatorId.trim() ||
+      !draft.tenantId?.trim() ||
+      !draft.canonicalOperatorId?.trim() ||
+      draft.tenantId !== source.tenantId ||
+      draft.canonicalOperatorId !== source.canonicalOperatorId
+    ) {
+      throw new Error("Background action authority requires matching tenant and canonical operator identity");
+    }
+  }
+
   return Object.freeze({
     [EXECUTIVE_ACTION_GRANT_BRAND]: true as const,
     ...draft,
+    source,
   });
 }
 
