@@ -7,6 +7,7 @@ describe("lanternCityRouter identity mapping", () => {
       lanternObjectiveMarksScope({
         tenantId: "tenant-a",
         dayDirectorActorId: "7",
+        dayDirectorActorIds: ["7", "22", "7"],
         campaignOperatorUserIds: [
           "canonical-owner",
           "driver-primary",
@@ -16,6 +17,7 @@ describe("lanternCityRouter identity mapping", () => {
     ).toEqual({
       tenantId: "tenant-a",
       operatorId: "7",
+      operatorIds: ["7", "22"],
       viewerOpenIds: ["canonical-owner", "driver-primary"],
     });
   });
