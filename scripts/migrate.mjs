@@ -128,10 +128,12 @@ const readSqlStatements = async relativePath => {
 const applyHistoricalCreateTables = async (relativePath, label) => {
   for (const original of await readSqlStatements(relativePath)) {
     if (!/^CREATE\s+TABLE\s+/i.test(original)) continue;
-    const statement = original.replace(
-      /^CREATE\s+TABLE\s+/i,
-      "CREATE TABLE IF NOT EXISTS "
-    );
+    const statement = /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+/i.test(original)
+      ? original
+      : original.replace(
+          /^CREATE\s+TABLE\s+/i,
+          "CREATE TABLE IF NOT EXISTS "
+        );
     await runRequired(statement, label);
   }
 };
