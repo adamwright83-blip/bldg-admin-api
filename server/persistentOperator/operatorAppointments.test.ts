@@ -2,8 +2,22 @@ import { describe, expect, it } from "vitest";
 import { targetWeekHorizon } from "../../shared/weeklyMissionReadiness";
 import { getAgentToolPolicy } from "../agents/toolRegistry";
 import { parseWeeklyPlanningCallbackRequest } from "./operatorAppointmentPolicy";
+import { insideSundayStandingWindow } from "./operatorAppointmentExecution";
 
 describe("Persistent Growth PR3 authority and appointment contracts", () => {
+  it("allows an unprompted planning call only on Sunday inside the standing window", () => {
+    const step = { timeZone: "America/Los_Angeles" };
+    expect(
+      insideSundayStandingWindow(step, new Date("2026-10-05T01:00:00.000Z"))
+    ).toBe(true); // Sunday 6:00 PM PDT
+    expect(
+      insideSundayStandingWindow(step, new Date("2026-10-06T01:00:00.000Z"))
+    ).toBe(false); // Monday 6:00 PM PDT
+    expect(
+      insideSundayStandingWindow(step, new Date("2026-10-04T23:30:00.000Z"))
+    ).toBe(false); // Sunday 4:30 PM PDT
+  });
+
   it("targets the coming Monday-Friday when planning is opened on Sunday", () => {
     const horizon = targetWeekHorizon({
       businessDate: "2026-10-04",
