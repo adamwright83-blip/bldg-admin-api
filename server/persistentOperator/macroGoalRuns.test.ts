@@ -181,7 +181,7 @@ describe("macro goal runs", () => {
     })).resolves.toBeNull();
   });
 
-  it("durably schedules the next evaluation and uses the source cycle for retry idempotency", async () => {
+  it("returns the next evaluation time for incomplete runs", async () => {
     const registry = new ServerVerticalRegistry();
     registry.registerTemplate(template);
     registry.registerMetricReader("fixture.accounts.v1", async () => ({
@@ -191,50 +191,20 @@ describe("macro goal runs", () => {
       coverage: "complete",
       observedAt: "2026-09-28T12:00:00.000Z",
     }));
-    const queued: Array<Record<string, unknown>> = [];
-    const cycleStore = {
-      async enqueue(input: Record<string, unknown>) {
-        queued.push(input);
-        return { id: "next-cycle", created: true };
-      },
-    } as any;
-    const runPersistence = persistence();
-
-    const first = await evaluateMacroGoalRunAndScheduleNext({
+    const result = await evaluateMacroGoalRunAndScheduleNext({
       tenantId: "tenant-1",
       runId: "run-1",
-      sourceCycleId: "source-cycle-1",
       registry,
-      runPersistence,
-      cycleStore,
+      runPersistence: persistence(),
       now: new Date("2026-09-28T12:00:00.000Z"),
     });
-    const second = await evaluateMacroGoalRunAndScheduleNext({
-      tenantId: "tenant-1",
-      runId: "run-1",
-      sourceCycleId: "source-cycle-1",
-      registry,
-      runPersistence,
-      cycleStore,
-      now: new Date("2026-09-28T12:05:00.000Z"),
-    });
-
-    expect(first.completed).toBe(false);
-    expect(first.nextCycle).toEqual({ id: "next-cycle", created: true });
-    expect(queued).toHaveLength(2);
-    expect(queued[0]).toMatchObject({
-      tenantId: "tenant-1",
-      goalRunId: "run-1",
-      triggerType: "scheduled_tick",
-      triggerSourceReference: "goal_cycle_requests:source-cycle-1:scheduled_successor",
-      idempotencyKey: "scheduled_tick:run-1:after:source-cycle-1",
-      availableAt: new Date("2026-09-28T13:00:00.000Z"),
-    });
-    expect(queued[1]?.idempotencyKey).toBe(queued[0]?.idempotencyKey);
-    expect(second.run.nextEvaluationAt).toEqual(new Date("2026-09-28T13:05:00.000Z"));
+    expect(result.completed).toBe(false);
+    expect(result.run.nextEvaluationAt).toEqual(
+      new Date("2026-09-28T13:00:00.000Z")
+    );
   });
 
-  it("does not schedule another cycle after evidence-backed completion", async () => {
+  it("returns no next evaluation after evidence-backed completion", async () => {
     const registry = new ServerVerticalRegistry();
     registry.registerTemplate(template);
     registry.registerMetricReader("fixture.accounts.v1", async () => ({
@@ -244,24 +214,15 @@ describe("macro goal runs", () => {
       coverage: "complete",
       observedAt: "2026-09-28T12:00:00.000Z",
     }));
-    let enqueueCalls = 0;
     const result = await evaluateMacroGoalRunAndScheduleNext({
       tenantId: "tenant-1",
       runId: "run-1",
-      sourceCycleId: "source-cycle-complete",
       registry,
       runPersistence: persistence(),
-      cycleStore: {
-        async enqueue() {
-          enqueueCalls += 1;
-          return { id: "should-not-exist", created: true };
-        },
-      } as any,
       now: new Date("2026-09-28T12:00:00.000Z"),
     });
     expect(result.completed).toBe(true);
-    expect(result.nextCycle).toBeNull();
-    expect(enqueueCalls).toBe(0);
+    expect(result.run.nextEvaluationAt).toBeNull();
   });
 
   it("does not complete when coverage is partial even when the recorded number reaches target", async () => {
