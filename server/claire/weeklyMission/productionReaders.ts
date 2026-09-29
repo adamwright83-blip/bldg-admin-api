@@ -7,7 +7,7 @@
 import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidates";
 import type { WeeklyDossierFact } from "../../../shared/weeklyMissionReadiness";
 import { getClaireCampaignSummary } from "../campaignAwareness";
-import { getActiveMacroGoal } from "../macroGoalService";
+import { getActiveMacroGoalForOperators } from "../macroGoalService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { listActiveRecurrenceRules } from "../workdayRecurrenceService";
 import { getDb } from "../../db";
@@ -38,6 +38,7 @@ function fieldClass(kind: FieldTodayItem["kind"]): WeeklyDossierFact["class"] {
 export async function readWeeklyDossierFacts(input: {
   tenantId: string;
   operatorId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
   dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
@@ -165,9 +166,11 @@ export async function readWeeklyDossierFacts(input: {
     });
   }
 
-  const goal = await getActiveMacroGoal({
+  const goal = await getActiveMacroGoalForOperators({
     tenantId: input.tenantId,
-    operatorUserId: input.operatorId,
+    operatorUserIds: input.operatorUserIds?.length
+      ? input.operatorUserIds
+      : [input.operatorId],
   });
   if (goal) {
     facts.push({
@@ -207,7 +210,9 @@ export async function readWeeklyGrowthCandidatesForDossier(input: {
   const feed = await loadWeeklyGrowthCandidates({
     tenantId: input.tenantId,
     operatorUserId: input.operatorId,
+    ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
     dayDirectorActorId: input.dayDirectorActorId,
+    ...(input.dayDirectorActorIds?.length ? { dayDirectorActorIds: input.dayDirectorActorIds } : {}),
     remainingDates: input.dates,
     now: input.now,
     timeZone: input.timeZone,
