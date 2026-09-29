@@ -170,6 +170,7 @@ export async function loadPersistentOperatorDiagnostics(input: {
   tenantId: string;
   canonicalOperatorId: string;
   operatorUserId: string;
+  operatorUserIds?: string[];
   dayDirectorActorId: string;
   dayDirectorActorIds?: string[];
   now?: Date;
@@ -220,10 +221,19 @@ export async function loadPersistentOperatorDiagnostics(input: {
     timeZone
   );
 
-  const obligations = await loadObligations(
-    input.tenantId,
-    input.operatorUserId
-  ).catch(() => []);
+  const authorizedOperatorUserIds = [...new Set(
+    (input.operatorUserIds?.length ? input.operatorUserIds : [input.operatorUserId])
+      .map(operatorUserId => operatorUserId.trim())
+      .filter(Boolean)
+  )];
+  const obligationGroups = await Promise.all(
+    authorizedOperatorUserIds.map(operatorUserId =>
+      loadObligations(input.tenantId, operatorUserId).catch(() => [])
+    )
+  );
+  const obligations = [...new Map(
+    obligationGroups.flat().map(obligation => [obligation.id, obligation] as const)
+  ).values()];
   const dueObligations = obligations.filter(
     obligation =>
       obligation.status !== "completed" &&
