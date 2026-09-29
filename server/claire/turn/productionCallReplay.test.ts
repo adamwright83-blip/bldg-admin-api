@@ -405,3 +405,23 @@ describe("2026-09-21 shadow trial — shared perception", () => {
     expect(interpretTurn("Yes.").acknowledgement).toBe(true);
   });
 });
+
+
+describe("Sunday weekly planning invite decline", () => {
+  it("clears the invite state and ends the proactive call after a decline", async () => {
+    const h = stateful();
+    h.state.sessionKind = "weekly_planning_invite";
+    h.state.weeklyPlanningWeekStart = "2026-10-05";
+
+    const result = await h.say("not now");
+
+    expect(result).toMatchObject({
+      speak: "All right.",
+      kind: "answered",
+      endCall: true,
+    });
+    expect(h.state.sessionKind).toBeUndefined();
+    expect(h.state.weeklyPlanningWeekStart).toBeNull();
+    expect(h.state.pendingWeeklyPlanningCallback).toBeNull();
+  });
+});
