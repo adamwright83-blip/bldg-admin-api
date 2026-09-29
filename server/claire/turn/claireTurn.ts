@@ -63,6 +63,10 @@ import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingR
 import { classifyOpenDialogueAct } from "./dialogueAct";
 import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
+import {
+  parseWeeklyPlanningCallbackRequest,
+  scheduleWeeklyPlanningCallbackForOperator,
+} from "../../persistentOperator/operatorAppointmentPolicy";
 import { beginWeeklyMission, loadWeeklyMissionPicture } from "../weeklyMission/driver";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
@@ -248,6 +252,7 @@ export type ClaireTurnDeps = {
   loadWorkdayPlan?: typeof loadConfirmedWorkdayPlan;
   weeklyPicture?: typeof loadWeeklyMissionPicture;
   beginWeekly?: typeof beginWeeklyMission;
+  scheduleWeeklyCallback?: typeof scheduleWeeklyPlanningCallbackForOperator;
   vocabulary: typeof loadBusinessVocabulary;
   accounts: typeof listAccountRefs;
   accountHistory: typeof loadAccountHistory;
@@ -289,6 +294,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     loadWorkdayPlan: loadConfirmedWorkdayPlan,
     weeklyPicture: loadWeeklyMissionPicture,
     beginWeekly: beginWeeklyMission,
+    scheduleWeeklyCallback: scheduleWeeklyPlanningCallbackForOperator,
     vocabulary: loadBusinessVocabulary,
     accounts: listAccountRefs,
     accountHistory: loadAccountHistory,
@@ -661,6 +667,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     dayDirectorActorId: input.dayDirectorActorId,
     timeZone,
     now,
+    weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
   };
   const beginWeeklyAfterMorningReconciliation = async (): Promise<string> => {
     if (
@@ -723,6 +730,128 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
 
+  if (
+    input.surface === "voice" &&
+    morningSession === "weekly_planning_invite" &&
+    state.weeklyPlanningWeekStart
+  ) {
+    const affirmative = /^(?:yes|yeah|yep|sure|ok(?:ay)?|now|do it now|let'?s do it(?: now)?)\b/i.test(
+      utterance.trim()
+    );
+    const negative = /^(?:no|nope|not now|forget it|cancel)\b/i.test(
+      utterance.trim()
+    );
+
+    if (state.pendingWeeklyPlanningCallback) {
+      if (affirmative && deps.scheduleWeeklyCallback) {
+        const pending = state.pendingWeeklyPlanningCallback;
+        try {
+          const scheduled = await deps.scheduleWeeklyCallback({
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            timeZone,
+            weekStart: state.weeklyPlanningWeekStart,
+            scheduledFor: new Date(pending.scheduledForIso),
+            sourceReference: pending.sourceReference,
+          });
+          state.pendingWeeklyPlanningCallback = null;
+          mark("fallback", { fallbackReason: "weekly_planning_callback_scheduled" });
+          return finish({
+            speak: `Booked. I'll call you at ${scheduled.readback}.`,
+            kind: "answered",
+          });
+        } catch {
+          mark("fallback", { fallbackReason: "weekly_planning_callback_failed" });
+          return finish({
+            speak: "I couldn't safely save that callback, so I didn't schedule it.",
+            kind: "answered",
+          });
+        }
+      }
+      if (negative) {
+        state.pendingWeeklyPlanningCallback = null;
+        mark("fallback", { fallbackReason: "weekly_planning_callback_declined" });
+        return finish({
+          speak: "All right. I won't schedule it.",
+          kind: "answered",
+        });
+      }
+    }
+
+    const callback = parseWeeklyPlanningCallbackRequest({
+      utterance,
+      now,
+      timeZone,
+    });
+    if (callback.kind === "invalid") {
+      mark("fallback", { fallbackReason: "weekly_planning_callback_invalid" });
+      return finish({ speak: callback.speech, kind: "answered" });
+    }
+    if (callback.kind === "request") {
+      if (callback.inferredMeridiem) {
+        state.pendingWeeklyPlanningCallback = {
+          scheduledForIso: callback.scheduledFor.toISOString(),
+          readback: callback.readback,
+          sourceReference: input.conversationKey,
+        };
+        mark("fallback", { fallbackReason: "weekly_planning_callback_readback" });
+        return finish({
+          speak: `${callback.readback} tonight. Say yes and I'll schedule it.`,
+          kind: "answered",
+        });
+      }
+      if (!deps.scheduleWeeklyCallback) {
+        return finish({
+          speak: "I can't safely schedule that callback from this call.",
+          kind: "answered",
+        });
+      }
+      try {
+        const scheduled = await deps.scheduleWeeklyCallback({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          timeZone,
+          weekStart: state.weeklyPlanningWeekStart,
+          scheduledFor: callback.scheduledFor,
+          sourceReference: input.conversationKey,
+        });
+        mark("fallback", { fallbackReason: "weekly_planning_callback_scheduled" });
+        return finish({
+          speak: `Booked. I'll call you at ${scheduled.readback}.`,
+          kind: "answered",
+        });
+      } catch {
+        mark("fallback", { fallbackReason: "weekly_planning_callback_failed" });
+        return finish({
+          speak: "I couldn't safely save that callback, so I didn't schedule it.",
+          kind: "answered",
+        });
+      }
+    }
+
+    if (affirmative && deps.beginWeekly) {
+      state.sessionKind = "weekly_planning";
+      state.pendingWeeklyPlanningCallback = null;
+      const turn = await deps.beginWeekly(weeklyScope).catch(() => null);
+      mark("fallback", { fallbackReason: "weekly_planning_begin" });
+      return finish({
+        speak: turn?.speech?.trim() || "I couldn't safely open the week.",
+        kind: "answered",
+      });
+    }
+
+    if (negative) {
+      mark("fallback", { fallbackReason: "weekly_planning_invite_declined" });
+      return finish({ speak: "All right.", kind: "answered" });
+    }
+
+    mark("fallback", { fallbackReason: "weekly_planning_invite_reask" });
+    return finish({
+      speak: "Want to do it now, or what time tonight?",
+      kind: "answered",
+    });
+  }
+
   // Incomplete fragments already returned. A weekly session owns this completed thought.
   const weekly = await routeActiveWeeklySession({
     tenantId: input.tenantId,
@@ -731,6 +860,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     utterance,
     now: deps.now(),
     timeZone: deps.timeZone(),
+    weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
   });
   if (weekly) {
     mark("fallback", { fallbackReason: "weekly_planning" });
