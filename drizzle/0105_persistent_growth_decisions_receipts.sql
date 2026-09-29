@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS `claire_proactive_obligations` (
 );
 
 ALTER TABLE `claire_proactive_obligations`
+  MODIFY COLUMN `kind` varchar(32) NOT NULL,
   ADD COLUMN `canonicalOperatorId` varchar(191) NULL,
   ADD COLUMN `goalRunId` varchar(36) NULL,
   ADD COLUMN `cycleId` varchar(36) NULL,
