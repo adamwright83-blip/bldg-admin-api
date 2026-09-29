@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { selectValidatedAuthorityEvent } from "./operationReceipt";
+import {
+  selectValidatedAuthorityEvent,
+  selectedObligationRef,
+} from "./operationReceipt";
 
 describe("operationReceipt authority lineage", () => {
   it("does not resolve authority from an unvalidated proposal or policy denial", () => {
@@ -20,6 +23,37 @@ describe("operationReceipt authority lineage", () => {
       },
     ];
     expect(selectValidatedAuthorityEvent(events)).toBeUndefined();
+  });
+
+  it("does not resolve approval basis from a failure before policy validation", () => {
+    const events = [
+      {
+        status: "failed",
+        operationStatus: "failed",
+        authorityBasis: null,
+        approvalBasis: "explicit_approval",
+      },
+    ];
+    expect(selectValidatedAuthorityEvent(events)).toBeUndefined();
+  });
+
+  it("keeps each decision linked to its originally selected obligation", () => {
+    const first = {
+      selectionKind: "obligation",
+      selectedRef: "obligation-a",
+    };
+    const later = {
+      selectionKind: "obligation",
+      selectedRef: "obligation-a",
+    };
+    expect(selectedObligationRef(first)).toBe("obligation-a");
+    expect(selectedObligationRef(later)).toBe("obligation-a");
+    expect(
+      selectedObligationRef({
+        selectionKind: "candidate",
+        selectedRef: "candidate-b",
+      })
+    ).toBeNull();
   });
 
   it("selects the first post-policy event carrying the validated authority basis", () => {
