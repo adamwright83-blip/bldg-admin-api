@@ -54,6 +54,7 @@ function fakeStore(over: {
   markRunning?: (s: ClaimedWorkflowStep) => Promise<boolean>;
   claimNextStep?: () => Promise<ClaimedWorkflowStep | null>;
   completeStep?: (s: ClaimedWorkflowStep, result: unknown) => Promise<boolean>;
+  failStep?: (s: ClaimedWorkflowStep, error: unknown, retryDelayMs: number) => Promise<unknown>;
 } = {}): FakeStore {
   const queue = [...(over.steps ?? [])];
   const calls: FakeStore["calls"] = {
@@ -95,6 +96,7 @@ function fakeStore(over: {
         message: error instanceof Error ? error.message : String(error),
         retryDelayMs,
       });
+      if (over.failStep) return over.failStep(s, error, retryDelayMs);
       return "retry_scheduled" as const;
     },
   };
@@ -187,6 +189,28 @@ describe("ProcurementWorker — step lifecycle", () => {
     await until(() => store.calls.fail.length === 1);
     expect(handler).toHaveBeenCalledTimes(1);
     expect(store.calls.fail[0].message).toBe("db blip on complete");
+  });
+
+  it("keeps polling and reports degraded health when failStep persistence throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const store = fakeStore({
+      steps: [step("1")],
+      failStep: async () => { throw new Error("DB unavailable while recording the failure"); },
+    });
+    const worker = startWorker(
+      store,
+      { "test.step": async () => { throw new Error("provider down"); } },
+      { concurrency: 1, pollMs: 5 }
+    );
+
+    await until(() => worker.health.degraded === true);
+    const claimsAfterFailure = store.calls.claim;
+    await until(() => store.calls.claim > claimsAfterFailure);
+    expect(worker.health).toMatchObject({
+      ok: false,
+      degraded: true,
+      lastError: "DB unavailable while recording the failure",
+    });
   });
 });
 
