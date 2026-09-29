@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
+import type { CampaignRun } from "../../../shared/campaignRun";
+import { projectCurrentDayLine } from "../../../shared/currentDayLine";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
+import { surfacedObjectiveIds } from "./currentDayLineRouter";
 import { readCurrentDayLine } from "./currentDayLineService";
 
 const outcome: MissionPlanOutcome = {
@@ -188,6 +191,52 @@ const readerInput = {
   timeZone: "UTC",
   now: new Date("2026-09-23T15:00:00.000Z"),
 };
+
+describe("Day Line diagnostic objective ids", () => {
+  it("uses the newest active campaign-run id instead of the shared campaign id", () => {
+    const line = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "ranked",
+      rankedWorks: [
+        { id: "campaign-a", title: "Campaign A" },
+        { id: "campaign-b", title: "Campaign B" },
+      ],
+      designated: null,
+    });
+    const runs: CampaignRun[] = [
+      {
+        campaignRunId: "run-a-new",
+        tenantId: "tenant-a",
+        operatorUserId: "operator-1",
+        campaignId: "campaign-a",
+        campaignVersion: 1,
+        fictionPackId: null,
+        fictionPackVersion: null,
+        targetSetId: "targets-a",
+        startedAt: "2026-09-23T12:00:00.000Z",
+        status: "active",
+        completedAt: null,
+      },
+      {
+        campaignRunId: "run-a-old",
+        tenantId: "tenant-a",
+        operatorUserId: "operator-1",
+        campaignId: "campaign-a",
+        campaignVersion: 1,
+        fictionPackId: null,
+        fictionPackVersion: null,
+        targetSetId: "targets-old",
+        startedAt: "2026-09-22T12:00:00.000Z",
+        status: "active",
+        completedAt: null,
+      },
+    ];
+    expect(surfacedObjectiveIds(line, runs)).toEqual([
+      "run-a-new",
+      "campaign-b",
+    ]);
+  });
+});
 
 describe("readCurrentDayLine", () => {
   it("projects Mission Director order without rescoring", async () => {
