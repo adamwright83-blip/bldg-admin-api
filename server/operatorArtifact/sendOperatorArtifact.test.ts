@@ -185,6 +185,42 @@ describe("sendOperatorArtifact", () => {
     expect(hoisted.twilioFactoryCalls).toBe(before + 1);
   });
 
+  it("persists goal-cycle lineage on provider acceptance and delivery receipts", async () => {
+    const decisionId = "11111111-1111-4111-8111-111111111111";
+    const accepted = await sendOperatorArtifact({
+      ...plain("lineage"),
+      agentEventId: 42,
+      decisionId,
+    });
+
+    expect(accepted.receipt).toMatchObject({
+      eventType: "MESSAGE_SENT",
+      agentEventId: 42,
+      decisionId,
+    });
+    const payload = hoisted.messagesCreate.mock.calls.at(-1)?.[0] as {
+      statusCallback?: string;
+    };
+    expect(payload.statusCallback).toContain("agentEventId=42");
+    expect(payload.statusCallback).toContain(
+      "decisionId=11111111-1111-4111-8111-111111111111"
+    );
+
+    const delivered = await recordOperatorArtifactProviderStatus({
+      tenantId: "goldline",
+      operatorUserId: "adam-admin",
+      messageSid: "SM_accepted",
+      messageStatus: "delivered",
+      agentEventId: 42,
+      decisionId,
+    });
+    expect(delivered.receipt).toMatchObject({
+      eventType: "MESSAGE_DELIVERED",
+      agentEventId: 42,
+      decisionId,
+    });
+  });
+
   it("accepts only the supported artifact kinds", async () => {
     const supported = [
       { kind: "plain_text", text: "Bring the key" },
