@@ -1,6 +1,8 @@
 import { formatInTimeZone } from "date-fns-tz";
-import { executeGrantedAction } from "../claire/brain/actions/gateway";
-import { startClairePreDriveCall } from "../claire/claireTwilio";
+import {
+  executeClairePersistentOperatorAction,
+  startClairePreDriveCall,
+} from "../claire/claireTwilio";
 import { beginWeeklyMission } from "../claire/weeklyMission/driver";
 import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
 import { logAgentEvent } from "../agents/agentEvents";
@@ -8,7 +10,6 @@ import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRe
 import { parseAuthoritativeMetricObservation } from "./macroGoalRuns";
 import { findActiveMacroGoalRun } from "./goalCycleService";
 import { resolveCanonicalOperatorIdentity } from "./identity";
-import { mintPersistentOperatorActionGrant } from "./actionPolicy";
 import {
   SUNDAY_PLANNING_LOCAL_END,
   SUNDAY_PLANNING_LOCAL_START,
@@ -140,7 +141,7 @@ export async function executeOperatorAppointment(
     step.source === "explicit_operator_request"
       ? identity.canonicalOpenId
       : null;
-  const grant = await mintPersistentOperatorActionGrant({
+  const result = await executeClairePersistentOperatorAction({
     identity,
     actionClass: "place_weekly_planning_call",
     authorityBasis: "scheduled_operator_appointment",
@@ -158,9 +159,6 @@ export async function executeOperatorAppointment(
     approvedByUserId,
     expiresAtMs: Date.now() + 5 * 60_000,
     scope: { identity: identity.canonicalOpenId },
-  });
-
-  const result = await executeGrantedAction(grant, {
     execute: async () => {
       let opening: string;
       let sessionKind: "weekly_planning_invite" | "weekly_planning";
