@@ -113,7 +113,7 @@ export async function readCurrentDayLine(
       readPlan({
         tenantId,
         operatorId,
-        operatorIds: input.operatorIds,
+        ...(input.operatorIds?.length ? { operatorIds: input.operatorIds } : {}),
         businessDate,
         timeZone,
       }),
