@@ -54,6 +54,18 @@ import { createResidentCoordinatedRequestTool } from "./tools/createResidentCoor
 import { createOrderFollowupTaskTool } from "./tools/createOrderFollowupTaskTool";
 import { cancelResidentOrderTool } from "./tools/cancelResidentOrderTool";
 
+export type ToolRiskClass =
+  | "READ_ONLY"
+  | "INTERNAL_REVERSIBLE"
+  | "EXTERNAL_COMMUNICATION"
+  | "FINANCIAL_OR_CONTRACTUAL";
+
+export type ToolPolicyMetadata = {
+  riskClass: ToolRiskClass;
+  expectedObservation: string;
+  idempotencyContract: string;
+};
+
 export type AgentToolResult<TOutput = unknown> = {
   entityType?: string | null;
   entityId?: string | number | null;
@@ -120,6 +132,70 @@ export const toolRegistry = new Map<string, AgentTool>(
   tools.map((tool) => [tool.name, tool])
 );
 
+const toolPolicyOverrides: Readonly<Record<string, ToolPolicyMetadata>> = {
+  getResidentContextTool: {
+    riskClass: "READ_ONLY",
+    expectedObservation: "resident/context read",
+    idempotencyContract: "pure read",
+  },
+  getLevel4GateStateTool: {
+    riskClass: "READ_ONLY",
+    expectedObservation: "gate-state read",
+    idempotencyContract: "pure read",
+  },
+  searchNetworkVendorsTool: {
+    riskClass: "READ_ONLY",
+    expectedObservation: "vendor search result",
+    idempotencyContract: "pure read",
+  },
+  draftCustomerMessageTool: {
+    riskClass: "INTERNAL_REVERSIBLE",
+    expectedObservation: "draft text only; no provider send",
+    idempotencyContract: "draft may be regenerated without external effect",
+  },
+  logOperatorTaskTool: {
+    riskClass: "INTERNAL_REVERSIBLE",
+    expectedObservation: "internal operator task row",
+    idempotencyContract: "tool-owned request/idempotency key",
+  },
+  logRevenueInterventionTool: {
+    riskClass: "INTERNAL_REVERSIBLE",
+    expectedObservation: "internal intervention record",
+    idempotencyContract: "tool-owned request/idempotency key",
+  },
+  sendCustomerReminderTool: {
+    riskClass: "EXTERNAL_COMMUNICATION",
+    expectedObservation: "provider communication receipt",
+    idempotencyContract: "provider/tool idempotency required",
+  },
+  sendOperatorArtifactTool: {
+    riskClass: "EXTERNAL_COMMUNICATION",
+    expectedObservation: "operator communication receipt",
+    idempotencyContract: "provider/tool idempotency required",
+  },
+  requestVendorConfirmationTool: {
+    riskClass: "EXTERNAL_COMMUNICATION",
+    expectedObservation: "vendor communication receipt",
+    idempotencyContract: "provider/tool idempotency required",
+  },
+  requestVendorBookingConfirmationTool: {
+    riskClass: "EXTERNAL_COMMUNICATION",
+    expectedObservation: "vendor communication receipt",
+    idempotencyContract: "provider/tool idempotency required",
+  },
+};
+
+const failClosedToolPolicy: ToolPolicyMetadata = {
+  riskClass: "FINANCIAL_OR_CONTRACTUAL",
+  expectedObservation: "authoritative tool result",
+  idempotencyContract: "explicit approval required before persistent execution",
+};
+
+export function getAgentToolPolicy(name: string): ToolPolicyMetadata {
+  return toolPolicyOverrides[name] ?? failClosedToolPolicy;
+}
+
+
 export function getAgentTool(name: string): AgentTool {
   const tool = toolRegistry.get(name);
   if (!tool) throw new Error(`Unknown agent tool: ${name}`);
@@ -131,5 +207,6 @@ export function listAgentTools() {
     name: tool.name,
     description: tool.description,
     requiresHumanApproval: tool.requiresHumanApproval === true,
+    policy: getAgentToolPolicy(tool.name),
   }));
 }
