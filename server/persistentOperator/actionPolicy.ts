@@ -3,6 +3,7 @@ import { tenantStandingAuthorizations } from "../../drizzle/schema";
 import { PERSISTENT_OPERATOR_ENTITLEMENT } from "../../shared/saasTenant";
 import { getDb } from "../db";
 import { hasTenantEntitlement, roleAllows } from "../saas/tenantAccess";
+import { resolveCanonicalOperatorIdentity } from "./identity";
 
 export const TOOL_RISK_CLASSES = [
   "READ_ONLY",
