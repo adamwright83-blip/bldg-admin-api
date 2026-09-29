@@ -841,8 +841,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     if (negative) {
+      // A declined proactive planning invite is terminal for this appointment.
+      // Clear the invite state before hanging up so a persisted/replayed turn
+      // cannot trap later operator speech back inside the invitation.
+      delete state.sessionKind;
+      state.weeklyPlanningWeekStart = null;
+      state.pendingWeeklyPlanningCallback = null;
       mark("fallback", { fallbackReason: "weekly_planning_invite_declined" });
-      return finish({ speak: "All right.", kind: "answered" });
+      return finish({ speak: "All right.", kind: "answered", endCall: true });
     }
 
     mark("fallback", { fallbackReason: "weekly_planning_invite_reask" });
