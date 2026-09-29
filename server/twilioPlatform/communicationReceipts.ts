@@ -292,8 +292,8 @@ function receiptInsertValues(
     durationSeconds: receipt.durationSeconds,
     providerErrorCode: receipt.providerErrorCode,
     providerErrorMessage: receipt.providerErrorMessage,
-    agentEventId: receipt.agentEventId,
-    decisionId: receipt.decisionId,
+    agentEventId: receipt.agentEventId ?? null,
+    decisionId: receipt.decisionId ?? null,
     idempotencyKey: receipt.idempotencyKey,
     createdAt: new Date(receipt.createdAt),
   };
