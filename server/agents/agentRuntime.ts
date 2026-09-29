@@ -5,11 +5,14 @@ import { getAgentTool, getAgentToolPolicy } from "./toolRegistry";
 import { evaluatePersistentActionPolicy } from "../persistentOperator/actionPolicy";
 import type { AgentEventWrite } from "./agentEvents";
 
-async function safeLogAgentEvent(event: AgentEventWrite): Promise<void> {
+async function safeLogAgentEvent(
+  event: AgentEventWrite
+): Promise<number | null> {
   try {
-    await logAgentEvent(event);
+    return await logAgentEvent(event);
   } catch (error) {
     console.warn("[AgentEvents] Failed to persist event:", error);
+    return null;
   }
 }
 
@@ -122,7 +125,7 @@ export async function runAgentTool<TOutput = unknown>(
     }
 
     if (ctx.agentType === "goal_cycle_agent") {
-      await safeLogAgentEvent({
+      const executionEventId = await safeLogAgentEvent({
         ctx: eventCtx,
         toolName,
         inputJson: input,
@@ -131,6 +134,7 @@ export async function runAgentTool<TOutput = unknown>(
         latencyMs: Date.now() - started,
         requiresHumanApproval,
       });
+      eventCtx = { ...eventCtx, agentEventId: executionEventId };
     }
 
     const result = await tool.execute(input, eventCtx);
