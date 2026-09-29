@@ -26,8 +26,8 @@ export function selectValidatedAuthorityEvent<
   return events.find(event => {
     const status = event.operationStatus ?? event.status;
     return (
-      (event.authorityBasis != null || event.approvalBasis != null) &&
-      ["execution_started", "success", "succeeded", "failed"].includes(status)
+      status === "execution_started" &&
+      (event.authorityBasis != null || event.approvalBasis != null)
     );
   });
 }
@@ -65,15 +65,17 @@ export async function operationReceipt(input: {
         )
       )
       .orderBy(asc(communicationReceipts.createdAt)),
-    db
-      .select()
-      .from(claireProactiveObligations)
-      .where(
-        and(
-          eq(claireProactiveObligations.tenantId, input.tenantId),
-          eq(claireProactiveObligations.decisionId, input.decisionId)
-        )
-      ),
+    decision.selectionKind === "obligation" && decision.selectedRef
+      ? db
+          .select()
+          .from(claireProactiveObligations)
+          .where(
+            and(
+              eq(claireProactiveObligations.tenantId, input.tenantId),
+              eq(claireProactiveObligations.id, decision.selectedRef)
+            )
+          )
+      : Promise.resolve([]),
   ]);
 
   const authorityEvent = selectValidatedAuthorityEvent(events);
