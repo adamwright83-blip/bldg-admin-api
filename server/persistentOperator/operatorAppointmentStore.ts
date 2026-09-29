@@ -149,12 +149,15 @@ export class OperatorAppointmentStore
       if (
         insert.affectedRows !== 1 &&
         row.appointmentKind === "sunday_weekly_planning" &&
-        ["scheduled", "retry_scheduled"].includes(row.status)
+        ["scheduled", "retry_scheduled", "leased", "running"].includes(row.status) &&
+        row.callDispatchStartedAt == null
       ) {
         // The weekly idempotency key intentionally survives authorization
-        // rotation. Refresh the standing grant and timezone while the row is
-        // still unclaimed. A never-attempted scheduled row follows the current
-        // tenant-local slot; a retry_scheduled row keeps its worker backoff.
+        // rotation. Refresh authority/timezone until external dispatch begins,
+        // including a row already leased by another replica. A stale worker
+        // copy is fenced by beginCallDispatch's standing-authorization CAS.
+        // Only a never-attempted scheduled row follows the current local slot;
+        // retries and active leases retain their existing execution time.
         await connection.execute(
           `UPDATE operator_appointments
               SET scheduledFor = CASE
@@ -165,7 +168,8 @@ export class OperatorAppointmentStore
                   standingAuthorizationId = ?
             WHERE tenantId = ? AND id = ?
               AND appointmentKind = 'sunday_weekly_planning'
-              AND status IN ('scheduled','retry_scheduled')`,
+              AND status IN ('scheduled','retry_scheduled','leased','running')
+              AND callDispatchStartedAt IS NULL`,
           [
             input.scheduledFor,
             input.timeZone,
@@ -297,8 +301,9 @@ export class OperatorAppointmentStore
           AND leaseOwner = ?
           AND leaseExpiresAt > CURRENT_TIMESTAMP(3)
           AND callDispatchStartedAt IS NULL
-          AND callSid IS NULL`,
-      [step.tenantId, step.id, step.leaseOwner]
+          AND callSid IS NULL
+          AND standingAuthorizationId <=> ?`,
+      [step.tenantId, step.id, step.leaseOwner, step.standingAuthorizationId]
     );
     return result.affectedRows === 1;
   }
