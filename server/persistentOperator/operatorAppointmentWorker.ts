@@ -64,12 +64,15 @@ export class OperatorAppointmentWorker {
   constructor(
     store: OperatorAppointmentStore,
     options: OperatorAppointmentWorkerOptions,
-    executor: (step: ClaimedOperatorAppointment) => Promise<unknown> =
-      executeOperatorAppointment
+    executor?: (step: ClaimedOperatorAppointment) => Promise<unknown>
   ) {
+    const run =
+      executor ??
+      ((step: ClaimedOperatorAppointment) =>
+        executeOperatorAppointment(step, new Date(), store));
     const handler: DurableStepHandler<ClaimedOperatorAppointment> = async ({
       step,
-    }) => executor(step);
+    }) => run(step);
     this.worker = new DurableWorker(
       new ScheduledAppointmentExecutionStore(store),
       new Map([["operator_appointment.execute", handler]]),
