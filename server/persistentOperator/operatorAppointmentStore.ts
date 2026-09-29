@@ -286,7 +286,9 @@ export class OperatorAppointmentStore
               leaseExpiresAt = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MICROSECOND)
         WHERE tenantId = ? AND id = ?
           AND status IN ('leased','running')
-          AND leaseOwner = ?`,
+          AND leaseOwner = ?
+          AND standingAuthorizationId <=> ?
+          AND timeZone = ?`,
       [leaseMs * 1000, step.tenantId, step.id, step.leaseOwner]
     );
     return result.affectedRows === 1;
@@ -353,6 +355,8 @@ export class OperatorAppointmentStore
         step.tenantId,
         step.id,
         step.leaseOwner,
+        step.standingAuthorizationId,
+        step.timeZone,
       ]
     );
     return result.affectedRows === 1;
