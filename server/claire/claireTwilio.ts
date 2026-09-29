@@ -912,6 +912,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               rookContactResidues,
             },
             {
+              timeZone: () =>
+                conversation.appointmentTimeZone || getDashboardTimeZone(),
               confirmPlan: () =>
                 confirmWorkdayPlan({
                   tenantId: conversation.tenantId,
@@ -1199,6 +1201,7 @@ async function persistClaireVoiceConversation(input: {
   inboundContextReady?: boolean;
   sessionKindOverride?: PreDriveConversation["sessionKind"];
   weeklyPlanningWeekStart?: string | null;
+  appointmentTimeZone?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -1217,6 +1220,7 @@ async function persistClaireVoiceConversation(input: {
     touchedAt: now,
     sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
+    appointmentTimeZone: input.appointmentTimeZone ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
@@ -1273,6 +1277,7 @@ export async function startClairePreDriveCall(input: {
     missionId: input.missionId,
     sessionKindOverride: input.sessionKindOverride,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
+    appointmentTimeZone: input.timeZone ?? null,
   });
   try {
     const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });
