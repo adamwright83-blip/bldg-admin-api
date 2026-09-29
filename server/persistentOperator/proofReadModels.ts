@@ -251,11 +251,26 @@ export async function getAuthoritativeScoreboard(input: {
   let coverage: ScoreboardCoverage = "unavailable";
 
   const baselineNum = activeRun?.baselineValue != null ? Number(activeRun.baselineValue) : null;
+  const runStartedMs = activeRun?.startedAt
+    ? new Date(activeRun.startedAt).getTime()
+    : activeRun?.createdAt
+      ? new Date(activeRun.createdAt).getTime()
+      : 0;
+
+  // Prevent double-counting: only add outcomes observed at or after run baseline start
+  const incrementalEconomicOutcomes = economicOutcomes.filter(o => {
+    if (!runStartedMs || !activeRun?.baselineObservationRef) return true;
+    const outcomeObservedMs = o.observedAt ? new Date(o.observedAt).getTime() : 0;
+    return outcomeObservedMs >= runStartedMs;
+  });
+
+  const incrementalRevenueDollars =
+    incrementalEconomicOutcomes.reduce((sum, o) => sum + (o.monetaryValueCents ?? 0), 0) / 100;
   const newRevenueDollars =
     attributableEconomicValueCents != null ? attributableEconomicValueCents / 100 : 0;
 
   if (activeRun?.baselineObservationRef) {
-    authoritativeObservedValue = baselineNum != null ? baselineNum + newRevenueDollars : null;
+    authoritativeObservedValue = baselineNum != null ? baselineNum + incrementalRevenueDollars : null;
     precision =
       activeRun.baselinePrecision === "exact" && economicPrecision === "exact"
         ? "exact"

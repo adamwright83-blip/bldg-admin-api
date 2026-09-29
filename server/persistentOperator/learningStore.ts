@@ -223,10 +223,10 @@ export async function getLearnedDeltasByDecision(input: {
 }
 
 /**
- * Resolves the primary technique or teaching key associated with an outcome
+ * Resolves all techniques or teaching keys associated with an outcome
  * by inspecting the originating objective or decision loadout.
  */
-export async function resolveTargetKeyFromOutcome(outcome: GoalCycleOutcomeRecord): Promise<string> {
+export async function resolveTargetKeysFromOutcome(outcome: GoalCycleOutcomeRecord): Promise<string[]> {
   // 1. Try objective loadout
   if (outcome.objectiveId) {
     try {
@@ -234,8 +234,9 @@ export async function resolveTargetKeyFromOutcome(outcome: GoalCycleOutcomeRecor
         tenantId: outcome.tenantId,
         objectiveId: outcome.objectiveId,
       });
-      if (objective?.loadout?.length && objective.loadout[0]?.key) {
-        return objective.loadout[0].key;
+      if (objective?.loadout?.length) {
+        const keys = objective.loadout.map(item => item.key).filter(Boolean);
+        if (keys.length > 0) return Array.from(new Set(keys));
       }
     } catch {
       // Objective store lookup optional/fallback
@@ -249,8 +250,9 @@ export async function resolveTargetKeyFromOutcome(outcome: GoalCycleOutcomeRecor
         tenantId: outcome.tenantId,
         decisionId: outcome.decisionId,
       });
-      if (decision?.loadout?.length && decision.loadout[0]?.key) {
-        return decision.loadout[0].key;
+      if (decision?.loadout?.length) {
+        const keys = decision.loadout.map(item => item.key).filter(Boolean);
+        if (keys.length > 0) return Array.from(new Set(keys));
       }
     } catch {
       // Decision store lookup optional/fallback
@@ -258,7 +260,12 @@ export async function resolveTargetKeyFromOutcome(outcome: GoalCycleOutcomeRecor
   }
 
   // 3. Fallback to outcomeKind
-  return outcome.outcomeKind;
+  return [outcome.outcomeKind];
+}
+
+export async function resolveTargetKeyFromOutcome(outcome: GoalCycleOutcomeRecord): Promise<string> {
+  const keys = await resolveTargetKeysFromOutcome(outcome);
+  return keys[0] ?? outcome.outcomeKind;
 }
 
 /**
@@ -326,7 +333,8 @@ function deriveDeterministicLearning(
     const newDeliveries = priorDeliveries + 1;
     const newSampleSize = priorSampleSize + 1;
     const newWeight = Math.min(2.0, Number((priorWeight + 0.05).toFixed(2)));
-    const confidence: "high" | "medium" | "low" = newDeliveries >= 5 ? "high" : "medium";
+    const confidence: "high" | "medium" | "low" =
+      newDeliveries >= 5 ? "high" : newDeliveries >= 2 ? "medium" : "low";
 
     return {
       learningKind: "channel_affinity",
@@ -388,16 +396,17 @@ function deriveDeterministicLearning(
  *
  * Enforces:
  * 1. Receipt-backed: relies on authoritative outcome and evidence references.
- * 2. Invariant: only verified outcomes can produce positive business learning.
+ * 2. Invariant: only verified outcomes can produce positive business learning;
+ *    authoritative rejections produce execution constraints.
  * 3. Freshness / Non-conflict: rejects stale or conflicting evidence.
  * 4. Delayed outcomes: attaches to originating historical goalRun and decision;
  *    does NOT reopen superseded or completed goals.
  * 5. Exactly-once counting: idempotency unique key ensures retries/worker restarts
  *    never count an outcome twice.
- * 6. Stateful & cumulative: reads prior active delta and increments sample size,
- *    accumulated revenue, and verified deliveries instead of hardcoding stubs.
- * 7. Real technique targeting: automatically resolves targetKey from originating
- *    objective/decision loadout so future selection consumes it directly.
+ * 6. Stateful & cumulative: reads prior active delta across kinds to share unified
+ *    history (deliveries, revenue, failures, doctrine weight).
+ * 7. Multi-weapon loadout credit: resolves all techniques packed in loadout so
+ *    every contributing doctrine receives stateful reinforcement.
  */
 export async function evaluateOutcomeAndRecordLearning(
   input: EvaluateOutcomeLearningInput
@@ -420,10 +429,10 @@ export async function evaluateOutcomeAndRecordLearning(
     throw new Error(`Outcome '${input.outcomeId}' not found for tenant '${input.tenantId}'`);
   }
 
-  // Only verified outcomes can produce authoritative learning
-  if (outcome.epistemicStatus !== "verified") {
+  // Only epistemically settled outcomes (verified or authoritative rejected) can produce learning
+  if (outcome.epistemicStatus === "unverified" || outcome.epistemicStatus === "disputed") {
     throw new Error(
-      `Cannot derive learning from outcome with unverified epistemic status: '${outcome.epistemicStatus}'`
+      `Cannot derive learning from outcome with unresolved epistemic status: '${outcome.epistemicStatus}'`
     );
   }
 
@@ -440,88 +449,105 @@ export async function evaluateOutcomeAndRecordLearning(
     `Learning delta for outcome '${outcome.outcomeKind}'`
   );
 
-  const resolvedTargetKey = input.targetKey ?? (await resolveTargetKeyFromOutcome(outcome));
-  const resolvedLearningKind =
-    input.learningKind ??
-    (outcome.impactClass === "commercial_revenue"
-      ? "doctrine_weight"
-      : outcome.impactClass === "action_verification"
-        ? "channel_affinity"
-        : "loadout_recommendation");
+  const targetKeys = input.targetKey
+    ? [input.targetKey]
+    : await resolveTargetKeysFromOutcome(outcome);
 
-  // Query prior active delta for stateful, cumulative learning
-  const existingDeltas = await listGoalCycleLearnedDeltas({
-    tenantId: input.tenantId,
-    targetKey: resolvedTargetKey,
-    learningKind: resolvedLearningKind,
-    limit: 1,
-  });
-  const priorDelta = existingDeltas[0] ?? null;
+  let primaryDelta: GoalCycleLearnedDeltaRecord | null = null;
+  let primaryCreated = false;
 
-  const derived = deriveDeterministicLearning(outcome, resolvedTargetKey, priorDelta);
-  const learningKind = input.learningKind ?? derived.learningKind;
-  const targetKey = resolvedTargetKey;
-  const deltaType = input.deltaType ?? derived.deltaType;
-  const beforeState = input.beforeState ?? derived.beforeState;
-  const afterState = input.afterState ?? derived.afterState;
-  const explanation = input.explanation ?? derived.explanation;
-  const confidence = derived.confidence;
-
-  const existing = await findLearnedDeltaByIdempotencyKey({
-    tenantId: input.tenantId,
-    outcomeId: outcome.id,
-    learningKind,
-    targetKey,
-  });
-  if (existing) {
-    return { delta: existing, created: false };
-  }
-
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-
-  const id = randomUUID();
-  const insertPayload = {
-    id,
-    tenantId: input.tenantId,
-    goalRunId: outcome.goalRunId,
-    cycleId: outcome.cycleId,
-    decisionId: outcome.decisionId,
-    objectiveId: outcome.objectiveId,
-    outcomeId: outcome.id,
-    canonicalOperatorId: outcome.canonicalOperatorId,
-    operatorUserId: outcome.operatorUserId,
-    learningKind,
-    targetKey,
-    deltaType,
-    beforeStateJson: beforeState,
-    afterStateJson: afterState,
-    evidenceReference: outcome.evidenceReference,
-    confidence,
-    explanation,
-    appliedCount: 1,
-  };
-
-  try {
-    await db.insert(goalCycleLearnedDeltas).values(insertPayload);
-    const created = await getGoalCycleLearnedDelta({
+  for (const targetKey of targetKeys) {
+    // Query prior active delta across kinds for this targetKey to share unified state
+    const existingDeltas = await listGoalCycleLearnedDeltas({
       tenantId: input.tenantId,
-      deltaId: id,
+      targetKey,
+      limit: 1,
     });
-    if (!created) throw new Error("Failed to load created learned delta");
-    return { delta: created, created: true };
-  } catch (error) {
-    if (isMysqlDuplicateKeyError(error)) {
-      const duplicate = await findLearnedDeltaByIdempotencyKey({
-        tenantId: input.tenantId,
-        outcomeId: outcome.id,
-        learningKind,
-        targetKey,
-      });
-      if (duplicate) return { delta: duplicate, created: false };
+    const priorDelta = existingDeltas[0] ?? null;
+
+    const derived = deriveDeterministicLearning(outcome, targetKey, priorDelta);
+    const learningKind = input.learningKind ?? derived.learningKind;
+    const deltaType = input.deltaType ?? derived.deltaType;
+    const beforeState = input.beforeState ?? derived.beforeState;
+    const afterState = input.afterState ?? derived.afterState;
+    const explanation = input.explanation ?? derived.explanation;
+    const confidence = derived.confidence;
+
+    const existing = await findLearnedDeltaByIdempotencyKey({
+      tenantId: input.tenantId,
+      outcomeId: outcome.id,
+      learningKind,
+      targetKey,
+    });
+
+    if (existing) {
+      if (!primaryDelta) {
+        primaryDelta = existing;
+        primaryCreated = false;
+      }
+      continue;
     }
-    throw error;
+
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+
+    const id = randomUUID();
+    const insertPayload = {
+      id,
+      tenantId: input.tenantId,
+      goalRunId: outcome.goalRunId,
+      cycleId: outcome.cycleId,
+      decisionId: outcome.decisionId,
+      objectiveId: outcome.objectiveId,
+      outcomeId: outcome.id,
+      canonicalOperatorId: outcome.canonicalOperatorId,
+      operatorUserId: outcome.operatorUserId,
+      learningKind,
+      targetKey,
+      deltaType,
+      beforeStateJson: beforeState,
+      afterStateJson: afterState,
+      evidenceReference: outcome.evidenceReference,
+      confidence,
+      explanation,
+      appliedCount: 1,
+    };
+
+    try {
+      await db.insert(goalCycleLearnedDeltas).values(insertPayload);
+      const created = await getGoalCycleLearnedDelta({
+        tenantId: input.tenantId,
+        deltaId: id,
+      });
+      if (created) {
+        if (!primaryDelta) {
+          primaryDelta = created;
+          primaryCreated = true;
+        }
+      }
+    } catch (error) {
+      if (isMysqlDuplicateKeyError(error)) {
+        const duplicate = await findLearnedDeltaByIdempotencyKey({
+          tenantId: input.tenantId,
+          outcomeId: outcome.id,
+          learningKind,
+          targetKey,
+        });
+        if (duplicate && !primaryDelta) {
+          primaryDelta = duplicate;
+          primaryCreated = false;
+        }
+      } else {
+        throw error;
+      }
+    }
   }
+
+  if (!primaryDelta) {
+    throw new Error("Failed to record learned delta");
+  }
+
+  return { delta: primaryDelta, created: primaryCreated };
 }
 
 /**

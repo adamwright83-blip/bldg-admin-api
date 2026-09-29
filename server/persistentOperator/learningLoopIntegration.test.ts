@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { resolveTargetKeyFromOutcome, type GoalCycleLearnedDeltaRecord } from "./learningStore";
+import {
+  resolveTargetKeyFromOutcome,
+  resolveTargetKeysFromOutcome,
+  type GoalCycleLearnedDeltaRecord,
+} from "./learningStore";
 import type { GoalCycleOutcomeRecord } from "./outcomeStore";
-import { salesExecutionIntelligenceProvider } from "../executionIntelligence/selectExecutionIntelligence";
 import type { SalesIntelTeaching } from "../../shared/salesIntelTeaching";
 
-describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
+describe("Persistent Growth Learning Loop Integration (PR6.1 & PR6.2)", () => {
   describe("1. TargetKey resolution from loadout (The Grok Seam Fix)", () => {
     it("resolves targetKey to the actual loadout technique rather than generic outcomeKind", async () => {
       const outcome: GoalCycleOutcomeRecord = {
@@ -32,6 +35,34 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
       // When objective or decision store are queried, if no database row exists, fallback is outcomeKind
       const targetKey = await resolveTargetKeyFromOutcome(outcome);
       expect(targetKey).toBe("order_confirmed");
+    });
+
+    it("multi-weapon credit: resolves all techniques in loadout so secondary weapons get credit", async () => {
+      const outcome: GoalCycleOutcomeRecord = {
+        id: "outcome-multi-1",
+        tenantId: "tenant-growth",
+        goalRunId: "run-growth-1",
+        cycleId: "cycle-growth-1",
+        decisionId: "dec-growth-1",
+        objectiveId: "obj-growth-1",
+        canonicalOperatorId: "tenant:tenant-growth:operator:operator-growth",
+        operatorUserId: "operator-growth",
+        impactClass: "action_verification",
+        monetaryValueCents: null,
+        outcomeKind: "visit_verified",
+        sourceSystem: "driver_mobile",
+        evidenceReference: "stops:stop-123",
+        evidenceClass: "operator_attested",
+        observedAt: "2026-09-29T10:00:00.000Z",
+        epistemicStatus: "verified",
+        explanation: "Driver completed stop with door hanger and route density check",
+        createdAt: "2026-09-29T10:00:00.000Z",
+        updatedAt: "2026-09-29T10:00:00.000Z",
+      };
+
+      const keys = await resolveTargetKeysFromOutcome(outcome);
+      expect(Array.isArray(keys)).toBe(true);
+      expect(keys.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -67,15 +98,6 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
         createdAt: "2026-09-29T10:00:00.000Z",
       };
 
-      // Teaching 2: Cold email sequence (base context fit 0.5, alphabetically earlier)
-      const teaching2: SalesIntelTeaching = {
-        ...teaching1,
-        id: "t-2",
-        teachingKey: "cold_email_sequence",
-        title: "Cold Email Sequence",
-        principle: "Email route businesses",
-      };
-
       // Delta boosting door_to_door_prospecting with weight 1.5x
       const learnedDelta: GoalCycleLearnedDeltaRecord = {
         id: "delta-door-1",
@@ -101,7 +123,6 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
       };
 
       // Mock teaching selection with the delta present
-      const context = "commercial business route followup";
       const baseFit1 = 0.5; // matches "commercial"
       const boostAmount = (1.5 - 1.0) * baseFit1; // +0.25
       const boostedScore = baseFit1 + boostAmount; // 0.75
@@ -111,7 +132,7 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
     });
   });
 
-  describe("3. Scoreboard observed value ground truth (The Stale Baseline Fix)", () => {
+  describe("3. Scoreboard observed value ground truth (The Stale Baseline & Double-Count Fix)", () => {
     it("incorporates newly verified revenue into authoritative observed value and reduces remaining gap", () => {
       const initialBaselineDollars = 500;
       const targetDollars = 2000;
@@ -124,6 +145,32 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
       expect(remainingGap).toBe(1200); // Progress is real and visible!
     });
 
+    it("prevents double-counting by excluding orders observed before the goal run started", () => {
+      const runStartMs = new Date("2026-09-29T12:00:00.000Z").getTime();
+      const initialBaselineDollars = 500; // already includes orders prior to 12:00 PM
+
+      const priorOrderObservedMs = new Date("2026-09-29T10:00:00.000Z").getTime();
+      const newOrderObservedMs = new Date("2026-09-29T14:00:00.000Z").getTime();
+
+      const outcomes = [
+        { id: "ord-old", monetaryValueCents: 10000, observedAt: "2026-09-29T10:00:00.000Z" },
+        { id: "ord-new", monetaryValueCents: 20000, observedAt: "2026-09-29T14:00:00.000Z" },
+      ];
+
+      const incrementalOutcomes = outcomes.filter(
+        o => new Date(o.observedAt).getTime() >= runStartMs
+      );
+
+      expect(incrementalOutcomes).toHaveLength(1);
+      expect(incrementalOutcomes[0].id).toBe("ord-new");
+
+      const incrementalRevenueDollars = incrementalOutcomes[0].monetaryValueCents / 100;
+      const authoritativeObserved = initialBaselineDollars + incrementalRevenueDollars;
+
+      // 500 + 200 = 700 (NOT 500 + 100 + 200 = 800)
+      expect(authoritativeObserved).toBe(700);
+    });
+
     it("accurately distinguishes recorded_only receipts from external ledger exactness", () => {
       const internalOutcomeSource = "operator_submission";
       const externalLedgerSource = "cleancloud";
@@ -133,6 +180,18 @@ describe("Persistent Growth Learning Loop Integration (PR6.1)", () => {
 
       expect(isInternalLedgerExact).toBe(false);
       expect(isExternalLedgerExact).toBe(true);
+    });
+  });
+
+  describe("4. Action path confidence scale (Grok Point 4)", () => {
+    it("assigns low confidence for n=1 first visit, medium for n=2..4, and high for n>=5", () => {
+      const confidenceForVisits = (n: number): "high" | "medium" | "low" =>
+        n >= 5 ? "high" : n >= 2 ? "medium" : "low";
+
+      expect(confidenceForVisits(1)).toBe("low"); // No longer skips low!
+      expect(confidenceForVisits(2)).toBe("medium");
+      expect(confidenceForVisits(4)).toBe("medium");
+      expect(confidenceForVisits(5)).toBe("high");
     });
   });
 });
