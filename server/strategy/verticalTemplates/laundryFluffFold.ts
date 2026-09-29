@@ -147,6 +147,10 @@ export const laundryFluffFoldTemplate: VerticalTemplate = {
   metricCatalog: [
     { metricKey: "new_paying_customers", authoritativeReaderId: "strategy.new_paying_customers.v1" },
     { metricKey: "active_customers", authoritativeReaderId: "strategy.active_customers.v1" },
+    { metricKey: "paid_orders_per_period", authoritativeReaderId: "strategy.paid_orders_per_period.v1" },
+    { metricKey: "net_sales_per_period", authoritativeReaderId: "strategy.net_sales_per_period.v1" },
+    { metricKey: "property_accounts_won", authoritativeReaderId: "commercial.property_accounts_won.v1" },
+    { metricKey: "recurring_account_paid_revenue", authoritativeReaderId: "commercial.recurring_account_paid_revenue.v1" },
   ],
   opportunityKinds: ["property_account", "customer_reactivation"],
   campaignSeeds: [],

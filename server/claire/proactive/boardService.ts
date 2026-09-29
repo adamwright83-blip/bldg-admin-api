@@ -28,6 +28,10 @@ import {
 import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
 import { isStrategyFeatureEnabled, STRATEGY_FLAGS } from "../../../shared/strategyFeatureFlags";
 import { requiresSpendClearance } from "../../strategy/spendClearance";
+import {
+  durableTriggerShadowEnabled,
+  enqueueDurableTriggerForOperator,
+} from "../../persistentOperator/goalCycleService";
 
 export const claireOperatorDoctrine = mysqlTable(
   "claire_operator_doctrine",
@@ -174,6 +178,21 @@ export async function ensureAdamBoard(input: {
   if (!db) return { brief: "", created: 0 };
   const timeZone = getDashboardTimeZone();
   const today = businessToday(new Date(), timeZone);
+  if (durableTriggerShadowEnabled()) {
+    void enqueueDurableTriggerForOperator({
+      tenantId: input.tenantId,
+      operatorOpenId: input.operatorUserId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: `proactive_obligation_sweep:${input.operatorUserId}:${today}`,
+      idempotencyKey: `proactive_obligation_sweep:${input.operatorUserId}:${today}`,
+      availableAt: new Date(now),
+    }).catch(error => {
+      console.warn(
+        "[ClaireProactive] Durable trigger shadow enqueue failed",
+        error instanceof Error ? error.message : error
+      );
+    });
+  }
   const rules = await loadDoctrine(input.tenantId, input.operatorUserId);
   let created = 0;
 

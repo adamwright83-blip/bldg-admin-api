@@ -4176,6 +4176,39 @@ await ensureRequiredIndex(
      ADD KEY idx_persistent_operator_diag_reason (tenantId,reason,occurredAt)`
 );
 
+// Persistent Growth Operator PR2 — macro goal runs + durable goal cycles.
+// This migration is CREATE TABLE IF NOT EXISTS only and is safe on repeated boots.
+await applyIdempotentSqlFile(
+  "../drizzle/0103_persistent_growth_goal_cycles.sql",
+  "Persistent Growth macro goal run and durable cycle tables"
+);
+for (const [tableName, columns] of [
+  ["macro_goal_runs", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "macroGoalId",
+    "verticalKey", "status", "goalSnapshotJson", "metricKey", "targetValue",
+    "unit", "baselineObservationRef", "baselineValue", "baselinePrecision",
+    "baselineCoverage", "startedAt", "lastEvaluatedAt", "nextEvaluationAt",
+    "policyVersion", "completedAt", "completionEvidenceRef", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_tenant_state", ["tenantId", "lastClaimedAt", "createdAt", "updatedAt"]],
+  ["goal_cycle_requests", [
+    "id", "tenantId", "goalRunId", "triggerType", "triggerSourceReference",
+    "idempotencyKey", "status", "availableAt", "deadlineAt", "leaseOwner",
+    "leaseExpiresAt", "heartbeatAt", "attemptCount", "maxAttempts", "lastError",
+    "resultJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_history", [
+    "id", "tenantId", "goalRunId", "requestId", "eventType", "fromStatus",
+    "toStatus", "leaseOwner", "attemptNumber", "detailsJson", "errorText", "createdAt",
+  ]],
+  ["goal_cycle_dead_letters", [
+    "id", "tenantId", "goalRunId", "requestId", "reason", "errorText",
+    "attemptCount", "triggerType", "triggerSourceReference", "deadLetteredAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
 // END schema-path-normalized
 
 await conn.end();
