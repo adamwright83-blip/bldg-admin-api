@@ -129,16 +129,19 @@ export async function attachObligationDecisionLineage(input: {
 }): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const lineage: Partial<typeof claireProactiveObligations.$inferInsert> = {
+    canonicalOperatorId: input.canonicalOperatorId,
+    goalRunId: input.goalRunId,
+    cycleId: input.cycleId,
+    decisionId: input.decisionId,
+    executionType: input.executionType ?? null,
+  };
+  if (input.objectiveRef !== undefined) {
+    lineage.objectiveRef = input.objectiveRef;
+  }
   const result = await db
     .update(claireProactiveObligations)
-    .set({
-      canonicalOperatorId: input.canonicalOperatorId,
-      goalRunId: input.goalRunId,
-      cycleId: input.cycleId,
-      decisionId: input.decisionId,
-      executionType: input.executionType ?? null,
-      objectiveRef: input.objectiveRef ?? null,
-    })
+    .set(lineage)
     .where(
       and(
         eq(claireProactiveObligations.tenantId, input.tenantId),
