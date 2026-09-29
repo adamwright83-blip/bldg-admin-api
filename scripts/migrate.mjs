@@ -4335,47 +4335,59 @@ await ensureRequiredIndex(
       "write_withheld",
       "execution_started",
     ]);
+    for (const [column, ddl] of [
+      ["goalRunId", "ALTER TABLE agent_events ADD COLUMN goalRunId VARCHAR(36) NULL"],
+      ["cycleId", "ALTER TABLE agent_events ADD COLUMN cycleId VARCHAR(36) NULL"],
+      ["decisionId", "ALTER TABLE agent_events ADD COLUMN decisionId VARCHAR(36) NULL"],
+      ["obligationId", "ALTER TABLE agent_events ADD COLUMN obligationId VARCHAR(191) NULL"],
+      ["authorityBasis", "ALTER TABLE agent_events ADD COLUMN authorityBasis VARCHAR(64) NULL"],
+      ["approvalBasis", "ALTER TABLE agent_events ADD COLUMN approvalBasis VARCHAR(64) NULL"],
+      ["standingAuthorizationId", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationId VARCHAR(36) NULL"],
+      ["standingAuthorizationVersion", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationVersion INT NULL"],
+      ["policyVersion", "ALTER TABLE agent_events ADD COLUMN policyVersion VARCHAR(96) NULL"],
+      ["operationStatus", "ALTER TABLE agent_events ADD COLUMN operationStatus VARCHAR(32) NULL"],
+    ]) {
+      await ensureRequiredColumn("agent_events", column, ddl);
+    }
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_decision",
+      ["tenantId", "decisionId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_decision (tenantId,decisionId,id)"
+    );
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_cycle",
+      ["tenantId", "cycleId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_cycle (tenantId,cycleId,id)"
+    );
+  } else {
+    console.log("→ agent_events absent in this schema; skipping PR4 receipt lineage extension");
   }
 }
-for (const [column, ddl] of [
-  ["goalRunId", "ALTER TABLE agent_events ADD COLUMN goalRunId VARCHAR(36) NULL"],
-  ["cycleId", "ALTER TABLE agent_events ADD COLUMN cycleId VARCHAR(36) NULL"],
-  ["decisionId", "ALTER TABLE agent_events ADD COLUMN decisionId VARCHAR(36) NULL"],
-  ["obligationId", "ALTER TABLE agent_events ADD COLUMN obligationId VARCHAR(191) NULL"],
-  ["authorityBasis", "ALTER TABLE agent_events ADD COLUMN authorityBasis VARCHAR(64) NULL"],
-  ["approvalBasis", "ALTER TABLE agent_events ADD COLUMN approvalBasis VARCHAR(64) NULL"],
-  ["standingAuthorizationId", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationId VARCHAR(36) NULL"],
-  ["standingAuthorizationVersion", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationVersion INT NULL"],
-  ["policyVersion", "ALTER TABLE agent_events ADD COLUMN policyVersion VARCHAR(96) NULL"],
-  ["operationStatus", "ALTER TABLE agent_events ADD COLUMN operationStatus VARCHAR(32) NULL"],
-]) {
-  await ensureRequiredColumn("agent_events", column, ddl);
-}
-await ensureRequiredIndex(
-  "agent_events",
-  "idx_agent_events_decision",
-  ["tenantId", "decisionId", "id"],
-  "ALTER TABLE agent_events ADD KEY idx_agent_events_decision (tenantId,decisionId,id)"
-);
-await ensureRequiredIndex(
-  "agent_events",
-  "idx_agent_events_cycle",
-  ["tenantId", "cycleId", "id"],
-  "ALTER TABLE agent_events ADD KEY idx_agent_events_cycle (tenantId,cycleId,id)"
-);
 
-for (const [column, ddl] of [
-  ["agentEventId", "ALTER TABLE communication_receipts ADD COLUMN agentEventId INT NULL"],
-  ["decisionId", "ALTER TABLE communication_receipts ADD COLUMN decisionId VARCHAR(36) NULL"],
-]) {
-  await ensureRequiredColumn("communication_receipts", column, ddl);
+{
+  const [communicationReceiptTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'communication_receipts'`
+  );
+  if (communicationReceiptTables.length > 0) {
+    for (const [column, ddl] of [
+      ["agentEventId", "ALTER TABLE communication_receipts ADD COLUMN agentEventId INT NULL"],
+      ["decisionId", "ALTER TABLE communication_receipts ADD COLUMN decisionId VARCHAR(36) NULL"],
+    ]) {
+      await ensureRequiredColumn("communication_receipts", column, ddl);
+    }
+    await ensureRequiredIndex(
+      "communication_receipts",
+      "idx_communication_receipts_decision",
+      ["tenantId", "decisionId", "createdAt"],
+      "ALTER TABLE communication_receipts ADD KEY idx_communication_receipts_decision (tenantId,decisionId,createdAt)"
+    );
+  } else {
+    console.log("→ communication_receipts absent in this schema; skipping PR4 receipt lineage extension");
+  }
 }
-await ensureRequiredIndex(
-  "communication_receipts",
-  "idx_communication_receipts_decision",
-  ["tenantId", "decisionId", "createdAt"],
-  "ALTER TABLE communication_receipts ADD KEY idx_communication_receipts_decision (tenantId,decisionId,createdAt)"
-);
 
 // END schema-path-normalized
 
