@@ -64,6 +64,11 @@ export const persistentOperatorRouter = router({
         tenantId: identity.tenantId,
         canonicalOperatorId: identity.canonicalOperatorId,
         operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: [
+          identity.canonicalOpenId,
+          identity.sourceOpenId,
+          ...identity.aliases.map(alias => alias.openId),
+        ],
         dayDirectorActorId: identity.dayDirectorActorId,
         dayDirectorActorIds: identity.dayDirectorActorIds,
       });
