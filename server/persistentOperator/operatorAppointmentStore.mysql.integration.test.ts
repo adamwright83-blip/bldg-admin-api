@@ -284,7 +284,7 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       .toBe((before.scheduledFor as Date).getTime());
   });
 
-  it("does not rewrite Sunday authority after a worker has claimed the appointment", async () => {
+  it("refreshes claimed Sunday authority and fences a stale worker before call dispatch", async () => {
     const store = new OperatorAppointmentStore(pool);
     const first = await store.enqueue(appointment());
     const claimed = await store.claimNextStep({
@@ -301,14 +301,25 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       })
     );
 
+    expect(await store.markRunning(claimed!)).toBe(true);
+    expect(await store.beginCallDispatch(claimed!)).toBe(false);
+    expect(
+      await store.failStep(
+        claimed!,
+        new Error("standing authorization rotated before dispatch"),
+        60_000
+      )
+    ).toBe("retry_scheduled");
+
     const [row] = await rows<RowDataPacket>(
-      "SELECT standingAuthorizationId, timeZone, status FROM operator_appointments WHERE id = ?",
+      "SELECT standingAuthorizationId, timeZone, status, callDispatchStartedAt FROM operator_appointments WHERE id = ?",
       [first.id]
     );
     expect(row).toMatchObject({
-      standingAuthorizationId: "auth-a",
-      timeZone: "America/Los_Angeles",
-      status: "leased",
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
+      status: "retry_scheduled",
+      callDispatchStartedAt: null,
     });
   });
 
