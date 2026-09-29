@@ -8,7 +8,7 @@ import { missionDirectorPlans, opsTasks } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
-import { getActiveMacroGoal } from "../claire/macroGoalService";
+import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
 import { loadDailyCommand } from "../claire/dailyCommandContract";
 import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
 import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
@@ -38,14 +38,14 @@ function missionOperatorIds(input: {
 
 async function loadRankingContext(input: {
   tenantId: string;
-  operatorUserId: string;
+  operatorUserIds: readonly string[];
   businessDate: string;
 }): Promise<RankingContext> {
   let macroGoal: RankingContext["macroGoal"] = null;
   try {
-    const goal = await getActiveMacroGoal({
+    const goal = await getActiveMacroGoalForOperators({
       tenantId: input.tenantId,
-      operatorUserId: input.operatorUserId,
+      operatorUserIds: input.operatorUserIds,
     });
     if (goal) {
       macroGoal = {
@@ -255,7 +255,7 @@ export async function computeMissionPlan(input: {
     actorId: operatorUserId,
     dayDirectorActorId: input.operatorId,
     dayDirectorActorIds: input.operatorIds ? [...input.operatorIds] : undefined,
-    operatorUserId,
+    operatorUserIds,
     businessDate: input.businessDate,
     timeZone: input.timeZone,
   }).catch(() => null);
