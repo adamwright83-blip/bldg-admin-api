@@ -48,7 +48,7 @@ async function insertRun(input: {
       input.tenantId,
       `canonical:${input.tenantId}`,
       `operator:${input.tenantId}`,
-      `goal:${id}`,
+      id,
       input.status ?? "active",
     ]
   );
