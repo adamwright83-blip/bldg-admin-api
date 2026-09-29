@@ -313,6 +313,32 @@ describe("readCurrentDayLine", () => {
     });
   });
 
+  it("forwards actor IDs and openIds as separate planning identities", async () => {
+    const planForDate = vi.fn(async () => storedPlan);
+    await readCurrentDayLine(
+      {
+        ...readerInput,
+        operatorIds: ["operator-1", "22"],
+        operatorUserId: "admin-owner",
+        operatorUserIds: ["admin-owner", "driver-primary"],
+      },
+      {
+        planForDate,
+        listCampaigns: async () => campaigns,
+        getDayDirectorState: async () => ({ ...directorState, commitments: [] }),
+      }
+    );
+    expect(planForDate).toHaveBeenCalledWith({
+      tenantId: "tenant-a",
+      operatorId: "operator-1",
+      operatorIds: ["operator-1", "22"],
+      operatorUserId: "admin-owner",
+      operatorUserIds: ["admin-owner", "driver-primary"],
+      businessDate: "2026-09-23",
+      timeZone: "UTC",
+    });
+  });
+
   it("does not project a no_plan diagnostic ranking as today's line", async () => {
     const planForDate = vi.fn(async () => ({
       ...storedPlan,
