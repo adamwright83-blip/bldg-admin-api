@@ -39,6 +39,7 @@ export async function readWeeklyDossierFacts(input: {
   tenantId: string;
   operatorId: string;
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
   now: Date;
   timeZone: string;
@@ -49,6 +50,7 @@ export async function readWeeklyDossierFacts(input: {
     const state = await getDayDirectorState({
       tenantId: input.tenantId,
       actorId: input.dayDirectorActorId,
+      actorIds: input.dayDirectorActorIds ? [...input.dayDirectorActorIds] : undefined,
       businessDate,
     });
     for (const commitment of state?.commitments ?? []) {
@@ -106,10 +108,22 @@ export async function readWeeklyDossierFacts(input: {
     }
   }
 
-  const rules = await listActiveRecurrenceRules({
-    tenantId: input.tenantId,
-    actorId: input.dayDirectorActorId,
-  });
+  const actorIds = [...new Set(
+    [input.dayDirectorActorId, ...(input.dayDirectorActorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
+  const ruleGroups = await Promise.all(
+    actorIds.map(actorId =>
+      listActiveRecurrenceRules({
+        tenantId: input.tenantId,
+        actorId,
+      })
+    )
+  );
+  const rules = [...new Map(
+    ruleGroups.flat().map(rule => [rule.id, rule] as const)
+  ).values()];
   for (const rule of rules) {
     const window = [rule.windowStart, rule.windowEnd].filter(Boolean).join("–");
     facts.push({
