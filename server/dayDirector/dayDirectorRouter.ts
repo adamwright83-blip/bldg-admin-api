@@ -93,11 +93,22 @@ export const dayDirectorRouter = router({
     .input(z.object({ commitmentId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const identity = await dayDirectorIdentity(ctx, "day_director.complete");
-      return completeDayDirectorCommitment({
+      const result = await completeDayDirectorCommitment({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
         actorIds: identity.dayDirectorActorIds,
         commitmentId: input.commitmentId,
       });
+      if (!result.alreadyCompleted) {
+        await recordPersistentOperatorDiagnosticEvent({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          subsystem: "day_director.complete",
+          eventKind: "objective_verified",
+          objectiveId: input.commitmentId,
+        }).catch(() => undefined);
+      }
+      return result;
     }),
 });
