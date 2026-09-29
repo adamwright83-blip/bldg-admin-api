@@ -113,6 +113,26 @@ describe.skipIf(!DATABASE_URL)("goal cycle store — real MySQL", () => {
     expect(Number(count)).toBe(1);
   });
 
+  it("rejects an idempotency key that is already bound to a different goal run", async () => {
+    const firstRunId = await insertRun({ tenantId: "tenant-a" });
+    const secondRunId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool);
+    await store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: firstRunId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: "operator:a:day:1",
+      idempotencyKey: "shared-key",
+    });
+    await expect(store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: secondRunId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: "operator:b:day:1",
+      idempotencyKey: "shared-key",
+    })).rejects.toThrow(/idempotency key is bound to different work/);
+  });
+
   it("paused goals retain queued work but do not execute until resumed", async () => {
     const runId = await insertRun({ tenantId: "tenant-a", status: "paused" });
     const store = new GoalCycleStore(pool);
