@@ -32,6 +32,8 @@ export type ObjectiveMarksDeps = {
     tenantId: string;
     operatorId: string;
     operatorIds?: string[];
+    operatorUserId?: string;
+    operatorUserIds?: string[];
   }) => Promise<CurrentDayLine>;
   listTenantRuns: (input: { tenantId: string; limit: number }) => Promise<CampaignRun[]>;
   listRunSlots: typeof listRunSlots;
@@ -97,6 +99,8 @@ export async function loadLanternObjectiveMarks(
     tenantId: string;
     operatorId: string;
     operatorIds?: readonly string[];
+    operatorUserId?: string;
+    operatorUserIds?: readonly string[];
     viewerOpenId?: string;
     viewerOpenIds?: readonly string[];
   },
@@ -121,6 +125,10 @@ export async function loadLanternObjectiveMarks(
       operatorId: input.operatorId,
       ...(input.operatorIds?.length
         ? { operatorIds: [...input.operatorIds] }
+        : {}),
+      ...(input.operatorUserId ? { operatorUserId: input.operatorUserId } : {}),
+      ...(input.operatorUserIds?.length
+        ? { operatorUserIds: [...input.operatorUserIds] }
         : {}),
     });
   } catch (error) {
