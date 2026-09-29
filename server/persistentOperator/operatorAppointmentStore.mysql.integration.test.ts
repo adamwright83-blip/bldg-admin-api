@@ -17,6 +17,20 @@ async function rows<T extends RowDataPacket>(sql: string, params: unknown[] = []
 }
 
 async function applySchema() {
+  await pool.query(`
+    CREATE TABLE agent_events (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+      agentType ENUM(
+        'resident_agent','operator_voice_agent','vendor_agent','driver_agent',
+        'gm_agent','building_agent','collections_agent','operator_task_agent',
+        'system_agent'
+      ) NOT NULL,
+      actorType ENUM('human','voice','resident_chat','driver','vendor','ai_agent','system') NOT NULL,
+      toolName VARCHAR(128) NOT NULL,
+      status ENUM('success','failed','approval_required','blocked') NOT NULL
+    )
+  `);
   const sql = await readFile(
     new URL("../../drizzle/0104_persistent_operator_authority_appointments.sql", import.meta.url),
     "utf8"
