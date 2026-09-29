@@ -50,6 +50,10 @@ CREATE TABLE `goal_cycle_decisions` (
 );
 
 ALTER TABLE `agent_events`
+  MODIFY COLUMN `status` enum(
+    'proposed','policy_denied','write_withheld','approval_required',
+    'execution_started','success','failed','blocked'
+  ) NOT NULL,
   ADD COLUMN `goalRunId` varchar(36) NULL,
   ADD COLUMN `cycleId` varchar(36) NULL,
   ADD COLUMN `decisionId` varchar(36) NULL,
