@@ -9,7 +9,20 @@
 
 import type { ClaireTurnResult } from "../../turn/claireTurn";
 import type { WorkingMemorySource } from "../workingMemory/snapshot";
-import type { ExecutiveActionGrant } from "../contracts/grants";
+import {
+  actionGrantSourceIsBackground,
+  type ActionAuthorityBasis,
+  type ActionClass,
+  type ActionGrantSource,
+  type ExecutiveActionGrant,
+} from "../contracts/grants";
+import { executeGrantedAction } from "../actions/gateway";
+import { mintActionGrant } from "../executive/grants";
+import {
+  evaluatePersistentActionPolicy,
+  type ToolRiskClass,
+} from "../../../persistentOperator/actionPolicy";
+import type { CanonicalOperatorIdentity } from "../../../persistentOperator/identity";
 import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
 import {
   liveExecutiveDeps,
@@ -190,4 +203,59 @@ export async function runClaireBrainV2LiveTurn(
     });
     return { active: false, reason: "error" };
   }
+}
+
+
+export async function executePersistentOperatorAction<T>(input: {
+  identity: CanonicalOperatorIdentity;
+  actionClass: ActionClass;
+  authorityBasis: ActionAuthorityBasis;
+  source: Exclude<ActionGrantSource, { type: "operator_turn" }>;
+  riskClass: ToolRiskClass;
+  exactAction: string;
+  standingAuthorizationId?: string | null;
+  approvedByUserId?: string | null;
+  expiresAtMs: number;
+  scope?: ExecutiveActionGrant["scope"];
+  execute: (grant: ExecutiveActionGrant) => Promise<T>;
+}) {
+  if (!actionGrantSourceIsBackground(input.source)) {
+    throw new Error("Persistent operator action requires a background authority source");
+  }
+  if (
+    input.source.tenantId !== input.identity.tenantId ||
+    input.source.canonicalOperatorId !== input.identity.canonicalOperatorId
+  ) {
+    throw new Error("Persistent operator authority source identity mismatch");
+  }
+
+  const policy = await evaluatePersistentActionPolicy({
+    tenantId: input.identity.tenantId,
+    canonicalOperatorId: input.identity.canonicalOperatorId,
+    operatorUserId: input.identity.canonicalOpenId,
+    exactAction: input.exactAction,
+    riskClass: input.riskClass,
+    standingAuthorizationId: input.standingAuthorizationId,
+    approvedByUserId: input.approvedByUserId,
+  });
+  if (!policy.allowed) {
+    throw new Error(`Persistent action policy denied: ${policy.reason}`);
+  }
+
+  const grant = mintActionGrant({
+    actionClass: input.actionClass,
+    scope: input.scope ?? { identity: input.identity.canonicalOpenId },
+    authorityBasis: input.authorityBasis,
+    sourceTurnAssembledText: "",
+    source: input.source,
+    tenantId: input.identity.tenantId,
+    canonicalOperatorId: input.identity.canonicalOperatorId,
+    expiresAtMs: input.expiresAtMs,
+    constraints: {
+      mutationAllowed: true,
+      shadowOnly: false,
+    },
+  });
+
+  return executeGrantedAction(grant, { execute: input.execute });
 }
