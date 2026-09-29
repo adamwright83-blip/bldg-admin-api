@@ -4209,6 +4209,30 @@ for (const [tableName, columns] of [
   await assertRequiredColumns(tableName, columns);
 }
 
+// Persistent Growth Operator PR3 — standing authority + durable Claire appointments.
+await applyIdempotentSqlFile(
+  "../drizzle/0104_persistent_operator_authority_appointments.sql",
+  "Persistent operator authority and Claire appointment tables"
+);
+for (const [tableName, columns] of [
+  ["tenant_standing_authorizations", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "channel",
+    "recipientClass", "exactAction", "dailyLimit", "allowedLocalStart",
+    "allowedLocalEnd", "timeZone", "version", "sourceReference",
+    "authorizedByUserId", "createdAt", "revokedAt",
+  ]],
+  ["operator_appointments", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "appointmentKind",
+    "weekStart", "scheduledFor", "timeZone", "source", "sourceReference",
+    "standingAuthorizationId", "unprompted", "idempotencyKey", "status",
+    "leaseOwner", "leaseExpiresAt", "heartbeatAt", "attemptCount", "maxAttempts",
+    "callSid", "calendarEventId", "calendarStatus", "followupTextSentAt",
+    "lastError", "resultJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
 // END schema-path-normalized
 
 await conn.end();
