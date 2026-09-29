@@ -4257,10 +4257,17 @@ for (const [tableName, columns] of [
 
 // Persistent Growth Operator PR4 — obligations, decisions, loadouts, receipts.
 // The SQL file is the one-shot migration authority. Production boot applies
-// its CREATE TABLE statement and then adds lineage columns idempotently.
+// its CREATE TABLE statement and then upgrades the shared obligation table
+// idempotently before adding lineage columns.
 await applyHistoricalCreateTables(
   "../drizzle/0105_persistent_growth_decisions_receipts.sql",
   "Persistent Growth PR4 decision tables"
+);
+
+await runRequired(
+  `ALTER TABLE claire_proactive_obligations
+     MODIFY COLUMN kind VARCHAR(32) NOT NULL`,
+  "claire_proactive_obligations.kind PR4 widening"
 );
 
 for (const [column, ddl] of [
