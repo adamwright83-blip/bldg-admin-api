@@ -244,6 +244,39 @@ describe("Claire transcript Railway log mirror", () => {
     expect(serialized).not.toContain("providerMetadata");
   });
 
+  it("mirrors authorized owner text immediately on the live persistence path", async () => {
+    vi.stubEnv("CLAIRE_TRANSCRIPT_LOG_SCOPES", "default:adam-admin");
+    vi.stubEnv("CLAIRE_TRANSCRIPT_TEXT_SCOPES", "default:adam-admin");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    await createConversationSession({
+      tenantId: "default",
+      operatorUserId: "adam-admin",
+      claireConversationId: "conv-relay-owner-text",
+      conversationKind: "pre_drive",
+      recordingEnabled: false,
+      providerCallSid: "CA-relay-owner-text",
+    });
+
+    await persistOperatorAndClaire({
+      callSid: "CA-relay-owner-text",
+      claireConversationId: "conv-relay-owner-text",
+      operatorText: "Put the laundry follow-up on my Day Line.",
+      claireText: "I can do that.",
+      turnKey: 1,
+    });
+
+    const turns = info.mock.calls
+      .filter(call => call[0] === "[ClaireTranscript]")
+      .map(call => JSON.parse(String(call[1])))
+      .filter(row => row.event === "claire_transcript_turn");
+
+    expect(turns.map(row => [row.speaker, row.text])).toEqual([
+      ["OPERATOR", "Put the laundry follow-up on my Day Line."],
+      ["CLAIRE", "I can do that."],
+    ]);
+  });
+
   it("does not log a different operator in the same tenant", async () => {
     vi.stubEnv("CLAIRE_TRANSCRIPT_LOG_SCOPES", "default:adam-admin");
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
