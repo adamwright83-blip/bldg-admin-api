@@ -247,6 +247,43 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     expect(Boolean(row.slotMatches)).toBe(true);
   });
 
+  it("refreshes rotated Sunday authority without resetting retry backoff", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(appointment());
+    const step = await store.claimNextStep({
+      leaseOwner: "worker",
+      leaseMs: 10_000,
+    });
+    expect(step).toMatchObject({ id: first.id });
+    expect(await store.failStep(step!, new Error("transient guard failure"), 60_000))
+      .toBe("retry_scheduled");
+
+    const [before] = await rows<RowDataPacket>(
+      "SELECT scheduledFor FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+
+    await store.enqueue(
+      appointment({
+        scheduledFor: new Date(Date.now() + 3_600_000),
+        timeZone: "America/New_York",
+        standingAuthorizationId: "auth-b",
+      })
+    );
+
+    const [after] = await rows<RowDataPacket>(
+      "SELECT scheduledFor, standingAuthorizationId, timeZone, status FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(after).toMatchObject({
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
+      status: "retry_scheduled",
+    });
+    expect((after.scheduledFor as Date).getTime())
+      .toBe((before.scheduledFor as Date).getTime());
+  });
+
   it("does not rewrite Sunday authority after a worker has claimed the appointment", async () => {
     const store = new OperatorAppointmentStore(pool);
     const first = await store.enqueue(appointment());
