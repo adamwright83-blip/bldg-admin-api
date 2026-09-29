@@ -2,7 +2,31 @@
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { requireCanonicalOperatorIdentityForUser } from "../../persistentOperator/identity";
 import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
+import type { CampaignRun } from "../../../shared/campaignRun";
+import type { CurrentDayLine } from "../../../shared/currentDayLine";
+import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
 import { readCurrentDayLine } from "./currentDayLineService";
+
+export function surfacedObjectiveIds(
+  line: CurrentDayLine,
+  runs: readonly CampaignRun[]
+): string[] {
+  const newestActiveRunByCampaign = new Map<string, string>();
+  for (const run of runs) {
+    if (run.status !== "active" || newestActiveRunByCampaign.has(run.campaignId)) continue;
+    newestActiveRunByCampaign.set(run.campaignId, run.campaignRunId);
+  }
+  const surfaced = new Set<string>();
+  for (const item of line.items) {
+    surfaced.add(newestActiveRunByCampaign.get(item.id) ?? item.id);
+  }
+  if (line.designated) {
+    surfaced.add(
+      newestActiveRunByCampaign.get(line.designated.id) ?? line.designated.id
+    );
+  }
+  return [...surfaced];
+}
 
 export const currentDayLineRouter = router({
   today: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
@@ -34,10 +58,17 @@ export const currentDayLineRouter = router({
       reason,
     }).catch(() => undefined);
 
-    const surfaced = new Set(line.items.map(item => item.id));
-    if (line.designated) surfaced.add(line.designated.id);
+    const operatorUserIds = [...new Set([
+      identity.canonicalOpenId,
+      identity.sourceOpenId,
+      ...identity.aliases.map(alias => alias.openId),
+    ])];
+    const runs = await listOperatorRunsForIdentities({
+      tenantId: identity.tenantId,
+      operatorUserIds,
+    }).catch(() => []);
     await Promise.all(
-      [...surfaced].map(objectiveId =>
+      surfacedObjectiveIds(line, runs).map(objectiveId =>
         recordPersistentOperatorDiagnosticEvent({
           tenantId: identity.tenantId,
           canonicalOperatorId: identity.canonicalOperatorId,
