@@ -1,0 +1,50 @@
+name: Procurement durable worker characterization
+
+# Pins the lease/retry/dead-letter behavior of the procurement durable worker
+# against real MySQL, so extracting it into a domain-neutral module (Persistent
+# Growth Slice B) can prove procurement keeps working unchanged.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: procurement-durable-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  durable-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3413:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Worker loop (fake store)
+        run: pnpm vitest run server/procurement/worker.test.ts server/procurement/migrations.test.ts
+      - name: Workflow store against real MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3413/mysql
+        run: pnpm vitest run --config vitest.integration.config.ts server/procurement/workflowStore.mysql.integration.test.ts
