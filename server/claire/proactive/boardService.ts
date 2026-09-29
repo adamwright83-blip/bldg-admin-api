@@ -53,7 +53,7 @@ export const claireOperatorDoctrine = mysqlTable(
 // Compatibility export: persistent-operator core owns the centralized table shape.
 export { claireProactiveObligations };
 
-let lastSweepAt = 0;
+const lastSweepAtByOperator = new Map<string, number>();
 const SWEEP_MS = 60_000;
 
 function daysBetween(later: string, earlier: string): number {
@@ -176,8 +176,12 @@ export async function ensureOperatorBoard(input: {
     return { brief: "", created: 0 };
   }
   const now = Date.now();
-  if (!input.force && now - lastSweepAt < SWEEP_MS) return { brief: "", created: 0 };
-  lastSweepAt = now;
+  const sweepKey = `${input.tenantId}:${input.operatorUserId}`;
+  const lastSweepAt = lastSweepAtByOperator.get(sweepKey) ?? 0;
+  if (!input.force && now - lastSweepAt < SWEEP_MS) {
+    return { brief: "", created: 0 };
+  }
+  lastSweepAtByOperator.set(sweepKey, now);
   const db = await getDb();
   if (!db) return { brief: "", created: 0 };
   const timeZone = input.timeZone;
