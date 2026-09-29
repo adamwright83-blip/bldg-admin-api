@@ -87,7 +87,7 @@ export async function saveDoctrine(tenantId: string, operatorUserId: string, rul
 /**
  * Read the operator's existing proactive obligations. Pure read — it creates nothing.
  *
- * `ensureAdamBoard` is the sweep that WRITES obligations; an observer must never call
+ * `ensureOperatorBoard` is the sweep that WRITES obligations; an observer must never call
  * it. This is the read-only view of what the board already holds.
  */
 export async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
@@ -104,7 +104,12 @@ export async function loadObligations(tenantId: string, operatorUserId: string):
   }
 }
 
-async function upsertObligation(tenantId: string, operatorUserId: string, obligation: ProactiveObligation): Promise<void> {
+async function upsertObligation(
+  tenantId: string,
+  operatorUserId: string,
+  obligation: ProactiveObligation,
+  lineage?: { commercialFollowUpRef?: string | null }
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db
@@ -118,9 +123,15 @@ async function upsertObligation(tenantId: string, operatorUserId: string, obliga
       payloadJson: obligation,
       status: obligation.status,
       dueDate: obligation.dueDate,
+      commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
     })
     .onDuplicateKeyUpdate({
-      set: { payloadJson: obligation, status: obligation.status, dueDate: obligation.dueDate },
+      set: {
+        payloadJson: obligation,
+        status: obligation.status,
+        dueDate: obligation.dueDate,
+        commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
+      },
     });
 }
 
@@ -299,7 +310,12 @@ export async function ensureOperatorBoard(input: {
           history: [follow.note],
         });
         if (already.some(item => item.id === obligation.id)) continue;
-        await upsertObligation(input.tenantId, input.operatorUserId, obligation);
+        await upsertObligation(
+          input.tenantId,
+          input.operatorUserId,
+          obligation,
+          { commercialFollowUpRef: follow.id }
+        );
         await placeOnDayLine({
           tenantId: input.tenantId,
           actorId: input.actorId,
