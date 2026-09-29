@@ -6,6 +6,10 @@ import os from "node:os";
 import mysql from "mysql2/promise";
 import { ProcurementWorker, type ProcurementStepHandler } from "./worker";
 import { ProcurementWorkflowStore } from "./workflowStore";
+import { GoalCycleStore } from "../persistentOperator/goalCycleStore";
+import { GoalCycleWorker } from "../persistentOperator/goalCycleWorker";
+import { evaluateMacroGoalRun } from "../persistentOperator/macroGoalRuns";
+import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the procurement worker");
@@ -39,6 +43,32 @@ const worker = new ProcurementWorker(store, handlers, {
   concurrency: numberFromEnv("PROCUREMENT_WORKER_CONCURRENCY", 4),
   retryBaseMs: numberFromEnv("PROCUREMENT_WORKER_RETRY_BASE_MS", 5_000),
 });
+const goalCycleStore = new GoalCycleStore(pool, {
+  perTenantConcurrency: numberFromEnv("GOAL_CYCLE_PER_TENANT_CONCURRENCY", 2),
+});
+const goalCycleWorker = new GoalCycleWorker(
+  goalCycleStore,
+  {
+    leaseOwner: `${leaseOwner}:goal-cycle`,
+    leaseMs: numberFromEnv("GOAL_CYCLE_WORKER_LEASE_MS", 60_000),
+    pollMs: numberFromEnv("GOAL_CYCLE_WORKER_POLL_MS", 1_000),
+    concurrency: numberFromEnv("GOAL_CYCLE_WORKER_CONCURRENCY", 4),
+    retryBaseMs: numberFromEnv("GOAL_CYCLE_WORKER_RETRY_BASE_MS", 5_000),
+  },
+  async input => {
+    const evaluation = await evaluateMacroGoalRun({
+      tenantId: input.tenantId,
+      runId: input.runId,
+      registry: defaultVerticalRegistry,
+    });
+    return {
+      runId: evaluation.run.id,
+      status: evaluation.run.status,
+      completed: evaluation.completed,
+      observation: evaluation.observation,
+    };
+  }
+);
 
 const port = numberFromEnv("PORT", 8081);
 const server = http.createServer((request, response) => {
@@ -46,20 +76,27 @@ const server = http.createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
-  const health = worker.health;
+  const procurement = worker.health;
+  const goalCycles = goalCycleWorker.health;
+  const health = {
+    ok: procurement.ok && goalCycles.ok,
+    procurement,
+    goalCycles,
+  };
   response.writeHead(health.ok ? 200 : 503, { "content-type": "application/json" });
   response.end(JSON.stringify(health));
 });
 
 server.listen(port, () => console.log(`[ProcurementWorker] health listening on ${port}`));
 void worker.start();
+void goalCycleWorker.start();
 
 let shuttingDown = false;
 const shutdown = async (signal: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[ProcurementWorker] received ${signal}; draining`);
-  await worker.stop();
+  await Promise.all([worker.stop(), goalCycleWorker.stop()]);
   await new Promise<void>(resolve => server.close(() => resolve()));
   await pool.end();
 };
