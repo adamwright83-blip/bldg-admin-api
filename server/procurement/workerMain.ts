@@ -9,6 +9,7 @@ import { ProcurementWorkflowStore } from "./workflowStore";
 import { GoalCycleStore } from "../persistentOperator/goalCycleStore";
 import { GoalCycleWorker } from "../persistentOperator/goalCycleWorker";
 import { evaluateMacroGoalRunAndScheduleNext } from "../persistentOperator/goalCycleService";
+import { decideGoalCycle } from "../persistentOperator/decisionEngine";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "../persistentOperator/operatorAppointmentWorker";
@@ -63,11 +64,22 @@ const goalCycleWorker = new GoalCycleWorker(
       runId: input.runId,
       registry: defaultVerticalRegistry,
     });
+    const decision = await decideGoalCycle({
+      tenantId: input.tenantId,
+      runId: input.runId,
+      cycleId: input.cycleId,
+      registry: defaultVerticalRegistry,
+    });
     return {
       runId: evaluation.run.id,
       status: evaluation.run.status,
       completed: evaluation.completed,
       observation: evaluation.observation,
+      decisionId: decision.decision.id,
+      decisionCreated: decision.created,
+      selectionKind: decision.decision.selectionKind,
+      selectedRef: decision.decision.selectedRef,
+      selectedReasonCode: decision.decision.selectedReasonCode,
       nextEvaluationAt: evaluation.run.nextEvaluationAt?.toISOString() ?? null,
     };
   }
