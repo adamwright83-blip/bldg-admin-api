@@ -6,7 +6,10 @@
  * scope. Shadow grants remain inert.
  */
 
-import type { ExecutiveActionGrant } from "../contracts/grants";
+import {
+  actionGrantSourceIsBackground,
+  type ExecutiveActionGrant,
+} from "../contracts/grants";
 import { isExecutiveActionGrant } from "../executive/grants";
 
 export class ActionGatewayError extends Error {
@@ -44,6 +47,25 @@ export async function executeGrantedAction<T = unknown>(
   }
 
   const typed: ExecutiveActionGrant = grant;
+
+  if (typed.expiresAtMs <= Date.now()) {
+    throw new ActionGatewayError("ExecutiveActionGrant expired before execution");
+  }
+
+  if (
+    typed.source &&
+    actionGrantSourceIsBackground(typed.source) &&
+    (
+      !typed.tenantId?.trim() ||
+      !typed.canonicalOperatorId?.trim() ||
+      typed.tenantId !== typed.source.tenantId ||
+      typed.canonicalOperatorId !== typed.source.canonicalOperatorId
+    )
+  ) {
+    throw new ActionGatewayError(
+      "background ExecutiveActionGrant is missing tenant/canonical operator authority"
+    );
+  }
 
   if (typed.constraints.shadowOnly) {
     if (typed.constraints.mutationAllowed) {
