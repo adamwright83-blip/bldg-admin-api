@@ -7536,9 +7536,9 @@ export type InsertMacroGoalRun = typeof macroGoalRuns.$inferInsert;
 
 export const goalCycleTenantState = mysqlTable("goal_cycle_tenant_state", {
   tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
-  lastClaimedAt: timestamp("lastClaimedAt"),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-  updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  lastClaimedAt: timestamp("lastClaimedAt", { fsp: 3 }),
+  createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
 });
 
 export const goalCycleRequests = mysqlTable(
@@ -7570,18 +7570,18 @@ export const goalCycleRequests = mysqlTable(
     ])
       .notNull()
       .default("queued"),
-    availableAt: timestamp("availableAt").notNull().defaultNow(),
-    deadlineAt: timestamp("deadlineAt"),
+    availableAt: timestamp("availableAt", { fsp: 3 }).notNull().defaultNow(),
+    deadlineAt: timestamp("deadlineAt", { fsp: 3 }),
     leaseOwner: varchar("leaseOwner", { length: 191 }),
-    leaseExpiresAt: timestamp("leaseExpiresAt"),
-    heartbeatAt: timestamp("heartbeatAt"),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    heartbeatAt: timestamp("heartbeatAt", { fsp: 3 }),
     attemptCount: int("attemptCount").notNull().default(0),
     maxAttempts: int("maxAttempts").notNull().default(5),
     lastError: text("lastError"),
     resultJson: json("resultJson"),
-    completedAt: timestamp("completedAt"),
-    createdAt: timestamp("createdAt").notNull().defaultNow(),
-    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
   },
   table => ({
     tenantIdempotencyUnique: uniqueIndex(
@@ -7623,7 +7623,7 @@ export const goalCycleHistory = mysqlTable(
     attemptNumber: int("attemptNumber"),
     detailsJson: json("detailsJson"),
     errorText: text("errorText"),
-    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
   },
   table => ({
     requestIdx: index("idx_goal_cycle_history_request").on(
@@ -7651,7 +7651,7 @@ export const goalCycleDeadLetters = mysqlTable(
     attemptCount: int("attemptCount").notNull(),
     triggerType: varchar("triggerType", { length: 64 }).notNull(),
     triggerSourceReference: varchar("triggerSourceReference", { length: 191 }),
-    deadLetteredAt: timestamp("deadLetteredAt").notNull().defaultNow(),
+    deadLetteredAt: timestamp("deadLetteredAt", { fsp: 3 }).notNull().defaultNow(),
   },
   table => ({
     requestUnique: uniqueIndex("uq_goal_cycle_dead_letters_request").on(
