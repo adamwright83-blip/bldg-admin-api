@@ -110,4 +110,56 @@ describe("Persistent Growth Learning Store (Slice J)", () => {
       expect(historicalDelta.appliedCount).toBe(1);
     });
   });
+
+  describe("stateful cumulative learning and technique targeting", () => {
+    it("accumulates sample size and verified deliveries progressively across multiple outcomes", () => {
+      const delta1 = sampleLearnedDelta({
+        id: "delta-1",
+        targetKey: "sales:cold_visit_followup",
+        learningKind: "channel_affinity",
+        beforeState: { doctrineWeight: 1.0, sampleSize: 0, verifiedDeliveries: 0 },
+        afterState: { doctrineWeight: 1.05, sampleSize: 1, verifiedDeliveries: 1 },
+      });
+
+      const delta2 = sampleLearnedDelta({
+        id: "delta-2",
+        targetKey: "sales:cold_visit_followup",
+        learningKind: "channel_affinity",
+        beforeState: delta1.afterState, // Real prior state, not invented!
+        afterState: { doctrineWeight: 1.10, sampleSize: 2, verifiedDeliveries: 2 },
+      });
+
+      expect(delta2.beforeState).toEqual(delta1.afterState);
+      expect((delta2.afterState as Record<string, unknown>).sampleSize).toBe(2);
+      expect((delta2.afterState as Record<string, unknown>).verifiedDeliveries).toBe(2);
+      expect((delta2.afterState as Record<string, unknown>).doctrineWeight).toBe(1.10);
+    });
+
+    it("increases confidence to high when sample size reaches n >= 5", () => {
+      const deltaN5 = sampleLearnedDelta({
+        afterState: { doctrineWeight: 1.30, sampleSize: 5, verifiedDeliveries: 5 },
+        confidence: "high",
+      });
+
+      expect(deltaN5.confidence).toBe("high");
+      expect((deltaN5.afterState as Record<string, unknown>).sampleSize).toBe(5);
+    });
+
+    it("tracks failure counts and activates constraint suppression on repeated failure", () => {
+      const failureDelta = sampleLearnedDelta({
+        deltaType: "suppress",
+        learningKind: "execution_constraint",
+        afterState: {
+          doctrineWeight: 0.5,
+          failureCount: 2,
+          constrained: true,
+          reason: "Customer requested no further in-person visits",
+        },
+      });
+
+      expect(failureDelta.deltaType).toBe("suppress");
+      expect((failureDelta.afterState as Record<string, unknown>).constrained).toBe(true);
+      expect((failureDelta.afterState as Record<string, unknown>).failureCount).toBe(2);
+    });
+  });
 });

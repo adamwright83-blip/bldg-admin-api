@@ -232,7 +232,10 @@ export async function getAuthoritativeScoreboard(input: {
       economicPrecision = "conflicting";
       attributableEconomicValueCents = null; // Fails closed: conflict means unresolved total
     } else {
-      economicPrecision = "exact";
+      const isExternalLedgerVerified = economicOutcomes.every(
+        o => o.sourceSystem === "cleancloud" || o.sourceSystem === "stripe" || o.sourceSystem === "shopify"
+      );
+      economicPrecision = isExternalLedgerVerified ? "exact" : "recorded_only";
       attributableEconomicValueCents = economicOutcomes.reduce(
         (sum, o) => sum + (o.monetaryValueCents ?? 0),
         0
@@ -247,13 +250,16 @@ export async function getAuthoritativeScoreboard(input: {
   let precision: ScoreboardPrecision = "unknown";
   let coverage: ScoreboardCoverage = "unavailable";
 
+  const baselineNum = activeRun?.baselineValue != null ? Number(activeRun.baselineValue) : null;
+  const newRevenueDollars =
+    attributableEconomicValueCents != null ? attributableEconomicValueCents / 100 : 0;
+
   if (activeRun?.baselineObservationRef) {
-    authoritativeObservedValue =
-      activeRun.baselineValue != null ? Number(activeRun.baselineValue) : null;
+    authoritativeObservedValue = baselineNum != null ? baselineNum + newRevenueDollars : null;
     precision =
-      activeRun.baselinePrecision === "exact"
+      activeRun.baselinePrecision === "exact" && economicPrecision === "exact"
         ? "exact"
-        : activeRun.baselinePrecision === "recorded_only"
+        : activeRun.baselinePrecision === "recorded_only" || economicPrecision === "recorded_only"
           ? "recorded_only"
           : "unknown";
     coverage =
@@ -268,6 +274,13 @@ export async function getAuthoritativeScoreboard(input: {
       authoritativeObservedValue != null &&
       coverage === "complete"
     ) {
+      remainingGap = Math.max(0, targetValue - authoritativeObservedValue);
+    }
+  } else if (attributableEconomicValueCents != null) {
+    authoritativeObservedValue = newRevenueDollars;
+    precision = economicPrecision === "exact" ? "exact" : "recorded_only";
+    coverage = "complete";
+    if (targetValue != null) {
       remainingGap = Math.max(0, targetValue - authoritativeObservedValue);
     }
   }
