@@ -791,8 +791,9 @@ export async function transitionCommercialMission(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  let mission: CommercialMission;
   try {
-    return await db.transaction(tx => transitionCommercialMissionWith(tx, input));
+    mission = await db.transaction(tx => transitionCommercialMissionWith(tx, input));
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
     const replay = await getCommercialMissionByIdempotencyKey({
@@ -800,8 +801,41 @@ export async function transitionCommercialMission(input: {
       idempotencyKey: input.idempotencyKey,
     });
     if (!replay || replay.id !== input.missionId) throw error;
-    return replay;
+    mission = replay;
   }
+
+  // POST-COMMIT: Run bridge when transaction has committed durably to the database
+  if (input.toStatus === "visit_completed") {
+    try {
+      const [persistedEvent] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.idempotencyKey, input.idempotencyKey)
+          )
+        )
+        .limit(1);
+
+      if (persistedEvent) {
+        const { bridgeDriverAction } = await import("../persistentOperator/fieldEventBridge");
+        await bridgeDriverAction({
+          tenantId: input.tenantId,
+          actorId: input.actor.id ?? "system",
+          missionId: input.missionId,
+          evidenceReference: `commercial_mission_events:${persistedEvent.id}`,
+          sourceSystem: "dayforge_field",
+          outcomeKind: "visit_completed",
+          metadata: input.metadata,
+        });
+      }
+    } catch (err) {
+      console.warn("[PersistentOperator] field event bridge deferred", err);
+    }
+  }
+
+  return mission;
 }
 
 export async function transitionCommercialMissionWith(
@@ -914,24 +948,6 @@ export async function transitionCommercialMissionWith(
             }
           : undefined,
       });
-
-      if (eventName === "visit_completed") {
-        import("../persistentOperator/fieldEventBridge")
-          .then(({ bridgeDriverAction }) => {
-            bridgeDriverAction({
-              tenantId: input.tenantId,
-              actorId: input.actor.id,
-              missionId: input.missionId,
-              evidenceReference: `commercial_mission_events:${projectionCorrelationId}`,
-              sourceSystem: "dayforge_field",
-              outcomeKind: "visit_completed",
-              metadata: input.metadata,
-            }).catch(err => {
-              console.warn("[PersistentOperator] field event bridge deferred", err);
-            });
-          })
-          .catch(() => undefined);
-      }
 
       return transitioned;
 }

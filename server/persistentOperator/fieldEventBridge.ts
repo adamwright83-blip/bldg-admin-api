@@ -11,11 +11,14 @@ import { getDb } from "../db";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,
+  transitionObjectiveStatus,
   type PersistentGrowthObjective,
 } from "./objectiveStore";
 import {
   bindEconomicOutcome,
+  recordGoalCycleOutcome,
   verifyObjectiveExecution,
+  type EpistemicStatus,
   type GoalCycleOutcomeRecord,
 } from "./outcomeStore";
 import {
@@ -181,6 +184,123 @@ export async function bridgeDriverAction(
   };
 }
 
+export type BridgeCommercialResolutionInput = {
+  tenantId: string;
+  actorId: string;
+  missionId: number;
+  resolution: "won" | "lost";
+  evidenceReference: string;
+  sourceSystem?: string;
+  explanation?: string;
+  observedAt?: Date | string;
+  metadata?: Record<string, unknown>;
+};
+
+export type BridgeCommercialResolutionResult =
+  | {
+      bridged: true;
+      objective: PersistentGrowthObjective;
+      outcome: GoalCycleOutcomeRecord;
+      delta: GoalCycleLearnedDeltaRecord | null;
+    }
+  | {
+      bridged: false;
+      reason: string;
+    };
+
+/**
+ * Bridges an authoritative commercial pipeline resolution (won/lost) to the Persistent
+ * Growth Operator ledger as an operational_result outcome.
+ *
+ * Enforces key truth distinction:
+ * - A driver field visit is an action_verification (work happened).
+ * - An account won or lost is an operational_result (business milestone achieved).
+ * - Neither manufactures economic revenue cents (that belongs exclusively to commercial_revenue).
+ */
+export async function bridgeCommercialResolution(
+  input: BridgeCommercialResolutionInput
+): Promise<BridgeCommercialResolutionResult> {
+  const db = await getDb();
+  if (!db) {
+    return { bridged: false, reason: "Database unavailable" };
+  }
+
+  const matchingObjectives = await findDeterministicObjectivesForDriverAction({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    missionId: input.missionId,
+    evidenceReference: input.evidenceReference,
+  });
+
+  if (matchingObjectives.length === 0) {
+    return {
+      bridged: false,
+      reason: `No active objective deterministically linked to commercial mission ${input.missionId}`,
+    };
+  }
+
+  if (matchingObjectives.length > 1) {
+    console.warn(
+      `[PersistentOperator] Ambiguous match: ${matchingObjectives.length} objectives match mission ${input.missionId}. Failing closed.`
+    );
+    return {
+      bridged: false,
+      reason: `Ambiguous match: multiple active objectives found for mission ${input.missionId}`,
+    };
+  }
+
+  const targetObjective = matchingObjectives[0];
+  const isWon = input.resolution === "won";
+  const outcomeKind = isWon ? "account_won" : "account_lost";
+  const epistemicStatus: EpistemicStatus = isWon ? "verified" : "rejected";
+
+  const recorded = await recordGoalCycleOutcome({
+    tenantId: input.tenantId,
+    objectiveId: targetObjective.id,
+    outcomeKind,
+    impactClass: "operational_result",
+    epistemicStatus,
+    evidenceClass: "authoritative_external",
+    evidenceReference: input.evidenceReference,
+    sourceSystem: input.sourceSystem ?? "commercial_pipeline",
+    monetaryValueCents: null,
+    observedAt: input.observedAt ?? new Date(),
+    explanation:
+      input.explanation ??
+      `Commercial pipeline mission ${input.missionId} resolved as ${input.resolution} (${input.evidenceReference})`,
+    metadata: {
+      missionId: input.missionId,
+      resolution: input.resolution,
+      ...input.metadata,
+    },
+  });
+  const outcome = recorded.outcome;
+
+  if (isWon) {
+    await transitionObjectiveStatus({
+      tenantId: input.tenantId,
+      objectiveId: targetObjective.id,
+      toStatus: "completed",
+      statusReason: `Account won via mission ${input.missionId}`,
+    }).catch(err => {
+      console.warn("[PersistentOperator] failed to transition objective status to completed", err);
+    });
+  }
+
+  const deltas = await listGoalCycleLearnedDeltas({
+    tenantId: input.tenantId,
+    outcomeId: outcome.id,
+    limit: 1,
+  });
+
+  return {
+    bridged: true,
+    objective: targetObjective,
+    outcome,
+    delta: deltas[0] ?? null,
+  };
+}
+
 /**
  * Searches for active objectives that have an explicit, deterministic link
  * to the given driver action target.
@@ -201,7 +321,7 @@ async function findDeterministicObjectivesForDriverAction(
 
     // Check if the mission belongs to a commercial account
     const [mission] = await db
-      .select({ accountId: commercialMissions.accountId })
+      .select({ accountSnapshotJson: commercialMissions.accountSnapshotJson })
       .from(commercialMissions)
       .where(
         and(
@@ -211,10 +331,12 @@ async function findDeterministicObjectivesForDriverAction(
       )
       .limit(1);
 
-    if (mission?.accountId) {
+    const snapshot = mission?.accountSnapshotJson as { accountId?: number | string } | null;
+    const accountId = snapshot?.accountId;
+    if (accountId) {
       targetChecks.push({
         actionTargetType: "commercial_account",
-        actionTargetId: String(mission.accountId),
+        actionTargetId: String(accountId),
       });
     }
   }

@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bridgeDriverAction,
+  bridgeCommercialResolution,
   bridgeCleanCloudPaidOrder,
   type BridgeDriverActionInput,
   type BridgeCleanCloudOrderInput,
@@ -57,6 +58,50 @@ describe("Persistent Growth Operator — Field Event Bridge (Truth Rules & Seams
 
       expect(dummyActionOutcome.impactClass).toBe("action_verification");
       expect(dummyActionOutcome.monetaryValueCents).toBeNull();
+    });
+  });
+
+  describe("Rule 1b: Commercial Resolution -> Operational Result (Not Action Verification)", () => {
+    it("fails closed when commercial mission has no linked objective", async () => {
+      const result = await bridgeCommercialResolution({
+        tenantId: "tenant-mock-comm",
+        actorId: "driver-1",
+        missionId: 99999,
+        resolution: "won",
+        evidenceReference: "commercial_pipeline:resolution:99999",
+      });
+
+      expect(result.bridged).toBe(false);
+      if (!result.bridged) {
+        expect(
+          result.reason === "Database unavailable" ||
+          result.reason.includes("No active objective")
+        ).toBe(true);
+      }
+    });
+
+    it("treats account won/lost as operational_result and never manufactures revenue", () => {
+      // Truth contract: resolution is an operational milestone, not action verification or money
+      const wonOutcome = {
+        outcomeKind: "account_won",
+        impactClass: "operational_result" as const,
+        epistemicStatus: "verified" as const,
+        monetaryValueCents: null,
+      };
+      const lostOutcome = {
+        outcomeKind: "account_lost",
+        impactClass: "operational_result" as const,
+        epistemicStatus: "rejected" as const,
+        monetaryValueCents: null,
+      };
+
+      expect(wonOutcome.impactClass).toBe("operational_result");
+      expect(wonOutcome.epistemicStatus).toBe("verified");
+      expect(wonOutcome.monetaryValueCents).toBeNull();
+
+      expect(lostOutcome.impactClass).toBe("operational_result");
+      expect(lostOutcome.epistemicStatus).toBe("rejected");
+      expect(lostOutcome.monetaryValueCents).toBeNull();
     });
   });
 

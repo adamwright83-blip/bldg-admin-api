@@ -3,56 +3,62 @@
 /**
  * Executable Field Proof Witness: Goldline Growth Loop
  *
- * Verifies the full closed-loop lineage of the Persistent Growth Operator:
+ * Verifies the full closed-loop lineage of the Persistent Growth Operator through
+ * ACTUAL production entry points:
  *
- *   Goal Run -> Decision -> Objective -> Real Day Line / Driver entity ->
- *   Real completion evidence -> Action outcome -> Real CleanCloud paid evidence ->
- *   Economic outcome -> Learned delta -> Changed scoreboard ->
- *   Changed next-cycle loadout ranking
+ *   Goal Run -> Real Commercial Mission -> Decision -> Objective ->
+ *   Real Day Line (readCurrentDayLine) -> Real Driver Completion (transitionCommercialMission) ->
+ *   Real Commercial Event ID -> Action Outcome -> Real CleanCloud Ingestion (importCleanCloudPaidOrders) ->
+ *   Deterministic Economic Outcome -> Automatic Learned Delta -> Scoreboard Movement ->
+ *   Loadout Delta Re-ranking -> Full Operation Receipt
  *
- * Non-negotiable truth rules enforced:
- *   1. Driver/Day Line -> action verification (deterministic lineage, actual stop/mission
- *      completion evidence reference, no manufactured revenue).
- *   2. CleanCloud -> economic outcome (no heuristic matching, explicit customer/account
- *      lineage, fails closed on ambiguity, preserves delayed attribution).
- *   3. Outcome -> automatic learning (retry-safe, idempotency prevents duplicate counts).
- *   4. Continuous durable lineage across all operational records.
- *   5. Production read smoke across 4 distinct states without mutation.
+ * Absolute Truth Rules Enforced:
+ *   1. Driver/Day Line -> Action Verification (deterministic lineage, actual persisted
+ *      commercial_mission_events.id, zero manufactured revenue from visit completion).
+ *   2. CleanCloud -> Economic Outcome (no heuristic matching; explicit customer/account
+ *      lineage; fails closed on ambiguity; preserves delayed attribution).
+ *   3. Outcome -> Automatic Learning (crash-safe, eventual consistency via pending learning sweeper).
+ *   4. Zero manufactured proof: fails immediately with exit code 1 if MySQL database is offline.
+ *      Never generates fake outcomes or prints simulated success.
  */
 
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../server/db";
 import {
-  bridgeDriverAction,
-  bridgeCleanCloudPaidOrder,
-} from "../server/persistentOperator/fieldEventBridge";
-import {
-  getAuthoritativeScoreboard,
-  getLoadoutDelta,
-  getPersistentGrowthHistory,
-} from "../server/persistentOperator/proofReadModels";
-import { operationReceipt } from "../server/persistentOperator/operationReceipt";
+  createCommercialMission,
+  transitionCommercialMission,
+} from "../server/commercialMissions/commercialMissionStore";
+import { readCurrentDayLine } from "../server/goldline/dayline/currentDayLineService";
+import { importCleanCloudPaidOrders } from "../server/cleancloudPaidOrders";
 import {
   materializeGoalCycleObjective,
-  projectToRankedDayWork,
-  type PersistentGrowthObjective,
+  getGoalCycleObjective,
 } from "../server/persistentOperator/objectiveStore";
 import {
   appendGoalCycleDecision,
   type GoalCycleDecisionDraft,
 } from "../server/persistentOperator/decisionStore";
 import {
+  getAuthoritativeScoreboard,
+  getLoadoutDelta,
+  getPersistentGrowthHistory,
+} from "../server/persistentOperator/proofReadModels";
+import { operationReceipt } from "../server/persistentOperator/operationReceipt";
+import { processPendingOutcomeLearnings } from "../server/persistentOperator/learningStore";
+import {
   macroGoalRuns,
-  goalCycleRequests,
-  commercialMissions,
+  goalCycleOutcomes,
+  goalCycleLearnedDeltas,
   commercialMissionEvents,
-  cleancloudPaidOrders,
 } from "../drizzle/schema";
+import type { WeeklyGrowthCandidate } from "../shared/weeklyGrowthCandidates";
 
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
 const CYAN = "\x1b[36m";
 const YELLOW = "\x1b[33m";
+const RED = "\x1b[31m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 
@@ -70,68 +76,65 @@ async function runWitness() {
   console.log(`${BOLD}================================================================${RESET}`);
 
   const db = await getDb();
-  const hasLiveDb = Boolean(db);
-
-  if (hasLiveDb) {
-    console.log(`${GREEN}✓ Connected to live MySQL database. Exercising real DB persistence.${RESET}`);
-  } else {
-    console.log(`${YELLOW}! MySQL database offline. Exercising deterministic proof contracts & models.${RESET}`);
+  if (!db) {
+    console.error(`\n${BOLD}${RED}FATAL: Live MySQL database is required to witness real persisted lineage.${RESET}`);
+    console.error("The executable witness refuses to manufacture fake proof or simulate success.");
+    console.error("Please configure DATABASE_URL to execute the full field proof.\n");
+    process.exit(1);
   }
+
+  console.log(`${GREEN}✓ Connected to live MySQL database. Exercising real DB persistence.${RESET}`);
 
   const runId = randomUUID();
   const cycleId = randomUUID();
   const decisionId = randomUUID();
-  const objectiveId = randomUUID();
   const tenantId = `t-witness-${runId.slice(0, 8)}`;
   const operatorUserId = `driver-${runId.slice(0, 6)}`;
   const canonicalOperatorId = `tenant:${tenantId}:operator:${operatorUserId}`;
+  const cleancloudCustomerId = 80000 + Math.floor(Math.random() * 10000);
   const now = new Date();
+  const businessDate = now.toISOString().slice(0, 10);
 
   // ==========================================================================
   // SMOKE CHECK 1: Empty Production State
   // ==========================================================================
   console.log(`\n${BOLD}--- Production Read Smoke State 1: Empty Production State ---${RESET}`);
-  if (hasLiveDb) {
-    const emptyScoreboard = await getAuthoritativeScoreboard({
-      tenantId: `t-empty-${randomUUID().slice(0, 6)}`,
-      canonicalOperatorId: `tenant:test:operator:none`,
-    });
-    console.log(`  Empty Scoreboard Coverage: ${emptyScoreboard.coverage}, Executed: ${emptyScoreboard.executedWorkCount}, Revenue: ${emptyScoreboard.attributableEconomicValueCents}`);
-    const emptyDelta = await getLoadoutDelta({ tenantId: `t-empty-${randomUUID().slice(0, 6)}` });
-    console.log(`  Empty Loadout Delta: ${emptyDelta ?? "null (no unbacked deltas)"}`);
-  } else {
-    console.log(`  Empty state contract verified: coverage='unavailable', observedValue=null, unbacked deltas=null`);
-  }
+  const emptyTenantId = `t-empty-${randomUUID().slice(0, 8)}`;
+  const emptyScoreboard = await getAuthoritativeScoreboard({
+    tenantId: emptyTenantId,
+    canonicalOperatorId: `tenant:${emptyTenantId}:operator:none`,
+  });
+  console.log(`  Empty Scoreboard Coverage: ${emptyScoreboard.coverage}, Executed: ${emptyScoreboard.executedWorkCount}, Attributed Revenue: ${emptyScoreboard.attributableEconomicValueCents}`);
+  const emptyDelta = await getLoadoutDelta({ tenantId: emptyTenantId });
+  console.log(`  Empty Loadout Delta: ${emptyDelta ?? "null (no unbacked deltas)"}`);
 
   // ==========================================================================
-  // STEP 1: Macro Goal Run
+  // STEP 1: Macro Goal Run Persistence
   // ==========================================================================
   const baselineValue = 500;
   const targetValue = 2000;
   const metricKey = "commercial_revenue";
 
-  if (hasLiveDb && db) {
-    await db.insert(macroGoalRuns).values({
-      id: runId,
-      tenantId,
-      canonicalOperatorId,
-      operatorUserId,
-      macroGoalId: `mg-${runId.slice(0, 8)}`,
-      verticalKey: "commercial_laundry",
-      goalSnapshotJson: { title: "Reach $2,000 weekly commercial revenue" },
-      metricKey,
-      targetValue: String(targetValue),
-      unit: "dollars",
-      baselineObservationRef: `baseline:cleancloud:prior_week`,
-      baselineValue: String(baselineValue),
-      baselinePrecision: "exact",
-      baselineCoverage: "complete",
-      startedAt: now,
-      policyVersion: "2026.1",
-    });
-  }
+  await db.insert(macroGoalRuns).values({
+    id: runId,
+    tenantId,
+    canonicalOperatorId,
+    operatorUserId,
+    macroGoalId: `mg-${runId.slice(0, 8)}`,
+    verticalKey: "commercial_laundry",
+    goalSnapshotJson: { title: "Reach $2,000 weekly commercial revenue" },
+    metricKey,
+    targetValue: String(targetValue),
+    unit: "dollars",
+    baselineObservationRef: "baseline:cleancloud:prior_week",
+    baselineValue: String(baselineValue),
+    baselinePrecision: "exact",
+    baselineCoverage: "complete",
+    startedAt: now,
+    policyVersion: "2026.1",
+  });
 
-  logStep(1, "Goal Run Initialized", {
+  logStep(1, "Macro Goal Run Persisted", {
     goalRunId: runId,
     tenantId,
     canonicalOperatorId,
@@ -139,13 +142,75 @@ async function runWitness() {
     baselineValue: `$${baselineValue}.00`,
     targetValue: `$${targetValue}.00`,
     precision: "exact",
-    coverage: "complete",
   });
 
   // ==========================================================================
-  // STEP 2: Goal Cycle & Deterministic Decision
+  // STEP 2: Real Commercial Mission Created (Authoritative Pipeline State)
   // ==========================================================================
-  const packedTechnique = "door_to_door_prospecting";
+  const customerEmail = `billing-${runId.slice(0, 6)}@acmeindustrial.com`;
+  const realMission = await createCommercialMission({
+    tenantId,
+    assignedTo: operatorUserId,
+    account: {
+      name: "Acme Industrial Laundry Partner",
+      accountType: "commercial_laundry",
+      providerName: "cleancloud",
+      providerAccountId: String(cleancloudCustomerId),
+    },
+    opportunity: {
+      title: "Commercial Linens Route",
+      estimatedMonthlyCents: 50000,
+    },
+    brief: {
+      salesAngle: "Commercial laundry pickup and delivery service",
+    },
+    steps: [],
+    actor: { type: "system", id: "system", role: "admin" },
+    idempotencyKey: `cm-create-${runId}`,
+  });
+
+  logStep(2, "Real Commercial Mission Created in Database", {
+    missionId: realMission.id,
+    accountName: realMission.account.name,
+    providerAccountId: realMission.account.providerAccountId,
+    assignedTo: realMission.assignedTo,
+    status: realMission.status,
+    version: realMission.version,
+  });
+
+  // ==========================================================================
+  // STEP 3: Goal Cycle Decision & Objective Materialized
+  // ==========================================================================
+  const packedTechnique = "doctrine:field_first";
+  const candidateRef: WeeklyGrowthCandidate = {
+    id: `cand-${realMission.id}`,
+    tenantId,
+    sourceRefs: [
+      {
+        sourceType: "commercial_mission",
+        sourceId: String(realMission.id),
+      },
+    ],
+    title: `Visit: ${realMission.account.name}`,
+    objective: "In-person commercial acquisition visit",
+    executionType: "mission",
+    recommendedLoadout: [
+      {
+        id: `weapon-${runId.slice(0, 6)}`,
+        label: "Field-First Commercial Doctrine",
+        kind: "doctrine",
+        detail: "Execute in-person discovery and qualification",
+        sourceRef: `teaching:${packedTechnique}`,
+        key: packedTechnique,
+      },
+    ],
+    grounding: "commercial_acquisition",
+    motionHint: "account_acquisition",
+    rankScore: 0.95,
+    scoreFactors: [],
+    warnings: [],
+  };
+
   const decisionDraft: GoalCycleDecisionDraft = {
     tenantId,
     goalRunId: runId,
@@ -155,330 +220,288 @@ async function runWitness() {
     policyVersion: "2026.1",
     weeklyIntentId: `intent-${runId.slice(0, 6)}`,
     weeklyIntentRevision: 1,
-    weekStart: now.toISOString().slice(0, 10),
+    weekStart: businessDate,
     candidateFingerprint: `cand-fp-${runId.slice(0, 6)}`,
-    candidateIds: ["cand-commercial-walk"],
-    candidateReasonCodes: { "cand-commercial-walk": ["LOCAL_ROUTE_DENSITY"] },
+    candidateIds: [candidateRef.id],
+    candidateReasonCodes: { [candidateRef.id]: ["LOCAL_ROUTE_DENSITY"] },
     missionDirectorPlanId: `plan-${runId.slice(0, 6)}`,
     missionDirectorRevision: 1,
     selectionKind: "candidate",
-    selectedRef: "cand-commercial-walk",
+    selectedRef: candidateRef.id,
     selectedExecutionType: "mission",
     selectedReasonCode: "PRIMARY_CANDIDATE",
-    evidenceRefs: [`radar:opportunity:${runId.slice(0, 6)}`],
+    evidenceRefs: [`commercial_missions:${realMission.id}`],
     blockedCandidates: [],
     priorComparableDecisionId: null,
     sourceCoverage: { verifiedCount: 1 },
-    loadout: [
-      {
-        id: `weapon-${runId.slice(0, 6)}`,
-        label: "Door-to-door Commercial Walk",
-        kind: "context",
-        detail: "Walk commercial buildings along route",
-        sourceRef: `teaching:${packedTechnique}`,
-        key: packedTechnique,
-      },
-    ],
-    experiment: null,
+    loadout: candidateRef.recommendedLoadout,
   };
 
-  if (hasLiveDb && db) {
-    await db.insert(goalCycleRequests).values({
-      id: cycleId,
-      tenantId,
-      goalRunId: runId,
-      triggerType: "scheduled_tick",
-      idempotencyKey: `cycle-req-${cycleId}`,
-      status: "claimed",
-    });
-    await appendGoalCycleDecision(decisionDraft);
-  }
-
-  logStep(2, "Deterministic Decision Appended", {
-    decisionId,
-    cycleId,
-    selectionKind: decisionDraft.selectionKind,
-    selectedRef: decisionDraft.selectedRef,
-    executionType: decisionDraft.selectedExecutionType,
-    packedLoadout: [packedTechnique],
+  const decision = await appendGoalCycleDecision(decisionDraft);
+  const { objective } = await materializeGoalCycleObjective({
+    tenantId,
+    decision,
+    candidate: candidateRef,
+    businessDate,
   });
 
-  // ==========================================================================
-  // STEP 3: Materialize Persistent Growth Objective
-  // ==========================================================================
-  const candidateRecord = {
-    id: "cand-commercial-walk",
-    title: "Commercial Route Acquisition Walk",
-    objective: "Execute door-to-door commercial walk at 1200 Harbor Ave",
-    sourceRefs: [{ sourceType: "commercial_mission", sourceId: "9001" }],
-  };
-
-  let objective: PersistentGrowthObjective;
-  if (hasLiveDb && db) {
-    const materialized = await materializeGoalCycleObjective({
-      tenantId,
-      decision: {
-        id: decisionId,
-        tenantId,
-        goalRunId: runId,
-        cycleId,
-        canonicalOperatorId,
-        operatorUserId,
-        policyVersion: "2026.1",
-        weeklyIntentId: null,
-        weeklyIntentRevision: null,
-        weekStart: null,
-        candidateFingerprint: "fp",
-        candidateIds: ["cand-commercial-walk"],
-        candidateReasonCodes: {},
-        missionDirectorPlanId: null,
-        missionDirectorRevision: null,
-        selectionKind: "candidate",
-        selectedRef: "cand-commercial-walk",
-        selectedExecutionType: "mission",
-        selectedReasonCode: "PRIMARY_CANDIDATE",
-        evidenceRefs: [],
-        blockedCandidates: [],
-        priorComparableDecisionId: null,
-        sourceCoverage: null,
-        loadout: decisionDraft.loadout,
-        experiment: null,
-        decisionFingerprint: "fp-dec",
-        createdAt: now.toISOString(),
-      },
-      candidate: candidateRecord as never,
-    });
-    objective = materialized.objective;
-  } else {
-    objective = {
-      id: objectiveId,
-      tenantId,
-      goalRunId: runId,
-      cycleId,
-      decisionId,
-      canonicalOperatorId,
-      operatorUserId,
-      selectionKind: "candidate",
-      selectedRef: "cand-commercial-walk",
-      title: candidateRecord.title,
-      description: candidateRecord.objective,
-      executionType: "mission",
-      authority: "HUMAN_EXECUTION",
-      status: "presented",
-      statusReason: null,
-      actionTargetType: "commercial_mission",
-      actionTargetId: "9001",
-      actionTargetDisplayName: candidateRecord.title,
-      businessDate: now.toISOString().slice(0, 10),
-      windowStart: null,
-      windowEnd: null,
-      loadout: decisionDraft.loadout,
-      evidenceRefs: [],
-      completedAt: null,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-  }
-
   logStep(3, "Persistent Growth Objective Materialized", {
+    decisionId: decision.id,
     objectiveId: objective.id,
+    title: objective.title,
     actionTargetType: objective.actionTargetType,
     actionTargetId: objective.actionTargetId,
     executionType: objective.executionType,
-    authority: objective.authority,
-    status: objective.status,
+    packedTechnique,
   });
 
   // ==========================================================================
-  // STEP 4: Real Day Line / Driver Entity Projection
+  // STEP 4: Real Production Day Line Integration Verified
   // ==========================================================================
-  const rankedDayWork = projectToRankedDayWork(objective);
-  logStep(4, "Day Line Projection Preserves Objective ID", {
-    dayLineItemId: rankedDayWork.id,
-    objectiveIdPreserved: rankedDayWork.id === objective.id,
-    title: rankedDayWork.title,
-    executionType: rankedDayWork.executionType,
+  const dayLine = await readCurrentDayLine({
+    tenantId,
+    operatorId: operatorUserId,
+    operatorUserId,
+    businessDate,
   });
 
-  // ==========================================================================
-  // STEP 5: Real Completion Evidence (Driver visit_completed)
-  // ==========================================================================
-  const completionEventReference = `commercial_mission_events:cme-${randomUUID().slice(0, 8)}`;
-  logStep(5, "Driver Surface Completes Real Work", {
-    actorId: operatorUserId,
-    action: "visit_completed",
-    physicalEntity: "1200 Harbor Ave, Long Beach, CA",
-    evidenceReference: completionEventReference,
-    sourceSystem: "dayforge_field",
-  });
-
-  // ==========================================================================
-  // STEP 6: Action Verification Outcome (No manufactured revenue)
-  // ==========================================================================
-  let actionOutcomeId: string;
-  if (hasLiveDb && db) {
-    const bridgeResult = await bridgeDriverAction({
-      tenantId,
-      actorId: operatorUserId,
-      objectiveId: objective.id,
-      evidenceReference: completionEventReference,
-      sourceSystem: "dayforge_field",
-      outcomeKind: "visit_completed",
-    });
-    if (!bridgeResult.bridged) throw new Error(`Bridge driver action failed: ${bridgeResult.message}`);
-    actionOutcomeId = bridgeResult.outcome.id;
-  } else {
-    actionOutcomeId = `outcome-action-${randomUUID().slice(0, 8)}`;
+  const dayLineItem = dayLine.items.find(item => item.id === objective.id);
+  if (!dayLineItem) {
+    throw new Error(`Production Day Line failed to surface Persistent Objective ${objective.id}`);
   }
 
-  logStep(6, "Action Outcome Recorded & Verified", {
-    outcomeId: actionOutcomeId,
-    impactClass: "action_verification",
-    epistemicStatus: "verified",
-    monetaryValueCents: "null (Truth Rule: zero manufactured revenue)",
-    evidenceReference: completionEventReference,
-    objectiveStatusTransitionedTo: "action_executed",
+  logStep(4, "Production Day Line Verified (currentDayLineService)", {
+    rankingStatus: dayLine.rankingStatus,
+    surfacedObjectiveId: dayLineItem.id,
+    title: dayLineItem.title,
+    executionType: dayLineItem.executionType,
+    fieldRequired: dayLineItem.executionContract.fieldRequired,
+  });
+
+  // ==========================================================================
+  // STEP 5: Real Driver Completion via transitionCommercialMission
+  // ==========================================================================
+  const transitionKey = `trans-visit-${runId}`;
+  const transitionedMission = await transitionCommercialMission({
+    tenantId,
+    missionId: realMission.id,
+    expectedVersion: realMission.version,
+    toStatus: "visit_completed",
+    actor: { type: "driver", id: operatorUserId, role: "field_operator" },
+    idempotencyKey: transitionKey,
+  });
+
+  // Query the persisted event in MySQL
+  const [persistedEvent] = await db
+    .select({ id: commercialMissionEvents.id })
+    .from(commercialMissionEvents)
+    .where(
+      and(
+        eq(commercialMissionEvents.tenantId, tenantId),
+        eq(commercialMissionEvents.idempotencyKey, transitionKey)
+      )
+    )
+    .limit(1);
+
+  if (!persistedEvent) {
+    throw new Error("Commercial mission transition event was not persisted to MySQL");
+  }
+
+  const expectedEvidenceRef = `commercial_mission_events:${persistedEvent.id}`;
+
+  // Query the resulting action verification outcome
+  const [actionOutcome] = await db
+    .select()
+    .from(goalCycleOutcomes)
+    .where(
+      and(
+        eq(goalCycleOutcomes.tenantId, tenantId),
+        eq(goalCycleOutcomes.objectiveId, objective.id),
+        eq(goalCycleOutcomes.impactClass, "action_verification")
+      )
+    )
+    .limit(1);
+
+  if (!actionOutcome) {
+    throw new Error("Driver action bridge did not record action_verification outcome");
+  }
+  if (actionOutcome.monetaryValueCents !== null) {
+    throw new Error("Truth violation: action_verification manufactured economic revenue!");
+  }
+  if (actionOutcome.evidenceReference !== expectedEvidenceRef) {
+    throw new Error(
+      `Evidence ref mismatch: expected ${expectedEvidenceRef}, got ${actionOutcome.evidenceReference}`
+    );
+  }
+
+  logStep(5, "Real Driver Completion & Action Outcome Verified", {
+    transitionedStatus: transitionedMission.status,
+    persistedEventId: persistedEvent.id,
+    evidenceReference: actionOutcome.evidenceReference,
+    impactClass: actionOutcome.impactClass,
+    monetaryValueCents: "null (Truth Rule 1: No manufactured revenue)",
+    epistemicStatus: actionOutcome.epistemicStatus,
   });
 
   // ==========================================================================
   // SMOKE CHECK 2: Action-Only State
   // ==========================================================================
   console.log(`\n${BOLD}--- Production Read Smoke State 2: Action-Only State ---${RESET}`);
-  if (hasLiveDb) {
-    const scoreboardActionOnly = await getAuthoritativeScoreboard({ tenantId, goalRunId: runId });
-    console.log(`  Executed Work Count: ${scoreboardActionOnly.executedWorkCount}`);
-    console.log(`  Attributable Economic Value: ${scoreboardActionOnly.attributableEconomicValueCents ?? "$0 (No false revenue awarded)"}`);
-    console.log(`  Authoritative Observed Value: $${scoreboardActionOnly.authoritativeObservedValue}.00 (Baseline only)`);
-  } else {
-    console.log(`  Action-only state verified: executed=1, attributableEconomicValueCents=null, observed=$${baselineValue}.00`);
-  }
+  const actionScoreboard = await getAuthoritativeScoreboard({
+    tenantId,
+    canonicalOperatorId,
+  });
+  console.log(`  Scoreboard Executed Work: ${actionScoreboard.executedWorkCount}, Attributed Economic Value: ${actionScoreboard.attributableEconomicValueCents ?? "$0 (null)"}`);
 
   // ==========================================================================
-  // STEP 7: Real CleanCloud Paid Order Evidence
+  // STEP 6: Real CleanCloud Production Ingestion (importCleanCloudPaidOrders)
   // ==========================================================================
-  const cleancloudOrderId = `cc-ord-${randomUUID().slice(0, 8)}`;
-  const cleancloudCustomerId = `cc-cust-${randomUUID().slice(0, 8)}`;
+  const cleancloudOrderId = 90000 + Math.floor(Math.random() * 10000);
   const paidCents = 45000; // $450.00
-  const orderEvidenceRef = `orders:cleancloud:${cleancloudOrderId}`;
+  const orderCsv = [
+    "Order ID,Customer,Total,Payment Date,Email,Phone,Address,Customer ID",
+    `${cleancloudOrderId},Acme Industrial Laundry Partner,$450.00,${businessDate} 14:00,${customerEmail},555-0199,100 Industrial Parkway,${cleancloudCustomerId}`,
+  ].join("\n");
 
-  if (hasLiveDb && db) {
-    await db.insert(cleancloudPaidOrders).values({
-      tenantId,
-      sourceReportType: "orders_sales",
-      sourceFileName: "daily_sync_cleancloud.csv",
-      importBatchId: 101,
-      cleancloudOrderId,
-      cleancloudCustomerId,
-      customerName: "Harbor Operations",
-      paid: true,
-      totalCents: paidCents,
-      paidDateUtc: now,
-      buildingResolutionStatus: "not_applicable",
-    });
+  const importSummary = await importCleanCloudPaidOrders({
+    csvText: orderCsv,
+    sourceReportType: "orders_sales",
+    tenantId,
+    sourceFileName: `witness-${runId}.csv`,
+  });
+
+  if (importSummary.importedRowCount < 1) {
+    throw new Error("CleanCloud paid order import failed to insert row");
   }
 
-  logStep(7, "Authoritative CleanCloud Paid Order Witness", {
+  // Query the resulting economic outcome
+  const [economicOutcome] = await db
+    .select()
+    .from(goalCycleOutcomes)
+    .where(
+      and(
+        eq(goalCycleOutcomes.tenantId, tenantId),
+        eq(goalCycleOutcomes.objectiveId, objective.id),
+        eq(goalCycleOutcomes.impactClass, "commercial_revenue")
+      )
+    )
+    .limit(1);
+
+  if (!economicOutcome) {
+    throw new Error("CleanCloud production bridge failed to bind economic outcome");
+  }
+  if (economicOutcome.monetaryValueCents !== paidCents) {
+    throw new Error(
+      `Economic value mismatch: expected ${paidCents}, found ${economicOutcome.monetaryValueCents}`
+    );
+  }
+
+  logStep(6, "Real CleanCloud Production Ingestion & Economic Binding Verified", {
     cleancloudOrderId,
     cleancloudCustomerId,
-    paid: true,
-    totalCents: `$${(paidCents / 100).toFixed(2)}`,
-    evidenceReference: orderEvidenceRef,
-    sourceSystem: "cleancloud",
+    importedRowCount: importSummary.importedRowCount,
+    economicOutcomeId: economicOutcome.id,
+    impactClass: economicOutcome.impactClass,
+    monetaryValueCents: `$${(paidCents / 100).toFixed(2)} (${paidCents} cents)`,
+    evidenceReference: economicOutcome.evidenceReference,
+    sourceSystem: economicOutcome.sourceSystem,
   });
 
   // ==========================================================================
-  // STEP 8: Economic Outcome Bound Deterministically
+  // STEP 7: Reconcile Pending Learnings (Eventual Consistency Sweeper)
   // ==========================================================================
-  let econOutcomeId: string;
-  if (hasLiveDb && db) {
-    const econResult = await bridgeCleanCloudPaidOrder({
-      tenantId,
-      cleancloudOrderId,
-      cleancloudCustomerId,
-      paid: true,
-      totalCents: paidCents,
-      paidDateUtc: now,
-      objectiveId: objective.id, // Deterministic lineage!
-    });
-    if (!econResult.bridged) throw new Error(`Bridge CleanCloud order failed: ${econResult.message}`);
-    econOutcomeId = econResult.outcome.id;
-  } else {
-    econOutcomeId = `outcome-econ-${randomUUID().slice(0, 8)}`;
+  const sweeperResult = await processPendingOutcomeLearnings({ tenantId });
+  logStep(7, "Automatic Learning Sweeper Executed (Crash-Safe Outbox)", {
+    processedOutcomes: sweeperResult.processedCount,
+    errors: sweeperResult.errors.length,
+  });
+
+  // Verify learned deltas in database
+  const learnedDeltas = await db
+    .select()
+    .from(goalCycleLearnedDeltas)
+    .where(eq(goalCycleLearnedDeltas.tenantId, tenantId));
+
+  if (learnedDeltas.length === 0) {
+    throw new Error("Automatic learning failed to produce goal_cycle_learned_deltas row");
   }
 
-  logStep(8, "Economic Outcome Bound with Deterministic Lineage", {
-    outcomeId: econOutcomeId,
-    impactClass: "commercial_revenue",
-    monetaryValueCents: paidCents,
-    epistemicStatus: "verified",
-    evidenceClass: "authoritative_external",
-    evidenceReference: orderEvidenceRef,
-    delayedAttributionPreserved: true,
+  const latestDelta = learnedDeltas[0]!;
+  logStep(8, "Learned Delta Verified in MySQL", {
+    deltaId: latestDelta.id,
+    targetKey: latestDelta.targetKey,
+    learningKind: latestDelta.learningKind,
+    deltaType: latestDelta.deltaType,
+    confidence: latestDelta.confidence,
+    appliedCount: latestDelta.appliedCount,
   });
 
   // ==========================================================================
-  // STEP 9: Automatic Learned Delta Verified
+  // STEP 8: Read Models Verified Purely Against Real Database
   // ==========================================================================
-  const expectedNewWeight = 1.5;
-  logStep(9, "Automatic Learning Evaluated & Delta Recorded", {
-    targetKey: packedTechnique,
-    deltaType: "boost",
-    beforeDoctrineWeight: 1.0,
-    afterDoctrineWeight: expectedNewWeight,
-    accumulatedRevenue: `$${(paidCents / 100).toFixed(2)}`,
-    confidence: "medium",
-    idempotentReplaySafe: true,
+  console.log(`\n${BOLD}--- Production Read Smoke State 3 & 4: Scoreboard & Loadout Proof ---${RESET}`);
+  const finalScoreboard = await getAuthoritativeScoreboard({
+    tenantId,
+    canonicalOperatorId,
   });
 
-  // ==========================================================================
-  // STEP 10: Scoreboard Movement Proven
-  // ==========================================================================
-  const newObservedDollars = baselineValue + paidCents / 100; // 500 + 450 = 950
-  const remainingGap = Math.max(0, targetValue - newObservedDollars); // 2000 - 950 = 1050
+  const expectedObservedValue = baselineValue + paidCents / 100; // 500 + 450 = 950
+  const expectedRemainingGap = Math.max(0, targetValue - expectedObservedValue); // 2000 - 950 = 1050
 
-  logStep(10, "Authoritative Scoreboard Movement Proven", {
-    baselineValue: `$${baselineValue}.00`,
-    newAttributedRevenue: `$${(paidCents / 100).toFixed(2)}`,
-    authoritativeObservedValue: `$${newObservedDollars}.00`,
-    targetValue: `$${targetValue}.00`,
-    remainingGap: `$${remainingGap}.00 (Down from $1,500.00)`,
-    precision: "exact (CleanCloud external ledger verified)",
-    coverage: "complete",
+  logStep(9, "Authoritative Scoreboard Proven", {
+    baselineValue: `$${finalScoreboard.baselineValue}.00`,
+    executedWorkCount: finalScoreboard.executedWorkCount,
+    attributableEconomicValueCents: finalScoreboard.attributableEconomicValueCents,
+    authoritativeObservedValue: `$${finalScoreboard.authoritativeObservedValue}.00`,
+    expectedObservedValue: `$${expectedObservedValue}.00`,
+    targetValue: `$${finalScoreboard.targetValue}.00`,
+    remainingGap: `$${finalScoreboard.remainingGap}.00 (Expected: $${expectedRemainingGap}.00)`,
+    precision: finalScoreboard.precision,
+    coverage: finalScoreboard.coverage,
   });
 
-  // ==========================================================================
-  // STEP 11: Next-Cycle Loadout Ranking Change
-  // ==========================================================================
-  const baseFit = 0.5;
-  const boostedScore = baseFit + (expectedNewWeight - 1.0) * baseFit; // 0.75
-
-  logStep(11, "Next-Cycle Loadout Re-ranking Verified", {
-    boostedTechnique: packedTechnique,
-    baseScore: baseFit,
-    boostedScore: boostedScore.toFixed(2),
-    newRank: "#1 in synthesized next-cycle loadout",
-    effect: "Behavior successfully adapted from physical execution & economic truth!",
-  });
-
-  // ==========================================================================
-  // SMOKE CHECK 3 & 4: Delayed Economic & Re-ranked Read Model Smoke
-  // ==========================================================================
-  console.log(`\n${BOLD}--- Production Read Smoke State 3 & 4: Learned / Re-ranked Reads ---${RESET}`);
-  if (hasLiveDb) {
-    const finalScoreboard = await getAuthoritativeScoreboard({ tenantId, goalRunId: runId });
-    console.log(`  Final Scoreboard Observed: $${finalScoreboard.authoritativeObservedValue}.00, Gap: $${finalScoreboard.remainingGap}.00`);
-    const finalReceipt = await operationReceipt({ tenantId, decisionId });
-    console.log(`  Receipt Verification: ${finalReceipt?.verification.status}, Outcome: ${finalReceipt?.businessOutcome.status}, Economic: ${finalReceipt?.economicObservation.status}`);
-  } else {
-    console.log(`  Read models verified pure query-only: zero state mutation across scoreboard, receipt, and loadoutDelta.`);
+  if (finalScoreboard.authoritativeObservedValue !== expectedObservedValue) {
+    throw new Error(
+      `Scoreboard value mismatch: expected ${expectedObservedValue}, got ${finalScoreboard.authoritativeObservedValue}`
+    );
   }
+
+  const finalLoadoutDelta = await getLoadoutDelta({
+    tenantId,
+    canonicalOperatorId,
+  });
+
+  if (!finalLoadoutDelta) {
+    throw new Error("getLoadoutDelta returned null for learned tenant");
+  }
+
+  const finalReceipt = await operationReceipt({ tenantId, decisionId });
+  if (!finalReceipt) {
+    throw new Error("operationReceipt returned null for decision");
+  }
+
+  logStep(10, "Operation Receipt & Loadout Delta Proven", {
+    decisionId: finalReceipt.decisionId,
+    verificationStatus: finalReceipt.verification.status,
+    businessOutcomeStatus: finalReceipt.businessOutcome.status,
+    economicStatus: finalReceipt.economicObservation.status,
+    loadoutDeltaTarget: finalLoadoutDelta.targetKey,
+    loadoutDeltaType: finalLoadoutDelta.deltaType,
+  });
+
+  const history = await getPersistentGrowthHistory({
+    tenantId,
+    canonicalOperatorId,
+  });
+  console.log(`  History Items: ${history.items.length}, Summary: ${history.summary.decisionsCount} decisions, ${history.summary.outcomesCount} outcomes`);
 
   console.log(`\n${BOLD}${GREEN}================================================================${RESET}`);
   console.log(`${BOLD}${GREEN}   FULL GOLDLINE GROWTH LOOP VERIFIED WITH DURABLE LINEAGE!   ${RESET}`);
+  console.log(`${BOLD}${GREEN}   ALL 8 ARCHITECTURAL REQUIREMENTS PROVEN ON PRODUCTION ENTRY POINTS ${RESET}`);
   console.log(`${BOLD}${GREEN}================================================================${RESET}\n`);
 }
 
 runWitness().catch(err => {
-  console.error(`\n${BOLD}\x1b[31mError running Goldline growth loop witness:${RESET}`, err);
+  console.error(`\n${BOLD}${RED}Witness execution failed with error:${RESET}`, err);
   process.exit(1);
 });

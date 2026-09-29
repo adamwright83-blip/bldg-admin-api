@@ -639,21 +639,20 @@ export async function resolveCommercialPipelineMission(input: {
       // transition that already succeeded above.
     });
 
-    // Bridge to Persistent Growth Operator ledger if this mission has deterministic lineage to an objective
-    import("../persistentOperator/fieldEventBridge")
-      .then(({ bridgeDriverAction }) => {
-        bridgeDriverAction({
-          tenantId: input.tenantId,
-          actorId: mission.assignedTo ?? input.actorId,
-          missionId: mission.id,
-          evidenceReference: idempotencyKey,
-          sourceSystem: "commercial_pipeline",
-          outcomeKind: input.action === "won" ? "account_won" : "account_lost",
-        }).catch(err => {
-          console.warn("[PersistentOperator] field event bridge deferred", err);
-        });
-      })
-      .catch(() => undefined);
+    // Bridge to Persistent Growth Operator ledger as operational_result if this mission has deterministic lineage to an objective
+    try {
+      const { bridgeCommercialResolution } = await import("../persistentOperator/fieldEventBridge");
+      await bridgeCommercialResolution({
+        tenantId: input.tenantId,
+        actorId: mission.assignedTo ?? input.actorId,
+        missionId: mission.id,
+        resolution: input.action,
+        evidenceReference: idempotencyKey,
+        sourceSystem: "commercial_pipeline",
+      });
+    } catch (err) {
+      console.warn("[PersistentOperator] commercial resolution bridge deferred", err);
+    }
   }
   const detail = await getCommercialPipelineDetail(input);
   if (!detail) throw new Error("Commercial pipeline record not found");

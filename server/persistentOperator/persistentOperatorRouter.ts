@@ -216,4 +216,38 @@ export const persistentOperatorRouter = router({
         ...input,
       });
     }),
+
+  bridgeCommercialResolution: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        resolution: z.enum(["won", "lost"]),
+        evidenceReference: z.string().min(1),
+        explanation: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "persistent_operator.field_bridge",
+      });
+      const { bridgeCommercialResolution } = await import("./fieldEventBridge");
+      return bridgeCommercialResolution({
+        tenantId: ctx.tenantId,
+        actorId: identity.dayDirectorActorId,
+        ...input,
+      });
+    }),
+
+  reconcilePendingLearnings: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const { processPendingOutcomeLearnings } = await import("./learningStore");
+      return processPendingOutcomeLearnings({
+        tenantId: ctx.tenantId,
+        limit: input?.limit,
+      });
+    }),
 });
+

@@ -12,6 +12,11 @@ import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { planForDate } from "../../missionDirector/missionDirectorService";
+import {
+  listGoalCycleObjectives,
+  projectToRankedDayWork,
+  type PersistentGrowthObjective,
+} from "../../persistentOperator/objectiveStore";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
 import {
   businessDateInZone,
@@ -23,6 +28,7 @@ import {
 type PlanReader = typeof planForDate;
 type CampaignReader = typeof listCampaigns;
 type DayStateReader = typeof getDayDirectorState;
+type ObjectiveReader = typeof listGoalCycleObjectives;
 type DayState = Awaited<ReturnType<DayStateReader>>;
 
 function rankingOf(outcome: MissionPlanOutcome): Array<{ campaignId: string }> {
@@ -35,7 +41,7 @@ function rankingStatusFor(
   outcome: MissionPlanOutcome,
   rankedCount: number
 ): CurrentDayLine["rankingStatus"] {
-  if (outcome.status === "no_plan") return "no_plan";
+  if (outcome.status === "no_plan" && rankedCount === 0) return "no_plan";
   if (rankedCount === 0) return "unavailable";
   return "ranked";
 }
@@ -85,6 +91,7 @@ export async function readCurrentDayLine(
     planForDate?: PlanReader;
     listCampaigns?: CampaignReader;
     getDayDirectorState?: DayStateReader;
+    listObjectives?: ObjectiveReader;
   } = {}
 ): Promise<CurrentDayLine> {
   const now = input.now ?? new Date();
@@ -109,9 +116,10 @@ export async function readCurrentDayLine(
   const readPlan = deps.planForDate ?? planForDate;
   const readCampaigns = deps.listCampaigns ?? listCampaigns;
   const readState = deps.getDayDirectorState ?? getDayDirectorState;
+  const readObjectives = deps.listObjectives ?? listGoalCycleObjectives;
 
   try {
-    const [plan, campaigns] = await Promise.all([
+    const [plan, campaigns, objectives] = await Promise.all([
       readPlan({
         tenantId,
         operatorId,
@@ -122,6 +130,16 @@ export async function readCurrentDayLine(
         timeZone,
       }),
       readCampaigns({ tenantId, includeDisabled: true }),
+      readObjectives({
+        tenantId,
+        businessDate,
+      }).catch(err => {
+        console.warn(
+          "[day-line] persistent objectives are unavailable",
+          err instanceof Error ? err.message : err
+        );
+        return [] as PersistentGrowthObjective[];
+      }),
     ]);
     let state: DayState | null = null;
     try {
@@ -140,18 +158,38 @@ export async function readCurrentDayLine(
     const byCampaign = new Map(campaigns.map(campaign => [campaign.campaignId, campaign]));
     const seen = new Set<string>();
     const rankedWorks: RankedDayWork[] = [];
-    for (const evidence of rankingOf(plan.outcome)) {
-      const id = evidence.campaignId.trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const campaign = byCampaign.get(id);
-      rankedWorks.push({
-        id,
-        title: campaign?.title ?? "Unspecified work",
-        objective: campaign?.objective ?? "",
-        completionCondition: campaign?.completionCondition ?? "",
-      });
+
+    // 1. Persistent Growth Objectives (active operator commitments for today)
+    for (const obj of objectives) {
+      if (
+        obj.status !== "presented" &&
+        obj.status !== "accepted" &&
+        obj.status !== "in_progress"
+      ) {
+        continue;
+      }
+      const work = projectToRankedDayWork(obj);
+      if (!work.id || seen.has(work.id)) continue;
+      seen.add(work.id);
+      rankedWorks.push(work);
     }
+
+    // 2. Mission Plan Campaign Ranking
+    if (plan.outcome.status !== "no_plan") {
+      for (const evidence of rankingOf(plan.outcome)) {
+        const id = evidence.campaignId.trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const campaign = byCampaign.get(id);
+        rankedWorks.push({
+          id,
+          title: campaign?.title ?? "Unspecified work",
+          objective: campaign?.objective ?? "",
+          completionCondition: campaign?.completionCondition ?? "",
+        });
+      }
+    }
+
     return projectCurrentDayLine({
       businessDate,
       rankingStatus: rankingStatusFor(plan.outcome, rankedWorks.length),
