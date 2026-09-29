@@ -12,6 +12,7 @@ import {
 import {
   deriveWeekStatus,
   remainingWeekHorizon,
+  targetWeekHorizon,
   type RemainingWeekHorizon,
   type WeeklyIntentRecord,
 } from "../../../shared/weeklyMissionReadiness";
@@ -41,6 +42,8 @@ export type WeeklyDriverScope = {
   dayDirectorActorIds?: readonly string[];
   timeZone: string;
   now?: Date;
+  /** Durable appointments can plan the coming Monday-Friday while called on Sunday. */
+  weekStartOverride?: string;
 };
 
 export type WeeklyDriverDeps = {
@@ -317,10 +320,13 @@ async function assembleCard(scope: WeeklyDriverScope, deps: WeeklyDriverDeps): P
 
 function horizonFor(scope: WeeklyDriverScope): RemainingWeekHorizon {
   const now = scope.now ?? new Date();
-  return remainingWeekHorizon({
+  const input = {
     businessDate: formatInTimeZone(now, scope.timeZone, "yyyy-MM-dd"),
     localTime: formatInTimeZone(now, scope.timeZone, "HH:mm"),
-  });
+  };
+  return scope.weekStartOverride
+    ? targetWeekHorizon({ ...input, weekStart: scope.weekStartOverride })
+    : remainingWeekHorizon(input);
 }
 
 function readersFor(scope: WeeklyDriverScope, deps: WeeklyDriverDeps): WeeklyDossierReaders {
