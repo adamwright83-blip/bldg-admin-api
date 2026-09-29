@@ -94,14 +94,8 @@ import {
   renderClaireOpeningVoice,
 } from "./voice/claireVoiceTransport";
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
-import { sendSMSWithReceipt } from "../_core/sms";
-import { logAgentEvent } from "../agents/agentEvents";
 import { getDefaultGoalCyclePool } from "../persistentOperator/goalCycleStore";
 import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
-import {
-  recordCommunicationReceipt,
-  TwilioCommunicationReceiptError,
-} from "../twilioPlatform/communicationReceipts";
 import {
   abandonAuthorizedAmdHandoff,
   amdDetectionTwiml,
@@ -166,6 +160,8 @@ type PreDriveConversation = ClaireTurnState & {
     | "pre_drive"
     | "weekly_planning_invite"
     | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
+  appointmentTimeZone?: string | null;
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
   /** True after inbound context assembly was applied or conservatively given up. */
@@ -494,64 +490,11 @@ async function handlePlanningAppointmentMissedStatus(
     answeredBy === "fax";
   if (!callSid || !missed) return;
 
+  // The Sunday standing authorization covers a call only. A missed call does
+  // not manufacture SMS authority. Record the miss and wait for an explicitly
+  // authorized follow-up channel in a later slice.
   const store = new OperatorAppointmentStore(getDefaultGoalCyclePool());
-  const appointment = await store.markMissedByCallSid(callSid);
-  if (!appointment) return;
-  const followup = await store.claimMissedFollowup(callSid);
-  if (!followup) return;
-
-  const to = await authorizedOperatorPhone({
-    tenantId: followup.tenantId,
-    actorId: followup.operatorUserId,
-  });
-  const sms = await sendSMSWithReceipt(
-    to,
-    "Missed you. Want to pick a new time?",
-    { idempotencyKey: `operator-appointment:${followup.id}:missed` }
-  );
-
-  if (sms.accepted && sms.providerMessageId) {
-    try {
-      await recordCommunicationReceipt({
-        tenantId: followup.tenantId,
-        operatorUserId: followup.operatorUserId,
-        eventType: "MESSAGE_SENT",
-        messageSid: sms.providerMessageId,
-        direction: "outbound",
-        to,
-        status: sms.providerStatus,
-      });
-    } catch (error) {
-      if (
-        !(
-          error instanceof TwilioCommunicationReceiptError &&
-          error.code === "persistence_unconfigured"
-        )
-      ) {
-        console.warn("[Claire] missed-call SMS receipt was not stored", error);
-      }
-    }
-  }
-
-  await logAgentEvent({
-    ctx: {
-      tenantId: followup.tenantId,
-      agentType: "goal_cycle_agent",
-      actorType: "system",
-      actorId: followup.operatorUserId,
-      canonicalOperatorId: followup.canonicalOperatorId,
-    },
-    toolName: "sendClaireWeeklyPlanningMissedText",
-    inputJson: { appointmentId: followup.id, callSid },
-    outputJson: {
-      accepted: sms.accepted,
-      providerMessageId: sms.providerMessageId,
-      evidenceName: sms.evidenceName,
-    },
-    status: sms.accepted ? "success" : "failed",
-    entityType: "operator_appointment",
-    entityId: followup.id,
-  }).catch(() => undefined);
+  await store.markMissedByCallSid(callSid);
 }
 
 function callSidFrom(req: Request): string | undefined {
