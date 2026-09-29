@@ -296,7 +296,19 @@ export type PendingProposalState = {
   pendingFieldCapture?: ConversationalFieldOutcome | null;
   lastAcceptedCommitmentId?: string | null;
   blockerKind?: BlockerKind | null;
-  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  sessionKind?:
+    | "evening_planning"
+    | "morning_reconciliation"
+    | "field_debrief"
+    | "pre_drive"
+    | "weekly_planning_invite"
+    | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
+  pendingWeeklyPlanningCallback?: {
+    scheduledForIso: string;
+    readback: string;
+    sourceReference: string;
+  } | null;
   pendingEngineeringOffer?: {
     capabilityKey: string;
     operatorRequest: string;
