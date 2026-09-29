@@ -1,3 +1,4 @@
+import { formatInTimeZone } from "date-fns-tz";
 import {
   executeClairePersistentOperatorAction,
   startClairePreDriveCall,
@@ -10,6 +11,8 @@ import { parseAuthoritativeMetricObservation } from "./macroGoalRuns";
 import { findActiveMacroGoalRun } from "./goalCycleService";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import {
+  SUNDAY_PLANNING_LOCAL_END,
+  SUNDAY_PLANNING_LOCAL_START,
   SUNDAY_WEEKLY_PLANNING_ACTION,
 } from "./operatorAppointmentPolicy";
 import {
@@ -96,6 +99,19 @@ async function resolveAppointmentIdentity(step: ClaimedOperatorAppointment) {
   return resolution.identity;
 }
 
+export function insideSundayStandingWindow(
+  step: Pick<ClaimedOperatorAppointment, "timeZone">,
+  now: Date
+): boolean {
+  const weekday = Number(formatInTimeZone(now, step.timeZone, "i"));
+  const hm = formatInTimeZone(now, step.timeZone, "HH:mm");
+  return (
+    weekday === 7 &&
+    hm >= SUNDAY_PLANNING_LOCAL_START &&
+    hm <= SUNDAY_PLANNING_LOCAL_END
+  );
+}
+
 export async function executeOperatorAppointment(
   step: ClaimedOperatorAppointment,
   now = new Date(),
@@ -114,6 +130,13 @@ export async function executeOperatorAppointment(
   if (locked) {
     return {
       skipped: "week_already_locked",
+      weekStart: step.weekStart,
+    };
+  }
+
+  if (step.unprompted && !insideSundayStandingWindow(step, now)) {
+    return {
+      skipped: "outside_authorized_sunday_window",
       weekStart: step.weekStart,
     };
   }
