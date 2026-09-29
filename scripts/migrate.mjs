@@ -4214,6 +4214,9 @@ await applyIdempotentSqlFile(
   "../drizzle/0104_persistent_operator_authority_appointments.sql",
   "Persistent operator authority and Claire appointment tables"
 );
+await assertEnumContainsValues("agent_events", "agentType", [
+  "goal_cycle_agent",
+]);
 for (const [tableName, columns] of [
   ["tenant_standing_authorizations", [
     "id", "tenantId", "canonicalOperatorId", "operatorUserId", "channel",
