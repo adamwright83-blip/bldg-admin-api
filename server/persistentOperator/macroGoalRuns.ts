@@ -490,7 +490,7 @@ export async function pauseMacroGoalRun(input: {
       status: "paused",
     })
   );
-  if (!updated) throw new Error("Macro goal run not found");
+  if (!updated) throw new Error("Macro goal run transition rejected");
   return updated;
 }
 
@@ -509,7 +509,7 @@ export async function resumeMacroGoalRun(input: {
       nextEvaluationAt: input.now ?? new Date(),
     })
   );
-  if (!updated) throw new Error("Macro goal run not found");
+  if (!updated) throw new Error("Macro goal run transition rejected");
   return updated;
 }
 
@@ -526,6 +526,6 @@ export async function supersedeMacroGoalRun(input: {
       status: "superseded",
     })
   );
-  if (!updated) throw new Error("Macro goal run not found");
+  if (!updated) throw new Error("Macro goal run transition rejected");
   return updated;
 }
