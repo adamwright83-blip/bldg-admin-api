@@ -402,7 +402,16 @@ async function planForDateInner(input: {
   if (latest && latest.inputFingerprint === inputFingerprint) {
     return latest;
   }
-  const revision = (latest?.revision ?? 0) + 1;
+  // Reads span the authorized alias group, but revisions are unique per
+  // concrete operatorId. Compute the next revision only from the canonical
+  // write key so an alias-owned revision number cannot collide with an
+  // existing canonical revision.
+  const canonicalLatest = await getLatestPlan({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: input.businessDate,
+  });
+  const revision = (canonicalLatest?.revision ?? 0) + 1;
   const row = {
     id: randomUUID(),
     tenantId: input.tenantId,
