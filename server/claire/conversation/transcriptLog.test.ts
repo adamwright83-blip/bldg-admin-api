@@ -14,6 +14,7 @@ import {
   redactClaireTranscriptText,
   transcriptLogBackfillCount,
   transcriptLoggingAllowed,
+  transcriptTextLoggingAllowed,
 } from "./transcriptLog";
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
 import { persistOperatorAndClaire } from "./liveCall";
@@ -72,6 +73,79 @@ describe("Claire transcript Railway log mirror", () => {
         "default:adam-admin"
       )
     ).toBe(false);
+    expect(
+      transcriptTextLoggingAllowed(
+        { tenantId: "default", operatorUserId: "adam-admin" },
+        "default:adam-admin"
+      )
+    ).toBe(true);
+    expect(
+      transcriptTextLoggingAllowed(
+        { tenantId: "default", operatorUserId: "driver-primary" },
+        "default:adam-admin"
+      )
+    ).toBe(false);
+  });
+
+  it("includes redacted transcript text only for an explicitly text-authorized operator", async () => {
+    vi.stubEnv("CLAIRE_TRANSCRIPT_LOG_SCOPES", "default:adam-admin,default:driver-primary");
+    vi.stubEnv("CLAIRE_TRANSCRIPT_TEXT_SCOPES", "default:adam-admin");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const ownerSession = await createConversationSession({
+      tenantId: "default",
+      operatorUserId: "adam-admin",
+      claireConversationId: "conv-owner-text",
+      conversationKind: "pre_drive",
+      recordingEnabled: false,
+      providerCallSid: "CA-owner-text",
+    });
+    await persistSpokenTurn({
+      callSid: "CA-owner-text",
+      speaker: "OPERATOR",
+      text: "Call me at 323-555-1212 about the Day Line.",
+      turnKey: 1,
+    });
+    await emitClaireTranscriptLog(ownerSession.id, {
+      includeLiveTurns: true,
+      includePostCall: false,
+      reason: "owner_text_test",
+    });
+
+    const driverSession = await createConversationSession({
+      tenantId: "default",
+      operatorUserId: "driver-primary",
+      claireConversationId: "conv-driver-text",
+      conversationKind: "pre_drive",
+      recordingEnabled: false,
+      providerCallSid: "CA-driver-text",
+    });
+    await persistSpokenTurn({
+      callSid: "CA-driver-text",
+      speaker: "OPERATOR",
+      text: "Customer-private transcript body",
+      turnKey: 1,
+    });
+    await emitClaireTranscriptLog(driverSession.id, {
+      includeLiveTurns: true,
+      includePostCall: false,
+      reason: "driver_text_test",
+    });
+
+    const payloads = info.mock.calls
+      .filter(call => call[0] === "[ClaireTranscript]")
+      .map(call => JSON.parse(String(call[1])));
+    const ownerTurn = payloads.find(
+      row => row.claireConversationId === "conv-owner-text" && row.event === "claire_transcript_turn"
+    );
+    const driverTurn = payloads.find(
+      row => row.claireConversationId === "conv-driver-text" && row.event === "claire_transcript_turn"
+    );
+
+    expect(ownerTurn.text).toContain("[REDACTED_PHONE]");
+    expect(ownerTurn.text).toContain("about the Day Line.");
+    expect(driverTurn.text).toBeUndefined();
+    expect(JSON.stringify(payloads)).not.toContain("Customer-private transcript body");
   });
 
   it("logs only the configured operator's speaker-attributed turns and omits provider secrets", async () => {
