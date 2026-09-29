@@ -146,6 +146,68 @@ export class OperatorAppointmentStore
       ) {
         throw new Error("Operator appointment idempotency key is bound to different work");
       }
+      const sundayExecutionSnapshotChanged =
+        row.standingAuthorizationId !== (input.standingAuthorizationId ?? null) ||
+        row.timeZone !== input.timeZone;
+      if (
+        insert.affectedRows !== 1 &&
+        row.appointmentKind === "sunday_weekly_planning" &&
+        ["scheduled", "retry_scheduled", "leased", "running"].includes(row.status) &&
+        row.callDispatchStartedAt == null &&
+        (
+          ["scheduled", "retry_scheduled"].includes(row.status) ||
+          sundayExecutionSnapshotChanged
+        )
+      ) {
+        // The weekly idempotency key intentionally survives authorization
+        // rotation. Refresh authority/timezone until external dispatch begins.
+        // If another replica already leased the old snapshot, revoke that lease
+        // immediately and refund its claim: no real execution occurred, and
+        // leaving a stale final-attempt lease alive would let expiry dead-letter
+        // the current week's appointment before the stale worker can fail it.
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET scheduledFor = CASE
+                    WHEN status = 'scheduled' THEN ?
+                    WHEN status IN ('leased','running') THEN CURRENT_TIMESTAMP(3)
+                    ELSE scheduledFor
+                  END,
+                  attemptCount = CASE
+                    WHEN status IN ('leased','running')
+                      THEN GREATEST(attemptCount - 1, 0)
+                    ELSE attemptCount
+                  END,
+                  leaseOwner = CASE
+                    WHEN status IN ('leased','running') THEN NULL
+                    ELSE leaseOwner
+                  END,
+                  leaseExpiresAt = CASE
+                    WHEN status IN ('leased','running') THEN NULL
+                    ELSE leaseExpiresAt
+                  END,
+                  heartbeatAt = CASE
+                    WHEN status IN ('leased','running') THEN NULL
+                    ELSE heartbeatAt
+                  END,
+                  status = CASE
+                    WHEN status IN ('leased','running') THEN 'retry_scheduled'
+                    ELSE status
+                  END,
+                  timeZone = ?,
+                  standingAuthorizationId = ?
+            WHERE tenantId = ? AND id = ?
+              AND appointmentKind = 'sunday_weekly_planning'
+              AND status IN ('scheduled','retry_scheduled','leased','running')
+              AND callDispatchStartedAt IS NULL`,
+          [
+            input.scheduledFor,
+            input.timeZone,
+            input.standingAuthorizationId ?? null,
+            input.tenantId,
+            row.id,
+          ]
+        );
+      }
       if (
         insert.affectedRows !== 1 &&
         row.status === "cancelled" &&
@@ -253,8 +315,17 @@ export class OperatorAppointmentStore
               leaseExpiresAt = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MICROSECOND)
         WHERE tenantId = ? AND id = ?
           AND status IN ('leased','running')
-          AND leaseOwner = ?`,
-      [leaseMs * 1000, step.tenantId, step.id, step.leaseOwner]
+          AND leaseOwner = ?
+          AND standingAuthorizationId <=> ?
+          AND timeZone = ?`,
+      [
+        leaseMs * 1000,
+        step.tenantId,
+        step.id,
+        step.leaseOwner,
+        step.standingAuthorizationId,
+        step.timeZone,
+      ]
     );
     return result.affectedRows === 1;
   }
@@ -268,8 +339,9 @@ export class OperatorAppointmentStore
           AND leaseOwner = ?
           AND leaseExpiresAt > CURRENT_TIMESTAMP(3)
           AND callDispatchStartedAt IS NULL
-          AND callSid IS NULL`,
-      [step.tenantId, step.id, step.leaseOwner]
+          AND callSid IS NULL
+          AND standingAuthorizationId <=> ?`,
+      [step.tenantId, step.id, step.leaseOwner, step.standingAuthorizationId]
     );
     return result.affectedRows === 1;
   }
@@ -310,7 +382,9 @@ export class OperatorAppointmentStore
               heartbeatAt = NULL
         WHERE tenantId = ? AND id = ?
           AND status IN ('leased','running')
-          AND leaseOwner = ?`,
+          AND leaseOwner = ?
+          AND standingAuthorizationId <=> ?
+          AND timeZone = ?`,
       [
         callSid,
         calendarEventId,
@@ -319,6 +393,8 @@ export class OperatorAppointmentStore
         step.tenantId,
         step.id,
         step.leaseOwner,
+        step.standingAuthorizationId,
+        step.timeZone,
       ]
     );
     return result.affectedRows === 1;
@@ -366,6 +442,36 @@ export class OperatorAppointmentStore
         );
         await connection.commit();
         return "dead_letter";
+      }
+      const executionSnapshotChanged =
+        row.standingAuthorizationId !== step.standingAuthorizationId ||
+        row.timeZone !== step.timeZone;
+      if (executionSnapshotChanged) {
+        // Authority/timezone refresh is a fencing event, not an execution
+        // attempt. Requeue the refreshed row and refund the claim that only
+        // observed a stale snapshot so the current week's appointment cannot
+        // be dead-lettered solely because rotation happened on the final
+        // configured attempt.
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET status = 'retry_scheduled',
+                  lastError = ?,
+                  scheduledFor = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MICROSECOND),
+                  attemptCount = GREATEST(attemptCount - 1, 0),
+                  leaseOwner = NULL,
+                  leaseExpiresAt = NULL,
+                  heartbeatAt = NULL
+            WHERE tenantId = ? AND id = ?
+              AND callDispatchStartedAt IS NULL`,
+          [
+            `execution_snapshot_refreshed: ${errorText}`,
+            retryDelayMs * 1000,
+            row.tenantId,
+            row.id,
+          ]
+        );
+        await connection.commit();
+        return "retry_scheduled";
       }
       if (Number(row.attemptCount) >= Number(row.maxAttempts)) {
         await connection.execute(

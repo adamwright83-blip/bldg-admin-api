@@ -41,6 +41,7 @@ import {
 } from "./conversation/ledgerService";
 import {
   endClaireCallLedger,
+  finalizeClaireCallLedger,
   linkClaireActionIds,
   linkClaireCallAction,
   persistOperatorAndClaire,
@@ -1114,11 +1115,10 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         const gatherTwiml = speakAndHangUp(result.speak);
         // A guarded personal turn closed the thread with business complete and an authored exit line.
         await dropCall(conversationId);
-        await endClaireCallLedger({
+        await finalizeClaireCallLedger({
           callSid: input.callSid,
           claireConversationId: conversationId,
-          claireText: result.speak,
-          reason: "personal_thread_closed",
+          reason: result.endCallReason ?? "personal_thread_closed",
         });
         return { speak: result.speak, endCall: true, listenOnly: false, gatherTwiml };
       }

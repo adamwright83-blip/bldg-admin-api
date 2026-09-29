@@ -213,8 +213,10 @@ export type ClaireTurnResult = {
   assembledUtterance?: string;
   /** How the assembled utterance was released. Incomplete holds must not feed V2 as a real turn. */
   thoughtCompleteness?: "complete" | "incomplete" | "forced_flush";
-  /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
+  /** The authoritative voice adapter should hang up after speaking. */
   endCall?: boolean;
+  /** Auditable call-ledger completion reason for non-generic authored exits. */
+  endCallReason?: string;
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
   mutationReceipts?: MutationReceipt[];
@@ -841,8 +843,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     if (negative) {
+      // A declined proactive planning invite is terminal for this appointment.
+      // Clear the invite state before hanging up so a persisted/replayed turn
+      // cannot trap later operator speech back inside the invitation.
+      delete state.sessionKind;
+      state.weeklyPlanningWeekStart = null;
+      state.pendingWeeklyPlanningCallback = null;
       mark("fallback", { fallbackReason: "weekly_planning_invite_declined" });
-      return finish({ speak: "All right.", kind: "answered" });
+      return finish({
+        speak: "All right.",
+        kind: "answered",
+        endCall: true,
+        endCallReason: "weekly_planning_invite_declined",
+      });
     }
 
     mark("fallback", { fallbackReason: "weekly_planning_invite_reask" });

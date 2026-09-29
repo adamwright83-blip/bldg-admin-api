@@ -99,8 +99,8 @@ async function resolveAppointmentIdentity(step: ClaimedOperatorAppointment) {
   return resolution.identity;
 }
 
-function insideSundayStandingWindow(
-  step: ClaimedOperatorAppointment,
+export function insideSundayStandingWindow(
+  step: Pick<ClaimedOperatorAppointment, "timeZone">,
   now: Date
 ): boolean {
   const weekday = Number(formatInTimeZone(now, step.timeZone, "i"));

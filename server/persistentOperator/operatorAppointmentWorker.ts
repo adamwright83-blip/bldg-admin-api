@@ -45,8 +45,14 @@ class ScheduledAppointmentExecutionStore
     return this.store.heartbeat(step, leaseMs);
   }
 
-  completeStep(step: ClaimedOperatorAppointment, result: unknown) {
-    return this.store.completeStep(step, result);
+  async completeStep(step: ClaimedOperatorAppointment, result: unknown) {
+    const completed = await this.store.completeStep(step, result);
+    if (!completed) {
+      throw new Error(
+        "Operator appointment completion lost its authority/timezone execution snapshot"
+      );
+    }
+    return true;
   }
 
   failStep(
