@@ -300,6 +300,7 @@ export async function decideGoalCycle(input: {
         cycleId: existing.cycleId,
         decisionId: existing.id,
         executionType: existing.selectedExecutionType,
+        onlyIfUnclaimedOrSameDecision: true,
       });
     }
     return { decision: existing, created: false };
