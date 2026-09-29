@@ -27,7 +27,7 @@ export async function activateMacroGoalAndQueue(input: {
   verticalKey: string;
   policyVersion: string;
   now?: Date;
-  registry?: VerticalRegistry;
+  registry: VerticalRegistry;
   runPersistence?: MacroGoalRunPersistence;
   cycleStore?: GoalCycleEnqueuer;
 }): Promise<{ run: MacroGoalRun; cycleId: string; cycleCreated: boolean } | null> {
