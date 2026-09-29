@@ -78,6 +78,43 @@ describe("weekly mission driver", () => {
     expect(after).toEqual(before);
   });
 
+  it("resumes an alias-owned planning session after canonical binding", async () => {
+    memory();
+    const aliasScope = {
+      ...SCOPE,
+      operatorId: "driver-alias",
+      dayDirectorActorId: "22",
+    };
+    const started = await beginWeeklyMission(aliasScope, isolated);
+    expect(started.resumed).toBe(false);
+
+    const canonicalScope = {
+      ...SCOPE,
+      operatorId: "admin-owner",
+      dayDirectorActorId: "11",
+      operatorIdentities: [
+        { operatorId: "admin-owner", dayDirectorActorId: "11" },
+        { operatorId: "driver-alias", dayDirectorActorId: "22" },
+      ],
+      dayDirectorActorIds: ["11", "22"],
+    };
+    const resumed = await beginWeeklyMission(canonicalScope, isolated);
+    expect(resumed.resumed).toBe(true);
+
+    const canonicalSession = await loadWeeklySession({
+      tenantId: SCOPE.tenantId,
+      operatorId: "admin-owner",
+      weekStart: started.card.weekStart,
+    });
+    const aliasSession = await loadWeeklySession({
+      tenantId: SCOPE.tenantId,
+      operatorId: "driver-alias",
+      weekStart: started.card.weekStart,
+    });
+    expect(canonicalSession).toBeNull();
+    expect(aliasSession).not.toBeNull();
+  });
+
   it("does not open a session on a weekend", async () => {
     memory();
     const weekend = { ...SCOPE, now: new Date("2026-09-26T17:00:00Z") };
