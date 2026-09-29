@@ -130,8 +130,8 @@ export type TwilioCommunicationReceipt = {
   durationSeconds: number | null;
   providerErrorCode: string | null;
   providerErrorMessage: string | null;
-  agentEventId: number | null;
-  decisionId: string | null;
+  agentEventId?: number | null;
+  decisionId?: string | null;
   idempotencyKey: string;
   createdAt: string;
 };
