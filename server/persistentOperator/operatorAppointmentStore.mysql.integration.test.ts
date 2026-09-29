@@ -284,14 +284,14 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       .toBe((before.scheduledFor as Date).getTime());
   });
 
-  it("refreshes claimed Sunday authority and fences a stale worker before call dispatch", async () => {
+  it("refreshes claimed Sunday authority by revoking and requeueing the stale lease", async () => {
     const store = new OperatorAppointmentStore(pool);
     const first = await store.enqueue(appointment());
     const claimed = await store.claimNextStep({
       leaseOwner: "worker",
       leaseMs: 10_000,
     });
-    expect(claimed).toMatchObject({ id: first.id });
+    expect(claimed).toMatchObject({ id: first.id, attemptCount: 1 });
 
     await store.enqueue(
       appointment({
@@ -301,7 +301,7 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       })
     );
 
-    expect(await store.markRunning(claimed!)).toBe(true);
+    expect(await store.markRunning(claimed!)).toBe(false);
     expect(await store.beginCallDispatch(claimed!)).toBe(false);
     expect(
       await store.failStep(
@@ -309,16 +309,18 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
         new Error("standing authorization rotated before dispatch"),
         60_000
       )
-    ).toBe("retry_scheduled");
+    ).toBe("lease_lost");
 
     const [row] = await rows<RowDataPacket>(
-      "SELECT standingAuthorizationId, timeZone, status, callDispatchStartedAt FROM operator_appointments WHERE id = ?",
+      "SELECT standingAuthorizationId, timeZone, status, attemptCount, leaseOwner, callDispatchStartedAt FROM operator_appointments WHERE id = ?",
       [first.id]
     );
     expect(row).toMatchObject({
       standingAuthorizationId: "auth-b",
       timeZone: "America/New_York",
       status: "retry_scheduled",
+      attemptCount: 0,
+      leaseOwner: null,
       callDispatchStartedAt: null,
     });
   });
@@ -352,56 +354,7 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
         new Error("authority/timezone execution snapshot changed"),
         60_000
       )
-    ).toBe("retry_scheduled");
-
-    const [row] = await rows<RowDataPacket>(
-      "SELECT standingAuthorizationId, timeZone, status, completedAt FROM operator_appointments WHERE id = ?",
-      [first.id]
-    );
-    expect(row).toMatchObject({
-      standingAuthorizationId: "auth-b",
-      timeZone: "America/New_York",
-      status: "retry_scheduled",
-      completedAt: null,
-    });
-  });
-
-  it("refunds the final attempt when a claimed Sunday snapshot is refreshed", async () => {
-    const store = new OperatorAppointmentStore(pool);
-    const first = await store.enqueue(
-      appointment({
-        maxAttempts: 1,
-        idempotencyKey: "final-attempt-snapshot-refresh",
-      })
-    );
-    const claimed = await store.claimNextStep({
-      leaseOwner: "worker",
-      leaseMs: 10_000,
-    });
-    expect(claimed).toMatchObject({
-      id: first.id,
-      attemptCount: 1,
-      maxAttempts: 1,
-    });
-    expect(await store.markRunning(claimed!)).toBe(true);
-
-    await store.enqueue(
-      appointment({
-        maxAttempts: 1,
-        idempotencyKey: "final-attempt-snapshot-refresh",
-        scheduledFor: new Date(Date.now() + 3_600_000),
-        timeZone: "America/New_York",
-        standingAuthorizationId: "auth-b",
-      })
-    );
-
-    expect(
-      await store.failStep(
-        claimed!,
-        new Error("authority/timezone execution snapshot changed"),
-        60_000
-      )
-    ).toBe("retry_scheduled");
+    ).toBe("lease_lost");
 
     const [row] = await rows<RowDataPacket>(
       "SELECT standingAuthorizationId, timeZone, status, attemptCount, completedAt FROM operator_appointments WHERE id = ?",
@@ -413,6 +366,63 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       status: "retry_scheduled",
       attemptCount: 0,
       completedAt: null,
+    });
+  });
+
+  it("refunds the final attempt immediately when a claimed Sunday snapshot is refreshed", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(
+      appointment({
+        maxAttempts: 1,
+        idempotencyKey: "final-attempt-snapshot-refresh",
+      })
+    );
+    const claimed = await store.claimNextStep({
+      leaseOwner: "worker",
+      leaseMs: 100,
+    });
+    expect(claimed).toMatchObject({
+      id: first.id,
+      attemptCount: 1,
+      maxAttempts: 1,
+    });
+
+    await store.enqueue(
+      appointment({
+        maxAttempts: 1,
+        idempotencyKey: "final-attempt-snapshot-refresh",
+        scheduledFor: new Date(Date.now() + 3_600_000),
+        timeZone: "America/New_York",
+        standingAuthorizationId: "auth-b",
+      })
+    );
+
+    await wait(250);
+    expect(await store.deadLetterExpiredSteps()).toBe(0);
+
+    const [row] = await rows<RowDataPacket>(
+      "SELECT standingAuthorizationId, timeZone, status, attemptCount, leaseOwner, completedAt FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(row).toMatchObject({
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
+      status: "retry_scheduled",
+      attemptCount: 0,
+      leaseOwner: null,
+      completedAt: null,
+    });
+
+    const refreshed = await store.claimNextStep({
+      leaseOwner: "fresh-worker",
+      leaseMs: 10_000,
+    });
+    expect(refreshed).toMatchObject({
+      id: first.id,
+      attemptCount: 1,
+      maxAttempts: 1,
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
     });
   });
 
