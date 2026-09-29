@@ -277,7 +277,10 @@ export async function ensureSundayPlanningAppointment(input: {
         scheduledFor: slot.scheduledFor.toISOString(),
         timeZone,
       },
-      outputJson: { scheduled: true },
+      outputJson: {
+      scheduled: true,
+      cancelledPriorCallbacks,
+    },
       status: "success",
       entityType: "operator_appointment",
       entityId: result.id,
@@ -366,7 +369,7 @@ export async function scheduleWeeklyPlanningCallback(input: {
   sourceReference: string;
   store: OperatorAppointmentStore;
 }): Promise<{ id: string; created: boolean; readback: string }> {
-  await input.store.cancelPendingCallbacks({
+  const cancelledPriorCallbacks = await input.store.cancelPendingCallbacks({
     tenantId: input.identity.tenantId,
     canonicalOperatorId: input.identity.canonicalOperatorId,
     weekStart: input.weekStart,
@@ -403,7 +406,10 @@ export async function scheduleWeeklyPlanningCallback(input: {
       canonicalOperatorId: input.identity.canonicalOperatorId,
       approvedByUserId: input.identity.canonicalOpenId,
     },
-    toolName: "scheduleClaireWeeklyPlanningCallback",
+    toolName:
+      cancelledPriorCallbacks > 0
+        ? "rescheduleClaireWeeklyPlanningCallback"
+        : "scheduleClaireWeeklyPlanningCallback",
     inputJson: {
       appointmentId: result.id,
       scheduledFor: input.scheduledFor.toISOString(),
