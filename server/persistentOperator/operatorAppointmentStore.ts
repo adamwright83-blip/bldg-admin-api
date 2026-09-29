@@ -414,6 +414,36 @@ export class OperatorAppointmentStore
         await connection.commit();
         return "dead_letter";
       }
+      const executionSnapshotChanged =
+        row.standingAuthorizationId !== step.standingAuthorizationId ||
+        row.timeZone !== step.timeZone;
+      if (executionSnapshotChanged) {
+        // Authority/timezone refresh is a fencing event, not an execution
+        // attempt. Requeue the refreshed row and refund the claim that only
+        // observed a stale snapshot so the current week's appointment cannot
+        // be dead-lettered solely because rotation happened on the final
+        // configured attempt.
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET status = 'retry_scheduled',
+                  lastError = ?,
+                  scheduledFor = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MICROSECOND),
+                  attemptCount = GREATEST(attemptCount - 1, 0),
+                  leaseOwner = NULL,
+                  leaseExpiresAt = NULL,
+                  heartbeatAt = NULL
+            WHERE tenantId = ? AND id = ?
+              AND callDispatchStartedAt IS NULL`,
+          [
+            `execution_snapshot_refreshed: ${errorText}`,
+            retryDelayMs * 1000,
+            row.tenantId,
+            row.id,
+          ]
+        );
+        await connection.commit();
+        return "retry_scheduled";
+      }
       if (Number(row.attemptCount) >= Number(row.maxAttempts)) {
         await connection.execute(
           `UPDATE operator_appointments
