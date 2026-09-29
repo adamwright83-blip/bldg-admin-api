@@ -54,6 +54,8 @@ export type AgentContext = {
   standingAuthorizationId?: string | null;
   standingAuthorizationVersion?: number | null;
   policyVersion?: string | null;
+  /** Agent-event row that marks execution_started for this tool invocation. */
+  agentEventId?: number | null;
 };
 
 const agentToolAllowlist: Record<AgentType, Set<string>> = {
