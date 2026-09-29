@@ -77,6 +77,13 @@ function persistence(initial = runRow()): MacroGoalRunPersistence {
     },
     async setStatus(input) {
       if (input.tenantId !== row.tenantId || input.id !== row.id) return null;
+      const allowed =
+        input.status === "active"
+          ? row.status === "paused"
+          : input.status === "paused"
+            ? row.status === "active"
+            : row.status === "active" || row.status === "paused";
+      if (!allowed) return null;
       row = {
         ...row,
         status: input.status,
@@ -152,6 +159,25 @@ describe("macro goal runs", () => {
       status: "completed",
       completionEvidenceRef: "fixture:accounts:12",
     });
+  });
+
+  it("refuses to reopen a terminal run through the status persistence contract", async () => {
+    const completed = persistence(runRow({
+      status: "completed",
+      completedAt: new Date("2026-09-28T12:00:00.000Z"),
+      completionEvidenceRef: "fixture:accounts:10",
+    }));
+    await expect(completed.setStatus({
+      tenantId: "tenant-1",
+      id: "run-1",
+      status: "active",
+      nextEvaluationAt: new Date("2026-09-28T13:00:00.000Z"),
+    })).resolves.toBeNull();
+    await expect(completed.setStatus({
+      tenantId: "tenant-1",
+      id: "run-1",
+      status: "paused",
+    })).resolves.toBeNull();
   });
 
   it("does not complete when coverage is partial even when the recorded number reaches target", async () => {
