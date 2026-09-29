@@ -10,6 +10,7 @@ import {
   isWeeklyLockBind,
   parseDayMove,
   remainingWeekHorizon,
+  targetWeekHorizon,
   type WeeklyAct,
 } from "../../../shared/weeklyMissionReadiness";
 import { advanceWeeklySession, type WeeklyAdvanceResult } from "./advance";
@@ -36,10 +37,17 @@ export async function routeActiveWeeklySession(input: {
   utterance: string;
   now: Date;
   timeZone: string;
+  weekStartOverride?: string;
 }): Promise<WeeklyRouteResult | null> {
   const businessDate = formatInTimeZone(input.now, input.timeZone, "yyyy-MM-dd");
   const localTime = formatInTimeZone(input.now, input.timeZone, "HH:mm");
-  const horizon = remainingWeekHorizon({ businessDate, localTime });
+  const horizon = input.weekStartOverride
+    ? targetWeekHorizon({
+        businessDate,
+        localTime,
+        weekStart: input.weekStartOverride,
+      })
+    : remainingWeekHorizon({ businessDate, localTime });
   const session = await loadWeeklySession({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
@@ -76,6 +84,7 @@ async function routeLoadedSession(
     utterance: string;
     now: Date;
     timeZone: string;
+    weekStartOverride?: string;
   },
   horizon: ReturnType<typeof remainingWeekHorizon>,
   session: WeeklyPlanningSession

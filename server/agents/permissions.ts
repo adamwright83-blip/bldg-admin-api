@@ -23,7 +23,8 @@ export type AgentType =
   | "gm_agent"
   | "building_agent"
   | "collections_agent"
-  | "operator_task_agent";
+  | "operator_task_agent"
+  | "goal_cycle_agent";
 
 export type ActorType =
   | "human"
@@ -43,6 +44,8 @@ export type AgentContext = {
   actorId?: string | null;
   approvedByUserId?: string | null;
   trustedUiFlow?: boolean;
+  canonicalOperatorId?: string | null;
+  standingAuthorizationId?: string | null;
 };
 
 const agentToolAllowlist: Record<AgentType, Set<string>> = {
@@ -103,6 +106,14 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
   building_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "requestVendorConfirmationTool"]),
   collections_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool"]),
   operator_task_agent: new Set(["logOperatorTaskTool", "draftCustomerMessageTool", "logRevenueInterventionTool", "importCleanCloudOrdersTool", "importClearentTransactionsTool"]),
+  goal_cycle_agent: new Set([
+    "getResidentContextTool",
+    "getLevel4GateStateTool",
+    "draftCustomerMessageTool",
+    "logOperatorTaskTool",
+    "logRevenueInterventionTool",
+    "sendCustomerReminderTool",
+  ]),
 };
 
 export function assertToolPermission(ctx: AgentContext, toolName: string): void {

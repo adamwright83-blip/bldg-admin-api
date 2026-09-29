@@ -227,6 +227,47 @@ export function remainingWeekHorizon(input: { businessDate: string; localTime: s
   };
 }
 
+export function targetWeekHorizon(input: {
+  businessDate: string;
+  localTime: string;
+  weekStart: string;
+}): RemainingWeekHorizon {
+  if (!isValidYmd(input.businessDate)) {
+    throw new Error(`Invalid business date: ${input.businessDate}`);
+  }
+  if (!isValidYmd(input.weekStart) || weekdayIndex(input.weekStart) !== 1) {
+    throw new Error(`Target week must start on Monday: ${input.weekStart}`);
+  }
+  const match = /^(\d{2}):(\d{2})$/.exec(input.localTime);
+  if (!match) throw new Error(`Invalid local time: ${input.localTime}`);
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    throw new Error(`Invalid local time: ${input.localTime}`);
+  }
+
+  const weekdays = Array.from({ length: 5 }, (_, index) =>
+    addDaysYmd(input.weekStart, index)
+  );
+  const friday = weekdays[4]!;
+  const remainingDates =
+    input.businessDate < input.weekStart
+      ? weekdays
+      : input.businessDate > friday
+        ? []
+        : weekdays.filter(date => date >= input.businessDate);
+
+  return {
+    businessDate: input.businessDate,
+    weekday: weekdayName(input.businessDate),
+    localTime: input.localTime,
+    localMinutes: hours * 60 + minutes,
+    weekStart: input.weekStart,
+    remainingDates,
+    todayIsRemnant: remainingDates[0] === input.businessDate,
+  };
+}
+
 /**
  * Active interview wins over a previously locked intent.
  * Adjust reopens the same week; the revision stays draft until a new lock.

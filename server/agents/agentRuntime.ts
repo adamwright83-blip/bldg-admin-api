@@ -1,7 +1,8 @@
 import { logAgentEvent } from "./agentEvents";
 import { evaluateHumanApproval } from "./humanApproval";
 import { assertToolPermission, type AgentContext } from "./permissions";
-import { getAgentTool } from "./toolRegistry";
+import { getAgentTool, getAgentToolPolicy } from "./toolRegistry";
+import { evaluatePersistentActionPolicy } from "../persistentOperator/actionPolicy";
 import type { AgentEventWrite } from "./agentEvents";
 
 async function safeLogAgentEvent(event: AgentEventWrite): Promise<void> {
@@ -23,7 +24,50 @@ export async function runAgentTool<TOutput = unknown>(
   try {
     assertToolPermission(ctx, toolName);
     const tool = getAgentTool(toolName);
-    const approval = evaluateHumanApproval(ctx, toolName);
+    const toolPolicy = getAgentToolPolicy(toolName);
+    let approval = evaluateHumanApproval(ctx, toolName);
+
+    if (ctx.agentType === "goal_cycle_agent") {
+      const persistentPolicy = await evaluatePersistentActionPolicy({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: ctx.canonicalOperatorId ?? "",
+        operatorUserId: ctx.actorId ?? "",
+        exactAction: toolName,
+        riskClass: toolPolicy.riskClass,
+        standingAuthorizationId: ctx.standingAuthorizationId,
+        approvedByUserId: ctx.approvedByUserId,
+      });
+      if (!persistentPolicy.allowed) {
+        const output = {
+          approvalRequired:
+            persistentPolicy.reason === "explicit_approval_required" ||
+            persistentPolicy.reason === "standing_authorization_required",
+          toolName,
+          reason: `Persistent action policy denied: ${persistentPolicy.reason}`,
+        };
+        await safeLogAgentEvent({
+          ctx,
+          toolName,
+          inputJson: input,
+          outputJson: output,
+          status: output.approvalRequired ? "approval_required" : "blocked",
+          latencyMs: Date.now() - started,
+          requiresHumanApproval: output.approvalRequired,
+        });
+        return output as TOutput;
+      }
+      if (
+        toolPolicy.riskClass === "EXTERNAL_COMMUNICATION" &&
+        persistentPolicy.authority === "standing_authorization"
+      ) {
+        approval = {
+          allowed: true,
+          requiresHumanApproval: false,
+          approvedByUserId: null,
+        };
+      }
+    }
+
     requiresHumanApproval = tool.requiresHumanApproval === true || approval.requiresHumanApproval;
 
     if (!approval.allowed) {
