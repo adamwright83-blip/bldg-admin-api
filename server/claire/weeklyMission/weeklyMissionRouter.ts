@@ -45,7 +45,12 @@ async function scope(
   return {
     tenantId: identity.tenantId,
     operatorId: identity.weeklyOperatorId,
+    operatorIdentities: identity.aliases.map(alias => ({
+      operatorId: alias.openId,
+      dayDirectorActorId: String(alias.userId),
+    })),
     dayDirectorActorId: identity.dayDirectorActorId,
+    dayDirectorActorIds: identity.dayDirectorActorIds,
     timeZone: zone,
   };
 }
@@ -73,7 +78,9 @@ export const weeklyMissionRouter = router({
         tenantId: identity.tenantId,
         actorId: identity.weeklyOperatorId,
         operatorUserId: identity.weeklyOperatorId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
         dayDirectorActorId: identity.dayDirectorActorId,
+        dayDirectorActorIds: identity.dayDirectorActorIds,
         businessDate: input.businessDate,
         timeZone: input.timeZone,
         weekStart: horizon.weekStart,
