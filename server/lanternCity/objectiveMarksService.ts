@@ -28,7 +28,11 @@ import { readCurrentDayLine } from "../goldline/dayline/currentDayLineService";
 export const LANTERN_MARK_RUN_LIMIT = 50;
 
 export type ObjectiveMarksDeps = {
-  readDayLine: (input: { tenantId: string; operatorId: string }) => Promise<CurrentDayLine>;
+  readDayLine: (input: {
+    tenantId: string;
+    operatorId: string;
+    operatorIds?: string[];
+  }) => Promise<CurrentDayLine>;
   listTenantRuns: (input: { tenantId: string; limit: number }) => Promise<CampaignRun[]>;
   listRunSlots: typeof listRunSlots;
   listTargets: typeof listTargets;
@@ -92,6 +96,7 @@ export async function loadLanternObjectiveMarks(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: readonly string[];
     viewerOpenId?: string;
     viewerOpenIds?: readonly string[];
   },
@@ -111,7 +116,11 @@ export async function loadLanternObjectiveMarks(
 
   let dayLine: CurrentDayLine | null = null;
   try {
-    dayLine = await deps.readDayLine({ tenantId, operatorId: input.operatorId });
+    dayLine = await deps.readDayLine({
+      tenantId,
+      operatorId: input.operatorId,
+      operatorIds: input.operatorIds ? [...input.operatorIds] : undefined,
+    });
   } catch (error) {
     console.warn(
       "[lantern-city] Day Line unavailable for objective marks",
