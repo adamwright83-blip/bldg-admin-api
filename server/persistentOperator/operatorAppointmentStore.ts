@@ -48,6 +48,7 @@ type AppointmentRow = RowDataPacket & {
   leaseExpiresAt: Date | null;
   attemptCount: number;
   maxAttempts: number;
+  callDispatchStartedAt: Date | null;
   callSid: string | null;
   followupTextSentAt: Date | null;
 };
@@ -145,6 +146,21 @@ export class OperatorAppointmentStore
       ) {
         throw new Error("Operator appointment idempotency key is bound to different work");
       }
+      if (
+        insert.affectedRows !== 1 &&
+        row.status === "cancelled" &&
+        row.appointmentKind === "weekly_planning_callback"
+      ) {
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET status = 'scheduled',
+                  scheduledFor = ?,
+                  completedAt = NULL,
+                  lastError = NULL
+            WHERE tenantId = ? AND id = ? AND status = 'cancelled'`,
+          [input.scheduledFor, input.tenantId, row.id]
+        );
+      }
       await connection.commit();
       return { id: row.id, created: insert.affectedRows === 1 };
     } catch (error) {
@@ -171,7 +187,8 @@ export class OperatorAppointmentStore
              OR (status IN ('leased','running')
                  AND leaseExpiresAt IS NOT NULL
                  AND leaseExpiresAt <= CURRENT_TIMESTAMP(3)
-                 AND attemptCount < maxAttempts)
+                 AND attemptCount < maxAttempts
+                 AND callDispatchStartedAt IS NULL)
           )
           ORDER BY scheduledFor, createdAt, id
           LIMIT 1
@@ -238,6 +255,21 @@ export class OperatorAppointmentStore
           AND status IN ('leased','running')
           AND leaseOwner = ?`,
       [leaseMs * 1000, step.tenantId, step.id, step.leaseOwner]
+    );
+    return result.affectedRows === 1;
+  }
+
+  async beginCallDispatch(step: ClaimedOperatorAppointment): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE operator_appointments
+          SET callDispatchStartedAt = CURRENT_TIMESTAMP(3)
+        WHERE tenantId = ? AND id = ?
+          AND status = 'running'
+          AND leaseOwner = ?
+          AND leaseExpiresAt > CURRENT_TIMESTAMP(3)
+          AND callDispatchStartedAt IS NULL
+          AND callSid IS NULL`,
+      [step.tenantId, step.id, step.leaseOwner]
     );
     return result.affectedRows === 1;
   }
@@ -356,14 +388,18 @@ export class OperatorAppointmentStore
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE operator_appointments
           SET status = 'dead_letter',
-              lastError = 'lease_expired_after_final_attempt',
+              lastError = CASE
+                WHEN callDispatchStartedAt IS NOT NULL AND callSid IS NULL
+                  THEN 'call_dispatch_outcome_uncertain_no_redial'
+                ELSE 'lease_expired_after_final_attempt'
+              END,
               leaseOwner = NULL,
               leaseExpiresAt = NULL,
               heartbeatAt = NULL
         WHERE status IN ('leased','running')
           AND leaseExpiresAt IS NOT NULL
           AND leaseExpiresAt <= CURRENT_TIMESTAMP(3)
-          AND attemptCount >= maxAttempts`
+          AND (attemptCount >= maxAttempts OR callDispatchStartedAt IS NOT NULL)`
     );
     return result.affectedRows;
   }
