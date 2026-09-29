@@ -30,6 +30,15 @@ describe("Persistent operator PR1 schema contract", () => {
     }
   });
 
+  it("serializes alias graph checks and inserts under locked persisted users", () => {
+    const identity = repoFile("server/persistentOperator/identity.ts");
+    expect(identity).toContain("db.transaction");
+    expect(identity).toContain('.for("update")');
+    expect(identity).toContain("inArray(users.id, [canonicalUser.id, aliasUser.id])");
+    expect(identity).toMatch(/canonicalAsAlias[\s\S]*aliasAsCanonical/);
+    expect(identity).toMatch(/tx\.insert\(persistentOperatorIdentityBindings\)/);
+  });
+
   it("does not reintroduce a default-tenant fallback at migrated identity seams", () => {
     const files = [
       "server/persistentOperator/identity.ts",
