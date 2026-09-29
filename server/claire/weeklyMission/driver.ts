@@ -33,7 +33,7 @@ import {
 export type WeeklyDriverScope = {
   tenantId: string;
   operatorId: string;
-  operatorIdentities?: readonly Array<{
+  operatorIdentities?: ReadonlyArray<{
     operatorId: string;
     dayDirectorActorId: string;
   }>;
