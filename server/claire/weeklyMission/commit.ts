@@ -13,7 +13,11 @@ import {
   type WeeklyIntentDay,
   type WeeklyIntentRecord,
 } from "../../../shared/weeklyMissionReadiness";
-import { acceptProposal, designateDayDirectorPrimary } from "../../dayDirector/dayDirectorService";
+import {
+  acceptProposalWithReceipt,
+  designateDayDirectorPrimary,
+} from "../../dayDirector/dayDirectorService";
+import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
 import { latestWeeklyIntent, saveWeeklyIntent } from "./intentStore";
 import {
   clearWeeklySession,
@@ -23,19 +27,46 @@ import {
 } from "./session";
 import { deriveInternalHypothesis, draftFromDossier, type WeeklyDossier } from "./dossier";
 
+type WeeklyAcceptedCommitment =
+  Awaited<ReturnType<typeof acceptProposalWithReceipt>>["stored"];
+type WeeklyAcceptResult =
+  | Awaited<ReturnType<typeof acceptProposalWithReceipt>>
+  | WeeklyAcceptedCommitment;
+
 export type WeeklyCommitPorts = {
   designatePrimary: typeof designateDayDirectorPrimary;
-  acceptProposal: typeof acceptProposal;
+  acceptProposal: (
+    input: Parameters<typeof acceptProposalWithReceipt>[0]
+  ) => Promise<WeeklyAcceptResult>;
   saveIntent: typeof saveWeeklyIntent;
   latestIntent: typeof latestWeeklyIntent;
 };
 
 const defaultPorts: WeeklyCommitPorts = {
   designatePrimary: designateDayDirectorPrimary,
-  acceptProposal,
+  acceptProposal: acceptProposalWithReceipt,
   saveIntent: saveWeeklyIntent,
   latestIntent: latestWeeklyIntent,
 };
+
+async function acceptWeeklyProposal(
+  ports: WeeklyCommitPorts,
+  input: Parameters<typeof acceptProposalWithReceipt>[0]
+): Promise<Awaited<ReturnType<typeof acceptProposalWithReceipt>>> {
+  const result = await ports.acceptProposal(input);
+  if (
+    result &&
+    typeof result === "object" &&
+    "stored" in result &&
+    "created" in result
+  ) {
+    return result as Awaited<ReturnType<typeof acceptProposalWithReceipt>>;
+  }
+  return {
+    stored: result as WeeklyAcceptedCommitment,
+    created: true,
+  };
+}
 
 export type WeeklyCommitResult = {
   locked: boolean;
@@ -48,6 +79,7 @@ export type WeeklyCommitResult = {
 export async function commitWeeklyPlan(
   input: {
     session: WeeklyPlanningSession;
+    dayDirectorActorIds?: readonly string[];
     now?: Date;
   },
   ports: WeeklyCommitPorts = defaultPorts
@@ -79,45 +111,68 @@ export async function commitWeeklyPlan(
     }
     try {
       const existing = session.committedRefs[day.businessDate];
-      const commitmentId = existing
-        ? (
-            await ports.designatePrimary({
-              tenantId: session.tenantId,
-              actorId: session.dayDirectorActorId,
-              businessDate: day.businessDate,
-              commitmentId: existing.commitmentId,
-              nowIso: now.toISOString(),
-            })
-          ).commitmentId
-        : day.primary.existingCommitmentId
-          ? (
-              await ports.designatePrimary({
-                tenantId: session.tenantId,
-                actorId: session.dayDirectorActorId,
-                businessDate: day.businessDate,
-                commitmentId: day.primary.existingCommitmentId,
-                nowIso: now.toISOString(),
-              })
-            ).commitmentId
-          : await createPrimary(session, day.businessDate, day.primary.text, now, ports);
+      let commitmentId: string;
+      let primaryCreated = false;
+      if (existing) {
+        commitmentId = (
+          await ports.designatePrimary({
+            tenantId: session.tenantId,
+            actorId: session.dayDirectorActorId,
+            businessDate: day.businessDate,
+            commitmentId: existing.commitmentId,
+            nowIso: now.toISOString(),
+          })
+        ).commitmentId;
+      } else if (day.primary.existingCommitmentId) {
+        commitmentId = (
+          await ports.designatePrimary({
+            tenantId: session.tenantId,
+            actorId: session.dayDirectorActorId,
+            businessDate: day.businessDate,
+            commitmentId: day.primary.existingCommitmentId,
+            nowIso: now.toISOString(),
+          })
+        ).commitmentId;
+      } else {
+        const createdPrimary = await createPrimary(
+          session,
+          day.businessDate,
+          day.primary.text,
+          now,
+          input.dayDirectorActorIds,
+          ports
+        );
+        commitmentId = createdPrimary.commitmentId;
+        primaryCreated = createdPrimary.created;
+      }
       session.committedRefs[day.businessDate] = {
         commitmentId,
         idempotencyKey: primaryKey(session.weekStart, day.businessDate),
       };
       commitmentIds.push(commitmentId);
+      const primaryWasExisting = Boolean(
+        existing || day.primary.existingCommitmentId || !primaryCreated
+      );
       receipts.push({
-        claimedState: day.primary.existingCommitmentId || existing ? "updated" : "created",
+        claimedState: primaryWasExisting ? "updated" : "created",
         entityId: commitmentId,
-        statement: `${day.weekday}: ${existing || day.primary.existingCommitmentId ? "designated" : "created"} ${day.primary.text}`,
+        statement: `${day.weekday}: ${primaryWasExisting ? "designated" : "created"} ${day.primary.text}`,
       });
       for (const item of day.readinessRequirements) {
         const clock = explicitClock(item.text);
         if (!clock) continue;
-        const readinessId = await createScheduledReadiness(session, item.completeByDate, item.text, clock, ports);
+        const readiness = await createScheduledReadiness(
+          session,
+          item.completeByDate,
+          item.text,
+          clock,
+          input.dayDirectorActorIds,
+          ports
+        );
         receipts.push({
-          claimedState: "created",
-          entityId: readinessId,
-          statement: `${day.weekday} readiness created ${item.text}`,
+          claimedState: readiness.created ? "created" : "updated",
+          entityId: readiness.commitmentId,
+          statement: `${day.weekday} readiness ${readiness.created ? "created" : "updated"} ${item.text}`,
         });
       }
       days.push(intentDay(day, commitmentId));
@@ -225,8 +280,9 @@ async function createPrimary(
   businessDate: string,
   title: string,
   now: Date,
+  actorIds: readonly string[] | undefined,
   ports: WeeklyCommitPorts
-): Promise<string> {
+): Promise<{ commitmentId: string; created: boolean }> {
   const proposal: DayDirectorProposal = {
     promptKey: primaryKey(session.weekStart, businessDate),
     title: title.slice(0, 255),
@@ -244,30 +300,40 @@ async function createPrimary(
       designatedAt: now.toISOString(),
     },
   };
-  const stored = await ports.acceptProposal({
+  const accepted = await acceptWeeklyProposal(ports, {
     tenantId: session.tenantId,
     actorId: session.dayDirectorActorId,
+    actorIds,
     businessDate,
     proposal,
   });
-  if (!stored?.id) throw new Error(`Primary was not stored for ${businessDate}`);
+  if (!accepted.stored?.id) throw new Error(`Primary was not stored for ${businessDate}`);
+  if (accepted.created) {
+    await recordPersistentOperatorDiagnosticEvent({
+      tenantId: session.tenantId,
+      operatorUserId: session.operatorId,
+      subsystem: "weekly_mission.commit",
+      eventKind: "objective_created",
+      objectiveId: accepted.stored.id,
+    }).catch(() => undefined);
+  }
   const designated = await ports.designatePrimary({
     tenantId: session.tenantId,
-    actorId: session.dayDirectorActorId,
+    actorId: accepted.stored.actorId ?? session.dayDirectorActorId,
     businessDate,
-    commitmentId: stored.id,
+    commitmentId: accepted.stored.id,
     nowIso: now.toISOString(),
   });
-  return designated.commitmentId;
+  return { commitmentId: designated.commitmentId, created: accepted.created };
 }
-
 async function createScheduledReadiness(
   session: WeeklyPlanningSession,
   businessDate: string,
   text: string,
   clock: string,
+  actorIds: readonly string[] | undefined,
   ports: WeeklyCommitPorts
-): Promise<string> {
+): Promise<{ commitmentId: string; created: boolean }> {
   const proposal: DayDirectorProposal = {
     promptKey: `weekly-readiness:${session.weekStart}:${businessDate}:${clock}`.slice(0, 191),
     title: text.slice(0, 255),
@@ -280,16 +346,27 @@ async function createScheduledReadiness(
     targetBusinessDate: businessDate,
     command: emptyCommandMetadata(),
   };
-  const stored = await ports.acceptProposal({
+  const accepted = await acceptWeeklyProposal(ports, {
     tenantId: session.tenantId,
     actorId: session.dayDirectorActorId,
+    actorIds,
     businessDate,
     proposal,
   });
-  if (!stored?.id) throw new Error(`Scheduled readiness was not stored for ${businessDate}`);
-  return stored.id;
+  if (!accepted.stored?.id) {
+    throw new Error(`Scheduled readiness was not stored for ${businessDate}`);
+  }
+  if (accepted.created) {
+    await recordPersistentOperatorDiagnosticEvent({
+      tenantId: session.tenantId,
+      operatorUserId: session.operatorId,
+      subsystem: "weekly_mission.commit",
+      eventKind: "objective_created",
+      objectiveId: accepted.stored.id,
+    }).catch(() => undefined);
+  }
+  return { commitmentId: accepted.stored.id, created: accepted.created };
 }
-
 function explicitClock(text: string): string | null {
   const spoken = /\b(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))\b/i.exec(text);
   if (spoken) return spoken[1]!;

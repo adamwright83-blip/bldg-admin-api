@@ -62,6 +62,7 @@ export const dayDirectorRouter = router({
       const { stored, created } = await acceptProposalWithReceipt({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
+        actorIds: identity.dayDirectorActorIds,
         ...input,
       });
       if (stored && created) {

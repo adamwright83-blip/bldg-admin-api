@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, inArray, ne, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm";
 import {
   dayDirectorCommitments,
   goldlineWorldEvents,
@@ -305,13 +305,14 @@ export async function loadPersistentOperatorDiagnostics(input: {
     now,
   });
 
-  const truthRows = db
+  const [truthAggregate] = db
     ? await db
         .select({
-          verificationClass: goldlineWorldEvents.verificationClass,
-          provenanceClass: goldlineWorldEvents.provenanceClass,
-          confidence: goldlineWorldEvents.confidence,
-          classification: goldlineWorldEvents.classification,
+          observations: sql<number>`count(*)`,
+          exact: sql<number>`sum(case when ${goldlineWorldEvents.verificationClass} = 'VERIFIED' then 1 else 0 end)`,
+          recordedOnly: sql<number>`sum(case when ${goldlineWorldEvents.provenanceClass} = 'existing_business_record' and ${goldlineWorldEvents.verificationClass} <> 'VERIFIED' then 1 else 0 end)`,
+          platformReported: sql<number>`sum(case when ${goldlineWorldEvents.provenanceClass} = 'provider_verified' then 1 else 0 end)`,
+          missingUnknown: sql<number>`sum(case when ${goldlineWorldEvents.confidence} = 'unknown' or ${goldlineWorldEvents.verificationClass} = 'CLAIMED' then 1 else 0 end)`,
         })
         .from(goldlineWorldEvents)
         .where(
@@ -321,24 +322,13 @@ export async function loadPersistentOperatorDiagnostics(input: {
             ne(goldlineWorldEvents.classification, "game_projection")
           )
         )
-        .limit(10000)
     : [];
 
-  const denominator = truthRows.length;
-  const exact = truthRows.filter(row => row.verificationClass === "VERIFIED").length;
-  const recordedOnly = truthRows.filter(
-    row =>
-      row.provenanceClass === "existing_business_record" &&
-      row.verificationClass !== "VERIFIED"
-  ).length;
-  const platformReported = truthRows.filter(
-    row => row.provenanceClass === "provider_verified"
-  ).length;
-  const missingUnknown = truthRows.filter(
-    row =>
-      row.confidence === "unknown" ||
-      row.verificationClass === "CLAIMED"
-  ).length;
+  const denominator = Number(truthAggregate?.observations ?? 0);
+  const exact = Number(truthAggregate?.exact ?? 0);
+  const recordedOnly = Number(truthAggregate?.recordedOnly ?? 0);
+  const platformReported = Number(truthAggregate?.platformReported ?? 0);
+  const missingUnknown = Number(truthAggregate?.missingUnknown ?? 0);
 
   return {
     window: {

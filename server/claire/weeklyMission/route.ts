@@ -81,7 +81,11 @@ async function routeLoadedSession(
   session: WeeklyPlanningSession
 ): Promise<WeeklyRouteResult> {
   if (lockBindApplies(session, input.utterance)) {
-    const committed = await commitWeeklyPlan({ session, now: input.now });
+    const committed = await commitWeeklyPlan({
+      session,
+      dayDirectorActorIds: input.dayDirectorActorIds,
+      now: input.now,
+    });
     return {
       speak: committed.speech,
       receiptBackedCommit: committed.locked ? committed.speech : undefined,
