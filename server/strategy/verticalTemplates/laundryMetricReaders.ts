@@ -1,5 +1,6 @@
 import { getActiveCustomerMetric } from "../../claire/activeCustomerMetric";
 import { readCanonicalRevenue } from "../../analytics/canonicalRevenue";
+import { addDaysYmd } from "../../analytics/businessPeriods";
 import { loadBusinessSourceCoverage } from "../../analytics/sourceCoverage";
 import { getDashboardTimeZone, zonedYmd } from "../../dashboardZoned";
 import { getStrategyGrowthMetrics } from "../growthMetrics";
@@ -7,9 +8,10 @@ import type { AuthoritativeMetricObservation } from "../../persistentOperator/ma
 import type { MetricReader } from "./registry";
 
 function trailingThirtyDayPeriod(asOf: Date, timeZone: string) {
+  const endYmd = zonedYmd(asOf, timeZone);
   return {
-    startYmd: zonedYmd(new Date(asOf.getTime() - 29 * 86_400_000), timeZone),
-    endYmd: zonedYmd(asOf, timeZone),
+    startYmd: addDaysYmd(endYmd, -29),
+    endYmd,
   };
 }
 
