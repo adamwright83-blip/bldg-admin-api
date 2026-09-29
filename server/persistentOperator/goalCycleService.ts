@@ -7,6 +7,7 @@ import {
 } from "./identity";
 import {
   activateCurrentMacroGoalRun,
+  evaluateMacroGoalRun,
   pauseMacroGoalRun,
   resumeMacroGoalRun,
   type MacroGoalRun,
@@ -184,4 +185,35 @@ export async function enqueueDurableTriggerForOperator(input: {
 
 export function durableTriggerShadowEnabled(): boolean {
   return process.env.PERSISTENT_OPERATOR_DURABLE_TRIGGER_SHADOW === "1";
+}
+
+export async function evaluateMacroGoalRunAndScheduleNext(input: {
+  tenantId: string;
+  runId: string;
+  registry: VerticalRegistry;
+  now?: Date;
+  runPersistence?: MacroGoalRunPersistence;
+  cycleStore?: GoalCycleEnqueuer;
+}) {
+  const evaluation = await evaluateMacroGoalRun({
+    tenantId: input.tenantId,
+    runId: input.runId,
+    now: input.now,
+    registry: input.registry,
+    persistence: input.runPersistence,
+  });
+  let nextCycle: { id: string; created: boolean } | null = null;
+  if (evaluation.run.status === "active" && evaluation.run.nextEvaluationAt) {
+    const store = input.cycleStore ?? createDefaultGoalCycleStore();
+    const availableAt = evaluation.run.nextEvaluationAt;
+    nextCycle = await store.enqueue({
+      tenantId: input.tenantId,
+      goalRunId: evaluation.run.id,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: `macro_goal_runs:${evaluation.run.id}:scheduled`,
+      idempotencyKey: `scheduled_tick:${evaluation.run.id}:${availableAt.toISOString()}`,
+      availableAt,
+    });
+  }
+  return { ...evaluation, nextCycle };
 }
