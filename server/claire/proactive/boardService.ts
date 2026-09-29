@@ -183,8 +183,8 @@ export async function ensureAdamBoard(input: {
       tenantId: input.tenantId,
       operatorOpenId: input.operatorUserId,
       triggerType: "scheduled_tick",
-      triggerSourceReference: `proactive_obligation_sweep:${today}`,
-      idempotencyKey: `proactive_obligation_sweep:${today}`,
+      triggerSourceReference: `proactive_obligation_sweep:${input.operatorUserId}:${today}`,
+      idempotencyKey: `proactive_obligation_sweep:${input.operatorUserId}:${today}`,
       availableAt: new Date(now),
     }).catch(error => {
       console.warn(
