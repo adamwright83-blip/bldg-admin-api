@@ -178,12 +178,14 @@ describe("weekly mission driver", () => {
   it("keeps the driver off Daily Command writes and on the canonical week contract", () => {
     const driver = readFileSync(new URL("./driver.ts", import.meta.url), "utf8");
     const intentStore = readFileSync(new URL("./intentStore.ts", import.meta.url), "utf8");
+    const route = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
     const contract = readFileSync(new URL("../../../client/src/pages/goldline/week/weeklyIntentContract.ts", import.meta.url), "utf8");
     const shared = readFileSync(new URL("../../../shared/weeklyMissionReadiness.ts", import.meta.url), "utf8");
     expect(driver).not.toMatch(/loadDailyCommand\s*\(/);
     expect(driver).not.toMatch(/projectRecurrenceForDate\s*\(/);
     expect(driver).toMatch(/deps\.latestIntent \?\? latestWeeklyIntent/);
     expect(driver).toContain("readWeeklyGrowthCandidatesForDossier");
+    expect(route).toContain("operatorUserIds: input.operatorIds");
     expect(intentStore).not.toMatch(/ER_NO_SUCH_TABLE|DAYFORGE_RELEASE_TEST_MODE/);
     expect(contract).toContain('from "@shared/weeklyMissionReadiness"');
     expect(contract).toContain("isLockedWeeklyIntent");
