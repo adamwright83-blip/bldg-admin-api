@@ -149,12 +149,25 @@ export class GoalCycleStore
         ]
       );
       const [rows] = await connection.execute<RowDataPacket[]>(
-        `SELECT id FROM goal_cycle_requests
+        `SELECT id, goalRunId, triggerType, triggerSourceReference
+           FROM goal_cycle_requests
           WHERE tenantId = ? AND idempotencyKey = ? LIMIT 1`,
         [input.tenantId, input.idempotencyKey]
       );
-      const id = String(rows[0]?.id ?? "");
+      const existing = rows[0];
+      const id = String(existing?.id ?? "");
       if (!id) throw new Error("Unable to resolve durable goal cycle request");
+      if (
+        insert.affectedRows !== 1 &&
+        (
+          String(existing?.goalRunId ?? "") !== input.goalRunId ||
+          String(existing?.triggerType ?? "") !== input.triggerType ||
+          (existing?.triggerSourceReference ?? null) !==
+            (input.triggerSourceReference ?? null)
+        )
+      ) {
+        throw new Error("Goal cycle idempotency key is bound to different work");
+      }
       if (insert.affectedRows === 1) {
         await insertHistory(connection, {
           tenantId: input.tenantId,
