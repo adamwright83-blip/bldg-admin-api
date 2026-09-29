@@ -148,6 +148,32 @@ export class OperatorAppointmentStore
       }
       if (
         insert.affectedRows !== 1 &&
+        row.appointmentKind === "sunday_weekly_planning" &&
+        ["scheduled", "retry_scheduled"].includes(row.status)
+      ) {
+        // The weekly idempotency key intentionally survives authorization
+        // rotation. Before a worker has claimed the row, refresh the durable
+        // appointment to the current tenant-local slot and standing grant so
+        // timezone changes do not strand the week's call on revoked authority.
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET scheduledFor = ?,
+                  timeZone = ?,
+                  standingAuthorizationId = ?
+            WHERE tenantId = ? AND id = ?
+              AND appointmentKind = 'sunday_weekly_planning'
+              AND status IN ('scheduled','retry_scheduled')`,
+          [
+            input.scheduledFor,
+            input.timeZone,
+            input.standingAuthorizationId ?? null,
+            input.tenantId,
+            row.id,
+          ]
+        );
+      }
+      if (
+        insert.affectedRows !== 1 &&
         row.status === "cancelled" &&
         row.appointmentKind === "weekly_planning_callback"
       ) {
