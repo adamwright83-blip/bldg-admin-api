@@ -59,15 +59,14 @@ const goalCycleWorker = new GoalCycleWorker(
     const evaluation = await evaluateMacroGoalRunAndScheduleNext({
       tenantId: input.tenantId,
       runId: input.runId,
-      sourceCycleId: input.cycleId,
       registry: defaultVerticalRegistry,
-      cycleStore: goalCycleStore,
     });
     return {
       runId: evaluation.run.id,
       status: evaluation.run.status,
       completed: evaluation.completed,
       observation: evaluation.observation,
+      nextEvaluationAt: evaluation.run.nextEvaluationAt?.toISOString() ?? null,
     };
   }
 );
