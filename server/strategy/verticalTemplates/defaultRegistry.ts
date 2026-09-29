@@ -5,6 +5,10 @@ import {
   laundryNewPayingCustomersMetricReader,
   laundryPaidOrdersMetricReader,
 } from "./laundryMetricReaders";
+import {
+  propertyAccountsWonMetricReader,
+  recurringAccountPaidRevenueMetricReader,
+} from "./commercialMetricReaders";
 import { ServerVerticalRegistry } from "./registry";
 
 /**
@@ -28,4 +32,13 @@ defaultVerticalRegistry.registerMetricReader(
 defaultVerticalRegistry.registerMetricReader(
   "strategy.net_sales_per_period.v1",
   laundryNetSalesMetricReader
+);
+
+defaultVerticalRegistry.registerMetricReader(
+  "commercial.property_accounts_won.v1",
+  propertyAccountsWonMetricReader
+);
+defaultVerticalRegistry.registerMetricReader(
+  "commercial.recurring_account_paid_revenue.v1",
+  recurringAccountPaidRevenueMetricReader
 );
