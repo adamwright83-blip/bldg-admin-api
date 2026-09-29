@@ -73,6 +73,7 @@ import {
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
+  executePersistentOperatorAction,
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
 } from "./brain/live/runClaireBrainV2LiveTurn";
@@ -136,6 +137,12 @@ const DEFAULT_HINTS = "got it, I'm good, that's enough, end call, hang up, goodb
 
 /** Seconds of silence after a held fragment before we treat the thought as finished. */
 export const CONTINUATION_GRACE_SECONDS = 3;
+
+export async function executeClairePersistentOperatorAction(
+  input: Parameters<typeof executePersistentOperatorAction>[0]
+) {
+  return executePersistentOperatorAction(input);
+}
 
 /**
  * A live call's working state. It is persisted (claire_conversation_states),
