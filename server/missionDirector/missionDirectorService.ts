@@ -255,7 +255,7 @@ export async function computeMissionPlan(input: {
     actorId: operatorUserId,
     dayDirectorActorId: input.operatorId,
     dayDirectorActorIds: input.operatorIds ? [...input.operatorIds] : undefined,
-    operatorUserIds,
+    operatorUserId,
     businessDate: input.businessDate,
     timeZone: input.timeZone,
   }).catch(() => null);
@@ -276,7 +276,7 @@ export async function computeMissionPlan(input: {
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
-    operatorUserId,
+    operatorUserIds,
     businessDate: input.businessDate,
   });
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
