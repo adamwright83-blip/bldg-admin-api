@@ -17,12 +17,54 @@ export type ActionClass =
   | "commit_briefing"
   | "commit_account_follow_up"
   | "cancel_pending"
-  | "revise_pending";
+  | "revise_pending"
+  | "create_weekly_planning_callback"
+  | "place_weekly_planning_call"
+  | "send_weekly_planning_missed_text";
 
 export type ActionAuthorityBasis =
   | "current_turn_explicit_request"
   | "current_turn_operator_commitment"
-  | "pending_lifecycle";
+  | "pending_lifecycle"
+  | "standing_goal_policy"
+  | "locked_weekly_intent"
+  | "due_authorized_obligation"
+  | "authoritative_business_event"
+  | "scheduled_operator_appointment";
+
+export type ActionGrantSource =
+  | {
+      type: "operator_turn";
+      assembledText: string;
+    }
+  | {
+      type: "goal_cycle";
+      tenantId: string;
+      canonicalOperatorId: string;
+      goalRunId: string;
+      cycleId: string;
+      evidenceRefs: string[];
+    }
+  | {
+      type: "pending_lifecycle";
+      tenantId: string;
+      canonicalOperatorId: string;
+      lifecycleId: string;
+    }
+  | {
+      type: "scheduled_operator_appointment";
+      tenantId: string;
+      canonicalOperatorId: string;
+      appointmentId: string;
+      appointmentKind: "sunday_weekly_planning" | "weekly_planning_callback";
+      standingAuthorizationId: string | null;
+    };
+
+export function actionGrantSourceIsBackground(
+  source: ActionGrantSource
+): source is Exclude<ActionGrantSource, { type: "operator_turn" }> {
+  return source.type !== "operator_turn";
+}
 
 export type ExecutiveActionGrant = {
   readonly [EXECUTIVE_ACTION_GRANT_BRAND]: true;
@@ -34,6 +76,10 @@ export type ExecutiveActionGrant = {
   };
   authorityBasis: ActionAuthorityBasis;
   sourceTurnAssembledText: string;
+  /** Populated by the sole grant minter. Legacy conversational callers may omit the draft source. */
+  source?: ActionGrantSource;
+  tenantId?: string | null;
+  canonicalOperatorId?: string | null;
   expiresAtMs: number;
   constraints: {
     mutationAllowed: boolean;
