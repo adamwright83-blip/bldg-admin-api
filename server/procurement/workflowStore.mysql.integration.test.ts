@@ -212,17 +212,32 @@ describe.skipIf(!DATABASE_URL)("procurement workflow store — real MySQL", () =
     expect(letter.reason).toBe("deadline_exceeded");
   });
 
-  it("KNOWN GAP: a step whose owner crashes on its final attempt stays leased forever", async () => {
-    // Current behavior, recorded so an extraction cannot silently keep or lose
-    // it: the claim query requires attempt_count < max_attempts, and the sweep
-    // only handles pending/ready/retry_scheduled steps that have a deadline. A
-    // final-attempt crash is therefore neither reclaimed nor dead-lettered.
-    const { stepId } = await create({ maxAttempts: 1 });
+  it("dead-letters an abandoned final-attempt lease without executing a hidden extra attempt", async () => {
+    const { stepId, workflowId } = await create({ maxAttempts: 1 });
     await claimAs("crashed", 100);
     await wait(250);
+
     expect(await claimAs("rescuer")).toBeNull();
-    expect(await store.deadLetterExpiredSteps()).toBe(0);
-    expect((await stepRow(stepId)).status).toBe("leased");
+    expect(await store.deadLetterExpiredSteps()).toBe(1);
+    expect(await stepRow(stepId)).toMatchObject({
+      status: "dead_letter",
+      attempt_count: 1,
+      lease_owner: null,
+      last_error: "lease_expired_after_final_attempt",
+    });
+    expect(await workflowStatus(workflowId)).toBe("dead_letter");
+    const letters = await rows<RowDataPacket>(
+      "SELECT reason, error_text, attempt_count FROM procurement_dead_letters WHERE source_id = ?",
+      [stepId]
+    );
+    expect(letters).toEqual([
+      expect.objectContaining({
+        reason: "attempts_exhausted",
+        error_text: "lease_expired_after_final_attempt",
+        attempt_count: 1,
+      }),
+    ]);
+    expect(await history(stepId)).toEqual(["step.created", "step.leased", "step.dead_lettered"]);
   });
 
   it("two real workers drain a shared queue with every step handled exactly once", async () => {
