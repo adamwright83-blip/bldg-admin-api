@@ -18,6 +18,8 @@ describe("lanternCityRouter identity mapping", () => {
       tenantId: "tenant-a",
       operatorId: "7",
       operatorIds: ["7", "22"],
+      operatorUserId: "canonical-owner",
+      operatorUserIds: ["canonical-owner", "driver-primary"],
       viewerOpenIds: ["canonical-owner", "driver-primary"],
     });
   });
