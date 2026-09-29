@@ -152,7 +152,7 @@ describe("macro goal runs", () => {
       tenantId: "tenant-1",
       runId: "run-1",
       registry,
-      runPersistence: persistence(),
+      persistence: persistence(),
       now: new Date("2026-09-28T12:00:00.000Z"),
     });
     expect(result.completed).toBe(true);
@@ -250,7 +250,7 @@ describe("macro goal runs", () => {
       runId: "run-1",
       sourceCycleId: "source-cycle-complete",
       registry,
-      persistence: persistence(),
+      runPersistence: persistence(),
       cycleStore: {
         async enqueue() {
           enqueueCalls += 1;
