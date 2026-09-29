@@ -317,7 +317,8 @@ export async function decideGoalCycle(input: {
     ...identity.identity.aliases.map(alias => alias.openId),
   ];
 
-  if (run.status === "completed") {
+  if (run.status !== "active") {
+    const completed = run.status === "completed";
     return appendGoalCycleDecision({
       tenantId: input.tenantId,
       goalRunId: run.id,
@@ -336,13 +337,16 @@ export async function decideGoalCycle(input: {
       selectionKind: "wait",
       selectedRef: null,
       selectedExecutionType: null,
-      selectedReasonCode: "GOAL_RUN_COMPLETED",
-      evidenceRefs: run.completionEvidenceRef
-        ? [`goal_completion:${run.completionEvidenceRef}`]
-        : [],
+      selectedReasonCode: completed
+        ? "GOAL_RUN_COMPLETED"
+        : "GOAL_RUN_INACTIVE",
+      evidenceRefs:
+        completed && run.completionEvidenceRef
+          ? [`goal_completion:${run.completionEvidenceRef}`]
+          : [],
       blockedCandidates: [],
       priorComparableDecisionId: null,
-      sourceCoverage: { goalRun: "completed" },
+      sourceCoverage: { goalRun: run.status },
       loadout: [],
       experiment: null,
     });
