@@ -47,6 +47,20 @@ describe("Persistent operator PR1 schema contract", () => {
     );
   });
 
+  it("records Day Director creation only when accept inserted a new commitment", () => {
+    const router = repoFile("server/dayDirector/dayDirectorRouter.ts");
+    const service = repoFile("server/dayDirector/dayDirectorService.ts");
+    expect(router).toMatch(
+      /const \{ stored, created \} = await acceptProposalWithReceipt/
+    );
+    expect(router).toMatch(
+      /if \(stored && created\)[\s\S]*eventKind: "objective_created"[\s\S]*objectiveId: stored\.id/
+    );
+    expect(service).toContain(
+      "created: Boolean(stored && stored.id === row.id)"
+    );
+  });
+
   it("does not reintroduce a default-tenant fallback at migrated identity seams", () => {
     const files = [
       "server/persistentOperator/identity.ts",
