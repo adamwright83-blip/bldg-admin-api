@@ -235,18 +235,24 @@ export async function proposeCommitment(input: {
 async function demoteOtherPrimaries(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
   businessDate: string;
   exceptId: string;
 }) {
   const db = await getDb();
   if (!db) return;
+  const actorIds = [...new Set(
+    [input.actorId, ...(input.actorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const rows = await db
     .select()
     .from(dayDirectorCommitments)
     .where(
       and(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
         eq(dayDirectorCommitments.businessDate, input.businessDate)
       )
     );
@@ -270,7 +276,7 @@ async function demoteOtherPrimaries(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.actorId, row.actorId),
           eq(dayDirectorCommitments.id, row.id)
         )
       );
@@ -357,6 +363,7 @@ export async function acceptProposalWithReceipt(input: {
       await demoteOtherPrimaries({
         tenantId: input.tenantId,
         actorId: stored.actorId,
+        actorIds,
         businessDate,
         exceptId: stored.id,
       });
@@ -416,6 +423,7 @@ export async function acceptProposalWithReceipt(input: {
     await demoteOtherPrimaries({
       tenantId: input.tenantId,
       actorId: stored.actorId,
+      actorIds,
       businessDate,
       exceptId: stored.id,
     });
@@ -572,6 +580,7 @@ export async function updateDayDirectorCommitment(input: {
 export async function designateDayDirectorPrimary(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
   businessDate: string;
   commitmentId: string;
   nowIso: string;
@@ -580,13 +589,18 @@ export async function designateDayDirectorPrimary(input: {
 }): Promise<{ commitmentId: string }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const actorIds = [...new Set(
+    [input.actorId, ...(input.actorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const rows = await db
     .select()
     .from(dayDirectorCommitments)
     .where(
       and(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
         eq(dayDirectorCommitments.businessDate, input.businessDate)
       )
     );
@@ -622,7 +636,7 @@ export async function designateDayDirectorPrimary(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.actorId, row.actorId),
           eq(dayDirectorCommitments.id, row.id)
         )
       );

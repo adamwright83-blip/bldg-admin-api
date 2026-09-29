@@ -118,6 +118,7 @@ export async function commitWeeklyPlan(
           await ports.designatePrimary({
             tenantId: session.tenantId,
             actorId: session.dayDirectorActorId,
+            actorIds: input.dayDirectorActorIds,
             businessDate: day.businessDate,
             commitmentId: existing.commitmentId,
             nowIso: now.toISOString(),
@@ -128,6 +129,7 @@ export async function commitWeeklyPlan(
           await ports.designatePrimary({
             tenantId: session.tenantId,
             actorId: session.dayDirectorActorId,
+            actorIds: input.dayDirectorActorIds,
             businessDate: day.businessDate,
             commitmentId: day.primary.existingCommitmentId,
             nowIso: now.toISOString(),
@@ -320,6 +322,7 @@ async function createPrimary(
   const designated = await ports.designatePrimary({
     tenantId: session.tenantId,
     actorId: accepted.stored.actorId ?? session.dayDirectorActorId,
+    actorIds,
     businessDate,
     commitmentId: accepted.stored.id,
     nowIso: now.toISOString(),
