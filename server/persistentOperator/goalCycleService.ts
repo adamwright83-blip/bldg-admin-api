@@ -190,31 +190,18 @@ export function durableTriggerShadowEnabled(): boolean {
 export async function evaluateMacroGoalRunAndScheduleNext(input: {
   tenantId: string;
   runId: string;
-  sourceCycleId: string;
   registry: VerticalRegistry;
   now?: Date;
   runPersistence?: MacroGoalRunPersistence;
-  cycleStore?: GoalCycleEnqueuer;
 }) {
-  const evaluation = await evaluateMacroGoalRun({
+  // Scheduling is committed atomically by GoalCycleStore.completeStep after
+  // the evaluation result is durably accepted. Keeping it out of the handler
+  // prevents every external trigger from spawning its own recurring chain.
+  return evaluateMacroGoalRun({
     tenantId: input.tenantId,
     runId: input.runId,
     now: input.now,
     registry: input.registry,
     persistence: input.runPersistence,
   });
-  let nextCycle: { id: string; created: boolean } | null = null;
-  if (evaluation.run.status === "active" && evaluation.run.nextEvaluationAt) {
-    const store = input.cycleStore ?? createDefaultGoalCycleStore();
-    const availableAt = evaluation.run.nextEvaluationAt;
-    nextCycle = await store.enqueue({
-      tenantId: input.tenantId,
-      goalRunId: evaluation.run.id,
-      triggerType: "scheduled_tick",
-      triggerSourceReference: `goal_cycle_requests:${input.sourceCycleId}:scheduled_successor`,
-      idempotencyKey: `scheduled_tick:${evaluation.run.id}:after:${input.sourceCycleId}`,
-      availableAt,
-    });
-  }
-  return { ...evaluation, nextCycle };
 }
