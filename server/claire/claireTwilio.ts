@@ -93,6 +93,14 @@ import {
   renderClaireOpeningVoice,
 } from "./voice/claireVoiceTransport";
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
+import { sendSMSWithReceipt } from "../_core/sms";
+import { logAgentEvent } from "../agents/agentEvents";
+import { getDefaultGoalCyclePool } from "../persistentOperator/goalCycleStore";
+import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
+import {
+  recordCommunicationReceipt,
+  TwilioCommunicationReceiptError,
+} from "../twilioPlatform/communicationReceipts";
 import {
   abandonAuthorizedAmdHandoff,
   amdDetectionTwiml,
@@ -455,6 +463,88 @@ export function claireVoiceCallCreateOptions(): {
     statusCallbackEvent: ["completed"],
     statusCallbackMethod: "POST",
   };
+}
+
+const MISSED_APPOINTMENT_CALL_STATUSES = new Set([
+  "no-answer",
+  "busy",
+  "failed",
+  "canceled",
+  "cancelled",
+]);
+
+async function handlePlanningAppointmentMissedStatus(
+  body: Record<string, string>
+): Promise<void> {
+  const callSid = String(body.CallSid ?? "").trim();
+  const status = String(body.CallStatus ?? body.CallStatusEvent ?? "")
+    .trim()
+    .toLowerCase();
+  const answeredBy = String(body.AnsweredBy ?? "").trim().toLowerCase();
+  const missed =
+    MISSED_APPOINTMENT_CALL_STATUSES.has(status) ||
+    answeredBy.startsWith("machine") ||
+    answeredBy === "fax";
+  if (!callSid || !missed) return;
+
+  const store = new OperatorAppointmentStore(getDefaultGoalCyclePool());
+  const appointment = await store.markMissedByCallSid(callSid);
+  if (!appointment) return;
+  const followup = await store.claimMissedFollowup(callSid);
+  if (!followup) return;
+
+  const to = await authorizedOperatorPhone({
+    tenantId: followup.tenantId,
+    actorId: followup.operatorUserId,
+  });
+  const sms = await sendSMSWithReceipt(
+    to,
+    "Missed you. Want to pick a new time?",
+    { idempotencyKey: `operator-appointment:${followup.id}:missed` }
+  );
+
+  if (sms.accepted && sms.providerMessageId) {
+    try {
+      await recordCommunicationReceipt({
+        tenantId: followup.tenantId,
+        operatorUserId: followup.operatorUserId,
+        eventType: "MESSAGE_SENT",
+        messageSid: sms.providerMessageId,
+        direction: "outbound",
+        to,
+        status: sms.providerStatus,
+      });
+    } catch (error) {
+      if (
+        !(
+          error instanceof TwilioCommunicationReceiptError &&
+          error.code === "persistence_unconfigured"
+        )
+      ) {
+        console.warn("[Claire] missed-call SMS receipt was not stored", error);
+      }
+    }
+  }
+
+  await logAgentEvent({
+    ctx: {
+      tenantId: followup.tenantId,
+      agentType: "goal_cycle_agent",
+      actorType: "system",
+      actorId: followup.operatorUserId,
+      canonicalOperatorId: followup.canonicalOperatorId,
+    },
+    toolName: "sendClaireWeeklyPlanningMissedText",
+    inputJson: { appointmentId: followup.id, callSid },
+    outputJson: {
+      accepted: sms.accepted,
+      providerMessageId: sms.providerMessageId,
+      evidenceName: sms.evidenceName,
+    },
+    status: sms.accepted ? "success" : "failed",
+    entityType: "operator_appointment",
+    entityId: followup.id,
+  }).catch(() => undefined);
 }
 
 function callSidFrom(req: Request): string | undefined {
@@ -2215,6 +2305,7 @@ export function registerClaireRoutes(app: Express): void {
         callSid: String(body.CallSid ?? ""),
         callStatus: String(body.CallStatus ?? body.CallStatusEvent ?? ""),
       });
+      await handlePlanningAppointmentMissedStatus(body);
     })().catch(error => {
       console.error("[ClaireLedger] call-status failed", error);
     });
