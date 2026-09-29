@@ -323,6 +323,49 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     });
   });
 
+  it("rejects stale completion after Sunday authority or timezone refresh", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(appointment());
+    const claimed = await store.claimNextStep({
+      leaseOwner: "worker",
+      leaseMs: 10_000,
+    });
+    expect(claimed).toMatchObject({ id: first.id });
+    expect(await store.markRunning(claimed!)).toBe(true);
+
+    await store.enqueue(
+      appointment({
+        scheduledFor: new Date(Date.now() + 3_600_000),
+        timeZone: "America/New_York",
+        standingAuthorizationId: "auth-b",
+      })
+    );
+
+    expect(
+      await store.completeStep(claimed!, {
+        skipped: "outside_authorized_sunday_window",
+      })
+    ).toBe(false);
+    expect(
+      await store.failStep(
+        claimed!,
+        new Error("authority/timezone execution snapshot changed"),
+        60_000
+      )
+    ).toBe("retry_scheduled");
+
+    const [row] = await rows<RowDataPacket>(
+      "SELECT standingAuthorizationId, timeZone, status, completedAt FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(row).toMatchObject({
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
+      status: "retry_scheduled",
+      completedAt: null,
+    });
+  });
+
   it("rescheduling callbacks does not consume or cancel the weekly unprompted row", async () => {
     const store = new OperatorAppointmentStore(pool);
     const weekly = await store.enqueue(appointment());
