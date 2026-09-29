@@ -25,12 +25,28 @@ function coverageQuality(
 export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetricObservation> =
   async ({ tenantId, asOf }) => {
     const now = asOf ?? new Date();
+    const timeZone = getDashboardTimeZone();
     const [metric, sourceCoverage] = await Promise.all([
-      getActiveCustomerMetric({ tenantId, now }),
+      getActiveCustomerMetric({ tenantId, now, timeZone }),
       loadBusinessSourceCoverage({ tenantId, now }),
     ]);
     const coverage = coverageQuality(sourceCoverage);
-    const exact = metric.completeness === "complete" && coverage === "complete";
+    const cleancloud = sourceCoverage.sources.find(source => source.sourceId === "cleancloud");
+    const cleancloudHeld = Boolean(cleancloud?.includedInCombinedBook);
+    const economicSpan = sourceCoverage.book.scope.cleancloudEconomicEvents;
+    const windowStartYmd = zonedYmd(new Date(metric.windowStart), timeZone);
+    const windowEndYmd = zonedYmd(new Date(metric.windowEnd), timeZone);
+    const paidWindowCovered =
+      !cleancloudHeld ||
+      Boolean(
+        economicSpan &&
+          economicSpan.from <= windowStartYmd &&
+          economicSpan.through >= windowEndYmd
+      );
+    const exact =
+      metric.completeness === "complete" &&
+      coverage === "complete" &&
+      paidWindowCovered;
     return {
       value: metric.value,
       observationRef:
@@ -54,15 +70,17 @@ export const laundryNewPayingCustomersMetricReader: MetricReader<AuthoritativeMe
     ]);
     const cleancloud = sourceCoverage.sources.find(source => source.sourceId === "cleancloud");
     const cleancloudHeld = Boolean(cleancloud?.includedInCombinedBook);
-    const historyCoversReaderWindow =
+    const economicSpan = sourceCoverage.book.scope.cleancloudEconomicEvents;
+    const fullPaidHistoryCovered =
       !cleancloudHeld ||
       Boolean(
-        sourceCoverage.book.scope.cleancloudOrdersCreated &&
-          sourceCoverage.book.scope.cleancloudOrdersCreated.from <= "2020-01-01"
+        economicSpan &&
+          economicSpan.from <= "2020-01-01" &&
+          economicSpan.through >= period.endYmd
       );
     const exact =
       sourceCoverage.book.exhaustiveCurrent &&
-      historyCoversReaderWindow &&
+      fullPaidHistoryCovered &&
       metrics.newPayingCustomers.uncertainCount === 0;
     return {
       value: metrics.newPayingCustomers.count,
