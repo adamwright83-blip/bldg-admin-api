@@ -45,7 +45,15 @@ export type AgentContext = {
   approvedByUserId?: string | null;
   trustedUiFlow?: boolean;
   canonicalOperatorId?: string | null;
+  goalRunId?: string | null;
+  cycleId?: string | null;
+  decisionId?: string | null;
+  obligationId?: string | null;
+  authorityBasis?: string | null;
+  approvalBasis?: string | null;
   standingAuthorizationId?: string | null;
+  standingAuthorizationVersion?: number | null;
+  policyVersion?: string | null;
 };
 
 const agentToolAllowlist: Record<AgentType, Set<string>> = {
