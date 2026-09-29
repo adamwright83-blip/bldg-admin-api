@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
+import { json, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import {
+  claireProactiveObligations,
+  commercialFollowUps,
+  dayDirectorCommitments,
+} from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
@@ -46,24 +50,8 @@ export const claireOperatorDoctrine = mysqlTable(
   })
 );
 
-export const claireProactiveObligations = mysqlTable(
-  "claire_proactive_obligations",
-  {
-    id: varchar("id", { length: 191 }).primaryKey(),
-    tenantId: varchar("tenantId", { length: 64 }).notNull(),
-    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
-    kind: mysqlEnum("kind", ["dormant_recovery", "sales_follow_up", "data_health"]).notNull(),
-    subjectKey: varchar("subjectKey", { length: 191 }).notNull(),
-    payloadJson: json("payloadJson").notNull(),
-    status: varchar("status", { length: 32 }).notNull(),
-    dueDate: varchar("dueDate", { length: 10 }).notNull(),
-    createdAt: timestamp("createdAt").notNull().defaultNow(),
-    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
-  },
-  table => ({
-    openIdx: index("idx_claire_proactive_open").on(table.tenantId, table.operatorUserId, table.status, table.dueDate),
-  })
-);
+// Compatibility export: persistent-operator core owns the centralized table shape.
+export { claireProactiveObligations };
 
 let lastSweepAt = 0;
 const SWEEP_MS = 60_000;
