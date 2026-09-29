@@ -422,6 +422,39 @@ export class OperatorAppointmentStore
     return result.affectedRows;
   }
 
+  async listPendingCallbacks(input: {
+    tenantId: string;
+    canonicalOperatorId: string;
+    weekStart: string;
+    excludeIdempotencyKey?: string | null;
+  }): Promise<Array<{ id: string; idempotencyKey: string }>> {
+    const params: unknown[] = [
+      input.tenantId,
+      input.canonicalOperatorId,
+      input.weekStart,
+    ];
+    const exclude = input.excludeIdempotencyKey?.trim();
+    const exclusionSql = exclude ? " AND idempotencyKey <> ?" : "";
+    if (exclude) params.push(exclude);
+    const [rows] = await this.pool.execute<
+      Array<RowDataPacket & { id: string; idempotencyKey: string }>
+    >(
+      `SELECT id, idempotencyKey
+         FROM operator_appointments
+        WHERE tenantId = ?
+          AND canonicalOperatorId = ?
+          AND weekStart = ?
+          AND appointmentKind = 'weekly_planning_callback'
+          AND status IN ('scheduled','retry_scheduled')${exclusionSql}
+        ORDER BY scheduledFor, createdAt, id`,
+      params
+    );
+    return rows.map(row => ({
+      id: String(row.id),
+      idempotencyKey: String(row.idempotencyKey),
+    }));
+  }
+
   async cancelPendingCallbacks(input: {
     tenantId: string;
     canonicalOperatorId: string;
