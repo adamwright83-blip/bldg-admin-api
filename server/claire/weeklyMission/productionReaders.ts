@@ -199,6 +199,7 @@ export async function readWeeklyDossierFacts(input: {
 export async function readWeeklyGrowthCandidatesForDossier(input: {
   tenantId: string;
   operatorId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
   dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
