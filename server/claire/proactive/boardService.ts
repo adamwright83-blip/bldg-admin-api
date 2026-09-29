@@ -169,6 +169,7 @@ export async function ensureOperatorBoard(input: {
   recoveryDraftIdentity: {
     storeName: string;
     senderName: string;
+    serviceLabel: string;
   };
   force?: boolean;
 }): Promise<{ brief: string; created: number }> {
@@ -279,7 +280,7 @@ export async function ensureOperatorBoard(input: {
       score,
       storeName: input.recoveryDraftIdentity.storeName,
       senderName: input.recoveryDraftIdentity.senderName,
-      lastServiceLabel: "laundry",
+      lastServiceLabel: input.recoveryDraftIdentity.serviceLabel,
     });
     const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
     await upsertObligation(input.tenantId, input.operatorUserId, obligation);
@@ -380,6 +381,7 @@ export async function ensureAdamBoard(input: {
     recoveryDraftIdentity: {
       storeName: "Laundry Butler",
       senderName: "Adam",
+      serviceLabel: "laundry",
     },
   });
 }
