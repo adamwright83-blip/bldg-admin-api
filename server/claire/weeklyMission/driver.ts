@@ -330,6 +330,7 @@ function readersFor(scope: WeeklyDriverScope, deps: WeeklyDriverDeps): WeeklyDos
       readWeeklyDossierFacts({
         tenantId: scope.tenantId,
         operatorId: scope.operatorId,
+        operatorUserIds: identityPairs(scope).map(pair => pair.operatorId),
         dayDirectorActorId: scope.dayDirectorActorId,
         dayDirectorActorIds: scope.dayDirectorActorIds,
         dates,
@@ -340,6 +341,7 @@ function readersFor(scope: WeeklyDriverScope, deps: WeeklyDriverDeps): WeeklyDos
       readWeeklyGrowthCandidatesForDossier({
         tenantId: scope.tenantId,
         operatorId: scope.operatorId,
+        operatorUserIds: identityPairs(scope).map(pair => pair.operatorId),
         dayDirectorActorId: scope.dayDirectorActorId,
         dayDirectorActorIds: scope.dayDirectorActorIds,
         dates: horizonFor(scope).remainingDates,
