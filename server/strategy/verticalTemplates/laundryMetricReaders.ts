@@ -47,6 +47,14 @@ export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetri
       metric.completeness === "complete" &&
       coverage === "complete" &&
       paidWindowCovered;
+    const scopedCoverage =
+      metric.value === null || metric.completeness === "unavailable"
+        ? "unavailable"
+        : exact
+          ? "complete"
+          : coverage === "complete"
+            ? "partial"
+            : coverage;
     return {
       value: metric.value,
       observationRef:
@@ -54,7 +62,7 @@ export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetri
           ? null
           : `strategy.active_customers.v1:${tenantId}:${metric.windowStart}:${metric.windowEnd}:${metric.computedAt}`,
       precision: metric.value === null ? "missing" : exact ? "exact" : "recorded_only",
-      coverage: metric.value === null ? "unavailable" : coverage,
+      coverage: scopedCoverage,
       observedAt: metric.computedAt,
     };
   };
@@ -82,11 +90,14 @@ export const laundryNewPayingCustomersMetricReader: MetricReader<AuthoritativeMe
       sourceCoverage.book.exhaustiveCurrent &&
       fullPaidHistoryCovered &&
       metrics.newPayingCustomers.uncertainCount === 0;
+    const baseCoverage = coverageQuality(sourceCoverage);
+    const scopedCoverage =
+      exact ? "complete" : baseCoverage === "complete" ? "partial" : baseCoverage;
     return {
       value: metrics.newPayingCustomers.count,
       observationRef: `strategy.new_paying_customers.v1:${tenantId}:${period.startYmd}:${period.endYmd}:${metrics.computedAt}`,
       precision: exact ? "exact" : "recorded_only",
-      coverage: exact ? "complete" : coverageQuality(sourceCoverage),
+      coverage: scopedCoverage,
       observedAt: metrics.computedAt,
     };
   };
