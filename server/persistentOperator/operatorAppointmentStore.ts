@@ -146,11 +146,18 @@ export class OperatorAppointmentStore
       ) {
         throw new Error("Operator appointment idempotency key is bound to different work");
       }
+      const sundayExecutionSnapshotChanged =
+        row.standingAuthorizationId !== (input.standingAuthorizationId ?? null) ||
+        row.timeZone !== input.timeZone;
       if (
         insert.affectedRows !== 1 &&
         row.appointmentKind === "sunday_weekly_planning" &&
         ["scheduled", "retry_scheduled", "leased", "running"].includes(row.status) &&
-        row.callDispatchStartedAt == null
+        row.callDispatchStartedAt == null &&
+        (
+          ["scheduled", "retry_scheduled"].includes(row.status) ||
+          sundayExecutionSnapshotChanged
+        )
       ) {
         // The weekly idempotency key intentionally survives authorization
         // rotation. Refresh authority/timezone until external dispatch begins.
