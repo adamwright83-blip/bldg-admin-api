@@ -349,6 +349,24 @@ export class OperatorAppointmentStore
         await connection.rollback();
         return "lease_lost";
       }
+      if (row.callDispatchStartedAt != null) {
+        await connection.execute(
+          `UPDATE operator_appointments
+              SET status = 'dead_letter',
+                  lastError = ?,
+                  leaseOwner = NULL,
+                  leaseExpiresAt = NULL,
+                  heartbeatAt = NULL
+            WHERE tenantId = ? AND id = ?`,
+          [
+            `call_dispatch_failed_or_uncertain_no_redial: ${errorText}`,
+            row.tenantId,
+            row.id,
+          ]
+        );
+        await connection.commit();
+        return "dead_letter";
+      }
       if (Number(row.attemptCount) >= Number(row.maxAttempts)) {
         await connection.execute(
           `UPDATE operator_appointments
