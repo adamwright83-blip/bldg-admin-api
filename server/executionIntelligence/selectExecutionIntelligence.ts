@@ -3,6 +3,7 @@ import type {
   ExecutionIntelligenceSelectionInput,
 } from "../../shared/executionIntelligence";
 import { listExecutionEligibleTeachings } from "../salesIntel/salesIntelTeachingStore";
+import { getActiveLearnedLoadoutDeltas } from "../persistentOperator/learningStore";
 
 export interface ExecutionIntelligenceProvider {
   readonly doctrineFamily: string;
@@ -56,21 +57,53 @@ function applicabilityScore(input: {
 export const salesExecutionIntelligenceProvider: ExecutionIntelligenceProvider = {
   doctrineFamily: "sales",
   async select(input) {
-    const teachings = await listExecutionEligibleTeachings().catch(() => []);
+    const [teachings, deltas] = await Promise.all([
+      listExecutionEligibleTeachings().catch(() => []),
+      getActiveLearnedLoadoutDeltas({ tenantId: input.tenantId }).catch(() => []),
+    ]);
+    const boosted = new Map(
+      deltas
+        .filter(d => d.deltaType === "boost" || d.deltaType === "reinforce")
+        .map(d => [d.targetKey, d])
+    );
+    const suppressed = new Map(
+      deltas
+        .filter(d => d.deltaType === "suppress")
+        .map(d => [d.targetKey, d])
+    );
+
     const context = contextText({
       objective: input.objectiveRef,
       context: input.context,
     });
 
     return teachings
-      .map(teaching => ({
-        teaching,
-        fit: applicabilityScore({
+      .map(teaching => {
+        const isSuppressed = suppressed.has(teaching.teachingKey);
+        const boostDelta = boosted.get(teaching.teachingKey);
+        const baseFit = applicabilityScore({
           context,
           whenToUse: teaching.whenToUse,
           whenNotToUse: teaching.whenNotToUse,
-        }),
-      }))
+        });
+        if (isSuppressed) {
+          return {
+            teaching,
+            fit: { eligible: false, score: 0, reason: "suppressed by learned outcome constraint" },
+          };
+        }
+        if (boostDelta && baseFit.eligible) {
+          return {
+            teaching,
+            fit: {
+              eligible: true,
+              score: baseFit.score + 1.0,
+              reason: `${baseFit.reason}; boosted by verified outcome: ${boostDelta.explanation}`,
+            },
+          };
+        }
+        return { teaching, fit: baseFit };
+      })
       .filter(entry => entry.fit.eligible)
       .sort(
         (a, b) =>

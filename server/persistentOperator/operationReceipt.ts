@@ -5,6 +5,7 @@ import {
   communicationReceipts,
   goalCycleObjectives,
   goalCycleOutcomes,
+  goalCycleLearnedDeltas,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import {
@@ -67,7 +68,7 @@ export async function operationReceipt(input: {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
 
-  const [events, communications, obligations, objectives, outcomes] =
+  const [events, communications, obligations, objectives, outcomes, learnedDeltas] =
     await Promise.all([
       optionalReceiptRows(() =>
         db
@@ -130,6 +131,18 @@ export async function operationReceipt(input: {
             )
           )
           .orderBy(asc(goalCycleOutcomes.createdAt))
+      ),
+      optionalReceiptRows(() =>
+        db
+          .select()
+          .from(goalCycleLearnedDeltas)
+          .where(
+            and(
+              eq(goalCycleLearnedDeltas.tenantId, input.tenantId),
+              eq(goalCycleLearnedDeltas.decisionId, input.decisionId)
+            )
+          )
+          .orderBy(asc(goalCycleLearnedDeltas.createdAt))
       ),
     ]);
 
@@ -300,6 +313,30 @@ export async function operationReceipt(input: {
           },
         }
       : unresolved("economic_observation_not_linked"),
-    laterPolicyChange: unresolved("policy_change_not_linked"),
+    learningDelta:
+      learnedDeltas.length > 0
+        ? {
+            status: "resolved" as const,
+            value: learnedDeltas.map(d => ({
+              deltaId: d.id,
+              learningKind: d.learningKind,
+              targetKey: d.targetKey,
+              deltaType: d.deltaType,
+              explanation: d.explanation,
+              confidence: d.confidence,
+              createdAt: d.createdAt.toISOString(),
+            })),
+          }
+        : unresolved("no_learning_delta_linked"),
+    laterPolicyChange:
+      learnedDeltas.length > 0
+        ? {
+            status: "resolved" as const,
+            value: {
+              policyDeltasCount: learnedDeltas.length,
+              deltaKeys: learnedDeltas.map(d => d.targetKey),
+            },
+          }
+        : unresolved("policy_change_not_linked"),
   };
 }

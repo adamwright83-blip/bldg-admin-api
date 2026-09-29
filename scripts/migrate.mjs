@@ -4483,6 +4483,51 @@ await ensureRequiredIndex(
   }
 }
 
+// Persistent Growth Operator PR6 — Slices J + K + L: learning deltas, proof/read models, and hardening.
+await applyHistoricalCreateTables(
+  "../drizzle/0107_persistent_growth_learning_proof_hardening.sql",
+  "Persistent Growth PR6 learned delta tables"
+);
+
+await assertRequiredColumns("goal_cycle_learned_deltas", [
+  "id", "tenantId", "goalRunId", "cycleId", "decisionId", "objectiveId",
+  "outcomeId", "canonicalOperatorId", "operatorUserId", "learningKind",
+  "targetKey", "deltaType", "beforeStateJson", "afterStateJson",
+  "evidenceReference", "confidence", "explanation", "appliedCount",
+  "createdAt", "updatedAt",
+]);
+
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "uq_goal_cycle_learned_deltas_idempotency",
+  ["tenantId", "outcomeId", "learningKind", "targetKey"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD UNIQUE KEY uq_goal_cycle_learned_deltas_idempotency (tenantId,outcomeId,learningKind,targetKey)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_decision",
+  ["tenantId", "decisionId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_decision (tenantId,decisionId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_objective",
+  ["tenantId", "objectiveId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_objective (tenantId,objectiveId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_operator",
+  ["tenantId", "canonicalOperatorId", "learningKind", "targetKey"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_operator (tenantId,canonicalOperatorId,learningKind,targetKey)"
+);
+
 // END schema-path-normalized
 
 await conn.end();
