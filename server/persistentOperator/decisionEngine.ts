@@ -426,23 +426,14 @@ export async function decideGoalCycle(input: {
     };
   }
 
-  let obligations: PersistentObligation[] = [];
-  let obligationCoverage: unknown = { status: "available", count: 0 };
-  try {
-    obligations = await listOpenPersistentObligations({
-      tenantId: input.tenantId,
-      operatorUserIds: operatorIds,
-      verticalKey: run.verticalKey,
-      registry: input.registry,
-      dueThrough: today,
-    });
-    obligationCoverage = { status: "available", count: obligations.length };
-  } catch (error) {
-    obligationCoverage = {
-      status: "unavailable",
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
+  const obligations = await listOpenPersistentObligations({
+    tenantId: input.tenantId,
+    operatorUserIds: operatorIds,
+    verticalKey: run.verticalKey,
+    registry: input.registry,
+    dueThrough: today,
+  });
+  const obligationCoverage = { status: "available", count: obligations.length };
 
   let plan: MissionDirectorPlan | null = null;
   let missionDirectorCoverage: unknown = { status: "available", plan: false };

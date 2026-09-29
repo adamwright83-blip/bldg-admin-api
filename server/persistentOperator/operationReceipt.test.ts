@@ -20,6 +20,20 @@ describe("operationReceipt authority lineage", () => {
     ).resolves.toEqual([]);
   });
 
+  it("inspects wrapped causes when ORM wraps ER_NO_SUCH_TABLE", async () => {
+    const inner = Object.assign(new Error("Table doesn't exist"), {
+      code: "ER_NO_SUCH_TABLE",
+      errno: 1146,
+    });
+    const wrapped = new Error("Query failed in Drizzle", { cause: inner });
+    expect(isMissingOptionalReceiptTableError(wrapped)).toBe(true);
+    await expect(
+      optionalReceiptRows(async () => {
+        throw wrapped;
+      })
+    ).resolves.toEqual([]);
+  });
+
   it("does not swallow non-schema receipt query failures", async () => {
     const failure = Object.assign(new Error("connection lost"), {
       code: "PROTOCOL_CONNECTION_LOST",

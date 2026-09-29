@@ -5,6 +5,10 @@ import {
   communicationReceipts,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import {
+  isMysqlMissingTableError,
+  queryOptionalMysqlTable,
+} from "../mysqlErrors";
 import { getGoalCycleDecision } from "./decisionStore";
 
 export type ReceiptLink<T> =
@@ -16,20 +20,13 @@ function unresolved(reason: string): ReceiptLink<never> {
 }
 
 export function isMissingOptionalReceiptTableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const value = error as { code?: unknown; errno?: unknown };
-  return value.code === "ER_NO_SUCH_TABLE" || value.errno === 1146;
+  return isMysqlMissingTableError(error);
 }
 
 export async function optionalReceiptRows<T>(
   read: () => Promise<T[]>
 ): Promise<T[]> {
-  try {
-    return await read();
-  } catch (error) {
-    if (isMissingOptionalReceiptTableError(error)) return [];
-    throw error;
-  }
+  return queryOptionalMysqlTable(read);
 }
 
 export function selectValidatedAuthorityEvent<
