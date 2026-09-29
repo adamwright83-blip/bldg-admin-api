@@ -378,31 +378,70 @@ export class ProcurementWorkflowStore {
     let count = 0;
     try {
       await connection.beginTransaction();
-      const [rows] = await connection.query<Array<RowDataPacket & { id: string; workflow_id: string; payload_json: unknown; attempt_count: number }>>(
-        `SELECT id, workflow_id, payload_json, attempt_count
+      const [rows] = await connection.query<Array<RowDataPacket & {
+        id: string;
+        workflow_id: string;
+        payload_json: unknown;
+        attempt_count: number;
+        max_attempts: number;
+        status: string;
+        deadline_at: Date | null;
+        lease_expires_at: Date | null;
+      }>>(
+        `SELECT id, workflow_id, payload_json, attempt_count, max_attempts,
+                status, deadline_at, lease_expires_at
            FROM procurement_workflow_steps
-          WHERE status IN ('pending','ready','retry_scheduled')
-            AND deadline_at IS NOT NULL AND deadline_at <= CURRENT_TIMESTAMP(3)
+          WHERE (
+                  (status IN ('pending','ready','retry_scheduled')
+                    AND deadline_at IS NOT NULL
+                    AND deadline_at <= CURRENT_TIMESTAMP(3))
+               OR (status IN ('leased','running')
+                    AND lease_expires_at IS NOT NULL
+                    AND lease_expires_at <= CURRENT_TIMESTAMP(3)
+                    AND attempt_count >= max_attempts)
+                )
           FOR UPDATE SKIP LOCKED`,
       );
       for (const row of rows) {
+        const finalAttemptLeaseExpired =
+          (row.status === "leased" || row.status === "running") &&
+          Number(row.attempt_count) >= Number(row.max_attempts) &&
+          row.lease_expires_at != null;
+        const reason = finalAttemptLeaseExpired ? "attempts_exhausted" : "deadline_exceeded";
+        const errorText = finalAttemptLeaseExpired
+          ? "lease_expired_after_final_attempt"
+          : "deadline_exceeded";
+
         await connection.execute(
-          `UPDATE procurement_workflow_steps SET status = 'dead_letter', last_error = 'deadline_exceeded'
+          `UPDATE procurement_workflow_steps
+              SET status = 'dead_letter', last_error = ?,
+                  lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL
             WHERE id = ?`,
-          [row.id],
+          [errorText, row.id],
         );
         await connection.execute(
           `INSERT INTO procurement_dead_letters
              (workflow_id, source_type, source_id, reason, payload_json, error_text, attempt_count)
-           VALUES (?, 'workflow_step', ?, 'deadline_exceeded', ?, 'deadline_exceeded', ?)
-           ON DUPLICATE KEY UPDATE reason = VALUES(reason)`,
-          [row.workflow_id, row.id, jsonParam(row.payload_json), row.attempt_count],
+           VALUES (?, 'workflow_step', ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE reason = VALUES(reason), error_text = VALUES(error_text),
+             attempt_count = VALUES(attempt_count)`,
+          [row.workflow_id, row.id, reason, jsonParam(row.payload_json), errorText, row.attempt_count],
         );
         await connection.execute(
           `UPDATE procurement_workflows SET status = 'dead_letter', failed_at = CURRENT_TIMESTAMP(3)
             WHERE id = ?`,
           [row.workflow_id],
         );
+        await insertHistory(connection, {
+          workflowId: String(row.workflow_id),
+          stepId: String(row.id),
+          eventType: "step.dead_lettered",
+          fromStatus: row.status,
+          toStatus: "dead_letter",
+          leaseOwner: finalAttemptLeaseExpired ? null : undefined,
+          attemptNumber: Number(row.attempt_count),
+          error: errorText,
+        });
         count += 1;
       }
       await connection.commit();
