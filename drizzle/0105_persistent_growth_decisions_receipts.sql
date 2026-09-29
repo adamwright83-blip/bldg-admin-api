@@ -3,6 +3,21 @@
 -- This file is the one-shot schema migration. scripts/migrate.mjs applies the
 -- same shape idempotently for production boot migrations.
 
+CREATE TABLE IF NOT EXISTS `claire_proactive_obligations` (
+  `id` varchar(191) NOT NULL,
+  `tenantId` varchar(64) NOT NULL,
+  `operatorUserId` varchar(128) NOT NULL,
+  `kind` varchar(32) NOT NULL,
+  `subjectKey` varchar(191) NOT NULL,
+  `payloadJson` json NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `dueDate` varchar(10) NOT NULL,
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_claire_proactive_open` (`tenantId`, `operatorUserId`, `status`, `dueDate`)
+);
+
 ALTER TABLE `claire_proactive_obligations`
   ADD COLUMN `canonicalOperatorId` varchar(191) NULL,
   ADD COLUMN `goalRunId` varchar(36) NULL,
