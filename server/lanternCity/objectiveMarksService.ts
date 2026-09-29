@@ -119,7 +119,9 @@ export async function loadLanternObjectiveMarks(
     dayLine = await deps.readDayLine({
       tenantId,
       operatorId: input.operatorId,
-      operatorIds: input.operatorIds ? [...input.operatorIds] : undefined,
+      ...(input.operatorIds?.length
+        ? { operatorIds: [...input.operatorIds] }
+        : {}),
     });
   } catch (error) {
     console.warn(
