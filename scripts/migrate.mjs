@@ -4253,6 +4253,130 @@ for (const [tableName, columns] of [
   await assertRequiredColumns(tableName, columns);
 }
 
+// Persistent Growth Operator PR4 — obligations, decisions, loadouts, receipts.
+// The SQL file is the one-shot migration authority. Production boot applies
+// its CREATE TABLE statement and then adds lineage columns idempotently.
+await applyHistoricalCreateTables(
+  "../drizzle/0105_persistent_growth_decisions_receipts.sql",
+  "Persistent Growth PR4 decision tables"
+);
+
+for (const [column, ddl] of [
+  ["canonicalOperatorId", "ALTER TABLE claire_proactive_obligations ADD COLUMN canonicalOperatorId VARCHAR(191) NULL"],
+  ["goalRunId", "ALTER TABLE claire_proactive_obligations ADD COLUMN goalRunId VARCHAR(36) NULL"],
+  ["cycleId", "ALTER TABLE claire_proactive_obligations ADD COLUMN cycleId VARCHAR(36) NULL"],
+  ["decisionId", "ALTER TABLE claire_proactive_obligations ADD COLUMN decisionId VARCHAR(36) NULL"],
+  ["executionType", "ALTER TABLE claire_proactive_obligations ADD COLUMN executionType VARCHAR(32) NULL"],
+  ["commercialFollowUpRef", "ALTER TABLE claire_proactive_obligations ADD COLUMN commercialFollowUpRef VARCHAR(191) NULL"],
+  ["objectiveRef", "ALTER TABLE claire_proactive_obligations ADD COLUMN objectiveRef VARCHAR(191) NULL"],
+  ["agentEventId", "ALTER TABLE claire_proactive_obligations ADD COLUMN agentEventId INT NULL"],
+]) {
+  await ensureRequiredColumn("claire_proactive_obligations", column, ddl);
+}
+await ensureRequiredIndex(
+  "claire_proactive_obligations",
+  "idx_claire_proactive_decision",
+  ["tenantId", "decisionId"],
+  "ALTER TABLE claire_proactive_obligations ADD KEY idx_claire_proactive_decision (tenantId,decisionId)"
+);
+await ensureRequiredIndex(
+  "claire_proactive_obligations",
+  "idx_claire_proactive_cycle",
+  ["tenantId", "cycleId"],
+  "ALTER TABLE claire_proactive_obligations ADD KEY idx_claire_proactive_cycle (tenantId,cycleId)"
+);
+
+await assertRequiredColumns("goal_cycle_decisions", [
+  "id", "tenantId", "goalRunId", "cycleId", "canonicalOperatorId",
+  "operatorUserId", "policyVersion", "weeklyIntentId", "weeklyIntentRevision",
+  "weekStart", "candidateFingerprint", "candidateIdsJson",
+  "candidateReasonCodesJson", "missionDirectorPlanId", "missionDirectorRevision",
+  "selectionKind", "selectedRef", "selectedExecutionType", "selectedReasonCode",
+  "evidenceRefsJson", "blockedCandidatesJson", "priorComparableDecisionId",
+  "sourceCoverageJson", "loadoutJson", "experimentJson", "decisionFingerprint",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "uq_goal_cycle_decisions_cycle",
+  ["tenantId", "cycleId"],
+  "ALTER TABLE goal_cycle_decisions ADD UNIQUE KEY uq_goal_cycle_decisions_cycle (tenantId,cycleId)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_selected",
+  ["tenantId", "selectionKind", "selectedRef", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_selected (tenantId,selectionKind,selectedRef,createdAt)"
+);
+
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await runRequired(
+      `ALTER TABLE agent_events
+         MODIFY COLUMN status ENUM(
+           'proposed','policy_denied','write_withheld','approval_required',
+           'execution_started','success','failed','blocked'
+         ) NOT NULL`,
+      "agent_events.status PR4 lifecycle enum"
+    );
+    await assertEnumContainsValues("agent_events", "status", [
+      "proposed",
+      "policy_denied",
+      "write_withheld",
+      "execution_started",
+    ]);
+  }
+}
+for (const [column, ddl] of [
+  ["goalRunId", "ALTER TABLE agent_events ADD COLUMN goalRunId VARCHAR(36) NULL"],
+  ["cycleId", "ALTER TABLE agent_events ADD COLUMN cycleId VARCHAR(36) NULL"],
+  ["decisionId", "ALTER TABLE agent_events ADD COLUMN decisionId VARCHAR(36) NULL"],
+  ["obligationId", "ALTER TABLE agent_events ADD COLUMN obligationId VARCHAR(191) NULL"],
+  ["authorityBasis", "ALTER TABLE agent_events ADD COLUMN authorityBasis VARCHAR(64) NULL"],
+  ["approvalBasis", "ALTER TABLE agent_events ADD COLUMN approvalBasis VARCHAR(64) NULL"],
+  ["standingAuthorizationId", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationId VARCHAR(36) NULL"],
+  ["standingAuthorizationVersion", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationVersion INT NULL"],
+  ["policyVersion", "ALTER TABLE agent_events ADD COLUMN policyVersion VARCHAR(96) NULL"],
+  ["operationStatus", "ALTER TABLE agent_events ADD COLUMN operationStatus VARCHAR(32) NULL"],
+]) {
+  await ensureRequiredColumn("agent_events", column, ddl);
+}
+await ensureRequiredIndex(
+  "agent_events",
+  "idx_agent_events_decision",
+  ["tenantId", "decisionId", "id"],
+  "ALTER TABLE agent_events ADD KEY idx_agent_events_decision (tenantId,decisionId,id)"
+);
+await ensureRequiredIndex(
+  "agent_events",
+  "idx_agent_events_cycle",
+  ["tenantId", "cycleId", "id"],
+  "ALTER TABLE agent_events ADD KEY idx_agent_events_cycle (tenantId,cycleId,id)"
+);
+
+for (const [column, ddl] of [
+  ["agentEventId", "ALTER TABLE communication_receipts ADD COLUMN agentEventId INT NULL"],
+  ["decisionId", "ALTER TABLE communication_receipts ADD COLUMN decisionId VARCHAR(36) NULL"],
+]) {
+  await ensureRequiredColumn("communication_receipts", column, ddl);
+}
+await ensureRequiredIndex(
+  "communication_receipts",
+  "idx_communication_receipts_decision",
+  ["tenantId", "decisionId", "createdAt"],
+  "ALTER TABLE communication_receipts ADD KEY idx_communication_receipts_decision (tenantId,decisionId,createdAt)"
+);
+
 // END schema-path-normalized
 
 await conn.end();
