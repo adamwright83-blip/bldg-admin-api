@@ -568,7 +568,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.persistedAliasOpenId, persistedAliasOpenId),
+          eq(persistentOperatorIdentityBindings.aliasOpenId, persistedAliasOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -578,7 +578,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.persistedAliasOpenId, persistedCanonicalOpenId),
+          eq(persistentOperatorIdentityBindings.aliasOpenId, persistedCanonicalOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -588,7 +588,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.persistedCanonicalOpenId, persistedAliasOpenId),
+          eq(persistentOperatorIdentityBindings.canonicalOpenId, persistedAliasOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -596,11 +596,11 @@ export async function bindOperatorIdentityAlias(input: {
     if (
       active.some(
         binding =>
-          binding.persistedCanonicalOpenId !== persistedCanonicalOpenId ||
+          binding.canonicalOpenId !== persistedCanonicalOpenId ||
           binding.surface !== input.surface
       ) ||
       canonicalAsAlias.some(
-        binding => binding.persistedCanonicalOpenId !== persistedCanonicalOpenId
+        binding => binding.canonicalOpenId !== persistedCanonicalOpenId
       ) ||
       aliasAsCanonical.length > 0
     ) {
@@ -611,8 +611,8 @@ export async function bindOperatorIdentityAlias(input: {
     const row: OperatorIdentityBinding = {
       id: randomUUID(),
       tenantId,
-      persistedCanonicalOpenId,
-      persistedAliasOpenId,
+      canonicalOpenId: persistedCanonicalOpenId,
+      aliasOpenId: persistedAliasOpenId,
       activeAliasKey: `${tenantId}:${persistedAliasOpenId}`,
       surface: input.surface,
       active: true,
