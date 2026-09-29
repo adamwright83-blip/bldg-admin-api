@@ -78,8 +78,8 @@ function transcriptWarn(message: string, error: unknown): void {
 
 /**
  * Runtime logs are an inspection surface, not the authoritative transcript.
- * Kept only for legacy callers/tests that need redaction before non-log display.
- * Infrastructure transcript logging itself is metadata-only.
+ * Transcript text is emitted only for a separately allowlisted operator scope,
+ * and sensitive provider/auth/phone-shaped content is redacted first.
  */
 export function redactClaireTranscriptText(text: string): string {
   return text
@@ -97,12 +97,13 @@ export function redactClaireTranscriptText(text: string): string {
 }
 
 /**
- * Emits metadata for one newly persisted live turn. Conversation Relay can
- * remain in-progress for the entire socket lifetime, so timing/ordinal metadata
- * is useful for Railway inspection without copying transcript bodies.
+ * Emits one newly persisted live turn. Conversation Relay can remain
+ * in-progress for the entire socket lifetime, so the scoped inspection mirror
+ * must work before call completion.
  *
- * The same explicit tenant/operator scope gate applies here. Transcript text,
- * provider ids and providerMetadata are never logged.
+ * Metadata requires CLAIRE_TRANSCRIPT_LOG_SCOPES. Transcript text additionally
+ * requires CLAIRE_TRANSCRIPT_TEXT_SCOPES and is redacted before logging.
+ * Provider ids and providerMetadata are never logged.
  */
 export async function emitClaireTranscriptTurnLog(
   turn: Pick<ConversationTurn, "sessionId" | "ordinal" | "speaker" | "text" | "occurredAt">,
