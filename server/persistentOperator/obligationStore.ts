@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { claireProactiveObligations } from "../../drizzle/schema";
 import type { ProactiveObligation } from "../../shared/claireProactive";
 import type { ObjectiveExecutionType } from "../../shared/objectiveExecution";
@@ -126,6 +126,7 @@ export async function attachObligationDecisionLineage(input: {
   decisionId: string;
   executionType?: ObjectiveExecutionType | null;
   objectiveRef?: string | null;
+  onlyIfUnclaimedOrSameDecision?: boolean;
 }): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -145,7 +146,13 @@ export async function attachObligationDecisionLineage(input: {
     .where(
       and(
         eq(claireProactiveObligations.tenantId, input.tenantId),
-        eq(claireProactiveObligations.id, input.obligationId)
+        eq(claireProactiveObligations.id, input.obligationId),
+        input.onlyIfUnclaimedOrSameDecision
+          ? or(
+              isNull(claireProactiveObligations.decisionId),
+              eq(claireProactiveObligations.decisionId, input.decisionId)
+            )
+          : undefined
       )
     );
   return Number(result[0]?.affectedRows ?? 0) === 1;
