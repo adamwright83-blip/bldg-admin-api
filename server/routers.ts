@@ -8,6 +8,7 @@ import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { strategyRouter } from "./strategy/strategyRouter";
+import { candyBarRouter } from "./candyBar/router";
 import {
   attributeOrderFromCampaign,
   reverseCommercialOrderAttribution,
@@ -371,6 +372,7 @@ function localYmd(offsetDays = 0): string {
 export const appRouter = router({
   system: systemRouter,
   strategy: strategyRouter,
+  candyBar: candyBarRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
