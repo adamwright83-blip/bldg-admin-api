@@ -30,7 +30,9 @@ export type WeeklyRouteResult = {
 export async function routeActiveWeeklySession(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   utterance: string;
   now: Date;
   timeZone: string;
@@ -68,7 +70,9 @@ async function routeLoadedSession(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: readonly string[];
     dayDirectorActorId: string;
+    dayDirectorActorIds?: readonly string[];
     utterance: string;
     now: Date;
     timeZone: string;
@@ -94,6 +98,7 @@ async function routeLoadedSession(
           tenantId: input.tenantId,
           operatorId: input.operatorId,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates,
           now: input.now,
           timeZone: input.timeZone,
@@ -103,6 +108,7 @@ async function routeLoadedSession(
           tenantId: input.tenantId,
           operatorId: input.operatorId,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates: horizon.remainingDates,
           now: input.now,
           timeZone: input.timeZone,
