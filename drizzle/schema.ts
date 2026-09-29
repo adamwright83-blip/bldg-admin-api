@@ -7745,6 +7745,7 @@ export const operatorAppointments = mysqlTable(
     heartbeatAt: timestamp("heartbeatAt", { fsp: 3 }),
     attemptCount: int("attemptCount").notNull().default(0),
     maxAttempts: int("maxAttempts").notNull().default(3),
+    callDispatchStartedAt: timestamp("callDispatchStartedAt", { fsp: 3 }),
     callSid: varchar("callSid", { length: 64 }),
     calendarEventId: varchar("calendarEventId", { length: 191 }),
     calendarStatus: varchar("calendarStatus", { length: 32 }),
