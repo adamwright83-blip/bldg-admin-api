@@ -13,7 +13,9 @@ export type WeeklyGrowthCandidateDeps = {
   readSources: (input: {
     tenantId: string;
     operatorUserId: string;
+    operatorUserIds?: readonly string[];
     dayDirectorActorId: string;
+    dayDirectorActorIds?: readonly string[];
     timeZone: string;
   }) => Promise<WeeklyGrowthSourceBundle>;
   today?: (now: Date, timeZone: string) => string;
@@ -36,7 +38,9 @@ export async function loadWeeklyGrowthCandidates(
   const bundle = await deps.readSources({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
+    ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
     dayDirectorActorId: input.dayDirectorActorId,
+    ...(input.dayDirectorActorIds?.length ? { dayDirectorActorIds: input.dayDirectorActorIds } : {}),
     timeZone: input.timeZone,
   });
   const assembled = assembleWeeklyGrowthCandidates({
