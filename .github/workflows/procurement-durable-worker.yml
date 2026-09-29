@@ -51,7 +51,9 @@ jobs:
           server/persistentOperator/operatorAppointments.test.ts
           server/persistentOperator/decisionEngine.test.ts
           server/persistentOperator/decisionStore.test.ts
+          server/persistentOperator/operationReceipt.test.ts
           server/persistentOperator/pr4SchemaContract.test.ts
+          server/claire/proactive/boardService.test.ts
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
       - name: Workflow stores against real MySQL
         env:

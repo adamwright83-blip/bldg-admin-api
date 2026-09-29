@@ -12,6 +12,7 @@ import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { getDb } from "../../db";
+import { queryOptionalMysqlTable } from "../../mysqlErrors";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -93,15 +94,13 @@ export async function saveDoctrine(tenantId: string, operatorUserId: string, rul
 export async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
   const db = await getDb();
   if (!db) return [];
-  try {
+  return queryOptionalMysqlTable(async () => {
     const rows = await db
       .select()
       .from(claireProactiveObligations)
       .where(and(eq(claireProactiveObligations.tenantId, tenantId), eq(claireProactiveObligations.operatorUserId, operatorUserId)));
     return rows.map(row => row.payloadJson as ProactiveObligation);
-  } catch {
-    return [];
-  }
+  });
 }
 
 async function upsertObligation(

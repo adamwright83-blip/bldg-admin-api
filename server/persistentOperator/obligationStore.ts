@@ -147,7 +147,7 @@ export async function attachObligationDecisionLineage(input: {
       and(
         eq(claireProactiveObligations.tenantId, input.tenantId),
         eq(claireProactiveObligations.id, input.obligationId),
-        input.onlyIfUnclaimedOrSameDecision
+        (input.onlyIfUnclaimedOrSameDecision ?? true)
           ? or(
               isNull(claireProactiveObligations.decisionId),
               eq(claireProactiveObligations.decisionId, input.decisionId)

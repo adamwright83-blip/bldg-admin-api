@@ -42,16 +42,23 @@ describe("Persistent Growth Operator PR4 schema and authority contracts", () => 
     expect(engine).not.toContain("anthropic");
   });
 
-  it("fences replay lineage so an older cycle cannot replace a newer decision", () => {
+  it("fences replay lineage and first-pass selection so older cycles cannot replace newer decisions", () => {
     const engine = repoFile("server/persistentOperator/decisionEngine.ts");
     const obligations = repoFile("server/persistentOperator/obligationStore.ts");
 
-    expect(engine).toContain("onlyIfUnclaimedOrSameDecision: true");
+    const engineFences = engine.match(/onlyIfUnclaimedOrSameDecision:\s*true/g) ?? [];
+    expect(engineFences.length).toBeGreaterThanOrEqual(2);
     expect(obligations).toContain("onlyIfUnclaimedOrSameDecision?: boolean");
     expect(obligations).toContain("isNull(claireProactiveObligations.decisionId)");
     expect(obligations).toContain(
       "eq(claireProactiveObligations.decisionId, input.decisionId)"
     );
+  });
+
+  it("propagates database errors when reading obligations to prevent corrupting state", () => {
+    const board = repoFile("server/claire/proactive/boardService.ts");
+    expect(board).toContain("queryOptionalMysqlTable");
+    expect(board).not.toMatch(/loadObligations[\s\S]*?catch\s*\{\s*return\s*\[\];\s*\}/);
   });
 
   it("keeps missing receipt links explicitly unresolved", () => {

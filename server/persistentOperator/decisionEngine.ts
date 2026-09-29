@@ -564,6 +564,7 @@ export async function decideGoalCycle(input: {
         choice.selectedCandidate?.id ??
         choice.selectedObligation.objectiveRef ??
         null,
+      onlyIfUnclaimedOrSameDecision: true,
     });
   }
 
