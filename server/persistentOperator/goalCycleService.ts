@@ -1,7 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 import { macroGoalRuns } from "../../drizzle/schema";
 import type { VerticalRegistry } from "../strategy/verticalTemplates/registry";
-import type { CanonicalOperatorIdentity } from "./identity";
+import {
+  resolveCanonicalOperatorIdentity,
+  type CanonicalOperatorIdentity,
+} from "./identity";
 import {
   activateCurrentMacroGoalRun,
   pauseMacroGoalRun,
@@ -137,4 +140,48 @@ export async function resumeMacroGoalAndQueue(input: {
     availableAt: now,
   });
   return { run, cycle };
+}
+
+export async function enqueueDurableTriggerForOperator(input: {
+  tenantId: string;
+  operatorOpenId: string;
+  triggerType: GoalCycleTrigger;
+  triggerSourceReference: string;
+  idempotencyKey: string;
+  availableAt?: Date;
+  cycleStore?: GoalCycleEnqueuer;
+}): Promise<
+  | { queued: true; cycleId: string; created: boolean; goalRunId: string }
+  | { queued: false; reason: "identity_unresolved" | "identity_ambiguous" | "no_active_goal_run" }
+> {
+  const identity = await resolveCanonicalOperatorIdentity({
+    tenantId: input.tenantId,
+    source: { type: "open_id", value: input.operatorOpenId },
+    subsystem: "persistent_operator.durable_trigger",
+  });
+  if (!identity.ok) return { queued: false, reason: identity.reason };
+  const run = await findActiveMacroGoalRun({
+    tenantId: input.tenantId,
+    canonicalOperatorId: identity.identity.canonicalOperatorId,
+  });
+  if (!run) return { queued: false, reason: "no_active_goal_run" };
+  const store = input.cycleStore ?? createDefaultGoalCycleStore();
+  const cycle = await store.enqueue({
+    tenantId: input.tenantId,
+    goalRunId: run.id,
+    triggerType: input.triggerType,
+    triggerSourceReference: input.triggerSourceReference,
+    idempotencyKey: input.idempotencyKey,
+    availableAt: input.availableAt,
+  });
+  return {
+    queued: true,
+    cycleId: cycle.id,
+    created: cycle.created,
+    goalRunId: run.id,
+  };
+}
+
+export function durableTriggerShadowEnabled(): boolean {
+  return process.env.PERSISTENT_OPERATOR_DURABLE_TRIGGER_SHADOW === "1";
 }
