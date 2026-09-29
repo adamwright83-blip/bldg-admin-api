@@ -59,6 +59,7 @@ const goalCycleWorker = new GoalCycleWorker(
     const evaluation = await evaluateMacroGoalRunAndScheduleNext({
       tenantId: input.tenantId,
       runId: input.runId,
+      sourceCycleId: input.cycleId,
       registry: defaultVerticalRegistry,
       cycleStore: goalCycleStore,
     });
