@@ -19,8 +19,7 @@ export type ActionClass =
   | "cancel_pending"
   | "revise_pending"
   | "create_weekly_planning_callback"
-  | "place_weekly_planning_call"
-  | "send_weekly_planning_missed_text";
+  | "place_weekly_planning_call";
 
 export type ActionAuthorityBasis =
   | "current_turn_explicit_request"
