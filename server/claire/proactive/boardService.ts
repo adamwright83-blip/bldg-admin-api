@@ -314,13 +314,14 @@ export async function ensureOperatorBoard(input: {
           lastOutcome: null,
           history: [follow.note],
         });
-        if (already.some(item => item.id === obligation.id)) continue;
+        const existing = already.some(item => item.id === obligation.id);
         await upsertObligation(
           input.tenantId,
           input.operatorUserId,
           obligation,
           { commercialFollowUpRef: follow.id }
         );
+        if (existing) continue;
         await placeOnDayLine({
           tenantId: input.tenantId,
           actorId: input.actorId,
