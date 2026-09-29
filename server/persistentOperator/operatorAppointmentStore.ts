@@ -289,7 +289,14 @@ export class OperatorAppointmentStore
           AND leaseOwner = ?
           AND standingAuthorizationId <=> ?
           AND timeZone = ?`,
-      [leaseMs * 1000, step.tenantId, step.id, step.leaseOwner]
+      [
+        leaseMs * 1000,
+        step.tenantId,
+        step.id,
+        step.leaseOwner,
+        step.standingAuthorizationId,
+        step.timeZone,
+      ]
     );
     return result.affectedRows === 1;
   }
@@ -346,7 +353,9 @@ export class OperatorAppointmentStore
               heartbeatAt = NULL
         WHERE tenantId = ? AND id = ?
           AND status IN ('leased','running')
-          AND leaseOwner = ?`,
+          AND leaseOwner = ?
+          AND standingAuthorizationId <=> ?
+          AND timeZone = ?`,
       [
         callSid,
         calendarEventId,
