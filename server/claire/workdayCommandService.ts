@@ -83,7 +83,11 @@ export async function loadDailyCommand(
       timeZone: input.timeZone,
       now: input.now,
     }).catch(() => null),
-    getCampaign({ tenantId: input.tenantId, actorId: input.dayDirectorActorId }).catch(() => null),
+    getCampaign({
+      tenantId: input.tenantId,
+      actorId: input.dayDirectorActorId,
+      actorIds: input.dayDirectorActorIds,
+    }).catch(() => null),
     listVehicleCargo(input.tenantId, input.vehicleId ?? input.operatorUserId).catch(() => []),
   ]);
 
