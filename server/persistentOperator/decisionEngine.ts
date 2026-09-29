@@ -10,7 +10,6 @@ import type {
   WeeklyGrowthCandidateFeed,
 } from "../../shared/weeklyGrowthCandidates";
 import {
-  addDaysYmd,
   remainingWeekHorizon,
   targetWeekHorizon,
   type RemainingWeekHorizon,
@@ -201,6 +200,7 @@ async function latestApplicableWeeklyIntent(input: {
   operatorIds: readonly string[];
   businessDate: string;
   localTime: string;
+  weekStart: string;
 }): Promise<{
   id: string;
   revision: number;
@@ -220,13 +220,13 @@ async function latestApplicableWeeklyIntent(input: {
     .where(
       and(
         eq(weeklyIntents.tenantId, input.tenantId),
-        inArray(weeklyIntents.operatorId, [...input.operatorIds])
+        inArray(weeklyIntents.operatorId, [...input.operatorIds]),
+        eq(weeklyIntents.weekStart, input.weekStart)
       )
     )
     .orderBy(desc(weeklyIntents.lockedAt), desc(weeklyIntents.revision))
     .limit(1);
   if (!row) return null;
-  if (row.weekStart > addDaysYmd(input.businessDate, 7)) return null;
   const horizon = targetWeekHorizon({
     businessDate: input.businessDate,
     localTime: input.localTime,
@@ -283,7 +283,20 @@ export async function decideGoalCycle(input: {
     tenantId: input.tenantId,
     cycleId: input.cycleId,
   });
-  if (existing) return { decision: existing, created: false };
+  if (existing) {
+    if (existing.selectionKind === "obligation" && existing.selectedRef) {
+      await attachObligationDecisionLineage({
+        tenantId: input.tenantId,
+        obligationId: existing.selectedRef,
+        canonicalOperatorId: existing.canonicalOperatorId,
+        goalRunId: existing.goalRunId,
+        cycleId: existing.cycleId,
+        decisionId: existing.id,
+        executionType: existing.selectedExecutionType,
+      });
+    }
+    return { decision: existing, created: false };
+  }
 
   const now = input.now ?? new Date();
   const run = await loadRun({ tenantId: input.tenantId, runId: input.runId });
@@ -377,6 +390,7 @@ export async function decideGoalCycle(input: {
     operatorIds,
     businessDate: today,
     localTime,
+    weekStart: currentHorizon.weekStart,
   });
   const horizon = weeklyIntent?.horizon ?? currentHorizon;
 
