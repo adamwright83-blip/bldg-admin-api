@@ -8,7 +8,6 @@ import {
   EXECUTIVE_ACTION_GRANT_BRAND,
   NARRATIVE_REVEAL_GRANT_BRAND,
   PERSONAL_DISCLOSURE_GRANT_BRAND,
-  actionGrantSourceIsBackground,
   type ActionGrantDraft,
   type ActionGrantSource,
   type CallControlGrant,
