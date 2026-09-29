@@ -14,6 +14,7 @@ import {
   revokeOperatorIdentityAlias,
 } from "./identity";
 import { loadPersistentOperatorDiagnostics } from "./observability";
+import { operationReceipt } from "./operationReceipt";
 
 function identityFailure(error: unknown): never {
   if (error instanceof CanonicalOperatorIdentityError) {
@@ -76,6 +77,15 @@ export const persistentOperatorRouter = router({
       identityFailure(error);
     }
   }),
+
+  operationReceipt: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ decisionId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      operationReceipt({
+        tenantId: ctx.tenantId,
+        decisionId: input.decisionId,
+      })
+    ),
 
   bindAlias: legacyDayforgeTenantAdminProcedure
     .input(

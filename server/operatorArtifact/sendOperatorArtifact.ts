@@ -98,6 +98,9 @@ export type SendOperatorArtifactInput = {
   tenantId: string;
   operatorUserId: string;
   artifact: OperatorArtifact;
+  /** Internal execution lineage. Callers do not choose these values. */
+  agentEventId?: number | null;
+  decisionId?: string | null;
 } & NoCallerDestination;
 
 export type OperatorSmsPort = {
@@ -385,9 +388,22 @@ function assertCallerSuppliesNoDestination(input: object): void {
   }
 }
 
-function statusCallbackUrl(tenantId: string, operatorUserId: string): string {
+function statusCallbackUrl(input: {
+  tenantId: string;
+  operatorUserId: string;
+  agentEventId?: number | null;
+  decisionId?: string | null;
+}): string {
   const base = ENV.adminBaseUrl.replace(/\/$/, "");
-  const params = new URLSearchParams({ tenantId, operatorUserId });
+  const params = new URLSearchParams({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  });
+  if (input.agentEventId != null && Number.isInteger(input.agentEventId)) {
+    params.set("agentEventId", String(input.agentEventId));
+  }
+  const decisionId = input.decisionId?.trim();
+  if (decisionId) params.set("decisionId", decisionId);
   return `${base}${OPERATOR_ARTIFACT_STATUS_PATH}?${params.toString()}`;
 }
 
@@ -468,6 +484,8 @@ async function recordMessageReceipt(input: {
   status: string | null;
   providerErrorCode?: string | null;
   providerErrorMessage?: string | null;
+  agentEventId?: number | null;
+  decisionId?: string | null;
 }): Promise<{ receipt: TwilioCommunicationReceipt; duplicate: boolean }> {
   return recordCommunicationReceipt({
     tenantId: input.tenantId,
@@ -480,6 +498,8 @@ async function recordMessageReceipt(input: {
     status: input.status,
     providerErrorCode: input.providerErrorCode,
     providerErrorMessage: input.providerErrorMessage,
+    agentEventId: input.agentEventId ?? null,
+    decisionId: input.decisionId ?? null,
   });
 }
 
@@ -517,7 +537,12 @@ export async function sendOperatorArtifact(
     sent = await port.send({
       to: resolvedTo,
       body,
-      statusCallback: statusCallbackUrl(tenantId, operatorUserId),
+      statusCallback: statusCallbackUrl({
+        tenantId,
+        operatorUserId,
+        agentEventId: input.agentEventId,
+        decisionId: input.decisionId,
+      }),
     });
   } catch (error) {
     if (
@@ -552,6 +577,8 @@ export async function sendOperatorArtifact(
             from,
             to: resolvedTo,
             status: sent.status || null,
+            agentEventId: input.agentEventId,
+            decisionId: input.decisionId,
           })
         : null;
     return {
@@ -576,6 +603,8 @@ export async function sendOperatorArtifact(
       from,
       to: resolvedTo,
       status: sent.status || "accepted",
+      agentEventId: input.agentEventId,
+      decisionId: input.decisionId,
     });
   } catch (error) {
     if (
@@ -624,6 +653,8 @@ export async function recordOperatorArtifactProviderStatus(input: {
   to?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  agentEventId?: number | null;
+  decisionId?: string | null;
 }): Promise<{
   delivered: boolean;
   duplicate: boolean;
@@ -663,6 +694,8 @@ export async function recordOperatorArtifactProviderStatus(input: {
     providerErrorCode: eventType === "MESSAGE_FAILED" ? input.errorCode : null,
     providerErrorMessage:
       eventType === "MESSAGE_FAILED" ? input.errorMessage : null,
+    agentEventId: input.agentEventId ?? null,
+    decisionId: input.decisionId ?? null,
   });
   return {
     delivered: eventType === "MESSAGE_DELIVERED",
@@ -730,6 +763,10 @@ export function registerOperatorArtifactSmsRoutes(app: Express): void {
       }
       const tenantId = queryValue(req.query.tenantId);
       const operatorUserId = queryValue(req.query.operatorUserId);
+      const agentEventIdRaw = queryValue(req.query.agentEventId);
+      const agentEventId =
+        /^\d+$/.test(agentEventIdRaw) ? Number(agentEventIdRaw) : null;
+      const decisionId = queryValue(req.query.decisionId) || null;
       const messageSid = body.MessageSid || body.SmsSid || "";
       const messageStatus = body.MessageStatus || body.SmsStatus || "";
       try {
@@ -742,6 +779,8 @@ export function registerOperatorArtifactSmsRoutes(app: Express): void {
           to: body.To || null,
           errorCode: body.ErrorCode || null,
           errorMessage: body.ErrorMessage || null,
+          agentEventId,
+          decisionId,
         });
         res.status(204).end();
       } catch (error) {

@@ -34,6 +34,8 @@ export const sendOperatorArtifactTool: AgentTool<Record<string, unknown>> = {
       tenantId: ctx.tenantId,
       operatorUserId: ctx.actorId ?? "",
       artifact: raw.artifact as OperatorArtifact,
+      agentEventId: ctx.agentEventId ?? null,
+      decisionId: ctx.decisionId ?? null,
     };
     for (const key of CALLER_DESTINATION_FIELDS) {
       if (key in raw) {

@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
+import { json, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import {
+  claireProactiveObligations,
+  commercialFollowUps,
+  dayDirectorCommitments,
+} from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { getDb } from "../../db";
+import { queryOptionalMysqlTable } from "../../mysqlErrors";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -46,26 +51,10 @@ export const claireOperatorDoctrine = mysqlTable(
   })
 );
 
-export const claireProactiveObligations = mysqlTable(
-  "claire_proactive_obligations",
-  {
-    id: varchar("id", { length: 191 }).primaryKey(),
-    tenantId: varchar("tenantId", { length: 64 }).notNull(),
-    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
-    kind: mysqlEnum("kind", ["dormant_recovery", "sales_follow_up", "data_health"]).notNull(),
-    subjectKey: varchar("subjectKey", { length: 191 }).notNull(),
-    payloadJson: json("payloadJson").notNull(),
-    status: varchar("status", { length: 32 }).notNull(),
-    dueDate: varchar("dueDate", { length: 10 }).notNull(),
-    createdAt: timestamp("createdAt").notNull().defaultNow(),
-    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
-  },
-  table => ({
-    openIdx: index("idx_claire_proactive_open").on(table.tenantId, table.operatorUserId, table.status, table.dueDate),
-  })
-);
+// Compatibility export: persistent-operator core owns the centralized table shape.
+export { claireProactiveObligations };
 
-let lastSweepAt = 0;
+const lastSweepAtByOperator = new Map<string, number>();
 const SWEEP_MS = 60_000;
 
 function daysBetween(later: string, earlier: string): number {
@@ -99,24 +88,27 @@ export async function saveDoctrine(tenantId: string, operatorUserId: string, rul
 /**
  * Read the operator's existing proactive obligations. Pure read — it creates nothing.
  *
- * `ensureAdamBoard` is the sweep that WRITES obligations; an observer must never call
+ * `ensureOperatorBoard` is the sweep that WRITES obligations; an observer must never call
  * it. This is the read-only view of what the board already holds.
  */
 export async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
   const db = await getDb();
   if (!db) return [];
-  try {
+  return queryOptionalMysqlTable(async () => {
     const rows = await db
       .select()
       .from(claireProactiveObligations)
       .where(and(eq(claireProactiveObligations.tenantId, tenantId), eq(claireProactiveObligations.operatorUserId, operatorUserId)));
     return rows.map(row => row.payloadJson as ProactiveObligation);
-  } catch {
-    return [];
-  }
+  });
 }
 
-async function upsertObligation(tenantId: string, operatorUserId: string, obligation: ProactiveObligation): Promise<void> {
+async function upsertObligation(
+  tenantId: string,
+  operatorUserId: string,
+  obligation: ProactiveObligation,
+  lineage?: { commercialFollowUpRef?: string | null }
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db
@@ -130,10 +122,36 @@ async function upsertObligation(tenantId: string, operatorUserId: string, obliga
       payloadJson: obligation,
       status: obligation.status,
       dueDate: obligation.dueDate,
+      commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
     })
     .onDuplicateKeyUpdate({
-      set: { payloadJson: obligation, status: obligation.status, dueDate: obligation.dueDate },
+      set: {
+        payloadJson: obligation,
+        status: obligation.status,
+        dueDate: obligation.dueDate,
+        commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
+      },
     });
+}
+
+async function backfillObligationCommercialFollowUpRef(input: {
+  tenantId: string;
+  operatorUserId: string;
+  obligationId: string;
+  commercialFollowUpRef: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(claireProactiveObligations)
+    .set({ commercialFollowUpRef: input.commercialFollowUpRef })
+    .where(
+      and(
+        eq(claireProactiveObligations.tenantId, input.tenantId),
+        eq(claireProactiveObligations.operatorUserId, input.operatorUserId),
+        eq(claireProactiveObligations.id, input.obligationId)
+      )
+    );
 }
 
 async function placeOnDayLine(input: {
@@ -162,21 +180,31 @@ async function placeOnDayLine(input: {
   await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
 }
 
-export async function ensureAdamBoard(input: {
+export async function ensureOperatorBoard(input: {
   tenantId: string;
   operatorUserId: string;
   actorId: string;
+  timeZone: string;
+  recoveryDraftIdentity: {
+    storeName: string;
+    senderName: string;
+    serviceLabel: string;
+  };
   force?: boolean;
 }): Promise<{ brief: string; created: number }> {
   if (!isStrategyFeatureEnabled(input.tenantId, STRATEGY_FLAGS.LEGACY_AUTONOMY)) {
     return { brief: "", created: 0 };
   }
   const now = Date.now();
-  if (!input.force && now - lastSweepAt < SWEEP_MS) return { brief: "", created: 0 };
-  lastSweepAt = now;
+  const sweepKey = `${input.tenantId}:${input.operatorUserId}`;
+  const lastSweepAt = lastSweepAtByOperator.get(sweepKey) ?? 0;
+  if (!input.force && now - lastSweepAt < SWEEP_MS) {
+    return { brief: "", created: 0 };
+  }
+  lastSweepAtByOperator.set(sweepKey, now);
   const db = await getDb();
   if (!db) return { brief: "", created: 0 };
-  const timeZone = getDashboardTimeZone();
+  const timeZone = input.timeZone;
   const today = businessToday(new Date(), timeZone);
   if (durableTriggerShadowEnabled()) {
     void enqueueDurableTriggerForOperator({
@@ -269,9 +297,9 @@ export async function ensureAdamBoard(input: {
     });
     const draft = buildWinBackDraft({
       score,
-      storeName: "Laundry Butler",
-      senderName: "Adam",
-      lastServiceLabel: "laundry",
+      storeName: input.recoveryDraftIdentity.storeName,
+      senderName: input.recoveryDraftIdentity.senderName,
+      lastServiceLabel: input.recoveryDraftIdentity.serviceLabel,
     });
     const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
     await upsertObligation(input.tenantId, input.operatorUserId, obligation);
@@ -305,8 +333,27 @@ export async function ensureAdamBoard(input: {
           lastOutcome: null,
           history: [follow.note],
         });
-        if (already.some(item => item.id === obligation.id)) continue;
-        await upsertObligation(input.tenantId, input.operatorUserId, obligation);
+        const existing = already.find(item => item.id === obligation.id);
+        if (existing) {
+          // PR4 lineage backfill must never replay the obligation constructor
+          // over durable workflow state. Existing obligations may already be
+          // draft_prepared, awaiting_result, completed, or cancelled and may
+          // carry accumulated payload state that a fresh scheduled payload
+          // does not know about.
+          await backfillObligationCommercialFollowUpRef({
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            obligationId: existing.id,
+            commercialFollowUpRef: follow.id,
+          });
+          continue;
+        }
+        await upsertObligation(
+          input.tenantId,
+          input.operatorUserId,
+          obligation,
+          { commercialFollowUpRef: follow.id }
+        );
         await placeOnDayLine({
           tenantId: input.tenantId,
           actorId: input.actorId,
@@ -349,6 +396,27 @@ export async function ensureAdamBoard(input: {
       skipSales,
     }),
   };
+}
+
+/**
+ * Legacy founder compatibility only. New persistent-operator code must call
+ * ensureOperatorBoard with tenant-owned timezone and sender identity.
+ */
+export async function ensureAdamBoard(input: {
+  tenantId: string;
+  operatorUserId: string;
+  actorId: string;
+  force?: boolean;
+}): Promise<{ brief: string; created: number }> {
+  return ensureOperatorBoard({
+    ...input,
+    timeZone: getDashboardTimeZone(),
+    recoveryDraftIdentity: {
+      storeName: "Laundry Butler",
+      senderName: "Adam",
+      serviceLabel: "laundry",
+    },
+  });
 }
 
 export async function explainProactive(tenantId: string, operatorUserId: string, utterance: string): Promise<string | null> {

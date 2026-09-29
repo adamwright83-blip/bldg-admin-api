@@ -2,14 +2,51 @@ import { logAgentEvent } from "./agentEvents";
 import { evaluateHumanApproval } from "./humanApproval";
 import { assertToolPermission, type AgentContext } from "./permissions";
 import { getAgentTool, getAgentToolPolicy } from "./toolRegistry";
-import { evaluatePersistentActionPolicy } from "../persistentOperator/actionPolicy";
+import {
+  evaluatePersistentActionPolicy,
+  type PersistentActionPolicyDecision,
+} from "../persistentOperator/actionPolicy";
 import type { AgentEventWrite } from "./agentEvents";
 
-async function safeLogAgentEvent(event: AgentEventWrite): Promise<void> {
+export function validatedPersistentPolicyEventContext(
+  ctx: AgentContext,
+  policy: Extract<PersistentActionPolicyDecision, { allowed: true }>
+): AgentContext {
+  const standing =
+    policy.authority === "standing_authorization"
+      ? {
+          standingAuthorizationId: policy.standingAuthorizationId,
+          standingAuthorizationVersion: policy.standingAuthorizationVersion,
+        }
+      : {
+          standingAuthorizationId: null,
+          standingAuthorizationVersion: null,
+        };
+  return {
+    ...ctx,
+    approvedByUserId:
+      policy.authority === "explicit_approval"
+        ? ctx.approvedByUserId ?? null
+        : null,
+    authorityBasis: policy.authority,
+    approvalBasis:
+      policy.authority === "explicit_approval"
+        ? "explicit_approval"
+        : policy.authority === "standing_authorization"
+          ? "standing_authorization"
+          : "automatic",
+    ...standing,
+  };
+}
+
+async function safeLogAgentEvent(
+  event: AgentEventWrite
+): Promise<number | null> {
   try {
-    await logAgentEvent(event);
+    return await logAgentEvent(event);
   } catch (error) {
     console.warn("[AgentEvents] Failed to persist event:", error);
+    return null;
   }
 }
 
@@ -20,6 +57,12 @@ export async function runAgentTool<TOutput = unknown>(
 ): Promise<TOutput> {
   const started = Date.now();
   let requiresHumanApproval = false;
+  let eventCtx: AgentContext = {
+    ...ctx,
+    approvalBasis:
+      ctx.approvalBasis ??
+      (ctx.approvedByUserId?.trim() ? "explicit_approval" : null),
+  };
 
   try {
     assertToolPermission(ctx, toolName);
@@ -28,6 +71,16 @@ export async function runAgentTool<TOutput = unknown>(
     let approval = evaluateHumanApproval(ctx, toolName);
 
     if (ctx.agentType === "goal_cycle_agent") {
+      await safeLogAgentEvent({
+        ctx: eventCtx,
+        toolName,
+        inputJson: input,
+        status: "proposed",
+        operationStatus: "proposed",
+        latencyMs: Date.now() - started,
+        requiresHumanApproval: tool.requiresHumanApproval === true,
+      });
+
       const persistentPolicy = await evaluatePersistentActionPolicy({
         tenantId: ctx.tenantId,
         canonicalOperatorId: ctx.canonicalOperatorId ?? "",
@@ -38,24 +91,33 @@ export async function runAgentTool<TOutput = unknown>(
         approvedByUserId: ctx.approvedByUserId,
       });
       if (!persistentPolicy.allowed) {
+        const approvalRequired =
+          persistentPolicy.reason === "explicit_approval_required" ||
+          persistentPolicy.reason === "standing_authorization_required";
         const output = {
-          approvalRequired:
-            persistentPolicy.reason === "explicit_approval_required" ||
-            persistentPolicy.reason === "standing_authorization_required",
+          approvalRequired,
           toolName,
           reason: `Persistent action policy denied: ${persistentPolicy.reason}`,
         };
         await safeLogAgentEvent({
-          ctx,
+          ctx: eventCtx,
           toolName,
           inputJson: input,
           outputJson: output,
-          status: output.approvalRequired ? "approval_required" : "blocked",
+          status: approvalRequired ? "approval_required" : "policy_denied",
+          operationStatus: approvalRequired
+            ? "approval_required"
+            : "policy_denied",
           latencyMs: Date.now() - started,
-          requiresHumanApproval: output.approvalRequired,
+          requiresHumanApproval: approvalRequired,
         });
         return output as TOutput;
       }
+
+      eventCtx = validatedPersistentPolicyEventContext(
+        eventCtx,
+        persistentPolicy
+      );
       if (
         toolPolicy.riskClass === "EXTERNAL_COMMUNICATION" &&
         persistentPolicy.authority === "standing_authorization"
@@ -68,7 +130,8 @@ export async function runAgentTool<TOutput = unknown>(
       }
     }
 
-    requiresHumanApproval = tool.requiresHumanApproval === true || approval.requiresHumanApproval;
+    requiresHumanApproval =
+      tool.requiresHumanApproval === true || approval.requiresHumanApproval;
 
     if (!approval.allowed) {
       const output = {
@@ -77,24 +140,39 @@ export async function runAgentTool<TOutput = unknown>(
         reason: "Human approval is required before this action can run.",
       };
       await safeLogAgentEvent({
-        ctx,
+        ctx: eventCtx,
         toolName,
         inputJson: input,
         outputJson: output,
         status: "approval_required",
+        operationStatus: "approval_required",
         latencyMs: Date.now() - started,
         requiresHumanApproval,
       });
       return output as TOutput;
     }
 
-    const result = await tool.execute(input, ctx);
+    if (ctx.agentType === "goal_cycle_agent") {
+      const executionEventId = await safeLogAgentEvent({
+        ctx: eventCtx,
+        toolName,
+        inputJson: input,
+        status: "execution_started",
+        operationStatus: "execution_started",
+        latencyMs: Date.now() - started,
+        requiresHumanApproval,
+      });
+      eventCtx = { ...eventCtx, agentEventId: executionEventId };
+    }
+
+    const result = await tool.execute(input, eventCtx);
     await safeLogAgentEvent({
-      ctx,
+      ctx: eventCtx,
       toolName,
       inputJson: input,
       outputJson: result.output,
       status: "success",
+      operationStatus: "succeeded",
       latencyMs: Date.now() - started,
       entityType: result.entityType ?? null,
       entityId: result.entityId ?? null,
@@ -104,10 +182,11 @@ export async function runAgentTool<TOutput = unknown>(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await safeLogAgentEvent({
-      ctx,
+      ctx: eventCtx,
       toolName,
       inputJson: input,
       status: "failed",
+      operationStatus: "failed",
       errorMessage: message,
       latencyMs: Date.now() - started,
       requiresHumanApproval,

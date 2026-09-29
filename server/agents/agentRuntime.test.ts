@@ -1,6 +1,72 @@
 import { describe, expect, it } from "vitest";
-import { parseOperatorVoiceCommand } from "./agentRuntime";
+import {
+  parseOperatorVoiceCommand,
+  validatedPersistentPolicyEventContext,
+} from "./agentRuntime";
 import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage } from "../operatorTaskIntake";
+
+describe("validatedPersistentPolicyEventContext", () => {
+  const base = {
+    tenantId: "tenant-a",
+    agentType: "goal_cycle_agent" as const,
+    actorType: "system" as const,
+    actorId: "adam",
+    approvedByUserId: "adam",
+    standingAuthorizationId: "stale-auth",
+    standingAuthorizationVersion: 99,
+  };
+
+  it("uses the standing authorization record actually validated by policy", () => {
+    expect(
+      validatedPersistentPolicyEventContext(base, {
+        allowed: true,
+        authority: "standing_authorization",
+        standingAuthorizationId: "validated-auth",
+        standingAuthorizationVersion: 4,
+      })
+    ).toMatchObject({
+      authorityBasis: "standing_authorization",
+      approvalBasis: "standing_authorization",
+      approvedByUserId: null,
+      standingAuthorizationId: "validated-auth",
+      standingAuthorizationVersion: 4,
+    });
+  });
+
+  it("clears caller-supplied standing authorization lineage for explicit approval", () => {
+    expect(
+      validatedPersistentPolicyEventContext(base, {
+        allowed: true,
+        authority: "explicit_approval",
+        standingAuthorizationId: null,
+        standingAuthorizationVersion: null,
+      })
+    ).toMatchObject({
+      authorityBasis: "explicit_approval",
+      approvalBasis: "explicit_approval",
+      approvedByUserId: "adam",
+      standingAuthorizationId: null,
+      standingAuthorizationVersion: null,
+    });
+  });
+
+  it("clears both approval and standing authorization lineage for automatic actions", () => {
+    expect(
+      validatedPersistentPolicyEventContext(base, {
+        allowed: true,
+        authority: "automatic",
+        standingAuthorizationId: null,
+        standingAuthorizationVersion: null,
+      })
+    ).toMatchObject({
+      authorityBasis: "automatic",
+      approvalBasis: "automatic",
+      approvedByUserId: null,
+      standingAuthorizationId: null,
+      standingAuthorizationVersion: null,
+    });
+  });
+});
 
 describe("parseOperatorVoiceCommand", () => {
   it("turns bank deposit voice notes into schedule and availability actions", () => {
