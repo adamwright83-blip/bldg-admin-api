@@ -314,7 +314,13 @@ const databasePersistence: MacroGoalRunPersistence = {
   async setStatus(input) {
     const db = await getDb();
     if (!db) throw new Error("Database unavailable");
-    await db
+    const allowedFrom =
+      input.status === "active"
+        ? ["paused"] as const
+        : input.status === "paused"
+          ? ["active"] as const
+          : ["active", "paused"] as const;
+    const result = await db
       .update(macroGoalRuns)
       .set({
         status: input.status,
@@ -326,9 +332,14 @@ const databasePersistence: MacroGoalRunPersistence = {
       .where(
         and(
           eq(macroGoalRuns.tenantId, input.tenantId),
-          eq(macroGoalRuns.id, input.id)
+          eq(macroGoalRuns.id, input.id),
+          inArray(macroGoalRuns.status, [...allowedFrom])
         )
       );
+    const affected = Number(
+      (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
+    );
+    if (affected !== 1) return null;
     return this.get(input);
   },
 };
