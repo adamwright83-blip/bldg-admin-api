@@ -364,6 +364,23 @@ export async function recordGoalCycleOutcome(
       outcomeId: id,
     });
     if (!created) throw new Error("Failed to load created outcome record");
+
+    // Automatically trigger learning for epistemically settled outcomes (verified or rejected)
+    if (created.epistemicStatus === "verified" || created.epistemicStatus === "rejected") {
+      try {
+        const { evaluateOutcomeAndRecordLearning } = await import("./learningStore");
+        await evaluateOutcomeAndRecordLearning({
+          tenantId: created.tenantId,
+          outcomeId: created.id,
+        });
+      } catch (learningError) {
+        console.warn(
+          `[PersistentOperator] Automatic learning evaluation deferred for outcome ${created.id}:`,
+          learningError instanceof Error ? learningError.message : learningError
+        );
+      }
+    }
+
     return { outcome: created, created: true };
   } catch (error) {
     if (isMysqlDuplicateKeyError(error)) {

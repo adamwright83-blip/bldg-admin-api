@@ -914,6 +914,25 @@ export async function transitionCommercialMissionWith(
             }
           : undefined,
       });
+
+      if (eventName === "visit_completed") {
+        import("../persistentOperator/fieldEventBridge")
+          .then(({ bridgeDriverAction }) => {
+            bridgeDriverAction({
+              tenantId: input.tenantId,
+              actorId: input.actor.id,
+              missionId: input.missionId,
+              evidenceReference: `commercial_mission_events:${projectionCorrelationId}`,
+              sourceSystem: "dayforge_field",
+              outcomeKind: "visit_completed",
+              metadata: input.metadata,
+            }).catch(err => {
+              console.warn("[PersistentOperator] field event bridge deferred", err);
+            });
+          })
+          .catch(() => undefined);
+      }
+
       return transitioned;
 }
 

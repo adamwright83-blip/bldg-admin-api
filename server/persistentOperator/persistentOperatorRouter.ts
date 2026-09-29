@@ -20,6 +20,10 @@ import {
   getLoadoutDelta,
   getPersistentGrowthHistory,
 } from "./proofReadModels";
+import {
+  bridgeDriverAction,
+  bridgeCleanCloudPaidOrder,
+} from "./fieldEventBridge";
 
 function identityFailure(error: unknown): never {
   if (error instanceof CanonicalOperatorIdentityError) {
@@ -135,13 +139,19 @@ export const persistentOperatorRouter = router({
     }),
 
   loadoutDelta: legacyDayforgeTenantOperatorProcedure
-    .input(z.object({ deltaId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      getLoadoutDelta({
+    .input(z.object({ deltaId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
         tenantId: ctx.tenantId,
-        deltaId: input.deltaId,
-      })
-    ),
+        user: ctx.user,
+        subsystem: "persistent_operator.loadout_delta",
+      });
+      return getLoadoutDelta({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId,
+        deltaId: input?.deltaId,
+      });
+    }),
 
   history: legacyDayforgeTenantOperatorProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).optional() }).optional())
@@ -155,6 +165,55 @@ export const persistentOperatorRouter = router({
         tenantId: ctx.tenantId,
         canonicalOperatorId: identity.canonicalOperatorId,
         limit: input?.limit,
+      });
+    }),
+
+  bridgeDriverAction: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        objectiveId: z.string().uuid().optional(),
+        missionId: z.number().int().positive().optional(),
+        orderId: z.number().int().positive().optional(),
+        commitmentId: z.string().optional(),
+        stopId: z.string().optional(),
+        evidenceReference: z.string().min(1),
+        sourceSystem: z.string().optional(),
+        outcomeKind: z.string().optional(),
+        explanation: z.string().optional(),
+        observedAt: z.coerce.date().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "persistent_operator.field_bridge",
+      });
+      return bridgeDriverAction({
+        tenantId: ctx.tenantId,
+        actorId: identity.dayDirectorActorId,
+        ...input,
+      });
+    }),
+
+  bridgeCleanCloudOrder: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        cleancloudOrderId: z.string().min(1),
+        cleancloudCustomerId: z.string().optional(),
+        customerEmail: z.string().optional(),
+        customerPhone: z.string().optional(),
+        paid: z.boolean(),
+        totalCents: z.number().int().nonnegative(),
+        paidDateUtc: z.coerce.date().optional(),
+        objectiveId: z.string().uuid().optional(),
+        explanation: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return bridgeCleanCloudPaidOrder({
+        tenantId: ctx.tenantId,
+        ...input,
       });
     }),
 });
