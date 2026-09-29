@@ -152,7 +152,7 @@ describe("macro goal runs", () => {
       tenantId: "tenant-1",
       runId: "run-1",
       registry,
-      persistence: persistence(),
+      runPersistence: persistence(),
       now: new Date("2026-09-28T12:00:00.000Z"),
     });
     expect(result.completed).toBe(true);
@@ -205,7 +205,7 @@ describe("macro goal runs", () => {
       runId: "run-1",
       sourceCycleId: "source-cycle-1",
       registry,
-      persistence: runPersistence,
+      runPersistence,
       cycleStore,
       now: new Date("2026-09-28T12:00:00.000Z"),
     });
@@ -214,7 +214,7 @@ describe("macro goal runs", () => {
       runId: "run-1",
       sourceCycleId: "source-cycle-1",
       registry,
-      persistence: runPersistence,
+      runPersistence,
       cycleStore,
       now: new Date("2026-09-28T12:05:00.000Z"),
     });
