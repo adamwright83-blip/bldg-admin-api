@@ -150,10 +150,15 @@ async function placeOnDayLine(input: {
   await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
 }
 
-export async function ensureAdamBoard(input: {
+export async function ensureOperatorBoard(input: {
   tenantId: string;
   operatorUserId: string;
   actorId: string;
+  timeZone: string;
+  recoveryDraftIdentity: {
+    storeName: string;
+    senderName: string;
+  };
   force?: boolean;
 }): Promise<{ brief: string; created: number }> {
   if (!isStrategyFeatureEnabled(input.tenantId, STRATEGY_FLAGS.LEGACY_AUTONOMY)) {
@@ -164,7 +169,7 @@ export async function ensureAdamBoard(input: {
   lastSweepAt = now;
   const db = await getDb();
   if (!db) return { brief: "", created: 0 };
-  const timeZone = getDashboardTimeZone();
+  const timeZone = input.timeZone;
   const today = businessToday(new Date(), timeZone);
   if (durableTriggerShadowEnabled()) {
     void enqueueDurableTriggerForOperator({
@@ -257,8 +262,8 @@ export async function ensureAdamBoard(input: {
     });
     const draft = buildWinBackDraft({
       score,
-      storeName: "Laundry Butler",
-      senderName: "Adam",
+      storeName: input.recoveryDraftIdentity.storeName,
+      senderName: input.recoveryDraftIdentity.senderName,
       lastServiceLabel: "laundry",
     });
     const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
@@ -337,6 +342,26 @@ export async function ensureAdamBoard(input: {
       skipSales,
     }),
   };
+}
+
+/**
+ * Legacy founder compatibility only. New persistent-operator code must call
+ * ensureOperatorBoard with tenant-owned timezone and sender identity.
+ */
+export async function ensureAdamBoard(input: {
+  tenantId: string;
+  operatorUserId: string;
+  actorId: string;
+  force?: boolean;
+}): Promise<{ brief: string; created: number }> {
+  return ensureOperatorBoard({
+    ...input,
+    timeZone: getDashboardTimeZone(),
+    recoveryDraftIdentity: {
+      storeName: "Laundry Butler",
+      senderName: "Adam",
+    },
+  });
 }
 
 export async function explainProactive(tenantId: string, operatorUserId: string, utterance: string): Promise<string | null> {
