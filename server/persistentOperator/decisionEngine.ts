@@ -46,6 +46,13 @@ type CycleChoice = {
   blockedCandidates: BlockedCycleCandidate[];
 };
 
+export function inactiveGoalRunWaitReason(
+  status: string
+): "GOAL_RUN_COMPLETED" | "GOAL_RUN_INACTIVE" | null {
+  if (status === "active") return null;
+  return status === "completed" ? "GOAL_RUN_COMPLETED" : "GOAL_RUN_INACTIVE";
+}
+
 function campaignIdFromPlan(
   plan: MissionDirectorPlan | null
 ): string | null {
@@ -317,8 +324,9 @@ export async function decideGoalCycle(input: {
     ...identity.identity.aliases.map(alias => alias.openId),
   ];
 
-  if (run.status !== "active") {
-    const completed = run.status === "completed";
+  const inactiveRunReason = inactiveGoalRunWaitReason(run.status);
+  if (inactiveRunReason) {
+    const completed = inactiveRunReason === "GOAL_RUN_COMPLETED";
     return appendGoalCycleDecision({
       tenantId: input.tenantId,
       goalRunId: run.id,
@@ -337,9 +345,7 @@ export async function decideGoalCycle(input: {
       selectionKind: "wait",
       selectedRef: null,
       selectedExecutionType: null,
-      selectedReasonCode: completed
-        ? "GOAL_RUN_COMPLETED"
-        : "GOAL_RUN_INACTIVE",
+      selectedReasonCode: inactiveRunReason,
       evidenceRefs:
         completed && run.completionEvidenceRef
           ? [`goal_completion:${run.completionEvidenceRef}`]
