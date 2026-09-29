@@ -153,16 +153,38 @@ export class OperatorAppointmentStore
         row.callDispatchStartedAt == null
       ) {
         // The weekly idempotency key intentionally survives authorization
-        // rotation. Refresh authority/timezone until external dispatch begins,
-        // including a row already leased by another replica. A stale worker
-        // copy is fenced by beginCallDispatch's standing-authorization CAS.
-        // Only a never-attempted scheduled row follows the current local slot;
-        // retries and active leases retain their existing execution time.
+        // rotation. Refresh authority/timezone until external dispatch begins.
+        // If another replica already leased the old snapshot, revoke that lease
+        // immediately and refund its claim: no real execution occurred, and
+        // leaving a stale final-attempt lease alive would let expiry dead-letter
+        // the current week's appointment before the stale worker can fail it.
         await connection.execute(
           `UPDATE operator_appointments
               SET scheduledFor = CASE
                     WHEN status = 'scheduled' THEN ?
+                    WHEN status IN ('leased','running') THEN CURRENT_TIMESTAMP(3)
                     ELSE scheduledFor
+                  END,
+                  attemptCount = CASE
+                    WHEN status IN ('leased','running')
+                      THEN GREATEST(attemptCount - 1, 0)
+                    ELSE attemptCount
+                  END,
+                  status = CASE
+                    WHEN status IN ('leased','running') THEN 'retry_scheduled'
+                    ELSE status
+                  END,
+                  leaseOwner = CASE
+                    WHEN status = 'retry_scheduled' THEN NULL
+                    ELSE leaseOwner
+                  END,
+                  leaseExpiresAt = CASE
+                    WHEN status = 'retry_scheduled' THEN NULL
+                    ELSE leaseExpiresAt
+                  END,
+                  heartbeatAt = CASE
+                    WHEN status = 'retry_scheduled' THEN NULL
+                    ELSE heartbeatAt
                   END,
                   timeZone = ?,
                   standingAuthorizationId = ?
