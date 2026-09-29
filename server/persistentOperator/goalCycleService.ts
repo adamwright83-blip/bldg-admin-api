@@ -190,6 +190,7 @@ export function durableTriggerShadowEnabled(): boolean {
 export async function evaluateMacroGoalRunAndScheduleNext(input: {
   tenantId: string;
   runId: string;
+  sourceCycleId: string;
   registry: VerticalRegistry;
   now?: Date;
   runPersistence?: MacroGoalRunPersistence;
@@ -210,8 +211,8 @@ export async function evaluateMacroGoalRunAndScheduleNext(input: {
       tenantId: input.tenantId,
       goalRunId: evaluation.run.id,
       triggerType: "scheduled_tick",
-      triggerSourceReference: `macro_goal_runs:${evaluation.run.id}:scheduled`,
-      idempotencyKey: `scheduled_tick:${evaluation.run.id}:${availableAt.toISOString()}`,
+      triggerSourceReference: `goal_cycle_requests:${input.sourceCycleId}:scheduled_successor`,
+      idempotencyKey: `scheduled_tick:${evaluation.run.id}:after:${input.sourceCycleId}`,
       availableAt,
     });
   }
