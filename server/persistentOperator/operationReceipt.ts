@@ -15,6 +15,23 @@ function unresolved(reason: string): ReceiptLink<never> {
   return { status: "unresolved", reason };
 }
 
+export function isMissingOptionalReceiptTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; errno?: unknown };
+  return value.code === "ER_NO_SUCH_TABLE" || value.errno === 1146;
+}
+
+export async function optionalReceiptRows<T>(
+  read: () => Promise<T[]>
+): Promise<T[]> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isMissingOptionalReceiptTableError(error)) return [];
+    throw error;
+  }
+}
+
 export function selectValidatedAuthorityEvent<
   T extends {
     status: string;
@@ -52,26 +69,30 @@ export async function operationReceipt(input: {
   if (!db) throw new Error("Database unavailable");
 
   const [events, communications, obligations] = await Promise.all([
-    db
-      .select()
-      .from(agentEvents)
-      .where(
-        and(
-          eq(agentEvents.tenantId, input.tenantId),
-          eq(agentEvents.decisionId, input.decisionId)
+    optionalReceiptRows(() =>
+      db
+        .select()
+        .from(agentEvents)
+        .where(
+          and(
+            eq(agentEvents.tenantId, input.tenantId),
+            eq(agentEvents.decisionId, input.decisionId)
+          )
         )
-      )
-      .orderBy(asc(agentEvents.id)),
-    db
-      .select()
-      .from(communicationReceipts)
-      .where(
-        and(
-          eq(communicationReceipts.tenantId, input.tenantId),
-          eq(communicationReceipts.decisionId, input.decisionId)
+        .orderBy(asc(agentEvents.id))
+    ),
+    optionalReceiptRows(() =>
+      db
+        .select()
+        .from(communicationReceipts)
+        .where(
+          and(
+            eq(communicationReceipts.tenantId, input.tenantId),
+            eq(communicationReceipts.decisionId, input.decisionId)
+          )
         )
-      )
-      .orderBy(asc(communicationReceipts.createdAt)),
+        .orderBy(asc(communicationReceipts.createdAt))
+    ),
     selectedObligationRef(decision)
       ? db
           .select()
