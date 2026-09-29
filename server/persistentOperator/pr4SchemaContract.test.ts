@@ -11,6 +11,10 @@ describe("Persistent Growth Operator PR4 schema and authority contracts", () => 
     const schema = repoFile("drizzle/schema.ts");
     const migrate = repoFile("scripts/migrate.mjs");
 
+    expect(sql).toContain(
+      "CREATE TABLE IF NOT EXISTS \`claire_proactive_obligations\`"
+    );
+
     for (const source of [sql, schema, migrate]) {
       expect(source).toContain("goal_cycle_decisions");
       expect(source).toContain("decisionFingerprint");
