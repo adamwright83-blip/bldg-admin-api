@@ -43,7 +43,7 @@ type FakeStore = ProcurementWorkflowStore & {
     claim: number;
     deadLetterSweep: number;
     markRunning: string[];
-    heartbeat: string[];
+    heartbeat: Array<{ id: string; leaseMs: number }>;
     complete: Array<{ id: string; result: unknown }>;
     fail: Array<{ id: string; message: string; retryDelayMs: number }>;
   };
@@ -80,8 +80,8 @@ function fakeStore(over: {
       calls.markRunning.push(s.id);
       return over.markRunning ? over.markRunning(s) : true;
     },
-    async heartbeat(s: ClaimedWorkflowStep) {
-      calls.heartbeat.push(s.id);
+    async heartbeat(s: ClaimedWorkflowStep, leaseMs: number) {
+      calls.heartbeat.push({ id: s.id, leaseMs });
       return true;
     },
     async completeStep(s: ClaimedWorkflowStep, result: unknown) {
@@ -198,6 +198,7 @@ describe("ProcurementWorker — leases and heartbeats", () => {
     startWorker(store, { "test.step": async () => { await gate; return "ok"; } }, { leaseMs: 300 });
 
     await until(() => store.calls.heartbeat.length >= 3, 3_000);
+    expect(store.calls.heartbeat.every(call => call.id === "1" && call.leaseMs === 300)).toBe(true);
     release();
     await until(() => store.calls.complete.length === 1);
     const afterFinish = store.calls.heartbeat.length;
@@ -217,6 +218,7 @@ describe("ProcurementWorker — leases and heartbeats", () => {
     // 30ms / 3 would be 10ms; the floor is 100ms, so ~2 beats in 260ms, never ~25.
     expect(store.calls.heartbeat.length).toBeLessThanOrEqual(3);
     expect(store.calls.heartbeat.length).toBeGreaterThanOrEqual(1);
+    expect(store.calls.heartbeat.every(call => call.id === "1" && call.leaseMs === 30)).toBe(true);
   });
 });
 
