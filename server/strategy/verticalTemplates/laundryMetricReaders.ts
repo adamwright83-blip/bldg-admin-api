@@ -48,7 +48,8 @@ export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetri
     const exact =
       metric.completeness === "complete" &&
       coverage === "complete" &&
-      paidWindowCovered;
+      paidWindowCovered &&
+      metric.unmatchedCount === 0;
     const scopedCoverage =
       metric.value === null || metric.completeness === "unavailable"
         ? "unavailable"
