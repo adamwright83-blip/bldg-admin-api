@@ -43,7 +43,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Worker loop (fake store)
-        run: pnpm vitest run server/procurement/worker.test.ts server/procurement/migrations.test.ts server/persistentOperator/macroGoalRuns.test.ts server/persistentOperator/operatorAppointments.test.ts
+        run: pnpm vitest run server/procurement/worker.test.ts server/procurement/migrations.test.ts server/persistentOperator/macroGoalRuns.test.ts server/persistentOperator/operatorAppointments.test.ts server/claire/brain/tests/persistentOperatorAuthority.test.ts
       - name: Workflow stores against real MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3413/mysql
