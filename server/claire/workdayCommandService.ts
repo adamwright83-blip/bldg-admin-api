@@ -47,6 +47,7 @@ export type LoadDailyCommandInput = {
   tenantId: string;
   actorId: string;
   dayDirectorActorId: string;
+  dayDirectorActorIds?: string[];
   operatorUserId: string;
   businessDate: string;
   vehicleId?: string;
@@ -71,6 +72,7 @@ export async function loadDailyCommand(
     getState({
       tenantId: input.tenantId,
       actorId: input.dayDirectorActorId,
+      actorIds: input.dayDirectorActorIds,
       businessDate: input.businessDate,
     }),
     getField({
@@ -81,7 +83,11 @@ export async function loadDailyCommand(
       timeZone: input.timeZone,
       now: input.now,
     }).catch(() => null),
-    getCampaign({ tenantId: input.tenantId, actorId: input.dayDirectorActorId }).catch(() => null),
+    getCampaign({
+      tenantId: input.tenantId,
+      actorId: input.dayDirectorActorId,
+      actorIds: input.dayDirectorActorIds,
+    }).catch(() => null),
     listVehicleCargo(input.tenantId, input.vehicleId ?? input.operatorUserId).catch(() => []),
   ]);
 

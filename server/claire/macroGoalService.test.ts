@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { OperatorMacroGoal } from "../../drizzle/schema";
 import {
   getActiveMacroGoal,
+  getActiveMacroGoalForOperators,
   setActiveMacroGoal,
   type MacroGoalPersistence,
 } from "./macroGoalService";
@@ -79,6 +80,34 @@ describe("operator macro goals", () => {
     const persistence = memoryPersistence([row()]);
     expect(await getActiveMacroGoal({ tenantId: "tenant-2", operatorUserId: "operator-1" }, persistence)).toBeNull();
     expect(await getActiveMacroGoal({ tenantId: "tenant-1", operatorUserId: "operator-2" }, persistence)).toBeNull();
+  });
+
+  it("resolves the newest active macro goal across authorized operator aliases", async () => {
+    const persistence = memoryPersistence([
+      row({
+        id: "canonical-old",
+        operatorUserId: "admin-owner",
+        updatedAt: new Date("2026-09-14T00:00:00.000Z"),
+      }),
+      row({
+        id: "driver-new",
+        operatorUserId: "driver-alias",
+        objective: "Recover dormant customers",
+        updatedAt: new Date("2026-09-15T00:00:00.000Z"),
+      }),
+    ]);
+    const goal = await getActiveMacroGoalForOperators(
+      {
+        tenantId: "tenant-1",
+        operatorUserIds: ["admin-owner", "driver-alias", "admin-owner"],
+      },
+      persistence
+    );
+    expect(goal).toMatchObject({
+      id: "driver-new",
+      operatorUserId: "driver-alias",
+      objective: "Recover dormant customers",
+    });
   });
 
   it("atomically supersedes the scoped active goal", async () => {

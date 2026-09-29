@@ -165,7 +165,9 @@ export type WeeklyGrowthCandidateFeed = {
 export type LoadWeeklyGrowthCandidatesInput = {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   /** Remaining business dates. Used only to judge prep feasibility. */
   remainingDates: readonly string[];
   now: Date;

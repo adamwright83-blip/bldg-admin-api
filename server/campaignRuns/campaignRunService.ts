@@ -15,7 +15,7 @@
  *
  * Survives `getDb()` returning null like every neighbouring service does.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   goldlineCampaignRuns,
@@ -283,30 +283,65 @@ export async function listOperatorRuns(input: {
   tenantId: string;
   operatorUserId: string;
 }): Promise<CampaignRun[]> {
+  return listOperatorRunsForIdentities({
+    tenantId: input.tenantId,
+    operatorUserIds: [input.operatorUserId],
+  });
+}
+
+/**
+ * Canonical identity groups may contain historical aliases. Business rows stay
+ * immutable: ownership is read across the explicitly authorized alias set
+ * rather than rewriting old Campaign Runs.
+ */
+export async function listOperatorRunsForIdentities(input: {
+  tenantId: string;
+  operatorUserIds: readonly string[];
+}): Promise<CampaignRun[]> {
   const db = await getDb();
   if (!db) return [];
+  const operatorUserIds = [...new Set(input.operatorUserIds.map(value => value.trim()).filter(Boolean))];
+  if (operatorUserIds.length === 0) return [];
   const rows = await db
     .select()
     .from(goldlineCampaignRuns)
     .where(
       and(
         eq(goldlineCampaignRuns.tenantId, input.tenantId),
-        eq(goldlineCampaignRuns.operatorUserId, input.operatorUserId)
+        inArray(goldlineCampaignRuns.operatorUserId, operatorUserIds)
       )
     )
     .orderBy(desc(goldlineCampaignRuns.startedAt));
   return rows.map(toRun);
 }
 
-/**
- * Every write of evidence passes through here first. A run that is not active,
- * or a caller who is not the run's operator, contributes nothing.
- */
-async function assertWritableRun(input: {
+type CampaignRunOwnershipInput = {
   tenantId: string;
   campaignRunId: string;
   operatorUserId: string;
-}): Promise<CampaignRun> {
+  authorizedOperatorUserIds?: readonly string[];
+};
+
+export function campaignRunOwnerIsAuthorized(input: {
+  runOperatorUserId: string;
+  operatorUserId: string;
+  authorizedOperatorUserIds?: readonly string[];
+}): boolean {
+  const allowed = new Set([
+    input.operatorUserId,
+    ...(input.authorizedOperatorUserIds ?? []),
+  ]);
+  return allowed.has(input.runOperatorUserId);
+}
+
+/**
+ * Every write of evidence passes through here first. A run that is not active,
+ * or a caller whose canonical identity group does not contain the run owner,
+ * contributes nothing.
+ */
+async function assertWritableRun(
+  input: CampaignRunOwnershipInput
+): Promise<CampaignRun> {
   const run = await getCampaignRun(input);
   if (!run) throw new Error(`Unknown campaign run ${input.campaignRunId}`);
   if (run.status !== "active") {
@@ -314,9 +349,15 @@ async function assertWritableRun(input: {
       `Campaign run ${input.campaignRunId} is ${run.status}; evidence is only accepted while a run is active`
     );
   }
-  if (run.operatorUserId !== input.operatorUserId) {
+  if (
+    !campaignRunOwnerIsAuthorized({
+      runOperatorUserId: run.operatorUserId,
+      operatorUserId: input.operatorUserId,
+      authorizedOperatorUserIds: input.authorizedOperatorUserIds,
+    })
+  ) {
     throw new Error(
-      "This run belongs to another operator. Evidence is recorded by the operator who is doing the work, and by nobody else."
+      "This run belongs to another operator. Evidence is recorded only for an explicitly authorized canonical identity."
     );
   }
   return run;
@@ -354,6 +395,7 @@ export async function recordTerritoryPresence(input: {
   tenantId: string;
   campaignRunId: string;
   operatorUserId: string;
+  authorizedOperatorUserIds?: readonly string[];
   lat: number;
   lng: number;
   accuracyMeters?: number | null;
@@ -363,6 +405,7 @@ export async function recordTerritoryPresence(input: {
   if (!db) return null;
 
   const run = await assertWritableRun(input);
+  const evidenceOperatorUserId = run.operatorUserId;
   const targets = await listTargets({
     tenantId: input.tenantId,
     targetSetId: run.targetSetId,
@@ -396,7 +439,7 @@ export async function recordTerritoryPresence(input: {
     targetId: null,
     kind: "territory_presence",
     occurredAt: new Date(),
-    operatorUserId: input.operatorUserId,
+    operatorUserId: evidenceOperatorUserId,
     provenance: "device_location",
     epistemicState: "confirmed",
     supportingPresenceEventId: null,
@@ -421,13 +464,15 @@ export async function recordPlacement(input: {
   campaignRunId: string;
   targetId: string;
   operatorUserId: string;
+  authorizedOperatorUserIds?: readonly string[];
   supportingPresenceEventId: string;
   note?: string | null;
 }): Promise<{ eventId: string } | null> {
   const db = await getDb();
   if (!db) return null;
 
-  await assertWritableRun(input);
+  const run = await assertWritableRun(input);
+  const evidenceOperatorUserId = run.operatorUserId;
 
   const slots = await listRunSlots(input);
   const events = await listRunEvents(input);
@@ -452,7 +497,7 @@ export async function recordPlacement(input: {
       "A placement needs a territory-presence event from this run. Presence is never placement, and placement without presence never qualifies."
     );
   }
-  if (presence.operatorUserId !== input.operatorUserId) {
+  if (presence.operatorUserId !== evidenceOperatorUserId) {
     throw new Error(
       "That presence observation belongs to another operator and cannot vouch for this placement."
     );
@@ -466,7 +511,7 @@ export async function recordPlacement(input: {
     targetId: input.targetId,
     kind: "placement_reported",
     occurredAt: new Date(),
-    operatorUserId: input.operatorUserId,
+    operatorUserId: evidenceOperatorUserId,
     provenance: "operator_reported",
     epistemicState: "confirmed",
     supportingPresenceEventId: input.supportingPresenceEventId,
@@ -492,6 +537,7 @@ export async function replaceTarget(input: {
   targetId: string;
   replacementTargetId: string;
   operatorUserId: string;
+  authorizedOperatorUserIds?: readonly string[];
   note: string;
 }): Promise<{ eventId: string } | null> {
   const db = await getDb();
@@ -504,6 +550,7 @@ export async function replaceTarget(input: {
   }
 
   const run = await assertWritableRun(input);
+  const evidenceOperatorUserId = run.operatorUserId;
 
   const slots = await listRunSlots(input);
   const events = await listRunEvents(input);
@@ -547,7 +594,7 @@ export async function replaceTarget(input: {
     targetId: input.targetId,
     kind: "target_replaced",
     occurredAt: new Date(),
-    operatorUserId: input.operatorUserId,
+    operatorUserId: evidenceOperatorUserId,
     provenance: "operator_observed",
     epistemicState: "confirmed",
     supportingPresenceEventId: null,

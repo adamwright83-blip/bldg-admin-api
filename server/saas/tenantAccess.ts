@@ -6,8 +6,10 @@ import {
   legacyDayforgeSaasSubscriptions,
 } from "../../drizzle/schema";
 import {
+  DAYFORGE_ENTITLEMENTS,
   subscriptionAllowsLegacyDayforgeAccess,
   type LegacyDayforgeEntitlement,
+  type SaasEntitlement,
   type SaasTenantMemberRole,
 } from "../../shared/saasTenant";
 import { getDb } from "../db";
@@ -77,7 +79,18 @@ export async function hasLegacyDayforgeEntitlement(input: {
   entitlement: LegacyDayforgeEntitlement;
   now?: Date;
 }): Promise<boolean> {
-  if (legacyTenantIds().has(input.tenantId)) return true;
+  return hasTenantEntitlement(input);
+}
+
+export async function hasTenantEntitlement(input: {
+  tenantId: string;
+  entitlement: SaasEntitlement;
+  now?: Date;
+}): Promise<boolean> {
+  const legacyCompatible = DAYFORGE_ENTITLEMENTS.includes(
+    input.entitlement as LegacyDayforgeEntitlement
+  );
+  if (legacyCompatible && legacyTenantIds().has(input.tenantId)) return true;
   const db = await getDb();
   if (!db) return false;
 

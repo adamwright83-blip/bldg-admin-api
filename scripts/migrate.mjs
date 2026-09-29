@@ -3970,6 +3970,212 @@ await assertRequiredColumns("goldline_rook_contact_sessions", [
   "callAttemptId",
   "status",
 ]);
+// Phase 0 — Persistent Growth Operator core contracts.
+// The production boot path does not replay numbered Drizzle migrations, so
+// make the historical Armory tables exist idempotently before Phase 0 alters
+// them. This keeps fresh databases bootable and is safe on existing databases.
+await applyIdempotentSqlFile(
+  "../drizzle/0053_armory_evolution_sales_intel.sql",
+  "Armory Evolution historical tables"
+);
+// Mirrors drizzle/0101_persistent_growth_phase0.sql.
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "decisionPointId",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN decisionPointId VARCHAR(191) NULL AFTER provenanceKind"
+);
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "encounterReference",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN encounterReference VARCHAR(191) NULL AFTER decisionPointId"
+);
+await ensureRequiredColumn(
+  "armory_weapon_outcomes",
+  "associationStrength",
+  "ALTER TABLE armory_weapon_outcomes ADD COLUMN associationStrength ENUM('decision_point','encounter','mission_window_legacy') NOT NULL DEFAULT 'mission_window_legacy' AFTER outcomeReference"
+);
+await assertEnumContainsValues("armory_weapon_outcomes", "associationStrength", [
+  "decision_point",
+  "encounter",
+  "mission_window_legacy",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tenant_learning_governance (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    scope VARCHAR(96) NOT NULL,
+    version INT NOT NULL,
+    termsVersion VARCHAR(96) NOT NULL,
+    policyVersion VARCHAR(96) NOT NULL,
+    permittedAggregationUse BOOLEAN NOT NULL DEFAULT false,
+    authorizedByUserId VARCHAR(128) NOT NULL,
+    effectiveAt TIMESTAMP NOT NULL,
+    revokedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version),
+    KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)
+  )`,
+  "CREATE TABLE tenant_learning_governance"
+);
+await assertRequiredColumns("tenant_learning_governance", [
+  "id",
+  "tenantId",
+  "scope",
+  "version",
+  "termsVersion",
+  "policyVersion",
+  "permittedAggregationUse",
+  "authorizedByUserId",
+  "effectiveAt",
+  "revokedAt",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "uq_tenant_learning_governance_scope_version",
+  ["tenantId", "scope", "version"],
+  `ALTER TABLE tenant_learning_governance
+     ADD UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version)`
+);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "idx_tenant_learning_governance_active",
+  ["tenantId", "scope", "effectiveAt", "revokedAt"],
+  `ALTER TABLE tenant_learning_governance
+     ADD KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)`
+);
+
+// Persistent operator canonical identity + silent-idle observability.
+// Mirrors drizzle/0102_persistent_operator_identity_observability.sql.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS persistent_operator_identity_bindings (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    canonicalOpenId VARCHAR(64) NOT NULL,
+    aliasOpenId VARCHAR(64) NOT NULL,
+    activeAliasKey VARCHAR(191) NULL,
+    surface VARCHAR(32) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT true,
+    createdByOpenId VARCHAR(64) NULL,
+    revokedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_persistent_operator_identity_active_alias (activeAliasKey),
+    KEY idx_persistent_operator_identity_alias (tenantId,aliasOpenId,active),
+    KEY idx_persistent_operator_identity_canonical (tenantId,canonicalOpenId,active)
+  )`,
+  "CREATE TABLE persistent_operator_identity_bindings"
+);
+await ensureRequiredColumn(
+  "persistent_operator_identity_bindings",
+  "activeAliasKey",
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD COLUMN activeAliasKey VARCHAR(191) NULL`
+);
+await assertRequiredColumns("persistent_operator_identity_bindings", [
+  "id",
+  "tenantId",
+  "canonicalOpenId",
+  "aliasOpenId",
+  "activeAliasKey",
+  "surface",
+  "active",
+  "createdByOpenId",
+  "revokedAt",
+  "createdAt",
+  "updatedAt",
+]);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = CONCAT(tenantId, ':', aliasOpenId)
+     WHERE active = true
+       AND (activeAliasKey IS NULL OR activeAliasKey = '')`,
+  "Backfill active persistent operator alias keys"
+);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = NULL
+     WHERE active = false
+       AND activeAliasKey IS NOT NULL`,
+  "Clear inactive persistent operator alias keys"
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "uq_persistent_operator_identity_active_alias",
+  ["activeAliasKey"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD UNIQUE KEY uq_persistent_operator_identity_active_alias (activeAliasKey)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "idx_persistent_operator_identity_alias",
+  ["tenantId", "aliasOpenId", "active"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD KEY idx_persistent_operator_identity_alias (tenantId,aliasOpenId,active)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "idx_persistent_operator_identity_canonical",
+  ["tenantId", "canonicalOpenId", "active"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD KEY idx_persistent_operator_identity_canonical (tenantId,canonicalOpenId,active)`
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS persistent_operator_diagnostic_events (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    canonicalOperatorId VARCHAR(191) NULL,
+    operatorUserId VARCHAR(128) NULL,
+    subsystem VARCHAR(64) NOT NULL,
+    eventKind VARCHAR(64) NOT NULL,
+    reason VARCHAR(64) NULL,
+    sourceIdentityType VARCHAR(32) NULL,
+    targetIdentityType VARCHAR(32) NULL,
+    objectiveId VARCHAR(191) NULL,
+    occurredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_persistent_operator_diag_tenant_time (tenantId,occurredAt),
+    KEY idx_persistent_operator_diag_operator_time (tenantId,canonicalOperatorId,occurredAt),
+    KEY idx_persistent_operator_diag_reason (tenantId,reason,occurredAt)
+  )`,
+  "CREATE TABLE persistent_operator_diagnostic_events"
+);
+await assertRequiredColumns("persistent_operator_diagnostic_events", [
+  "id",
+  "tenantId",
+  "canonicalOperatorId",
+  "operatorUserId",
+  "subsystem",
+  "eventKind",
+  "reason",
+  "sourceIdentityType",
+  "targetIdentityType",
+  "objectiveId",
+  "occurredAt",
+]);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_tenant_time",
+  ["tenantId", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_tenant_time (tenantId,occurredAt)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_operator_time",
+  ["tenantId", "canonicalOperatorId", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_operator_time (tenantId,canonicalOperatorId,occurredAt)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_reason",
+  ["tenantId", "reason", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_reason (tenantId,reason,occurredAt)`
+);
+
 // END schema-path-normalized
 
 await conn.end();

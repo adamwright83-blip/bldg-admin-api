@@ -3349,6 +3349,71 @@ export const legacyDayforgeSaasMemberships = mysqlTable(
   })
 );
 
+export const persistentOperatorIdentityBindings = mysqlTable(
+  "persistent_operator_identity_bindings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOpenId: varchar("canonicalOpenId", { length: 64 }).notNull(),
+    aliasOpenId: varchar("aliasOpenId", { length: 64 }).notNull(),
+    activeAliasKey: varchar("activeAliasKey", { length: 191 }),
+    surface: varchar("surface", { length: 32 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdByOpenId: varchar("createdByOpenId", { length: 64 }),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeAliasUnique: uniqueIndex(
+      "uq_persistent_operator_identity_active_alias"
+    ).on(table.activeAliasKey),
+    aliasIdx: index("idx_persistent_operator_identity_alias").on(
+      table.tenantId,
+      table.aliasOpenId,
+      table.active
+    ),
+    canonicalIdx: index("idx_persistent_operator_identity_canonical").on(
+      table.tenantId,
+      table.canonicalOpenId,
+      table.active
+    ),
+  })
+);
+
+export const persistentOperatorDiagnosticEvents = mysqlTable(
+  "persistent_operator_diagnostic_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
+    operatorUserId: varchar("operatorUserId", { length: 128 }),
+    subsystem: varchar("subsystem", { length: 64 }).notNull(),
+    eventKind: varchar("eventKind", { length: 64 }).notNull(),
+    reason: varchar("reason", { length: 64 }),
+    sourceIdentityType: varchar("sourceIdentityType", { length: 32 }),
+    targetIdentityType: varchar("targetIdentityType", { length: 32 }),
+    objectiveId: varchar("objectiveId", { length: 191 }),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantTimeIdx: index("idx_persistent_operator_diag_tenant_time").on(
+      table.tenantId,
+      table.occurredAt
+    ),
+    operatorTimeIdx: index("idx_persistent_operator_diag_operator_time").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.occurredAt
+    ),
+    reasonIdx: index("idx_persistent_operator_diag_reason").on(
+      table.tenantId,
+      table.reason,
+      table.occurredAt
+    ),
+  })
+);
+
 export const legacyDayforgeSaasUserCredentials = mysqlTable(
   "dayforge_saas_user_credentials",
   {
@@ -3596,6 +3661,36 @@ export const legacyDayforgeSaasEntitlements = mysqlTable(
       table.tenantId,
       table.entitlementKey,
       table.source
+    ),
+  })
+);
+
+export const tenantLearningGovernance = mysqlTable(
+  "tenant_learning_governance",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    scope: varchar("scope", { length: 96 }).notNull(),
+    version: int("version").notNull(),
+    termsVersion: varchar("termsVersion", { length: 96 }).notNull(),
+    policyVersion: varchar("policyVersion", { length: 96 }).notNull(),
+    permittedAggregationUse: boolean("permittedAggregationUse")
+      .notNull()
+      .default(false),
+    authorizedByUserId: varchar("authorizedByUserId", { length: 128 }).notNull(),
+    effectiveAt: timestamp("effectiveAt").notNull(),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantScopeVersionUnique: uniqueIndex(
+      "uq_tenant_learning_governance_scope_version"
+    ).on(table.tenantId, table.scope, table.version),
+    activeLookupIdx: index("idx_tenant_learning_governance_active").on(
+      table.tenantId,
+      table.scope,
+      table.effectiveAt,
+      table.revokedAt
     ),
   })
 );
@@ -5566,6 +5661,8 @@ export const armoryWeaponUsages = mysqlTable(
       "personal_evidence",
       "foundation",
     ]).notNull(),
+    decisionPointId: varchar("decisionPointId", { length: 191 }),
+    encounterReference: varchar("encounterReference", { length: 191 }),
     requestId: varchar("requestId", { length: 36 }).notNull(),
     usedAt: timestamp("usedAt").defaultNow().notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -5613,6 +5710,13 @@ export const armoryWeaponOutcomes = mysqlTable(
       "no_change",
     ]).notNull(),
     outcomeReference: varchar("outcomeReference", { length: 191 }).notNull(),
+    associationStrength: mysqlEnum("associationStrength", [
+      "decision_point",
+      "encounter",
+      "mission_window_legacy",
+    ])
+      .notNull()
+      .default("mission_window_legacy"),
     observedAt: timestamp("observedAt").defaultNow().notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },

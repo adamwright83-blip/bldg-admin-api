@@ -30,7 +30,9 @@ export type WeeklyRouteResult = {
 export async function routeActiveWeeklySession(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   utterance: string;
   now: Date;
   timeZone: string;
@@ -68,7 +70,9 @@ async function routeLoadedSession(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: readonly string[];
     dayDirectorActorId: string;
+    dayDirectorActorIds?: readonly string[];
     utterance: string;
     now: Date;
     timeZone: string;
@@ -77,7 +81,11 @@ async function routeLoadedSession(
   session: WeeklyPlanningSession
 ): Promise<WeeklyRouteResult> {
   if (lockBindApplies(session, input.utterance)) {
-    const committed = await commitWeeklyPlan({ session, now: input.now });
+    const committed = await commitWeeklyPlan({
+      session,
+      dayDirectorActorIds: input.dayDirectorActorIds,
+      now: input.now,
+    });
     return {
       speak: committed.speech,
       receiptBackedCommit: committed.locked ? committed.speech : undefined,
@@ -93,7 +101,9 @@ async function routeLoadedSession(
         readWeeklyDossierFacts({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates,
           now: input.now,
           timeZone: input.timeZone,
@@ -102,7 +112,9 @@ async function routeLoadedSession(
         readWeeklyGrowthCandidatesForDossier({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates: horizon.remainingDates,
           now: input.now,
           timeZone: input.timeZone,

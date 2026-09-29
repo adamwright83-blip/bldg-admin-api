@@ -214,6 +214,146 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
+/* ---- one-loop proof: today's run targets and the evidence behind them ---- */
+.marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.markTarget,
+.markPresence {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  appearance: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 999px;
+}
+/* area evidence: a soft ring where Driver measured presence, never a building */
+.markPresence {
+  width: 34px;
+  height: 34px;
+  border: 2px dashed rgba(255, 244, 220, 0.85);
+  background: rgba(255, 244, 220, 0.14);
+}
+/* a building on a run; weight rises only with evidence that names it */
+.markTarget {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 244, 220, 0.9);
+  background: rgba(34, 24, 40, 0.75);
+}
+.markToday {
+  width: 22px;
+  height: 22px;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(255, 200, 77, 0.28), 0 0 18px rgba(255, 200, 77, 0.55);
+  animation: todayPulse 2.4s ease-in-out infinite;
+}
+.mark_reported {
+  background: rgba(255, 200, 77, 0.45);
+}
+.mark_evidenced {
+  background: rgba(255, 200, 77, 0.7);
+}
+.mark_completed {
+  background: var(--gold);
+  box-shadow: 0 0 0 5px rgba(255, 200, 77, 0.35), 0 0 26px rgba(255, 200, 77, 0.8);
+}
+@keyframes todayPulse {
+  50% {
+    box-shadow: 0 0 0 9px rgba(255, 200, 77, 0.08), 0 0 26px rgba(255, 200, 77, 0.7);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .markToday {
+    animation: none;
+  }
+}
+.todayBar {
+  position: absolute;
+  z-index: 6;
+  right: 18px;
+  top: calc(env(safe-area-inset-top, 0px) + 72px);
+  max-width: min(420px, calc(100% - 36px));
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 2px solid var(--gold);
+  border-radius: 16px;
+  color: var(--ink2);
+}
+.todayBar b {
+  color: var(--ink);
+  font: 700 17px/1.1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.04em;
+}
+.todayKicker {
+  color: var(--gold);
+  font: 700 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.todayBar button,
+.receipt button {
+  appearance: none;
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: var(--gold);
+  color: #3a2600;
+  font: 700 14px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.todayBar button:focus-visible,
+.receipt button:focus-visible,
+.markTarget:focus-visible,
+.markPresence:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.receipt {
+  position: absolute;
+  z-index: 7;
+  right: 18px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  width: min(380px, calc(100% - 36px));
+  box-sizing: border-box;
+  background: var(--card);
+  border: 2px solid var(--gold);
+  border-radius: 18px;
+  padding: 14px 16px 16px;
+}
+.receipt h2 {
+  margin: 0 0 6px;
+  font: 24px/1 Anton, Impact, sans-serif;
+  text-transform: uppercase;
+}
+.receipt p {
+  margin: 0 0 10px;
+  color: var(--ink2);
+}
+.receipt ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.receipt button + button {
+  margin-left: 8px;
+  background: transparent;
+  color: var(--ink);
+}
 @media (max-width: 640px) {
   .towers {
     top: auto;
@@ -222,5 +362,16 @@
   .dock button {
     padding: 0 10px;
     font-size: 14px;
+  }
+  .todayBar {
+    left: 18px;
+    right: 18px;
+    max-width: none;
+  }
+  .receipt {
+    right: 18px;
+    left: 18px;
+    width: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
   }
 }

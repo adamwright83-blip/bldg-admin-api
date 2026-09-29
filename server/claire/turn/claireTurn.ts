@@ -63,6 +63,7 @@ import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingR
 import { classifyOpenDialogueAct } from "./dialogueAct";
 import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
+import { beginWeeklyMission, loadWeeklyMissionPicture } from "../weeklyMission/driver";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -245,6 +246,8 @@ export type ClaireTurnDeps = {
   campaign: typeof getClaireCampaignSummary;
   markReconciliation?: typeof markWorkdayReconciliation;
   loadWorkdayPlan?: typeof loadConfirmedWorkdayPlan;
+  weeklyPicture?: typeof loadWeeklyMissionPicture;
+  beginWeekly?: typeof beginWeeklyMission;
   vocabulary: typeof loadBusinessVocabulary;
   accounts: typeof listAccountRefs;
   accountHistory: typeof loadAccountHistory;
@@ -284,6 +287,8 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     campaign: getClaireCampaignSummary,
     markReconciliation: markWorkdayReconciliation,
     loadWorkdayPlan: loadConfirmedWorkdayPlan,
+    weeklyPicture: loadWeeklyMissionPicture,
+    beginWeekly: beginWeeklyMission,
     vocabulary: loadBusinessVocabulary,
     accounts: listAccountRefs,
     accountHistory: loadAccountHistory,
@@ -650,8 +655,29 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   };
   const morningSession =
     state.sessionKind ?? input.context?.workday?.session ?? null;
-  const completeMorningReconciliation = async () => {
-    if (morningSession !== "morning_reconciliation" || !deps.markReconciliation) return;
+  const weeklyScope = {
+    tenantId: input.tenantId,
+    operatorId: input.operatorUserId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    timeZone,
+    now,
+  };
+  const beginWeeklyAfterMorningReconciliation = async (): Promise<string> => {
+    if (
+      input.surface !== "voice" ||
+      morningSession !== "morning_reconciliation" ||
+      !deps.weeklyPicture ||
+      !deps.beginWeekly
+    ) {
+      return "";
+    }
+    const picture = await deps.weeklyPicture(weeklyScope).catch(() => null);
+    if (!picture || (picture.status !== "IN_PROGRESS" && !picture.canBegin)) return "";
+    const turn = await deps.beginWeekly(weeklyScope).catch(() => null);
+    return turn?.speech?.trim() ?? "";
+  };
+  const completeMorningReconciliation = async (): Promise<string> => {
+    if (morningSession !== "morning_reconciliation" || !deps.markReconciliation) return "";
     await deps
       .markReconciliation({
         tenantId: input.tenantId,
@@ -660,6 +686,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         status: "complete",
       })
       .catch(() => undefined);
+    // Weekly Mission Readiness is a real Monday/first-call contract, not a UI-only
+    // feature. Once today's reconciliation is actually complete, hand the same
+    // voice call into the weekly session instead of falling back to generic
+    // briefing capture and waiting for the operator to remind Claire.
+    return beginWeeklyAfterMorningReconciliation();
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -967,13 +998,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         vehicleId: input.operatorUserId,
       });
       mark("briefing");
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
       const commitSpeak = speakBriefingCommit(result, today);
       const receipts = result.receipts ?? [];
       // A referential bundle authorization is one complete command. Some older
       // confirmation parsing can leave "to the Day Line" as a remainder; replaying
       // that fragment after the save can route back through Day Line logic and write twice.
-      if (reply.remainder && !explicitPendingCommit) {
+      if (reply.remainder && !explicitPendingCommit && !weeklySpeech) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
         return finish({
           speak: more.speak,
@@ -984,7 +1015,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         });
       }
       return finish({
-        speak: "",
+        speak: weeklySpeech,
         receiptBackedCommit: commitSpeak,
         kind: "briefing_saved",
         actionIds: result.commitmentIds,
@@ -1090,7 +1121,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // ── 4. The whole utterance as a briefing ──────────────────────────────────
   if (morningSession === "morning_reconciliation" && deps.markReconciliation) {
     if (detectReconciliationComplete(utterance)) {
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
+      if (weeklySpeech) {
+        mark("fallback", { fallbackReason: "weekly_planning_auto_start" });
+        return finish({ speak: weeklySpeech, kind: "answered" });
+      }
     }
     if (isMorningGreeting(utterance) && !state.pendingBriefing && !state.pendingProposal) {
       const plan = deps.loadWorkdayPlan
@@ -1186,14 +1221,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
     );
     mark("briefing");
-    await completeMorningReconciliation();
+    const weeklySpeech = await completeMorningReconciliation();
     const updateSpeech = (result.receipts ?? [])
       .filter(receipt => receipt.claimedState === "updated")
       .map(receipt => `Updated: ${receipt.statement}.`)
       .join(" ");
     const createdSpeech = result.added?.length ? speakBriefingCommit(result, today) : "";
     return finish({
-      speak: "",
+      speak: weeklySpeech,
       receiptBackedCommit: [createdSpeech, updateSpeech].filter(Boolean).join(" "),
       kind: "briefing_saved",
       actionIds: result.commitmentIds,
@@ -1335,9 +1370,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
       state.pendingBriefing = null;
       mark("briefing");
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
       return finish({
-        speak: answers.join(" ").trim(),
+        speak: [answers.join(" ").trim(), weeklySpeech].filter(Boolean).join(" "),
         receiptBackedCommit: speakBriefingCommit(result, today),
         kind: "briefing_saved",
         actionIds: result.commitmentIds,

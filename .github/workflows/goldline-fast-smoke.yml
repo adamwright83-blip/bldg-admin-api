@@ -41,6 +41,8 @@ jobs:
       GOLDLINE_PROOF_MODE: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: pnpm/action-setup@v6
         with:
           version: 10.4.1
@@ -51,6 +53,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
+      - name: Enforce Phase 0 architecture guards
+        run: |
+          pnpm check:nomenclature
+          pnpm check:tenant-ratchet
+          pnpm check:vertical-dependencies
+      - name: Prove Persistent Growth Operator Phase 0 contracts
+        run: >-
+          pnpm vitest run
+          server/strategy/verticalTemplates/registry.test.ts
+          server/saas/tenantSourceAdapters.test.ts
+          server/saas/tenantImportService.test.ts
+          server/analytics/canonicalRevenue.test.ts
+          server/analytics/sourceCoverage.test.ts
+          server/executionIntelligence/selectExecutionIntelligence.test.ts
+          server/armory/armoryJ0.test.ts
+          shared/tenantLearningGovernance.test.ts
+          server/persistentOperator/tenantScope.test.ts
+          server/persistentOperator/phase0SchemaContract.test.ts
+          server/persistentOperator/identity.test.ts
+          server/persistentOperator/observability.test.ts
+          server/persistentOperator/identitySchemaContract.test.ts
+          server/campaignRuns/canonicalOwnership.test.ts
+          server/lanternCity/lanternCityRouter.test.ts
+          shared/lanternCityObjectiveMarks.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run

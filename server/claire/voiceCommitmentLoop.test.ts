@@ -637,3 +637,60 @@ describe("Day Line edit and cancel through Claire", () => {
     expect(approveEngineering).not.toHaveBeenCalled();
   });
 });
+
+
+describe("explicit Objective execution type survives the single-item voice path", () => {
+  it("stores an Instagram publishing assignment as a growth Challenge, not an untyped/prep item", async () => {
+    const utterance =
+      "I need to publish the static image Instagram assignment today as a challenge, not a mission.";
+    const propose = vi.fn().mockResolvedValue(
+      proposalFixture({
+        title: "Publish static image Instagram assignment",
+        sourceText: utterance,
+      })
+    );
+    const accept = vi.fn().mockResolvedValue({ id: "instagram-challenge-1" });
+    const state: PendingProposalState = {};
+
+    const proposed = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-28",
+        utterance,
+        state,
+      },
+      {
+        propose,
+        accept,
+        classify: vi.fn().mockResolvedValue("new_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+      }
+    );
+
+    expect(proposed.kind).toBe("proposed");
+    expect(state.pendingProposal?.kind).toBe("growth");
+    expect(state.pendingProposal?.executionType).toBe("challenge");
+
+    const saved = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-28",
+        utterance: "yes",
+        state,
+      },
+      { accept }
+    );
+
+    expect(saved.kind).toBe("accepted");
+    expect(accept).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposal: expect.objectContaining({
+          kind: "growth",
+          executionType: "challenge",
+        }),
+      })
+    );
+  });
+});
