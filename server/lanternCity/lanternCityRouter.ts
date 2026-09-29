@@ -17,6 +17,8 @@ export function lanternObjectiveMarksScope(input: {
     tenantId: input.tenantId,
     operatorId: input.dayDirectorActorId,
     operatorIds: [...new Set(input.dayDirectorActorIds)],
+    operatorUserId: input.campaignOperatorUserIds[0],
+    operatorUserIds: [...new Set(input.campaignOperatorUserIds)],
     viewerOpenIds: [...new Set(input.campaignOperatorUserIds)],
   };
 }
