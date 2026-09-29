@@ -151,21 +151,43 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     });
   });
 
-  it("allows only one missed-call follow-up claim", async () => {
+  it("never reclaims an appointment after external call dispatch begins", async () => {
     const store = new OperatorAppointmentStore(pool);
     const scheduled = await store.enqueue(appointment());
-    const step = await store.claimNextStep({ leaseOwner: "worker", leaseMs: 10_000 });
-    expect(step).not.toBeNull();
+    const step = await store.claimNextStep({ leaseOwner: "worker", leaseMs: 100 });
+    expect(step).toMatchObject({ id: scheduled.id });
     expect(await store.markRunning(step!)).toBe(true);
-    expect(
-      await store.completeStep(step!, { callSid: "CA1234567890" })
-    ).toBe(true);
-    await store.markMissedByCallSid("CA1234567890");
+    expect(await store.beginCallDispatch(step!)).toBe(true);
+    expect(await store.beginCallDispatch(step!)).toBe(false);
 
-    const first = await store.claimMissedFollowup("CA1234567890");
-    const second = await store.claimMissedFollowup("CA1234567890");
-    expect(first).toMatchObject({ id: scheduled.id });
-    expect(second).toBeNull();
+    await wait(250);
+    expect(
+      await store.claimNextStep({ leaseOwner: "rescuer", leaseMs: 10_000 })
+    ).toBeNull();
+    expect(await store.deadLetterExpiredSteps()).toBe(1);
+    const [row] = await rows<RowDataPacket>(
+      "SELECT status, lastError, attemptCount FROM operator_appointments WHERE id = ?",
+      [scheduled.id]
+    );
+    expect(row).toMatchObject({
+      status: "dead_letter",
+      lastError: "call_dispatch_outcome_uncertain_no_redial",
+      attemptCount: 1,
+    });
+  });
+
+  it("does not retry when provider execution fails after dispatch was claimed", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const scheduled = await store.enqueue(appointment({ idempotencyKey: "dispatch-fail" }));
+    const step = await store.claimNextStep({ leaseOwner: "worker", leaseMs: 10_000 });
+    expect(step).toMatchObject({ id: scheduled.id });
+    expect(await store.markRunning(step!)).toBe(true);
+    expect(await store.beginCallDispatch(step!)).toBe(true);
+    expect(await store.failStep(step!, new Error("provider outcome unknown"), 100))
+      .toBe("dead_letter");
+    expect(
+      await store.claimNextStep({ leaseOwner: "rescuer", leaseMs: 10_000 })
+    ).toBeNull();
   });
 
   it("an idempotent callback retry does not cancel its own durable row", async () => {
