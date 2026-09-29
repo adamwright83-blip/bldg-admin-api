@@ -73,6 +73,7 @@ export async function operationReceipt(input: {
       "approval_required",
       "execution_started",
       "success",
+      "succeeded",
       "failed",
     ].includes(event.operationStatus ?? event.status)
   );
