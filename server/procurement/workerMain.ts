@@ -8,7 +8,7 @@ import { ProcurementWorker, type ProcurementStepHandler } from "./worker";
 import { ProcurementWorkflowStore } from "./workflowStore";
 import { GoalCycleStore } from "../persistentOperator/goalCycleStore";
 import { GoalCycleWorker } from "../persistentOperator/goalCycleWorker";
-import { evaluateMacroGoalRun } from "../persistentOperator/macroGoalRuns";
+import { evaluateMacroGoalRunAndScheduleNext } from "../persistentOperator/goalCycleService";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -56,10 +56,11 @@ const goalCycleWorker = new GoalCycleWorker(
     retryBaseMs: numberFromEnv("GOAL_CYCLE_WORKER_RETRY_BASE_MS", 5_000),
   },
   async input => {
-    const evaluation = await evaluateMacroGoalRun({
+    const evaluation = await evaluateMacroGoalRunAndScheduleNext({
       tenantId: input.tenantId,
       runId: input.runId,
       registry: defaultVerticalRegistry,
+      cycleStore: goalCycleStore,
     });
     return {
       runId: evaluation.run.id,
