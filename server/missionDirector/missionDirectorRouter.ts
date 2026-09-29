@@ -30,6 +30,8 @@ export const missionDirectorRouter = router({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
         ...input,
       });
     }),
@@ -41,6 +43,8 @@ export const missionDirectorRouter = router({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
         ...input,
       });
     }),
@@ -57,6 +61,8 @@ export const missionDirectorRouter = router({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
         ...input,
       });
     }),
