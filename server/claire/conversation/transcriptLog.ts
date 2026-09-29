@@ -57,6 +57,17 @@ export function transcriptLoggingAllowed(
   );
 }
 
+export function transcriptTextLoggingAllowed(
+  session: Pick<ConversationSession, "tenantId" | "operatorUserId">,
+  raw = process.env.CLAIRE_TRANSCRIPT_TEXT_SCOPES ?? ""
+): boolean {
+  return parseTranscriptLogScopes(raw).some(
+    scope =>
+      scope.tenantId === session.tenantId &&
+      scope.operatorUserId === session.operatorUserId
+  );
+}
+
 function transcriptLog(payload: Record<string, unknown>): void {
   console.info(LOG_PREFIX, JSON.stringify(payload));
 }
@@ -101,6 +112,7 @@ export async function emitClaireTranscriptTurnLog(
     const store = productionConversationStore();
     const session = await store.getSession(turn.sessionId);
     if (!session || !transcriptLoggingAllowed(session)) return;
+    const includeText = transcriptTextLoggingAllowed(session);
     transcriptLog({
       event: "claire_transcript_turn",
       reason,
@@ -111,6 +123,7 @@ export async function emitClaireTranscriptTurnLog(
       ordinal: turn.ordinal,
       speaker: turn.speaker,
       textLength: turn.text.length,
+      ...(includeText ? { text: redactClaireTranscriptText(turn.text) } : {}),
       occurredAt: turn.occurredAt,
     });
   } catch (error) {
@@ -126,9 +139,10 @@ export async function emitClaireTranscriptTurnLog(
  * This is therefore a narrow, configuration-gated read mirror — not a second
  * transcript store and not a public API.
  *
- * Deliberately omitted from logs: transcript bodies, provider call SID,
- * recording SID/URL, provider metadata, phone numbers, auth material, and
- * environment secrets.
+ * Transcript bodies remain omitted unless the session is separately allowlisted
+ * by CLAIRE_TRANSCRIPT_TEXT_SCOPES. Provider call SID, recording SID/URL,
+ * provider metadata, phone numbers, auth material, and environment secrets are
+ * always omitted or redacted.
  */
 export async function emitClaireTranscriptLog(
   sessionId: string,
@@ -158,6 +172,7 @@ export async function emitClaireTranscriptLog(
       });
 
       const turns = await store.listTurns(session.id);
+      const includeText = transcriptTextLoggingAllowed(session);
       for (const turn of turns) {
         transcriptLog({
           event: "claire_transcript_turn",
@@ -169,6 +184,7 @@ export async function emitClaireTranscriptLog(
           ordinal: turn.ordinal,
           speaker: turn.speaker,
           textLength: turn.text.length,
+          ...(includeText ? { text: redactClaireTranscriptText(turn.text) } : {}),
           occurredAt: turn.occurredAt,
         });
       }
@@ -180,6 +196,7 @@ export async function emitClaireTranscriptLog(
         POST_CALL_TRANSCRIPT_SOURCE
       );
       if (transcript?.text) {
+        const includeText = transcriptTextLoggingAllowed(session);
         transcriptLog({
           event: "claire_post_call_transcript_summary",
           reason: options.reason ?? "unspecified",
@@ -188,6 +205,9 @@ export async function emitClaireTranscriptLog(
           tenantId: session.tenantId,
           operatorUserId: session.operatorUserId,
           textLength: transcript.text.length,
+          ...(includeText
+            ? { text: redactClaireTranscriptText(transcript.text) }
+            : {}),
           source: POST_CALL_TRANSCRIPT_SOURCE,
         });
       }
