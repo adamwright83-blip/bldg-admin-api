@@ -14,6 +14,8 @@ describe("Persistent Growth Operator PR4 schema and authority contracts", () => 
     expect(sql).toContain(
       "CREATE TABLE IF NOT EXISTS \`claire_proactive_obligations\`"
     );
+    expect(sql).toContain("MODIFY COLUMN \`kind\` varchar(32) NOT NULL");
+    expect(migrate).toContain("MODIFY COLUMN kind VARCHAR(32) NOT NULL");
 
     for (const source of [sql, schema, migrate]) {
       expect(source).toContain("goal_cycle_decisions");
