@@ -1,3 +1,5 @@
+import type { CanonicalOperatorIdentity } from "./identity";
+
 export type PersistentOperatorTenantScope = {
   tenantId: string;
   operatorUserId: string;
@@ -11,4 +13,13 @@ export function assertPersistentOperatorTenantScope(
   if (!tenantId) throw new Error("persistent operator requires tenantId");
   if (!operatorUserId) throw new Error("persistent operator requires operatorUserId");
   return { tenantId, operatorUserId };
+}
+
+export function persistentOperatorScopeFromCanonicalIdentity(
+  identity: CanonicalOperatorIdentity
+): PersistentOperatorTenantScope {
+  return assertPersistentOperatorTenantScope({
+    tenantId: identity.tenantId,
+    operatorUserId: identity.canonicalOpenId,
+  });
 }

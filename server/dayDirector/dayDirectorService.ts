@@ -1,5 +1,5 @@
 import { enforceTitleContract } from "../claire/briefing/titleContract";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
   dayDirectorCommitments,
@@ -58,8 +58,14 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 export async function getDayDirectorState(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: string[];
   businessDate: string;
 }) {
+  const actorIds = [...new Set(
+    (input.actorIds?.length ? input.actorIds : [input.actorId])
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const db = await getDb();
   if (!db)
     return {
@@ -85,7 +91,7 @@ export async function getDayDirectorState(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          inArray(dayDirectorCommitments.actorId, actorIds),
           eq(dayDirectorCommitments.businessDate, input.businessDate)
         )
       ),
@@ -95,7 +101,7 @@ export async function getDayDirectorState(input: {
       .where(
         and(
           eq(dayDirectorPromptStates.tenantId, input.tenantId),
-          eq(dayDirectorPromptStates.actorId, input.actorId),
+          inArray(dayDirectorPromptStates.actorId, actorIds),
           eq(dayDirectorPromptStates.businessDate, input.businessDate),
           eq(dayDirectorPromptStates.state, "dismissed")
         )
@@ -151,7 +157,7 @@ export async function getDayDirectorState(input: {
           : {}),
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
-    dismissedPromptKeys: prompts.map(row => row.promptKey),
+    dismissedPromptKeys: [...new Set(prompts.map(row => row.promptKey))],
     intelligenceAvailable: Boolean(ENV.anthropicApiKey?.trim()),
   };
 }
@@ -229,18 +235,24 @@ export async function proposeCommitment(input: {
 async function demoteOtherPrimaries(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
   businessDate: string;
   exceptId: string;
 }) {
   const db = await getDb();
   if (!db) return;
+  const actorIds = [...new Set(
+    [input.actorId, ...(input.actorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const rows = await db
     .select()
     .from(dayDirectorCommitments)
     .where(
       and(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
         eq(dayDirectorCommitments.businessDate, input.businessDate)
       )
     );
@@ -264,23 +276,101 @@ async function demoteOtherPrimaries(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.actorId, row.actorId),
           eq(dayDirectorCommitments.id, row.id)
         )
       );
   }
 }
 
-export async function acceptProposal(input: {
+export async function acceptProposalWithReceipt(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
   businessDate: string;
   proposal: DayDirectorProposal;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const actorIds = [...new Set(
+    [input.actorId, ...(input.actorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
+  if (actorIds.length === 0) throw new Error("Day Director actor identity is required");
   const businessDate = input.proposal.targetBusinessDate ?? input.businessDate;
   const command = input.proposal.command ?? emptyCommandMetadata();
+  const metadataJson = {
+    prerequisites: input.proposal.prerequisites,
+    intelligence: input.proposal.intelligence,
+    detailState: input.proposal.detailState ?? "COMPLETE",
+    missingDetails: input.proposal.missingDetails ?? [],
+    detailNote: input.proposal.detailNote ?? null,
+    command,
+    ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
+    ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
+  };
+
+  const existingRows = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
+        eq(dayDirectorCommitments.businessDate, businessDate),
+        eq(dayDirectorCommitments.idempotencyKey, input.proposal.promptKey)
+      )
+    )
+    .limit(2);
+  if (existingRows.length > 1) {
+    throw new Error("Day Director acceptance is ambiguous across authorized actor IDs");
+  }
+
+  const existing = existingRows[0];
+  if (existing) {
+    await db
+      .update(dayDirectorCommitments)
+      .set({
+        title: input.proposal.title.trim().slice(0, 255),
+        kind: input.proposal.kind,
+        metadataJson,
+      })
+      .where(
+        and(
+          eq(dayDirectorCommitments.tenantId, input.tenantId),
+          eq(dayDirectorCommitments.id, existing.id)
+        )
+      );
+    await setPromptState({
+      tenantId: input.tenantId,
+      actorId: existing.actorId,
+      businessDate,
+      promptKey: input.proposal.promptKey,
+      state: "accepted",
+    });
+    const [stored] = await db
+      .select()
+      .from(dayDirectorCommitments)
+      .where(
+        and(
+          eq(dayDirectorCommitments.tenantId, input.tenantId),
+          eq(dayDirectorCommitments.id, existing.id)
+        )
+      )
+      .limit(1);
+    if (stored && command.role === "primary") {
+      await demoteOtherPrimaries({
+        tenantId: input.tenantId,
+        actorId: stored.actorId,
+        actorIds,
+        businessDate,
+        exceptId: stored.id,
+      });
+    }
+    return { stored, created: false };
+  }
+
   const row = {
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -294,16 +384,7 @@ export async function acceptProposal(input: {
       ? "manual"
       : "user_reported") as "manual" | "user_reported",
     sourceText: input.proposal.sourceText,
-    metadataJson: {
-      prerequisites: input.proposal.prerequisites,
-      intelligence: input.proposal.intelligence,
-      detailState: input.proposal.detailState ?? "COMPLETE",
-      missingDetails: input.proposal.missingDetails ?? [],
-      detailNote: input.proposal.detailNote ?? null,
-      command,
-      ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
-      ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
-    },
+    metadataJson,
   };
   await db
     .insert(dayDirectorCommitments)
@@ -322,26 +403,41 @@ export async function acceptProposal(input: {
     promptKey: input.proposal.promptKey,
     state: "accepted",
   });
-  const [stored] = await db
+  const storedRows = await db
     .select()
     .from(dayDirectorCommitments)
     .where(
       and(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
         eq(dayDirectorCommitments.businessDate, businessDate),
         eq(dayDirectorCommitments.idempotencyKey, input.proposal.promptKey)
       )
     )
-    .limit(1);
+    .limit(2);
+  if (storedRows.length > 1) {
+    throw new Error("Day Director acceptance is ambiguous across authorized actor IDs");
+  }
+  const stored = storedRows[0];
   if (stored && command.role === "primary") {
     await demoteOtherPrimaries({
       tenantId: input.tenantId,
-      actorId: input.actorId,
+      actorId: stored.actorId,
+      actorIds,
       businessDate,
       exceptId: stored.id,
     });
   }
+  return {
+    stored,
+    created: Boolean(stored && stored.id === row.id),
+  };
+}
+
+export async function acceptProposal(
+  input: Parameters<typeof acceptProposalWithReceipt>[0]
+) {
+  const { stored } = await acceptProposalWithReceipt(input);
   return stored;
 }
 
@@ -364,8 +460,14 @@ export async function setPromptState(input: {
 export async function completeDayDirectorCommitment(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: string[];
   commitmentId: string;
 }) {
+  const actorIds = [...new Set(
+    (input.actorIds?.length ? input.actorIds : [input.actorId])
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
@@ -375,7 +477,7 @@ export async function completeDayDirectorCommitment(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          inArray(dayDirectorCommitments.actorId, actorIds),
           eq(dayDirectorCommitments.id, input.commitmentId)
         )
       )
@@ -390,7 +492,7 @@ export async function completeDayDirectorCommitment(input: {
         .where(
           and(
             eq(dayDirectorCommitments.tenantId, input.tenantId),
-            eq(dayDirectorCommitments.actorId, input.actorId),
+            inArray(dayDirectorCommitments.actorId, actorIds),
             eq(dayDirectorCommitments.id, input.commitmentId)
           )
         );
@@ -478,6 +580,7 @@ export async function updateDayDirectorCommitment(input: {
 export async function designateDayDirectorPrimary(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
   businessDate: string;
   commitmentId: string;
   nowIso: string;
@@ -486,13 +589,18 @@ export async function designateDayDirectorPrimary(input: {
 }): Promise<{ commitmentId: string }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const actorIds = [...new Set(
+    [input.actorId, ...(input.actorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
   const rows = await db
     .select()
     .from(dayDirectorCommitments)
     .where(
       and(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
         eq(dayDirectorCommitments.businessDate, input.businessDate)
       )
     );
@@ -528,7 +636,7 @@ export async function designateDayDirectorPrimary(input: {
       .where(
         and(
           eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.actorId, row.actorId),
           eq(dayDirectorCommitments.id, row.id)
         )
       );

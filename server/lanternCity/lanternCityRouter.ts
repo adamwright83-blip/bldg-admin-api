@@ -4,22 +4,43 @@
  * not be one. Lantern City projects business records; it never writes them.
  */
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
+import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
 import { loadLanternObjectiveMarks } from "./objectiveMarksService";
 
-export function lanternObjectiveMarksScope(ctx: {
+export function lanternObjectiveMarksScope(input: {
   tenantId: string;
-  user: { id?: unknown; openId: string };
+  dayDirectorActorId: string;
+  dayDirectorActorIds: readonly string[];
+  campaignOperatorUserIds: readonly string[];
 }) {
   return {
-    tenantId: ctx.tenantId,
-    operatorId: dayDirectorActorId(ctx),
-    viewerOpenId: ctx.user.openId,
+    tenantId: input.tenantId,
+    operatorId: input.dayDirectorActorId,
+    operatorIds: [...new Set(input.dayDirectorActorIds)],
+    operatorUserId: input.campaignOperatorUserIds[0],
+    operatorUserIds: [...new Set(input.campaignOperatorUserIds)],
+    viewerOpenIds: [...new Set(input.campaignOperatorUserIds)],
   };
 }
 
 export const lanternCityRouter = router({
-  objectiveMarks: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
-    loadLanternObjectiveMarks(lanternObjectiveMarksScope(ctx))
-  ),
+  objectiveMarks: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+    const identity = await requireCanonicalOperatorIdentityForUser({
+      tenantId: ctx.tenantId,
+      user: ctx.user,
+      subsystem: "lantern_city",
+    });
+    return loadLanternObjectiveMarks(
+      lanternObjectiveMarksScope({
+        tenantId: identity.tenantId,
+        dayDirectorActorId: identity.dayDirectorActorId,
+        dayDirectorActorIds: identity.dayDirectorActorIds,
+        campaignOperatorUserIds: [
+          identity.canonicalOpenId,
+          identity.sourceOpenId,
+          ...identity.aliases.map(alias => alias.openId),
+        ],
+      })
+    );
+  }),
 });

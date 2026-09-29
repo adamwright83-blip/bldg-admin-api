@@ -26,8 +26,8 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
   const ownerB = `dayforge:owner-b-${suffix}`;
   const workerA = `dayforge:worker-a-${suffix}`;
   const workerB = `dayforge:worker-b-${suffix}`;
-  const ownerNumericIdA = 910001;
-  const ownerNumericIdB = 910002;
+  let ownerNumericIdA = 0;
+  let ownerNumericIdB = 0;
   let db: mysql.Connection;
   let missionAId = 0;
   let missionBId = 0;
@@ -106,11 +106,13 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
         [tenantId, tenantId, label, label, "#111111", label, `${tenantId}@example.invalid`, "America/Los_Angeles"]
       );
       for (const [openId, role] of [[ownerOpenId, "owner"], [workerOpenId, "field"]] as const) {
-        await db.execute(
+        const [userInsert] = await db.execute<mysql.ResultSetHeader>(
           `INSERT INTO users (tenantId,openId,name,email,role,loginMethod)
            VALUES (?,?,?,?, 'user','password')`,
           [tenantId, openId, openId, `${openId.replace(/[^a-z0-9]/gi, "-")}@example.invalid`]
         );
+        if (openId === ownerA) ownerNumericIdA = userInsert.insertId;
+        if (openId === ownerB) ownerNumericIdB = userInsert.insertId;
         await db.execute(
           `INSERT INTO dayforge_saas_memberships (tenantId,userOpenId,role,active)
            VALUES (?,?,?,true)`,
@@ -147,6 +149,10 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
          VALUES (?,'wash_fold','2099-01-01','8-10','123 Test St',?,?,?,'new',25.00,false)`,
         [tenantId, label, "Customer", tenantId === tenantA ? "3105550101" : "3105550202"]
       );
+    }
+
+    if (!ownerNumericIdA || !ownerNumericIdB) {
+      throw new Error("Synthetic owner identities were not persisted");
     }
 
     const missionCallerA = commercialMissionRouter.createCaller(ctx(tenantA, ownerA));

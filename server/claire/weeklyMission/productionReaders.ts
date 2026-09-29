@@ -7,7 +7,7 @@
 import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidates";
 import type { WeeklyDossierFact } from "../../../shared/weeklyMissionReadiness";
 import { getClaireCampaignSummary } from "../campaignAwareness";
-import { getActiveMacroGoal } from "../macroGoalService";
+import { getActiveMacroGoalForOperators } from "../macroGoalService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { listActiveRecurrenceRules } from "../workdayRecurrenceService";
 import { getDb } from "../../db";
@@ -38,7 +38,9 @@ function fieldClass(kind: FieldTodayItem["kind"]): WeeklyDossierFact["class"] {
 export async function readWeeklyDossierFacts(input: {
   tenantId: string;
   operatorId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
   now: Date;
   timeZone: string;
@@ -49,6 +51,7 @@ export async function readWeeklyDossierFacts(input: {
     const state = await getDayDirectorState({
       tenantId: input.tenantId,
       actorId: input.dayDirectorActorId,
+      actorIds: input.dayDirectorActorIds ? [...input.dayDirectorActorIds] : undefined,
       businessDate,
     });
     for (const commitment of state?.commitments ?? []) {
@@ -106,10 +109,22 @@ export async function readWeeklyDossierFacts(input: {
     }
   }
 
-  const rules = await listActiveRecurrenceRules({
-    tenantId: input.tenantId,
-    actorId: input.dayDirectorActorId,
-  });
+  const actorIds = [...new Set(
+    [input.dayDirectorActorId, ...(input.dayDirectorActorIds ?? [])]
+      .map(actorId => actorId.trim())
+      .filter(Boolean)
+  )];
+  const ruleGroups = await Promise.all(
+    actorIds.map(actorId =>
+      listActiveRecurrenceRules({
+        tenantId: input.tenantId,
+        actorId,
+      })
+    )
+  );
+  const rules = [...new Map(
+    ruleGroups.flat().map(rule => [rule.id, rule] as const)
+  ).values()];
   for (const rule of rules) {
     const window = [rule.windowStart, rule.windowEnd].filter(Boolean).join("–");
     facts.push({
@@ -131,6 +146,7 @@ export async function readWeeklyDossierFacts(input: {
   const campaign = await getClaireCampaignSummary({
     tenantId: input.tenantId,
     actorId: input.dayDirectorActorId,
+    actorIds: input.dayDirectorActorIds,
   });
   if (campaign) {
     facts.push({
@@ -151,9 +167,11 @@ export async function readWeeklyDossierFacts(input: {
     });
   }
 
-  const goal = await getActiveMacroGoal({
+  const goal = await getActiveMacroGoalForOperators({
     tenantId: input.tenantId,
-    operatorUserId: input.operatorId,
+    operatorUserIds: input.operatorUserIds?.length
+      ? input.operatorUserIds
+      : [input.operatorId],
   });
   if (goal) {
     facts.push({
@@ -182,7 +200,9 @@ export async function readWeeklyDossierFacts(input: {
 export async function readWeeklyGrowthCandidatesForDossier(input: {
   tenantId: string;
   operatorId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   dates: readonly string[];
   now: Date;
   timeZone: string;
@@ -192,7 +212,9 @@ export async function readWeeklyGrowthCandidatesForDossier(input: {
   const feed = await loadWeeklyGrowthCandidates({
     tenantId: input.tenantId,
     operatorUserId: input.operatorId,
+    ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
     dayDirectorActorId: input.dayDirectorActorId,
+    ...(input.dayDirectorActorIds?.length ? { dayDirectorActorIds: input.dayDirectorActorIds } : {}),
     remainingDates: input.dates,
     now: input.now,
     timeZone: input.timeZone,

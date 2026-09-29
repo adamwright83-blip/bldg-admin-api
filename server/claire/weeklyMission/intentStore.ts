@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { weeklyIntents } from "../../../drizzle/schema";
 import type { WeeklyIntentRecord } from "../../../shared/weeklyMissionReadiness";
 import { getDb } from "../../db";
@@ -8,19 +8,33 @@ export async function latestWeeklyIntent(input: {
   operatorId: string;
   weekStart: string;
 }): Promise<WeeklyIntentRecord | null> {
+  return latestWeeklyIntentForOperators({
+    tenantId: input.tenantId,
+    operatorIds: [input.operatorId],
+    weekStart: input.weekStart,
+  });
+}
+
+export async function latestWeeklyIntentForOperators(input: {
+  tenantId: string;
+  operatorIds: readonly string[];
+  weekStart: string;
+}): Promise<WeeklyIntentRecord | null> {
   const db = await getDb();
   if (!db) return null;
+  const operatorIds = [...new Set(input.operatorIds.map(id => id.trim()).filter(Boolean))];
+  if (!operatorIds.length) return null;
   const [row] = await db
     .select()
     .from(weeklyIntents)
     .where(
       and(
         eq(weeklyIntents.tenantId, input.tenantId),
-        eq(weeklyIntents.operatorId, input.operatorId),
+        inArray(weeklyIntents.operatorId, operatorIds),
         eq(weeklyIntents.weekStart, input.weekStart)
       )
     )
-    .orderBy(desc(weeklyIntents.revision))
+    .orderBy(desc(weeklyIntents.lockedAt), desc(weeklyIntents.revision))
     .limit(1);
   if (!row) return null;
   const days = typeof row.daysJson === "string" ? JSON.parse(row.daysJson) : row.daysJson;

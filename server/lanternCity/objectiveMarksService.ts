@@ -28,7 +28,13 @@ import { readCurrentDayLine } from "../goldline/dayline/currentDayLineService";
 export const LANTERN_MARK_RUN_LIMIT = 50;
 
 export type ObjectiveMarksDeps = {
-  readDayLine: (input: { tenantId: string; operatorId: string }) => Promise<CurrentDayLine>;
+  readDayLine: (input: {
+    tenantId: string;
+    operatorId: string;
+    operatorIds?: string[];
+    operatorUserId?: string;
+    operatorUserIds?: string[];
+  }) => Promise<CurrentDayLine>;
   listTenantRuns: (input: { tenantId: string; limit: number }) => Promise<CampaignRun[]>;
   listRunSlots: typeof listRunSlots;
   listTargets: typeof listTargets;
@@ -89,7 +95,15 @@ const defaultDeps: ObjectiveMarksDeps = {
 };
 
 export async function loadLanternObjectiveMarks(
-  input: { tenantId: string; operatorId: string; viewerOpenId: string },
+  input: {
+    tenantId: string;
+    operatorId: string;
+    operatorIds?: readonly string[];
+    operatorUserId?: string;
+    operatorUserIds?: readonly string[];
+    viewerOpenId?: string;
+    viewerOpenIds?: readonly string[];
+  },
   deps: ObjectiveMarksDeps = defaultDeps
 ): Promise<LanternObjectiveMarks> {
   const tenantId = input.tenantId.trim();
@@ -98,6 +112,7 @@ export async function loadLanternObjectiveMarks(
       tenantId: "",
       operatorId: input.operatorId,
       viewerOpenId: input.viewerOpenId,
+      viewerOpenIds: input.viewerOpenIds,
       dayLine: null,
       runs: [],
     });
@@ -105,7 +120,17 @@ export async function loadLanternObjectiveMarks(
 
   let dayLine: CurrentDayLine | null = null;
   try {
-    dayLine = await deps.readDayLine({ tenantId, operatorId: input.operatorId });
+    dayLine = await deps.readDayLine({
+      tenantId,
+      operatorId: input.operatorId,
+      ...(input.operatorIds?.length
+        ? { operatorIds: [...input.operatorIds] }
+        : {}),
+      ...(input.operatorUserId ? { operatorUserId: input.operatorUserId } : {}),
+      ...(input.operatorUserIds?.length
+        ? { operatorUserIds: [...input.operatorUserIds] }
+        : {}),
+    });
   } catch (error) {
     console.warn(
       "[lantern-city] Day Line unavailable for objective marks",
@@ -131,6 +156,7 @@ export async function loadLanternObjectiveMarks(
     tenantId,
     operatorId: input.operatorId,
     viewerOpenId: input.viewerOpenId,
+    viewerOpenIds: input.viewerOpenIds,
     dayLine,
     runs: inputs,
   });

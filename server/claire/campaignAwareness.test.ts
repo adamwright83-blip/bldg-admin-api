@@ -18,6 +18,37 @@ describe("getClaireCampaignSummary — authoritative, read-only", () => {
     expect(mocks.createMission).not.toHaveBeenCalled();
   });
 
+  it("keeps an alias-owned active campaign visible after canonical binding", async () => {
+    mocks.readMission.mockImplementation(async ({ driverId }: { driverId: string }) => {
+      if (driverId === "driver-alias") {
+        return {
+          missionId: "mission-alias",
+          isComplete: false,
+          visitedCount: 4,
+          totalCount: 12,
+          targets,
+          outcomes: Object.fromEntries(targets.slice(0, 4).map(target => [target.id, "pitched"])),
+        };
+      }
+      return null;
+    });
+    const summary = await getClaireCampaignSummary({
+      tenantId: "tenant-1",
+      actorId: "canonical-actor",
+      actorIds: ["canonical-actor", "driver-alias"],
+    });
+    expect(summary).toMatchObject({
+      active: true,
+      completedCount: 4,
+      remainingCount: 8,
+      totalCount: 12,
+    });
+    expect(mocks.readMission).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      driverId: "driver-alias",
+    });
+  });
+
   it("reports a completed campaign", async () => {
     mocks.readMission.mockResolvedValue({ isComplete: true, visitedCount: 12, totalCount: 12, targets, outcomes: Object.fromEntries(targets.map(target => [target.id, "pitched"])) });
     expect(await getClaireCampaignSummary({ tenantId: "tenant-1", actorId: "operator-1" })).toMatchObject({ active: false, remainingCount: 0, remainingTargets: [] });
