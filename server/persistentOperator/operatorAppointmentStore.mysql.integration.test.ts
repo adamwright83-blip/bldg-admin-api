@@ -154,6 +154,32 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     expect(second).toBeNull();
   });
 
+  it("an idempotent callback retry does not cancel its own durable row", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const callbackInput = appointment({
+      appointmentKind: "weekly_planning_callback",
+      source: "explicit_operator_request",
+      sourceReference: "conversation:same",
+      standingAuthorizationId: null,
+      unprompted: false,
+      idempotencyKey: "callback:same",
+    });
+    const first = await store.enqueue(callbackInput);
+    await store.cancelPendingCallbacks({
+      tenantId: callbackInput.tenantId,
+      canonicalOperatorId: callbackInput.canonicalOperatorId,
+      weekStart: callbackInput.weekStart,
+      excludeIdempotencyKey: callbackInput.idempotencyKey,
+    });
+    const second = await store.enqueue(callbackInput);
+    expect(second).toEqual({ id: first.id, created: false });
+    const [row] = await rows<RowDataPacket>(
+      "SELECT status FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(row.status).toBe("scheduled");
+  });
+
   it("rescheduling callbacks does not consume or cancel the weekly unprompted row", async () => {
     const store = new OperatorAppointmentStore(pool);
     const weekly = await store.enqueue(appointment());
