@@ -148,7 +148,7 @@ export const campaignRunRouter = router({
             operatorUserId: identity.canonicalOpenId,
             subsystem: "campaign_runs.start",
             eventKind: "objective_created",
-            objectiveId: run.campaignId,
+            objectiveId: run.campaignRunId,
           }).catch(() => undefined),
           recordPersistentOperatorDiagnosticEvent({
             tenantId: identity.tenantId,
@@ -156,7 +156,7 @@ export const campaignRunRouter = router({
             operatorUserId: identity.canonicalOpenId,
             subsystem: "campaign_runs.start",
             eventKind: "objective_started",
-            objectiveId: run.campaignId,
+            objectiveId: run.campaignRunId,
           }).catch(() => undefined),
         ]);
       }
@@ -218,7 +218,7 @@ export const campaignRunRouter = router({
             operatorUserId: identity.canonicalOpenId,
             subsystem: "campaign_runs.placement",
             eventKind: "objective_verified",
-            objectiveId: projection.run.campaignId,
+            objectiveId: projection.run.campaignRunId,
           }).catch(() => undefined);
         }
       }
