@@ -1,10 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
+  isMissingOptionalReceiptTableError,
+  optionalReceiptRows,
   selectValidatedAuthorityEvent,
   selectedObligationRef,
 } from "./operationReceipt";
 
 describe("operationReceipt authority lineage", () => {
+  it("treats absent optional receipt tables as unresolved evidence instead of throwing", async () => {
+    const missing = Object.assign(new Error("table does not exist"), {
+      code: "ER_NO_SUCH_TABLE",
+      errno: 1146,
+    });
+    expect(isMissingOptionalReceiptTableError(missing)).toBe(true);
+    await expect(
+      optionalReceiptRows(async () => {
+        throw missing;
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("does not swallow non-schema receipt query failures", async () => {
+    const failure = Object.assign(new Error("connection lost"), {
+      code: "PROTOCOL_CONNECTION_LOST",
+    });
+    expect(isMissingOptionalReceiptTableError(failure)).toBe(false);
+    await expect(
+      optionalReceiptRows(async () => {
+        throw failure;
+      })
+    ).rejects.toThrow("connection lost");
+  });
+
   it("does not resolve authority from an unvalidated proposal or policy denial", () => {
     const events = [
       {
