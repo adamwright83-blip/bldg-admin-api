@@ -1,11 +1,11 @@
 import { formatInTimeZone } from "date-fns-tz";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { commercialFollowUps, dayDirectorCommitments } from "../../drizzle/schema";
 import type { GrowthCampaign, TimingAssumption } from "../campaignLibrary/campaignLibraryTypes";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { listOperatorRuns } from "../campaignRuns/campaignRunService";
 import { getLatestChurnScan } from "../churnRadar/customerChurnService";
-import { getActiveMacroGoal } from "../claire/macroGoalService";
+import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
 import { loadObligations } from "../claire/proactive/boardService";
 import { listCommercialMissions } from "../commercialMissions/commercialMissionStore";
 import { getDb } from "../db";
@@ -47,10 +47,34 @@ const OPERATIONAL_OPS: Partial<Record<OpsTaskType, WeeklyGrowthOperationalClass>
   emergency_task: "admin",
 };
 
+function operatorUserIds(input: {
+  operatorUserId: string;
+  operatorUserIds?: readonly string[];
+}): string[] {
+  return [...new Set(
+    [input.operatorUserId, ...(input.operatorUserIds ?? [])]
+      .map(id => id.trim())
+      .filter(Boolean)
+  )];
+}
+
+function actorIds(input: {
+  dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
+}): string[] {
+  return [...new Set(
+    [input.dayDirectorActorId, ...(input.dayDirectorActorIds ?? [])]
+      .map(id => id.trim())
+      .filter(Boolean)
+  )];
+}
+
 export async function readWeeklyGrowthSources(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
   timeZone: string;
 }): Promise<WeeklyGrowthSourceBundle> {
   const db = await getDb();
@@ -69,7 +93,9 @@ export async function readWeeklyGrowthSources(input: {
 async function readUnfinished(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
 }): Promise<SourceAvailability<WeeklyGrowthRawRecord>> {
   const [commitments, missions, tasks, runs] = await Promise.all([
     readCommitments(input),
@@ -83,13 +109,17 @@ async function readUnfinished(input: {
 async function readCommitments(input: {
   tenantId: string;
   dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
 }): Promise<WeeklyGrowthRawRecord[]> {
   const db = await getDb();
   if (!db) throw new Error(DATABASE_UNAVAILABLE);
   const rows = await db
     .select()
     .from(dayDirectorCommitments)
-    .where(and(eq(dayDirectorCommitments.tenantId, input.tenantId), eq(dayDirectorCommitments.actorId, input.dayDirectorActorId)));
+    .where(and(
+      eq(dayDirectorCommitments.tenantId, input.tenantId),
+      inArray(dayDirectorCommitments.actorId, actorIds(input))
+    ));
   return rows.map(row => {
     const metadata = asRecord(row.metadataJson);
     const overlay = readDayLineOverlay(metadata);
@@ -134,8 +164,16 @@ async function readCommitments(input: {
 async function readMissions(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
 }): Promise<WeeklyGrowthRawRecord[]> {
-  const missions = await listCommercialMissions({ tenantId: input.tenantId, assignedTo: input.operatorUserId });
+  const groups = await Promise.all(
+    operatorUserIds(input).map(assignedTo =>
+      listCommercialMissions({ tenantId: input.tenantId, assignedTo })
+    )
+  );
+  const missions = [...new Map(
+    groups.flat().map(mission => [mission.id, mission] as const)
+  ).values()];
   return missions.map(mission => emptyRawRecord({
     tenantId: mission.tenantId,
     operatorUserId: mission.assignedTo,
@@ -154,11 +192,13 @@ async function readMissions(input: {
 async function readTasks(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
 }): Promise<WeeklyGrowthRawRecord[]> {
   const tasks = await listOpsTasks({ tenantId: input.tenantId, limit: 500 });
+  const authorized = new Set(operatorUserIds(input));
   return tasks.flatMap(task => {
     const assigned = task.assignedTo ?? task.createdBy;
-    if (assigned !== input.operatorUserId) return [];
+    if (!authorized.has(assigned)) return [];
     const metadata = asRecord(task.metadataJson);
     const campaignId = stringField(metadata, "campaignId");
     const mapped = GROWTH_OPS[task.taskType];
@@ -186,8 +226,16 @@ async function readTasks(input: {
 async function readRuns(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
 }): Promise<WeeklyGrowthRawRecord[]> {
-  const runs = await listOperatorRuns({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+  const groups = await Promise.all(
+    operatorUserIds(input).map(operatorUserId =>
+      listOperatorRuns({ tenantId: input.tenantId, operatorUserId })
+    )
+  );
+  const runs = [...new Map(
+    groups.flat().map(run => [run.campaignRunId, run] as const)
+  ).values()];
   return runs.map(run => emptyRawRecord({
     tenantId: run.tenantId,
     operatorUserId: run.operatorUserId,
@@ -238,9 +286,20 @@ async function readFollowUps(input: {
 async function readObligations(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
 }): Promise<SourceAvailability<WeeklyGrowthRawRecord>> {
-  const obligations = await loadObligations(input.tenantId, input.operatorUserId);
-  return { status: "available", records: obligations.map(obligation => obligationRecord(input, obligation)) };
+  const groups = await Promise.all(
+    operatorUserIds(input).map(async operatorUserId => {
+      const obligations = await loadObligations(input.tenantId, operatorUserId);
+      return obligations.map(obligation =>
+        obligationRecord({ tenantId: input.tenantId, operatorUserId }, obligation)
+      );
+    })
+  );
+  const records = [...new Map(
+    groups.flat().map(record => [record.sourceId, record] as const)
+  ).values()];
+  return { status: "available", records };
 }
 
 function obligationRecord(
@@ -338,8 +397,12 @@ function assumptionRecord(assumption: TimingAssumption): WeeklyGrowthRawRecord["
 async function readMacro(input: {
   tenantId: string;
   operatorUserId: string;
+  operatorUserIds?: readonly string[];
 }): Promise<SourceAvailability<WeeklyGrowthMacroSnapshot>> {
-  const goal = await getActiveMacroGoal({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+  const goal = await getActiveMacroGoalForOperators({
+    tenantId: input.tenantId,
+    operatorUserIds: operatorUserIds(input),
+  });
   if (!goal) return { status: "available", records: [] };
   return {
     status: "available",
