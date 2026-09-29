@@ -222,8 +222,8 @@ export async function executeOperatorAppointment(
 
   const call = result.result as { callSid?: unknown };
   const callSid =
-    typeof callSid === "string" && callSid.trim()
-      ? callSid.trim()
+    typeof call.callSid === "string" && call.callSid.trim()
+      ? call.callSid.trim()
       : null;
   if (!callSid) {
     throw new Error("Claire weekly planning call returned no call SID");
