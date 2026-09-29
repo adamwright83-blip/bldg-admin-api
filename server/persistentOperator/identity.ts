@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   persistentOperatorIdentityBindings,
   users,
@@ -545,55 +545,78 @@ export async function bindOperatorIdentityAlias(input: {
     throw new Error("A canonical identity does not need a self-alias binding");
   }
 
-  const [active, canonicalAsAlias, aliasAsCanonical] = await Promise.all([
-    defaultBindingsForAlias(tenantId, aliasOpenId),
-    defaultBindingsForAlias(tenantId, canonicalOpenId),
-    defaultBindingsForCanonical(tenantId, aliasOpenId),
-  ]);
-  if (
-    active.some(
-      binding =>
-        binding.canonicalOpenId !== canonicalOpenId ||
-        binding.surface !== input.surface
-    ) ||
-    canonicalAsAlias.some(
-      binding => binding.canonicalOpenId !== canonicalOpenId
-    ) ||
-    aliasAsCanonical.length > 0
-  ) {
-    // Canonical groups are deliberately one level deep. Chained aliases make
-    // ownership order-dependent, so they fail closed rather than being followed.
-    throw new CanonicalOperatorIdentityError("identity_ambiguous");
-  }
-  if (active[0]) return active[0];
+  // Binding graphs are one level deep. Lock both participating user rows in a
+  // deterministic order so cross-linked concurrent requests (B -> A and
+  // A -> C) cannot both validate against a stale graph and then commit.
+  return db.transaction(async tx => {
+    await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(inArray(users.id, [canonicalUser.id, aliasUser.id]))
+      .orderBy(users.id)
+      .for("update");
 
-  const row: OperatorIdentityBinding = {
-    id: randomUUID(),
-    tenantId,
-    canonicalOpenId,
-    aliasOpenId,
-    activeAliasKey: `${tenantId}:${aliasOpenId}`,
-    surface: input.surface,
-    active: true,
-    createdByOpenId: input.createdByOpenId,
-    revokedAt: null,
-  };
-  try {
-    await db.insert(persistentOperatorIdentityBindings).values(row);
+    const active = await tx
+      .select()
+      .from(persistentOperatorIdentityBindings)
+      .where(
+        and(
+          eq(persistentOperatorIdentityBindings.tenantId, tenantId),
+          eq(persistentOperatorIdentityBindings.aliasOpenId, aliasOpenId),
+          eq(persistentOperatorIdentityBindings.active, true)
+        )
+      );
+    const canonicalAsAlias = await tx
+      .select()
+      .from(persistentOperatorIdentityBindings)
+      .where(
+        and(
+          eq(persistentOperatorIdentityBindings.tenantId, tenantId),
+          eq(persistentOperatorIdentityBindings.aliasOpenId, canonicalOpenId),
+          eq(persistentOperatorIdentityBindings.active, true)
+        )
+      );
+    const aliasAsCanonical = await tx
+      .select()
+      .from(persistentOperatorIdentityBindings)
+      .where(
+        and(
+          eq(persistentOperatorIdentityBindings.tenantId, tenantId),
+          eq(persistentOperatorIdentityBindings.canonicalOpenId, aliasOpenId),
+          eq(persistentOperatorIdentityBindings.active, true)
+        )
+      );
+
+    if (
+      active.some(
+        binding =>
+          binding.canonicalOpenId !== canonicalOpenId ||
+          binding.surface !== input.surface
+      ) ||
+      canonicalAsAlias.some(
+        binding => binding.canonicalOpenId !== canonicalOpenId
+      ) ||
+      aliasAsCanonical.length > 0
+    ) {
+      throw new CanonicalOperatorIdentityError("identity_ambiguous");
+    }
+    if (active[0]) return active[0];
+
+    const row: OperatorIdentityBinding = {
+      id: randomUUID(),
+      tenantId,
+      canonicalOpenId,
+      aliasOpenId,
+      activeAliasKey: `${tenantId}:${aliasOpenId}`,
+      surface: input.surface,
+      active: true,
+      createdByOpenId: input.createdByOpenId,
+      revokedAt: null,
+    };
+    await tx.insert(persistentOperatorIdentityBindings).values(row);
     return row;
-  } catch {
-    // The unique activeAliasKey is the concurrency authority. If another
-    // identical request won the race, return that durable binding; if it
-    // points elsewhere, fail closed as an ambiguity instead of creating two.
-    const raced = await defaultBindingsForAlias(tenantId, aliasOpenId);
-    const exact = raced.find(
-      binding =>
-        binding.canonicalOpenId === canonicalOpenId &&
-        binding.surface === input.surface
-    );
-    if (exact && raced.length === 1) return exact;
-    throw new CanonicalOperatorIdentityError("identity_ambiguous");
-  }
+  });
+
 }
 
 export async function revokeOperatorIdentityAlias(input: {
