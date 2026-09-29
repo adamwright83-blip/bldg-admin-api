@@ -170,21 +170,21 @@ export class OperatorAppointmentStore
                       THEN GREATEST(attemptCount - 1, 0)
                     ELSE attemptCount
                   END,
-                  status = CASE
-                    WHEN status IN ('leased','running') THEN 'retry_scheduled'
-                    ELSE status
-                  END,
                   leaseOwner = CASE
-                    WHEN status = 'retry_scheduled' THEN NULL
+                    WHEN status IN ('leased','running') THEN NULL
                     ELSE leaseOwner
                   END,
                   leaseExpiresAt = CASE
-                    WHEN status = 'retry_scheduled' THEN NULL
+                    WHEN status IN ('leased','running') THEN NULL
                     ELSE leaseExpiresAt
                   END,
                   heartbeatAt = CASE
-                    WHEN status = 'retry_scheduled' THEN NULL
+                    WHEN status IN ('leased','running') THEN NULL
                     ELSE heartbeatAt
+                  END,
+                  status = CASE
+                    WHEN status IN ('leased','running') THEN 'retry_scheduled'
+                    ELSE status
                   END,
                   timeZone = ?,
                   standingAuthorizationId = ?
