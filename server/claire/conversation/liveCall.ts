@@ -93,6 +93,20 @@ export async function linkClaireCallAction(input: {
   );
 }
 
+export async function finalizeClaireCallLedger(input: {
+  callSid?: string;
+  claireConversationId?: string;
+  reason: string;
+}): Promise<void> {
+  void finishConversationAndMaybeAnalyze({
+    callSid: input.callSid,
+    claireConversationId: input.claireConversationId,
+    reason: input.reason,
+  }).catch(error => {
+    console.warn("[ClaireLedger] post-call pipeline failed", error);
+  });
+}
+
 export async function endClaireCallLedger(input: {
   callSid?: string;
   claireConversationId?: string;
@@ -101,11 +115,5 @@ export async function endClaireCallLedger(input: {
   reason: string;
 }): Promise<void> {
   await persistOperatorAndClaire(input);
-  void finishConversationAndMaybeAnalyze({
-    callSid: input.callSid,
-    claireConversationId: input.claireConversationId,
-    reason: input.reason,
-  }).catch(error => {
-    console.warn("[ClaireLedger] post-call pipeline failed", error);
-  });
+  await finalizeClaireCallLedger(input);
 }
