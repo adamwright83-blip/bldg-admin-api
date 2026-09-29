@@ -4,7 +4,7 @@ import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
 import { recordPersistentOperatorDiagnosticEvent } from "../persistentOperator/observability";
 import {
-  acceptProposal,
+  acceptProposalWithReceipt,
   completeDayDirectorCommitment,
   getDayDirectorState,
   proposeCommitment,
@@ -59,12 +59,12 @@ export const dayDirectorRouter = router({
     .input(z.object({ businessDate: date, proposal }))
     .mutation(async ({ ctx, input }) => {
       const identity = await dayDirectorIdentity(ctx, "day_director.accept");
-      const stored = await acceptProposal({
+      const { stored, created } = await acceptProposalWithReceipt({
         tenantId: identity.tenantId,
         actorId: identity.dayDirectorActorId,
         ...input,
       });
-      if (stored) {
+      if (stored && created) {
         await recordPersistentOperatorDiagnosticEvent({
           tenantId: identity.tenantId,
           canonicalOperatorId: identity.canonicalOperatorId,
