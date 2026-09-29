@@ -15,6 +15,8 @@ export const currentDayLineRouter = router({
       tenantId: identity.tenantId,
       operatorId: identity.dayDirectorActorId,
       operatorIds: identity.dayDirectorActorIds,
+      operatorUserId: identity.canonicalOpenId,
+      operatorUserIds: identity.aliases.map(alias => alias.openId),
     });
 
     const reason =
