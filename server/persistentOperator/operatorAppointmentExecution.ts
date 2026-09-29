@@ -15,7 +15,10 @@ import {
   SUNDAY_PLANNING_LOCAL_START,
   SUNDAY_WEEKLY_PLANNING_ACTION,
 } from "./operatorAppointmentPolicy";
-import type { ClaimedOperatorAppointment } from "./operatorAppointmentStore";
+import {
+  OperatorAppointmentStore,
+  type ClaimedOperatorAppointment,
+} from "./operatorAppointmentStore";
 
 function numberLabel(value: number): string {
   return Number.isInteger(value)
@@ -111,7 +114,8 @@ function insideSundayStandingWindow(
 
 export async function executeOperatorAppointment(
   step: ClaimedOperatorAppointment,
-  now = new Date()
+  now = new Date(),
+  store?: OperatorAppointmentStore
 ): Promise<Record<string, unknown>> {
   const identity = await resolveAppointmentIdentity(step);
   const operatorIds = [
@@ -194,6 +198,13 @@ export async function executeOperatorAppointment(
         sessionKind = "weekly_planning_invite";
       }
 
+      if (!store) {
+        throw new Error("Operator appointment execution requires its durable store");
+      }
+      const dispatchClaimed = await store.beginCallDispatch(step);
+      if (!dispatchClaimed) {
+        throw new Error("Operator appointment call dispatch already attempted");
+      }
       return startClairePreDriveCall({
         tenantId: step.tenantId,
         actorId: identity.communicationOperatorUserId,
@@ -209,7 +220,14 @@ export async function executeOperatorAppointment(
     return { skipped: result.reason };
   }
 
-  const call = result.result;
+  const call = result.result as { callSid?: unknown };
+  const callSid =
+    typeof callSid === "string" && callSid.trim()
+      ? callSid.trim()
+      : null;
+  if (!callSid) {
+    throw new Error("Claire weekly planning call returned no call SID");
+  }
   await logAgentEvent({
     ctx: {
       tenantId: step.tenantId,
@@ -227,14 +245,14 @@ export async function executeOperatorAppointment(
       weekStart: step.weekStart,
       source: step.source,
     },
-    outputJson: { callSid: call.callSid },
+    outputJson: { callSid: callSid },
     status: "success",
     entityType: "operator_appointment",
     entityId: step.id,
   }).catch(() => undefined);
 
   return {
-    callSid: call.callSid,
+    callSid: callSid,
     appointmentId: step.id,
     appointmentKind: step.appointmentKind,
     weekStart: step.weekStart,
