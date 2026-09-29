@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, or } from "drizzle-orm";
 import {
   dayDirectorCommitments,
   goldlineWorldEvents,
@@ -180,6 +180,17 @@ export async function loadPersistentOperatorDiagnostics(input: {
   const timeZone = getDashboardTimeZone();
   const today = businessDateInZone(now, timeZone);
   const db = await getDb();
+  const authorizedOperatorUserIds = [...new Set(
+    (input.operatorUserIds?.length ? input.operatorUserIds : [input.operatorUserId])
+      .map(operatorUserId => operatorUserId.trim())
+      .filter(Boolean)
+  )];
+  const authorizedCanonicalOperatorIds = [...new Set([
+    input.canonicalOperatorId,
+    ...authorizedOperatorUserIds.map(
+      openId => `tenant:${input.tenantId}:operator:${openId}`
+    ),
+  ])];
 
   const [eventRows, identityFailures] = db
     ? await Promise.all([
@@ -189,9 +200,15 @@ export async function loadPersistentOperatorDiagnostics(input: {
           .where(
             and(
               eq(persistentOperatorDiagnosticEvents.tenantId, input.tenantId),
-              eq(
-                persistentOperatorDiagnosticEvents.canonicalOperatorId,
-                input.canonicalOperatorId
+              or(
+                inArray(
+                  persistentOperatorDiagnosticEvents.canonicalOperatorId,
+                  authorizedCanonicalOperatorIds
+                ),
+                inArray(
+                  persistentOperatorDiagnosticEvents.operatorUserId,
+                  authorizedOperatorUserIds
+                )
               ),
               gte(persistentOperatorDiagnosticEvents.occurredAt, since)
             )
@@ -221,11 +238,6 @@ export async function loadPersistentOperatorDiagnostics(input: {
     timeZone
   );
 
-  const authorizedOperatorUserIds = [...new Set(
-    (input.operatorUserIds?.length ? input.operatorUserIds : [input.operatorUserId])
-      .map(operatorUserId => operatorUserId.trim())
-      .filter(Boolean)
-  )];
   const obligationGroups = await Promise.all(
     authorizedOperatorUserIds.map(operatorUserId =>
       loadObligations(input.tenantId, operatorUserId).catch(() => [])
