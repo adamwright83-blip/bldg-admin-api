@@ -152,12 +152,15 @@ export class OperatorAppointmentStore
         ["scheduled", "retry_scheduled"].includes(row.status)
       ) {
         // The weekly idempotency key intentionally survives authorization
-        // rotation. Before a worker has claimed the row, refresh the durable
-        // appointment to the current tenant-local slot and standing grant so
-        // timezone changes do not strand the week's call on revoked authority.
+        // rotation. Refresh the standing grant and timezone while the row is
+        // still unclaimed. A never-attempted scheduled row follows the current
+        // tenant-local slot; a retry_scheduled row keeps its worker backoff.
         await connection.execute(
           `UPDATE operator_appointments
-              SET scheduledFor = ?,
+              SET scheduledFor = CASE
+                    WHEN status = 'scheduled' THEN ?
+                    ELSE scheduledFor
+                  END,
                   timeZone = ?,
                   standingAuthorizationId = ?
             WHERE tenantId = ? AND id = ?
