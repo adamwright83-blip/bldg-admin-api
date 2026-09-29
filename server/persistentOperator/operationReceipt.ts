@@ -15,6 +15,23 @@ function unresolved(reason: string): ReceiptLink<never> {
   return { status: "unresolved", reason };
 }
 
+export function selectValidatedAuthorityEvent<
+  T extends {
+    status: string;
+    operationStatus?: string | null;
+    authorityBasis?: string | null;
+    approvalBasis?: string | null;
+  },
+>(events: readonly T[]): T | undefined {
+  return events.find(event => {
+    const status = event.operationStatus ?? event.status;
+    return (
+      (event.authorityBasis != null || event.approvalBasis != null) &&
+      ["execution_started", "success", "succeeded", "failed"].includes(status)
+    );
+  });
+}
+
 export async function operationReceipt(input: {
   tenantId: string;
   decisionId: string;
@@ -59,13 +76,7 @@ export async function operationReceipt(input: {
       ),
   ]);
 
-  const authorityEvent = events.find(event => {
-    const status = event.operationStatus ?? event.status;
-    return (
-      (event.authorityBasis != null || event.approvalBasis != null) &&
-      ["execution_started", "success", "succeeded", "failed"].includes(status)
-    );
-  });
+  const authorityEvent = selectValidatedAuthorityEvent(events);
   const executionEvents = events.filter(event =>
     [
       "proposed",
