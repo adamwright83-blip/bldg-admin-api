@@ -4246,6 +4246,7 @@ export const agentEvents = mysqlTable("agent_events", {
     "building_agent",
     "collections_agent",
     "operator_task_agent",
+    "goal_cycle_agent",
     "system_agent",
   ]).notNull(),
   actorType: mysqlEnum("actorType", [
