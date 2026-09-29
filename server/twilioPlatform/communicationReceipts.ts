@@ -43,6 +43,8 @@ export type RecordTwilioCommunicationReceiptInput = {
   durationSeconds?: number | null;
   providerErrorCode?: string | null;
   providerErrorMessage?: string | null;
+  agentEventId?: number | null;
+  decisionId?: string | null;
   createdAt?: string;
 };
 
@@ -206,6 +208,11 @@ export function buildTwilioCommunicationReceipt(
     durationSeconds,
     providerErrorCode: optionalText(input.providerErrorCode, ERROR_CODE_MAX),
     providerErrorMessage: scrubProviderErrorMessage(input.providerErrorMessage, env),
+    agentEventId:
+      input.agentEventId == null || !Number.isInteger(input.agentEventId)
+        ? null
+        : input.agentEventId,
+    decisionId: optionalText(input.decisionId, 36),
     idempotencyKey,
     createdAt: optionalTimestamp(input.createdAt, "createdAt") ?? new Date().toISOString(),
   };
@@ -255,6 +262,8 @@ export function communicationReceiptFromRow(
     durationSeconds: row.durationSeconds,
     providerErrorCode: row.providerErrorCode,
     providerErrorMessage: row.providerErrorMessage,
+    agentEventId: row.agentEventId,
+    decisionId: row.decisionId,
     idempotencyKey: row.idempotencyKey,
     createdAt: isoTimestamp(row.createdAt) ?? new Date(0).toISOString(),
   };
@@ -283,6 +292,8 @@ function receiptInsertValues(
     durationSeconds: receipt.durationSeconds,
     providerErrorCode: receipt.providerErrorCode,
     providerErrorMessage: receipt.providerErrorMessage,
+    agentEventId: receipt.agentEventId,
+    decisionId: receipt.decisionId,
     idempotencyKey: receipt.idempotencyKey,
     createdAt: new Date(receipt.createdAt),
   };
