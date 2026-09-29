@@ -44,7 +44,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Worker loop (fake store)
         run: pnpm vitest run server/procurement/worker.test.ts server/procurement/migrations.test.ts
-      - name: Workflow store against real MySQL
+      - name: Workflow stores against real MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3413/mysql
-        run: pnpm vitest run --config vitest.integration.config.ts server/procurement/workflowStore.mysql.integration.test.ts
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/procurement/workflowStore.mysql.integration.test.ts
+          server/persistentOperator/goalCycleStore.mysql.integration.test.ts
