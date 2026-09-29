@@ -277,7 +277,7 @@ async function demoteOtherPrimaries(input: {
   }
 }
 
-export async function acceptProposal(input: {
+export async function acceptProposalWithReceipt(input: {
   tenantId: string;
   actorId: string;
   businessDate: string;
@@ -348,6 +348,16 @@ export async function acceptProposal(input: {
       exceptId: stored.id,
     });
   }
+  return {
+    stored,
+    created: Boolean(stored && stored.id === row.id),
+  };
+}
+
+export async function acceptProposal(
+  input: Parameters<typeof acceptProposalWithReceipt>[0]
+) {
+  const { stored } = await acceptProposalWithReceipt(input);
   return stored;
 }
 
