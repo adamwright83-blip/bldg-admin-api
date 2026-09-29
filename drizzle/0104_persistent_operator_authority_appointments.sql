@@ -1,12 +1,5 @@
 -- Persistent Growth Operator PR3 — non-conversational authority + Claire appointments.
 
-ALTER TABLE agent_events
-  MODIFY COLUMN agentType ENUM(
-    'resident_agent','operator_voice_agent','vendor_agent','driver_agent',
-    'gm_agent','building_agent','collections_agent','operator_task_agent',
-    'goal_cycle_agent','system_agent'
-  ) NOT NULL;
-
 CREATE TABLE IF NOT EXISTS tenant_standing_authorizations (
   id VARCHAR(36) NOT NULL PRIMARY KEY,
   tenantId VARCHAR(64) NOT NULL,
@@ -53,6 +46,7 @@ CREATE TABLE IF NOT EXISTS operator_appointments (
   heartbeatAt TIMESTAMP(3) NULL,
   attemptCount INT NOT NULL DEFAULT 0,
   maxAttempts INT NOT NULL DEFAULT 3,
+  callDispatchStartedAt TIMESTAMP(3) NULL,
   callSid VARCHAR(64) NULL,
   calendarEventId VARCHAR(191) NULL,
   calendarStatus VARCHAR(32) NULL,
