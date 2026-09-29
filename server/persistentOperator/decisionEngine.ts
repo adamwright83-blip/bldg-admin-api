@@ -10,6 +10,7 @@ import type {
   WeeklyGrowthCandidateFeed,
 } from "../../shared/weeklyGrowthCandidates";
 import {
+  addDaysYmd,
   remainingWeekHorizon,
   targetWeekHorizon,
   type RemainingWeekHorizon,
@@ -225,6 +226,7 @@ async function latestApplicableWeeklyIntent(input: {
     .orderBy(desc(weeklyIntents.lockedAt), desc(weeklyIntents.revision))
     .limit(1);
   if (!row) return null;
+  if (row.weekStart > addDaysYmd(input.businessDate, 7)) return null;
   const horizon = targetWeekHorizon({
     businessDate: input.businessDate,
     localTime: input.localTime,
@@ -301,6 +303,38 @@ export async function decideGoalCycle(input: {
     identity.identity.canonicalOpenId,
     ...identity.identity.aliases.map(alias => alias.openId),
   ];
+
+  if (run.status === "completed") {
+    return appendGoalCycleDecision({
+      tenantId: input.tenantId,
+      goalRunId: run.id,
+      cycleId: input.cycleId,
+      canonicalOperatorId: run.canonicalOperatorId,
+      operatorUserId: run.operatorUserId,
+      policyVersion: run.policyVersion,
+      weeklyIntentId: null,
+      weeklyIntentRevision: null,
+      weekStart: null,
+      candidateFingerprint: null,
+      candidateIds: [],
+      candidateReasonCodes: {},
+      missionDirectorPlanId: null,
+      missionDirectorRevision: null,
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedExecutionType: null,
+      selectedReasonCode: "GOAL_RUN_COMPLETED",
+      evidenceRefs: run.completionEvidenceRef
+        ? [`goal_completion:${run.completionEvidenceRef}`]
+        : [],
+      blockedCandidates: [],
+      priorComparableDecisionId: null,
+      sourceCoverage: { goalRun: "completed" },
+      loadout: [],
+      experiment: null,
+    });
+  }
+
   const timeZone = await tenantTimeZone(input.tenantId);
   if (!timeZone) {
     const draft = {
@@ -347,7 +381,7 @@ export async function decideGoalCycle(input: {
   const horizon = weeklyIntent?.horizon ?? currentHorizon;
 
   let feed: WeeklyGrowthCandidateFeed | null = null;
-  let sourceCoverage: unknown = { candidateFeed: "unavailable" };
+  let feedCoverage: unknown = { status: "unavailable", reason: "not_loaded" };
   try {
     feed = await loadWeeklyGrowthCandidates({
       tenantId: input.tenantId,
@@ -359,15 +393,16 @@ export async function decideGoalCycle(input: {
       now,
       timeZone,
     });
-    sourceCoverage = feed.sources;
+    feedCoverage = { status: "available", sources: feed.sources };
   } catch (error) {
-    sourceCoverage = {
-      candidateFeed: "unavailable",
+    feedCoverage = {
+      status: "unavailable",
       reason: error instanceof Error ? error.message : String(error),
     };
   }
 
   let obligations: PersistentObligation[] = [];
+  let obligationCoverage: unknown = { status: "available", count: 0 };
   try {
     obligations = await listOpenPersistentObligations({
       tenantId: input.tenantId,
@@ -376,39 +411,51 @@ export async function decideGoalCycle(input: {
       registry: input.registry,
       dueThrough: today,
     });
+    obligationCoverage = { status: "available", count: obligations.length };
   } catch (error) {
-    sourceCoverage = {
-      candidateFeed: sourceCoverage,
-      obligations: {
-        status: "unavailable",
-        reason: error instanceof Error ? error.message : String(error),
-      },
+    obligationCoverage = {
+      status: "unavailable",
+      reason: error instanceof Error ? error.message : String(error),
     };
   }
 
-  const plan = await getLatestPlan({
-    tenantId: input.tenantId,
-    operatorId: identity.identity.weeklyOperatorId,
-    operatorIds,
-    businessDate: today,
-  }).catch(() => null);
+  let plan: MissionDirectorPlan | null = null;
+  let missionDirectorCoverage: unknown = { status: "available", plan: false };
+  try {
+    plan = await getLatestPlan({
+      tenantId: input.tenantId,
+      operatorId: identity.identity.weeklyOperatorId,
+      operatorIds,
+      businessDate: today,
+    });
+    missionDirectorCoverage = { status: "available", plan: plan !== null };
+  } catch (error) {
+    missionDirectorCoverage = {
+      status: "unavailable",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
 
-  const choice =
-    run.status === "completed"
-      ? {
-          selectionKind: "wait" as const,
-          selectedRef: null,
-          selectedCandidate: null,
-          selectedObligation: null,
-          selectedReasonCode: "GOAL_RUN_COMPLETED",
-          blockedCandidates: [],
-        }
-      : selectDeterministicCycleChoice({
-          weeklyIntentLocked: weeklyIntent !== null,
-          candidates: feed?.candidates ?? [],
-          obligations,
-          missionDirectorPlan: plan,
-        });
+  const sourceCoverage = {
+    tenantTimeZone: { status: "available", timeZone },
+    weeklyIntent: {
+      status: weeklyIntent ? "locked" : "unplanned",
+      id: weeklyIntent?.id ?? null,
+      revision: weeklyIntent?.revision ?? null,
+    },
+    candidateFeed: feedCoverage,
+    obligations: obligationCoverage,
+    missionDirector: missionDirectorCoverage,
+    actionPolicy: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+    channelReadiness: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+  };
+
+  const choice = selectDeterministicCycleChoice({
+    weeklyIntentLocked: weeklyIntent !== null,
+    candidates: feed?.candidates ?? [],
+    obligations,
+    missionDirectorPlan: plan,
+  });
 
   const execution =
     choice.selectedCandidate
