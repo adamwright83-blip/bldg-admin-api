@@ -10,7 +10,6 @@ import {
 } from "../claire/macroGoalService";
 import { getDb } from "../db";
 import type { VerticalRegistry } from "../strategy/verticalTemplates/registry";
-import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 import type { CanonicalOperatorIdentity } from "./identity";
 
 export const METRIC_PRECISIONS = [
@@ -350,7 +349,7 @@ export async function activateCurrentMacroGoalRun(input: {
   verticalKey: string;
   policyVersion: string;
   now?: Date;
-  registry?: VerticalRegistry;
+  registry: VerticalRegistry;
   persistence?: MacroGoalRunPersistence;
 }): Promise<MacroGoalRun | null> {
   if (input.identity.tenantId !== input.tenantId) {
@@ -374,11 +373,11 @@ export async function activateMacroGoalRun(input: {
   policyVersion: string;
   goal: MacroGoal;
   now?: Date;
-  registry?: VerticalRegistry;
+  registry: VerticalRegistry;
   persistence?: MacroGoalRunPersistence;
 }): Promise<MacroGoalRun> {
   const now = input.now ?? new Date();
-  const registry = input.registry ?? defaultVerticalRegistry;
+  const registry = input.registry;
   const persistence = input.persistence ?? databasePersistence;
   if (input.identity.tenantId !== input.tenantId || input.goal.tenantId !== input.tenantId) {
     throw new Error("Macro goal activation tenant mismatch");
@@ -418,7 +417,7 @@ export async function evaluateMacroGoalRun(input: {
   tenantId: string;
   runId: string;
   now?: Date;
-  registry?: VerticalRegistry;
+  registry: VerticalRegistry;
   persistence?: MacroGoalRunPersistence;
   nextEvaluationAt?: Date | null;
 }): Promise<{
@@ -427,7 +426,7 @@ export async function evaluateMacroGoalRun(input: {
   completed: boolean;
 }> {
   const now = input.now ?? new Date();
-  const registry = input.registry ?? defaultVerticalRegistry;
+  const registry = input.registry;
   const persistence = input.persistence ?? databasePersistence;
   const current = normalizeRun(
     await persistence.get({ tenantId: input.tenantId, id: input.runId })
