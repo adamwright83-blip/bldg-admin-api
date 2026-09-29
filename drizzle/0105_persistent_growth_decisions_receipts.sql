@@ -3,7 +3,7 @@
 -- This file is the one-shot schema migration. scripts/migrate.mjs applies the
 -- same shape idempotently for production boot migrations.
 
-CREATE TABLE `claire_proactive_obligations` (
+CREATE TABLE IF NOT EXISTS `claire_proactive_obligations` (
   `id` varchar(191) NOT NULL,
   `tenantId` varchar(64) NOT NULL,
   `operatorUserId` varchar(128) NOT NULL,
