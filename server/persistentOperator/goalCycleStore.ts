@@ -88,6 +88,14 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function nextEvaluationAtFromResult(value: unknown): Date | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = (value as { nextEvaluationAt?: unknown }).nextEvaluationAt;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export class GoalCycleStore
   implements DurableExecutionStore<ClaimedGoalCycle>
 {
@@ -378,8 +386,54 @@ export class GoalCycleStore
     resultValue: unknown
   ): Promise<boolean> {
     const connection = await this.pool.getConnection();
+    const serialized =
+      resultValue === undefined ? null : JSON.stringify(resultValue);
+    const nextEvaluationAt = nextEvaluationAtFromResult(resultValue);
     try {
       await connection.beginTransaction();
+
+      if (nextEvaluationAt && step.triggerType === "scheduled_tick") {
+        const [rescheduled] = await connection.execute<ResultSetHeader>(
+          `UPDATE goal_cycle_requests
+              SET status = 'queued',
+                  resultJson = ?,
+                  availableAt = ?,
+                  completedAt = NULL,
+                  leaseOwner = NULL,
+                  leaseExpiresAt = NULL,
+                  heartbeatAt = NULL,
+                  attemptCount = 0,
+                  lastError = NULL
+            WHERE tenantId = ? AND id = ?
+              AND status IN ('leased','running')
+              AND leaseOwner = ?`,
+          [
+            serialized,
+            nextEvaluationAt,
+            step.tenantId,
+            step.id,
+            step.leaseOwner,
+          ]
+        );
+        if (rescheduled.affectedRows !== 1) {
+          await connection.rollback();
+          return false;
+        }
+        await insertHistory(connection, {
+          tenantId: step.tenantId,
+          goalRunId: step.goalRunId,
+          requestId: step.id,
+          eventType: "cycle.rescheduled",
+          fromStatus: "running",
+          toStatus: "queued",
+          leaseOwner: step.leaseOwner,
+          attemptNumber: step.attemptCount,
+          details: { availableAt: nextEvaluationAt.toISOString() },
+        });
+        await connection.commit();
+        return true;
+      }
+
       const [result] = await connection.execute<ResultSetHeader>(
         `UPDATE goal_cycle_requests
             SET status = 'completed',
@@ -392,7 +446,7 @@ export class GoalCycleStore
             AND status IN ('leased','running')
             AND leaseOwner = ?`,
         [
-          resultValue === undefined ? null : JSON.stringify(resultValue),
+          serialized,
           step.tenantId,
           step.id,
           step.leaseOwner,
@@ -412,6 +466,112 @@ export class GoalCycleStore
         leaseOwner: step.leaseOwner,
         attemptNumber: step.attemptCount,
       });
+
+      if (nextEvaluationAt) {
+        const idempotencyKey = `scheduled_tick:${step.goalRunId}`;
+        const [scheduledRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT id, goalRunId, status, availableAt
+             FROM goal_cycle_requests
+            WHERE tenantId = ? AND idempotencyKey = ?
+            LIMIT 1
+            FOR UPDATE`,
+          [step.tenantId, idempotencyKey]
+        );
+        const existing = scheduledRows[0];
+        if (!existing) {
+          const scheduledId = randomUUID();
+          await connection.execute(
+            `INSERT INTO goal_cycle_requests
+               (id, tenantId, goalRunId, triggerType, triggerSourceReference,
+                idempotencyKey, status, availableAt, maxAttempts)
+             VALUES (?, ?, ?, 'scheduled_tick', ?, ?, 'queued', ?, 5)`,
+            [
+              scheduledId,
+              step.tenantId,
+              step.goalRunId,
+              `goal_cycle_requests:${step.id}:scheduled_successor`,
+              idempotencyKey,
+              nextEvaluationAt,
+            ]
+          );
+          await insertHistory(connection, {
+            tenantId: step.tenantId,
+            goalRunId: step.goalRunId,
+            requestId: scheduledId,
+            eventType: "cycle.queued",
+            toStatus: "queued",
+            details: {
+              triggerType: "scheduled_tick",
+              triggerSourceReference:
+                `goal_cycle_requests:${step.id}:scheduled_successor`,
+              availableAt: nextEvaluationAt.toISOString(),
+            },
+          });
+        } else {
+          if (String(existing.goalRunId ?? "") !== step.goalRunId) {
+            throw new Error("Scheduled goal cycle key is bound to a different run");
+          }
+          const existingStatus = String(existing.status ?? "");
+          if (["queued", "retry_scheduled"].includes(existingStatus)) {
+            const currentAvailableAt =
+              existing.availableAt instanceof Date
+                ? existing.availableAt
+                : new Date(String(existing.availableAt));
+            const availableAt =
+              Number.isNaN(currentAvailableAt.getTime()) ||
+              nextEvaluationAt.getTime() < currentAvailableAt.getTime()
+                ? nextEvaluationAt
+                : currentAvailableAt;
+            await connection.execute(
+              `UPDATE goal_cycle_requests
+                  SET availableAt = ?,
+                      triggerSourceReference = ?
+                WHERE tenantId = ? AND id = ?`,
+              [
+                availableAt,
+                `goal_cycle_requests:${step.id}:scheduled_successor`,
+                step.tenantId,
+                String(existing.id),
+              ]
+            );
+          } else if (
+            ["completed", "dead_letter", "cancelled"].includes(existingStatus)
+          ) {
+            await connection.execute(
+              `UPDATE goal_cycle_requests
+                  SET status = 'queued',
+                      triggerSourceReference = ?,
+                      availableAt = ?,
+                      deadlineAt = NULL,
+                      leaseOwner = NULL,
+                      leaseExpiresAt = NULL,
+                      heartbeatAt = NULL,
+                      attemptCount = 0,
+                      maxAttempts = 5,
+                      lastError = NULL,
+                      resultJson = NULL,
+                      completedAt = NULL
+                WHERE tenantId = ? AND id = ?`,
+              [
+                `goal_cycle_requests:${step.id}:scheduled_successor`,
+                nextEvaluationAt,
+                step.tenantId,
+                String(existing.id),
+              ]
+            );
+            await insertHistory(connection, {
+              tenantId: step.tenantId,
+              goalRunId: step.goalRunId,
+              requestId: String(existing.id),
+              eventType: "cycle.rescheduled",
+              fromStatus: existingStatus,
+              toStatus: "queued",
+              details: { availableAt: nextEvaluationAt.toISOString() },
+            });
+          }
+        }
+      }
+
       await connection.commit();
       return true;
     } catch (error) {
