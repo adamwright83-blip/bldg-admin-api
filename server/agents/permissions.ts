@@ -123,6 +123,7 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
     "logOperatorTaskTool",
     "logRevenueInterventionTool",
     "sendCustomerReminderTool",
+    "sendOperatorArtifactTool",
   ]),
 };
 

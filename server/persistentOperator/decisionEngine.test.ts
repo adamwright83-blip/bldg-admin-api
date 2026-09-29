@@ -148,4 +148,65 @@ describe("PR4 deterministic goal-cycle selection", () => {
       { id: "not-ready", reasons: ["INSUFFICIENT_PREP"] },
     ]);
   });
+
+  it("matches an open obligation due later in the horizon to a feed candidate", () => {
+    const future = obligation("obligation-future");
+    future.dueDate = "2026-10-02";
+    const candidateMatchingFuture = candidate("candidate-future", {
+      sourceRefs: [
+        {
+          sourceKind: "proactive_obligation",
+          sourceType: "sales_follow_up",
+          sourceId: "obligation-future",
+        },
+      ],
+    });
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: true,
+      candidates: [candidateMatchingFuture],
+      obligations: [future],
+      dueObligations: [],
+      missionDirectorPlan: null,
+    });
+    expect(result).toMatchObject({
+      selectionKind: "obligation",
+      selectedRef: "obligation-future",
+      selectedObligation: future,
+      selectedReasonCode: "CANONICAL_FEED_EXISTING_OBLIGATION",
+    });
+  });
+
+  it("restricts unplanned week selection exclusively to due obligations", () => {
+    const future = obligation("obligation-future");
+    future.dueDate = "2026-10-02";
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: false,
+      candidates: [candidate("campaign-a")],
+      obligations: [future],
+      dueObligations: [],
+      missionDirectorPlan: null,
+    });
+    expect(result).toMatchObject({
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedReasonCode: "WEEKLY_INTENT_UNPLANNED",
+    });
+  });
+
+  it("restricts fallback selection when candidates are empty to due obligations", () => {
+    const future = obligation("obligation-future");
+    future.dueDate = "2026-10-02";
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: true,
+      candidates: [],
+      obligations: [future],
+      dueObligations: [],
+      missionDirectorPlan: null,
+    });
+    expect(result).toMatchObject({
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
+    });
+  });
 });

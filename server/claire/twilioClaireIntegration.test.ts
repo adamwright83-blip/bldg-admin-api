@@ -138,6 +138,7 @@ describe("Claire Twilio integration seams", () => {
   it("exposes the send as an operator-voice tool and keeps it off resident S2S", () => {
     expect(getAgentTool("sendOperatorArtifactTool").name).toBe("sendOperatorArtifactTool");
     expect(() => assertToolPermission(operatorVoice("operator_voice_agent"), "sendOperatorArtifactTool")).not.toThrow();
+    expect(() => assertToolPermission(operatorVoice("goal_cycle_agent"), "sendOperatorArtifactTool")).not.toThrow();
     expect(() => assertToolPermission(operatorVoice("resident_agent"), "sendOperatorArtifactTool")).toThrow(
       /resident_agent is not allowed/
     );

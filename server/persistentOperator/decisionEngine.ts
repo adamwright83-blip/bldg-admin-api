@@ -92,6 +92,7 @@ export function selectDeterministicCycleChoice(input: {
   weeklyIntentLocked: boolean;
   candidates: readonly WeeklyGrowthCandidate[];
   obligations: readonly PersistentObligation[];
+  dueObligations?: readonly PersistentObligation[];
   missionDirectorPlan: MissionDirectorPlan | null;
 }): CycleChoice {
   const prepBlocked = input.candidates
@@ -100,13 +101,14 @@ export function selectDeterministicCycleChoice(input: {
   const eligible = input.candidates.filter(
     candidate => candidate.prep.feasibleWithinHorizon
   );
+  const dueObligations = input.dueObligations ?? input.obligations;
 
   if (!input.weeklyIntentLocked) {
     const blockedCandidates = input.candidates.map(candidate => ({
       id: candidate.id,
       reasons: ["WEEK_UNPLANNED_NEW_OBJECTIVE_WITHHELD"],
     }));
-    const obligation = input.obligations[0] ?? null;
+    const obligation = dueObligations[0] ?? null;
     if (obligation) {
       return {
         selectionKind: "obligation",
@@ -152,7 +154,7 @@ export function selectDeterministicCycleChoice(input: {
     };
   }
 
-  const obligation = input.obligations[0] ?? null;
+  const obligation = dueObligations[0] ?? null;
   if (obligation) {
     return {
       selectionKind: "obligation",
@@ -426,14 +428,18 @@ export async function decideGoalCycle(input: {
     };
   }
 
-  const obligations = await listOpenPersistentObligations({
+  const openObligations = await listOpenPersistentObligations({
     tenantId: input.tenantId,
     operatorUserIds: operatorIds,
     verticalKey: run.verticalKey,
     registry: input.registry,
-    dueThrough: today,
   });
-  const obligationCoverage = { status: "available", count: obligations.length };
+  const dueObligations = openObligations.filter(ob => ob.dueDate <= today);
+  const obligationCoverage = {
+    status: "available",
+    count: openObligations.length,
+    dueCount: dueObligations.length,
+  };
 
   let plan: MissionDirectorPlan | null = null;
   let missionDirectorCoverage: unknown = { status: "available", plan: false };
@@ -469,7 +475,8 @@ export async function decideGoalCycle(input: {
   const choice = selectDeterministicCycleChoice({
     weeklyIntentLocked: weeklyIntent !== null,
     candidates: feed?.candidates ?? [],
-    obligations,
+    obligations: openObligations,
+    dueObligations,
     missionDirectorPlan: plan,
   });
 

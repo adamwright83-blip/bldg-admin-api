@@ -71,4 +71,14 @@ describe("Persistent Growth Operator PR4 schema and authority contracts", () => 
     expect(receipt).toContain("business_outcome_not_linked");
     expect(receipt).toContain("economic_observation_not_linked");
   });
+
+  it("permits goal cycles to emit lineage-aware artifacts and classifies open obligations across the horizon", () => {
+    const permissions = repoFile("server/agents/permissions.ts");
+    const engine = repoFile("server/persistentOperator/decisionEngine.ts");
+
+    expect(permissions).toMatch(/goal_cycle_agent:\s*new Set\(\[[\s\S]*?"sendOperatorArtifactTool"/);
+    expect(engine).toContain("const dueObligations = openObligations.filter");
+    expect(engine).toContain("obligations: openObligations");
+    expect(engine).toContain("dueObligations");
+  });
 });
