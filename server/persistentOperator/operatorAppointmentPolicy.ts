@@ -366,12 +366,6 @@ export async function scheduleWeeklyPlanningCallback(input: {
   sourceReference: string;
   store: OperatorAppointmentStore;
 }): Promise<{ id: string; created: boolean; readback: string }> {
-  const cancelledPriorCallbacks = await input.store.cancelPendingCallbacks({
-    tenantId: input.identity.tenantId,
-    canonicalOperatorId: input.identity.canonicalOperatorId,
-    weekStart: input.weekStart,
-  });
-
   const key = [
     "weekly_planning_callback",
     input.identity.canonicalOperatorId,
@@ -379,6 +373,13 @@ export async function scheduleWeeklyPlanningCallback(input: {
     input.sourceReference,
     input.scheduledFor.toISOString(),
   ].join(":");
+  const cancelledPriorCallbacks = await input.store.cancelPendingCallbacks({
+    tenantId: input.identity.tenantId,
+    canonicalOperatorId: input.identity.canonicalOperatorId,
+    weekStart: input.weekStart,
+    excludeIdempotencyKey: key,
+  });
+
   const result = await input.store.enqueue({
     tenantId: input.identity.tenantId,
     canonicalOperatorId: input.identity.canonicalOperatorId,
