@@ -144,7 +144,13 @@ type PreDriveConversation = ClaireTurnState & {
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
   touchedAt: number;
-  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  sessionKind?:
+    | "evening_planning"
+    | "morning_reconciliation"
+    | "field_debrief"
+    | "pre_drive"
+    | "weekly_planning_invite"
+    | "weekly_planning";
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
   /** True after inbound context assembly was applied or conservatively given up. */
@@ -1191,6 +1197,7 @@ async function persistClaireVoiceConversation(input: {
   loadVocabulary?: boolean;
   /** Outbound already has assembled context. Inbound pickup bootstraps and waits until the first turn. */
   inboundContextReady?: boolean;
+  sessionKindOverride?: PreDriveConversation["sessionKind"];
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -1207,7 +1214,7 @@ async function persistClaireVoiceConversation(input: {
     context: input.context,
     turns: 0,
     touchedAt: now,
-    sessionKind: input.context.workday?.session,
+    sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
@@ -1223,7 +1230,8 @@ async function persistClaireVoiceConversation(input: {
       tenantId: input.tenantId,
       operatorUserId: input.actorId,
       claireConversationId: conversationId,
-      conversationKind: input.context.workday?.session ?? "pre_drive",
+      conversationKind:
+        input.sessionKindOverride ?? input.context.workday?.session ?? "pre_drive",
       missionId: input.missionId ?? null,
       recordingEnabled: isClaireVoiceRecordingEnabled(),
     })
@@ -1238,6 +1246,9 @@ export async function startClairePreDriveCall(input: {
   missionId?: number;
   /** The identity Day Director commitments (and Driver's dayline) are actually keyed by — see dayDirectorActorId(ctx). */
   dayDirectorActorId?: string;
+  /** Reuses the authorized Claire dialer while supplying a bounded authored opening. */
+  openingOverride?: string;
+  sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
 }): Promise<{ callSid: string; brief: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1247,7 +1258,8 @@ export async function startClairePreDriveCall(input: {
     missionId: input.missionId,
     dayDirectorActorId: input.dayDirectorActorId,
   });
-  const { brief, context } = generated;
+  const context = generated.context;
+  const brief = input.openingOverride?.trim() || generated.brief;
   const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -1256,6 +1268,7 @@ export async function startClairePreDriveCall(input: {
     context,
     spokenOpening: spokenClaireText(brief, true),
     missionId: input.missionId,
+    sessionKindOverride: input.sessionKindOverride,
   });
   try {
     const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });
