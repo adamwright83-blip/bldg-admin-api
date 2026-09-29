@@ -42,8 +42,8 @@ export async function triggerNightShiftRun(
       tenantId: scope.tenantId,
       operatorOpenId: scope.operatorId,
       triggerType: "scheduled_tick",
-      triggerSourceReference: `night_shift:${businessDate}`,
-      idempotencyKey: `night_shift:${businessDate}`,
+      triggerSourceReference: `night_shift:${scope.operatorId}:${businessDate}`,
+      idempotencyKey: `night_shift:${scope.operatorId}:${businessDate}`,
       availableAt: now,
     }).catch(error => {
       console.warn(
