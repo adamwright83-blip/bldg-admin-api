@@ -29,6 +29,9 @@ export type PersistentActionPolicyDecision =
       allowed: false;
       reason:
         | "missing_identity"
+        | "identity_unresolved"
+        | "entitlement_required"
+        | "role_not_allowed"
         | "standing_authorization_required"
         | "standing_authorization_invalid"
         | "explicit_approval_required";
@@ -66,6 +69,35 @@ export async function evaluatePersistentActionPolicy(
     !input.operatorUserId.trim()
   ) {
     return { allowed: false, reason: "missing_identity" };
+  }
+
+  const identity = await resolveCanonicalOperatorIdentity({
+    tenantId: input.tenantId,
+    source: { type: "open_id", value: input.operatorUserId },
+    subsystem: "persistent_operator.action_policy",
+  });
+  if (
+    !identity.ok ||
+    identity.identity.canonicalOperatorId !== input.canonicalOperatorId
+  ) {
+    return { allowed: false, reason: "identity_unresolved" };
+  }
+  const entitled = await hasTenantEntitlement({
+    tenantId: input.tenantId,
+    entitlement: PERSISTENT_OPERATOR_ENTITLEMENT,
+    now: input.now,
+  });
+  if (!entitled) {
+    return { allowed: false, reason: "entitlement_required" };
+  }
+  if (
+    !roleAllows(identity.identity.membership.canonical, [
+      "owner",
+      "admin",
+      "operator",
+    ])
+  ) {
+    return { allowed: false, reason: "role_not_allowed" };
   }
 
   if (input.riskClass === "READ_ONLY" || input.riskClass === "INTERNAL_REVERSIBLE") {
