@@ -7845,6 +7845,64 @@ export const goalCycleOutcomes = mysqlTable(
 export type GoalCycleOutcome = typeof goalCycleOutcomes.$inferSelect;
 export type InsertGoalCycleOutcome = typeof goalCycleOutcomes.$inferInsert;
 
+export const goalCycleLearnedDeltas = mysqlTable(
+  "goal_cycle_learned_deltas",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    objectiveId: varchar("objectiveId", { length: 36 }).notNull(),
+    outcomeId: varchar("outcomeId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    learningKind: varchar("learningKind", { length: 64 }).notNull(),
+    targetKey: varchar("targetKey", { length: 191 }).notNull(),
+    deltaType: varchar("deltaType", { length: 32 }).notNull(),
+    beforeStateJson: json("beforeStateJson"),
+    afterStateJson: json("afterStateJson").notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 191 }).notNull(),
+    confidence: varchar("confidence", { length: 32 }).notNull().default("high"),
+    explanation: text("explanation").notNull(),
+    appliedCount: int("appliedCount").notNull().default(1),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_goal_cycle_learned_deltas_idempotency").on(
+      table.tenantId,
+      table.outcomeId,
+      table.learningKind,
+      table.targetKey
+    ),
+    decisionIdx: index("idx_goal_cycle_learned_deltas_decision").on(
+      table.tenantId,
+      table.decisionId,
+      table.createdAt
+    ),
+    objectiveIdx: index("idx_goal_cycle_learned_deltas_objective").on(
+      table.tenantId,
+      table.objectiveId,
+      table.createdAt
+    ),
+    runIdx: index("idx_goal_cycle_learned_deltas_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+    operatorIdx: index("idx_goal_cycle_learned_deltas_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.learningKind,
+      table.targetKey
+    ),
+  })
+);
+
+export type GoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferSelect;
+export type InsertGoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {

@@ -15,6 +15,11 @@ import {
 } from "./identity";
 import { loadPersistentOperatorDiagnostics } from "./observability";
 import { operationReceipt } from "./operationReceipt";
+import {
+  getAuthoritativeScoreboard,
+  getLoadoutDelta,
+  getPersistentGrowthHistory,
+} from "./proofReadModels";
 
 function identityFailure(error: unknown): never {
   if (error instanceof CanonicalOperatorIdentityError) {
@@ -113,4 +118,43 @@ export const persistentOperatorRouter = router({
         bindingId: input.bindingId,
       })
     ),
+
+  scoreboard: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ goalRunId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "persistent_operator.scoreboard",
+      });
+      return getAuthoritativeScoreboard({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId,
+        goalRunId: input?.goalRunId,
+      });
+    }),
+
+  loadoutDelta: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ deltaId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      getLoadoutDelta({
+        tenantId: ctx.tenantId,
+        deltaId: input.deltaId,
+      })
+    ),
+
+  history: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "persistent_operator.history",
+      });
+      return getPersistentGrowthHistory({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId,
+        limit: input?.limit,
+      });
+    }),
 });
