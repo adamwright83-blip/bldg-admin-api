@@ -216,6 +216,65 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     expect(row.status).toBe("scheduled");
   });
 
+  it("refreshes an unclaimed Sunday appointment when its standing authorization rotates", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(appointment());
+    const refreshedSlot = new Date(Date.now() + 3_600_000);
+
+    const second = await store.enqueue(
+      appointment({
+        scheduledFor: refreshedSlot,
+        timeZone: "America/New_York",
+        standingAuthorizationId: "auth-b",
+      })
+    );
+
+    expect(second).toEqual({ id: first.id, created: false });
+    const [row] = await rows<RowDataPacket>(
+      `SELECT standingAuthorizationId,
+              timeZone,
+              scheduledFor = ? AS slotMatches,
+              status
+         FROM operator_appointments
+        WHERE id = ?`,
+      [refreshedSlot, first.id]
+    );
+    expect(row).toMatchObject({
+      standingAuthorizationId: "auth-b",
+      timeZone: "America/New_York",
+      status: "scheduled",
+    });
+    expect(Boolean(row.slotMatches)).toBe(true);
+  });
+
+  it("does not rewrite Sunday authority after a worker has claimed the appointment", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(appointment());
+    const claimed = await store.claimNextStep({
+      leaseOwner: "worker",
+      leaseMs: 10_000,
+    });
+    expect(claimed).toMatchObject({ id: first.id });
+
+    await store.enqueue(
+      appointment({
+        scheduledFor: new Date(Date.now() + 3_600_000),
+        timeZone: "America/New_York",
+        standingAuthorizationId: "auth-b",
+      })
+    );
+
+    const [row] = await rows<RowDataPacket>(
+      "SELECT standingAuthorizationId, timeZone, status FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(row).toMatchObject({
+      standingAuthorizationId: "auth-a",
+      timeZone: "America/Los_Angeles",
+      status: "leased",
+    });
+  });
+
   it("rescheduling callbacks does not consume or cancel the weekly unprompted row", async () => {
     const store = new OperatorAppointmentStore(pool);
     const weekly = await store.enqueue(appointment());
