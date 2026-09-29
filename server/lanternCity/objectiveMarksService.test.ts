@@ -71,6 +71,8 @@ describe("loadLanternObjectiveMarks", () => {
         tenantId: "tenant-b",
         operatorId: "7",
         operatorIds: ["7", "22"],
+        operatorUserId: "canonical-owner",
+        operatorUserIds: ["canonical-owner", "driver-primary"],
         viewerOpenId: "driver-1",
       },
       d
@@ -79,6 +81,8 @@ describe("loadLanternObjectiveMarks", () => {
       tenantId: "tenant-b",
       operatorId: "7",
       operatorIds: ["7", "22"],
+      operatorUserId: "canonical-owner",
+      operatorUserIds: ["canonical-owner", "driver-primary"],
     });
   });
 
