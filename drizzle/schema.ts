@@ -7666,6 +7666,118 @@ export const goalCycleDeadLetters = mysqlTable(
   })
 );
 
+export const tenantStandingAuthorizations = mysqlTable(
+  "tenant_standing_authorizations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    channel: varchar("channel", { length: 32 }).notNull(),
+    recipientClass: varchar("recipientClass", { length: 64 }).notNull(),
+    exactAction: varchar("exactAction", { length: 128 }).notNull(),
+    dailyLimit: int("dailyLimit").notNull().default(1),
+    allowedLocalStart: varchar("allowedLocalStart", { length: 5 }),
+    allowedLocalEnd: varchar("allowedLocalEnd", { length: 5 }),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    version: int("version").notNull().default(1),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    authorizedByUserId: varchar("authorizedByUserId", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt", { fsp: 3 }),
+  },
+  table => ({
+    lookupIdx: index("idx_tenant_standing_authorizations_lookup").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.exactAction,
+      table.revokedAt
+    ),
+    versionUnique: uniqueIndex("uq_tenant_standing_authorizations_version").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.exactAction,
+      table.version
+    ),
+  })
+);
+
+export type TenantStandingAuthorization =
+  typeof tenantStandingAuthorizations.$inferSelect;
+
+export const operatorAppointments = mysqlTable(
+  "operator_appointments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    appointmentKind: mysqlEnum("appointmentKind", [
+      "sunday_weekly_planning",
+      "weekly_planning_callback",
+    ]).notNull(),
+    weekStart: varchar("weekStart", { length: 10 }).notNull(),
+    scheduledFor: timestamp("scheduledFor", { fsp: 3 }).notNull(),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    source: mysqlEnum("source", [
+      "standing_weekly_authorization",
+      "explicit_operator_request",
+    ]).notNull(),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    standingAuthorizationId: varchar("standingAuthorizationId", { length: 36 }),
+    unprompted: boolean("unprompted").notNull().default(false),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    status: mysqlEnum("status", [
+      "scheduled",
+      "leased",
+      "running",
+      "retry_scheduled",
+      "completed",
+      "missed",
+      "cancelled",
+      "dead_letter",
+    ])
+      .notNull()
+      .default("scheduled"),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    heartbeatAt: timestamp("heartbeatAt", { fsp: 3 }),
+    attemptCount: int("attemptCount").notNull().default(0),
+    maxAttempts: int("maxAttempts").notNull().default(3),
+    callSid: varchar("callSid", { length: 64 }),
+    calendarEventId: varchar("calendarEventId", { length: 191 }),
+    calendarStatus: varchar("calendarStatus", { length: 32 }),
+    followupTextSentAt: timestamp("followupTextSentAt", { fsp: 3 }),
+    lastError: text("lastError"),
+    resultJson: json("resultJson"),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex("uq_operator_appointments_tenant_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    callSidUnique: uniqueIndex("uq_operator_appointments_call_sid").on(table.callSid),
+    dueIdx: index("idx_operator_appointments_due").on(
+      table.status,
+      table.scheduledFor,
+      table.leaseExpiresAt
+    ),
+    operatorWeekIdx: index("idx_operator_appointments_operator_week").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.weekStart,
+      table.appointmentKind,
+      table.status
+    ),
+  })
+);
+
+export type OperatorAppointment = typeof operatorAppointments.$inferSelect;
+export type InsertOperatorAppointment = typeof operatorAppointments.$inferInsert;
+
 export const claireConversationSessions = mysqlTable(
   "claire_conversation_sessions",
   {
