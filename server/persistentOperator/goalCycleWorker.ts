@@ -18,6 +18,7 @@ export type GoalCycleWorkerOptions = {
 export type GoalCycleEvaluator = (input: {
   tenantId: string;
   runId: string;
+  cycleId: string;
 }) => Promise<unknown>;
 
 /**
@@ -33,7 +34,11 @@ export class GoalCycleWorker {
     evaluator: GoalCycleEvaluator
   ) {
     const handler: DurableStepHandler<ClaimedGoalCycle> = async ({ step }) =>
-      evaluator({ tenantId: step.tenantId, runId: step.goalRunId });
+      evaluator({
+        tenantId: step.tenantId,
+        runId: step.goalRunId,
+        cycleId: step.id,
+      });
     this.worker = new DurableWorker(
       store,
       new Map([["goal_cycle.evaluate", handler]]),
