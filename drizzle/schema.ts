@@ -4294,6 +4294,7 @@ export const agentEvents = mysqlTable("agent_events", {
   standingAuthorizationVersion: int("standingAuthorizationVersion"),
   policyVersion: varchar("policyVersion", { length: 96 }),
   operationStatus: varchar("operationStatus", { length: 32 }),
+  objectiveId: varchar("objectiveId", { length: 36 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 },
 table => ({
@@ -4305,6 +4306,11 @@ table => ({
   cycleIdx: index("idx_agent_events_cycle").on(
     table.tenantId,
     table.cycleId,
+    table.id
+  ),
+  objectiveIdx: index("idx_agent_events_objective").on(
+    table.tenantId,
+    table.objectiveId,
     table.id
   ),
 }));
@@ -7733,6 +7739,111 @@ export const goalCycleDecisions = mysqlTable(
 
 export type GoalCycleDecision = typeof goalCycleDecisions.$inferSelect;
 export type InsertGoalCycleDecision = typeof goalCycleDecisions.$inferInsert;
+
+export const goalCycleObjectives = mysqlTable(
+  "goal_cycle_objectives",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    selectionKind: varchar("selectionKind", { length: 32 }).notNull(),
+    selectedRef: varchar("selectedRef", { length: 191 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull(),
+    executionType: varchar("executionType", { length: 32 }),
+    authority: varchar("authority", { length: 32 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("presented"),
+    statusReason: text("statusReason"),
+    actionTargetType: varchar("actionTargetType", { length: 64 }),
+    actionTargetId: varchar("actionTargetId", { length: 128 }),
+    actionTargetDisplayName: varchar("actionTargetDisplayName", { length: 255 }),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    windowStart: varchar("windowStart", { length: 32 }),
+    windowEnd: varchar("windowEnd", { length: 32 }),
+    loadoutJson: json("loadoutJson").notNull(),
+    evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    decisionUnique: uniqueIndex("uq_goal_cycle_objectives_decision").on(
+      table.tenantId,
+      table.decisionId
+    ),
+    runIdx: index("idx_goal_cycle_objectives_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+    operatorIdx: index("idx_goal_cycle_objectives_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.businessDate
+    ),
+  })
+);
+
+export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
+export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;
+
+export const goalCycleOutcomes = mysqlTable(
+  "goal_cycle_outcomes",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    objectiveId: varchar("objectiveId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    outcomeKind: varchar("outcomeKind", { length: 64 }).notNull(),
+    impactClass: varchar("impactClass", { length: 32 }).notNull(),
+    epistemicStatus: varchar("epistemicStatus", { length: 32 }).notNull().default("verified"),
+    evidenceClass: varchar("evidenceClass", { length: 32 }).notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 191 }).notNull(),
+    sourceSystem: varchar("sourceSystem", { length: 64 }).notNull(),
+    monetaryValueCents: int("monetaryValueCents"),
+    quantityValue: decimal("quantityValue", { precision: 15, scale: 2 }),
+    unit: varchar("unit", { length: 32 }),
+    explanation: text("explanation"),
+    metadataJson: json("metadataJson"),
+    observedAt: timestamp("observedAt", { fsp: 3 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_goal_cycle_outcomes_idempotency").on(
+      table.tenantId,
+      table.objectiveId,
+      table.outcomeKind,
+      table.evidenceReference
+    ),
+    decisionIdx: index("idx_goal_cycle_outcomes_decision").on(
+      table.tenantId,
+      table.decisionId,
+      table.createdAt
+    ),
+    objectiveIdx: index("idx_goal_cycle_outcomes_objective").on(
+      table.tenantId,
+      table.objectiveId,
+      table.createdAt
+    ),
+    runIdx: index("idx_goal_cycle_outcomes_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+  })
+);
+
+export type GoalCycleOutcome = typeof goalCycleOutcomes.$inferSelect;
+export type InsertGoalCycleOutcome = typeof goalCycleOutcomes.$inferInsert;
 
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",

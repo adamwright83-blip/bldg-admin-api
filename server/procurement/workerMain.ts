@@ -77,6 +77,7 @@ const goalCycleWorker = new GoalCycleWorker(
       observation: evaluation.observation,
       decisionId: decision.decision.id,
       decisionCreated: decision.created,
+      objectiveId: decision.objective?.id ?? null,
       selectionKind: decision.decision.selectionKind,
       selectedRef: decision.decision.selectedRef,
       selectedReasonCode: decision.decision.selectedReasonCode,

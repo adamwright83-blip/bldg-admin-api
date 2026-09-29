@@ -209,4 +209,12 @@ describe("PR4 deterministic goal-cycle selection", () => {
       selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
     });
   });
+
+  it("determines inactive goal run wait reasons accurately", () => {
+    expect(inactiveGoalRunWaitReason("active")).toBeNull();
+    expect(inactiveGoalRunWaitReason("completed")).toBe("GOAL_RUN_COMPLETED");
+    expect(inactiveGoalRunWaitReason("paused")).toBe("GOAL_RUN_INACTIVE");
+    expect(inactiveGoalRunWaitReason("cancelled")).toBe("GOAL_RUN_INACTIVE");
+  });
 });
+

@@ -3,6 +3,8 @@ import {
   agentEvents,
   claireProactiveObligations,
   communicationReceipts,
+  goalCycleObjectives,
+  goalCycleOutcomes,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import {
@@ -65,46 +67,71 @@ export async function operationReceipt(input: {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
 
-  const [events, communications, obligations] = await Promise.all([
-    optionalReceiptRows(() =>
-      db
-        .select()
-        .from(agentEvents)
-        .where(
-          and(
-            eq(agentEvents.tenantId, input.tenantId),
-            eq(agentEvents.decisionId, input.decisionId)
-          )
-        )
-        .orderBy(asc(agentEvents.id))
-    ),
-    optionalReceiptRows(() =>
-      db
-        .select()
-        .from(communicationReceipts)
-        .where(
-          and(
-            eq(communicationReceipts.tenantId, input.tenantId),
-            eq(communicationReceipts.decisionId, input.decisionId)
-          )
-        )
-        .orderBy(asc(communicationReceipts.createdAt))
-    ),
-    selectedObligationRef(decision)
-      ? db
+  const [events, communications, obligations, objectives, outcomes] =
+    await Promise.all([
+      optionalReceiptRows(() =>
+        db
           .select()
-          .from(claireProactiveObligations)
+          .from(agentEvents)
           .where(
             and(
-              eq(claireProactiveObligations.tenantId, input.tenantId),
-              eq(
-                claireProactiveObligations.id,
-                selectedObligationRef(decision)!
-              )
+              eq(agentEvents.tenantId, input.tenantId),
+              eq(agentEvents.decisionId, input.decisionId)
             )
           )
-      : Promise.resolve([]),
-  ]);
+          .orderBy(asc(agentEvents.id))
+      ),
+      optionalReceiptRows(() =>
+        db
+          .select()
+          .from(communicationReceipts)
+          .where(
+            and(
+              eq(communicationReceipts.tenantId, input.tenantId),
+              eq(communicationReceipts.decisionId, input.decisionId)
+            )
+          )
+          .orderBy(asc(communicationReceipts.createdAt))
+      ),
+      selectedObligationRef(decision)
+        ? db
+            .select()
+            .from(claireProactiveObligations)
+            .where(
+              and(
+                eq(claireProactiveObligations.tenantId, input.tenantId),
+                eq(
+                  claireProactiveObligations.id,
+                  selectedObligationRef(decision)!
+                )
+              )
+            )
+        : Promise.resolve([]),
+      optionalReceiptRows(() =>
+        db
+          .select()
+          .from(goalCycleObjectives)
+          .where(
+            and(
+              eq(goalCycleObjectives.tenantId, input.tenantId),
+              eq(goalCycleObjectives.decisionId, input.decisionId)
+            )
+          )
+          .limit(1)
+      ),
+      optionalReceiptRows(() =>
+        db
+          .select()
+          .from(goalCycleOutcomes)
+          .where(
+            and(
+              eq(goalCycleOutcomes.tenantId, input.tenantId),
+              eq(goalCycleOutcomes.decisionId, input.decisionId)
+            )
+          )
+          .orderBy(asc(goalCycleOutcomes.createdAt))
+      ),
+    ]);
 
   const authorityEvent = selectValidatedAuthorityEvent(events);
   const executionEvents = events.filter(event =>
@@ -118,6 +145,20 @@ export async function operationReceipt(input: {
       "succeeded",
       "failed",
     ].includes(event.operationStatus ?? event.status)
+  );
+
+  const actionVerification = outcomes.find(
+    o => o.impactClass === "action_verification"
+  );
+  const businessOutcomeRecord = outcomes.find(
+    o =>
+      o.impactClass === "operational_result" ||
+      o.impactClass === "customer_lifecycle"
+  );
+  const economicRecord = outcomes.find(
+    o =>
+      o.impactClass === "commercial_revenue" ||
+      o.monetaryValueCents !== null
   );
 
   return {
@@ -197,10 +238,68 @@ export async function operationReceipt(input: {
           })),
         }
       : unresolved("no_communication_receipt_linked"),
-    humanObjective: unresolved("slice_h_not_linked"),
-    verification: unresolved("verification_not_linked"),
-    businessOutcome: unresolved("business_outcome_not_linked"),
-    economicObservation: unresolved("economic_observation_not_linked"),
+    humanObjective:
+      objectives.length > 0
+        ? {
+            status: "resolved" as const,
+            value: {
+              objectiveId: objectives[0].id,
+              title: objectives[0].title,
+              description: objectives[0].description,
+              status: objectives[0].status,
+              authority: objectives[0].authority,
+              executionType: objectives[0].executionType,
+              actionTargetType: objectives[0].actionTargetType,
+              actionTargetId: objectives[0].actionTargetId,
+              completedAt: objectives[0].completedAt?.toISOString() ?? null,
+              businessDate: objectives[0].businessDate,
+            },
+          }
+        : unresolved("slice_h_not_linked"),
+    verification: actionVerification
+      ? {
+          status: "resolved" as const,
+          value: {
+            outcomeId: actionVerification.id,
+            outcomeKind: actionVerification.outcomeKind,
+            evidenceReference: actionVerification.evidenceReference,
+            sourceSystem: actionVerification.sourceSystem,
+            observedAt: actionVerification.observedAt.toISOString(),
+            explanation: actionVerification.explanation,
+          },
+        }
+      : unresolved("verification_not_linked"),
+    businessOutcome: businessOutcomeRecord
+      ? {
+          status: "resolved" as const,
+          value: {
+            outcomeId: businessOutcomeRecord.id,
+            outcomeKind: businessOutcomeRecord.outcomeKind,
+            epistemicStatus: businessOutcomeRecord.epistemicStatus,
+            evidenceReference: businessOutcomeRecord.evidenceReference,
+            sourceSystem: businessOutcomeRecord.sourceSystem,
+            explanation: businessOutcomeRecord.explanation,
+            observedAt: businessOutcomeRecord.observedAt.toISOString(),
+          },
+        }
+      : unresolved("business_outcome_not_linked"),
+    economicObservation: economicRecord
+      ? {
+          status: "resolved" as const,
+          value: {
+            outcomeId: economicRecord.id,
+            outcomeKind: economicRecord.outcomeKind,
+            monetaryValueCents: economicRecord.monetaryValueCents,
+            quantityValue: economicRecord.quantityValue
+              ? String(economicRecord.quantityValue)
+              : null,
+            unit: economicRecord.unit,
+            evidenceReference: economicRecord.evidenceReference,
+            sourceSystem: economicRecord.sourceSystem,
+            observedAt: economicRecord.observedAt.toISOString(),
+          },
+        }
+      : unresolved("economic_observation_not_linked"),
     laterPolicyChange: unresolved("policy_change_not_linked"),
   };
 }
