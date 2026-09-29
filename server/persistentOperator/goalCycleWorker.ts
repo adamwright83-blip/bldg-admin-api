@@ -2,9 +2,7 @@ import {
   DurableWorker,
   type DurableStepHandler,
 } from "../durableExecution/worker";
-import { evaluateMacroGoalRun } from "./macroGoalRuns";
 import {
-  createDefaultGoalCycleStore,
   type ClaimedGoalCycle,
   type GoalCycleStore,
 } from "./goalCycleStore";
@@ -22,16 +20,6 @@ export type GoalCycleEvaluator = (input: {
   runId: string;
 }) => Promise<unknown>;
 
-const defaultEvaluator: GoalCycleEvaluator = async input => {
-  const evaluation = await evaluateMacroGoalRun(input);
-  return {
-    runId: evaluation.run.id,
-    status: evaluation.run.status,
-    completed: evaluation.completed,
-    observation: evaluation.observation,
-  };
-};
-
 /**
  * Slice B worker. It does not mint authority or execute business actions; PR3
  * owns that boundary. PR2 durably wakes and reevaluates the macro-goal run.
@@ -42,7 +30,7 @@ export class GoalCycleWorker {
   constructor(
     store: GoalCycleStore,
     options: GoalCycleWorkerOptions,
-    evaluator: GoalCycleEvaluator = defaultEvaluator
+    evaluator: GoalCycleEvaluator
   ) {
     const handler: DurableStepHandler<ClaimedGoalCycle> = async ({ step }) =>
       evaluator({ tenantId: step.tenantId, runId: step.goalRunId });
@@ -70,8 +58,3 @@ export class GoalCycleWorker {
   }
 }
 
-export function createDefaultGoalCycleWorker(
-  options: GoalCycleWorkerOptions
-): GoalCycleWorker {
-  return new GoalCycleWorker(createDefaultGoalCycleStore(), options);
-}
