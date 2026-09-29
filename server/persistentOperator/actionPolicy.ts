@@ -25,7 +25,24 @@ export type PersistentActionPolicyInput = {
 };
 
 export type PersistentActionPolicyDecision =
-  | { allowed: true; authority: "automatic" | "standing_authorization" | "explicit_approval" }
+  | {
+      allowed: true;
+      authority: "automatic";
+      standingAuthorizationId: null;
+      standingAuthorizationVersion: null;
+    }
+  | {
+      allowed: true;
+      authority: "explicit_approval";
+      standingAuthorizationId: null;
+      standingAuthorizationVersion: null;
+    }
+  | {
+      allowed: true;
+      authority: "standing_authorization";
+      standingAuthorizationId: string;
+      standingAuthorizationVersion: number;
+    }
   | {
       allowed: false;
       reason:
@@ -102,17 +119,32 @@ export async function evaluatePersistentActionPolicy(
   }
 
   if (input.riskClass === "READ_ONLY" || input.riskClass === "INTERNAL_REVERSIBLE") {
-    return { allowed: true, authority: "automatic" };
+    return {
+      allowed: true,
+      authority: "automatic",
+      standingAuthorizationId: null,
+      standingAuthorizationVersion: null,
+    };
   }
 
   if (input.riskClass === "FINANCIAL_OR_CONTRACTUAL") {
     return input.approvedByUserId?.trim()
-      ? { allowed: true, authority: "explicit_approval" }
+      ? {
+          allowed: true,
+          authority: "explicit_approval",
+          standingAuthorizationId: null,
+          standingAuthorizationVersion: null,
+        }
       : { allowed: false, reason: "explicit_approval_required" };
   }
 
   if (input.approvedByUserId?.trim()) {
-    return { allowed: true, authority: "explicit_approval" };
+    return {
+      allowed: true,
+      authority: "explicit_approval",
+      standingAuthorizationId: null,
+      standingAuthorizationVersion: null,
+    };
   }
   if (!input.standingAuthorizationId?.trim()) {
     return { allowed: false, reason: "standing_authorization_required" };
@@ -150,5 +182,10 @@ export async function evaluatePersistentActionPolicy(
   ) {
     return { allowed: false, reason: "standing_authorization_invalid" };
   }
-  return { allowed: true, authority: "standing_authorization" };
+  return {
+    allowed: true,
+    authority: "standing_authorization",
+    standingAuthorizationId: authorization.id,
+    standingAuthorizationVersion: Number(authorization.version),
+  };
 }
