@@ -59,12 +59,13 @@ export async function operationReceipt(input: {
       ),
   ]);
 
-  const authorityEvent = events.find(
-    event =>
-      event.authorityBasis != null ||
-      event.approvalBasis != null ||
-      event.standingAuthorizationId != null
-  );
+  const authorityEvent = events.find(event => {
+    const status = event.operationStatus ?? event.status;
+    return (
+      (event.authorityBasis != null || event.approvalBasis != null) &&
+      ["execution_started", "success", "succeeded", "failed"].includes(status)
+    );
+  });
   const executionEvents = events.filter(event =>
     [
       "proposed",
