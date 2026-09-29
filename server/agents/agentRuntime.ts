@@ -2,8 +2,42 @@ import { logAgentEvent } from "./agentEvents";
 import { evaluateHumanApproval } from "./humanApproval";
 import { assertToolPermission, type AgentContext } from "./permissions";
 import { getAgentTool, getAgentToolPolicy } from "./toolRegistry";
-import { evaluatePersistentActionPolicy } from "../persistentOperator/actionPolicy";
+import {
+  evaluatePersistentActionPolicy,
+  type PersistentActionPolicyDecision,
+} from "../persistentOperator/actionPolicy";
 import type { AgentEventWrite } from "./agentEvents";
+
+export function validatedPersistentPolicyEventContext(
+  ctx: AgentContext,
+  policy: Extract<PersistentActionPolicyDecision, { allowed: true }>
+): AgentContext {
+  const standing =
+    policy.authority === "standing_authorization"
+      ? {
+          standingAuthorizationId: policy.standingAuthorizationId,
+          standingAuthorizationVersion: policy.standingAuthorizationVersion,
+        }
+      : {
+          standingAuthorizationId: null,
+          standingAuthorizationVersion: null,
+        };
+  return {
+    ...ctx,
+    approvedByUserId:
+      policy.authority === "explicit_approval"
+        ? ctx.approvedByUserId ?? null
+        : null,
+    authorityBasis: policy.authority,
+    approvalBasis:
+      policy.authority === "explicit_approval"
+        ? "explicit_approval"
+        : policy.authority === "standing_authorization"
+          ? "standing_authorization"
+          : "automatic",
+    ...standing,
+  };
+}
 
 async function safeLogAgentEvent(
   event: AgentEventWrite
@@ -80,16 +114,10 @@ export async function runAgentTool<TOutput = unknown>(
         return output as TOutput;
       }
 
-      eventCtx = {
-        ...eventCtx,
-        authorityBasis: persistentPolicy.authority,
-        approvalBasis:
-          persistentPolicy.authority === "explicit_approval"
-            ? "explicit_approval"
-            : persistentPolicy.authority === "standing_authorization"
-              ? "standing_authorization"
-              : "automatic",
-      };
+      eventCtx = validatedPersistentPolicyEventContext(
+        eventCtx,
+        persistentPolicy
+      );
       if (
         toolPolicy.riskClass === "EXTERNAL_COMMUNICATION" &&
         persistentPolicy.authority === "standing_authorization"
