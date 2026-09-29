@@ -64,6 +64,24 @@ describe("loadLanternObjectiveMarks", () => {
     }
   });
 
+  it("forwards authorized Day Director actor aliases to the Day Line reader", async () => {
+    const d = deps();
+    await loadLanternObjectiveMarks(
+      {
+        tenantId: "tenant-b",
+        operatorId: "7",
+        operatorIds: ["7", "22"],
+        viewerOpenId: "driver-1",
+      },
+      d
+    );
+    expect(d.readDayLine).toHaveBeenCalledWith({
+      tenantId: "tenant-b",
+      operatorId: "7",
+      operatorIds: ["7", "22"],
+    });
+  });
+
   it("drops a run a reader returns for another tenant", async () => {
     const d = deps({ listTenantRuns: vi.fn(async () => [run("tenant-a", "run-a")]) });
     const out = await loadLanternObjectiveMarks({ tenantId: "tenant-b", operatorId: "7", viewerOpenId: "driver-1" }, d);
