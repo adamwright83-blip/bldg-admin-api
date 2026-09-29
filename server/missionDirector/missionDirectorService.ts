@@ -29,6 +29,13 @@ function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
+function missionOperatorIds(input: {
+  operatorId: string;
+  operatorIds?: readonly string[];
+}): string[] {
+  return [...new Set([input.operatorId, ...(input.operatorIds ?? [])].map(id => id.trim()).filter(Boolean))];
+}
+
 async function loadRankingContext(input: {
   tenantId: string;
   operatorId: string;
@@ -173,6 +180,7 @@ function toRecord(row: typeof missionDirectorPlans.$inferSelect): MissionDirecto
 export async function getLatestPlan(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
 }): Promise<MissionDirectorPlan | null> {
   const db = await getDb();
@@ -183,11 +191,11 @@ export async function getLatestPlan(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
         eq(missionDirectorPlans.businessDate, input.businessDate)
       )
     )
-    .orderBy(desc(missionDirectorPlans.revision))
+    .orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision))
     .limit(1);
   return row ? toRecord(row) : null;
 }
@@ -195,6 +203,7 @@ export async function getLatestPlan(input: {
 export async function listPlanRevisions(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
 }): Promise<MissionDirectorPlan[]> {
   const db = await getDb();
@@ -205,11 +214,11 @@ export async function listPlanRevisions(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
         eq(missionDirectorPlans.businessDate, input.businessDate)
       )
     )
-    .orderBy(desc(missionDirectorPlans.revision));
+    .orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision));
   return rows.map(toRecord);
 }
 
@@ -322,10 +331,11 @@ const activeRuns = new Map<string, Promise<MissionDirectorPlan>>();
 export async function planForDate(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
-  const key = `${input.tenantId}:${input.operatorId}:${input.businessDate}`;
+  const key = `${input.tenantId}:${missionOperatorIds(input).sort().join(",")}:${input.businessDate}`;
   const active = activeRuns.get(key);
   if (active) return active;
   const run = planForDateInner(input).finally(() => activeRuns.delete(key));
@@ -336,6 +346,7 @@ export async function planForDate(input: {
 async function planForDateInner(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
@@ -397,6 +408,7 @@ async function planForDateInner(input: {
 export async function recordPlanUsage(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
   usageOutcome: "used" | "ignored" | "wrong_mission";
 }): Promise<{ ok: true }> {
@@ -410,7 +422,7 @@ export async function recordPlanUsage(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        eq(missionDirectorPlans.operatorId, latest.operatorId),
         eq(missionDirectorPlans.businessDate, input.businessDate),
         eq(missionDirectorPlans.revision, latest.revision)
       )
