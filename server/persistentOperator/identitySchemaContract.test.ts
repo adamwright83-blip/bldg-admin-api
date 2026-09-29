@@ -39,6 +39,14 @@ describe("Persistent operator PR1 schema contract", () => {
     expect(identity).toMatch(/tx\.insert\(persistentOperatorIdentityBindings\)/);
   });
 
+  it("records Day Director verification only on the first real completion", () => {
+    const router = repoFile("server/dayDirector/dayDirectorRouter.ts");
+    expect(router).toMatch(/const result = await completeDayDirectorCommitment/);
+    expect(router).toMatch(
+      /if \(!result\.alreadyCompleted\)[\s\S]*eventKind: "objective_verified"[\s\S]*objectiveId: input\.commitmentId/
+    );
+  });
+
   it("does not reintroduce a default-tenant fallback at migrated identity seams", () => {
     const files = [
       "server/persistentOperator/identity.ts",
