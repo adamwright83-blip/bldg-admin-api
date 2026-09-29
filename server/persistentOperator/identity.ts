@@ -541,7 +541,13 @@ export async function bindOperatorIdentityAlias(input: {
     throw new Error("Both identities must have active tenant authority");
   }
 
-  if (aliasOpenId === canonicalOpenId) {
+  // MySQL openId lookups may be case-insensitive. From this point forward the
+  // persisted user rows are the spelling authority so every JS Set/key sees
+  // one stable identity.
+  const persistedCanonicalOpenId = canonicalUser.openId;
+  const persistedAliasOpenId = aliasUser.openId;
+
+  if (persistedAliasOpenId === persistedCanonicalOpenId) {
     throw new Error("A canonical identity does not need a self-alias binding");
   }
 
@@ -562,7 +568,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.aliasOpenId, aliasOpenId),
+          eq(persistentOperatorIdentityBindings.persistedAliasOpenId, persistedAliasOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -572,7 +578,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.aliasOpenId, canonicalOpenId),
+          eq(persistentOperatorIdentityBindings.persistedAliasOpenId, persistedCanonicalOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -582,7 +588,7 @@ export async function bindOperatorIdentityAlias(input: {
       .where(
         and(
           eq(persistentOperatorIdentityBindings.tenantId, tenantId),
-          eq(persistentOperatorIdentityBindings.canonicalOpenId, aliasOpenId),
+          eq(persistentOperatorIdentityBindings.persistedCanonicalOpenId, persistedAliasOpenId),
           eq(persistentOperatorIdentityBindings.active, true)
         )
       );
@@ -590,11 +596,11 @@ export async function bindOperatorIdentityAlias(input: {
     if (
       active.some(
         binding =>
-          binding.canonicalOpenId !== canonicalOpenId ||
+          binding.persistedCanonicalOpenId !== persistedCanonicalOpenId ||
           binding.surface !== input.surface
       ) ||
       canonicalAsAlias.some(
-        binding => binding.canonicalOpenId !== canonicalOpenId
+        binding => binding.persistedCanonicalOpenId !== persistedCanonicalOpenId
       ) ||
       aliasAsCanonical.length > 0
     ) {
@@ -605,9 +611,9 @@ export async function bindOperatorIdentityAlias(input: {
     const row: OperatorIdentityBinding = {
       id: randomUUID(),
       tenantId,
-      canonicalOpenId,
-      aliasOpenId,
-      activeAliasKey: `${tenantId}:${aliasOpenId}`,
+      persistedCanonicalOpenId,
+      persistedAliasOpenId,
+      activeAliasKey: `${tenantId}:${persistedAliasOpenId}`,
       surface: input.surface,
       active: true,
       createdByOpenId: input.createdByOpenId,
