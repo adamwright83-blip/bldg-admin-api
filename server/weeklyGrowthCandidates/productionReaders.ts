@@ -198,7 +198,7 @@ async function readTasks(input: {
   const authorized = new Set(operatorUserIds(input));
   return tasks.flatMap(task => {
     const assigned = task.assignedTo ?? task.createdBy;
-    if (!authorized.has(assigned)) return [];
+    if (!assigned || !authorized.has(assigned)) return [];
     const metadata = asRecord(task.metadataJson);
     const campaignId = stringField(metadata, "campaignId");
     const mapped = GROWTH_OPS[task.taskType];
