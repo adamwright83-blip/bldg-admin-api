@@ -11,7 +11,7 @@ import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
 import { loadDailyCommand } from "../claire/dailyCommandContract";
 import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
-import { latestWeeklyIntent } from "../claire/weeklyMission/intentStore";
+import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
   explicitOperatorMissionDisplacement,
@@ -38,14 +38,14 @@ function missionOperatorIds(input: {
 
 async function loadRankingContext(input: {
   tenantId: string;
-  operatorId: string;
+  operatorUserId: string;
   businessDate: string;
 }): Promise<RankingContext> {
   let macroGoal: RankingContext["macroGoal"] = null;
   try {
     const goal = await getActiveMacroGoal({
       tenantId: input.tenantId,
-      operatorUserId: input.operatorId,
+      operatorUserId: input.operatorUserId,
     });
     if (goal) {
       macroGoal = {
@@ -230,14 +230,21 @@ export async function listPlanRevisions(input: {
 export async function computeMissionPlan(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+  const operatorUserId = input.operatorUserId?.trim() || input.operatorId;
+  const operatorUserIds = [...new Set(
+    [operatorUserId, ...(input.operatorUserIds ?? [])].map(id => id.trim()).filter(Boolean)
+  )];
   const [allCampaigns, fieldToday] = await Promise.all([
     listCampaigns({ tenantId: input.tenantId, includeDisabled: true }),
     getFieldToday({
       tenantId: input.tenantId,
-      userId: input.operatorId,
+      userId: operatorUserId,
       includeAllAssignees: true,
       businessDate: input.businessDate,
       timeZone: input.timeZone,
@@ -245,16 +252,17 @@ export async function computeMissionPlan(input: {
   ]);
   const loaded = await loadDailyCommand({
     tenantId: input.tenantId,
-    actorId: input.operatorId,
+    actorId: operatorUserId,
     dayDirectorActorId: input.operatorId,
-    operatorUserId: input.operatorId,
+    dayDirectorActorIds: input.operatorIds ? [...input.operatorIds] : undefined,
+    operatorUserId,
     businessDate: input.businessDate,
     timeZone: input.timeZone,
   }).catch(() => null);
   const weeklyIntent = loaded
-    ? await latestWeeklyIntent({
+    ? await latestWeeklyIntentForOperators({
         tenantId: input.tenantId,
-        operatorId: input.operatorId,
+        operatorIds: operatorUserIds,
         weekStart: weekStartMonday(input.businessDate),
       })
     : null;
@@ -268,7 +276,7 @@ export async function computeMissionPlan(input: {
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
-    operatorId: input.operatorId,
+    operatorUserId,
     businessDate: input.businessDate,
   });
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
@@ -332,6 +340,8 @@ export async function planForDate(input: {
   tenantId: string;
   operatorId: string;
   operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
@@ -347,6 +357,8 @@ async function planForDateInner(input: {
   tenantId: string;
   operatorId: string;
   operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
@@ -376,11 +388,15 @@ async function planForDateInner(input: {
   // Execution write, not a read. Operator-confirmed recurrence rules become
   // today's Day Director commitments before the plan is computed. Idempotent
   // per rule and date. computeMissionPlan stays persistence-free and only reads.
-  await projectRecurrenceForDate({
-    tenantId: input.tenantId,
-    actorId: input.operatorId,
-    businessDate: input.businessDate,
-  }).catch(() => ({ projectedIds: [], created: 0 }));
+  await Promise.all(
+    missionOperatorIds(input).map(actorId =>
+      projectRecurrenceForDate({
+        tenantId: input.tenantId,
+        actorId,
+        businessDate: input.businessDate,
+      }).catch(() => ({ projectedIds: [], created: 0 }))
+    )
+  );
   const { outcome, inputFingerprint } = await computeMissionPlan(input);
   const latest = await getLatestPlan(input);
   if (latest && latest.inputFingerprint === inputFingerprint) {
