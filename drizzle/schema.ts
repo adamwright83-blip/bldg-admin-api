@@ -4295,7 +4295,19 @@ export const agentEvents = mysqlTable("agent_events", {
   policyVersion: varchar("policyVersion", { length: 96 }),
   operationStatus: varchar("operationStatus", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+},
+table => ({
+  decisionIdx: index("idx_agent_events_decision").on(
+    table.tenantId,
+    table.decisionId,
+    table.id
+  ),
+  cycleIdx: index("idx_agent_events_cycle").on(
+    table.tenantId,
+    table.cycleId,
+    table.id
+  ),
+}));
 
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type InsertAgentEvent = typeof agentEvents.$inferInsert;
