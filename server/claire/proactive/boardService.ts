@@ -135,6 +135,26 @@ async function upsertObligation(
     });
 }
 
+async function backfillObligationCommercialFollowUpRef(input: {
+  tenantId: string;
+  operatorUserId: string;
+  obligationId: string;
+  commercialFollowUpRef: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(claireProactiveObligations)
+    .set({ commercialFollowUpRef: input.commercialFollowUpRef })
+    .where(
+      and(
+        eq(claireProactiveObligations.tenantId, input.tenantId),
+        eq(claireProactiveObligations.operatorUserId, input.operatorUserId),
+        eq(claireProactiveObligations.id, input.obligationId)
+      )
+    );
+}
+
 async function placeOnDayLine(input: {
   tenantId: string;
   actorId: string;
@@ -314,14 +334,27 @@ export async function ensureOperatorBoard(input: {
           lastOutcome: null,
           history: [follow.note],
         });
-        const existing = already.some(item => item.id === obligation.id);
+        const existing = already.find(item => item.id === obligation.id);
+        if (existing) {
+          // PR4 lineage backfill must never replay the obligation constructor
+          // over durable workflow state. Existing obligations may already be
+          // draft_prepared, awaiting_result, completed, or cancelled and may
+          // carry accumulated payload state that a fresh scheduled payload
+          // does not know about.
+          await backfillObligationCommercialFollowUpRef({
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            obligationId: existing.id,
+            commercialFollowUpRef: follow.id,
+          });
+          continue;
+        }
         await upsertObligation(
           input.tenantId,
           input.operatorUserId,
           obligation,
           { commercialFollowUpRef: follow.id }
         );
-        if (existing) continue;
         await placeOnDayLine({
           tenantId: input.tenantId,
           actorId: input.actorId,
