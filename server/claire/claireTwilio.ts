@@ -2332,6 +2332,16 @@ export function registerClaireRoutes(app: Express): void {
         from: body.From,
         to: body.To,
       });
+      if (
+        String(body.AnsweredBy ?? "")
+          .trim()
+          .toLowerCase()
+          .match(/^(machine|fax)/)
+      ) {
+        void handlePlanningAppointmentMissedStatus(body).catch(error => {
+          console.warn("[Claire] planning appointment missed-call follow-up failed", error);
+        });
+      }
       return res.status(result.status).send(result.twiml);
     } catch (error) {
       console.error("[Claire] amd webhook error", error instanceof Error ? error.name : "error");
