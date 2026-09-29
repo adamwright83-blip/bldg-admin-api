@@ -29,6 +29,7 @@ export const missionDirectorRouter = router({
       return planForDate({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
         ...input,
       });
     }),
@@ -39,6 +40,7 @@ export const missionDirectorRouter = router({
       return listPlanRevisions({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
         ...input,
       });
     }),
@@ -54,6 +56,7 @@ export const missionDirectorRouter = router({
       return recordPlanUsage({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
         ...input,
       });
     }),
