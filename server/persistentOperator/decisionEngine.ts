@@ -36,6 +36,11 @@ import {
   listOpenPersistentObligations,
   type PersistentObligation,
 } from "./obligationStore";
+import {
+  getGoalCycleObjectiveByDecision,
+  materializeGoalCycleObjective,
+  type PersistentGrowthObjective,
+} from "./objectiveStore";
 
 type CycleChoice = {
   selectionKind: GoalCycleSelectionKind;
@@ -281,13 +286,19 @@ function evidenceReferences(input: {
   return [...refs];
 }
 
+export type DecideGoalCycleResult = {
+  decision: GoalCycleDecisionRecord;
+  created: boolean;
+  objective?: PersistentGrowthObjective | null;
+};
+
 export async function decideGoalCycle(input: {
   tenantId: string;
   runId: string;
   cycleId: string;
   registry: VerticalRegistry;
   now?: Date;
-}): Promise<{ decision: GoalCycleDecisionRecord; created: boolean }> {
+}): Promise<DecideGoalCycleResult> {
   const existing = await findDecisionForCycle({
     tenantId: input.tenantId,
     cycleId: input.cycleId,
@@ -305,7 +316,14 @@ export async function decideGoalCycle(input: {
         onlyIfUnclaimedOrSameDecision: true,
       });
     }
-    return { decision: existing, created: false };
+    const existingObjective =
+      existing.selectionKind !== "wait"
+        ? await getGoalCycleObjectiveByDecision({
+            tenantId: input.tenantId,
+            decisionId: existing.id,
+          })
+        : null;
+    return { decision: existing, created: false, objective: existingObjective };
   }
 
   const now = input.now ?? new Date();
@@ -330,7 +348,7 @@ export async function decideGoalCycle(input: {
   const inactiveRunReason = inactiveGoalRunWaitReason(run.status);
   if (inactiveRunReason) {
     const completed = inactiveRunReason === "GOAL_RUN_COMPLETED";
-    return appendGoalCycleDecision({
+    const decisionResult = await appendGoalCycleDecision({
       tenantId: input.tenantId,
       goalRunId: run.id,
       cycleId: input.cycleId,
@@ -359,6 +377,7 @@ export async function decideGoalCycle(input: {
       loadout: [],
       experiment: null,
     });
+    return { ...decisionResult, objective: null };
   }
 
   const timeZone = await tenantTimeZone(input.tenantId);
@@ -389,7 +408,8 @@ export async function decideGoalCycle(input: {
       loadout: [],
       experiment: null,
     };
-    return appendGoalCycleDecision(draft);
+    const decisionResult = await appendGoalCycleDecision(draft);
+    return { ...decisionResult, objective: null };
   }
 
   const today = businessToday(now, timeZone);
@@ -549,6 +569,19 @@ export async function decideGoalCycle(input: {
     experiment: null,
   });
 
+  let objective: PersistentGrowthObjective | null = null;
+  if (persisted.decision.selectionKind !== "wait") {
+    const materialized = await materializeGoalCycleObjective({
+      tenantId: input.tenantId,
+      decision: persisted.decision,
+      candidate: choice.selectedCandidate,
+      obligation: choice.selectedObligation,
+      businessDate: today,
+      now,
+    });
+    objective = materialized.objective;
+  }
+
   if (choice.selectedObligation) {
     await attachObligationDecisionLineage({
       tenantId: input.tenantId,
@@ -559,6 +592,7 @@ export async function decideGoalCycle(input: {
       decisionId: persisted.decision.id,
       executionType: selectedExecutionType,
       objectiveRef:
+        objective?.id ??
         choice.selectedCandidate?.id ??
         choice.selectedObligation.objectiveRef ??
         null,
@@ -566,5 +600,5 @@ export async function decideGoalCycle(input: {
     });
   }
 
-  return persisted;
+  return { decision: persisted.decision, created: persisted.created, objective };
 }

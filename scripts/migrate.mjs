@@ -4398,6 +4398,91 @@ await ensureRequiredIndex(
   }
 }
 
+// Persistent Growth Operator PR5 — Slices H + I: objectives, outcomes, and execution lineage.
+await applyHistoricalCreateTables(
+  "../drizzle/0106_persistent_growth_objectives_outcomes.sql",
+  "Persistent Growth PR5 objective and outcome tables"
+);
+
+for (const [tableName, columns] of [
+  ["goal_cycle_objectives", [
+    "id", "tenantId", "goalRunId", "cycleId", "decisionId", "canonicalOperatorId",
+    "operatorUserId", "selectionKind", "selectedRef", "title", "description",
+    "executionType", "authority", "status", "statusReason", "actionTargetType",
+    "actionTargetId", "actionTargetDisplayName", "businessDate", "windowStart",
+    "windowEnd", "loadoutJson", "evidenceRefsJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_outcomes", [
+    "id", "tenantId", "goalRunId", "cycleId", "decisionId", "objectiveId",
+    "canonicalOperatorId", "operatorUserId", "outcomeKind", "impactClass",
+    "epistemicStatus", "evidenceClass", "evidenceReference", "sourceSystem",
+    "monetaryValueCents", "quantityValue", "unit", "explanation", "metadataJson",
+    "observedAt", "createdAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "uq_goal_cycle_objectives_decision",
+  ["tenantId", "decisionId"],
+  "ALTER TABLE goal_cycle_objectives ADD UNIQUE KEY uq_goal_cycle_objectives_decision (tenantId,decisionId)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_operator",
+  ["tenantId", "canonicalOperatorId", "status", "businessDate"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_operator (tenantId,canonicalOperatorId,status,businessDate)"
+);
+
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "uq_goal_cycle_outcomes_idempotency",
+  ["tenantId", "objectiveId", "outcomeKind", "evidenceReference"],
+  "ALTER TABLE goal_cycle_outcomes ADD UNIQUE KEY uq_goal_cycle_outcomes_idempotency (tenantId,objectiveId,outcomeKind,evidenceReference)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_decision",
+  ["tenantId", "decisionId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_decision (tenantId,decisionId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_objective",
+  ["tenantId", "objectiveId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_objective (tenantId,objectiveId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_run (tenantId,goalRunId,createdAt)"
+);
+
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await ensureRequiredColumn("agent_events", "objectiveId", "ALTER TABLE agent_events ADD COLUMN objectiveId VARCHAR(36) NULL");
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_objective",
+      ["tenantId", "objectiveId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_objective (tenantId,objectiveId,id)"
+    );
+  }
+}
+
 // END schema-path-normalized
 
 await conn.end();

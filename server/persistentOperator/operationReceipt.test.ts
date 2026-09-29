@@ -123,4 +123,18 @@ describe("operationReceipt authority lineage", () => {
       authorityBasis: "standing_authorization",
     });
   });
+
+  it("handles missing PR5 receipt tables as unresolved without failing", async () => {
+    const missing = Object.assign(new Error("Table doesn't exist"), {
+      code: "ER_NO_SUCH_TABLE",
+      errno: 1146,
+    });
+    expect(isMissingOptionalReceiptTableError(missing)).toBe(true);
+    await expect(
+      optionalReceiptRows(async () => {
+        throw missing;
+      })
+    ).resolves.toEqual([]);
+  });
 });
+
