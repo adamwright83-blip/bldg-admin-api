@@ -4214,9 +4214,26 @@ await applyIdempotentSqlFile(
   "../drizzle/0104_persistent_operator_authority_appointments.sql",
   "Persistent operator authority and Claire appointment tables"
 );
-await assertEnumContainsValues("agent_events", "agentType", [
-  "goal_cycle_agent",
-]);
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await runRequired(
+      `ALTER TABLE agent_events
+         MODIFY COLUMN agentType ENUM(
+           'resident_agent','operator_voice_agent','vendor_agent','driver_agent',
+           'gm_agent','building_agent','collections_agent','operator_task_agent',
+           'goal_cycle_agent','system_agent'
+         ) NOT NULL`,
+      "agent_events.agentType persistent operator enum"
+    );
+    await assertEnumContainsValues("agent_events", "agentType", ["goal_cycle_agent"]);
+  } else {
+    console.log("→ agent_events absent in this schema; skipping optional enum extension");
+  }
+}
 for (const [tableName, columns] of [
   ["tenant_standing_authorizations", [
     "id", "tenantId", "canonicalOperatorId", "operatorUserId", "channel",
@@ -4229,7 +4246,7 @@ for (const [tableName, columns] of [
     "weekStart", "scheduledFor", "timeZone", "source", "sourceReference",
     "standingAuthorizationId", "unprompted", "idempotencyKey", "status",
     "leaseOwner", "leaseExpiresAt", "heartbeatAt", "attemptCount", "maxAttempts",
-    "callSid", "calendarEventId", "calendarStatus", "followupTextSentAt",
+    "callDispatchStartedAt", "callSid", "calendarEventId", "calendarStatus", "followupTextSentAt",
     "lastError", "resultJson", "completedAt", "createdAt", "updatedAt",
   ]],
 ]) {
