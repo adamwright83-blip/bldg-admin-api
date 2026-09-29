@@ -13,7 +13,10 @@ import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { logAgentEvent } from "../agents/agentEvents";
-import { createClairePlanningCalendarEvent } from "../googleCalendar/googleCalendarService";
+import {
+  createClairePlanningCalendarEvent,
+  deleteClairePlanningCalendarEvent,
+} from "../googleCalendar/googleCalendarService";
 import {
   hasTenantEntitlement,
   isLegacyDayforgeTenant,
@@ -373,13 +376,10 @@ export async function scheduleWeeklyPlanningCallback(input: {
     input.sourceReference,
     input.scheduledFor.toISOString(),
   ].join(":");
-  const cancelledPriorCallbacks = await input.store.cancelPendingCallbacks({
-    tenantId: input.identity.tenantId,
-    canonicalOperatorId: input.identity.canonicalOperatorId,
-    weekStart: input.weekStart,
-    excludeIdempotencyKey: key,
-  });
 
+  // Resolve/create the exact requested callback before cancelling anything.
+  // Retrying the same semantic request therefore preserves/reactivates the
+  // same durable row instead of cancelling its own idempotency target.
   const result = await input.store.enqueue({
     tenantId: input.identity.tenantId,
     canonicalOperatorId: input.identity.canonicalOperatorId,
@@ -394,6 +394,32 @@ export async function scheduleWeeklyPlanningCallback(input: {
     unprompted: false,
     idempotencyKey: key,
   });
+
+  const replacedCallbacks = await input.store.listPendingCallbacks({
+    tenantId: input.identity.tenantId,
+    canonicalOperatorId: input.identity.canonicalOperatorId,
+    weekStart: input.weekStart,
+    excludeIdempotencyKey: key,
+  });
+  const cancelledPriorCallbacks = await input.store.cancelPendingCallbacks({
+    tenantId: input.identity.tenantId,
+    canonicalOperatorId: input.identity.canonicalOperatorId,
+    weekStart: input.weekStart,
+    excludeIdempotencyKey: key,
+  });
+
+  // Calendar is a projection only. Remove obsolete projections for every
+  // durable callback we just cancelled; failure here never restores the old
+  // authoritative appointment.
+  await Promise.all(
+    replacedCallbacks.map(callback =>
+      deleteClairePlanningCalendarEvent({
+        tenantId: input.identity.tenantId,
+        userId: input.identity.canonicalOpenId,
+        appointmentId: callback.id,
+      })
+    )
+  );
 
   await logAgentEvent({
     ctx: {
@@ -438,7 +464,6 @@ export async function scheduleWeeklyPlanningCallback(input: {
     readback: formatInTimeZone(input.scheduledFor, input.timeZone, "h:mm a"),
   };
 }
-
 
 export function createDefaultOperatorAppointmentStore(): OperatorAppointmentStore {
   return new OperatorAppointmentStore(getDefaultGoalCyclePool());
