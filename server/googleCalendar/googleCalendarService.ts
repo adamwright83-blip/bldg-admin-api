@@ -427,3 +427,44 @@ export async function createClairePlanningCalendarEvent(input: {
     };
   }
 }
+
+
+export async function deleteClairePlanningCalendarEvent(input: {
+  tenantId: string;
+  userId: string;
+  appointmentId: string;
+}) {
+  try {
+    const authorized = await authorizedCalendar({
+      tenantId: input.tenantId,
+      userId: input.userId,
+    });
+    if (!authorized) {
+      return { status: "not_connected" as const };
+    }
+    const eventId = stableOperatorAppointmentCalendarEventId(input);
+    try {
+      await authorized.calendar.events.delete({
+        calendarId: authorized.row.calendarId || "primary",
+        eventId,
+      });
+      return { status: "deleted" as const };
+    } catch (error: any) {
+      if (
+        error?.code === 404 ||
+        error?.response?.status === 404 ||
+        error?.code === 410 ||
+        error?.response?.status === 410
+      ) {
+        return { status: "already_absent" as const };
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      "[GoogleCalendar] Claire planning appointment deletion failed without restoring cancelled callback:",
+      error
+    );
+    return { status: "failed" as const };
+  }
+}
