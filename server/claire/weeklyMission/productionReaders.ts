@@ -146,6 +146,7 @@ export async function readWeeklyDossierFacts(input: {
   const campaign = await getClaireCampaignSummary({
     tenantId: input.tenantId,
     actorId: input.dayDirectorActorId,
+    actorIds: input.dayDirectorActorIds,
   });
   if (campaign) {
     facts.push({
