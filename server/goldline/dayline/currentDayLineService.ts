@@ -76,6 +76,8 @@ export async function readCurrentDayLine(
     tenantId: string;
     operatorId: string;
     operatorIds?: string[];
+    operatorUserId?: string;
+    operatorUserIds?: string[];
     timeZone?: string;
     now?: Date;
   },
@@ -114,6 +116,8 @@ export async function readCurrentDayLine(
         tenantId,
         operatorId,
         ...(input.operatorIds?.length ? { operatorIds: input.operatorIds } : {}),
+        ...(input.operatorUserId ? { operatorUserId: input.operatorUserId } : {}),
+        ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
         businessDate,
         timeZone,
       }),
