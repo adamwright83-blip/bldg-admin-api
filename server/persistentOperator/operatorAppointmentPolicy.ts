@@ -277,10 +277,7 @@ export async function ensureSundayPlanningAppointment(input: {
         scheduledFor: slot.scheduledFor.toISOString(),
         timeZone,
       },
-      outputJson: {
-      scheduled: true,
-      cancelledPriorCallbacks,
-    },
+      outputJson: { scheduled: true },
       status: "success",
       entityType: "operator_appointment",
       entityId: result.id,
