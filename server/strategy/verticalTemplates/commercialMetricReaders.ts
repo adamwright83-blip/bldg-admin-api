@@ -51,19 +51,36 @@ export const recurringAccountPaidRevenueMetricReader: MetricReader<Authoritative
         observedAt: (asOf ?? new Date()).toISOString(),
       };
     }
-    const [row] = await db
-      .select({
-        cents: sql<number>`COALESCE(SUM(${commercialOrderAttributions.paidCents}), 0)`,
-      })
-      .from(commercialOrderAttributions)
-      .where(eq(commercialOrderAttributions.tenantId, tenantId));
+    const [[activeRow], [reviewRow]] = await Promise.all([
+      db
+        .select({
+          cents: sql<number>`COALESCE(SUM(${commercialOrderAttributions.paidCents}), 0)`,
+        })
+        .from(commercialOrderAttributions)
+        .where(
+          and(
+            eq(commercialOrderAttributions.tenantId, tenantId),
+            eq(commercialOrderAttributions.status, "active")
+          )
+        ),
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(commercialOrderAttributions)
+        .where(
+          and(
+            eq(commercialOrderAttributions.tenantId, tenantId),
+            eq(commercialOrderAttributions.status, "financial_review")
+          )
+        ),
+    ]);
     const observedAt = (asOf ?? new Date()).toISOString();
-    const cents = Number(row?.cents ?? 0);
+    const cents = Number(activeRow?.cents ?? 0);
+    const financialReviewCount = Number(reviewRow?.count ?? 0);
     return {
       value: cents / 100,
       observationRef: `commercial.recurring_account_paid_revenue.v1:${tenantId}:${observedAt}`,
-      precision: "exact",
-      coverage: "complete",
+      precision: financialReviewCount > 0 ? "recorded_only" : "exact",
+      coverage: financialReviewCount > 0 ? "conflicting" : "complete",
       observedAt,
     };
   };
