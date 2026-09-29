@@ -284,6 +284,51 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
       .toBe((before.scheduledFor as Date).getTime());
   });
 
+  it("repeated Sunday seeding with the same execution snapshot does not steal a live lease", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const first = await store.enqueue(
+      appointment({ idempotencyKey: "same-snapshot-live-lease" })
+    );
+    const claimed = await store.claimNextStep({
+      leaseOwner: "worker-a",
+      leaseMs: 10_000,
+    });
+    expect(claimed).toMatchObject({
+      id: first.id,
+      attemptCount: 1,
+      leaseOwner: "worker-a",
+      standingAuthorizationId: "auth-a",
+      timeZone: "America/Los_Angeles",
+    });
+
+    const duplicate = await store.enqueue(
+      appointment({
+        idempotencyKey: "same-snapshot-live-lease",
+        scheduledFor: new Date(Date.now() + 3_600_000),
+        standingAuthorizationId: "auth-a",
+        timeZone: "America/Los_Angeles",
+      })
+    );
+    expect(duplicate).toEqual({ id: first.id, created: false });
+
+    expect(await store.markRunning(claimed!)).toBe(true);
+    expect(await store.heartbeat(claimed!, 10_000)).toBe(true);
+    expect(await store.beginCallDispatch(claimed!)).toBe(true);
+
+    const [row] = await rows<RowDataPacket>(
+      "SELECT status, attemptCount, leaseOwner, standingAuthorizationId, timeZone, callDispatchStartedAt FROM operator_appointments WHERE id = ?",
+      [first.id]
+    );
+    expect(row).toMatchObject({
+      status: "running",
+      attemptCount: 1,
+      leaseOwner: "worker-a",
+      standingAuthorizationId: "auth-a",
+      timeZone: "America/Los_Angeles",
+    });
+    expect(row.callDispatchStartedAt).not.toBeNull();
+  });
+
   it("refreshes claimed Sunday authority by revoking and requeueing the stale lease", async () => {
     const store = new OperatorAppointmentStore(pool);
     const first = await store.enqueue(appointment());
