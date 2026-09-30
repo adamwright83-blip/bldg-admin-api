@@ -26,9 +26,9 @@ import {
   type WeeklyDraft,
   type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
-import { compressTitle } from "../briefing/titleContract";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
+import { isSemanticallyNormalizedPrimary } from "./semanticPrimary";
 import {
   clearWeeklySession,
   loadWeeklySurface,
@@ -250,30 +250,7 @@ function captureReadiness(session: WeeklyPlanningSession, utterance: string, dos
 }
 
 export function isActionablePrimaryCandidate(utterance: string): boolean {
-  const trimmed = utterance.trim();
-  if (!trimmed || trimmed.length < 3) return false;
-  // Conversational filler, questions, confusion, status updates, or today commands:
-  if (
-    /\b(?:what|why|who|when|how|where)\b/i.test(trimmed) &&
-    (/\?/i.test(trimmed) || /\b(?:mean|saying|owns|talking)\b/i.test(trimmed))
-  ) {
-    return false;
-  }
-  if (/^(?:what|why|who|when|how|where)\s+(?:do you|is|are|does|did|blocks|owns)\b/i.test(trimmed)) {
-    return false;
-  }
-  if (/\b(?:what do you mean|don't know|what you're saying|what are you talking about|i don't understand)\b/i.test(trimmed)) {
-    return false;
-  }
-  if (/^(?:great idea|sounds good|okay|ok|thanks|cool|got it|sure|all right)[.!]?$/i.test(trimmed)) {
-    return false;
-  }
-  if (/\b(?:for today|batch them|day line|right now|dropped off|dry cleaner|heading to|going home|no more orders|need customers)\b/i.test(trimmed)) {
-    return false;
-  }
-  if (/\b(?:stop|hold on|wait|pause)\b/i.test(trimmed)) return false;
-  if (/\bgreat idea\b/i.test(trimmed) && /\b(?:batch|today)\b/i.test(trimmed)) return false;
-  return true;
+  return isSemanticallyNormalizedPrimary(utterance);
 }
 
 function findMatchingGrowthCandidate(
@@ -362,20 +339,9 @@ export function capturePrimary(
     return;
   }
 
-  // 3. Concrete actionable directive stated by the operator (e.g. "Walk the plant.")
-  // Compress and validate actionability — never store raw unformatted blobs
-  const cleanTitle = compressTitle(utterance.replace(/\s+/g, " ").trim());
-  if (cleanTitle && cleanTitle.split(/\s+/).length >= 2 && !/\b(?:batch|today|great idea|mean)\b/i.test(cleanTitle)) {
-    const textWithPeriod = utterance.trim().endsWith(".") && !cleanTitle.endsWith(".") ? `${cleanTitle}.` : cleanTitle;
-    day.primary = {
-      text: textWithPeriod,
-      source: "operator_stated",
-      existingCommitmentId: null,
-      executionType: resolveWeeklyExecutionType({ text: textWithPeriod, candidates }),
-    };
-    day.uncertainty = null;
-    return;
-  }
+  // Unknown free-form speech is never persisted by the deterministic fallback.
+  // The model decision path may extract a normalized primary; if that path is
+  // unavailable or rejected, keep the day open and ask again.
 
   day.primary = null;
   day.uncertainty = "Unconfirmed mission.";
