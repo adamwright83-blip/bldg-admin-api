@@ -176,13 +176,14 @@ export async function propagateGeographicConquest(
     )
     .limit(50);
 
-  // Check which accounts already have active missions
+  // Check which accounts are already won customers (do not re-prospect won accounts)
   const existingMissions = await listCommercialMissions({
     tenantId: input.tenantId,
     limit: 100,
   });
-  const existingMissionAccountIds = new Set(
+  const wonAccountIds = new Set(
     existingMissions
+      .filter(m => m.status === "won")
       .map(m => {
         const snap = m.account as { accountId?: number | string };
         return snap.accountId ? Number(snap.accountId) : null;
@@ -190,17 +191,27 @@ export async function propagateGeographicConquest(
       .filter((id): id is number => id !== null)
   );
 
+  const existingMissionByAccountId = new Map<number, (typeof existingMissions)[0]>();
+  for (const m of existingMissions) {
+    const snap = m.account as { accountId?: number | string };
+    const aId = snap?.accountId ? Number(snap.accountId) : null;
+    if (aId && m.status !== "won") {
+      existingMissionByAccountId.set(aId, m);
+    }
+  }
+
   const nearbyOpportunities: Array<{
     accountId: number;
     name: string;
     address: string;
     accountType: string;
     distanceMiles: number;
+    existingMissionId?: number;
   }> = [];
 
   if (wonLat !== null && wonLng !== null) {
     for (const loc of otherLocations) {
-      if (existingMissionAccountIds.has(loc.accountId)) continue;
+      if (wonAccountIds.has(loc.accountId)) continue;
       if (!loc.latitude || !loc.longitude) continue;
       const candidateLat = Number(loc.latitude);
       const candidateLng = Number(loc.longitude);
@@ -211,12 +222,14 @@ export async function propagateGeographicConquest(
         { lat: candidateLat, lng: candidateLng }
       );
       if (dist <= radiusMiles) {
+        const existing = existingMissionByAccountId.get(loc.accountId);
         nearbyOpportunities.push({
           accountId: loc.accountId,
           name: loc.accountName,
           address: loc.address,
           accountType: loc.accountType,
           distanceMiles: Math.round(dist * 100) / 100,
+          existingMissionId: existing?.id,
         });
       }
     }
@@ -238,61 +251,68 @@ export async function propagateGeographicConquest(
   const operatorUserId = input.actorId ?? "adam-admin";
   const todayDate = new Date().toISOString().slice(0, 10);
 
-  // 4. Spawn candidate missions with deterministic idempotency keys
+  // 4. Spawn candidate missions or elevate existing corridor missions with deterministic idempotency keys
   for (const opp of nearbyOpportunities.slice(0, maxCandidates)) {
-    const stepKey = `step-corridor-won-${accountId}-neighbor-${opp.accountId}`;
-    const idempotencyKey = `geo-conquest:won-${accountId}:neighbor-${opp.accountId}`;
+    let missionId = opp.existingMissionId;
 
-    const mission = await createCommercialMission({
-      tenantId: input.tenantId,
-      assignedTo: operatorUserId,
-      account: {
-        name: opp.name,
-        accountType: opp.accountType,
-        address: opp.address,
-      },
-      opportunity: {
-        score: 85,
-        estimateConfidence: "high",
-        primarySignal: `Adjacent to recently won customer ${wonAccountName} (${opp.distanceMiles} mi away)`,
-        reasons: ["LOCAL_ROUTE_DENSITY", "NEIGHBOR_ACCOUNT_WON", "CLUSTER_OPPORTUNITY"],
-        risks: ["COLD_OUTREACH"],
-        estimatedAnnualValueCents: 600000,
-      },
-      brief: {
-        laundryOpportunity: `Direct corridor neighbor to recently won customer ${wonAccountName}. Consolidated route delivery eliminates transit overhead.`,
-        salesAngle: `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility with dedicated corridor delivery schedules and preferential neighbor pricing.`,
-        openingLine: `Hi, our delivery team stops right next door at ${wonAccountName}—we wanted to introduce ourselves and see if we can streamline your commercial laundry and towel needs on the same run.`,
-        discoveryQuestions: [
-          "Who currently handles your commercial laundry or linens?",
-          "Would consolidated route pickups along this corridor fit your schedule?",
-        ],
-        objections: ["We already have a vendor", "Price concerns"],
-      },
-      steps: [
-        {
-          key: stepKey,
-          label: `Walk-in pitch to ${opp.name}`,
-          detail: `Corridor neighbor pitch referencing ${wonAccountName}`,
-          status: "pending",
-          position: 1,
-          type: "irl_visit",
-          instructionText: `Introduce Goldline as the neighbor vendor for ${wonAccountName}`,
-          revealPolicy: "sequential",
-          destinationName: opp.name,
-          destinationAddress: opp.address,
+    if (!missionId) {
+      const stepKey = `step-corridor-won-${accountId}-neighbor-${opp.accountId}`;
+      const idempotencyKey = `geo-conquest:won-${accountId}:neighbor-${opp.accountId}`;
+
+      const mission = await createCommercialMission({
+        tenantId: input.tenantId,
+        assignedTo: operatorUserId,
+        account: {
+          name: opp.name,
+          accountType: opp.accountType,
+          address: opp.address,
         },
-      ],
-      actor: { type: "system", id: operatorUserId, role: "admin" },
-      idempotencyKey,
-      initialPipelineStage: "discovered",
-    });
+        opportunity: {
+          score: 85,
+          estimateConfidence: "high",
+          primarySignal: `Adjacent to recently won customer ${wonAccountName} (${opp.distanceMiles} mi away)`,
+          reasons: ["LOCAL_ROUTE_DENSITY", "NEIGHBOR_ACCOUNT_WON", "CLUSTER_OPPORTUNITY"],
+          risks: ["COLD_OUTREACH"],
+          estimatedAnnualValueCents: 600000,
+        },
+        brief: {
+          laundryOpportunity: `Direct corridor neighbor to recently won customer ${wonAccountName}. Consolidated route delivery eliminates transit overhead.`,
+          salesAngle: `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility with dedicated corridor delivery schedules and preferential neighbor pricing.`,
+          openingLine: `Hi, our delivery team stops right next door at ${wonAccountName}—we wanted to introduce ourselves and see if we can streamline your commercial laundry and towel needs on the same run.`,
+          discoveryQuestions: [
+            "Who currently handles your commercial laundry or linens?",
+            "Would consolidated route pickups along this corridor fit your schedule?",
+          ],
+          objections: ["We already have a vendor", "Price concerns"],
+        },
+        steps: [
+          {
+            key: stepKey,
+            label: `Walk-in pitch to ${opp.name}`,
+            detail: `Corridor neighbor pitch referencing ${wonAccountName}`,
+            status: "pending",
+            position: 1,
+            type: "irl_visit",
+            instructionText: `Introduce Goldline as the neighbor vendor for ${wonAccountName}`,
+            revealPolicy: "sequential",
+            destinationName: opp.name,
+            destinationAddress: opp.address,
+          },
+        ],
+        actor: { type: "system", id: operatorUserId, role: "admin" },
+        idempotencyKey,
+        initialPipelineStage: "discovered",
+      });
+      missionId = mission.id;
+    }
 
     generatedMissions.push({
-      missionId: mission.id,
+      missionId,
       accountName: opp.name,
       distanceMiles: opp.distanceMiles,
-      reason: `Spawned nearby corridor mission for ${opp.name} (${opp.distanceMiles} mi from won account ${wonAccountName})`,
+      reason: opp.existingMissionId
+        ? `Elevated existing corridor mission for ${opp.name} (${opp.distanceMiles} mi from won account ${wonAccountName})`
+        : `Spawned nearby corridor mission for ${opp.name} (${opp.distanceMiles} mi from won account ${wonAccountName})`,
     });
 
     // 5. Register scheduled neighbor conquest obligation in proactive obligations table
