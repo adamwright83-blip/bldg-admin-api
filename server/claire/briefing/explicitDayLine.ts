@@ -23,6 +23,31 @@ export function refersToPriorWork(utterance: string): boolean {
   );
 }
 
+const STRUCTURED_RECOVERY_GROUP =
+  /\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i;
+const EXPLICIT_RECOVERY_CONTEXT =
+  /\b(?:dormant\s+(?:accounts|customers)|recovery\s+(?:texts|messages|outreach)|win[- ]?back)\b/i;
+const RECOVERY_GROUP_TRACKING_TARGET =
+  /\b(?:day\s*line|for\s+today|today|this\s+(?:morning|afternoon|evening)|tonight)\b/i;
+const IMPERATIVE_RECOVERY_GROUP_ACTION =
+  /^(?:(?:yes|yeah|yep|okay|ok|sure)[,\s]+)?(?:do|send|batch)\b/i;
+
+/**
+ * A bare pronoun is not enough to turn a business question into recovery work.
+ * The group reference must be anchored by known recovery context, an imperative
+ * recovery action, or an explicit Day Line/today target.
+ */
+export function referencesStructuredRecoveryGroup(utterance: string): boolean {
+  const text = utterance.trim();
+  if (!STRUCTURED_RECOVERY_GROUP.test(text)) return false;
+  if (EXPLICIT_RECOVERY_CONTEXT.test(text)) return true;
+  if (IMPERATIVE_RECOVERY_GROUP_ACTION.test(text)) return true;
+  return (
+    /\b(?:put|add|batch|send|do)\b/i.test(text) &&
+    RECOVERY_GROUP_TRACKING_TARGET.test(text)
+  );
+}
+
 function clausesOf(text: string): string[] {
   return text
     .split(/\b(?=(?:just\s+)?(?:add|put)\b)/i)
@@ -113,17 +138,8 @@ export function assembleReferencedDayLineWork(input: {
 }): BriefingItem[] {
   // Recovery anaphora is resolved only from structured entities Claire
   // actually surfaced. Conversation prose is not an identity database.
-  const explicitRecovery =
-    /\b(?:dormant\s+(?:accounts|customers)|recovery\s+(?:texts|messages|outreach)|win[- ]?back)\b/i.test(
-      input.utterance
-    );
-  const anaphoricGroup =
-    /\b(?:batch|do|send|put|add)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i.test(
-      input.utterance
-    ) ||
-    /\b(?:those people|the people|that group|the whole group|everyone|everybody)\b[^.!?]{0,40}\b(?:mentioned|named|just mentioned)\b/i.test(
-      input.utterance
-    );
+  const explicitRecovery = EXPLICIT_RECOVERY_CONTEXT.test(input.utterance);
+  const anaphoricGroup = referencesStructuredRecoveryGroup(input.utterance);
   const structuredRefs = input.surfacedAccounts ?? [];
 
   if ((explicitRecovery || anaphoricGroup) && (structuredRefs.length > 0 || explicitRecovery)) {
