@@ -7,7 +7,7 @@ import {
   dayDirectorPromptStates,
   towerWarsPromises,
 } from "../../drizzle/schema";
-import type { DayDirectorCommitment, DayDirectorProposal } from "../../shared/dayDirector";
+import type { DayDirectorCommitment, DayDirectorProposal, DayDirectorReference } from "../../shared/dayDirector";
 import {
   demotePrimaryCommand,
   emptyCommandMetadata,
@@ -53,6 +53,29 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
     .filter(part => part.type === "text")
     .map(part => (part.type === "text" ? part.text : ""))
     .join("");
+}
+
+function readReferences(value: unknown): DayDirectorReference[] {
+  if (!Array.isArray(value)) return [];
+  const refs: DayDirectorReference[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    const kind = row.kind;
+    const source = row.source;
+    const id = typeof row.id === "string" ? row.id.trim() : "";
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (
+      (kind !== "customer" && kind !== "account") ||
+      (source !== "conversation_referent" && source !== "explicit") ||
+      !id ||
+      !name
+    ) {
+      continue;
+    }
+    refs.push({ kind, id, name, source });
+  }
+  return refs.slice(0, 50);
 }
 
 export async function getDayDirectorState(input: {
@@ -143,6 +166,7 @@ export async function getDayDirectorState(input: {
         scheduleKind: typeof metadata.scheduleKind === "string" ? metadata.scheduleKind : null,
         scheduleLabel: typeof metadata.scheduleLabel === "string" ? metadata.scheduleLabel : null,
         sourceText: row.sourceText,
+        references: readReferences(metadata.references),
         command,
         operatorMission: readOperatorMissionMetadata(metadata),
         ...("executionType" in metadata
@@ -306,6 +330,7 @@ export async function acceptProposalWithReceipt(input: {
     detailState: input.proposal.detailState ?? "COMPLETE",
     missingDetails: input.proposal.missingDetails ?? [],
     detailNote: input.proposal.detailNote ?? null,
+    references: readReferences(input.proposal.references),
     command,
     ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
     ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
