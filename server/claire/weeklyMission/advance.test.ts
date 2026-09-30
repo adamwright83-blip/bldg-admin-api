@@ -349,7 +349,9 @@ describe("advanceWeeklySession", () => {
         }),
       }
     );
-    expect(result.draft.days.find(day => day.businessDate === "2026-09-16")?.primary?.text).toBe("Walk the plant.");
+    // The invalid model act is rejected, and deterministic fallback no longer
+    // turns the raw operator sentence into durable weekly work.
+    expect(result.draft.days.find(day => day.businessDate === "2026-09-16")?.primary).toBeNull();
     expect(result.speech).not.toMatch(/Dana/);
     expect(result.speech).not.toMatch(/I scheduled/);
     expect(result.writesBusinessTruth).toBe(false);
