@@ -98,7 +98,8 @@ export async function ensureAutonomousGoalBootstrap(input: {
 
       if (!targetRunId) {
         const template = registry.listTemplates()[0];
-        const verticalKey = template?.verticalKey ?? "laundry_fluff_fold";
+        if (!template) continue;
+        const verticalKey = template.verticalKey;
         const activated = await activateCurrentMacroGoalRun({
           tenantId: goal.tenantId,
           identity: resolution.identity,
