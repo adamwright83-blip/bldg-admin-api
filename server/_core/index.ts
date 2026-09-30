@@ -64,6 +64,7 @@ import { startAutomaticGeographicReconciliation } from "../geography/geographicR
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
+import { startAutonomousPersistentOperatorWorkers } from "../persistentOperator/autonomousWorkerService";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -876,6 +877,12 @@ async function startServer() {
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_PROOF_MODE === "1") {
       const stopOutbox = startEconomicOutboxDrainer();
       server.once("close", stopOutbox);
+    }
+    if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_AUTONOMOUS_WORKERS === "1") {
+      const stopAutonomousWorkers = startAutonomousPersistentOperatorWorkers();
+      server.once("close", () => {
+        void stopAutonomousWorkers();
+      });
     }
   });
 }

@@ -22,6 +22,7 @@ import {
   type GoalCycleOutcomeRecord,
 } from "./outcomeStore";
 import {
+  evaluateOutcomeAndRecordLearning,
   listGoalCycleLearnedDeltas,
   type GoalCycleLearnedDeltaRecord,
 } from "./learningStore";
@@ -285,6 +286,18 @@ export async function bridgeCommercialResolution(
     }).catch(err => {
       console.warn("[PersistentOperator] failed to transition objective status to completed", err);
     });
+
+    void import("./geographicConquestService")
+      .then(({ propagateGeographicConquest }) =>
+        propagateGeographicConquest({
+          tenantId: input.tenantId,
+          missionId: input.missionId,
+          actorId: input.actorId,
+        })
+      )
+      .catch(err => {
+        console.warn("[PersistentOperator] geographic conquest propagation deferred", err);
+      });
   }
 
   const deltas = await listGoalCycleLearnedDeltas({
@@ -628,4 +641,241 @@ export async function bridgeCommercialMissionCompletion(input: {
     outcomeKind: input.eventName === "visit_completed" ? "visit_completed" : input.eventName,
     metadata: input.metadata,
   });
+}
+
+export type BridgeParkingLotDebriefInput = {
+  tenantId: string;
+  actorId: string;
+  missionId: number;
+  evidenceReference: string;
+  debriefText: string;
+  visitOutcome?: {
+    outcome: string;
+    notes?: string | null;
+    decisionMakerStatus?: string | null;
+    reason?: string | null;
+    quoteRequested?: boolean;
+    pilotRequested?: boolean;
+  } | null;
+  observedAt?: Date;
+  metadata?: Record<string, unknown>;
+};
+
+export type BridgeParkingLotDebriefResult =
+  | {
+      bridged: true;
+      objective: PersistentGrowthObjective;
+      outcome: GoalCycleOutcomeRecord;
+      delta?: GoalCycleLearnedDeltaRecord | null;
+      tacticalSignal: {
+        targetKey: string;
+        learningKind:
+          | "doctrine_weight"
+          | "loadout_recommendation"
+          | "execution_constraint"
+          | "channel_affinity";
+        deltaType: "boost" | "suppress" | "reinforce" | "constraint";
+        explanation: string;
+        confidence: "high" | "medium" | "low";
+      };
+    }
+  | {
+      bridged: false;
+      reason: string;
+    };
+
+export function extractTacticalSignalsFromDebrief(
+  text: string,
+  visitOutcome?: BridgeParkingLotDebriefInput["visitOutcome"]
+): {
+  targetKey: string;
+  learningKind:
+    | "doctrine_weight"
+    | "loadout_recommendation"
+    | "execution_constraint"
+    | "channel_affinity";
+  deltaType: "boost" | "suppress" | "reinforce" | "constraint";
+  explanation: string;
+  confidence: "high" | "medium" | "low";
+} {
+  const combined = (
+    text +
+    " " +
+    (visitOutcome?.reason ?? "") +
+    " " +
+    (visitOutcome?.notes ?? "")
+  ).toLowerCase();
+
+  // 1. Pricing resistance / friction
+  if (
+    combined.includes("price") ||
+    combined.includes("pricing") ||
+    combined.includes("expensive") ||
+    combined.includes("too high") ||
+    combined.includes("cost") ||
+    combined.includes("cents per pound") ||
+    combined.includes("per pound") ||
+    combined.includes("cheaper") ||
+    combined.includes("rates") ||
+    combined.includes("rate")
+  ) {
+    return {
+      targetKey: "doctrine:pricing_defense",
+      learningKind: "doctrine_weight",
+      deltaType: "boost",
+      explanation: `Field debrief revealed pricing resistance: "${text.slice(0, 100)}". Elevated pricing_defense doctrine.`,
+      confidence: "high",
+    };
+  }
+
+  // 2. Speed / Turnaround friction
+  if (
+    combined.includes("turnaround") ||
+    combined.includes("24-hour") ||
+    combined.includes("same day") ||
+    combined.includes("next day") ||
+    combined.includes("too slow") ||
+    combined.includes("delay") ||
+    combined.includes("rush")
+  ) {
+    return {
+      targetKey: "doctrine:express_turnaround",
+      learningKind: "doctrine_weight",
+      deltaType: "boost",
+      explanation: `Field debrief highlighted turnaround sensitivity: "${text.slice(0, 100)}". Elevated express_turnaround doctrine.`,
+      confidence: "high",
+    };
+  }
+
+  // 3. Gatekeeper / Access constraint
+  if (
+    combined.includes("gate code") ||
+    combined.includes("appointment required") ||
+    combined.includes("security") ||
+    combined.includes("guard") ||
+    combined.includes("receptionist refused") ||
+    visitOutcome?.decisionMakerStatus === "gatekeeper_blocked"
+  ) {
+    return {
+      targetKey: "constraint:appointment_required",
+      learningKind: "execution_constraint",
+      deltaType: "constraint",
+      explanation: `Field debrief reported facility access restriction: "${text.slice(0, 100)}". Enforced appointment_required constraint.`,
+      confidence: "high",
+    };
+  }
+
+  // 4. Quote / Pilot requested or positive interest
+  if (
+    visitOutcome?.quoteRequested ||
+    visitOutcome?.pilotRequested ||
+    combined.includes("quote") ||
+    combined.includes("pilot") ||
+    combined.includes("excited") ||
+    combined.includes("interested") ||
+    combined.includes("samples")
+  ) {
+    return {
+      targetKey: "doctrine:field_first",
+      learningKind: "loadout_recommendation",
+      deltaType: "boost",
+      explanation: `Field debrief validated in-person presentation: quote/pilot interest observed. Reinforced field_first doctrine.`,
+      confidence: "high",
+    };
+  }
+
+  // Default: General field discovery
+  return {
+    targetKey: "doctrine:field_first",
+    learningKind: "channel_affinity",
+    deltaType: "reinforce",
+    explanation: `Operator field testimony recorded: "${text.slice(0, 100)}". Reinforced field channel affinity.`,
+    confidence: "medium",
+  };
+}
+
+/**
+ * Bridges driver parking-lot debrief (Claire voice debrief or clerk observation)
+ * to an authoritative outcome and immediately derives a tactical learned delta.
+ */
+export async function bridgeParkingLotDebrief(
+  input: BridgeParkingLotDebriefInput
+): Promise<BridgeParkingLotDebriefResult> {
+  const db = await getDb();
+  if (!db) {
+    return { bridged: false, reason: "Database unavailable" };
+  }
+
+  const matchingObjectives = await findDeterministicObjectivesForDriverAction({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    missionId: input.missionId,
+    evidenceReference: input.evidenceReference,
+  });
+
+  if (matchingObjectives.length === 0) {
+    return {
+      bridged: false,
+      reason: `No active objective deterministically linked to mission ${input.missionId}`,
+    };
+  }
+
+  if (matchingObjectives.length > 1) {
+    return {
+      bridged: false,
+      reason: `Ambiguous match: multiple active objectives found for mission ${input.missionId}`,
+    };
+  }
+
+  const targetObjective = matchingObjectives[0];
+  const tacticalSignal = extractTacticalSignalsFromDebrief(
+    input.debriefText,
+    input.visitOutcome
+  );
+
+  const recorded = await recordGoalCycleOutcome({
+    tenantId: input.tenantId,
+    objectiveId: targetObjective.id,
+    outcomeKind: "field_debrief_analyzed",
+    impactClass: "operational_result",
+    epistemicStatus: "verified",
+    evidenceClass: "goldline_audit_log",
+    evidenceReference: input.evidenceReference,
+    sourceSystem: "claire_field_debrief",
+    monetaryValueCents: null,
+    observedAt: input.observedAt ?? new Date(),
+    explanation: tacticalSignal.explanation,
+    metadata: {
+      missionId: input.missionId,
+      debriefText: input.debriefText,
+      tacticalSignal,
+      ...input.metadata,
+    },
+  });
+
+  let delta: GoalCycleLearnedDeltaRecord | null = null;
+  try {
+    const learningResult = await evaluateOutcomeAndRecordLearning({
+      tenantId: input.tenantId,
+      outcomeId: recorded.outcome.id,
+      targetKey: tacticalSignal.targetKey,
+      learningKind: tacticalSignal.learningKind,
+      deltaType: tacticalSignal.deltaType,
+      explanation: tacticalSignal.explanation,
+    });
+    delta = learningResult.delta;
+  } catch (err) {
+    console.warn(
+      "[PersistentOperator] evaluateOutcomeAndRecordLearning deferred for debrief",
+      err
+    );
+  }
+
+  return {
+    bridged: true,
+    objective: targetObjective,
+    outcome: recorded.outcome,
+    delta,
+    tacticalSignal,
+  };
 }

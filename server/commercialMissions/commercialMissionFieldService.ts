@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissionFieldChecklistItems,
@@ -344,6 +344,52 @@ export async function recordParkingLotClerkObservation(input: {
   if (!state?.parkingLotClerkObservation) {
     throw new Error("Parking-lot Clerk observation was not persisted");
   }
+
+  // Post-commit: Bridge parking-lot clerk observation to Persistent Growth Operator learning
+  void (async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const [persistedEvent] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.missionId, input.missionId),
+            eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
+          )
+        )
+        .orderBy(desc(commercialMissionEvents.id))
+        .limit(1);
+
+      if (persistedEvent) {
+        const { bridgeParkingLotDebrief } = await import(
+          "../persistentOperator/fieldEventBridge"
+        );
+        await bridgeParkingLotDebrief({
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+          missionId: input.missionId,
+          evidenceReference: `commercial_mission_events:${persistedEvent.id}`,
+          debriefText: input.text,
+          visitOutcome: state.visitOutcome
+            ? {
+                outcome: state.visitOutcome.outcome,
+                notes: state.visitOutcome.notes,
+                decisionMakerStatus: state.visitOutcome.decisionMakerStatus,
+                reason: state.visitOutcome.reason,
+                quoteRequested: Boolean(state.visitOutcome.quoteRequested),
+                pilotRequested: Boolean(state.visitOutcome.pilotRequested),
+              }
+            : null,
+        });
+      }
+    } catch (err) {
+      console.warn("[PersistentOperator] parking-lot debrief bridge deferred", err);
+    }
+  })();
+
   return state;
 }
 

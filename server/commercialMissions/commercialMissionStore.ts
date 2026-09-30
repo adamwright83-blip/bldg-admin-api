@@ -853,6 +853,21 @@ export async function transitionCommercialMission(input: {
     }
   }
 
+  if (input.toStatus === "won") {
+    try {
+      const { propagateGeographicConquest } = await import(
+        "../persistentOperator/geographicConquestService"
+      );
+      void propagateGeographicConquest({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        actorId: input.actor.id,
+      });
+    } catch (err) {
+      console.warn("[PersistentOperator] geographic conquest propagation deferred", err);
+    }
+  }
+
   return mission;
 }
 
