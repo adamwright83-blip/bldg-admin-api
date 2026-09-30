@@ -144,6 +144,9 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 const ACTION_DIRECTIVE =
   /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|batch)\b/i;
 
+const REFERENTIAL_ACTION_DIRECTIVE =
+  /\b(?:do|send|put|add|batch|move)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i;
+
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
  * genuine-looking item: "don't add that", "that isn't a Day Line task", "I didn't ask you to add".
@@ -465,7 +468,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
-  const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
+  const hasExplicitActionRequest = (ACTION_DIRECTIVE.test(text) || REFERENTIAL_ACTION_DIRECTIVE.test(text)) && !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
 
   let cardinality = parseCardinality(text);
