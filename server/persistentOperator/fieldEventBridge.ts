@@ -821,14 +821,11 @@ export async function bridgeParkingLotDebrief(
     };
   }
 
-  if (matchingObjectives.length > 1) {
-    return {
-      bridged: false,
-      reason: `Ambiguous match: multiple active objectives found for mission ${input.missionId}`,
-    };
-  }
-
-  const targetObjective = matchingObjectives[0];
+  // If multiple cycle objectives target the same mission, bind to the most recent one
+  const sortedObjectives = [...matchingObjectives].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const targetObjective = sortedObjectives[0];
   const tacticalSignal = extractTacticalSignalsFromDebrief(
     input.debriefText,
     input.visitOutcome

@@ -419,7 +419,7 @@ export async function propagateGeographicConquest(
         outcomeKind: "geographic_conquest_expanded",
         impactClass: "operational_result",
         epistemicStatus: "verified",
-        evidenceClass: "derived",
+        evidenceClass: "operator_attested",
         evidenceReference: `accounts:commercial:${accountId}`,
         sourceSystem: "geographic_conquest",
         monetaryValueCents: null,
