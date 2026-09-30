@@ -21,7 +21,12 @@ import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayP
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "../briefing/briefingTypes";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
-import { assembleReferencedDayLineWork, confirmExistingDayLineSpeech, refersToPriorWork } from "../briefing/explicitDayLine";
+import {
+  assembleReferencedDayLineWork,
+  confirmExistingDayLineSpeech,
+  referencesStructuredRecoveryGroup,
+  refersToPriorWork,
+} from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
@@ -1167,11 +1172,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
+    const pendingHasStructuredRecoveryRefs = state.pendingBriefing.parsed.items.some(item =>
+      item.references?.some(
+        ref => ref.kind === "customer" && ref.source === "conversation_referent"
+      )
+    );
     const explicitPendingCommit =
       explicitPendingDayLineCommit(utterance) ||
-      (interpreted.hasExplicitActionRequest &&
-        refersToPriorWork(utterance) &&
-        /\b(?:put|add|save|log|track|write|place)\b/i.test(utterance));
+      (pendingHasStructuredRecoveryRefs &&
+        interpreted.hasExplicitActionRequest &&
+        referencesStructuredRecoveryGroup(utterance));
     const bindsPending =
       reply.decision === "yes" ||
       reply.decision === "no" ||
@@ -1378,9 +1388,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const unresolvedGroupReference =
     !state.pendingBriefing &&
     !(state.surfacedRecoveryAccounts?.length) &&
-    /\b(?:do|send|put|add|batch|move)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i.test(
-      utterance
-    );
+    referencesStructuredRecoveryGroup(utterance);
   if (unresolvedGroupReference && interpreted.hasExplicitActionRequest) {
     mark("fallback", { fallbackReason: "unresolved_structured_group_reference" });
     return finish({
