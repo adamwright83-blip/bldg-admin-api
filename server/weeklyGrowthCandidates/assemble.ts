@@ -33,6 +33,7 @@ const UNFINISHED_ORIGINS = new Set<WeeklyGrowthRawOrigin>([
 const LIVE_STATUS: Record<WeeklyGrowthRawOrigin, ReadonlySet<string> | null> = {
   day_director_commitment: new Set(["open"]),
   commercial_mission: new Set([
+    "candidate",
     "selected",
     "game_ready",
     "game_active",

@@ -166,17 +166,20 @@ async function readMissions(input: {
   operatorUserId: string;
   operatorUserIds?: readonly string[];
 }): Promise<WeeklyGrowthRawRecord[]> {
-  const groups = await Promise.all(
-    operatorUserIds(input).map(assignedTo =>
-      listCommercialMissions({ tenantId: input.tenantId, assignedTo })
-    )
-  );
+  const [operatorGroups, tenantMissions] = await Promise.all([
+    Promise.all(
+      operatorUserIds(input).map(assignedTo =>
+        listCommercialMissions({ tenantId: input.tenantId, assignedTo })
+      )
+    ),
+    listCommercialMissions({ tenantId: input.tenantId, limit: 100 }),
+  ]);
   const missions = [...new Map(
-    groups.flat().map(mission => [mission.id, mission] as const)
+    [...operatorGroups.flat(), ...tenantMissions].map(mission => [mission.id, mission] as const)
   ).values()];
   return missions.map(mission => emptyRawRecord({
     tenantId: mission.tenantId,
-    operatorUserId: mission.assignedTo,
+    operatorUserId: mission.assignedTo ?? input.operatorUserId,
     origin: "commercial_mission",
     sourceId: String(mission.id),
     title: mission.account.name || mission.code,

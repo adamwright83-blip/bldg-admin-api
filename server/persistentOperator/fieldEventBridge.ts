@@ -293,6 +293,7 @@ export async function bridgeCommercialResolution(
           tenantId: input.tenantId,
           missionId: input.missionId,
           actorId: input.actorId,
+          objectiveId: targetObjective.id,
         })
       )
       .catch(err => {

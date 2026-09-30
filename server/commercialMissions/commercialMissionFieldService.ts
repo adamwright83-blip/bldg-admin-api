@@ -345,11 +345,10 @@ export async function recordParkingLotClerkObservation(input: {
     throw new Error("Parking-lot Clerk observation was not persisted");
   }
 
-  // Post-commit: Bridge parking-lot clerk observation to Persistent Growth Operator learning
-  void (async () => {
-    try {
-      const db = await getDb();
-      if (!db) return;
+  // Post-commit: Synchronously bridge parking-lot clerk observation to Persistent Growth Operator learning
+  try {
+    const db = await getDb();
+    if (db) {
       const [persistedEvent] = await db
         .select({ id: commercialMissionEvents.id })
         .from(commercialMissionEvents)
@@ -385,10 +384,10 @@ export async function recordParkingLotClerkObservation(input: {
             : null,
         });
       }
-    } catch (err) {
-      console.warn("[PersistentOperator] parking-lot debrief bridge deferred", err);
     }
-  })();
+  } catch (err) {
+    console.warn("[PersistentOperator] parking-lot debrief immediate bridge deferred to sweeper", err);
+  }
 
   return state;
 }

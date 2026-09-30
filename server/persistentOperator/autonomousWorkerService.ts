@@ -17,8 +17,10 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
+  commercialMissionEvents,
+  goalCycleOutcomes,
   goalCycleRequests,
   macroGoalRuns,
   operatorMacroGoals,
@@ -152,6 +154,77 @@ export async function ensureAutonomousGoalBootstrap(input: {
   }
 }
 
+export async function sweepUnbridgedParkingLotDebriefs(input: {
+  limit?: number;
+} = {}): Promise<{
+  processedCount: number;
+  errors: Array<{ eventId: number; error: string }>;
+}> {
+  const db = await getDb();
+  if (!db) return { processedCount: 0, errors: [] };
+
+  const limit = input.limit ?? 25;
+  const recentEvents = await db
+    .select({
+      id: commercialMissionEvents.id,
+      tenantId: commercialMissionEvents.tenantId,
+      missionId: commercialMissionEvents.missionId,
+      actorId: commercialMissionEvents.actorId,
+      metadataJson: commercialMissionEvents.metadataJson,
+      createdAt: commercialMissionEvents.createdAt,
+    })
+    .from(commercialMissionEvents)
+    .where(eq(commercialMissionEvents.eventName, "parking_lot_clerk_observation"))
+    .orderBy(desc(commercialMissionEvents.id))
+    .limit(limit);
+
+  let processedCount = 0;
+  const errors: Array<{ eventId: number; error: string }> = [];
+
+  for (const event of recentEvents) {
+    const evidenceReference = `commercial_mission_events:${event.id}`;
+    const [existingOutcome] = await db
+      .select({ id: goalCycleOutcomes.id })
+      .from(goalCycleOutcomes)
+      .where(
+        and(
+          eq(goalCycleOutcomes.tenantId, event.tenantId),
+          eq(goalCycleOutcomes.evidenceReference, evidenceReference)
+        )
+      )
+      .limit(1);
+
+    if (existingOutcome) {
+      continue;
+    }
+
+    try {
+      const metadata = (event.metadataJson ?? {}) as Record<string, unknown>;
+      const debriefText = typeof metadata.text === "string" ? metadata.text : "";
+      const { bridgeParkingLotDebrief } = await import("./fieldEventBridge");
+      const result = await bridgeParkingLotDebrief({
+        tenantId: event.tenantId,
+        actorId: event.actorId ?? "clerk",
+        missionId: event.missionId,
+        evidenceReference,
+        debriefText,
+        observedAt: event.createdAt,
+      });
+
+      if (result.bridged) {
+        processedCount++;
+      }
+    } catch (err) {
+      errors.push({
+        eventId: event.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { processedCount, errors };
+}
+
 export function startAutonomousPersistentOperatorWorkers(
   options: AutonomousWorkerOptions = {}
 ): () => Promise<void> {
@@ -238,13 +311,22 @@ export function startAutonomousPersistentOperatorWorkers(
     }
   );
 
-  // 3. Periodic Outcome Learning Outbox Sweeper
+  // 3. Periodic Outcome Learning & Debrief Outbox Sweeper
   const learningDrainIntervalMs = options.learningDrainIntervalMs ?? 30_000;
   let learningSweeperActive = false;
   const learningTimer = setInterval(async () => {
     if (learningSweeperActive) return;
     learningSweeperActive = true;
     try {
+      // Step A: Sweep unbridged parking-lot debriefs into outcomes
+      const debriefResult = await sweepUnbridgedParkingLotDebriefs();
+      if (debriefResult.processedCount > 0) {
+        console.info(
+          `[AutonomousWorkers] Debrief sweeper bridged ${debriefResult.processedCount} pending observations`
+        );
+      }
+
+      // Step B: Reconcile outcomes into learned deltas
       const result = await processPendingOutcomeLearnings();
       if (result.processedCount > 0) {
         console.info(
@@ -265,6 +347,7 @@ export function startAutonomousPersistentOperatorWorkers(
       store: goalCycleStore,
       appointmentStore: operatorAppointmentStore,
     });
+    void sweepUnbridgedParkingLotDebriefs();
   }, 5_000);
 
   const bootstrapIntervalTimer = setInterval(() => {
