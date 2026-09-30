@@ -226,4 +226,117 @@ describe("Conquest Crash Recovery & Multi-Tenant Sweeper Lineage", () => {
     // Verifies fallback lineage recovery directly from completed objectives table
     expect(passedObjectiveIdToConquest).toBe(completedObjectiveId);
   });
+
+  it("prevents backlog starvation: pages past >25 newer already-processed wins to recover an older pending win", async () => {
+    const testTenant = "test-tenant-anti-starvation";
+    const testActorId = "operator-alex";
+    const olderPendingMissionId = 2001;
+    const olderPendingObjectiveId = "obj-lineage-older-pending-1001";
+
+    // Build 30 won events: IDs 1030 down to 1001
+    // Top 29 events (IDs 1030 to 1002) ALREADY have conquest completion receipts.
+    // The 30th event (ID 1001, mission 2001) is unpropagated.
+    const totalEventsCount = 30;
+    const allWonEvents: Array<{
+      id: number;
+      tenantId: string;
+      missionId: number;
+      actorId: string;
+      createdAt: Date;
+    }> = [];
+
+    for (let i = totalEventsCount; i >= 1; i--) {
+      allWonEvents.push({
+        id: 1000 + i,
+        tenantId: testTenant,
+        missionId: 2000 + i,
+        actorId: testActorId,
+        createdAt: new Date(Date.now() - (totalEventsCount - i) * 1000),
+      });
+    }
+
+    let recoveredMissionId: number | null = null;
+    let recoveredObjectiveId: string | null = null;
+
+    vi.spyOn(geographicConquestModule, "propagateGeographicConquest").mockImplementation(
+      async (input) => {
+        recoveredMissionId = input.missionId ?? null;
+        recoveredObjectiveId = input.objectiveId ?? null;
+        return {
+          propagated: true,
+          wonAccount: null,
+          generatedMissions: [],
+        };
+      }
+    );
+
+    let currentCursor: number | null = null;
+    let receiptCheckCalls = 0;
+
+    const mockDb = {
+      select: (fields: any) => ({
+        from: (table: any) => ({
+          where: (condition: any) => ({
+            orderBy: () => ({
+              limit: async (batchLimit: number) => {
+                // 1. Won events query with cursor pagination
+                if (fields.toStatus !== undefined || fields.missionId !== undefined) {
+                  let candidates = allWonEvents;
+                  if (currentCursor !== null) {
+                    candidates = candidates.filter((e) => e.id < currentCursor!);
+                  }
+                  const batch = candidates.slice(0, batchLimit);
+                  if (batch.length > 0) {
+                    currentCursor = batch[batch.length - 1].id;
+                  }
+                  return batch;
+                }
+                // 2. Lineage query (goalCycleOutcomes / goalCycleObjectives)
+                if (fields.objectiveId !== undefined) {
+                  return [
+                    {
+                      objectiveId: olderPendingObjectiveId,
+                      metadataJson: {
+                        missionId: olderPendingMissionId,
+                        resolution: "won",
+                      },
+                    },
+                  ];
+                }
+                return [];
+              },
+            }),
+            limit: async () => {
+              // 3. Receipt checks (goalCycleOutcomes / commercialMissionEvents)
+              // The first 29 missions are already receipted.
+              // Calls 30+ correspond to older mission 2001 which has NO receipt.
+              if (receiptCheckCalls < 29) {
+                receiptCheckCalls++;
+                return [{ id: 8888 }];
+              }
+              receiptCheckCalls++;
+              return [];
+            },
+          }),
+        }),
+      }),
+    };
+
+    vi.spyOn(dbModule, "getDb").mockResolvedValue(mockDb as any);
+
+    // Run sweeper with batchSize = 10, limit = 25
+    // The top 29 items (batches 1, 2, and 3) are already processed.
+    // The cursoring loop must page past the first 29 items and process the 30th item (mission 2001).
+    const sweepResult = await sweepUnpropagatedConquestWins({
+      tenantId: testTenant,
+      limit: 25,
+      batchSize: 10,
+    });
+
+    expect(sweepResult.errors).toEqual([]);
+    expect(sweepResult.processedCount).toBe(1);
+    // Verifies the older starved win (mission 2001) beyond position 25 was successfully reached and recovered!
+    expect(recoveredMissionId).toBe(olderPendingMissionId);
+    expect(recoveredObjectiveId).toBe(olderPendingObjectiveId);
+  });
 });

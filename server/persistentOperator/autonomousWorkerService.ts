@@ -17,7 +17,7 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
-import { and, desc, eq, inArray, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, like, lt, ne, or } from "drizzle-orm";
 import {
   commercialMissionEvents,
   goalCycleObjectives,
@@ -229,6 +229,7 @@ export async function sweepUnbridgedParkingLotDebriefs(input: {
 export async function sweepUnpropagatedConquestWins(input: {
   tenantId?: string;
   limit?: number;
+  batchSize?: number;
 } = {}): Promise<{
   processedCount: number;
   errors: Array<{ missionId: number; error: string }>;
@@ -236,132 +237,163 @@ export async function sweepUnpropagatedConquestWins(input: {
   const db = await getDb();
   if (!db) return { processedCount: 0, errors: [] };
 
-  const limit = input.limit ?? 25;
-
-  // Multi-tenant: If tenantId is specified, scope to that tenant;
-  // otherwise, discover recent won events across all tenants in JOYSTICK.
-  const conditions = [eq(commercialMissionEvents.toStatus, "won")];
-  if (input.tenantId) {
-    conditions.push(eq(commercialMissionEvents.tenantId, input.tenantId));
-  }
-
-  const wonEvents = await db
-    .select({
-      id: commercialMissionEvents.id,
-      tenantId: commercialMissionEvents.tenantId,
-      missionId: commercialMissionEvents.missionId,
-      actorId: commercialMissionEvents.actorId,
-      createdAt: commercialMissionEvents.createdAt,
-    })
-    .from(commercialMissionEvents)
-    .where(and(...conditions))
-    .orderBy(desc(commercialMissionEvents.id))
-    .limit(limit);
+  const targetLimit = input.limit ?? 25;
+  const batchSize = input.batchSize ?? 50;
 
   let processedCount = 0;
   const errors: Array<{ missionId: number; error: string }> = [];
+  let cursorId: number | null = null;
+  const visitedMissionIds = new Set<number>();
 
-  for (const event of wonEvents) {
-    const conquestEvidenceRef = `commercial_missions:${event.missionId}:conquest`;
-
-    // A. Check if conquest outcome receipt already exists
-    const [existingOutcome] = await db
-      .select({ id: goalCycleOutcomes.id })
-      .from(goalCycleOutcomes)
-      .where(
-        and(
-          eq(goalCycleOutcomes.tenantId, event.tenantId),
-          eq(goalCycleOutcomes.evidenceReference, conquestEvidenceRef)
-        )
-      )
-      .limit(1);
-
-    if (existingOutcome) {
-      continue;
+  // Page/cursor through won events until targetLimit unpropagated events are processed
+  // or until there are no further won events in the backlog.
+  while (processedCount < targetLimit) {
+    const conditions = [
+      eq(commercialMissionEvents.toStatus, "won"),
+      ne(commercialMissionEvents.eventName, "geographic_conquest_propagated"),
+    ];
+    if (input.tenantId) {
+      conditions.push(eq(commercialMissionEvents.tenantId, input.tenantId));
+    }
+    if (cursorId !== null) {
+      conditions.push(lt(commercialMissionEvents.id, cursorId));
     }
 
-    // B. Check if conquest completion receipt exists in commercialMissionEvents
-    const [existingReceipt] = await db
-      .select({ id: commercialMissionEvents.id })
-      .from(commercialMissionEvents)
-      .where(
-        and(
-          eq(commercialMissionEvents.tenantId, event.tenantId),
-          eq(commercialMissionEvents.missionId, event.missionId),
-          eq(commercialMissionEvents.eventName, "geographic_conquest_propagated")
-        )
-      )
-      .limit(1);
-
-    if (existingReceipt) {
-      continue;
-    }
-
-    // C. Recover original objectiveId from durable account_won outcome (even after objective completed)
-    let recoveredObjectiveId: string | null = null;
-    const wonOutcomes = await db
+    const batch = await db
       .select({
-        objectiveId: goalCycleOutcomes.objectiveId,
-        metadataJson: goalCycleOutcomes.metadataJson,
+        id: commercialMissionEvents.id,
+        tenantId: commercialMissionEvents.tenantId,
+        missionId: commercialMissionEvents.missionId,
+        actorId: commercialMissionEvents.actorId,
+        createdAt: commercialMissionEvents.createdAt,
       })
-      .from(goalCycleOutcomes)
-      .where(
-        and(
-          eq(goalCycleOutcomes.tenantId, event.tenantId),
-          eq(goalCycleOutcomes.outcomeKind, "account_won")
-        )
-      )
-      .orderBy(desc(goalCycleOutcomes.createdAt))
-      .limit(50);
+      .from(commercialMissionEvents)
+      .where(and(...conditions))
+      .orderBy(desc(commercialMissionEvents.id))
+      .limit(batchSize);
 
-    for (const outcome of wonOutcomes) {
-      const meta = outcome.metadataJson as { missionId?: number | string } | null;
-      if (meta?.missionId && Number(meta.missionId) === event.missionId) {
-        recoveredObjectiveId = outcome.objectiveId;
-        break;
-      }
+    if (batch.length === 0) {
+      break;
     }
 
-    // D. If not found in outcomes, check goalCycleObjectives directly (including completed objectives)
-    if (!recoveredObjectiveId) {
-      const [matchedObj] = await db
-        .select({ id: goalCycleObjectives.id })
-        .from(goalCycleObjectives)
+    const previousCursor: number | null = cursorId;
+
+    for (const event of batch) {
+      cursorId = event.id;
+
+      if (visitedMissionIds.has(event.missionId)) {
+        continue;
+      }
+      visitedMissionIds.add(event.missionId);
+
+      const conquestEvidenceRef = `commercial_missions:${event.missionId}:conquest`;
+
+      // A. Check if conquest outcome receipt already exists
+      const [existingOutcome] = await db
+        .select({ id: goalCycleOutcomes.id })
+        .from(goalCycleOutcomes)
         .where(
           and(
-            eq(goalCycleObjectives.tenantId, event.tenantId),
-            or(
-              eq(goalCycleObjectives.selectedRef, String(event.missionId)),
-              and(
-                eq(goalCycleObjectives.actionTargetType, "commercial_mission"),
-                eq(goalCycleObjectives.actionTargetId, String(event.missionId))
+            eq(goalCycleOutcomes.tenantId, event.tenantId),
+            eq(goalCycleOutcomes.evidenceReference, conquestEvidenceRef)
+          )
+        )
+        .limit(1);
+
+      if (existingOutcome) {
+        continue;
+      }
+
+      // B. Check if conquest completion receipt exists in commercialMissionEvents
+      const [existingReceipt] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, event.tenantId),
+            eq(commercialMissionEvents.missionId, event.missionId),
+            eq(commercialMissionEvents.eventName, "geographic_conquest_propagated")
+          )
+        )
+        .limit(1);
+
+      if (existingReceipt) {
+        continue;
+      }
+
+      // C. Recover original objectiveId from durable account_won outcome (even after objective completed)
+      let recoveredObjectiveId: string | null = null;
+      const wonOutcomes = await db
+        .select({
+          objectiveId: goalCycleOutcomes.objectiveId,
+          metadataJson: goalCycleOutcomes.metadataJson,
+        })
+        .from(goalCycleOutcomes)
+        .where(
+          and(
+            eq(goalCycleOutcomes.tenantId, event.tenantId),
+            eq(goalCycleOutcomes.outcomeKind, "account_won")
+          )
+        )
+        .orderBy(desc(goalCycleOutcomes.createdAt))
+        .limit(50);
+
+      for (const outcome of wonOutcomes) {
+        const meta = outcome.metadataJson as { missionId?: number | string } | null;
+        if (meta?.missionId && Number(meta.missionId) === event.missionId) {
+          recoveredObjectiveId = outcome.objectiveId;
+          break;
+        }
+      }
+
+      // D. If not found in outcomes, check goalCycleObjectives directly (including completed objectives)
+      if (!recoveredObjectiveId) {
+        const [matchedObj] = await db
+          .select({ id: goalCycleObjectives.id })
+          .from(goalCycleObjectives)
+          .where(
+            and(
+              eq(goalCycleObjectives.tenantId, event.tenantId),
+              or(
+                eq(goalCycleObjectives.selectedRef, String(event.missionId)),
+                and(
+                  eq(goalCycleObjectives.actionTargetType, "commercial_mission"),
+                  eq(goalCycleObjectives.actionTargetId, String(event.missionId))
+                )
               )
             )
           )
-        )
-        .orderBy(desc(goalCycleObjectives.createdAt))
-        .limit(1);
+          .orderBy(desc(goalCycleObjectives.createdAt))
+          .limit(1);
 
-      if (matchedObj) {
-        recoveredObjectiveId = matchedObj.id;
+        if (matchedObj) {
+          recoveredObjectiveId = matchedObj.id;
+        }
+      }
+
+      try {
+        const { propagateGeographicConquest } = await import("./geographicConquestService");
+        const result = await propagateGeographicConquest({
+          tenantId: event.tenantId,
+          missionId: event.missionId,
+          actorId: event.actorId,
+          objectiveId: recoveredObjectiveId,
+        });
+
+        processedCount++;
+        if (processedCount >= targetLimit) {
+          break;
+        }
+      } catch (err) {
+        errors.push({
+          missionId: event.missionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
-    try {
-      const { propagateGeographicConquest } = await import("./geographicConquestService");
-      const result = await propagateGeographicConquest({
-        tenantId: event.tenantId,
-        missionId: event.missionId,
-        actorId: event.actorId,
-        objectiveId: recoveredObjectiveId,
-      });
-
-      processedCount++;
-    } catch (err) {
-      errors.push({
-        missionId: event.missionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if (cursorId === previousCursor) {
+      break;
     }
   }
 

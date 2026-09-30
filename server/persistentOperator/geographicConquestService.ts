@@ -342,7 +342,7 @@ export async function propagateGeographicConquest(
             actorType: "system",
             actorId: operatorUserId,
             idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
-            payloadJson: {
+            metadataJson: {
               propagated: false,
               reason: "no_neighbors_within_corridor",
               wonAccountId: accountId,
@@ -639,7 +639,7 @@ export async function propagateGeographicConquest(
           actorType: "system",
           actorId: operatorUserId,
           idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
-          payloadJson: {
+          metadataJson: {
             propagated: true,
             generatedMissionsCount: generatedMissions.length,
             wonAccountId: accountId,
