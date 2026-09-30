@@ -16,6 +16,7 @@ export type BriefingTiming =
   | { kind: "daypart"; label: string };
 
 import type { ObjectiveExecutionType } from "../../../shared/objectiveExecution";
+import type { DayDirectorReference } from "../../../shared/dayDirector";
 
 export type BriefingItemKind = "completed" | "new_work";
 
@@ -39,6 +40,8 @@ export type BriefingItem = {
     source: "day_line" | "campaign";
     executionType?: ObjectiveExecutionType | null;
   } | null;
+  /** Structured entities resolved before this work becomes durable. */
+  references?: DayDirectorReference[];
   /** Explicit operator execution type. Absent means unspecified, not Mission. */
   executionType?: ObjectiveExecutionType | null;
 };

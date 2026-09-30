@@ -49,7 +49,7 @@ import { businessDateFor, loadDayWork, operationsQuestion, speakDayWork } from "
 import { isUnpaidQuestion, loadUnpaidOrders, speakUnpaidOrders } from "../knowledge/openOrdersKnowledge";
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
-import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
+import { ensureAdamBoard, explainProactive, handleDoctrineTurn, loadObligations } from "../proactive/boardService";
 import {
   beginClaireTurnTrace,
   classifyClaireBlend,
@@ -267,7 +267,8 @@ export type ClaireTurnDeps = {
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
-  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
+  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; recoveryAccounts?: Array<{ id: string; name: string }> }>;
+  recoveryObligations?: typeof loadObligations;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
    * Slice A (routing audit): the completed per-turn trace, handed back before
@@ -309,7 +310,18 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     searchMemory: searchOperatorConversation,
     memoryBetween: operatorTurnsBetween,
     encyclopedia: null,
-    watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
+    watchBoard: async ({ tenantId, operatorUserId, actorId }) => {
+      const board = await ensureAdamBoard({ tenantId, operatorUserId, actorId });
+      const recoveryAccounts = (await loadObligations(tenantId, operatorUserId))
+        .filter(
+          item =>
+            item.kind === "dormant_recovery" &&
+            (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
+        )
+        .map(item => ({ id: item.subjectKey, name: item.subjectName }));
+      return { brief: board.brief, recoveryAccounts };
+    },
+    recoveryObligations: loadObligations,
     doctrineTurn: handleDoctrineTurn,
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
@@ -325,6 +337,27 @@ const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
   if (!text.trim()) return;
   state.history = [...(state.history ?? []), { speaker, text: text.slice(0, 1_200), at }].slice(-HISTORY_LIMIT);
+}
+
+function recoveryRefsNamedInSpeech(
+  spokenText: string,
+  refs: Array<{ id: string; name: string }>
+): Array<{ id: string; name: string }> {
+  if (!spokenText.trim() || !refs.length) return [];
+  if (!/\b(?:dormant|dormancy|recovery|win[- ]?back|customer)\b/i.test(spokenText)) return [];
+  const spoken = spokenText.toLowerCase();
+  const spokenTokens = spoken.split(/[^a-z0-9]+/).filter(Boolean);
+  const firstNameCounts = new Map<string, number>();
+  for (const ref of refs) {
+    const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase();
+    if (first) firstNameCounts.set(first, (firstNameCounts.get(first) ?? 0) + 1);
+  }
+  return refs.filter(ref => {
+    const full = ref.name.trim().toLowerCase();
+    if (full && spoken.includes(full)) return true;
+    const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    return Boolean(first && firstNameCounts.get(first) === 1 && spokenTokens.includes(first));
+  });
 }
 
 /**
@@ -564,6 +597,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.fragmentHolds = 0;
   }
   remember(state, "operator", utterance, nowMs);
+  const liveRecoveryRefs = deps.recoveryObligations
+    ? (await deps.recoveryObligations(input.tenantId, input.operatorUserId).catch(() => []))
+        .filter(
+          item =>
+            item.kind === "dormant_recovery" &&
+            (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
+        )
+        .map(item => ({ id: item.subjectKey, name: item.subjectName }))
+        .filter(ref => ref.id.trim().length > 0 && ref.name.trim().length > 0)
+    : [];
   /**
    * Claire Intelligence Repair Part 2, Slice A: one trace per turn, recording
    * which of the many answer paths below produced the spoken text. Measurement
@@ -628,6 +671,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       mutationReceipts: result.mutationReceipts,
     });
     const guarded = speak === result.speak ? result : { ...result, speak };
+
+    // Capture customer referents from authoritative recovery obligations only
+    // when Claire actually names them aloud. Later "them/those people" can
+    // therefore resolve to identities, not to a count scraped from prose.
+    const matchedRecoveryRefs = recoveryRefsNamedInSpeech(guarded.speak, liveRecoveryRefs);
+    if (matchedRecoveryRefs.length) {
+      state.surfacedRecoveryAccounts = Array.from(
+        new Map(matchedRecoveryRefs.map(ref => [ref.id, ref])).values()
+      );
+    }
+
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
@@ -937,8 +991,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
         actorId: input.dayDirectorActorId,
-      }).catch(() => ({ brief: "" }));
+      }).catch(() => ({ brief: "", recoveryAccounts: [] }));
       if (board.brief) {
+        const surfaced = recoveryRefsNamedInSpeech(board.brief, board.recoveryAccounts ?? []);
+        if (surfaced.length) state.surfacedRecoveryAccounts = surfaced;
         mark("proactive_board");
         return finish({ speak: board.brief, kind: "answered" });
       }
@@ -1111,7 +1167,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
-    const explicitPendingCommit = explicitPendingDayLineCommit(utterance);
+    const explicitPendingCommit =
+      explicitPendingDayLineCommit(utterance) ||
+      (interpreted.hasExplicitActionRequest &&
+        refersToPriorWork(utterance) &&
+        /\b(?:put|add|save|log|track|write|place)\b/i.test(utterance));
     const bindsPending =
       reply.decision === "yes" ||
       reply.decision === "no" ||
@@ -1315,6 +1375,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
     }
   }
+  const unresolvedGroupReference =
+    !state.pendingBriefing &&
+    !(state.surfacedRecoveryAccounts?.length) &&
+    /\b(?:do|send|put|add|batch|move)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i.test(
+      utterance
+    );
+  if (unresolvedGroupReference && interpreted.hasExplicitActionRequest) {
+    mark("fallback", { fallbackReason: "unresolved_structured_group_reference" });
+    return finish({
+      speak: "Which people do you mean?",
+      kind: "answered",
+    });
+  }
+
   let parsed = parseBriefingDeterministically(utterance, clock);
   if (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance)) {
     const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
@@ -1347,7 +1421,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       items: [],
     };
   }
-  const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
+  const wantsBatchProposal =
+    /\bbatch\s+(?:them|all|those)\b/i.test(utterance) ||
+    (Boolean(state.surfacedRecoveryAccounts?.length) &&
+      /\b(?:do|send|batch)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group)\b/i.test(
+        utterance
+      ));
   const explicitCommitNow =
     explicitTrackingRequest(utterance) &&
     !wantsBatchProposal &&
@@ -1526,7 +1605,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
-    const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
     if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track") && !wantsBatchProposal) {
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,

@@ -19,6 +19,7 @@ import { lintPostGenerationStateVerbs, VerifiedFactInventoryBuilder } from "../a
 import { G4_UNVERIFIED_STATE_VERB_FALLBACK } from "../verifiedFactInventoryFromContext";
 import type { WeeklyDossier } from "./dossier";
 import type { WeeklyPlanningSession } from "./session";
+import { isSemanticallyNormalizedPrimary } from "./semanticPrimary";
 
 const ACTS: WeeklyAct[] = ["ASK", "PROPOSE", "REVISE", "AWAIT_CONFIRMATION", "CANCEL"];
 
@@ -122,7 +123,8 @@ export function acceptPlanningDecision(
     commitments,
     input.session.draft,
     operatorCommitments,
-    remnantExplicitlyRetained
+    remnantExplicitlyRetained,
+    input.utterance
   );
   if (draftDays === undefined) return null;
 
@@ -241,7 +243,8 @@ function parseDraftDays(
   corpus: string,
   draft: WeeklyDraft,
   operatorCorpus: string,
-  remnantExplicitlyRetained: boolean
+  remnantExplicitlyRetained: boolean,
+  sourceUtterance: string
 ): WeeklyDraftDayPatch[] | null | undefined {
   if (value == null) return null;
   if (!Array.isArray(value)) return undefined;
@@ -256,6 +259,7 @@ function parseDraftDays(
     if (typeof record.primaryText === "string" && record.primaryText.trim()) {
       const primaryText = record.primaryText.trim().slice(0, 255);
       if (!corpus.includes(primaryText.toLowerCase())) return undefined;
+      if (!isSemanticallyNormalizedPrimary(primaryText, sourceUtterance)) return undefined;
       const existing = draft.days.find(day => day.businessDate === businessDate);
       const isUnclaimedCurrentRemnant =
         dossier.horizon.todayIsRemnant &&

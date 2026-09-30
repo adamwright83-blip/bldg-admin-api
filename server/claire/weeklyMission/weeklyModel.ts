@@ -14,6 +14,61 @@ import type { WeeklyPlanningSession } from "./session";
 
 const ACTS = ["ASK", "PROPOSE", "REVISE", "AWAIT_CONFIRMATION", "CANCEL"] as const;
 
+export type WeeklySemanticRoute = "continue_weekly" | "leave_weekly";
+
+export async function classifyWeeklyTurnWithClaire(input: {
+  tenantId: string;
+  operatorId: string;
+  session: WeeklyPlanningSession;
+  utterance: string;
+}): Promise<WeeklySemanticRoute | null> {
+  if (!ENV.anthropicApiKey?.trim()) return null;
+  try {
+    const result = await invokeLLM({
+      tenantId: input.tenantId,
+      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      maxTokens: 120,
+      temperature: 0,
+      outputSchema: {
+        name: "weekly_turn_route",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["route"],
+          properties: {
+            route: { type: "string", enum: ["continue_weekly", "leave_weekly"] },
+          },
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "Decide whether the operator's CURRENT utterance is actually continuing the already-open weekly-planning conversation.",
+            "continue_weekly only when the utterance directly answers the open weekly-planning question, explicitly changes/resumes the weekly plan, or approves/rejects that plan.",
+            "leave_weekly for current-day status, route narration, a Day Line command, a business question, clarification, correction, interruption, chit-chat, or a new topic.",
+            "An open weekly session is context, never automatic authority. When uncertain, choose leave_weekly.",
+            "Never infer that an operational statement answers a weekly question merely because the weekly question was asked most recently.",
+            "Weekly session:",
+            JSON.stringify({
+              phase: input.session.phase,
+              lastQuestionKind: input.session.lastQuestionKind,
+              lastQuestionDate: input.session.lastQuestionDate,
+              draft: input.session.draft,
+            }),
+          ].join("\n"),
+        },
+        { role: "user", content: input.utterance },
+      ],
+    });
+    const parsed = JSON.parse(contentText(result)) as { route?: WeeklySemanticRoute };
+    return parsed.route === "continue_weekly" || parsed.route === "leave_weekly" ? parsed.route : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function completeWeeklyActWithClaire(input: {
   tenantId: string;
   operatorId: string;
@@ -126,6 +181,8 @@ export async function completeWeeklyActWithClaire(input: {
             "The current weekday is a remnant, not a pristine future day. Never assign its primary from dossier context alone; only retain it when the operator explicitly names it or explicitly says to keep it. Otherwise ask whether to keep a thin primary or stand today down.",
             "Say you have enough only when every remaining day has a primary or an explicit stand-down. Never claim the week is locked.",
             "Do not invent buildings, names, addresses, approvals, windows, or customers.",
+            "When you set draftDays.primaryText, output a concise normalized action title, never the operator's raw sentence, first-person narration, a question, acknowledgement, or conversational filler.",
+            "If you cannot derive a clean action title from the operator's meaning, leave that primary unset and ask one concise clarification.",
             "growthCandidates are unconfirmed options. They are not the week.",
             "The hypothesis is private. It is not the proposed week.",
             "Planning context:",
