@@ -124,6 +124,26 @@ describe("PR4 deterministic goal-cycle selection", () => {
     });
   });
 
+  it("prioritizes an unclaimed due obligation over an already-claimed obligation", () => {
+    const claimed = obligation("obligation-claimed");
+    claimed.decisionId = "decision-prior";
+    claimed.objectiveRef = "objective-prior";
+
+    const unclaimed = obligation("obligation-unclaimed");
+
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: false,
+      candidates: [candidate("campaign-a")],
+      obligations: [claimed, unclaimed],
+      missionDirectorPlan: null,
+    });
+    expect(result).toMatchObject({
+      selectionKind: "obligation",
+      selectedRef: "obligation-unclaimed",
+      selectedReasonCode: "EXISTING_DUE_OBLIGATION_UNPLANNED_WEEK",
+    });
+  });
+
   it("uses canonical feed order and blocks prep-infeasible candidates", () => {
     const first = candidate("not-ready", {
       prep: {

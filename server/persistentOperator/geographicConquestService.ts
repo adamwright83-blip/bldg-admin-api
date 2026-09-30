@@ -29,6 +29,7 @@ import { evaluateOutcomeAndRecordLearning } from "./learningStore";
 import { haversineDistanceMiles } from "../procurement/vendorCandidateServiceAreaVerifier";
 import { getDefaultGoalCyclePool, GoalCycleStore } from "./goalCycleStore";
 import { findDeterministicObjectivesForDriverAction } from "./fieldEventBridge";
+import { businessToday } from "../analytics/businessPeriods";
 
 export type PropagateGeographicConquestInput = {
   tenantId: string;
@@ -206,6 +207,8 @@ export async function propagateGeographicConquest(
     address: string;
     accountType: string;
     distanceMiles: number;
+    latitude: number;
+    longitude: number;
     existingMissionId?: number;
   }> = [];
 
@@ -229,6 +232,8 @@ export async function propagateGeographicConquest(
           address: loc.address,
           accountType: loc.accountType,
           distanceMiles: Math.round(dist * 100) / 100,
+          latitude: candidateLat,
+          longitude: candidateLng,
           existingMissionId: existing?.id,
         });
       }
@@ -249,7 +254,7 @@ export async function propagateGeographicConquest(
   }
 
   const operatorUserId = input.actorId ?? "adam-admin";
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = businessToday();
 
   // 4. Spawn candidate missions or elevate existing corridor missions with deterministic idempotency keys
   for (const opp of nearbyOpportunities.slice(0, maxCandidates)) {
@@ -259,6 +264,19 @@ export async function propagateGeographicConquest(
       const stepKey = `step-corridor-won-${accountId}-neighbor-${opp.accountId}`;
       const idempotencyKey = `geo-conquest:won-${accountId}:neighbor-${opp.accountId}`;
 
+      const isImmediateBlock = opp.distanceMiles <= 0.2;
+      const laundryOpportunity = isImmediateBlock
+        ? `Immediate corridor neighbor to recently won customer ${wonAccountName} (${opp.distanceMiles} mi away). Route proximity eliminates transit overhead.`
+        : `Active corridor account located ${opp.distanceMiles} mi from recently won customer ${wonAccountName}. Shared corridor transit enables consolidated route scheduling.`;
+
+      const salesAngle = isImmediateBlock
+        ? `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility with dedicated corridor delivery schedules and zero transit minimums.`
+        : `Our delivery route currently services ${wonAccountName} ${opp.distanceMiles} miles away along this active service corridor. Adding your facility to our regular run eliminates extra transit overhead and trip minimums.`;
+
+      const openingLine = isImmediateBlock
+        ? `Hi, our delivery team stops right next door at ${wonAccountName}—we wanted to introduce ourselves and see if consolidating commercial laundry on the same delivery run makes sense for your team.`
+        : `Hi, our team services ${wonAccountName} just ${opp.distanceMiles} miles away on our regular route corridor—we wanted to see if adding your facility to our scheduled run would streamline your commercial laundry logistics.`;
+
       const mission = await createCommercialMission({
         tenantId: input.tenantId,
         assignedTo: operatorUserId,
@@ -266,8 +284,8 @@ export async function propagateGeographicConquest(
           name: opp.name,
           accountType: opp.accountType,
           address: opp.address,
-          latitude: null,
-          longitude: null,
+          latitude: opp.latitude,
+          longitude: opp.longitude,
           decisionMaker: { name: null, title: null },
           locationCount: 1,
         },
@@ -280,9 +298,9 @@ export async function propagateGeographicConquest(
           estimatedAnnualValueCents: 600000,
         },
         brief: {
-          laundryOpportunity: `Direct corridor neighbor to recently won customer ${wonAccountName}. Consolidated route delivery eliminates transit overhead.`,
-          salesAngle: `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility with dedicated corridor delivery schedules and preferential neighbor pricing.`,
-          openingLine: `Hi, our delivery team stops right next door at ${wonAccountName}—we wanted to introduce ourselves and see if we can streamline your commercial laundry and towel needs on the same run.`,
+          laundryOpportunity,
+          salesAngle,
+          openingLine,
           discoveryQuestions: [
             "Who currently handles your commercial laundry or linens?",
             "Would consolidated route pickups along this corridor fit your schedule?",
@@ -293,11 +311,15 @@ export async function propagateGeographicConquest(
           {
             key: stepKey,
             label: `Walk-in pitch to ${opp.name}`,
-            detail: `Corridor neighbor pitch referencing ${wonAccountName}`,
+            detail: isImmediateBlock
+              ? `Corridor neighbor pitch referencing ${wonAccountName} on the same block`
+              : `Corridor account pitch referencing ${wonAccountName} (${opp.distanceMiles} mi away)`,
             status: "ready",
             position: 1,
             type: "field_visit",
-            instructionText: `Introduce Goldline as the neighbor vendor for ${wonAccountName}`,
+            instructionText: isImmediateBlock
+              ? `Introduce Goldline referencing current route service at ${wonAccountName} right on this block`
+              : `Introduce Goldline referencing current route service at ${wonAccountName} (${opp.distanceMiles} mi away)`,
             revealPolicy: "sequential",
             destinationName: opp.name,
             destinationAddress: opp.address,
@@ -399,18 +421,6 @@ export async function propagateGeographicConquest(
       targetObjectiveId = matching[0].id;
     }
   }
-  if (!targetObjectiveId) {
-    const [recentObj] = await db
-      .select({ id: goalCycleObjectives.id })
-      .from(goalCycleObjectives)
-      .where(eq(goalCycleObjectives.tenantId, input.tenantId))
-      .orderBy(desc(goalCycleObjectives.createdAt))
-      .limit(1);
-    if (recentObj) {
-      targetObjectiveId = recentObj.id;
-    }
-  }
-
   if (targetObjectiveId) {
     try {
       const recorded = await recordGoalCycleOutcome({
@@ -443,6 +453,10 @@ export async function propagateGeographicConquest(
     } catch (err) {
       console.warn("[GeographicConquest] learning delta write deferred:", err);
     }
+  } else {
+    console.warn(
+      `[GeographicConquest] No deterministic objective lineage found for won account ${accountId} (mission ${input.missionId ?? "none"}); failing closed to preserve semantic lineage.`
+    );
   }
 
   console.info(

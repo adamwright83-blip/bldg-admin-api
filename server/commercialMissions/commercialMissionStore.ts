@@ -282,8 +282,14 @@ async function upsertCommercialAccountLocationWith(
   const values = {
     label: "Primary",
     address: input.address.trim(),
-    latitude: input.latitude === null ? null : String(input.latitude),
-    longitude: input.longitude === null ? null : String(input.longitude),
+    latitude:
+      input.latitude === null || input.latitude === undefined
+        ? (existing?.latitude ?? null)
+        : String(input.latitude),
+    longitude:
+      input.longitude === null || input.longitude === undefined
+        ? (existing?.longitude ?? null)
+        : String(input.longitude),
     isPrimary: true,
   };
   if (existing) {
@@ -853,20 +859,6 @@ export async function transitionCommercialMission(input: {
     }
   }
 
-  if (input.toStatus === "won") {
-    try {
-      const { propagateGeographicConquest } = await import(
-        "../persistentOperator/geographicConquestService"
-      );
-      void propagateGeographicConquest({
-        tenantId: input.tenantId,
-        missionId: input.missionId,
-        actorId: input.actor.id,
-      });
-    } catch (err) {
-      console.warn("[PersistentOperator] geographic conquest propagation deferred", err);
-    }
-  }
 
   return mission;
 }

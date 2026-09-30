@@ -114,7 +114,12 @@ export function selectDeterministicCycleChoice(input: {
       id: candidate.id,
       reasons: ["WEEK_UNPLANNED_NEW_OBJECTIVE_WITHHELD"],
     }));
-    const obligation = dueObligations[0] ?? null;
+    const unassigned = dueObligations.filter(ob => !ob.decisionId && !ob.objectiveRef);
+    const obligation =
+      unassigned.find(ob => ob.kind === "sales_follow_up") ??
+      unassigned[0] ??
+      dueObligations[0] ??
+      null;
     if (obligation) {
       return {
         selectionKind: "obligation",
@@ -160,7 +165,12 @@ export function selectDeterministicCycleChoice(input: {
     };
   }
 
-  const obligation = dueObligations[0] ?? null;
+  const unassigned = dueObligations.filter(ob => !ob.decisionId && !ob.objectiveRef);
+  const obligation =
+    unassigned.find(ob => ob.kind === "sales_follow_up") ??
+    unassigned[0] ??
+    dueObligations[0] ??
+    null;
   if (obligation) {
     return {
       selectionKind: "obligation",
