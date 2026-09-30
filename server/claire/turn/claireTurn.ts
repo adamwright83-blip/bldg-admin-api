@@ -655,12 +655,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase();
         if (first) firstNameCounts.set(first, (firstNameCounts.get(first) ?? 0) + 1);
       }
+      const spokenTokens = spoken.split(/[^a-z0-9]+/).filter(Boolean);
       const matched = liveRecoveryRefs.filter(ref => {
         const full = ref.name.trim().toLowerCase();
         if (full && spoken.includes(full)) return true;
         const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-        return Boolean(first && firstNameCounts.get(first) === 1 && new RegExp(`\\b${first.replace(/[.*+?^{}()|[\\]\\\\]/g, "\\    const guarded = speak === result.speak ? result : { ...result, speak };
-    if (trace.synthesisRequired) {")}\\b`, "i").test(guarded.speak));
+        return Boolean(first && firstNameCounts.get(first) === 1 && spokenTokens.includes(first));
       });
       if (matched.length) {
         state.surfacedRecoveryAccounts = Array.from(
