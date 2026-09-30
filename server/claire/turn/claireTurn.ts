@@ -1167,7 +1167,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
-    const explicitPendingCommit = explicitPendingDayLineCommit(utterance);
+    const explicitPendingCommit =
+      explicitPendingDayLineCommit(utterance) ||
+      (interpreted.hasExplicitActionRequest &&
+        refersToPriorWork(utterance) &&
+        /\b(?:put|add|save|log|track|write|place)\b/i.test(utterance));
     const bindsPending =
       reply.decision === "yes" ||
       reply.decision === "no" ||
@@ -1417,7 +1421,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       items: [],
     };
   }
-  const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
+  const wantsBatchProposal =
+    /\bbatch\s+(?:them|all|those)\b/i.test(utterance) ||
+    (Boolean(state.surfacedRecoveryAccounts?.length) &&
+      /\b(?:do|send|batch)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group)\b/i.test(
+        utterance
+      ));
   const explicitCommitNow =
     explicitTrackingRequest(utterance) &&
     !wantsBatchProposal &&
@@ -1596,7 +1605,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
-    const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
     if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track") && !wantsBatchProposal) {
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,
