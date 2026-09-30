@@ -49,7 +49,7 @@ import { businessDateFor, loadDayWork, operationsQuestion, speakDayWork } from "
 import { isUnpaidQuestion, loadUnpaidOrders, speakUnpaidOrders } from "../knowledge/openOrdersKnowledge";
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
-import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
+import { ensureAdamBoard, explainProactive, handleDoctrineTurn, loadObligations } from "../proactive/boardService";
 import {
   beginClaireTurnTrace,
   classifyClaireBlend,
@@ -268,6 +268,7 @@ export type ClaireTurnDeps = {
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
+  recoveryObligations?: typeof loadObligations;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
    * Slice A (routing audit): the completed per-turn trace, handed back before
@@ -310,6 +311,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     memoryBetween: operatorTurnsBetween,
     encyclopedia: null,
     watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
+    recoveryObligations: loadObligations,
     doctrineTurn: handleDoctrineTurn,
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
@@ -564,6 +566,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.fragmentHolds = 0;
   }
   remember(state, "operator", utterance, nowMs);
+  const liveRecoveryRefs = deps.recoveryObligations
+    ? (await deps.recoveryObligations(input.tenantId, input.operatorUserId).catch(() => []))
+        .filter(
+          item =>
+            item.kind === "dormant_recovery" &&
+            (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
+        )
+        .map(item => ({ id: item.subjectKey, name: item.subjectName }))
+        .filter(ref => ref.id.trim().length > 0 && ref.name.trim().length > 0)
+    : [];
   /**
    * Claire Intelligence Repair Part 2, Slice A: one trace per turn, recording
    * which of the many answer paths below produced the spoken text. Measurement
@@ -628,6 +640,35 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       mutationReceipts: result.mutationReceipts,
     });
     const guarded = speak === result.speak ? result : { ...result, speak };
+
+    // Capture customer referents from authoritative recovery obligations only
+    // when Claire actually names them aloud. Later "them/those people" can
+    // therefore resolve to identities, not to a count scraped from prose.
+    if (
+      guarded.speak &&
+      liveRecoveryRefs.length &&
+      /\b(?:dormant|recovery|win[- ]?back|customer)\b/i.test(guarded.speak)
+    ) {
+      const spoken = guarded.speak.toLowerCase();
+      const firstNameCounts = new Map<string, number>();
+      for (const ref of liveRecoveryRefs) {
+        const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase();
+        if (first) firstNameCounts.set(first, (firstNameCounts.get(first) ?? 0) + 1);
+      }
+      const matched = liveRecoveryRefs.filter(ref => {
+        const full = ref.name.trim().toLowerCase();
+        if (full && spoken.includes(full)) return true;
+        const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+        return Boolean(first && firstNameCounts.get(first) === 1 && new RegExp(`\\b${first.replace(/[.*+?^{}()|[\\]\\\\]/g, "\\    const guarded = speak === result.speak ? result : { ...result, speak };
+    if (trace.synthesisRequired) {")}\\b`, "i").test(guarded.speak));
+      });
+      if (matched.length) {
+        state.surfacedRecoveryAccounts = Array.from(
+          new Map(matched.map(ref => [ref.id, ref])).values()
+        );
+      }
+    }
+
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
