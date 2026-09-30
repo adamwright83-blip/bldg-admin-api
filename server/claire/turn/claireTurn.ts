@@ -647,7 +647,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (
       guarded.speak &&
       liveRecoveryRefs.length &&
-      /\b(?:dormant|recovery|win[- ]?back|customer)\b/i.test(guarded.speak)
+      /\b(?:dormant|dormancy|recovery|win[- ]?back|customer)\b/i.test(guarded.speak)
     ) {
       const spoken = guarded.speak.toLowerCase();
       const firstNameCounts = new Map<string, number>();
