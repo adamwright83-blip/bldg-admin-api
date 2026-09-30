@@ -65,6 +65,11 @@ function operatorDesignation(state: DayState | null): RankedDayWork & {
     objective: chosen.sourceText ?? "",
     completionCondition: chosen.operatorMission.completionCondition,
     compatibilityPhrase: "todays_mission",
+    lineage: {
+      kind: "commitment",
+      sourceReference: `day_director_commitments:${chosen.id}`,
+      commitmentId: chosen.id,
+    },
   };
 }
 
@@ -174,6 +179,11 @@ export async function readCurrentDayLine(
       const work = projectToRankedDayWork(obj);
       if (!work.id || seen.has(work.id)) continue;
       seen.add(work.id);
+      work.lineage = {
+        kind: "objective",
+        sourceReference: `goal_cycle_objectives:${obj.id}`,
+        objectiveId: obj.id,
+      };
       rankedWorks.push(work);
     }
 
@@ -189,6 +199,11 @@ export async function readCurrentDayLine(
           title: campaign?.title ?? "Unspecified work",
           objective: campaign?.objective ?? "",
           completionCondition: campaign?.completionCondition ?? "",
+          lineage: {
+            kind: "campaign",
+            sourceReference: `campaign:${id}`,
+            campaignId: id,
+          },
         });
       }
     }

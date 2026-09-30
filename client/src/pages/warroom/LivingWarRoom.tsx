@@ -34,50 +34,51 @@ interface BuildingNode {
   routeMarginBoost: string;
 }
 
-const DEFAULT_LA_NODES: BuildingNode[] = [
+// Explicit sandbox simulation projections (unmistakably marked simulation, never business truth)
+const SANDBOX_SIMULATION_NODES: BuildingNode[] = [
   {
     id: "louise",
     name: "The Louise Los Feliz",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
-    status: "targeted", // Authoritatively non-won
+    status: "targeted", // Initial targeted state, not won
     units: 180,
     corridor: "Los Feliz Corridor",
     xPercent: 54,
     yPercent: 38,
-    routeMarginBoost: "+18.4%",
+    routeMarginBoost: "Modeled +18.4% (Simulated)",
   },
   {
     id: "argyle",
     name: "Argyle House",
     address: "1750 N Vine St, Los Angeles, CA",
-    status: "won",
+    status: "discovered", // Truth: discovered prospect, not won
     units: 250,
     corridor: "Hollywood Corridor",
     xPercent: 38,
     yPercent: 49,
-    routeMarginBoost: "+22.1%",
+    routeMarginBoost: "Modeled +22.1% (Simulated)",
   },
   {
     id: "los-feliz-towers",
     name: "Los Feliz Towers",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
-    status: "won",
+    status: "discovered", // Truth: discovered prospect, not won
     units: 196,
     corridor: "Los Feliz Corridor",
     xPercent: 66,
     yPercent: 36,
-    routeMarginBoost: "+14.7%",
+    routeMarginBoost: "Modeled +14.7% (Simulated)",
   },
   {
     id: "4455-los-feliz",
     name: "4455 Los Feliz",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
-    status: "won",
+    status: "discovered", // Truth: discovered prospect, not won
     units: 196,
     corridor: "Los Feliz Corridor",
     xPercent: 60,
     yPercent: 42,
-    routeMarginBoost: "+16.2%",
+    routeMarginBoost: "Modeled +16.2% (Simulated)",
   },
   {
     id: "franklin-plaza",
@@ -88,7 +89,7 @@ const DEFAULT_LA_NODES: BuildingNode[] = [
     corridor: "Franklin Corridor",
     xPercent: 46,
     yPercent: 44,
-    routeMarginBoost: "+11.0%",
+    routeMarginBoost: "Modeled +11.0% (Simulated)",
   },
 ];
 
@@ -144,8 +145,9 @@ export default function LivingWarRoom() {
     ? scoreboard.data.metricKey.replace(/_/g, " ").toUpperCase()
     : "ACTIVE ACCOUNTS TARGET";
 
-  const [nodes, setNodes] = useState<BuildingNode[]>(DEFAULT_LA_NODES);
-  const [selectedNode, setSelectedNode] = useState<BuildingNode>(DEFAULT_LA_NODES[0]);
+  const [nodes, setNodes] = useState<BuildingNode[]>([]);
+  const [selectedNode, setSelectedNode] = useState<BuildingNode | null>(null);
+  const [isSandboxMode, setIsSandboxMode] = useState<boolean>(false);
   const [isSimulatingWin, setIsSimulatingWin] = useState(false);
   const [hasSimulatedWin, setHasSimulatedWin] = useState(false);
   const [activeCustomers, setActiveCustomers] = useState(baseObserved);
@@ -178,9 +180,9 @@ export default function LivingWarRoom() {
     }
   }, [scoreboard.data?.authoritativeObservedValue, hasSimulatedWin]);
 
-  // If a target tenant with geographic atlas prospects loads, map them into the canvas
+  // Authoritative geographic atlas read model: identically applied to all tenants (including default)
   useEffect(() => {
-    if (atlas.data?.pursued && atlas.data.pursued.length > 0 && targetTenantId) {
+    if (atlas.data?.pursued && atlas.data.pursued.length > 0) {
       const mapped: BuildingNode[] = atlas.data.pursued.slice(0, 8).map((prospect, idx) => ({
         id: `prospect-${prospect.accountId}`,
         name: prospect.name,
@@ -190,15 +192,22 @@ export default function LivingWarRoom() {
         corridor: `${effectiveTenantDisplay.toUpperCase()} Corridor`,
         xPercent: 30 + (idx % 4) * 15,
         yPercent: 30 + Math.floor(idx / 4) * 20,
-        routeMarginBoost: `+${(12 + idx * 2.5).toFixed(1)}%`,
+        routeMarginBoost: prospect.stage === "won" ? "Active Account" : "Pending Analysis",
       }));
       setNodes(mapped);
       setSelectedNode(mapped[0]);
-    } else if (!targetTenantId) {
-      setNodes(DEFAULT_LA_NODES);
-      setSelectedNode(DEFAULT_LA_NODES[0]);
+      setIsSandboxMode(false);
+    } else if (!isSandboxMode) {
+      setNodes([]);
+      setSelectedNode(null);
     }
-  }, [atlas.data, targetTenantId, effectiveTenantDisplay]);
+  }, [atlas.data, effectiveTenantDisplay, isSandboxMode]);
+
+  const handleLoadSimulationSandbox = () => {
+    setIsSandboxMode(true);
+    setNodes(SANDBOX_SIMULATION_NODES);
+    setSelectedNode(SANDBOX_SIMULATION_NODES[0]);
+  };
 
   // Audio synthesizer for tactical sonic boom
   const playWarroomBoom = () => {
@@ -254,9 +263,18 @@ export default function LivingWarRoom() {
     setIsSimulatingWin(true);
     playWarroomBoom();
 
-    setNodes((prev) =>
-      prev.map((n) => (n.id === "louise" ? { ...n, status: "won" } : n))
-    );
+    if (nodes.length === 0 || !isSandboxMode) {
+      setIsSandboxMode(true);
+      const simulated = SANDBOX_SIMULATION_NODES.map((n) =>
+        n.id === "louise" ? { ...n, status: "won" as const } : n
+      );
+      setNodes(simulated);
+      setSelectedNode(simulated[0]);
+    } else {
+      setNodes((prev) =>
+        prev.map((n) => (n.id === (selectedNode?.id || "louise") ? { ...n, status: "won" as const } : n))
+      );
+    }
 
     setTimeout(() => {
       setActiveCustomers((c) => c + 1);
@@ -293,10 +311,28 @@ export default function LivingWarRoom() {
   };
 
   const handleResetSimulation = () => {
-    setNodes(DEFAULT_LA_NODES);
     setHasSimulatedWin(false);
+    setIsSandboxMode(false);
     setActiveCustomers(baseObserved);
     setMarginBoost(68.4);
+    if (atlas.data?.pursued && atlas.data.pursued.length > 0) {
+      const mapped: BuildingNode[] = atlas.data.pursued.slice(0, 8).map((prospect, idx) => ({
+        id: `prospect-${prospect.accountId}`,
+        name: prospect.name,
+        address: prospect.address,
+        status: (prospect.stage === "won" ? "won" : idx === 0 ? "targeted" : "discovered") as "won" | "targeted" | "discovered",
+        units: 200,
+        corridor: `${effectiveTenantDisplay.toUpperCase()} Corridor`,
+        xPercent: 30 + (idx % 4) * 15,
+        yPercent: 30 + Math.floor(idx / 4) * 20,
+        routeMarginBoost: prospect.stage === "won" ? "Active Account" : "Pending Analysis",
+      }));
+      setNodes(mapped);
+      setSelectedNode(mapped[0]);
+    } else {
+      setNodes([]);
+      setSelectedNode(null);
+    }
   };
 
   return (
@@ -318,9 +354,9 @@ export default function LivingWarRoom() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {hasSimulatedWin && (
+          {(hasSimulatedWin || isSandboxMode) && (
             <span style={{ fontSize: "0.75rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", padding: "4px 8px", borderRadius: 4, fontWeight: 700, border: "1px solid rgba(245, 158, 11, 0.4)" }}>
-              SANDBOX SIMULATION ACTIVE
+              SANDBOX SIMULATION ACTIVE [NOT BUSINESS TRUTH]
             </span>
           )}
           <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
@@ -367,36 +403,54 @@ export default function LivingWarRoom() {
           </svg>
 
           {/* High-Rise Building Marker Cards */}
-          {nodes.map((node) => {
-            const isSelected = selectedNode.id === node.id;
-            const isWon = node.status === "won";
-            const isTargeted = node.status === "targeted";
-
-            return (
-              <div
-                key={node.id}
-                className={`building-marker-card ${isWon ? "won" : isTargeted ? "targeted" : ""} ${
-                  isSelected ? "active" : ""
-                }`}
-                style={{
-                  left: `${node.xPercent}%`,
-                  top: `${node.yPercent}%`,
-                }}
-                onClick={() => setSelectedNode(node)}
-              >
-                <span className="marker-name">
-                  {isWon ? "👑 " : isTargeted ? "🎯 " : "📍 "}
-                  {node.name}
-                </span>
-                <div className="marker-meta">
-                  <span>{node.units} units</span>
-                  <span style={{ color: isWon ? "#fbbf24" : isTargeted ? "#38bdf8" : "#94a3b8", fontWeight: 700 }}>
-                    {isWon ? "WON" : isTargeted ? "TARGETED" : "SCAN"}
-                  </span>
-                </div>
+          {nodes.length === 0 ? (
+            <div style={{ position: "absolute", top: "35%", left: "50%", transform: "translate(-50%, -50%)", background: "rgba(15, 23, 42, 0.92)", border: "1px solid #334155", padding: "20px 28px", borderRadius: 8, textAlign: "center", maxWidth: 420, zIndex: 10 }}>
+              <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#e2e8f0", marginBottom: 6 }}>
+                Authoritative Atlas: 0 Active Accounts
               </div>
-            );
-          })}
+              <p style={{ fontSize: "0.8rem", color: "#94a3b8", lineHeight: 1.4, margin: "0 0 12px 0" }}>
+                Zero won accounts currently exist in the database for tenant '{effectiveTenantDisplay}'.
+              </p>
+              <button
+                type="button"
+                onClick={handleLoadSimulationSandbox}
+                style={{ padding: "6px 14px", fontSize: "0.78rem", background: "#f59e0b", color: "#000", fontWeight: 700, borderRadius: 4, border: "none", cursor: "pointer" }}
+              >
+                Launch Simulation Sandbox
+              </button>
+            </div>
+          ) : (
+            nodes.map((node) => {
+              const isSelected = selectedNode?.id === node.id;
+              const isWon = node.status === "won";
+              const isTargeted = node.status === "targeted";
+
+              return (
+                <div
+                  key={node.id}
+                  className={`building-marker-card ${isWon ? "won" : isTargeted ? "targeted" : ""} ${
+                    isSelected ? "active" : ""
+                  }`}
+                  style={{
+                    left: `${node.xPercent}%`,
+                    top: `${node.yPercent}%`,
+                  }}
+                  onClick={() => setSelectedNode(node)}
+                >
+                  <span className="marker-name">
+                    {isWon ? "👑 " : isTargeted ? "🎯 " : "📍 "}
+                    {node.name}
+                  </span>
+                  <div className="marker-meta">
+                    <span>{node.units} units</span>
+                    <span style={{ color: isWon ? "#fbbf24" : isTargeted ? "#38bdf8" : "#94a3b8", fontWeight: 700 }}>
+                      {isWon ? "WON" : isTargeted ? "TARGETED" : "SCAN"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
 
           {/* Floating Canvas HUD Gauges */}
           <div className="warroom-floating-hud">
@@ -408,8 +462,8 @@ export default function LivingWarRoom() {
 
             <div className="hud-panel">
               <span className="hud-label">Selected Asset Opportunity</span>
-              <span className="hud-val">{selectedNode.name.split(" ")[0]}</span>
-              <span className="hud-sub">{selectedNode.routeMarginBoost} Margin Expansion</span>
+              <span className="hud-val">{selectedNode ? selectedNode.name.split(" ")[0] : "None"}</span>
+              <span className="hud-sub">{selectedNode ? selectedNode.routeMarginBoost : "No asset selected"}</span>
             </div>
 
             <div className="hud-panel">

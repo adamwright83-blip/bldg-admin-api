@@ -31,7 +31,14 @@ interface CockpitStop {
   objectiveType: "commercial_drop" | "pickup" | "conquest_brief";
   primaryObjective: string;
   isRealDayLineWork: boolean;
-  executionType?: string;
+  executionType?: string | null;
+  lineage?: {
+    kind: "objective" | "campaign" | "commitment";
+    sourceReference: string;
+    objectiveId?: string;
+    campaignId?: string;
+    commitmentId?: string;
+  };
 }
 
 // Sandbox practice stops for driver HUD onboarding (clearly marked training)
@@ -108,8 +115,8 @@ export default function ClaireInCabCockpit() {
     retry: false,
   });
 
-  // AUTHORITATIVE PERSISTENT OPERATOR FIELD COMPLETION MUTATION
-  const bridgeDriverAction = trpc.system.persistentOperator.bridgeDriverAction.useMutation();
+  // CANONICAL JOYSTICK DAY LINE COMPLETION MUTATION (handles all 3 lineages: objective, campaign, commitment)
+  const completeDayLineItem = trpc.system.currentDayLine.completeItem.useMutation();
 
   const [trainingMode, setTrainingMode] = useState(false);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
@@ -135,10 +142,11 @@ export default function ClaireInCabCockpit() {
     distance: `${(idx + 1) * 0.4} mi`,
     corridor: "Canonical Day Line",
     units: 0,
-    objectiveType: item.executionType === "operator" ? "conquest_brief" : "commercial_drop",
-    primaryObjective: item.objective || item.title,
+    objectiveType: item.lineage?.kind === "objective" ? "conquest_brief" : "commercial_drop",
+    primaryObjective: item.title,
     isRealDayLineWork: true,
     executionType: item.executionType,
+    lineage: item.lineage,
   }));
 
   const activeStops = hasRealDayLineWork && !trainingMode ? realStops : TRAINING_STOPS;
@@ -290,15 +298,16 @@ export default function ClaireInCabCockpit() {
     if (stopToComplete.isRealDayLineWork) {
       setIsPersisting(true);
       try {
-        const result = await bridgeDriverAction.mutateAsync({
+        const result = await completeDayLineItem.mutateAsync({
           targetTenantId,
-          objectiveId: stopToComplete.id,
+          itemId: stopToComplete.id,
+          lineage: stopToComplete.lineage,
           evidenceReference: `voice_incab_receipt_${Date.now()}`,
           sourceSystem: "driver_cockpit_hud",
           explanation: `Driver confirmed completion via in-cab HUD: ${stopToComplete.name}`,
         });
 
-        if (result.bridged) {
+        if (result.success) {
           setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
           setLastReceipt(`Durable receipt confirmed for: ${stopToComplete.name}`);
 
@@ -313,11 +322,11 @@ export default function ClaireInCabCockpit() {
             setCurrentStopIndex(nextIndex);
           }, 1200);
         } else {
-          speakAsClaire(`Day Line action not bridged: ${result.reason}. Task remains pending.`);
+          speakAsClaire(`Day Line action not completed. Task remains pending.`);
         }
       } catch (err) {
-        console.error("Failed to bridge driver action:", err);
-        speakAsClaire("Mutation error on Day Line bridge. Objective not marked complete.");
+        console.error("Failed to complete Day Line item:", err);
+        speakAsClaire("Mutation error on Day Line completion. Objective not marked complete.");
       } finally {
         setIsPersisting(false);
       }

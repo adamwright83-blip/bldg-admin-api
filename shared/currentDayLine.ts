@@ -27,6 +27,16 @@ export type ExecutionContract = {
   eitherAcceptable: boolean;
 };
 
+export type DayLineItemLineageKind = "objective" | "campaign" | "commitment";
+
+export type DayLineItemLineage = {
+  kind: DayLineItemLineageKind;
+  sourceReference: string;
+  objectiveId?: string;
+  campaignId?: string;
+  commitmentId?: string;
+};
+
 export type CurrentDayLineItem = {
   id: string;
   title: string;
@@ -35,6 +45,7 @@ export type CurrentDayLineItem = {
   executionType: ObjectiveExecutionType | null;
   executionContract: ExecutionContract;
   compatibilityPhrase: "todays_mission" | null;
+  lineage?: DayLineItemLineage;
 };
 
 export type CurrentDayLine = {
@@ -59,6 +70,7 @@ export type RankedDayWork = {
    * Omit the property when the shared classifier may derive a type.
    */
   executionType?: ObjectiveExecutionType | null;
+  lineage?: DayLineItemLineage;
 };
 
 export function executionContractFromWork(input: {
@@ -120,6 +132,7 @@ function stampItem(
       eitherAcceptable: decision.eitherAcceptable,
     },
     compatibilityPhrase,
+    ...(work.lineage ? { lineage: work.lineage } : {}),
   };
 }
 

@@ -23,12 +23,12 @@ import {
   goalCycleRequests,
   legacyDayforgeSaasEntitlements,
   legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasSubscriptions,
   legacyDayforgeSaasTenantLocations,
   legacyDayforgeSaasTenants,
   macroGoalRuns,
   operatorMacroGoals,
   territoryOperatorProfiles,
+  users,
 } from "../../drizzle/schema";
 import { SAAS_ENTITLEMENTS } from "../../shared/saasTenant";
 import { getDb } from "../db";
@@ -285,10 +285,7 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
   const flagship = buildDefaultFlagship();
   const db = await getDb();
   if (!db) {
-    if (!activeFranchises.has(flagship.id)) {
-      activeFranchises.set(flagship.id, flagship);
-    }
-    return Array.from(activeFranchises.values());
+    return [flagship];
   }
 
   try {
@@ -324,8 +321,12 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
       const targetValue = macroGoalRow ? Number(macroGoalRow.targetValue) : 25000;
       const metricKey = macroGoalRow?.metricKey === "active_customers" ? "active_customers" : "monthly_recurring_revenue";
 
+      const franchiseId = tenant.slug.startsWith("franchise-")
+        ? tenant.slug
+        : `franchise-${tenant.slug}`;
+
       const record: FranchiseRecord = {
-        id: `franchise-${tenant.slug}`,
+        id: franchiseId,
         tenantId: tenant.id,
         name: tenant.businessName,
         city: profile ? profile.city : tenant.businessName.replace(/^Goldline\s+/i, "").replace(/\s+Central$/i, ""),
@@ -421,38 +422,81 @@ export async function provisionFranchise(
   const operatorUserId = input.operatorUserId || "admin";
 
   const db = await getDb();
-  let macroGoalId = randomUUID();
-  let macroGoalRunId = randomUUID();
+  if (!db) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database unavailable for franchise provisioning. Sovereign engine fails closed.",
+    });
+  }
 
-  if (db) {
-    // 2. Entire provisioning sequence executed in a single atomic transaction
-    await db.transaction(async (tx) => {
-      // (a) Insert or update canonical tenant in dayforge_saas_tenants
-      await tx
-        .insert(legacyDayforgeSaasTenants)
-        .values({
-          id: tenantId,
-          slug: `franchise-${slug}`,
+  let macroGoalId: string = randomUUID();
+  let macroGoalRunId: string = randomUUID();
+  const targetOperatorOpenId = `operator_${slug}`;
+
+  // 2. Entire provisioning sequence executed in a single atomic transaction
+  await db.transaction(async (tx) => {
+    // (a) Insert or update dedicated target-tenant operator in users table
+    await tx
+      .insert(users)
+      .values({
+        openId: targetOperatorOpenId,
+        tenantId,
+        name: input.operatorName || `Goldline ${profile.city} Operator`,
+        email: `operator@${slug}.goldline.bldg.chat`,
+        role: "admin",
+        loginMethod: "franchise_operator",
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          name: input.operatorName || `Goldline ${profile.city} Operator`,
+          tenantId,
+          role: "admin",
+        },
+      });
+
+    // (b) Insert or update canonical tenant in dayforge_saas_tenants
+    await tx
+      .insert(legacyDayforgeSaasTenants)
+      .values({
+        id: tenantId,
+        slug: `franchise-${slug}`,
+        businessName: `Goldline ${profile.city} Central`,
+        brandName: "Goldline",
+        primaryColor: "#e6b800",
+        contactName: input.operatorName || "Regional Operator",
+        contactEmail: `operator@${slug}.goldline.bldg.chat`,
+        contactPhone: input.operatorPhone || "+18005550100",
+        timeZone: profile.timeZone,
+        status: "active",
+        onboardingStep: "active",
+      })
+      .onDuplicateKeyUpdate({
+        set: {
           businessName: `Goldline ${profile.city} Central`,
-          brandName: "Goldline",
-          primaryColor: "#e6b800",
           contactName: input.operatorName || "Regional Operator",
-          contactEmail: `operator@${slug}.goldline.bldg.chat`,
           contactPhone: input.operatorPhone || "+18005550100",
-          timeZone: profile.timeZone,
           status: "active",
-          onboardingStep: "active",
-        })
-        .onDuplicateKeyUpdate({
-          set: {
-            businessName: `Goldline ${profile.city} Central`,
-            contactName: input.operatorName || "Regional Operator",
-            contactPhone: input.operatorPhone || "+18005550100",
-            status: "active",
-          },
-        });
+        },
+      });
 
-      // (b) Insert canonical SaaS owner membership so operator identity resolves
+    // (c) Insert canonical SaaS owner membership for the target operator identity
+    await tx
+      .insert(legacyDayforgeSaasMemberships)
+      .values({
+        tenantId,
+        userOpenId: targetOperatorOpenId,
+        role: "owner",
+        active: true,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          role: "owner",
+          active: true,
+        },
+      });
+
+    // Also authorize caller admin membership if distinct
+    if (operatorUserId && operatorUserId !== targetOperatorOpenId) {
       await tx
         .insert(legacyDayforgeSaasMemberships)
         .values({
@@ -467,45 +511,27 @@ export async function provisionFranchise(
             active: true,
           },
         });
+    }
 
-      // (c) Insert active SaaS subscription so access layer checks pass
+    // (d) Grant explicit manual platform entitlements for internal/franchise operations
+    // No fake Stripe subscriptions: real paying JOYSTICK tenants receive subscription truth
+    // only from the canonical Stripe billing/webhook flow. Internal platform-owned franchises
+    // carry explicit manual non-billing entitlements.
+    for (const entitlementKey of SAAS_ENTITLEMENTS) {
       await tx
-        .insert(legacyDayforgeSaasSubscriptions)
+        .insert(legacyDayforgeSaasEntitlements)
         .values({
           tenantId,
-          planKey: "sovereign_operator",
-          stripeCustomerId: `cust_${slug}`,
-          stripeSubscriptionId: `sub_${slug}`,
-          status: "active",
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: new Date(Date.now() + 365 * 86400000),
-          lastStripeEventId: `evt_prov_${slug}_${Date.now()}`,
-          lastStripeEventCreatedAt: now,
+          entitlementKey,
+          source: "manual",
+          enabled: true,
         })
         .onDuplicateKeyUpdate({
           set: {
-            status: "active",
-            planKey: "sovereign_operator",
-            currentPeriodEnd: new Date(Date.now() + 365 * 86400000),
+            enabled: true,
           },
         });
-
-      // (d) Grant all canonical SaaS & Persistent Operator entitlements
-      for (const entitlementKey of SAAS_ENTITLEMENTS) {
-        await tx
-          .insert(legacyDayforgeSaasEntitlements)
-          .values({
-            tenantId,
-            entitlementKey,
-            source: "plan",
-            enabled: true,
-          })
-          .onDuplicateKeyUpdate({
-            set: {
-              enabled: true,
-            },
-          });
-      }
+    }
 
       // (e) Insert primary depot location
       const primaryAnchor = profile.anchors[0];
@@ -620,6 +646,7 @@ export async function provisionFranchise(
       }
 
       // (h) Idempotent Operator Macro Goal: update existing active goal or insert new
+      const targetMrrNumeric = input.targetMrrCents / 100;
       const [existingGoal] = await tx
         .select()
         .from(operatorMacroGoals)
@@ -637,7 +664,7 @@ export async function provisionFranchise(
         await tx
           .update(operatorMacroGoals)
           .set({
-            targetValue: String(input.targetMrrCents / 100),
+            targetValue: String(targetMrrNumeric),
             updatedAt: now,
           })
           .where(eq(operatorMacroGoals.id, existingGoal.id));
@@ -645,10 +672,10 @@ export async function provisionFranchise(
         await tx.insert(operatorMacroGoals).values({
           id: macroGoalId,
           tenantId,
-          operatorUserId,
-          objective: `Achieve $${(input.targetMrrCents / 100).toLocaleString()}/mo MRR in ${profile.city} corridor`,
+          operatorUserId: targetOperatorOpenId,
+          objective: `Achieve $${targetMrrNumeric.toLocaleString()}/mo MRR in ${profile.city} corridor`,
           metricKey: "monthly_recurring_revenue",
-          targetValue: String(input.targetMrrCents / 100),
+          targetValue: String(targetMrrNumeric),
           unit: "USD",
           source: "admin",
           sourceNote: "Sovereign Franchise Engine ignition",
@@ -656,7 +683,22 @@ export async function provisionFranchise(
         });
       }
 
-      // (i) Bootstrap initial Persistent Operator Macro Goal Run for autonomy
+      // (i) Bootstrap canonical Persistent Operator Macro Goal Run with all required schema fields
+      const canonicalOpId = `tenant:${tenantId}:operator:${targetOperatorOpenId}`;
+      const goalSnapshot = {
+        id: macroGoalId,
+        tenantId,
+        operatorUserId: targetOperatorOpenId,
+        objective: `Achieve $${targetMrrNumeric.toLocaleString()}/mo MRR in ${profile.city} corridor`,
+        metricKey: "monthly_recurring_revenue",
+        targetValue: targetMrrNumeric,
+        unit: "USD",
+        source: "admin",
+        sourceNote: "Sovereign Franchise Engine ignition",
+        status: "active",
+        createdAt: now.toISOString(),
+      };
+
       const [existingRun] = await tx
         .select()
         .from(macroGoalRuns)
@@ -671,26 +713,54 @@ export async function provisionFranchise(
 
       if (existingRun) {
         macroGoalRunId = existingRun.id;
+        // Keep active run target synchronized with macro goal target on re-provisioning
+        await tx
+          .update(macroGoalRuns)
+          .set({
+            targetValue: targetMrrNumeric.toFixed(2),
+            goalSnapshotJson: goalSnapshot,
+            canonicalOperatorId: canonicalOpId,
+            operatorUserId: targetOperatorOpenId,
+            updatedAt: now,
+          })
+          .where(eq(macroGoalRuns.id, existingRun.id));
       } else {
         await tx.insert(macroGoalRuns).values({
           id: macroGoalRunId,
           tenantId,
-          canonicalOperatorId: operatorUserId,
-          operatorUserId,
+          canonicalOperatorId: canonicalOpId,
+          operatorUserId: targetOperatorOpenId,
           macroGoalId,
-          verticalKey: "commercial_laundry",
-          metricKey: "monthly_recurring_revenue",
-          targetValue: (input.targetMrrCents / 100).toFixed(2),
-          unit: "USD",
+          verticalKey: "laundry_fluff_fold",
           status: "active",
+          goalSnapshotJson: goalSnapshot,
+          metricKey: "monthly_recurring_revenue",
+          targetValue: targetMrrNumeric.toFixed(2),
+          unit: "USD",
+          baselineObservationRef: `baseline_prov_${slug}`,
+          baselineValue: "0.00",
+          baselinePrecision: "exact",
+          baselineCoverage: "complete",
           startedAt: now,
+          nextEvaluationAt: now,
+          policyVersion: "v1.0",
         });
       }
 
-      // (j) Queue initial goal cycle request in goalCycleRequests for autonomous dispatch
-      await tx
-        .insert(goalCycleRequests)
-        .values({
+      // (j) Canonical idempotent goal cycle request (never resets completed work to queued)
+      const [existingRequest] = await tx
+        .select({ id: goalCycleRequests.id, status: goalCycleRequests.status })
+        .from(goalCycleRequests)
+        .where(
+          and(
+            eq(goalCycleRequests.tenantId, tenantId),
+            eq(goalCycleRequests.idempotencyKey, `goal_activated:${macroGoalId}`)
+          )
+        )
+        .limit(1);
+
+      if (!existingRequest) {
+        await tx.insert(goalCycleRequests).values({
           id: randomUUID(),
           tenantId,
           goalRunId: macroGoalRunId,
@@ -700,21 +770,15 @@ export async function provisionFranchise(
           status: "queued",
           availableAt: now,
           maxAttempts: 5,
-        })
-        .onDuplicateKeyUpdate({
-          set: {
-            status: "queued",
-            availableAt: now,
-          },
         });
+      }
     });
-  }
 
   const telemetry: ProvisioningTelemetryStep[] = [
     {
       step: 1,
       title: "Tenant Partitioning",
-      detail: `Persisted canonical tenant '${tenantId}' into dayforge_saas_tenants with owner membership in dayforge_saas_memberships`,
+      detail: `Persisted canonical tenant '${tenantId}', dedicated operator user '${targetOperatorOpenId}', and owner membership in dayforge_saas_memberships`,
       timestamp: new Date().toISOString(),
       status: "completed",
     },
@@ -728,7 +792,7 @@ export async function provisionFranchise(
     {
       step: 3,
       title: "Macro Goal Ignition",
-      detail: `Persisted macro-goal row in operator_macro_goals and macro_goal_runs (${macroGoalRunId}): $${(input.targetMrrCents / 100).toLocaleString()} MRR`,
+      detail: `Persisted macro-goal row in operator_macro_goals and macro_goal_runs (${macroGoalRunId}) with canonical format 'tenant:${tenantId}:operator:${targetOperatorOpenId}'`,
       timestamp: new Date(Date.now() + 300).toISOString(),
       status: "completed",
     },
@@ -749,7 +813,7 @@ export async function provisionFranchise(
     {
       step: 6,
       title: "Day Line Dispatch Primed",
-      detail: `Autonomous goal run initialized with zero-cross-leak tenant partition. Mission Director queue primed`,
+      detail: `Granted explicit manual platform entitlements in dayforge_saas_entitlements (zero fake Stripe subscriptions) and idempotently queued goal_activated cycle`,
       timestamp: new Date(Date.now() + 750).toISOString(),
       status: "completed",
     },

@@ -96,6 +96,26 @@ export async function hasTenantEntitlement(input: {
   const db = await getDb();
   if (!db) return false;
 
+  const now = input.now ?? new Date();
+  const rows = await db
+    .select()
+    .from(legacyDayforgeSaasEntitlements)
+    .where(
+      and(
+        eq(legacyDayforgeSaasEntitlements.tenantId, input.tenantId),
+        eq(legacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
+      )
+    );
+
+  const activeRows = rows.filter(
+    row => !row.expiresAt || row.expiresAt.getTime() > now.getTime()
+  );
+
+  // 1. Explicit internal/platform manual entitlements grant access without requiring Stripe billing
+  const manual = activeRows.find(row => row.source === "manual");
+  if (manual) return manual.enabled;
+
+  // 2. Real paying JOYSTICK tenants receive subscription truth only from canonical Stripe billing
   const [subscription] = await db
     .select()
     .from(legacyDayforgeSaasSubscriptions)
@@ -113,22 +133,6 @@ export async function hasTenantEntitlement(input: {
     return false;
   }
 
-  const now = input.now ?? new Date();
-  const rows = await db
-    .select()
-    .from(legacyDayforgeSaasEntitlements)
-    .where(
-      and(
-        eq(legacyDayforgeSaasEntitlements.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
-      )
-    );
-
-  const activeRows = rows.filter(
-    row => !row.expiresAt || row.expiresAt.getTime() > now.getTime()
-  );
-  const manual = activeRows.find(row => row.source === "manual");
-  if (manual) return manual.enabled;
   return activeRows.some(row => row.source === "plan" && row.enabled);
 }
 
