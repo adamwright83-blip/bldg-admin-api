@@ -19,7 +19,7 @@ export type CleanCloudDirectCredentials = {
 };
 
 export type DirectSyncOptions = {
-  tenantId?: string;
+  tenantId: string;
   actorId?: string;
   from?: string;
   to?: string;
@@ -177,9 +177,15 @@ export async function fetchCleanCloudDirectExport(input: {
  * Pulls latest Orders (Sales) and Orders (Revenue) and commits them through the canonical ingestion ledger.
  */
 export async function runCleanCloudDirectSync(
-  options: DirectSyncOptions = {}
+  options: DirectSyncOptions
 ): Promise<DirectSyncResult> {
-  const tenantId = options.tenantId ?? "default";
+  const tenantId = options.tenantId;
+  if (!tenantId?.trim()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "tenantId is required for CleanCloud direct sync.",
+    });
+  }
   const actorId = options.actorId ?? "system:jawbreaker-direct";
   const db = await getDb();
   if (!db) {
@@ -204,6 +210,22 @@ export async function runCleanCloudDirectSync(
   const today = pacificToday();
   let from = options.from;
   let to = options.to ?? today;
+
+  if (!from) {
+    try {
+      const { loadBusinessSourceCoverage } = await import(
+        "../analytics/sourceCoverage"
+      );
+      const snapshot = await loadBusinessSourceCoverage({ tenantId });
+      const cleancloud = snapshot.sources.find(s => s.sourceId === "cleancloud");
+      if (cleancloud?.coveredThrough) {
+        // Start from coveredThrough (overlapping day) to ensure contiguous boundary
+        from = cleancloud.coveredThrough;
+      }
+    } catch {
+      // fallback to binding.lastSuccessAt
+    }
+  }
 
   if (!from) {
     if (binding.lastSuccessAt) {
