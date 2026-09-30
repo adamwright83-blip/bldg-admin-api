@@ -13,7 +13,7 @@
  * 6. Emits candidate_boost learned deltas with valid objective lineage.
  */
 
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, or } from "drizzle-orm";
 import {
   claireProactiveObligations,
   commercialAccounts,
@@ -22,6 +22,7 @@ import {
   commercialMissionEvents,
   commercialMissions,
   goalCycleObjectives,
+  goalCycleOutcomes,
   macroGoalRuns,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -323,8 +324,40 @@ export async function propagateGeographicConquest(
   // Sort by nearest distance
   nearbyOpportunities.sort((a, b) => a.distanceMiles - b.distanceMiles);
 
+  const operatorUserId = input.actorId ?? "adam-admin";
+  const todayDate = businessToday();
+
   // 3. If no neighboring accounts exist within radius, fail gracefully without inventing fake accounts
   if (nearbyOpportunities.length === 0) {
+    if (input.missionId) {
+      try {
+        await db
+          .insert(commercialMissionEvents)
+          .values({
+            tenantId: input.tenantId,
+            missionId: input.missionId,
+            eventName: "geographic_conquest_propagated",
+            fromStatus: "won",
+            toStatus: "won",
+            actorType: "system",
+            actorId: operatorUserId,
+            idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
+            payloadJson: {
+              propagated: false,
+              reason: "no_neighbors_within_corridor",
+              wonAccountId: accountId,
+            },
+          })
+          .onDuplicateKeyUpdate({
+            set: {
+              idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
+            },
+          });
+      } catch (receiptErr) {
+        console.warn("[GeographicConquest] conquest completion receipt write deferred:", receiptErr);
+      }
+    }
+
     return {
       propagated: false,
       wonAccount,
@@ -332,9 +365,6 @@ export async function propagateGeographicConquest(
       reason: `No neighboring commercial accounts within corridor radius (${radiusMiles} mi)`,
     };
   }
-
-  const operatorUserId = input.actorId ?? "adam-admin";
-  const todayDate = businessToday();
 
   // 4. Spawn candidate missions or elevate existing corridor missions with deterministic idempotency keys
   for (const opp of nearbyOpportunities.slice(0, maxCandidates)) {
@@ -499,8 +529,61 @@ export async function propagateGeographicConquest(
     }).catch(() => []);
     if (matching[0]) {
       targetObjectiveId = matching[0].id;
+    } else {
+      // Lineage recovery during crash recovery:
+      // When a mission is won, the normal win path completes the objective first.
+      // Therefore, findDeterministicObjectivesForDriverAction excludes it because it only looks for active objectives.
+      // A. Recover original objectiveId from durable account_won outcome
+      const wonOutcomes = await db
+        .select({
+          objectiveId: goalCycleOutcomes.objectiveId,
+          metadataJson: goalCycleOutcomes.metadataJson,
+        })
+        .from(goalCycleOutcomes)
+        .where(
+          and(
+            eq(goalCycleOutcomes.tenantId, input.tenantId),
+            eq(goalCycleOutcomes.outcomeKind, "account_won")
+          )
+        )
+        .orderBy(desc(goalCycleOutcomes.createdAt))
+        .limit(50);
+
+      for (const outcome of wonOutcomes) {
+        const meta = outcome.metadataJson as { missionId?: number | string } | null;
+        if (meta?.missionId && Number(meta.missionId) === input.missionId) {
+          targetObjectiveId = outcome.objectiveId;
+          break;
+        }
+      }
+
+      // B. If not found in outcomes, check goalCycleObjectives directly (including completed objectives)
+      if (!targetObjectiveId) {
+        const [matchedObj] = await db
+          .select({ id: goalCycleObjectives.id })
+          .from(goalCycleObjectives)
+          .where(
+            and(
+              eq(goalCycleObjectives.tenantId, input.tenantId),
+              or(
+                eq(goalCycleObjectives.selectedRef, String(input.missionId)),
+                and(
+                  eq(goalCycleObjectives.actionTargetType, "commercial_mission"),
+                  eq(goalCycleObjectives.actionTargetId, String(input.missionId))
+                )
+              )
+            )
+          )
+          .orderBy(desc(goalCycleObjectives.createdAt))
+          .limit(1);
+
+        if (matchedObj) {
+          targetObjectiveId = matchedObj.id;
+        }
+      }
     }
   }
+
   if (targetObjectiveId) {
     try {
       const recorded = await recordGoalCycleOutcome({
@@ -540,6 +623,37 @@ export async function propagateGeographicConquest(
     console.warn(
       `[GeographicConquest] No deterministic objective lineage found for won account ${accountId} (mission ${input.missionId ?? "none"}); failing closed to preserve semantic lineage.`
     );
+  }
+
+  // 8. Persist completion receipt into commercialMissionEvents to guarantee idempotent sweeper convergence
+  if (input.missionId) {
+    try {
+      await db
+        .insert(commercialMissionEvents)
+        .values({
+          tenantId: input.tenantId,
+          missionId: input.missionId,
+          eventName: "geographic_conquest_propagated",
+          fromStatus: "won",
+          toStatus: "won",
+          actorType: "system",
+          actorId: operatorUserId,
+          idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
+          payloadJson: {
+            propagated: true,
+            generatedMissionsCount: generatedMissions.length,
+            wonAccountId: accountId,
+            objectiveId: targetObjectiveId,
+          },
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            idempotencyKey: `geo-conquest:receipt:${input.missionId}`,
+          },
+        });
+    } catch (receiptErr) {
+      console.warn("[GeographicConquest] conquest completion receipt write deferred:", receiptErr);
+    }
   }
 
   console.info(

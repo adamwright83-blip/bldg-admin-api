@@ -17,9 +17,10 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import {
   commercialMissionEvents,
+  goalCycleObjectives,
   goalCycleOutcomes,
   goalCycleRequests,
   macroGoalRuns,
@@ -236,7 +237,13 @@ export async function sweepUnpropagatedConquestWins(input: {
   if (!db) return { processedCount: 0, errors: [] };
 
   const limit = input.limit ?? 25;
-  const tenantId = input.tenantId ?? "default";
+
+  // Multi-tenant: If tenantId is specified, scope to that tenant;
+  // otherwise, discover recent won events across all tenants in JOYSTICK.
+  const conditions = [eq(commercialMissionEvents.toStatus, "won")];
+  if (input.tenantId) {
+    conditions.push(eq(commercialMissionEvents.tenantId, input.tenantId));
+  }
 
   const wonEvents = await db
     .select({
@@ -247,12 +254,7 @@ export async function sweepUnpropagatedConquestWins(input: {
       createdAt: commercialMissionEvents.createdAt,
     })
     .from(commercialMissionEvents)
-    .where(
-      and(
-        eq(commercialMissionEvents.tenantId, tenantId),
-        eq(commercialMissionEvents.toStatus, "won")
-      )
-    )
+    .where(and(...conditions))
     .orderBy(desc(commercialMissionEvents.id))
     .limit(limit);
 
@@ -261,6 +263,8 @@ export async function sweepUnpropagatedConquestWins(input: {
 
   for (const event of wonEvents) {
     const conquestEvidenceRef = `commercial_missions:${event.missionId}:conquest`;
+
+    // A. Check if conquest outcome receipt already exists
     const [existingOutcome] = await db
       .select({ id: goalCycleOutcomes.id })
       .from(goalCycleOutcomes)
@@ -276,17 +280,83 @@ export async function sweepUnpropagatedConquestWins(input: {
       continue;
     }
 
+    // B. Check if conquest completion receipt exists in commercialMissionEvents
+    const [existingReceipt] = await db
+      .select({ id: commercialMissionEvents.id })
+      .from(commercialMissionEvents)
+      .where(
+        and(
+          eq(commercialMissionEvents.tenantId, event.tenantId),
+          eq(commercialMissionEvents.missionId, event.missionId),
+          eq(commercialMissionEvents.eventName, "geographic_conquest_propagated")
+        )
+      )
+      .limit(1);
+
+    if (existingReceipt) {
+      continue;
+    }
+
+    // C. Recover original objectiveId from durable account_won outcome (even after objective completed)
+    let recoveredObjectiveId: string | null = null;
+    const wonOutcomes = await db
+      .select({
+        objectiveId: goalCycleOutcomes.objectiveId,
+        metadataJson: goalCycleOutcomes.metadataJson,
+      })
+      .from(goalCycleOutcomes)
+      .where(
+        and(
+          eq(goalCycleOutcomes.tenantId, event.tenantId),
+          eq(goalCycleOutcomes.outcomeKind, "account_won")
+        )
+      )
+      .orderBy(desc(goalCycleOutcomes.createdAt))
+      .limit(50);
+
+    for (const outcome of wonOutcomes) {
+      const meta = outcome.metadataJson as { missionId?: number | string } | null;
+      if (meta?.missionId && Number(meta.missionId) === event.missionId) {
+        recoveredObjectiveId = outcome.objectiveId;
+        break;
+      }
+    }
+
+    // D. If not found in outcomes, check goalCycleObjectives directly (including completed objectives)
+    if (!recoveredObjectiveId) {
+      const [matchedObj] = await db
+        .select({ id: goalCycleObjectives.id })
+        .from(goalCycleObjectives)
+        .where(
+          and(
+            eq(goalCycleObjectives.tenantId, event.tenantId),
+            or(
+              eq(goalCycleObjectives.selectedRef, String(event.missionId)),
+              and(
+                eq(goalCycleObjectives.actionTargetType, "commercial_mission"),
+                eq(goalCycleObjectives.actionTargetId, String(event.missionId))
+              )
+            )
+          )
+        )
+        .orderBy(desc(goalCycleObjectives.createdAt))
+        .limit(1);
+
+      if (matchedObj) {
+        recoveredObjectiveId = matchedObj.id;
+      }
+    }
+
     try {
       const { propagateGeographicConquest } = await import("./geographicConquestService");
       const result = await propagateGeographicConquest({
         tenantId: event.tenantId,
         missionId: event.missionId,
         actorId: event.actorId,
+        objectiveId: recoveredObjectiveId,
       });
 
-      if (result.propagated) {
-        processedCount++;
-      }
+      processedCount++;
     } catch (err) {
       errors.push({
         missionId: event.missionId,
