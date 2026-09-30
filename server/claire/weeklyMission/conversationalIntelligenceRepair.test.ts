@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WeeklyDraft } from "../../../shared/weeklyMissionReadiness";
+import { morningChiefOfStaffBrief, overloadJudgment } from "../../../shared/claireProactive";
 import { commitBriefing } from "../briefing/briefingCommit";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "../turn/claireTurn";
 import {
@@ -46,9 +47,6 @@ const RECOVERY_OBLIGATIONS = RECOVERY_CUSTOMERS.map(([id, name]) => ({
   historyIntact: true as const,
   moveCount: 0,
 }));
-
-const RECOVERY_BRIEF =
-  "Seven dormant customers are ready for recovery: Sarah Connor, John Miller, Alice Wong, David Kim, Elena Rostova, Marcus Brody, and Chloe Price.";
 
 function initialWeeklyDraft(): WeeklyDraft {
   return {
@@ -191,7 +189,22 @@ describe("Claire conversational-intelligence repair", () => {
       searchMemory: vi.fn(async () => []) as never,
       memoryBetween: vi.fn(async () => []) as never,
       encyclopedia: null,
-      watchBoard: vi.fn(async () => ({ brief: RECOVERY_BRIEF })),
+      watchBoard: vi.fn(async () => {
+        const recoveries = overrides.noRecoveries ? [] : RECOVERY_OBLIGATIONS;
+        return {
+          brief: morningChiefOfStaffBrief({
+            recoveries,
+            sales: [],
+            warnings: [],
+            overload: overloadJudgment([]),
+            skipSales: false,
+          }),
+          recoveryAccounts: recoveries.map(item => ({
+            id: item.subjectKey,
+            name: item.subjectName,
+          })),
+        };
+      }),
       recoveryObligations: vi.fn(async () =>
         overrides.noRecoveries ? [] : RECOVERY_OBLIGATIONS
       ) as never,
