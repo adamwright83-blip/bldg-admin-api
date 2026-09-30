@@ -17,6 +17,13 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  goalCycleRequests,
+  macroGoalRuns,
+  operatorMacroGoals,
+} from "../../drizzle/schema";
+import { getDb } from "../db";
 import { getDefaultGoalCyclePool, GoalCycleStore } from "./goalCycleStore";
 import { GoalCycleWorker } from "./goalCycleWorker";
 import { evaluateMacroGoalRunAndScheduleNext } from "./goalCycleService";
@@ -25,6 +32,9 @@ import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRe
 import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
+import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
+import { resolveCanonicalOperatorIdentity } from "./identity";
+import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
 
 export type AutonomousWorkerOptions = {
   enabled?: boolean;
@@ -32,7 +42,114 @@ export type AutonomousWorkerOptions = {
   goalCyclePollMs?: number;
   appointmentPollMs?: number;
   learningDrainIntervalMs?: number;
+  bootstrapIntervalMs?: number;
 };
+
+export async function ensureAutonomousGoalBootstrap(input: {
+  store: GoalCycleStore;
+  appointmentStore: OperatorAppointmentStore;
+  registry?: typeof defaultVerticalRegistry;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const registry = input.registry ?? defaultVerticalRegistry;
+
+  // 1. Ensure Sunday planning appointment for the configured owner
+  try {
+    const appt = await ensureSundayPlanningAppointment({ store: input.appointmentStore });
+    if (appt?.created) {
+      console.info(`[AutonomousWorkers] Scheduled Sunday weekly planning appointment (${appt.id})`);
+    }
+  } catch (err) {
+    console.warn("[AutonomousWorkers] Sunday planning appointment check deferred:", err);
+  }
+
+  // 2. Discover active operator macro goals and ensure active macro_goal_runs + cycle requests
+  try {
+    const activeGoals = await db
+      .select()
+      .from(operatorMacroGoals)
+      .where(eq(operatorMacroGoals.status, "active"));
+
+    for (const goal of activeGoals) {
+      if (!goal.tenantId || !goal.operatorUserId) continue;
+
+      const resolution = await resolveCanonicalOperatorIdentity({
+        tenantId: goal.tenantId,
+        subsystem: "autonomous_goal_bootstrap",
+        source: { type: "open_id", value: goal.operatorUserId },
+      });
+      if (!resolution.ok) continue;
+
+      // Check if an active macro_goal_run exists
+      const [existingRun] = await db
+        .select()
+        .from(macroGoalRuns)
+        .where(
+          and(
+            eq(macroGoalRuns.tenantId, goal.tenantId),
+            eq(macroGoalRuns.status, "active"),
+            eq(macroGoalRuns.macroGoalId, goal.id)
+          )
+        )
+        .limit(1);
+
+      let targetRunId = existingRun?.id;
+
+      if (!targetRunId) {
+        const template = registry.listTemplates()[0];
+        const verticalKey = template?.verticalKey ?? "laundry_fluff_fold";
+        const activated = await activateCurrentMacroGoalRun({
+          tenantId: goal.tenantId,
+          identity: resolution.identity,
+          verticalKey,
+          policyVersion: "v1",
+          registry,
+        });
+        if (activated) {
+          targetRunId = activated.id;
+          console.info(
+            `[AutonomousWorkers] Activated macro goal run ${targetRunId} for tenant ${goal.tenantId} (${goal.metricKey}: ${activated.baselineValue} -> ${activated.targetValue})`
+          );
+        }
+      }
+
+      if (targetRunId) {
+        // Check if an active/queued cycle request already exists
+        const [activeCycle] = await db
+          .select({ id: goalCycleRequests.id, status: goalCycleRequests.status })
+          .from(goalCycleRequests)
+          .where(
+            and(
+              eq(goalCycleRequests.tenantId, goal.tenantId),
+              eq(goalCycleRequests.goalRunId, targetRunId),
+              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leasing"])
+            )
+          )
+          .limit(1);
+
+        if (!activeCycle) {
+          // If no active or queued cycle request exists, enqueue an autonomous scheduled tick
+          const enqueued = await input.store.enqueue({
+            tenantId: goal.tenantId,
+            goalRunId: targetRunId,
+            triggerType: "scheduled_tick",
+            triggerSourceReference: "autonomous_supervisor:heartbeat",
+            idempotencyKey: `auto_tick:${targetRunId}:${new Date().toISOString().slice(0, 13)}`,
+            availableAt: new Date(),
+          });
+          if (enqueued.created) {
+            console.info(
+              `[AutonomousWorkers] Enqueued autonomous goal cycle ${enqueued.id} for run ${targetRunId}`
+            );
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[AutonomousWorkers] Error during goal bootstrap:", err);
+  }
+}
 
 export function startAutonomousPersistentOperatorWorkers(
   options: AutonomousWorkerOptions = {}
@@ -140,6 +257,22 @@ export function startAutonomousPersistentOperatorWorkers(
     }
   }, learningDrainIntervalMs);
 
+  // 4. Initial Bootstrap & Periodic Goal/Appointment Sync
+  const bootstrapIntervalMs = options.bootstrapIntervalMs ?? 300_000;
+  const bootstrapInitialTimer = setTimeout(() => {
+    void ensureAutonomousGoalBootstrap({
+      store: goalCycleStore,
+      appointmentStore: operatorAppointmentStore,
+    });
+  }, 5_000);
+
+  const bootstrapIntervalTimer = setInterval(() => {
+    void ensureAutonomousGoalBootstrap({
+      store: goalCycleStore,
+      appointmentStore: operatorAppointmentStore,
+    });
+  }, bootstrapIntervalMs);
+
   // Start durable poll loops
   try {
     void goalCycleWorker.start();
@@ -154,6 +287,8 @@ export function startAutonomousPersistentOperatorWorkers(
     if (stopped) return;
     stopped = true;
     console.info("[AutonomousWorkers] Stopping autonomous workers...");
+    clearTimeout(bootstrapInitialTimer);
+    clearInterval(bootstrapIntervalTimer);
     clearInterval(learningTimer);
     await Promise.allSettled([
       goalCycleWorker.stop(),

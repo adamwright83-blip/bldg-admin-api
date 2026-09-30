@@ -22,6 +22,7 @@ import { getLatestPlan } from "../missionDirector/missionDirectorService";
 import type { MissionDirectorPlan } from "../../shared/missionDirector";
 import type { VerticalRegistry } from "../strategy/verticalTemplates/registry";
 import { loadWeeklyGrowthCandidates } from "../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
+import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import {
   appendGoalCycleDecision,
@@ -189,7 +190,13 @@ async function tenantTimeZone(tenantId: string): Promise<string | null> {
     .from(legacyDayforgeSaasTenants)
     .where(eq(legacyDayforgeSaasTenants.id, tenantId))
     .limit(1);
-  return tenant?.timeZone?.trim() || null;
+  if (tenant?.timeZone?.trim()) {
+    return tenant.timeZone.trim();
+  }
+  if (isLegacyDayforgeTenant(tenantId)) {
+    return process.env.ADMIN_DASHBOARD_TIMEZONE ?? "America/Los_Angeles";
+  }
+  return null;
 }
 
 async function loadRun(input: { tenantId: string; runId: string }) {

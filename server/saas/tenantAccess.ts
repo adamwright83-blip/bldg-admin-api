@@ -7,6 +7,7 @@ import {
 } from "../../drizzle/schema";
 import {
   DAYFORGE_ENTITLEMENTS,
+  PERSISTENT_OPERATOR_ENTITLEMENT,
   subscriptionAllowsLegacyDayforgeAccess,
   type LegacyDayforgeEntitlement,
   type SaasEntitlement,
@@ -87,9 +88,10 @@ export async function hasTenantEntitlement(input: {
   entitlement: SaasEntitlement;
   now?: Date;
 }): Promise<boolean> {
-  const legacyCompatible = DAYFORGE_ENTITLEMENTS.includes(
-    input.entitlement as LegacyDayforgeEntitlement
-  );
+  const legacyCompatible =
+    DAYFORGE_ENTITLEMENTS.includes(
+      input.entitlement as LegacyDayforgeEntitlement
+    ) || input.entitlement === PERSISTENT_OPERATOR_ENTITLEMENT;
   if (legacyCompatible && legacyTenantIds().has(input.tenantId)) return true;
   const db = await getDb();
   if (!db) return false;
