@@ -8,6 +8,7 @@ import {
 } from "../turn/conversationStateStore";
 import { capturePrimary } from "./advance";
 import { arbitrateWeeklyTurnIntent, routeActiveWeeklySession } from "./route";
+import { isSemanticallyNormalizedPrimary } from "./semanticPrimary";
 import {
   isWeeklySessionValid,
   loadWeeklySession,
@@ -348,6 +349,13 @@ describe("Claire conversational-intelligence repair", () => {
     );
     expect(accept).toHaveBeenCalledTimes(1);
     expect(accept.mock.calls[0]?.[0]?.proposal.references).toEqual(refs);
+  });
+
+  it("requires a normalized action shape before model output can become a weekly primary", () => {
+    expect(isSemanticallyNormalizedPrimary("Call Dana", "I need to call Dana Thursday.")).toBe(true);
+    expect(isSemanticallyNormalizedPrimary("I need to call Dana", "I need to call Dana Thursday.")).toBe(false);
+    expect(isSemanticallyNormalizedPrimary("Business is dead", "Business is dead today.")).toBe(false);
+    expect(isSemanticallyNormalizedPrimary("What blocks the week?", "What blocks the week?")).toBe(false);
   });
 
   it("never turns arbitrary conversational speech into a weekly primary", () => {
