@@ -21,8 +21,9 @@ import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayP
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "../briefing/briefingTypes";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
-import { assembleReferencedDayLineWork, confirmExistingDayLineSpeech } from "../briefing/explicitDayLine";
+import { assembleReferencedDayLineWork, confirmExistingDayLineSpeech, refersToPriorWork } from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
+import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
 import { reviseBriefing } from "../briefing/reviseBriefing";
 import {
@@ -157,6 +158,8 @@ export type ClaireTurnState = PendingProposalState &
     pendingReminded?: boolean;
     /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
     coverage?: CoveredSubject[];
+    /** Known customer recovery accounts surfaced to the operator during this conversation. */
+    surfacedRecoveryAccounts?: Array<{ id: string; name: string }>;
   };
 
 export type ClaireTurnInput = {
@@ -865,7 +868,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     });
   }
 
-  // Incomplete fragments already returned. A weekly session owns this completed thought.
+  // An open weekly session is context, not automatic conversational authority.
+  // Check for deliberate weekly continuation or commit; operational turns escape to the operational lane.
+  const currentWeekStart = weekStartMonday(today);
+  if (state.weeklyPlanningWeekStart && state.weeklyPlanningWeekStart < currentWeekStart) {
+    state.weeklyPlanningWeekStart = null;
+  }
   const weekly = await routeActiveWeeklySession({
     tenantId: input.tenantId,
     operatorId: input.operatorUserId,
@@ -902,7 +910,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: "All right.", kind: "answered" });
   }
 
-  const doctrineSpeak = deps.doctrineTurn
+  const isOperationalWorkOrDayLine =
+    explicitTrackingRequest(utterance) ||
+    refersToPriorWork(utterance) ||
+    explicitPendingDayLineCommit(utterance) ||
+    /\b(batch|put (?:them|it) on (?:the )?day line|add (?:this|them|it) to (?:the )?day line)\b/i.test(utterance);
+
+  const doctrineSpeak = (!isOperationalWorkOrDayLine && deps.doctrineTurn)
     ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
     : null;
   if (doctrineSpeak) {
@@ -1133,13 +1147,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     if ((reply.decision === "yes" || explicitPendingCommit) && !revisionText) {
       const pending = state.pendingBriefing.parsed;
-      state.pendingBriefing = null;
       const result = await deps.commit(pending, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
         conversationKey: input.conversationKey,
         vehicleId: input.operatorUserId,
       });
+      const writeSucceeded = Boolean(
+        (result?.added?.length ?? 0) + (result?.completed?.length ?? 0) > 0 ||
+        (result?.receipts?.length ?? 0) > 0 ||
+        (result?.commitmentIds?.length ?? 0) > 0
+      );
+      if (writeSucceeded) {
+        state.pendingBriefing = null;
+      }
       mark("briefing");
       const weeklySpeech = await completeMorningReconciliation();
       const commitSpeak = speakBriefingCommit(result, today);
@@ -1150,17 +1171,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       if (reply.remainder && !explicitPendingCommit && !weeklySpeech) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
         return finish({
-          speak: more.speak,
-          receiptBackedCommit: commitSpeak,
-          kind: "briefing_saved",
+          speak: more.speak || (writeSucceeded ? "" : commitSpeak),
+          receiptBackedCommit: writeSucceeded ? commitSpeak : undefined,
+          kind: writeSucceeded ? "briefing_saved" : "answered",
           actionIds: [...result.commitmentIds, ...(more.actionIds ?? [])],
           mutationReceipts: [...receipts, ...(more.mutationReceipts ?? [])],
         });
       }
       return finish({
-        speak: weeklySpeech,
-        receiptBackedCommit: commitSpeak,
-        kind: "briefing_saved",
+        speak: weeklySpeech || (writeSucceeded ? "" : commitSpeak),
+        receiptBackedCommit: writeSucceeded ? commitSpeak : undefined,
+        kind: writeSucceeded ? "briefing_saved" : "answered",
         actionIds: result.commitmentIds,
         mutationReceipts: receipts,
       });
@@ -1295,7 +1316,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
   let parsed = parseBriefingDeterministically(utterance, clock);
-  if (explicitTrackingRequest(utterance)) {
+  if (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance)) {
     const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
     const priorOnly = prior.at(-1) === utterance ? prior.slice(0, -1) : prior;
     const assembled = assembleReferencedDayLineWork({
@@ -1303,6 +1324,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       priorOperatorUtterances: priorOnly,
       clock,
       unfinished: looksUnfinished,
+      history: state.history,
+      surfacedAccounts: state.surfacedRecoveryAccounts,
     });
     if (assembled.length) parsed = { ...parsed, items: assembled, source: "deterministic" };
   }
@@ -1324,8 +1347,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       items: [],
     };
   }
+  const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
   const explicitCommitNow =
     explicitTrackingRequest(utterance) &&
+    !wantsBatchProposal &&
     parsed.items.length &&
     interpreted.mayProposeWork &&
     !(interpreted.hasBusinessQuestion && !interpreted.correctnessChallenge && !interpreted.provenanceQuestion);
@@ -1389,7 +1414,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     parsed.items.some(item => item.kind === "completed") ||
     parsed.items.some(item => item.businessDate !== today) ||
     (parsed.items.length >= 1 && parsed.questions.length >= 1) ||
-    (state.pendingBriefing !== null && state.pendingBriefing !== undefined && parsed.items.length >= 1);
+    (state.pendingBriefing !== null && state.pendingBriefing !== undefined && parsed.items.length >= 1) ||
+    wantsBatchProposal;
   const singleFlow = !multiItem && parsed.items.length <= 1 && singleIntentFlow(utterance);
 
   if (!businessQuestion && (multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(utterance) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
@@ -1500,7 +1526,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
-    if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track")) {
+    const wantsBatchProposal = /\bbatch\s+(?:them|all|those)\b/i.test(utterance);
+    if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track") && !wantsBatchProposal) {
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,

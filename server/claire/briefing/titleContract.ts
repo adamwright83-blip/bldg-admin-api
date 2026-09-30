@@ -92,7 +92,7 @@ export function enforceTitleContract(title: string): string {
 }
 
 const EXPLICIT_TRACKING =
-  /\b(?:add|put|place|log|track|note|write|save|schedule|set)\b[^.!?]{0,80}\b(?:day ?line|reminder|to-?do|calendar|my list|the list|my plan|the plan)\b|\bremind me\b|\bday ?line\b[^.!?]{0,40}\b(?:add|put)\b|\byou can put (?:that|it)\b/i;
+  /\b(?:add|put|place|log|track|note|write|save|schedule|set|batch)\b[^.!?]{0,80}\b(?:day ?line|reminder|to-?do|calendar|my list|the list|my plan|the plan|for today|today)\b|\bremind me\b|\bday ?line\b[^.!?]{0,40}\b(?:add|put)\b|\byou can put (?:that|it)\b|\bbatch\s+(?:them|all|those)(?:\s+all)?\s+(?:for\s+today|today)\b/i;
 
 export function explicitTrackingRequest(utterance: string): boolean {
   return EXPLICIT_TRACKING.test(utterance);
@@ -104,7 +104,7 @@ export function explicitTrackingRequest(utterance: string): boolean {
  * words authorize nothing by themselves.
  */
 const PENDING_DAY_LINE_COMMIT =
-  /^(?:(?:yes|yeah|yep|yup|sure|okay|ok|please|go ahead)[,\s]+)?(?:just\s+)?(?:add|put|place|log|track|save|write)\s+(?:all\s+(?:of\s+)?(?:that|it|them|those|this|these)|everything|(?:the\s+)?(?:stuff|list|items)|that|it|them|those|this|these)(?:\s+all)?(?:\s+(?:on|onto|to|in)\s+(?:(?:my|the)\s+)?day\s*line)?[.!?]*$/i;
+  /^(?:(?:yes|yeah|yep|yup|sure|okay|ok|please|go ahead)[,\s]+)?(?:just\s+)?(?:add|put|place|log|track|save|write|batch)\s+(?:all\s+(?:of\s+)?(?:that|it|them|those|this|these)|everything|(?:the\s+)?(?:stuff|list|items|dormant accounts|recovery texts|recovery tasks|accounts)|that|it|them|those|this|these)(?:\s+all)?(?:\s+(?:on|onto|to|in)\s+(?:(?:my|the)\s+)?day\s*line)?[.!?]*$/i;
 
 export function explicitPendingDayLineCommit(utterance: string): boolean {
   return PENDING_DAY_LINE_COMMIT.test(utterance.trim());

@@ -78,7 +78,7 @@ export type ClaireBrainV2LiveResult =
     };
 
 const UNPROVEN_DAY_LINE_WRITE_SPEECH =
-  "I understood the Day Line request, but I don't have a write receipt, so I can't confirm a change. Tell me the items again.";
+  "I understood the Day Line request, but I don't have a write receipt yet, so I can't confirm a change. I'm keeping those items in mind.";
 
 function hasDayLineWriteEvidence(result: ClaireTurnResult): boolean {
   return Boolean(result.actionIds?.length || result.mutationReceipts?.length);

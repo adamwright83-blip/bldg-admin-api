@@ -18,7 +18,7 @@ const DIRECTIVE =
   /\b(?:add|put|place|log|save|track)\b|\b(?:make sure|be sure)\b/i;
 
 export function refersToPriorWork(utterance: string): boolean {
-  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/i.test(
+  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about|batch (?:them|those|all)|(?:the\s+)?dormant (?:accounts|customers)|recovery texts|put them|them all)\b/i.test(
     utterance
   );
 }
@@ -108,7 +108,54 @@ export function assembleReferencedDayLineWork(input: {
   priorOperatorUtterances: string[];
   clock: BriefingClock;
   unfinished: (text: string) => boolean;
+  history?: Array<{ speaker: string; text: string }>;
+  surfacedAccounts?: Array<{ id: string; name: string }>;
 }): BriefingItem[] {
+  // Check for anaphoric recovery / dormant customer reference first: when the operator says
+  // "batch them all for today" or "put the dormant accounts on the Day Line", they are referencing
+  // the surfaced dormant recovery work, not random past clauses.
+  const refersToRecovery =
+    /\b(?:batch\s+(?:them|all|those)(?:\s+all)?\s+(?:for\s+today|today)|batch\s+them|batch\s+those|put\s+(?:them|the\s+dormant\s+accounts|the\s+recovery\s+texts)\s+on\s+(?:the\s+)?day\s*line|dormant\s+accounts|recovery\s+texts)\b/i.test(
+      input.utterance
+    ) ||
+    (refersToPriorWork(input.utterance) &&
+      (Boolean(input.surfacedAccounts?.length) ||
+        input.history?.some(h => /\b(?:dormant|recovery text)\b/i.test(h.text))));
+
+  if (refersToRecovery) {
+    let count = input.surfacedAccounts?.length ?? 0;
+    if (!count && input.history) {
+      for (const entry of input.history) {
+        const match =
+          /\b(\d+)\s+(?:dormant|recovery)\b/i.exec(entry.text) ||
+          /\b(seven|six|five|four|eight)\s+(?:dormant|recovery)\b/i.exec(entry.text);
+        if (match) {
+          const word = match[1]!.toLowerCase();
+          count = word === "seven" ? 7 : word === "six" ? 6 : word === "five" ? 5 : word === "eight" ? 8 : Number(word);
+          break;
+        }
+      }
+    }
+    const countPrefix = count ? `${count} ` : "";
+    const title = count ? `Send ${count} dormant-customer recovery texts` : "Send dormant-customer recovery texts";
+    const quote = `Send dormant-customer recovery texts to the ${countPrefix ? `${countPrefix} ` : ""}previously identified customers today`;
+    return [
+      {
+        kind: "new_work",
+        title,
+        quote,
+        businessDate: input.clock.today,
+        timing: { kind: "none" },
+        quantity: count || null,
+        people: [],
+        place: null,
+        needs: null,
+        existing: null,
+        executionType: "challenge",
+      },
+    ];
+  }
+
   const corpus = [...input.priorOperatorUtterances, input.utterance].join(" ");
   const sources = refersToPriorWork(input.utterance) ? [...input.priorOperatorUtterances, input.utterance] : [input.utterance];
   const found: Array<{ quote: string; title: string }> = [];
@@ -130,6 +177,7 @@ export function assembleReferencedDayLineWork(input: {
       found.push({ quote, title });
     }
   }
+
   return found.map(item => ({
     kind: "new_work" as const,
     title: item.title,

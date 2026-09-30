@@ -22,9 +22,11 @@ import {
   weekdayName,
   type WeeklyAct,
   type WeeklyDayDraft,
+  type WeeklyDossierFact,
   type WeeklyDraft,
   type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
+import { compressTitle } from "../briefing/titleContract";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
 import {
@@ -147,14 +149,14 @@ export async function advanceWeeklySession(
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
-    capturePrimary(session, utterance, input.dossier.growthCandidates);
+    capturePrimary(session, utterance, input.dossier.growthCandidates, input.dossier.facts);
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
     const target = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
     if (target) session.lastQuestionDate = target.businessDate;
     session.lastQuestionKind = "primary";
-    capturePrimary(session, utterance, input.dossier.growthCandidates);
+    capturePrimary(session, utterance, input.dossier.growthCandidates, input.dossier.facts);
     session.substantiveQuestions += 1;
     revised = true;
   }
@@ -247,10 +249,70 @@ function captureReadiness(session: WeeklyPlanningSession, utterance: string, dos
   day.readinessRequirements = capReadiness([...day.readinessRequirements, ...additions]);
 }
 
-function capturePrimary(
-  session: WeeklyPlanningSession,
+export function isActionablePrimaryCandidate(utterance: string): boolean {
+  const trimmed = utterance.trim();
+  if (!trimmed || trimmed.length < 3) return false;
+  // Conversational filler, questions, confusion, status updates, or today commands:
+  if (
+    /\b(?:what|why|who|when|how|where)\b/i.test(trimmed) &&
+    (/\?/i.test(trimmed) || /\b(?:mean|saying|owns|talking)\b/i.test(trimmed))
+  ) {
+    return false;
+  }
+  if (/^(?:what|why|who|when|how|where)\s+(?:do you|is|are|does|did|blocks|owns)\b/i.test(trimmed)) {
+    return false;
+  }
+  if (/\b(?:what do you mean|don't know|what you're saying|what are you talking about|i don't understand)\b/i.test(trimmed)) {
+    return false;
+  }
+  if (/^(?:great idea|sounds good|okay|ok|thanks|cool|got it|sure|all right)[.!]?$/i.test(trimmed)) {
+    return false;
+  }
+  if (/\b(?:for today|batch them|day line|right now|dropped off|dry cleaner|heading to|going home|no more orders|need customers)\b/i.test(trimmed)) {
+    return false;
+  }
+  if (/\b(?:stop|hold on|wait|pause)\b/i.test(trimmed)) return false;
+  if (/\bgreat idea\b/i.test(trimmed) && /\b(?:batch|today)\b/i.test(trimmed)) return false;
+  return true;
+}
+
+function findMatchingGrowthCandidate(
   utterance: string,
   candidates?: readonly WeeklyExecutionCandidateContract[]
+): WeeklyExecutionCandidateContract | null {
+  if (!candidates?.length) return null;
+  const lower = utterance.toLowerCase();
+  for (const c of candidates) {
+    if (lower.includes(c.title.toLowerCase()) || lower.includes(c.objective.toLowerCase())) {
+      return c;
+    }
+  }
+  const words = lower.replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length >= 4);
+  for (const c of candidates) {
+    const cWords = `${c.title} ${c.objective}`.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/);
+    const shared = words.filter(w => cWords.includes(w));
+    if (shared.length >= 2) return c;
+  }
+  return null;
+}
+
+function findMatchingDossierFact(
+  utterance: string,
+  facts?: readonly WeeklyDossierFact[]
+): WeeklyDossierFact | null {
+  if (!facts?.length) return null;
+  const lower = utterance.toLowerCase();
+  for (const f of facts) {
+    if (lower.includes(f.title.toLowerCase())) return f;
+  }
+  return null;
+}
+
+export function capturePrimary(
+  session: WeeklyPlanningSession,
+  utterance: string,
+  candidates?: readonly WeeklyExecutionCandidateContract[],
+  facts?: readonly WeeklyDossierFact[]
 ): void {
   const today = session.draft.days[0];
   const namedSkip = /\bskip\s+(monday|tuesday|wednesday|thursday|friday|today)\b/i.exec(utterance);
@@ -266,14 +328,57 @@ function capturePrimary(
   const date = session.lastQuestionDate ?? session.draft.days.find(day => !day.primary && day.disposition === "primary")?.businessDate;
   const day = session.draft.days.find(item => item.businessDate === date);
   if (!day || day.disposition === "stand_down") return;
-  const text = utterance.replace(/\s+/g, " ").trim().slice(0, 255);
-  day.primary = {
-    text,
-    source: "operator_stated",
-    existingCommitmentId: null,
-    executionType: resolveWeeklyExecutionType({ text, candidates }),
-  };
-  day.uncertainty = null;
+
+  // Reject conversational filler, questions, confusion, today-referencing speech
+  if (!isActionablePrimaryCandidate(utterance)) {
+    day.primary = null;
+    day.uncertainty = "Unconfirmed mission.";
+    return;
+  }
+
+  // 1. Try binding to an existing candidate in growthCandidates
+  const boundCandidate = findMatchingGrowthCandidate(utterance, candidates);
+  if (boundCandidate) {
+    day.primary = {
+      text: boundCandidate.title,
+      source: "operator_stated",
+      existingCommitmentId: boundCandidate.id ?? null,
+      executionType: resolveWeeklyExecutionType({ text: boundCandidate.title, candidates }),
+    };
+    day.uncertainty = null;
+    return;
+  }
+
+  // 2. Try binding to a known dossier fact / commitment
+  const boundFact = findMatchingDossierFact(utterance, facts);
+  if (boundFact) {
+    day.primary = {
+      text: boundFact.title,
+      source: "operator_stated",
+      existingCommitmentId: boundFact.id,
+      executionType: resolveWeeklyExecutionType({ text: boundFact.title, candidates }),
+    };
+    day.uncertainty = null;
+    return;
+  }
+
+  // 3. Concrete actionable directive stated by the operator (e.g. "Walk the plant.")
+  // Compress and validate actionability — never store raw unformatted blobs
+  const cleanTitle = compressTitle(utterance.replace(/\s+/g, " ").trim());
+  if (cleanTitle && cleanTitle.split(/\s+/).length >= 2 && !/\b(?:batch|today|great idea|mean)\b/i.test(cleanTitle)) {
+    const textWithPeriod = utterance.trim().endsWith(".") && !cleanTitle.endsWith(".") ? `${cleanTitle}.` : cleanTitle;
+    day.primary = {
+      text: textWithPeriod,
+      source: "operator_stated",
+      existingCommitmentId: null,
+      executionType: resolveWeeklyExecutionType({ text: textWithPeriod, candidates }),
+    };
+    day.uncertainty = null;
+    return;
+  }
+
+  day.primary = null;
+  day.uncertainty = "Unconfirmed mission.";
 }
 
 function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): string | null {
@@ -289,14 +394,14 @@ function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): s
     session.lastQuestionKind = "blocking";
     session.lastQuestionDate = empty.businessDate;
     empty.uncertainty = "Still no mission.";
-    return `One thing still blocks the week. What owns ${empty.weekday}?`;
+    return `We have most of the week in place, but ${empty.weekday} is still open. What's the main focus for ${empty.weekday}, or should we leave it open?`;
   }
   if (bounded && empty && !session.askedBlocking) {
     session.askedBlocking = true;
     session.lastQuestionKind = "blocking";
     session.lastQuestionDate = empty.businessDate;
     empty.uncertainty = "Still no mission.";
-    return `One thing still blocks the week. What owns ${empty.weekday}?`;
+    return `We have most of the week in place, but ${empty.weekday} is still open. What's the main focus for ${empty.weekday}, or should we leave it open?`;
   }
   if (bounded && !empty) return null;
   if (session.askedBlocking && !empty) return null;
@@ -337,7 +442,7 @@ function askPrimary(day: WeeklyDayDraft, dossier: WeeklyDossier): string {
     const listed = known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ");
     return `${day.weekday} already has ${listed}. What is the one mission that owns the rest of ${day.weekday}?`;
   }
-  return `What is the one mission for ${day.weekday}?`;
+  return `What is the focus for ${day.weekday}?`;
 }
 export function speakProposal(draft: WeeklyDraft): string {
   const lines = draft.days.map(day => {

@@ -134,7 +134,7 @@ export function classifyDoctrineUtterance(utterance: string): "temporary" | "dur
   const text = utterance.trim();
   if (!text) return "not_doctrine";
   const durable = /\b(from now on|going forward|always|never|remember this as a rule)\b/i.test(text);
-  const temporary = /\b(just today|only today|for today|until (?:payroll|this) is (?:finished|done)|skip .* today)\b/i.test(text);
+  const temporary = /\b(just today|only today|for today(?:,|\s+)(?:don't|do not|no|skip|hold)|until (?:payroll|this) is (?:finished|done)|skip .* today)\b/i.test(text);
   if (durable && !temporary) return "durable";
   if (temporary && !durable) return "temporary";
   if (durable && temporary) return "ambiguous";

@@ -142,7 +142,7 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
 /** A directive aimed at Claire's tracking systems: "add…", "put… on the Day Line", "remind me…". */
 const ACTION_DIRECTIVE =
-  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push)\b/i;
+  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|batch)\b/i;
 
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
@@ -273,7 +273,7 @@ const EXCLUSION =
  * one ("What sales happen before Thomas? ... don't tell me about Thomas").
  */
 const WORK_VERB =
-  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|driving|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder|do|doing|make|making|create|creating|process|processing|design|designing|draft|drafting|build|building|write|writing|finish|finishing|prepare|preparing)\b/i;
+  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|driving|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder|do|doing|make|making|create|creating|process|processing|design|designing|draft|drafting|build|building|write|writing|finish|finishing|prepare|preparing|batch|batching)\b/i;
 
 /**
  * The operator describing THEIR OWN work — either committing to it in first person ("I need to
@@ -287,7 +287,7 @@ const WORK_VERB =
  */
 const FIRST_PERSON_COMMITMENT = new RegExp(
   [
-    String.raw`\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
+    String.raw`\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|wanna|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
     String.raw`\b(?:i'm|i\s+am|we're|we\s+are)\s+\w+ing\b`,
     String.raw`\b(?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?]{0,40}\b(?:i|we)\s+(?:'m|am|'ll|will|have|need|got)\b`,
   ].join("|"),
