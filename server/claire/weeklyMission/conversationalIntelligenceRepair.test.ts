@@ -304,7 +304,7 @@ describe("Claire conversational-intelligence repair", () => {
   });
 
   it("carries structured references through commitBriefing into the Day Director proposal", async () => {
-    const accept = vi.fn(async () => ({ id: "dayline-1" }));
+    const accept = vi.fn(async (_input: any) => ({ id: "dayline-1" }));
     const refs = RECOVERY_CUSTOMERS.map(([id, name]) => ({
       kind: "customer" as const,
       id,
