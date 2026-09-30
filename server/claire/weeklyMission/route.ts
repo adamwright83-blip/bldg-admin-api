@@ -91,6 +91,13 @@ export function arbitrateWeeklyTurnIntent(input: {
     return "weekly_continue";
   }
 
+  // A direct action command that did not name the open weekly day belongs to
+  // Claire's normal action lifecycle. Weekly planning may observe it later; it
+  // does not get to own the command merely because a session is open.
+  if (interpreted.hasExplicitActionRequest) {
+    return "operational_today";
+  }
+
   if (isWeeklyRejection(utterance) && session.phase !== "interview") {
     return "weekly_continue";
   }
