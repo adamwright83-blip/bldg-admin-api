@@ -27,7 +27,11 @@ import {
   type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
-import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
+import {
+  acceptPlanningDecision,
+  applyPlanningDecision,
+  type WeeklyPlanningDecision,
+} from "./planningDecision";
 import { isSemanticallyNormalizedPrimary } from "./semanticPrimary";
 import {
   clearWeeklySession,
@@ -41,7 +45,8 @@ import {
 export type WeeklyAdvanceDeps = {
   /**
    * Existing Claire model. It chooses the next planning act.
-   * Null or an invalid decision falls back to the deterministic questionnaire.
+   * Model absence/outage falls back to deterministic handling. A non-null
+   * model response that fails validation is rejected without mutating the draft.
    */
   completeAct?: (input: {
     dossier: WeeklyDossier;
@@ -138,21 +143,22 @@ export async function advanceWeeklySession(
     session.internalHypothesis = deriveInternalHypothesis(input.dossier);
   }
   if (utterance) session.operatorEvidence.push(utterance.slice(0, 500));
-  const decision = await modelDecision(input, deps, session);
-  if (decision) {
-    applyPlanningDecision(session, decision, input.dossier.growthCandidates);
-    return finish(session, decision.act, decision.speech, input.dossier);
+  const modelAttempt = await modelDecision(input, deps, session);
+  if (modelAttempt.kind === "accepted") {
+    applyPlanningDecision(session, modelAttempt.decision, input.dossier.growthCandidates);
+    return finish(session, modelAttempt.decision.act, modelAttempt.decision.speech, input.dossier);
   }
+  const modelRejected = modelAttempt.kind === "rejected";
 
-  if (!move && utterance && session.lastQuestionKind === "readiness" && session.lastQuestionDate) {
+  if (!modelRejected && !move && utterance && session.lastQuestionKind === "readiness" && session.lastQuestionDate) {
     captureReadiness(session, utterance, input.dossier);
     session.substantiveQuestions += 1;
     revised = true;
-  } else if (utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
+  } else if (!modelRejected && utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
     capturePrimary(session, utterance, input.dossier.growthCandidates, input.dossier.facts);
     session.substantiveQuestions += 1;
     revised = true;
-  } else if (utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
+  } else if (!modelRejected && utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
     const target = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
     if (target) session.lastQuestionDate = target.businessDate;
     session.lastQuestionKind = "primary";
@@ -173,23 +179,32 @@ export async function advanceWeeklySession(
   return finish(session, revised ? "REVISE" : "ASK", speech, input.dossier);
 }
 
+type ModelDecisionAttempt =
+  | { kind: "unavailable" }
+  | { kind: "rejected" }
+  | { kind: "accepted"; decision: WeeklyPlanningDecision };
+
 async function modelDecision(
   input: { dossier: WeeklyDossier; session: WeeklyPlanningSession; operatorUtterance: string },
   deps: WeeklyAdvanceDeps,
   session: WeeklyPlanningSession
-): Promise<ReturnType<typeof acceptPlanningDecision>> {
-  if (!deps.completeAct) return null;
+): Promise<ModelDecisionAttempt> {
+  if (!deps.completeAct) return { kind: "unavailable" };
   let raw: unknown = null;
   try {
     raw = await deps.completeAct({ dossier: input.dossier, session, operatorUtterance: input.operatorUtterance });
   } catch {
-    return null;
+    return { kind: "unavailable" };
   }
-  return acceptPlanningDecision(raw, {
+  if (raw == null) return { kind: "unavailable" };
+  const decision = acceptPlanningDecision(raw, {
     dossier: input.dossier,
     session,
     utterance: input.operatorUtterance,
   });
+  return decision
+    ? { kind: "accepted", decision }
+    : { kind: "rejected" };
 }
 
 function dayMoveConflicts(
