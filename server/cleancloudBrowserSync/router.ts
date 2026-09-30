@@ -581,191 +581,89 @@ export const cleancloudBrowserSyncRouter = router({
     }),
   import: legacyDayforgeTenantOperatorProcedure
     .input(importInput)
-    .mutation(({ ctx, input }) => runRecordedImport(ctx, input, async () => {
+    .mutation(async ({ ctx, input }) => {
       assertAccount(ctx, input);
-      // Validate ALL rows before any write. Existing CSV endpoint permits partial
-      // imports; this transport deliberately requires an atomic, auditable result.
-      const { normalized, digest, reportType } = validatePayload(input, ctx.tenantId);
-      const db = await requireDb();
-      const physicalIds = new Map<string, string | null>();
-      for (const row of normalized) {
-        physicalIds.set(row.cleancloudOrderId, row.buildingResolutionStatus === "resolved"
-          ? await findPhysicalEntityIdByAddress({ tenantId: ctx.tenantId, address: row.address }) : null);
-      }
-      const paidToBridge: Array<{
-        cleancloudOrderId: string;
-        cleancloudCustomerId?: string | null;
-        customerEmail?: string | null;
-        customerPhone?: string | null;
-        totalCents: number;
-        paidAt: Date;
-      }> = [];
-
-      const committed = await db.transaction(async tx => {
-        const [binding] = await tx
-          .select()
-          .from(browserSyncBindings)
-          .where(eq(browserSyncBindings.tenantId, ctx.tenantId))
-          .for("update");
-        if (
-          !binding ||
-          binding.id !== input.bindingId ||
-          binding.storeId !== input.storeId ||
-          binding.storeLabel !== input.storeLabel
-        )
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Source binding does not match. Reconnect.",
-          });
-        const [prior] = await tx
-          .select()
-          .from(browserSyncReceipts)
-          .where(
-            and(
-              eq(browserSyncReceipts.tenantId, ctx.tenantId),
-              eq(browserSyncReceipts.requestId, input.requestId)
-            )
-          );
-        if (prior) {
-          if (prior.digest !== digest)
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "Retry payload differs from the original request.",
-            });
-          return prior.receiptJson;
-        }
-        const sourceFileName = `browser-${input.storeId}-${input.from}-${input.to}-${input.requestId}.csv`;
-        const [batch] = await tx
-          .insert(cleancloudImportBatches)
-          .values({
-            tenantId: ctx.tenantId,
-            source: `cleancloud_${reportType}`,
-            sourceFileName,
-            importStatus: "completed",
-          })
-          .$returningId();
-        let inserted = 0,
-          updated = 0,
-          unchanged = 0;
-        for (const row of normalized) {
-          const values = { ...row, importBatchId: batch.id, sourceFileName };
-          await enqueueEconomicSnapshot(tx, values, physicalIds.get(row.cleancloudOrderId) ?? null);
-          if (row.paid && (row.totalCents ?? 0) > 0) {
-            paidToBridge.push({
-              cleancloudOrderId: String(row.cleancloudOrderId),
-              cleancloudCustomerId: row.cleancloudCustomerId != null ? String(row.cleancloudCustomerId) : null,
-              customerEmail: row.customerEmail ?? null,
-              customerPhone: row.customerPhone ?? null,
-              totalCents: row.totalCents ?? 0,
-              paidAt: row.paymentDateUtc || row.paidDateUtc || row.placedAtUtc || new Date(),
-            });
-          }
-          const [existing] = await tx
-            .select()
-            .from(cleancloudPaidOrders)
-            .where(
-              and(
-                eq(cleancloudPaidOrders.tenantId, ctx.tenantId),
-                eq(
-                  cleancloudPaidOrders.cleancloudOrderId,
-                  row.cleancloudOrderId
-                ),
-                eq(cleancloudPaidOrders.sourceReportType, reportType)
-              )
-            )
-            .for("update");
-          if (existing && businessFields(existing) === businessFields(row)) {
-            unchanged++;
-            continue;
-          }
-          if (existing) {
-            await tx
-              .update(cleancloudPaidOrders)
-              .set(values)
-              .where(eq(cleancloudPaidOrders.id, existing.id));
-            updated++;
-          } else {
-            await tx.insert(cleancloudPaidOrders).values(values);
-            inserted++;
-          }
-        }
-        const completedAt = new Date();
-        const receipt = {
-          requestId: input.requestId,
-          tenantId: ctx.tenantId,
-          storeId: input.storeId,
-          storeLabel: input.storeLabel,
-          actorId: ctx.user.openId,
-          digest,
-          from: input.from,
-          to: input.to,
-          reportType,
-          completedAt: completedAt.toISOString(),
-          batchId: batch.id,
-          inserted,
-          updated,
-          unchanged,
-          skipped: 0,
-          totalRows: normalized.length,
-          importCommitted: true,
-          ...summarizeOrders(normalized),
-          scope:
-            "Orders created in the selected report period; totals use actual payment dates. Older orders and later corrections outside this window are not covered.",
-        };
-        await tx
-          .update(cleancloudImportBatches)
-          .set({
-            importedRowCount: inserted + updated,
-            duplicateRowCount: unchanged,
-          })
-          .where(eq(cleancloudImportBatches.id, batch.id));
-        await tx
-          .insert(browserSyncReceipts)
-          .values({
-            id: randomUUID(),
-            tenantId: ctx.tenantId,
-            requestId: input.requestId,
-            digest,
-            storeId: input.storeId,
-            importBatchId: batch.id,
-            receiptJson: receipt,
-          });
-        await tx
-          .update(browserSyncBindings)
-          .set({ lastSuccessAt: completedAt })
-          .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
-        return receipt;
+      const { executeCleanCloudIngestion } = await import("./ingestion");
+      return executeCleanCloudIngestion({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        bindingId: input.bindingId,
+        storeId: input.storeId,
+        storeLabel: input.storeLabel,
+        requestId: input.requestId,
+        from: input.from,
+        to: input.to,
+        exportUrl: input.exportUrl,
+        csv: input.csv,
+        reportType: input.reportType,
+        sourcePrefix: "browser",
       });
-
-      if (paidToBridge.length > 0) {
-        try {
-          const { bridgeCleanCloudPaidOrder } = await import("../persistentOperator/fieldEventBridge");
-          for (const order of paidToBridge) {
-            await bridgeCleanCloudPaidOrder({
-              tenantId: ctx.tenantId,
-              cleancloudOrderId: String(order.cleancloudOrderId),
-              cleancloudCustomerId: order.cleancloudCustomerId != null ? String(order.cleancloudCustomerId) : undefined,
-              customerEmail: order.customerEmail ?? undefined,
-              customerPhone: order.customerPhone ?? undefined,
-              paid: true,
-              totalCents: order.totalCents,
-              paidDateUtc: order.paidAt,
-              sourceFileName: `browser_sync:${input.requestId}`,
-            }).catch(err => {
-              console.warn("[PersistentOperator] cleancloud browser sync order bridge deferred", err);
-            });
-          }
-        } catch (err) {
-          console.warn("[PersistentOperator] failed to load fieldEventBridge for browser sync", err);
-        }
-      }
-
-      return completeImportDownstream(
-        ctx.tenantId,
-        committed as Record<string, unknown>,
-        input.requestId
-      );
-    })),
+    }),
+  /** Direct server-side sync using credentials configured in Railway */
+  directSync: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          reportTypes: z
+            .array(z.enum(["orders_sales", "orders_revenue"]))
+            .optional(),
+        })
+        .optional()
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { runCleanCloudDirectSync } = await import("./cleancloudDirectSync");
+      return runCleanCloudDirectSync({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        from: input?.from,
+        to: input?.to,
+        reportTypes: input?.reportTypes,
+      });
+    }),
+  /** Query direct sync availability and credentials status */
+  directStatus: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const { isCleanCloudDirectConfigured } = await import(
+      "./cleancloudDirectSync"
+    );
+    const db = await requireDb();
+    const [binding] = await db
+      .select()
+      .from(browserSyncBindings)
+      .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
+    return {
+      configured: isCleanCloudDirectConfigured(),
+      paired: !!binding,
+      storeId: binding?.storeId ?? null,
+      storeLabel: binding?.storeLabel ?? null,
+      lastSuccessAt: binding?.lastSuccessAt ?? null,
+    };
+  }),
+  /** Fine-grained stage heartbeat logging for browser automation observability */
+  recordHeartbeat: legacyDayforgeTenantOperatorProcedure
+    .input(
+      account.extend({
+        requestId: z.string().uuid().optional(),
+        stage: z.string().trim().min(1).max(40),
+        message: z.string().trim().max(500).optional(),
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      assertAccount(ctx, input);
+      const { recordSyncAttempt } = await import("./ingestion");
+      await recordSyncAttempt({
+        tenantId: ctx.tenantId,
+        requestId: input.requestId ?? null,
+        outcome: `extension_${input.stage}`,
+        message: input.message ?? null,
+        from: input.from ?? null,
+        to: input.to ?? null,
+      });
+      return { recorded: true as const };
+    }),
   /** The extension reports failures that happen before an import reaches Goldline. */
   reportFailure: legacyDayforgeTenantOperatorProcedure
     .input(

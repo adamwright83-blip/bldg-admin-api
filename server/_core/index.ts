@@ -62,6 +62,7 @@ import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
+import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -859,6 +860,8 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      const stopCleanCloudDirectScheduler = startCleanCloudDirectScheduler();
+      server.once("close", stopCleanCloudDirectScheduler);
       void import("../claire/conversation/transcriptLog")
         .then(({ emitLatestConfiguredClaireTranscripts }) =>
           emitLatestConfiguredClaireTranscripts()

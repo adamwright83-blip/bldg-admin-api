@@ -56,6 +56,7 @@ const uuid = () => crypto.randomUUID();
 async function captureRevenue(sales) {
   const requestId = uuid();
   const range = { from: sales.from, to: sales.to };
+  await reportHeartbeat("revenue_export_started");
   const tab = await openSite(`${CLEANCLOUD}/store`);
   try {
     const source = await runInTab(tab, prepareSource, [range, "orders_revenue"]);
@@ -69,6 +70,7 @@ async function captureRevenue(sales) {
         expiresAt: Date.now() + 60000,
       },
     });
+    await reportHeartbeat("revenue_export_clicked");
     await runInTab(tab, clickExport, [source.storeLabel]).catch(() => {});
     let captured;
     for (let i = 0; i < 300; i++) {
@@ -82,6 +84,7 @@ async function captureRevenue(sales) {
     await chrome.storage.session.remove("pendingExport");
     if (!captured)
       throw new Error("Chrome did not provide the Orders (Revenue) download.");
+    await reportHeartbeat("revenue_download_captured");
     const checked = validateRevenueExportUrl(captured.url, range);
     if (checked.storeId !== sales.storeId)
       throw new Error("Revenue export belongs to a different store.");
@@ -93,6 +96,7 @@ async function captureRevenue(sales) {
         MAX_BYTES,
       ]);
       parseCsv(report.csv, "orders_revenue");
+      await reportHeartbeat("revenue_csv_parsed");
       return {
         requestId,
         tenantId: sales.tenantId,
@@ -111,18 +115,73 @@ async function captureRevenue(sales) {
     await chrome.tabs.remove(tab).catch(() => {});
   }
 }
+async function ensureGoldlineTab() {
+  if (goldlineTab) {
+    try {
+      const tab = await chrome.tabs.get(goldlineTab);
+      if (tab && !tab.discarded) return goldlineTab;
+    } catch {
+      goldlineTab = null;
+    }
+  }
+  try {
+    const tabs = await chrome.tabs.query({ url: `${GOLDLINE}*` });
+    if (tabs.length > 0 && tabs[0].id) {
+      goldlineTab = tabs[0].id;
+      return goldlineTab;
+    }
+  } catch {
+    // query fallback
+  }
+  try {
+    goldlineTab = await openSite(GOLDLINE);
+    return goldlineTab;
+  } catch {
+    return null;
+  }
+}
+
+async function reportHeartbeat(stage, message) {
+  try {
+    const { run } = await chrome.storage.local.get("run");
+    if (!run?.tenantId || !run?.actorId) return;
+    await ensureGoldlineTab();
+    if (!goldlineTab) return;
+    await request("recordHeartbeat", {
+      tenantId: run.tenantId,
+      actorId: run.actorId,
+      ...(run.requestId ? { requestId: run.requestId } : {}),
+      stage,
+      message: message ? String(message).slice(0, 500) : undefined,
+      ...(run.range?.from ? { from: run.range.from, to: run.range.to } : {}),
+    });
+  } catch {
+    // Heartbeats must never fail the run
+  }
+}
+
 // Failures before an import reaches Goldline are otherwise invisible to
 // "is GUMBALL working?". Best effort only: never changes the sync outcome.
 async function reportFailure(stage, error) {
+  const errMsg = String(error?.message ?? error ?? "Sync failed").slice(0, 500);
   try {
+    await chrome.storage.local.set({
+      lastFailure: {
+        stage,
+        message: errMsg,
+        failedAt: new Date().toISOString(),
+      },
+    });
     const { run } = await chrome.storage.local.get("run");
-    if (!goldlineTab || !run?.tenantId || !run?.actorId) return;
+    if (!run?.tenantId || !run?.actorId) return;
+    await ensureGoldlineTab();
+    if (!goldlineTab) return;
     await request("reportFailure", {
       tenantId: run.tenantId,
       actorId: run.actorId,
       ...(run.requestId ? { requestId: run.requestId } : {}),
       stage,
-      message: String(error?.message ?? error ?? "Sync failed").slice(0, 500),
+      message: errMsg,
       ...(run.range?.from ? { from: run.range.from, to: run.range.to } : {}),
     });
   } catch {
@@ -219,6 +278,7 @@ if (!globalThis.chrome?.runtime?.id) {
         status("Checking your signed-in Goldline account…");
         goldlineTab = await openSite(GOLDLINE);
         const context = await request("context");
+        await reportHeartbeat("context_verified");
         if (scheduled) {
           const { schedule } = await chrome.storage.local.get("schedule");
           if (!schedule?.enabled || !context.binding)
@@ -246,7 +306,9 @@ if (!globalThis.chrome?.runtime?.id) {
         });
         status("Opening gumball reporting and setting the exact dates…");
         sourceTab = await openSite(`${CLEANCLOUD}/store`);
+        await reportHeartbeat("cleancloud_tab_opened");
         const source = await runInTab(sourceTab, prepareSource, [range]);
+        await reportHeartbeat("source_prepared", source.storeLabel);
         checkCancelled();
         if (context.binding && context.binding.storeLabel !== source.storeLabel)
           throw new Error(
@@ -276,10 +338,12 @@ if (!globalThis.chrome?.runtime?.id) {
         }
         // A download may interrupt the response channel; don't click again. The
         // independently registered worker observes the actual download instead.
+        await reportHeartbeat("export_clicked");
         await runInTab(sourceTab, clickExport, [source.storeLabel]).catch(
           () => {}
         );
         let captured;
+        await reportHeartbeat("download_waiting");
         for (let i = 0; i < 300; i++) {
           checkCancelled();
           const { pendingExport } =
@@ -295,6 +359,7 @@ if (!globalThis.chrome?.runtime?.id) {
           throw new Error(
             "Chrome did not provide the expected report download. Check the gumball tab; no import was submitted."
           );
+        await reportHeartbeat("download_captured");
         const capture = validateExportUrl(captured.url, range);
         if (context.binding && context.binding.storeId !== capture.storeId)
           throw new Error("Export belongs to a different gumball store.");
@@ -310,6 +375,7 @@ if (!globalThis.chrome?.runtime?.id) {
         checkCancelled();
         await save("validating");
         const rows = parseCsv(report.csv);
+        await reportHeartbeat("csv_parsed", `${rows.length} rows`);
         staged = {
           ...range,
           requestId,
