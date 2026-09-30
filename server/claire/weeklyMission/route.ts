@@ -67,6 +67,10 @@ export function arbitrateWeeklyTurnIntent(input: {
     return "operational_today";
   }
 
+  if (/\b(?:stop|hold on|wait|pause|hang on)\b/i.test(utterance)) {
+    return "chit_chat";
+  }
+
   const interpreted = interpretTurn(utterance);
   if (interpreted.callControl === "end" || interpreted.conversationControl) {
     return "chit_chat";
