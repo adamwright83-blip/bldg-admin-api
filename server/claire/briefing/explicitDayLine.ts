@@ -18,7 +18,7 @@ const DIRECTIVE =
   /\b(?:add|put|place|log|save|track)\b|\b(?:make sure|be sure)\b/i;
 
 export function refersToPriorWork(utterance: string): boolean {
-  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about|batch (?:them|those|all)|(?:the\s+)?dormant (?:accounts|customers)|recovery texts|put them|them all)\b/i.test(
+  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about|batch (?:them|those|all)|(?:the\s+)?dormant (?:accounts|customers)|recovery texts|put them|them all|the whole group|whole group|those people|that group|that work|everyone|everybody)\b/i.test(
     utterance
   );
 }
