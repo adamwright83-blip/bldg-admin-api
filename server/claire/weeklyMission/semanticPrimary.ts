@@ -49,7 +49,7 @@ export function isSemanticallyNormalizedPrimary(
 
   // Longer state descriptions are context, not missions. Short noun labels are
   // allowed; longer candidates need an action/work anchor.
-  if (words.length > 3 && STATUS_ONLY.test(text) && !ACTION_OR_WORK_NOUN.test(text)) {
+  if (STATUS_ONLY.test(text) && !ACTION_OR_WORK_NOUN.test(text)) {
     return false;
   }
   if (words.length > 4 && !ACTION_OR_WORK_NOUN.test(text)) return false;
