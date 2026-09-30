@@ -2,7 +2,10 @@
 import { describe, expect, it } from "vitest";
 import { extractTacticalSignalsFromDebrief, bridgeParkingLotDebrief } from "./fieldEventBridge";
 import { propagateGeographicConquest } from "./geographicConquestService";
-import { sweepUnbridgedParkingLotDebriefs } from "./autonomousWorkerService";
+import {
+  sweepUnbridgedParkingLotDebriefs,
+  sweepUnpropagatedConquestWins,
+} from "./autonomousWorkerService";
 
 describe("Closed-Loop Autonomy Integration (Phases 1 -> 2 -> 3)", () => {
   describe("Phase 2: Real Debrief -> Durable Learning Exactly Once", () => {
@@ -59,6 +62,10 @@ describe("Closed-Loop Autonomy Integration (Phases 1 -> 2 -> 3)", () => {
       expect(typeof propagateGeographicConquest).toBe("function");
     });
 
+    it("exports sweepUnpropagatedConquestWins for crash-safe win recovery", () => {
+      expect(typeof sweepUnpropagatedConquestWins).toBe("function");
+    });
+
     it("does not manufacture fake Corridor Prospect accounts when no real neighbor accounts exist", async () => {
       const result = await propagateGeographicConquest({
         tenantId: "t-test-no-neighbors",
@@ -68,7 +75,8 @@ describe("Closed-Loop Autonomy Integration (Phases 1 -> 2 -> 3)", () => {
       expect(result.generatedMissions).toEqual([]);
       expect(
         result.reason === "Database unavailable" ||
-          result.reason?.includes("Could not resolve commercial account ID")
+          result.reason?.includes("Could not resolve commercial account ID") ||
+          result.reason?.includes("not authoritatively won")
       ).toBe(true);
     });
   });

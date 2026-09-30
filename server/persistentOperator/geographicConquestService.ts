@@ -18,6 +18,8 @@ import {
   claireProactiveObligations,
   commercialAccounts,
   commercialAccountLocations,
+  commercialCustomers,
+  commercialMissionEvents,
   commercialMissions,
   goalCycleObjectives,
   macroGoalRuns,
@@ -70,10 +72,12 @@ export async function propagateGeographicConquest(
   // 1. Resolve won account identity and location
   let accountId = input.accountId;
   let wonAccountName = "Commercial Account";
+  let isAuthoritativelyWon = false;
 
-  if (!accountId && input.missionId) {
+  if (input.missionId) {
     const [mission] = await db
       .select({
+        status: commercialMissions.status,
         accountSnapshotJson: commercialMissions.accountSnapshotJson,
       })
       .from(commercialMissions)
@@ -84,6 +88,26 @@ export async function propagateGeographicConquest(
         )
       )
       .limit(1);
+
+    if (mission?.status === "won") {
+      isAuthoritativelyWon = true;
+    } else {
+      // Check commercialMissionEvents for an authoritative won event
+      const [wonEvent] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.missionId, input.missionId),
+            eq(commercialMissionEvents.toStatus, "won")
+          )
+        )
+        .limit(1);
+      if (wonEvent) {
+        isAuthoritativelyWon = true;
+      }
+    }
 
     const snapshot = mission?.accountSnapshotJson as {
       accountId?: number | string;
@@ -103,6 +127,62 @@ export async function propagateGeographicConquest(
       wonAccount: null,
       generatedMissions: [],
       reason: "Could not resolve commercial account ID for won mission",
+    };
+  }
+
+  // If missionId was not provided or didn't confirm won status, verify if the account is authoritatively won
+  if (!isAuthoritativelyWon) {
+    // 1. Check if any mission for this account is won
+    const wonMissions = await db
+      .select({ id: commercialMissions.id })
+      .from(commercialMissions)
+      .where(
+        and(
+          eq(commercialMissions.tenantId, input.tenantId),
+          eq(commercialMissions.status, "won")
+        )
+      )
+      .limit(50);
+
+    for (const m of wonMissions) {
+      const [mFull] = await db
+        .select({ accountSnapshotJson: commercialMissions.accountSnapshotJson })
+        .from(commercialMissions)
+        .where(eq(commercialMissions.id, m.id))
+        .limit(1);
+      const snap = mFull?.accountSnapshotJson as { accountId?: number | string } | null;
+      if (snap?.accountId && Number(snap.accountId) === accountId) {
+        isAuthoritativelyWon = true;
+        break;
+      }
+    }
+
+    // 2. Check if the account is an active commercial customer
+    if (!isAuthoritativelyWon) {
+      const [activeCustomer] = await db
+        .select({ id: commercialCustomers.id })
+        .from(commercialCustomers)
+        .where(
+          and(
+            eq(commercialCustomers.tenantId, input.tenantId),
+            eq(commercialCustomers.accountId, accountId),
+            eq(commercialCustomers.status, "active")
+          )
+        )
+        .limit(1);
+      if (activeCustomer) {
+        isAuthoritativelyWon = true;
+      }
+    }
+  }
+
+  // Fail closed if not authoritatively won: prevent dispatching sales work on non-won accounts
+  if (!isAuthoritativelyWon) {
+    return {
+      propagated: false,
+      wonAccount: null,
+      generatedMissions: [],
+      reason: `Commercial account ${accountId} (mission ${input.missionId ?? "none"}) is not authoritatively won; failing closed to prevent dispatching conquest sales work on non-won accounts.`,
     };
   }
 
@@ -266,12 +346,12 @@ export async function propagateGeographicConquest(
 
       const isImmediateBlock = opp.distanceMiles <= 0.2;
       const laundryOpportunity = isImmediateBlock
-        ? `Immediate corridor neighbor to recently won customer ${wonAccountName} (${opp.distanceMiles} mi away). Route proximity eliminates transit overhead.`
+        ? `Immediate corridor neighbor to recently won customer ${wonAccountName} (${opp.distanceMiles} mi away). Route proximity allows coordinated pickup and delivery along the same street.`
         : `Active corridor account located ${opp.distanceMiles} mi from recently won customer ${wonAccountName}. Shared corridor transit enables consolidated route scheduling.`;
 
       const salesAngle = isImmediateBlock
-        ? `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility with dedicated corridor delivery schedules and zero transit minimums.`
-        : `Our delivery route currently services ${wonAccountName} ${opp.distanceMiles} miles away along this active service corridor. Adding your facility to our regular run eliminates extra transit overhead and trip minimums.`;
+        ? `Since our route truck already services ${wonAccountName} directly on this block, we can integrate your facility directly into our regular corridor delivery schedule.`
+        : `Our delivery route currently services ${wonAccountName} ${opp.distanceMiles} miles away along this active service corridor. Adding your facility coordinates pickups on the same scheduled route corridor.`;
 
       const openingLine = isImmediateBlock
         ? `Hi, our delivery team stops right next door at ${wonAccountName}—we wanted to introduce ourselves and see if consolidating commercial laundry on the same delivery run makes sense for your team.`
@@ -430,12 +510,15 @@ export async function propagateGeographicConquest(
         impactClass: "operational_result",
         epistemicStatus: "verified",
         evidenceClass: "operator_attested",
-        evidenceReference: `accounts:commercial:${accountId}`,
+        evidenceReference: input.missionId
+          ? `commercial_missions:${input.missionId}:conquest`
+          : `accounts:commercial:${accountId}:conquest`,
         sourceSystem: "geographic_conquest",
         monetaryValueCents: null,
         observedAt: new Date(),
         explanation: `Account win at ${wonAccountName} triggered geographic conquest; dispatched ${generatedMissions.length} corridor opportunities.`,
         metadata: {
+          wonMissionId: input.missionId ?? null,
           wonAccountId: accountId,
           wonAccountName,
           generatedMissionIds: generatedMissions.map(m => m.missionId),

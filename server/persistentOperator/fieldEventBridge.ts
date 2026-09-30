@@ -287,18 +287,17 @@ export async function bridgeCommercialResolution(
       console.warn("[PersistentOperator] failed to transition objective status to completed", err);
     });
 
-    void import("./geographicConquestService")
-      .then(({ propagateGeographicConquest }) =>
-        propagateGeographicConquest({
-          tenantId: input.tenantId,
-          missionId: input.missionId,
-          actorId: input.actorId,
-          objectiveId: targetObjective.id,
-        })
-      )
-      .catch(err => {
-        console.warn("[PersistentOperator] geographic conquest propagation deferred", err);
+    try {
+      const { propagateGeographicConquest } = await import("./geographicConquestService");
+      await propagateGeographicConquest({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        actorId: input.actorId,
+        objectiveId: targetObjective.id,
       });
+    } catch (err) {
+      console.warn("[PersistentOperator] geographic conquest propagation error:", err);
+    }
   }
 
   const deltas = await listGoalCycleLearnedDeltas({

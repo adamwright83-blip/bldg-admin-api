@@ -9,7 +9,7 @@
  */
 
 import { getDb } from "../server/db";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, like } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   commercialMissionEvents,
@@ -20,9 +20,11 @@ import {
   macroGoalRuns,
   commercialMissions,
   commercialAccountLocations,
+  commercialPipelineRecords,
 } from "../drizzle/schema";
 import {
   sweepUnbridgedParkingLotDebriefs,
+  sweepUnpropagatedConquestWins,
 } from "../server/persistentOperator/autonomousWorkerService";
 import {
   bridgeParkingLotDebrief,
@@ -32,6 +34,13 @@ import { propagateGeographicConquest } from "../server/persistentOperator/geogra
 import { readCurrentDayLine } from "../server/goldline/dayline/currentDayLineService";
 import { decideGoalCycle } from "../server/persistentOperator/decisionEngine";
 import { defaultVerticalRegistry } from "../server/strategy/verticalTemplates/defaultRegistry";
+import {
+  createCommercialMission,
+  transitionCommercialMission,
+} from "../server/commercialMissions/commercialMissionStore";
+import {
+  resolveCommercialPipelineMission,
+} from "../server/commercialPipeline/commercialPipelineService";
 
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
@@ -160,48 +169,189 @@ async function run() {
   console.log(`  Processed pending outcome learnings: ${processedLearnings.processed} processed.`);
 
   // --------------------------------------------------------------------------
-  // STEP 3: Phase 3 — Geographic Conquest Exactly Once & Lineage to Day Line
+  // STEP 3: Phase 3 — Geographic Conquest Exactly Once & Durable Crash-Recovery
   // --------------------------------------------------------------------------
-  subheader("Step 3: Phase 3 — Geographic Conquest Exactly Once");
+  subheader("Step 3: Phase 3 — Authoritative Win -> Conquest Exactly Once");
 
-  // Pick won account: The Louise Los Feliz (Account 10)
-  const wonAccountId = 10;
-  console.log(`  Triggering geographic conquest for won account ID ${wonAccountId} ("The Louise Los Feliz")...`);
+  // Part A: Clean up stale test conquest artifacts
+  console.log(`  Cleaning stale conquest test artifacts in DB...`);
+  await db
+    .delete(claireProactiveObligations)
+    .where(and(eq(claireProactiveObligations.tenantId, tenantId), like(claireProactiveObligations.id, "sales:conquest:%")));
+  await db
+    .delete(goalCycleObjectives)
+    .where(and(eq(goalCycleObjectives.tenantId, tenantId), like(goalCycleObjectives.title, "Conquest pitch:%")));
+  console.log(`${GREEN}✓ Cleaned stale test conquest obligations and objectives.${RESET}`);
 
-  // First run
-  const result1 = await propagateGeographicConquest({
+  // Part B: Verify Fail-Closed on Non-Won Account 10 ("The Louise Los Feliz")
+  console.log(`\n  Testing fail-closed gate: calling propagateGeographicConquest on non-won Account 10 ("The Louise Los Feliz")...`);
+  const nonWonResult = await propagateGeographicConquest({
     tenantId,
-    accountId: wonAccountId,
+    accountId: 10,
     actorId,
     radiusMiles: 2.0,
-    maxCandidates: 2,
   });
-
-  console.log(`${GREEN}✓ Geographic Conquest Run 1 Completed:${RESET}`);
-  console.log(`    Propagated: ${result1.propagated}`);
-  console.log(`    Missions Dispatched / Elevated: ${result1.generatedMissions.length}`);
-  for (const m of result1.generatedMissions) {
-    console.log(`    ${DIM}•${RESET} Mission ${m.missionId} for "${m.accountName}" (${m.distanceMiles} mi away) - ${m.reason}`);
+  console.log(`  Non-won Account 10 result: propagated=${nonWonResult.propagated}, missions=${nonWonResult.generatedMissions.length}, reason="${nonWonResult.reason}"`);
+  if (nonWonResult.propagated || nonWonResult.generatedMissions.length > 0) {
+    throw new Error("FAIL: Non-won account was allowed to propagate conquest missions!");
   }
-  if (result1.reason) console.log(`    Reason: ${result1.reason}`);
+  console.log(`${GREEN}✓ Fail-Closed Gate Verified: Non-won account completely rejected (0 missions, 0 obligations).${RESET}`);
 
-  // Second run: test deterministic idempotency
-  console.log(`\n  Triggering Run 2 to test deterministic idempotency...`);
-  const result2 = await propagateGeographicConquest({
+  // Part C: Genuine Pipeline Win Witness via resolveCommercialPipelineMission({ action: "won" })
+  console.log(`\n  Setting up genuine commercial pipeline mission in corridor...`);
+  const testAccountName = `E2E Won Property ${randomUUID().slice(0, 8)}`;
+  const initIdempotencyKey = `e2e:create:${Date.now()}`;
+  const mission = await createCommercialMission({
     tenantId,
-    accountId: wonAccountId,
-    actorId,
-    radiusMiles: 2.0,
-    maxCandidates: 2,
+    assignedTo: actorId,
+    account: {
+      name: testAccountName,
+      accountType: "property_management",
+      address: "1800 N Vermont Ave, Los Angeles, CA 90027",
+      latitude: 34.1038,
+      longitude: -118.2917,
+      decisionMaker: { name: "Alex Property Manager", title: "General Manager" },
+      locationCount: 1,
+    },
+    opportunity: {
+      score: 90,
+      estimateConfidence: "high",
+      primarySignal: "Corridor test anchor",
+      reasons: ["CORRIDOR_ANCHOR"],
+      risks: [],
+      estimatedAnnualValueCents: 1200000,
+    },
+    brief: {
+      laundryOpportunity: "Large multifamily residential complex on Vermont corridor.",
+      salesAngle: "Direct corridor route service.",
+      openingLine: "Hi Alex, we service the Vermont corridor.",
+      discoveryQuestions: ["Current laundry vendor?"],
+      objections: [],
+    },
+    steps: [
+      {
+        key: "step-1",
+        label: "Walk-in pitch",
+        detail: "Walk-in pitch to property manager",
+        status: "ready",
+        position: 1,
+        type: "field_visit",
+        revealPolicy: "immediate",
+      },
+    ],
+    actor: { type: "operator", id: actorId },
+    idempotencyKey: initIdempotencyKey,
+    initialPipelineStage: "mission_created",
   });
 
-  console.log(`${GREEN}✓ Geographic Conquest Run 2 Completed (Idempotency Check):${RESET}`);
-  console.log(`    Missions in Run 2: ${result2.generatedMissions.length}`);
-  if (result2.reason) console.log(`    Reason: ${result2.reason}`);
+  const [createdMissionRow] = await db
+    .select()
+    .from(commercialMissions)
+    .where(eq(commercialMissions.id, mission.id))
+    .limit(1);
+  const snap = createdMissionRow.accountSnapshotJson as any;
+  const createdAccountId = Number(snap.accountId);
 
-  // Verify preserved real geocodes and distance-aware sales copy
-  const sampleMissionId = result1.generatedMissions[0]?.missionId;
-  if (sampleMissionId) {
+  // Transition mission through valid lifecycle stages up to follow_up
+  const transitions: Array<{ to: any; key: string }> = [
+    { to: "selected", key: `e2e:trans:1:${Date.now()}` },
+    { to: "game_ready", key: `e2e:trans:2:${Date.now()}` },
+    { to: "game_active", key: `e2e:trans:3:${Date.now()}` },
+    { to: "game_completed", key: `e2e:trans:4:${Date.now()}` },
+    { to: "phone_ready", key: `e2e:trans:5:${Date.now()}` },
+    { to: "preparing", key: `e2e:trans:6:${Date.now()}` },
+    { to: "en_route", key: `e2e:trans:7:${Date.now()}` },
+    { to: "arrived", key: `e2e:trans:8:${Date.now()}` },
+    { to: "visit_completed", key: `e2e:trans:9:${Date.now()}` },
+    { to: "follow_up", key: `e2e:trans:10:${Date.now()}` },
+  ];
+
+  let currentVer = mission.version;
+  for (const t of transitions) {
+    const res = await transitionCommercialMission({
+      tenantId,
+      missionId: mission.id,
+      expectedVersion: currentVer,
+      toStatus: t.to,
+      actor: { type: "operator", id: actorId },
+      idempotencyKey: t.key,
+    });
+    currentVer = res.version;
+  }
+
+  // Create active objective deterministically linked to this mission / account
+  const objectiveId = randomUUID();
+  const decisionId = randomUUID();
+  const today = new Date().toISOString().slice(0, 10);
+  await db.insert(goalCycleObjectives).values({
+    id: objectiveId,
+    tenantId,
+    goalRunId: activeRun.id,
+    cycleId: `cycle-${Date.now()}`,
+    decisionId,
+    canonicalOperatorId: `tenant:${tenantId}:operator:${actorId}`,
+    operatorUserId: actorId,
+    selectionKind: "obligation",
+    selectedRef: `sales:${mission.id}:${Date.now()}`,
+    title: `Close Deal: ${testAccountName}`,
+    description: `Win commercial contract for ${testAccountName}`,
+    authority: "operator_confirmed",
+    status: "presented",
+    actionTargetType: "commercial_account",
+    actionTargetId: String(createdAccountId),
+    actionTargetDisplayName: testAccountName,
+    businessDate: today,
+    loadoutJson: [],
+    evidenceRefsJson: [`commercial_missions:${mission.id}`],
+  });
+  console.log(`  Created active objective ${objectiveId} for mission ${mission.id} (account ${createdAccountId}).`);
+
+  // Find pipeline record
+  const [pipelineRecord] = await db
+    .select()
+    .from(commercialPipelineRecords)
+    .where(eq(commercialPipelineRecords.missionId, mission.id))
+    .limit(1);
+
+  console.log(`  Triggering authoritative win: resolveCommercialPipelineMission(pipeline ${pipelineRecord.id} -> "won")...`);
+  const resolution = await resolveCommercialPipelineMission({
+    tenantId,
+    pipelineId: pipelineRecord.id,
+    action: "won",
+    expectedMissionVersion: currentVer,
+    actorId,
+    requestId: `witness-win-${mission.id}-${Date.now()}`,
+    reason: "Signed service agreement",
+  });
+
+  const [wonMissionInDb] = await db
+    .select()
+    .from(commercialMissions)
+    .where(eq(commercialMissions.id, mission.id))
+    .limit(1);
+
+  console.log(`${GREEN}✓ Authoritative Win Executed:${RESET}`);
+  console.log(`    Pipeline Stage: ${resolution.stage}`);
+  console.log(`    Mission ${mission.id} DB Status: ${wonMissionInDb.status} (authoritatively won: ${wonMissionInDb.status === "won"})`);
+
+  // Part D: Check Conquest Obligations & Missions Generated by Authoritative Trigger
+  const conquestObligations = await db
+    .select()
+    .from(claireProactiveObligations)
+    .where(and(eq(claireProactiveObligations.tenantId, tenantId), like(claireProactiveObligations.id, "sales:conquest:%")))
+    .orderBy(desc(claireProactiveObligations.createdAt))
+    .limit(5);
+
+  console.log(`\n  Conquest Obligations generated by authoritative trigger: ${conquestObligations.length}`);
+  for (const ob of conquestObligations) {
+    const payload = ob.payloadJson as Record<string, unknown>;
+    console.log(`    ${DIM}•${RESET} Obligation [${ob.id}] status=${ob.status} title="${payload?.title}" why="${payload?.why}"`);
+  }
+
+  // Verify distance-aware, factual sales copy (NO "minimums" claims)
+  const [sampleObligation] = conquestObligations;
+  if (sampleObligation) {
+    const sampleMissionId = Number(sampleObligation.subjectKey);
     const [sampleMission] = await db
       .select()
       .from(commercialMissions)
@@ -209,36 +359,27 @@ async function run() {
       .limit(1);
 
     if (sampleMission) {
-      const snap = sampleMission.accountSnapshotJson as Record<string, unknown>;
+      const missionSnap = sampleMission.accountSnapshotJson as Record<string, unknown>;
       const brief = sampleMission.missionBriefJson as Record<string, unknown>;
-      console.log(`\n  Verified Mission ${sampleMissionId} Account & Sales Copy Integrity:`);
-      console.log(`    Account: "${snap?.name}"`);
-      console.log(`    Address: "${snap?.address}"`);
-      console.log(`    Preserved Geocodes: lat=${snap?.latitude ?? "null"}, lng=${snap?.longitude ?? "null"} (${snap?.latitude ? "PRESERVED" : "MISSING"})`);
-      console.log(`    Sales Angle: "${brief?.salesAngle}"`);
-      console.log(`    Distance-Aware / Factual: ${!String(brief?.salesAngle).includes("preferential neighbor pricing") ? "YES (factual route consolidation, zero transit minimums)" : "NO"}`);
+      const salesAngle = String(brief?.salesAngle ?? "");
+      const laundryOpp = String(brief?.laundryOpportunity ?? "");
+      const hasMinimumsClaim = salesAngle.toLowerCase().includes("minimum") || laundryOpp.toLowerCase().includes("minimum");
+      console.log(`\n  Verified Sales Copy & Geocode Integrity for Neighbor Mission ${sampleMissionId}:`);
+      console.log(`    Target: "${missionSnap?.name}" (${missionSnap?.address})`);
+      console.log(`    Preserved Geocodes: lat=${missionSnap?.latitude}, lng=${missionSnap?.longitude} (PRESERVED: ${missionSnap?.latitude != null})`);
+      console.log(`    Sales Angle: "${salesAngle}"`);
+      console.log(`    Distance-Aware / Factual: ${!hasMinimumsClaim ? "YES (factual corridor scheduling, ZERO minimums claims)" : "NO (contains unbacked claims)"}`);
     }
   }
 
-  // Check proactive obligations
-  const conquestObligations = await db
-    .select()
-    .from(claireProactiveObligations)
-    .where(eq(claireProactiveObligations.tenantId, tenantId))
-    .orderBy(desc(claireProactiveObligations.createdAt))
-    .limit(5);
+  // Part E: Test Crash-Recovery Sweeper
+  console.log(`\n  Testing crash-recovery sweeper sweepUnpropagatedConquestWins()...`);
+  const sweeperRes = await sweepUnpropagatedConquestWins({ tenantId });
+  console.log(`${GREEN}✓ Crash-Recovery Sweeper Executed Cleanly:${RESET}`);
+  console.log(`    Processed (unpropagated recovered): ${sweeperRes.processedCount}`);
+  console.log(`    Errors: ${sweeperRes.errors.length}`);
 
-  console.log(`\n  Proactive Obligations registered in DB:`);
-  for (const ob of conquestObligations) {
-    const payload = ob.payloadJson as Record<string, unknown>;
-    console.log(`    ${DIM}•${RESET} Obligation [${ob.id}] status=${ob.status} due=${ob.dueDate} title="${payload?.title ?? ob.kind}"`);
-  }
-
-  // Check fail-closed objective lineage behavior
-  console.log(`\n  Lineage Check: won account 10 has no deterministic objective lineage.`);
-  console.log(`  ${GREEN}✓ Geographic Conquest properly failed closed without attaching false outcome to unrelated objectives.${RESET}`);
-
-  // Materialize conquest obligation to active objective via goal cycle decision
+  // Part F: Materialize conquest obligation to active objective via goal cycle decision
   console.log(`\n  Triggering Goal Cycle to promote conquest obligation into active objective...`);
   const cycleId = randomUUID();
   const cycleResult = await decideGoalCycle({

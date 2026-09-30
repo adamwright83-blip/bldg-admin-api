@@ -225,6 +225,79 @@ export async function sweepUnbridgedParkingLotDebriefs(input: {
   return { processedCount, errors };
 }
 
+export async function sweepUnpropagatedConquestWins(input: {
+  tenantId?: string;
+  limit?: number;
+} = {}): Promise<{
+  processedCount: number;
+  errors: Array<{ missionId: number; error: string }>;
+}> {
+  const db = await getDb();
+  if (!db) return { processedCount: 0, errors: [] };
+
+  const limit = input.limit ?? 25;
+  const tenantId = input.tenantId ?? "default";
+
+  const wonEvents = await db
+    .select({
+      id: commercialMissionEvents.id,
+      tenantId: commercialMissionEvents.tenantId,
+      missionId: commercialMissionEvents.missionId,
+      actorId: commercialMissionEvents.actorId,
+      createdAt: commercialMissionEvents.createdAt,
+    })
+    .from(commercialMissionEvents)
+    .where(
+      and(
+        eq(commercialMissionEvents.tenantId, tenantId),
+        eq(commercialMissionEvents.toStatus, "won")
+      )
+    )
+    .orderBy(desc(commercialMissionEvents.id))
+    .limit(limit);
+
+  let processedCount = 0;
+  const errors: Array<{ missionId: number; error: string }> = [];
+
+  for (const event of wonEvents) {
+    const conquestEvidenceRef = `commercial_missions:${event.missionId}:conquest`;
+    const [existingOutcome] = await db
+      .select({ id: goalCycleOutcomes.id })
+      .from(goalCycleOutcomes)
+      .where(
+        and(
+          eq(goalCycleOutcomes.tenantId, event.tenantId),
+          eq(goalCycleOutcomes.evidenceReference, conquestEvidenceRef)
+        )
+      )
+      .limit(1);
+
+    if (existingOutcome) {
+      continue;
+    }
+
+    try {
+      const { propagateGeographicConquest } = await import("./geographicConquestService");
+      const result = await propagateGeographicConquest({
+        tenantId: event.tenantId,
+        missionId: event.missionId,
+        actorId: event.actorId,
+      });
+
+      if (result.propagated) {
+        processedCount++;
+      }
+    } catch (err) {
+      errors.push({
+        missionId: event.missionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { processedCount, errors };
+}
+
 export function startAutonomousPersistentOperatorWorkers(
   options: AutonomousWorkerOptions = {}
 ): () => Promise<void> {
@@ -326,7 +399,15 @@ export function startAutonomousPersistentOperatorWorkers(
         );
       }
 
-      // Step B: Reconcile outcomes into learned deltas
+      // Step B: Sweep unpropagated conquest wins into corridor missions & obligations
+      const conquestResult = await sweepUnpropagatedConquestWins();
+      if (conquestResult.processedCount > 0) {
+        console.info(
+          `[AutonomousWorkers] Conquest sweeper propagated ${conquestResult.processedCount} unpropagated wins`
+        );
+      }
+
+      // Step C: Reconcile outcomes into learned deltas
       const result = await processPendingOutcomeLearnings();
       if (result.processedCount > 0) {
         console.info(
@@ -348,6 +429,7 @@ export function startAutonomousPersistentOperatorWorkers(
       appointmentStore: operatorAppointmentStore,
     });
     void sweepUnbridgedParkingLotDebriefs();
+    void sweepUnpropagatedConquestWins();
   }, 5_000);
 
   const bootstrapIntervalTimer = setInterval(() => {
