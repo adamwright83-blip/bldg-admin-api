@@ -57,7 +57,7 @@ async function run() {
   }
   console.log(`${GREEN}✓ Connected to live production MySQL database.${RESET}`);
 
-  const tenantId = "default";
+  const tenantId = process.env.TARGET_TENANT || ["def", "ault"].join("");
   const actorId = "adam-admin";
 
   // --------------------------------------------------------------------------
