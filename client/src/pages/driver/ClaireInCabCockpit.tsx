@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { 
+  AlertCircle,
   ArrowRight, 
   Check, 
   CheckCircle2, 
   Compass, 
+  Layers,
   MapPin, 
   Mic, 
   MicOff, 
@@ -28,130 +30,142 @@ interface CockpitStop {
   units: number;
   objectiveType: "commercial_drop" | "pickup" | "conquest_brief";
   primaryObjective: string;
-  gateCode: string;
-  contactPerson: string;
-  contactPhone: string;
-  historicalTip: string;
+  isRealMissionTask: boolean;
+  rawTaskId?: string;
+  rawMissionId?: string;
 }
 
-const INITIAL_STOPS: CockpitStop[] = [
+// Sandbox practice stops for driver HUD onboarding (clearly marked training)
+const TRAINING_STOPS: CockpitStop[] = [
   {
-    id: "stop-1",
+    id: "train-1",
     name: "Argyle House",
     address: "1750 N Vine St, Los Angeles, CA",
     distance: "250 ft",
     corridor: "Hollywood High-Rise Corridor",
     units: 250,
     objectiveType: "commercial_drop",
-    primaryObjective: "Drop commercial linen trial packet with concierge Hector",
-    gateCode: "#4092",
-    contactPerson: "Hector (Front Desk)",
-    contactPhone: "+1 (323) 555-0182",
-    historicalTip: "Concierge accepts packages between 7 AM and 8 PM at lobby desk.",
+    primaryObjective: "Deliver commercial linen trial packet to lobby concierge desk",
+    isRealMissionTask: false,
   },
   {
-    id: "stop-2",
+    id: "train-2",
     name: "4455 Los Feliz Blvd",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
     distance: "0.3 mi",
     corridor: "Los Feliz Corridor",
     units: 196,
     objectiveType: "conquest_brief",
-    primaryObjective: "Follow up with property manager Elena on corridor route density",
-    gateCode: "*1024",
-    contactPerson: "Elena Vance (General Manager)",
-    contactPhone: "+1 (323) 555-0144",
-    historicalTip: "High corridor density asset. Neighbor to won account.",
+    primaryObjective: "Conduct corridor density check with on-site management",
+    isRealMissionTask: false,
   },
   {
-    id: "stop-3",
+    id: "train-3",
     name: "Los Feliz Towers",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
     distance: "0.5 mi",
     corridor: "Los Feliz Corridor",
     units: 196,
     objectiveType: "pickup",
-    primaryObjective: "Collect 2 garment bags for resident Sarah Miller (Unit 802)",
-    gateCode: "Call Box #802",
-    contactPerson: "Sarah Miller",
-    contactPhone: "+1 (323) 555-0199",
-    historicalTip: "Elevator B goes directly to 8th floor penthouse.",
-  },
-  {
-    id: "stop-4",
-    name: "Lugo's Lavanderia",
-    address: "Process Facility, Silver Lake",
-    distance: "1.4 mi",
-    corridor: "Processing Hub",
-    units: 0,
-    objectiveType: "commercial_drop",
-    primaryObjective: "Transfer commercial bags into express sanitize cycle",
-    gateCode: "Bay 3",
-    contactPerson: "Marco",
-    contactPhone: "+1 (323) 555-0112",
-    historicalTip: "Dock open until 6 PM.",
+    primaryObjective: "Collect resident laundry bag from designated service drop",
+    isRealMissionTask: false,
   },
 ];
 
 export default function ClaireInCabCockpit() {
-  const [stops, setStops] = useState<CockpitStop[]>(INITIAL_STOPS);
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenantId = urlParams.get("tenant") || "default";
+
+  const todayYmd = new Date().toISOString().split("T")[0];
+
+  // Authoritative Day Line Mission and Cargo Queries
+  const openChannelMission = trpc.system.openChannel.current.useQuery(
+    { businessDate: todayYmd },
+    { refetchInterval: 15_000, retry: false }
+  );
+
+  const cargoState = trpc.system.goldlineCargo.state.useQuery(undefined, {
+    refetchInterval: 15_000,
+    retry: false,
+  });
+
+  const completeTaskMutation = trpc.system.openChannel.completeTask.useMutation();
+
+  const [trainingMode, setTrainingMode] = useState(false);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechTranscript, setSpeechTranscript] = useState(
-    "Claire active. Approaching Argyle House in 250 feet. Objective: drop commercial trial with Hector."
-  );
+  const [isMuted, setIsMuted] = useState(false);
   const [completedObjectives, setCompletedObjectives] = useState<string[]>([]);
-  const [audioMuted, setAudioMuted] = useState(false);
+  const [isPersisting, setIsPersisting] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
-  const currentStop = stops[currentStopIndex] || stops[0];
 
-  // Tactical Web Audio chime generator
-  const playTacticalChime = (kind: "success" | "radar" | "voice") => {
+  // Derive stops from real Open Channel mission if active, otherwise offer training mode
+  const missionTasks = openChannelMission.data?.tasks ?? [];
+  const hasRealTasks = openChannelMission.data?.status === "active" && missionTasks.length > 0;
+
+  const realStops: CockpitStop[] = missionTasks.map((t, idx) => ({
+    id: t.id,
+    name: t.title,
+    address: t.navigationQuery || "En Route Corridor Stop",
+    distance: `${(idx + 1) * 0.4} mi`,
+    corridor: "Authoritative Day Line",
+    units: 0,
+    objectiveType: t.category === "sales" ? "conquest_brief" : t.category === "food" ? "commercial_drop" : "pickup",
+    primaryObjective: t.detail,
+    isRealMissionTask: true,
+    rawTaskId: t.id,
+    rawMissionId: openChannelMission.data?.id,
+  }));
+
+  const activeStops = hasRealTasks && !trainingMode ? realStops : TRAINING_STOPS;
+  const currentStop = activeStops[currentStopIndex] || activeStops[0];
+
+  // Synthesize Web Audio chime for acoustic HUD alerts
+  const playTacticalChime = (type: "radar" | "success" | "alert") => {
+    if (isMuted) return;
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      if (kind === "success") {
+      if (type === "success") {
         osc.type = "sine";
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
-        gain.gain.setValueAtTime(0.18, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
         osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      } else if (kind === "radar") {
-        osc.type = "triangle";
+        osc.stop(ctx.currentTime + 0.45);
+      } else {
+        osc.type = "sine";
         osc.frequency.setValueAtTime(440, ctx.currentTime);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
         osc.start();
-        osc.stop(ctx.currentTime + 0.1);
+        osc.stop(ctx.currentTime + 0.2);
       }
-    } catch {
-      // AudioContext policy fallback
-    }
+    } catch {}
   };
 
-  // Claire Voice Speech Synthesizer
   const speakAsClaire = (text: string) => {
-    setSpeechTranscript(text);
-    if (audioMuted) return;
-
+    if (isMuted) return;
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.05;
       utterance.pitch = 1.02;
 
-      // Prefer a natural English female voice
       const voices = window.speechSynthesis.getVoices();
       const selectedVoice =
         voices.find(
@@ -202,12 +216,12 @@ export default function ClaireInCabCockpit() {
           handleCompleteObjective();
         } else if (text.includes("brief") || text.includes("repeat") || text.includes("what")) {
           speakAsClaire(
-            `At ${currentStop.name}. Objective: ${currentStop.primaryObjective}. Concierge contact is ${currentStop.contactPerson}.`
+            `At ${currentStop.name}. Objective: ${currentStop.primaryObjective}.`
           );
         } else if (text.includes("next stop") || text.includes("skip")) {
           handleNextStop();
         } else {
-          speakAsClaire(`Acknowledged: "${text}". Logged on today's Day Line.`);
+          speakAsClaire(`I heard: "${text}". No matching Day Line command found.`);
         }
       };
 
@@ -225,7 +239,7 @@ export default function ClaireInCabCockpit() {
         } catch {}
       }
     };
-  }, [currentStopIndex, currentStop]);
+  }, [currentStopIndex, currentStop, activeStops, trainingMode]);
 
   const toggleMic = () => {
     if (!recognitionRef.current) {
@@ -247,29 +261,62 @@ export default function ClaireInCabCockpit() {
     }
   };
 
-  const handleCompleteObjective = () => {
+  // Truth-backed objective completion: executes real mutation when backed by Day Line
+  const handleCompleteObjective = async () => {
+    const stopToComplete = currentStop;
     playTacticalChime("success");
-    const completedName = currentStop.name;
-    setCompletedObjectives((prev) => [...prev, currentStop.id]);
 
-    const nextIndex = (currentStopIndex + 1) % stops.length;
-    const nextStop = stops[nextIndex];
+    if (stopToComplete.isRealMissionTask && stopToComplete.rawTaskId && stopToComplete.rawMissionId) {
+      setIsPersisting(true);
+      try {
+        const requestId = crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}`;
+        await completeTaskMutation.mutateAsync({
+          missionId: stopToComplete.rawMissionId,
+          taskId: stopToComplete.rawTaskId,
+          requestId,
+        });
 
-    speakAsClaire(
-      `Custody confirmed at ${completedName}. Objective written to ledger. Next stop: ${nextStop.name}, ${nextStop.distance}.`
-    );
+        setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
+        setLastReceipt(`Durable receipt confirmed for task: ${stopToComplete.name}`);
 
-    setTimeout(() => {
-      setCurrentStopIndex(nextIndex);
-    }, 1200);
+        const nextIndex = (currentStopIndex + 1) % activeStops.length;
+        const nextStop = activeStops[nextIndex];
+
+        speakAsClaire(
+          `Objective completed and verified on Day Line for ${stopToComplete.name}. Next stop: ${nextStop.name}.`
+        );
+
+        setTimeout(() => {
+          setCurrentStopIndex(nextIndex);
+        }, 1200);
+      } catch (err) {
+        console.error("Failed to complete task:", err);
+        speakAsClaire("Mutation failed on Day Line. Task was not marked complete.");
+      } finally {
+        setIsPersisting(false);
+      }
+    } else {
+      // Training Mode Simulator: Honest vocalization of simulation
+      setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
+      const nextIndex = (currentStopIndex + 1) % activeStops.length;
+      const nextStop = activeStops[nextIndex];
+
+      speakAsClaire(
+        `Training simulation step completed for ${stopToComplete.name}. Note: Demo mode active, not logged to production ledger.`
+      );
+
+      setTimeout(() => {
+        setCurrentStopIndex(nextIndex);
+      }, 1200);
+    }
   };
 
   const handleNextStop = () => {
     playTacticalChime("radar");
-    const nextIndex = (currentStopIndex + 1) % stops.length;
-    const nextStop = stops[nextIndex];
+    const nextIndex = (currentStopIndex + 1) % activeStops.length;
+    const nextStop = activeStops[nextIndex];
     setCurrentStopIndex(nextIndex);
-    speakAsClaire(`Switching focus to stop ${nextIndex + 1}: ${nextStop.name}. Distance ${nextStop.distance}.`);
+    speakAsClaire(`Focus switched to stop ${nextIndex + 1}: ${nextStop.name}. Distance ${nextStop.distance}.`);
   };
 
   return (
@@ -278,184 +325,159 @@ export default function ClaireInCabCockpit() {
       <div className="cockpit-top-bar">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <span className="cockpit-status-tag">
-            <span className="cockpit-live-indicator" /> Claire Cockpit HUD · Live
+            <span className="cockpit-live-indicator" /> Claire Cockpit HUD · Tenant: {tenantId}
           </span>
-          <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
-            Corridor Route Velocity: <strong>7.4 stops/hr</strong>
-          </span>
+          {(!hasRealTasks || trainingMode) && (
+            <span style={{ fontSize: "0.75rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", padding: "4px 8px", borderRadius: 4, fontWeight: 700, border: "1px solid rgba(245, 158, 11, 0.4)" }}>
+              TRAINING SIMULATOR MODE
+            </span>
+          )}
+          {lastReceipt && (
+            <span style={{ fontSize: "0.8rem", color: "#4ade80", fontWeight: 600 }}>
+              ✓ {lastReceipt}
+            </span>
+          )}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            onClick={() => setAudioMuted(!audioMuted)}
-            style={{
-              background: "none",
-              border: "none",
-              color: audioMuted ? "#ef4444" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              fontSize: "0.8rem",
-            }}
-          >
-            {audioMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            {audioMuted ? "MUTED" : "VOICE ON"}
-          </button>
-          <Link href="/war-room" className="btn-tactical" style={{ padding: "6px 12px", fontSize: "0.75rem" }}>
+          {hasRealTasks && (
+            <button
+              className="btn-tactical"
+              style={{ fontSize: "0.75rem", padding: "6px 12px" }}
+              onClick={() => setTrainingMode(!trainingMode)}
+            >
+              {trainingMode ? "Switch to Real Day Line" : "Switch to Training Simulator"}
+            </button>
+          )}
+          <Link href={`/war-room?tenant=${tenantId}`} className="btn-tactical" style={{ padding: "6px 12px", fontSize: "0.75rem" }}>
             <Compass size={14} /> War Room
           </Link>
-          <Link href="/franchise" className="btn-tactical" style={{ padding: "6px 12px", fontSize: "0.75rem" }}>
-            Franchise Engine
-          </Link>
+          <button
+            className="btn-tactical"
+            style={{ padding: "6px 12px" }}
+            onClick={() => setIsMuted(!isMuted)}
+            title={isMuted ? "Unmute Claire" : "Mute Claire"}
+          >
+            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
         </div>
       </div>
 
       {/* Main Cockpit Layout */}
       <div className="cockpit-main-layout">
-        {/* Left Stage: Claire Voice Medallion */}
-        <div className="claire-voice-stage">
-          <div className="avatar-container">
-            <div className={`avatar-ring-pulse ${isSpeaking ? "speaking" : ""}`} />
-            <img
-              src="/assets/sovereign/claire-cockpit-avatar.jpg"
-              alt="Claire In-Cab Voice Operator"
-              className={`avatar-img ${isSpeaking ? "speaking" : ""}`}
-            />
+        {/* Left Col: Target Focus & Spatial Radar */}
+        <div className="cockpit-target-card">
+          <div className="cockpit-stop-header">
+            <div>
+              <span className="cockpit-sequence-pill">
+                Stop {currentStopIndex + 1} of {activeStops.length} · {currentStop.isRealMissionTask ? "Authoritative Day Line" : "Training Practice"}
+              </span>
+              <h1 className="cockpit-stop-title">{currentStop.name}</h1>
+              <div className="cockpit-stop-address">
+                <MapPin size={16} color="#94a3b8" /> {currentStop.address}
+              </div>
+            </div>
+
+            <div className="cockpit-radar-distance">
+              <span className="dist-num">{currentStop.distance}</span>
+              <span className="dist-unit">Proximity Radar</span>
+            </div>
           </div>
 
-          <div className="claire-voice-transcript">
-            <span className="transcript-speaker">
-              {isSpeaking ? "CLAIRE (SPEAKING)" : isListening ? "LISTENING FOR DRIVER..." : "CLAIRE (IDLE / ARMED)"}
-            </span>
-            <span className="transcript-text">{speechTranscript}</span>
+          {/* Tactical Directive Panel */}
+          <div className="cockpit-objective-box">
+            <div className="cockpit-objective-label">
+              <Sparkles size={16} color="#fbbf24" /> Primary Mission Directive
+            </div>
+            <div className="cockpit-objective-text">
+              {currentStop.primaryObjective}
+            </div>
           </div>
 
-          <div style={{ width: "100%", textAlign: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Hands-Free Vocal Directives
-            </span>
-          </div>
-
-          <div className="voice-command-hints">
-            <span
-              className="command-hint-pill"
-              onClick={() => speakAsClaire(`At ${currentStop.name}. ${currentStop.primaryObjective}.`)}
+          {/* Action Zone: Giant Touch Targets for In-Cab Operation */}
+          <div className="cockpit-action-row">
+            <button
+              className="btn-cockpit-primary"
+              onClick={handleCompleteObjective}
+              disabled={isPersisting}
             >
-              "Claire, brief me"
-            </span>
-            <span className="command-hint-pill" onClick={handleCompleteObjective}>
-              "Dropped sample with Hector"
-            </span>
-            <span className="command-hint-pill" onClick={handleCompleteObjective}>
-              "Picked up Sarah's bags"
-            </span>
-            <span className="command-hint-pill" onClick={handleNextStop}>
-              "Next stop"
-            </span>
+              <CheckCircle2 size={24} />
+              {isPersisting
+                ? "Writing to Day Line..."
+                : currentStop.isRealMissionTask
+                  ? "Confirm & Complete Day Line Task"
+                  : "Complete Practice Stop [Simulator]"}
+            </button>
+
+            <button className="btn-cockpit-nav" onClick={handleNextStop}>
+              <Navigation size={22} />
+              <span>Next Stop</span>
+            </button>
           </div>
         </div>
 
-        {/* Right Stage: Spatial Proximity & Stop Radar */}
-        <div className="spatial-route-stage">
-          <div className="current-stop-card">
-            <div className="stop-radar-header">
-              <div>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: "#f59e0b",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Target Corridor Stop #{currentStopIndex + 1} of {stops.length}
-                </span>
-                <h1 className="stop-building-title">{currentStop.name}</h1>
-                <p className="stop-address">
-                  <MapPin size={15} color="#38bdf8" /> {currentStop.address}
-                </p>
-              </div>
-
-              <span className="stop-distance-badge">{currentStop.distance}</span>
+        {/* Right Col: Claire Autonomous Copilot & Route Sequence */}
+        <div className="cockpit-copilot-rail">
+          {/* Claire Audio Visualizer Medallion */}
+          <div className="claire-avatar-container">
+            <img
+              src="/assets/sovereign/claire-cockpit-avatar.jpg"
+              alt="Claire In-Cab Voice Copilot"
+              className={`claire-avatar-img ${isSpeaking ? "is-speaking" : ""}`}
+            />
+            <div>
+              <span className="claire-title">Claire In-Cab Voice Copilot</span>
+              <span className="claire-status-text">
+                {isSpeaking
+                  ? "Speaking voice directive..."
+                  : isListening
+                    ? "Listening for driver voice commands..."
+                    : "Hands-free voice recognition idle"}
+              </span>
             </div>
 
-            {/* Objective Banner */}
-            <div className="objective-banner">
-              <span className="objective-label">Authoritative Day Line Objective</span>
-              <p className="objective-text">{currentStop.primaryObjective}</p>
-            </div>
-
-            {/* Stop Intel Grid */}
-            <div className="stop-intel-grid">
-              <div className="intel-box">
-                <span className="intel-title">Access Gate Code</span>
-                <span className="intel-val">{currentStop.gateCode}</span>
-              </div>
-              <div className="intel-box">
-                <span className="intel-title">On-Site Contact</span>
-                <span className="intel-val">{currentStop.contactPerson}</span>
-              </div>
-              <div className="intel-box">
-                <span className="intel-title">Asset Scale</span>
-                <span className="intel-val">{currentStop.units} Residential Units</span>
-              </div>
-              <div className="intel-box">
-                <span className="intel-title">Learned Corridor Tip</span>
-                <span className="intel-val" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                  {currentStop.historicalTip}
-                </span>
-              </div>
-            </div>
-
-            {/* Action Bar */}
-            <div className="cockpit-actions-row">
-              <button className="btn-complete-obj" onClick={handleCompleteObjective}>
-                <ShieldCheck size={20} /> Verify & Complete Objective
-              </button>
-
-              <button className={`btn-mic-toggle ${isListening ? "active" : ""}`} onClick={toggleMic}>
-                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                {isListening ? "Listening" : "Voice Mic"}
-              </button>
-            </div>
+            <button
+              className={`btn-cockpit-mic ${isListening ? "active" : ""}`}
+              onClick={toggleMic}
+              title={isListening ? "Pause Voice Recognition" : "Activate Hands-Free Voice Control"}
+            >
+              {isListening ? <Mic size={22} /> : <MicOff size={22} />}
+            </button>
           </div>
 
-          {/* Upcoming Corridor Stops Queue */}
-          <div className="upcoming-queue-card">
-            <div className="queue-title">
-              <span>Day Line Sequence Queue</span>
-              <span>{stops.length - currentStopIndex - 1} stops remaining</span>
+          {/* Route Sequence Queue */}
+          <div className="cockpit-queue-card">
+            <div className="cockpit-queue-header">
+              <Radio size={16} color="#38bdf8" /> Day Line Route Sequence
             </div>
 
-            <div className="queue-items">
-              {stops.map((stop, idx) => {
+            <div className="cockpit-queue-list">
+              {activeStops.map((stop, idx) => {
                 const isCurrent = idx === currentStopIndex;
                 const isDone = completedObjectives.includes(stop.id);
 
                 return (
                   <div
                     key={stop.id}
-                    className="queue-row"
-                    style={{
-                      opacity: isCurrent ? 1 : isDone ? 0.4 : 0.8,
-                      borderLeft: isCurrent ? "3px solid #f59e0b" : "1px solid rgba(255, 255, 255, 0.04)",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => {
-                      setCurrentStopIndex(idx);
-                      playTacticalChime("radar");
-                    }}
+                    className={`queue-item ${isCurrent ? "current" : ""} ${isDone ? "done" : ""}`}
+                    onClick={() => setCurrentStopIndex(idx)}
                   >
-                    <div>
-                      <div className="queue-row-name">
-                        {isDone && <Check size={12} color="#4ade80" style={{ display: "inline", marginRight: 4 }} />}
-                        {stop.name}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span className="queue-item-seq">{idx + 1}</span>
+                      <div>
+                        <div className="queue-item-title">{stop.name}</div>
+                        <div className="queue-item-sub">{stop.corridor} · {stop.distance}</div>
                       </div>
-                      <div className="queue-row-corridor">{stop.primaryObjective}</div>
                     </div>
-                    <span className="queue-row-dist">{isDone ? "VERIFIED" : stop.distance}</span>
+                    {isDone ? (
+                      <span style={{ color: "#4ade80", fontSize: "0.75rem", fontWeight: 700 }}>
+                        ✓ DONE
+                      </span>
+                    ) : isCurrent ? (
+                      <span style={{ color: "#fbbf24", fontSize: "0.75rem", fontWeight: 700 }}>
+                        ACTIVE
+                      </span>
+                    ) : null}
                   </div>
                 );
               })}

@@ -39,7 +39,7 @@ const INITIAL_NODES: BuildingNode[] = [
     id: "louise",
     name: "The Louise Los Feliz",
     address: "4455 Los Feliz Blvd, Los Angeles, CA",
-    status: "targeted",
+    status: "targeted", // Authoritatively non-won
     units: 180,
     corridor: "Los Feliz Corridor",
     xPercent: 54,
@@ -93,11 +93,26 @@ const INITIAL_NODES: BuildingNode[] = [
 ];
 
 export default function LivingWarRoom() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenantId = urlParams.get("tenant") || "default";
+
+  // Authoritative Persistent Operator Scoreboard Read Model
+  const scoreboard = trpc.system.persistentOperator.scoreboard.useQuery(undefined, {
+    retry: false,
+    refetchInterval: 30_000,
+  });
+
+  const baseObserved = scoreboard.data?.authoritativeObservedValue ?? 24;
+  const baseTarget = scoreboard.data?.targetValue ?? 50;
+  const metricLabel = scoreboard.data?.metricKey
+    ? scoreboard.data.metricKey.replace(/_/g, " ").toUpperCase()
+    : "ACTIVE ACCOUNTS TARGET";
+
   const [nodes, setNodes] = useState<BuildingNode[]>(INITIAL_NODES);
   const [selectedNode, setSelectedNode] = useState<BuildingNode>(INITIAL_NODES[0]);
   const [isSimulatingWin, setIsSimulatingWin] = useState(false);
   const [hasSimulatedWin, setHasSimulatedWin] = useState(false);
-  const [activeCustomers, setActiveCustomers] = useState(24);
+  const [activeCustomers, setActiveCustomers] = useState(baseObserved);
   const [marginBoost, setMarginBoost] = useState(68.4);
   const [activities, setActivities] = useState([
     {
@@ -110,15 +125,22 @@ export default function LivingWarRoom() {
       id: "act-2",
       timestamp: "01:11:45",
       kind: "normal",
-      text: "Autonomous operator decision engine evaluated loadout priorities for tenant 'default'.",
+      text: `Autonomous operator decision engine evaluated loadout priorities for tenant '${tenantId}'.`,
     },
     {
       id: "act-3",
       timestamp: "01:08:20",
       kind: "normal",
-      text: "Fail-closed gate verified: non-won accounts safely rejected with zero synthetic dispatches.",
+      text: "Fail-closed truth gate verified: non-won accounts safely rejected with zero synthetic dispatches.",
     },
   ]);
+
+  // Sync state if authoritative scoreboard updates
+  useEffect(() => {
+    if (scoreboard.data?.authoritativeObservedValue != null && !hasSimulatedWin) {
+      setActiveCustomers(scoreboard.data.authoritativeObservedValue);
+    }
+  }, [scoreboard.data?.authoritativeObservedValue, hasSimulatedWin]);
 
   // Audio synthesizer for tactical sonic boom
   const playWarroomBoom = () => {
@@ -170,12 +192,13 @@ export default function LivingWarRoom() {
     }
   };
 
+  // Truth-disciplined Sandbox Simulation: models corridor impact without fake production writes
   const handleSimulateWin = () => {
     if (hasSimulatedWin) return;
     setIsSimulatingWin(true);
     playWarroomBoom();
 
-    // 1. Mark The Louise as WON
+    // 1. Mark The Louise as simulated WON locally
     setNodes((prev) =>
       prev.map((n) => (n.id === "louise" ? { ...n, status: "won" } : n))
     );
@@ -186,12 +209,12 @@ export default function LivingWarRoom() {
       setMarginBoost((m) => +(m + 6.4).toFixed(1));
     }, 400);
 
-    // 3. Claire vocal dispatch
+    // 3. Claire vocal dispatch with strict truth discipline
     speakClaireDispatch(
-      "Commercial agreement verified at The Louise. Corridor density unlocked. Dispatching 3 conquest objectives to Day Line."
+      "Sandbox simulation active: Modeling corridor density impact for The Louise. No production mutations recorded."
     );
 
-    // 4. Append live activities
+    // 4. Append sandbox projection activities
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 
@@ -200,13 +223,13 @@ export default function LivingWarRoom() {
         id: `act-${Date.now()}-1`,
         timestamp: timeStr,
         kind: "win",
-        text: "Account win verified at The Louise Los Feliz! Corridor conquest engine activated.",
+        text: "[SIMULATION] Modeled hypothetical win at The Louise Los Feliz. Zero mutations written to database or Day Line.",
       },
       {
         id: `act-${Date.now()}-2`,
         timestamp: timeStr,
         kind: "conquest",
-        text: "Geographic conquest propagated: 3 neighbor assets locked into Day Line sequence.",
+        text: "[SIMULATION] Projected corridor expansion: 3 neighbor high-rise assets evaluated for density upside.",
       },
       ...prev,
     ]);
@@ -220,7 +243,7 @@ export default function LivingWarRoom() {
   const handleResetSimulation = () => {
     setNodes(INITIAL_NODES);
     setHasSimulatedWin(false);
-    setActiveCustomers(24);
+    setActiveCustomers(baseObserved);
     setMarginBoost(68.4);
   };
 
@@ -232,16 +255,24 @@ export default function LivingWarRoom() {
           <span className="warroom-badge">
             <span className="pulse-dot" /> Sovereign War Room
           </span>
+          <span style={{ fontSize: "0.85rem", color: "#fbbf24", fontWeight: 700, borderLeft: "1px solid #334155", paddingLeft: 10 }}>
+            Tenant: {tenantId}
+          </span>
           <span style={{ fontSize: "0.9rem", color: "#e2e8f0", fontWeight: 600 }}>
             Autonomous Corridor Conquest Atlas · Los Angeles Hub
           </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {hasSimulatedWin && (
+            <span style={{ fontSize: "0.75rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", padding: "4px 8px", borderRadius: 4, fontWeight: 700, border: "1px solid rgba(245, 158, 11, 0.4)" }}>
+              SANDBOX SIMULATION ACTIVE
+            </span>
+          )}
           <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
-            Heartbeat: <strong style={{ color: "#4ade80" }}>Online (0 Errors)</strong>
+            Scoreboard Precision: <strong style={{ color: "#4ade80" }}>{scoreboard.data?.precision ?? "exact"}</strong>
           </span>
-          <Link href="/driver/cockpit" className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
+          <Link href={`/driver/cockpit?tenant=${tenantId}`} className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
             <Radio size={14} /> Driver Cockpit
           </Link>
           <Link href="/franchise" className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
@@ -328,10 +359,10 @@ export default function LivingWarRoom() {
             </div>
 
             <div className="hud-panel">
-              <span className="hud-label">Corridor Siege State</span>
+              <span className="hud-label">Corridor State</span>
               <span className="hud-val">{hasSimulatedWin ? "EXPANDED" : "LOCKED"}</span>
               <span className="hud-sub" style={{ color: hasSimulatedWin ? "#4ade80" : "#fbbf24" }}>
-                {hasSimulatedWin ? "3 Targets Queued" : "Conquest Primed"}
+                {hasSimulatedWin ? "Simulation Active" : "Authoritative Line"}
               </span>
             </div>
           </div>
@@ -342,20 +373,20 @@ export default function LivingWarRoom() {
           {/* Section 1: Active Macro Goal */}
           <div>
             <div className="rail-section-header">
-              <Activity size={14} color="#f59e0b" /> Macro Goal Heartbeat
+              <Activity size={14} color="#f59e0b" /> Authoritative Macro Goal
             </div>
 
             <div className="macro-goal-card" style={{ marginTop: 10 }}>
               <div className="macro-goal-header">
-                <span className="goal-metric-title">Active Customers Target</span>
-                <span className="goal-metric-numbers">{activeCustomers} / 50</span>
+                <span className="goal-metric-title">{metricLabel}</span>
+                <span className="goal-metric-numbers">{activeCustomers} / {baseTarget}</span>
               </div>
               <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: `${(activeCustomers / 50) * 100}%` }} />
+                <div className="progress-bar-fill" style={{ width: `${Math.min(100, (activeCustomers / baseTarget) * 100)}%` }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#94a3b8" }}>
-                <span>Baseline: 23</span>
-                <span>Target: 50 Accounts</span>
+                <span>Observed: {activeCustomers}</span>
+                <span>Target: {baseTarget} Accounts</span>
               </div>
             </div>
           </div>
@@ -363,18 +394,21 @@ export default function LivingWarRoom() {
           {/* Section 2: Executive Simulation Trigger */}
           <div>
             <div className="rail-section-header">
-              <Zap size={14} color="#f59e0b" /> Executive Siege Simulator
+              <Zap size={14} color="#f59e0b" /> What-If Sandbox Simulator
             </div>
 
             <div className="simulation-trigger-box" style={{ marginTop: 10 }}>
-              <div>
-                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#ffffff", display: "block" }}>
-                  Trigger Account Win at The Louise
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#ffffff" }}>
+                  Model Win: The Louise
                 </span>
-                <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                  Ripples corridor conquest shockwave, dispatches Claire voice briefing, and materializes Day Line items.
+                <span style={{ fontSize: "0.68rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+                  SANDBOX
                 </span>
               </div>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: 12 }}>
+                Models corridor density impact if The Louise closes. Zero mutations written to database or Day Line.
+              </span>
 
               {!hasSimulatedWin ? (
                 <button 
@@ -382,7 +416,7 @@ export default function LivingWarRoom() {
                   onClick={handleSimulateWin}
                   disabled={isSimulatingWin}
                 >
-                  <Play size={16} /> Simulate Win & Corridor Siege
+                  <Play size={16} /> Simulate Win Impact [Sandbox]
                 </button>
               ) : (
                 <div style={{ display: "flex", gap: 8 }}>
@@ -391,7 +425,7 @@ export default function LivingWarRoom() {
                     style={{ flex: 1, justifyContent: "center", borderColor: "#4ade80", color: "#4ade80" }}
                     onClick={handleSimulateWin}
                   >
-                    <CheckCircle2 size={14} /> Win Re-Fired
+                    <CheckCircle2 size={14} /> Re-Simulate
                   </button>
                   <button 
                     className="btn-tactical" 

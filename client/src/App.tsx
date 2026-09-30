@@ -248,9 +248,6 @@ const SAAS_CUSTOMER_SAFE_PATHS = [
   "/onboarding",
   "/goldline/start",
   "/receipt/",
-  "/war-room",
-  "/driver/cockpit",
-  "/franchise",
 ] as const;
 
 function isSaasCustomerSafePath(pathname: string): boolean {
@@ -485,9 +482,21 @@ function AdminHostRouter() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
-      <Route path="/driver/cockpit" component={ClaireCockpitRoute} />
-      <Route path="/war-room" component={LivingWarRoomRoute} />
-      <Route path="/franchise" component={FranchiseFactoryRoute} />
+      <Route path="/driver/cockpit">
+        <AdminAuthGate>
+          <ClaireCockpitRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/war-room">
+        <AdminAuthGate>
+          <LivingWarRoomRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/franchise">
+        <AdminAuthGate>
+          <FranchiseFactoryRoute />
+        </AdminAuthGate>
+      </Route>
       <Route
         path="/commercial-proposal/:missionId"
         component={CommercialProposalPrintRoute}
@@ -702,9 +711,21 @@ function Router() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
-      <Route path="/driver/cockpit" component={ClaireCockpitRoute} />
-      <Route path="/war-room" component={LivingWarRoomRoute} />
-      <Route path="/franchise" component={FranchiseFactoryRoute} />
+      <Route path="/driver/cockpit">
+        <AdminAuthGate>
+          <ClaireCockpitRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/war-room">
+        <AdminAuthGate>
+          <LivingWarRoomRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/franchise">
+        <AdminAuthGate>
+          <FranchiseFactoryRoute />
+        </AdminAuthGate>
+      </Route>
       <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route
         path="/commercial-proposal/:missionId"

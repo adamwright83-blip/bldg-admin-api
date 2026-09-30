@@ -3,10 +3,12 @@
  *
  * tRPC endpoints for inspecting active operator franchises,
  * launching new metro territories, and streaming provisioning telemetry.
+ *
+ * All endpoints are strictly authenticated and protected behind adminProcedure.
  */
 
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { adminProcedure, router } from "../_core/trpc";
 import {
   listFranchises,
   getFranchiseById,
@@ -14,18 +16,18 @@ import {
 } from "./franchiseService";
 
 export const franchiseRouter = router({
-  list: publicProcedure.query(async () => {
+  list: adminProcedure.query(async () => {
     return listFranchises();
   }),
 
-  getById: publicProcedure
+  getById: adminProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ input }) => {
       const franchise = await getFranchiseById(input.id);
       return franchise;
     }),
 
-  provision: publicProcedure
+  provision: adminProcedure
     .input(
       z.object({
         city: z.string().trim().min(2).max(64),
@@ -42,7 +44,7 @@ export const franchiseRouter = router({
         voicePersona: z.string().trim().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       return provisionFranchise({
         city: input.city,
         state: input.state,
@@ -51,6 +53,7 @@ export const franchiseRouter = router({
         targetAccounts: input.targetAccounts,
         operatorName: input.operatorName,
         operatorPhone: input.operatorPhone,
+        operatorUserId: ctx.user.openId,
         voicePersona: input.voicePersona,
       });
     }),
