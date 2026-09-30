@@ -319,7 +319,7 @@ export async function bridgeCommercialResolution(
  * Searches for active objectives that have an explicit, deterministic link
  * to the given driver action target.
  */
-async function findDeterministicObjectivesForDriverAction(
+export async function findDeterministicObjectivesForDriverAction(
   input: BridgeDriverActionInput
 ): Promise<PersistentGrowthObjective[]> {
   const db = await getDb();
@@ -840,7 +840,7 @@ export async function bridgeParkingLotDebrief(
     outcomeKind: "field_debrief_analyzed",
     impactClass: "operational_result",
     epistemicStatus: "verified",
-    evidenceClass: "goldline_audit_log",
+    evidenceClass: "operator_attested",
     evidenceReference: input.evidenceReference,
     sourceSystem: "claire_field_debrief",
     monetaryValueCents: null,

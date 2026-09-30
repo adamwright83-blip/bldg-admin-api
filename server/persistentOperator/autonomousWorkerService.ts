@@ -99,7 +99,7 @@ export async function ensureAutonomousGoalBootstrap(input: {
       let targetRunId = existingRun?.id;
 
       if (!targetRunId) {
-        const template = registry.listTemplates()[0];
+        const template = registry.list()[0];
         if (!template) continue;
         const verticalKey = template.verticalKey;
         const activated = await activateCurrentMacroGoalRun({
@@ -126,7 +126,7 @@ export async function ensureAutonomousGoalBootstrap(input: {
             and(
               eq(goalCycleRequests.tenantId, goal.tenantId),
               eq(goalCycleRequests.goalRunId, targetRunId),
-              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leasing"])
+              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leased"])
             )
           )
           .limit(1);

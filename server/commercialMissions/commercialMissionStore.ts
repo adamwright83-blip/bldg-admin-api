@@ -535,6 +535,7 @@ export async function createCommercialMission(input: {
       const opportunityId = Number(opportunityInsert[0].insertId);
       const accountSnapshot: CommercialMissionAccountSnapshot = { ...input.account, accountId };
       const opportunitySnapshot: CommercialMissionOpportunitySnapshot = {
+        ...input.opportunity,
         score,
         estimateConfidence,
         primarySignal,
@@ -542,7 +543,6 @@ export async function createCommercialMission(input: {
         risks: risksJson,
         evidence: evidenceJson,
         estimatedAnnualValueCents,
-        ...input.opportunity,
         opportunityId,
       };
 
