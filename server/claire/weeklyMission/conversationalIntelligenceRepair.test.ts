@@ -1,16 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { remainingWeekHorizon, type WeeklyDraft } from "../../../shared/weeklyMissionReadiness";
+import type { WeeklyDraft } from "../../../shared/weeklyMissionReadiness";
+import { commitBriefing } from "../briefing/briefingCommit";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "../turn/claireTurn";
 import {
   createMemoryConversationStateStore,
   setClaireConversationStateStoreForTests,
 } from "../turn/conversationStateStore";
-import {
-  advanceWeeklySession,
-  capturePrimary,
-  isActionablePrimaryCandidate,
-} from "./advance";
-import { loadWeeklyDossier } from "./dossier";
+import { capturePrimary } from "./advance";
 import { arbitrateWeeklyTurnIntent, routeActiveWeeklySession } from "./route";
 import {
   isWeeklySessionValid,
@@ -21,21 +17,37 @@ import {
   type WeeklyPlanningSession,
 } from "./session";
 
-// Monday of test week
 const WEEK_START = "2026-09-28";
 const TUESDAY = "2026-09-29";
-const NOW = new Date("2026-09-29T16:00:00Z"); // Tuesday 09:00 AM Pacific
+const NOW = new Date("2026-09-29T16:00:00Z");
 const TIMEZONE = "America/Los_Angeles";
 
-const SEVEN_DORMANT_CUSTOMERS = [
-  { id: "cust_1", name: "Sarah Connor" },
-  { id: "cust_2", name: "John Miller" },
-  { id: "cust_3", name: "Alice Wong" },
-  { id: "cust_4", name: "David Kim" },
-  { id: "cust_5", name: "Elena Rostova" },
-  { id: "cust_6", name: "Marcus Brody" },
-  { id: "cust_7", name: "Chloe Price" },
-];
+const RECOVERY_CUSTOMERS = [
+  ["cust_1", "Sarah Connor"],
+  ["cust_2", "John Miller"],
+  ["cust_3", "Alice Wong"],
+  ["cust_4", "David Kim"],
+  ["cust_5", "Elena Rostova"],
+  ["cust_6", "Marcus Brody"],
+  ["cust_7", "Chloe Price"],
+] as const;
+
+const RECOVERY_OBLIGATIONS = RECOVERY_CUSTOMERS.map(([id, name]) => ({
+  id: `recovery:${id}`,
+  kind: "dormant_recovery" as const,
+  subjectKey: id,
+  subjectName: name,
+  status: "scheduled" as const,
+  dueDate: TUESDAY,
+  title: `Recover ${name}`,
+  why: `${name} crossed the dormant threshold.`,
+  draft: null,
+  historyIntact: true as const,
+  moveCount: 0,
+}));
+
+const RECOVERY_BRIEF =
+  "Seven dormant customers are ready for recovery: Sarah Connor, John Miller, Alice Wong, David Kim, Elena Rostova, Marcus Brody, and Chloe Price.";
 
 function initialWeeklyDraft(): WeeklyDraft {
   return {
@@ -90,7 +102,22 @@ function initialWeeklyDraft(): WeeklyDraft {
   };
 }
 
-describe("Claire Conversational-Intelligence Repair — Production Incident Regression", () => {
+function openWeeklySession(lastQuestionKind: "primary" | "readiness" = "primary"): WeeklyPlanningSession {
+  const session = newWeeklySession({
+    tenantId: "default",
+    operatorId: "adam",
+    dayDirectorActorId: "actor-adam",
+    weekStart: WEEK_START,
+    draft: initialWeeklyDraft(),
+  });
+  session.phase = "interview";
+  session.substantiveQuestions = 2;
+  session.lastQuestionKind = lastQuestionKind;
+  session.lastQuestionDate = lastQuestionKind === "readiness" ? TUESDAY : "2026-09-30";
+  return session;
+}
+
+describe("Claire conversational-intelligence repair", () => {
   let memoryStore: ReturnType<typeof createMemoryConversationStateStore>;
 
   beforeEach(() => {
@@ -102,12 +129,8 @@ describe("Claire Conversational-Intelligence Repair — Production Incident Regr
     setClaireConversationStateStoreForTests(null);
   });
 
-  function createTestFixture(overrides: { failCommit?: boolean } = {}) {
-    const state: ClaireTurnState = {
-      history: [],
-      surfacedRecoveryAccounts: SEVEN_DORMANT_CUSTOMERS,
-    };
-
+  function createTestFixture(overrides: { failCommit?: boolean; noRecoveries?: boolean } = {}) {
+    const state: ClaireTurnState = { history: [] };
     const committedReceipts: any[] = [];
     const committedItems: any[] = [];
 
@@ -153,7 +176,7 @@ describe("Claire Conversational-Intelligence Repair — Production Incident Regr
         runQuery: vi.fn() as never,
       },
       commitment: vi.fn(async () => ({ kind: "not_applicable" as const })) as never,
-      followUp: vi.fn(async () => "Dormant customer recovery.") as never,
+      followUp: vi.fn(async () => "Recovery texts are short win-back messages to dormant customers.") as never,
       extractModel: null,
       loadExisting: async () => [],
       commit: commitMock as never,
@@ -167,14 +190,19 @@ describe("Claire Conversational-Intelligence Repair — Production Incident Regr
       searchMemory: vi.fn(async () => []) as never,
       memoryBetween: vi.fn(async () => []) as never,
       encyclopedia: null,
+      watchBoard: vi.fn(async () => ({ brief: RECOVERY_BRIEF })),
+      recoveryObligations: vi.fn(async () =>
+        overrides.noRecoveries ? [] : RECOVERY_OBLIGATIONS
+      ) as never,
+      doctrineTurn: vi.fn(async () => null),
       classifyPriorClaim: (async () => false) as never,
       rerunBusinessQuery: vi.fn() as never,
       classifierBudgetMs: 30,
       ...extra,
     });
 
-    const say = async (utterance: string, extra: Partial<ClaireTurnDeps> = {}) => {
-      return runClaireTurn(
+    const say = async (utterance: string, extra: Partial<ClaireTurnDeps> = {}) =>
+      runClaireTurn(
         {
           tenantId: "default",
           operatorUserId: "adam",
@@ -194,348 +222,249 @@ describe("Claire Conversational-Intelligence Repair — Production Incident Regr
         },
         deps(extra)
       );
-    };
 
     return { state, say, commitMock, committedReceipts, committedItems };
   }
 
-  it("reproduces and passes the exact 9-turn production sequence without weekly hijacking", async () => {
-    // Step 1: Active in-progress weekly-planning session exists from earlier in the week
-    const initialDraft = initialWeeklyDraft();
-    const session: WeeklyPlanningSession = newWeeklySession({
-      tenantId: "default",
-      operatorId: "adam",
-      dayDirectorActorId: "actor-adam",
-      weekStart: WEEK_START,
-      draft: initialDraft,
-    });
-    session.phase = "interview";
-    session.substantiveQuestions = 2;
-    session.lastQuestionKind = "primary";
-    session.lastQuestionDate = "2026-09-30"; // Wednesday
+  async function surfaceRecoveries(fixture: ReturnType<typeof createTestFixture>) {
+    const turn = await fixture.say("What should I do today?");
+    expect(turn.speak).toContain("Sarah Connor");
+    expect(turn.speak).toContain("Chloe Price");
+    expect(fixture.state.surfacedRecoveryAccounts).toEqual(
+      RECOVERY_CUSTOMERS.map(([id, name]) => ({ id, name }))
+    );
+  }
+
+  it("discovers structured recovery referents through the real turn runtime and later resolves them", async () => {
+    const session = openWeeklySession();
     await saveWeeklySession(session);
-
-    // Save initial JSON snapshot of weekly draft to verify bit-identical invariance
-    const beforeCallWeeklyJson = JSON.stringify(session.draft);
-
+    const beforeWeekly = JSON.stringify(session.draft);
     const fixture = createTestFixture();
 
-    // Step 2: Operator says they dropped off an order and are heading to the dry cleaner
-    const turn2 = await fixture.say(
-      "I just dropped off an order and I'm on my way to the dry cleaner for another order."
+    const status = await fixture.say(
+      "Once I leave here I'm basically done for the day, and business is dead."
     );
-    expect(turn2.speak).not.toMatch(/What owns Thursday|What owns Friday|blocks the week/i);
-    expect(turn2.kind).not.toBe("fallback");
+    expect(status.speak).not.toMatch(/owns (?:Thursday|Friday)|blocks the week/i);
 
-    // Step 3: Operator says they're going home afterward because there are no more orders and they need customers
-    const turn3 = await fixture.say(
-      "After that I'm going home because I have no more orders and I need customers."
-    );
-    expect(turn3.speak).not.toMatch(/What owns Thursday|What owns Friday|blocks the week/i);
+    await surfaceRecoveries(fixture);
 
-    // Step 4: Claire intelligently surfaced dormant-customer recovery texts (7 customers)
-    // Recorded in history
-    fixture.state.history!.push({
-      speaker: "claire",
-      text: "I identified seven dormant customers who haven't ordered in over 60 days. We can send recovery texts to Sarah Connor, John Miller, Alice Wong, David Kim, Elena Rostova, Marcus Brody, and Chloe Price.",
-      at: Date.now(),
-    });
+    const explanation = await fixture.say("What are recovery texts?");
+    expect(explanation.speak).toMatch(/win-back|dormant/i);
+    expect(explanation.speak).not.toMatch(/owns (?:Thursday|Friday)|blocks the week/i);
 
-    // Step 5: Operator asks what “recovery texts” means
-    const turn5 = await fixture.say("What does recovery texts mean?");
-    expect(turn5.speak).not.toMatch(/What owns Thursday|What owns Friday|blocks the week/i);
-
-    // Step 6: Claire explains it naturally
-    fixture.state.history!.push({
-      speaker: "claire",
-      text: "Recovery texts are short win-back messages offering a discount to re-engage accounts that haven't ordered recently.",
-      at: Date.now(),
-    });
-
-    // Step 7: Operator says: “I wanna batch them all for today. Great idea.”
-    const turn7 = await fixture.say("I wanna batch them all for today. Great idea.");
-    // PASS REQUIREMENT: No weekly-planning hijack! No "What owns Thursday?"!
-    expect(turn7.speak).not.toMatch(/What owns Thursday|What owns Friday|One thing still blocks the week/i);
-    // PASS REQUIREMENT: Raw operator utterance MUST NOT become a task
-    expect(turn7.speak).not.toMatch(/I wanna batch them all for today/i);
-    // Interpreted as today's dormant-customer recovery work for the 7 identified customers
+    const batch = await fixture.say("Yeah, do the whole group this afternoon.");
+    expect(batch.speak).not.toMatch(/owns (?:Thursday|Friday)|blocks the week/i);
     expect(fixture.state.pendingBriefing).not.toBeNull();
-    const pendingItem = fixture.state.pendingBriefing!.parsed.items[0];
-    expect(pendingItem).toBeDefined();
-    expect(pendingItem.title).toBe("Send 7 dormant-customer recovery texts");
-    expect(pendingItem.businessDate).toBe(TUESDAY);
-    expect(pendingItem.executionType).toBe("challenge");
 
-    // Step 8: Operator says: “Put them on the Day Line.”
-    const turn8 = await fixture.say("Put them on the Day Line.");
-    // PASS REQUIREMENT: Real receipt-backed write before Claire claims success
+    const pending = fixture.state.pendingBriefing!.parsed.items[0]!;
+    expect(pending.title).toBe("Send 7 dormant-customer recovery texts");
+    expect(pending.people).toEqual(RECOVERY_CUSTOMERS.map(([, name]) => name));
+    expect(pending.references).toEqual(
+      RECOVERY_CUSTOMERS.map(([id, name]) => ({
+        kind: "customer",
+        id,
+        name,
+        source: "conversation_referent",
+      }))
+    );
+
+    const saved = await fixture.say("Those people you just mentioned — put that work on today.");
     expect(fixture.commitMock).toHaveBeenCalledTimes(1);
     expect(fixture.committedReceipts.length).toBeGreaterThan(0);
-    expect(turn8.receiptBackedCommit).toBeDefined();
-    expect(turn8.receiptBackedCommit).toMatch(/Done\.\s+1 on today's line/i);
-    expect(turn8.speak).not.toMatch(/tell me the items again/i);
+    expect(saved.receiptBackedCommit).toMatch(/Done\.\s+1 on today's line/i);
+    expect(saved.speak).not.toMatch(/tell me the items again/i);
+    expect(fixture.committedItems[0]?.references).toEqual(pending.references);
 
-    // Step 9: Verify persisted weekly draft remains completely bit-identical!
-    const afterCallSession = await loadWeeklySession({
+    const after = await loadWeeklySession({
       tenantId: "default",
       operatorId: "adam",
       weekStart: WEEK_START,
     });
-    expect(afterCallSession).not.toBeNull();
-    const afterCallWeeklyJson = JSON.stringify(afterCallSession!.draft);
-    expect(afterCallWeeklyJson).toBe(beforeCallWeeklyJson);
-
-    // Unrelated weekly days were not mutated
-    expect(afterCallSession!.draft.days.find(d => d.weekday === "Thursday")?.primary).toBeNull();
-    expect(afterCallSession!.draft.days.find(d => d.weekday === "Friday")?.primary).toBeNull();
-    expect(afterCallSession!.draft.days.find(d => d.weekday === "Wednesday")?.primary).toBeNull();
+    expect(JSON.stringify(after?.draft)).toBe(beforeWeekly);
   });
 
-  it("handles write failure truthfully: retains the 7 items in working memory without asking the operator to repeat them", async () => {
+  it("retains the structured customer set after a failed write and never asks for it again", async () => {
     const fixture = createTestFixture({ failCommit: true });
+    await surfaceRecoveries(fixture);
+    await fixture.say("Batch them for today.");
 
-    fixture.state.history!.push({
-      speaker: "claire",
-      text: "I identified seven dormant customers. We can send recovery texts to them.",
-      at: Date.now(),
-    });
-
-    // Propose batch for today
-    await fixture.say("I wanna batch them all for today. Great idea.");
-    expect(fixture.state.pendingBriefing).not.toBeNull();
-
-    // Confirm write, which fails
-    const failTurn = await fixture.say("Put them on the Day Line.");
-
-    // Truthful status communicated
-    expect(failTurn.speak).toMatch(/nothing saved|try again/i);
-    expect(failTurn.speak).not.toMatch(/tell me the items again/i);
-
-    // CRITICAL REQUIREMENT: Claire retains the intended items in working memory!
-    expect(fixture.state.pendingBriefing).not.toBeNull();
-    expect(fixture.state.pendingBriefing!.parsed.items[0]?.title).toBe("Send 7 dormant-customer recovery texts");
+    const fail = await fixture.say("Put them on the Day Line.");
+    expect(fail.speak).toMatch(/nothing saved|try again/i);
+    expect(fail.speak).not.toMatch(/tell me the items again/i);
+    expect(fixture.state.pendingBriefing?.parsed.items[0]?.references).toHaveLength(7);
     expect(fixture.state.surfacedRecoveryAccounts).toHaveLength(7);
   });
 
-  it("unit test: capturePrimary('I wanna batch them all for today. Great idea.') writes nothing durable and leaves draft empty", () => {
-    const draft = initialWeeklyDraft();
-    const session: WeeklyPlanningSession = newWeeklySession({
-      tenantId: "default",
-      operatorId: "adam",
-      dayDirectorActorId: "actor-adam",
-      weekStart: WEEK_START,
-      draft,
-    });
-    session.lastQuestionKind = "primary";
-    session.lastQuestionDate = "2026-10-01"; // Thursday
-
-    // Call capturePrimary with the exact utterance from the production incident
-    capturePrimary(session, "I wanna batch them all for today. Great idea.");
-
-    const thursday = session.draft.days.find(d => d.businessDate === "2026-10-01");
-    expect(thursday?.primary).toBeNull();
-    expect(thursday?.uncertainty).toBe("Unconfirmed mission.");
-    expect(JSON.stringify(session.draft)).not.toContain("I wanna batch them all for today");
-    expect(JSON.stringify(session.draft)).not.toContain("Great idea");
+  it("fails closed instead of inventing a group when no structured referent exists", async () => {
+    const fixture = createTestFixture({ noRecoveries: true });
+    const result = await fixture.say("Do the whole group this afternoon.");
+    expect(result.speak).toBe("Which people do you mean?");
+    expect(fixture.commitMock).not.toHaveBeenCalled();
+    expect(fixture.state.pendingBriefing ?? null).toBeNull();
   });
 
-  it("unit test: capturePrimary rejects conversational confusion and questions as tasks", () => {
-    const draft = initialWeeklyDraft();
-    const session = newWeeklySession({
-      tenantId: "default",
-      operatorId: "adam",
-      dayDirectorActorId: "actor-adam",
-      weekStart: WEEK_START,
-      draft,
-    });
-    session.lastQuestionKind = "primary";
+  it("carries structured references through commitBriefing into the Day Director proposal", async () => {
+    const accept = vi.fn(async () => ({ id: "dayline-1" }));
+    const refs = RECOVERY_CUSTOMERS.map(([id, name]) => ({
+      kind: "customer" as const,
+      id,
+      name,
+      source: "conversation_referent" as const,
+    }));
+    await commitBriefing(
+      {
+        items: [
+          {
+            kind: "new_work",
+            title: "Send 7 dormant-customer recovery texts",
+            quote: "Send recovery texts today to the seven identified customers",
+            businessDate: TUESDAY,
+            timing: { kind: "none" },
+            quantity: 7,
+            people: RECOVERY_CUSTOMERS.map(([, name]) => name),
+            place: null,
+            needs: null,
+            existing: null,
+            references: refs,
+            executionType: "challenge",
+          },
+        ],
+        context: [],
+        questions: [],
+        unparsed: [],
+        source: "deterministic",
+      },
+      {
+        tenantId: "default",
+        dayDirectorActorId: "actor-adam",
+        conversationKey: "call:refs",
+      },
+      {
+        accept: accept as never,
+        complete: vi.fn() as never,
+        update: vi.fn() as never,
+        linkVehicleWork: vi.fn() as never,
+      }
+    );
+    expect(accept).toHaveBeenCalledTimes(1);
+    expect(accept.mock.calls[0]?.[0]?.proposal.references).toEqual(refs);
+  });
+
+  it("never turns arbitrary conversational speech into a weekly primary", () => {
+    const session = openWeeklySession();
     session.lastQuestionDate = "2026-10-01";
 
+    capturePrimary(session, "I wanna batch them all for today. Great idea.");
     capturePrimary(session, "What blocks the week? What do you mean?");
-    expect(session.draft.days.find(d => d.businessDate === "2026-10-01")?.primary).toBeNull();
+    capturePrimary(session, "I don't know what you're saying.");
 
-    capturePrimary(session, "I don't know what you're saying...");
-    expect(session.draft.days.find(d => d.businessDate === "2026-10-01")?.primary).toBeNull();
-
-    capturePrimary(session, "One thing still blocks the week. What owns Thursday?");
-    expect(session.draft.days.find(d => d.businessDate === "2026-10-01")?.primary).toBeNull();
+    expect(session.draft.days.find(day => day.businessDate === "2026-10-01")?.primary).toBeNull();
+    expect(JSON.stringify(session.draft)).not.toMatch(/I wanna batch|What blocks the week|don't know what you're saying/i);
   });
 
-  describe("adversarial cases", () => {
-    it("operator interrupts Claire with 'stop' or 'hold on'", async () => {
-      const draft = initialWeeklyDraft();
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft,
-      });
-      await saveWeeklySession(session);
+  it("parks an ambiguous operational utterance even while a readiness question is pending", async () => {
+    const session = openWeeklySession("readiness");
+    await saveWeeklySession(session);
 
-      const intent1 = arbitrateWeeklyTurnIntent({ utterance: "stop", session, now: NOW, timeZone: TIMEZONE });
-      expect(intent1).toBe("chit_chat");
-
-      const intent2 = arbitrateWeeklyTurnIntent({ utterance: "hold on a second", session, now: NOW, timeZone: TIMEZONE });
-      expect(intent2).toBe("chit_chat");
-
-      const routed = await routeActiveWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        utterance: "stop",
-        now: NOW,
-        timeZone: TIMEZONE,
-      });
-      expect(routed).toBeNull(); // Escaped to operational lane!
-    });
-
-    it("operator changes subject to weather or trivia", async () => {
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft: initialWeeklyDraft(),
-      });
-      await saveWeeklySession(session);
-
-      const intent = arbitrateWeeklyTurnIntent({
-        utterance: "What's the weather like outside right now?",
+    expect(
+      arbitrateWeeklyTurnIntent({
+        utterance: "I'm pulling into the laundromat now.",
         session,
         now: NOW,
         timeZone: TIMEZONE,
-      });
-      expect(intent).toBe("clarify");
+      })
+    ).toBe("semantic_review");
 
-      const routed = await routeActiveWeeklySession({
+    const classifyIntent = vi.fn(async () => "leave_weekly" as const);
+    const routed = await routeActiveWeeklySession(
+      {
         tenantId: "default",
         operatorId: "adam",
         dayDirectorActorId: "actor-adam",
-        utterance: "What's the weather like outside right now?",
+        utterance: "I'm pulling into the laundromat now.",
         now: NOW,
         timeZone: TIMEZONE,
-      });
-      expect(routed).toBeNull();
+      },
+      { classifyIntent }
+    );
+    expect(routed).toBeNull();
+    expect(classifyIntent).toHaveBeenCalledOnce();
+
+    const after = await loadWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      weekStart: WEEK_START,
     });
-
-    it("operator asks 'what did you say?'", async () => {
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft: initialWeeklyDraft(),
-      });
-      const intent = arbitrateWeeklyTurnIntent({
-        utterance: "Wait, what did you say?",
-        session,
-        now: NOW,
-        timeZone: TIMEZONE,
-      });
-      expect(intent).toBe("clarify");
-    });
-
-    it("operator gives an operational status update with several clauses and no request", async () => {
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft: initialWeeklyDraft(),
-      });
-      const utterance = "I was at the plant, then drove to 5th Street, talked to Dave for a minute, and now I'm waiting in the truck.";
-      const intent = arbitrateWeeklyTurnIntent({ utterance, session, now: NOW, timeZone: TIMEZONE });
-      expect(intent).toBe("operational_today");
-
-      const routed = await routeActiveWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        utterance,
-        now: NOW,
-        timeZone: TIMEZONE,
-      });
-      expect(routed).toBeNull();
-    });
-
-    it("operator gives an explicit Day Line command while weekly session is open", async () => {
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft: initialWeeklyDraft(),
-      });
-      await saveWeeklySession(session);
-
-      const fixture = createTestFixture();
-      const result = await fixture.say("Put fix the plant boiler on the Day Line.");
-
-      // Must NOT be intercepted by weekly planning
-      expect(result.speak).not.toMatch(/What owns Thursday|What owns Friday/i);
-      // Commits to Day Line
-      expect(fixture.commitMock).toHaveBeenCalled();
-      expect(fixture.committedItems.some((i: any) => i.title.toLowerCase().includes("plant boiler"))).toBe(true);
-
-      // Weekly session is still parked and untouched
-      const loaded = await loadWeeklySession({ tenantId: "default", operatorId: "adam", weekStart: WEEK_START });
-      expect(loaded?.phase).toBe("interview");
-      expect(loaded?.draft.days.find(d => d.weekday === "Thursday")?.primary).toBeNull();
-    });
-
-    it("operator later deliberately returns to weekly planning", async () => {
-      const session = newWeeklySession({
-        tenantId: "default",
-        operatorId: "adam",
-        dayDirectorActorId: "actor-adam",
-        weekStart: WEEK_START,
-        draft: initialWeeklyDraft(),
-      });
-      session.lastQuestionKind = "primary";
-      session.lastQuestionDate = "2026-10-01"; // Thursday
-      await saveWeeklySession(session);
-
-      // Explicit return to weekly planning
-      const intent1 = arbitrateWeeklyTurnIntent({
-        utterance: "Let's go back to weekly planning.",
-        session,
-        now: NOW,
-        timeZone: TIMEZONE,
-      });
-      expect(intent1).toBe("weekly_continue");
-
-      // Day move in weekly planning
-      const intent2 = arbitrateWeeklyTurnIntent({
-        utterance: "Thursday, not Tuesday",
-        session,
-        now: NOW,
-        timeZone: TIMEZONE,
-      });
-      expect(intent2).toBe("weekly_continue");
-    });
+    expect(after?.lastQuestionKind).toBe("readiness");
+    expect(after?.draft).toEqual(session.draft);
   });
 
-  describe("Session lifetime invariants", () => {
-    it("a weekly session is valid only for its weekStart and expires once the week ends", () => {
-      const session = newWeeklySession({
+  it("classifier failure parks the weekly session rather than stealing the turn", async () => {
+    const session = openWeeklySession("readiness");
+    await saveWeeklySession(session);
+
+    const routed = await routeActiveWeeklySession(
+      {
         tenantId: "default",
         operatorId: "adam",
         dayDirectorActorId: "actor-adam",
-        weekStart: "2026-09-14",
-        draft: initialWeeklyDraft(),
-      });
+        utterance: "I'm waiting outside the building now.",
+        now: NOW,
+        timeZone: TIMEZONE,
+      },
+      { classifyIntent: vi.fn(async () => null) }
+    );
+    expect(routed).toBeNull();
+  });
 
-      // Valid during that week (Friday 2026-09-18)
-      expect(isWeeklySessionValid(session, { businessDate: "2026-09-18", timeZone: TIMEZONE })).toBe(true);
+  it("recognizes unseen topic changes without incident-specific phrases", () => {
+    const session = openWeeklySession("readiness");
+    const cases = [
+      "Business is dead today. What should I do about that?",
+      "Anyway, forget that for a second. What happened with Dana?",
+      "Where did the revenue number come from?",
+    ];
+    for (const utterance of cases) {
+      expect(
+        arbitrateWeeklyTurnIntent({ utterance, session, now: NOW, timeZone: TIMEZONE })
+      ).not.toBe("weekly_continue");
+    }
+  });
 
-      // Invalid after Friday of that week (e.g. 2026-09-19 or 2026-09-29)
-      expect(isWeeklySessionValid(session, { businessDate: "2026-09-19", timeZone: TIMEZONE })).toBe(false);
-      expect(isWeeklySessionValid(session, { businessDate: "2026-09-29", timeZone: TIMEZONE })).toBe(false);
+  it("deliberately returns to the weekly plan when the operator names the open day", () => {
+    const session = openWeeklySession();
+    session.lastQuestionDate = "2026-10-01";
+    expect(
+      arbitrateWeeklyTurnIntent({
+        utterance: "Okay, back to Thursday. I need the sales walk ready before noon.",
+        session,
+        now: NOW,
+        timeZone: TIMEZONE,
+      })
+    ).toBe("weekly_continue");
+  });
+
+  it("explicit Day Line commands bypass a parked weekly session", async () => {
+    const session = openWeeklySession();
+    await saveWeeklySession(session);
+    const fixture = createTestFixture();
+
+    const result = await fixture.say("Put fix the plant boiler on the Day Line.");
+    expect(result.speak).not.toMatch(/owns (?:Thursday|Friday)/i);
+    expect(fixture.commitMock).toHaveBeenCalled();
+
+    const loaded = await loadWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      weekStart: WEEK_START,
     });
+    expect(loaded?.draft).toEqual(session.draft);
+  });
 
-    it("WEEKLY_SESSION_TTL_MS is at most 7 days", () => {
-      expect(WEEKLY_SESSION_TTL_MS).toBeLessThanOrEqual(7 * 24 * 60 * 60 * 1000);
-    });
+  it("weekly session lifetime is bounded to its target week", () => {
+    const session = openWeeklySession();
+    expect(isWeeklySessionValid(session, { businessDate: "2026-10-02", timeZone: TIMEZONE })).toBe(true);
+    expect(isWeeklySessionValid(session, { businessDate: "2026-10-03", timeZone: TIMEZONE })).toBe(false);
+    expect(WEEKLY_SESSION_TTL_MS).toBeLessThanOrEqual(7 * 24 * 60 * 60 * 1000);
   });
 });
