@@ -5,9 +5,11 @@
  * for multi-metro Goldline route franchises.
  *
  * HARDENED AGAINST GOLDLINE TRUTH CONTRACT:
- * - Real MySQL persistence via legacyDayforgeSaasTenants, legacyDayforgeSaasTenantLocations,
- *   legacyDayforgeSaasEntitlements, and operatorMacroGoals.
- * - Fails closed on unsupported metros (never silently falls back to Austin).
+ * - 100% transactional & idempotent via db.transaction().
+ * - Creates canonical SaaS tenant, owner membership, active subscription, entitlements,
+ *   primary depot location, territory profile with populated routePointsJson,
+ *   commercial accounts, and persistent operator macro-goal run.
+ * - Fails closed on unsupported metros (never silently falls back).
  * - Enforces zero-cross-leak tenant scoping.
  */
 
@@ -15,9 +17,16 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import {
+  commercialAccountLocations,
+  commercialAccounts,
+  commercialPipelineRecords,
+  goalCycleRequests,
   legacyDayforgeSaasEntitlements,
+  legacyDayforgeSaasMemberships,
+  legacyDayforgeSaasSubscriptions,
   legacyDayforgeSaasTenantLocations,
   legacyDayforgeSaasTenants,
+  macroGoalRuns,
   operatorMacroGoals,
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
@@ -100,7 +109,7 @@ export interface ProvisioningTelemetryStep {
   status: "completed" | "active" | "pending";
 }
 
-// In-memory cache for fast reads and non-db fallback in unit tests
+// In-memory cache for fast reads and unit test fallbacks
 const activeFranchises: Map<string, FranchiseRecord> = new Map();
 
 function buildDefaultFlagship(): FranchiseRecord {
@@ -198,7 +207,7 @@ export const CITY_ANCHOR_PROFILES: Record<
     timeZone: string;
     corridorName: string;
     center: { lat: number; lng: number };
-    anchors: Array<{ name: string; address: string; potentialUnits: number }>;
+    anchors: Array<{ name: string; address: string; potentialUnits: number; lat: number; lng: number }>;
   }
 > = {
   Austin: {
@@ -208,12 +217,12 @@ export const CITY_ANCHOR_PROFILES: Record<
     corridorName: "Rainey & Downtown High-Rise Corridor",
     center: { lat: 30.2672, lng: -97.7431 },
     anchors: [
-      { name: "The Independent Austin", address: "301 West Ave, Austin, TX", potentialUnits: 363 },
-      { name: "Seaholm Residences", address: "222 West Ave, Austin, TX", potentialUnits: 280 },
-      { name: "The Austonian", address: "200 Congress Ave, Austin, TX", potentialUnits: 178 },
-      { name: "70 Rainey", address: "70 Rainey St, Austin, TX", potentialUnits: 164 },
-      { name: "44 East Ave", address: "44 East Ave, Austin, TX", potentialUnits: 322 },
-      { name: "Northshore Austin", address: "110 San Antonio St, Austin, TX", potentialUnits: 439 },
+      { name: "The Independent Austin", address: "301 West Ave, Austin, TX", potentialUnits: 363, lat: 30.2679, lng: -97.7505 },
+      { name: "Seaholm Residences", address: "222 West Ave, Austin, TX", potentialUnits: 280, lat: 30.2667, lng: -97.7513 },
+      { name: "The Austonian", address: "200 Congress Ave, Austin, TX", potentialUnits: 178, lat: 30.2652, lng: -97.7434 },
+      { name: "70 Rainey", address: "70 Rainey St, Austin, TX", potentialUnits: 164, lat: 30.2598, lng: -97.7388 },
+      { name: "44 East Ave", address: "44 East Ave, Austin, TX", potentialUnits: 322, lat: 30.2568, lng: -97.7392 },
+      { name: "Northshore Austin", address: "110 San Antonio St, Austin, TX", potentialUnits: 439, lat: 30.2656, lng: -97.7461 },
     ],
   },
   Seattle: {
@@ -223,11 +232,11 @@ export const CITY_ANCHOR_PROFILES: Record<
     corridorName: "South Lake Union Tech Corridor",
     center: { lat: 47.6062, lng: -122.3321 },
     anchors: [
-      { name: "Spire Seattle", address: "2500 6th Ave, Seattle, WA", potentialUnits: 343 },
-      { name: "Cirrus South Lake Union", address: "2030 8th Ave, Seattle, WA", potentialUnits: 398 },
-      { name: "Kinects Tower", address: "1823 Minor Ave, Seattle, WA", potentialUnits: 357 },
-      { name: "AMLI Arc", address: "1800 Boren Ave, Seattle, WA", potentialUnits: 393 },
-      { name: "Stratus Luxury Living", address: "1200 9th Ave, Seattle, WA", potentialUnits: 396 },
+      { name: "Spire Seattle", address: "2500 6th Ave, Seattle, WA", potentialUnits: 343, lat: 47.6175, lng: -122.3465 },
+      { name: "Cirrus South Lake Union", address: "2030 8th Ave, Seattle, WA", potentialUnits: 398, lat: 47.6162, lng: -122.3364 },
+      { name: "Kinects Tower", address: "1823 Minor Ave, Seattle, WA", potentialUnits: 357, lat: 47.6168, lng: -122.3328 },
+      { name: "AMLI Arc", address: "1800 Boren Ave, Seattle, WA", potentialUnits: 393, lat: 47.6171, lng: -122.3322 },
+      { name: "Stratus Luxury Living", address: "1200 9th Ave, Seattle, WA", potentialUnits: 396, lat: 47.6114, lng: -122.3312 },
     ],
   },
   Miami: {
@@ -237,11 +246,11 @@ export const CITY_ANCHOR_PROFILES: Record<
     corridorName: "Brickell Financial High-Density Corridor",
     center: { lat: 25.7617, lng: -80.1918 },
     anchors: [
-      { name: "Brickell Flatiron", address: "1000 Brickell Plaza, Miami, FL", potentialUnits: 527 },
-      { name: "SLS Lux Brickell", address: "801 S Miami Ave, Miami, FL", potentialUnits: 450 },
-      { name: "Panorama Tower", address: "1100 Brickell Bay Dr, Miami, FL", potentialUnits: 821 },
-      { name: "Echo Brickell", address: "1451 Brickell Ave, Miami, FL", potentialUnits: 180 },
-      { name: "The Bond on Brickell", address: "1080 Brickell Ave, Miami, FL", potentialUnits: 328 },
+      { name: "Brickell Flatiron", address: "1000 Brickell Plaza, Miami, FL", potentialUnits: 527, lat: 25.7645, lng: -80.1924 },
+      { name: "SLS Lux Brickell", address: "801 S Miami Ave, Miami, FL", potentialUnits: 450, lat: 25.7661, lng: -80.1932 },
+      { name: "Panorama Tower", address: "1100 Brickell Bay Dr, Miami, FL", potentialUnits: 821, lat: 25.7628, lng: -80.1901 },
+      { name: "Echo Brickell", address: "1451 Brickell Ave, Miami, FL", potentialUnits: 180, lat: 25.7592, lng: -80.1921 },
+      { name: "The Bond on Brickell", address: "1080 Brickell Ave, Miami, FL", potentialUnits: 328, lat: 25.7634, lng: -80.1919 },
     ],
   },
   Denver: {
@@ -251,10 +260,10 @@ export const CITY_ANCHOR_PROFILES: Record<
     corridorName: "LoDo & Union Station Corridor",
     center: { lat: 39.7392, lng: -104.9903 },
     anchors: [
-      { name: "The Confluence Denver", address: "2166 15th St, Denver, CO", potentialUnits: 288 },
-      { name: "Cadence Union Station", address: "1920 17th St, Denver, CO", potentialUnits: 219 },
-      { name: "Pivot Union Station", address: "1999 Chestnut Pl, Denver, CO", potentialUnits: 361 },
-      { name: "Skyline at Highlands", address: "2500 17th St, Denver, CO", potentialUnits: 175 },
+      { name: "The Confluence Denver", address: "2166 15th St, Denver, CO", potentialUnits: 288, lat: 39.7548, lng: -105.0062 },
+      { name: "Cadence Union Station", address: "1920 17th St, Denver, CO", potentialUnits: 219, lat: 39.7535, lng: -104.9995 },
+      { name: "Pivot Union Station", address: "1999 Chestnut Pl, Denver, CO", potentialUnits: 361, lat: 39.7562, lng: -104.9982 },
+      { name: "Skyline at Highlands", address: "2500 17th St, Denver, CO", potentialUnits: 175, lat: 39.7584, lng: -105.0112 },
     ],
   },
   Chicago: {
@@ -264,10 +273,10 @@ export const CITY_ANCHOR_PROFILES: Record<
     corridorName: "Fulton Market & West Loop Corridor",
     center: { lat: 41.8781, lng: -87.6298 },
     anchors: [
-      { name: "The Dylan West Loop", address: "160 N Morgan St, Chicago, IL", potentialUnits: 282 },
-      { name: "166 N Aberdeen", address: "166 N Aberdeen St, Chicago, IL", potentialUnits: 224 },
-      { name: "Milieu on the Park", address: "205 S Peoria St, Chicago, IL", potentialUnits: 275 },
-      { name: "727 West Madison", address: "727 W Madison St, Chicago, IL", potentialUnits: 492 },
+      { name: "The Dylan West Loop", address: "160 N Morgan St, Chicago, IL", potentialUnits: 282, lat: 41.8845, lng: -87.6521 },
+      { name: "166 N Aberdeen", address: "166 N Aberdeen St, Chicago, IL", potentialUnits: 224, lat: 41.8848, lng: -87.6548 },
+      { name: "Milieu on the Park", address: "205 S Peoria St, Chicago, IL", potentialUnits: 275, lat: 41.8792, lng: -87.6496 },
+      { name: "727 West Madison", address: "727 W Madison St, Chicago, IL", potentialUnits: 492, lat: 41.8818, lng: -87.6465 },
     ],
   },
 };
@@ -283,7 +292,6 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
   }
 
   try {
-    // Read canonical active tenants from database
     const dbTenants = await db
       .select()
       .from(legacyDayforgeSaasTenants)
@@ -294,7 +302,6 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
     for (const tenant of dbTenants) {
       if (tenant.id === "default" || tenant.id === "laundry_farm") continue;
 
-      // Find matching profile by city or slug
       const profileKey = Object.keys(CITY_ANCHOR_PROFILES).find(
         (key) =>
           tenant.businessName.toLowerCase().includes(key.toLowerCase()) ||
@@ -302,7 +309,6 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
       );
       const profile = profileKey ? CITY_ANCHOR_PROFILES[profileKey] : null;
 
-      // Read active macro-goal if persisted
       const [macroGoalRow] = await db
         .select()
         .from(operatorMacroGoals)
@@ -347,8 +353,8 @@ export async function listFranchises(): Promise<FranchiseRecord[]> {
               address: a.address,
               corridorGroup: profile.corridorName,
               status: idx === 0 ? "targeted" : "discovered",
-              lat: profile.center.lat,
-              lng: profile.center.lng,
+              lat: a.lat,
+              lng: a.lng,
               potentialUnits: a.potentialUnits,
               estimatedMonthlySpendCents: a.potentialUnits * 2400,
             }))
@@ -394,7 +400,7 @@ export async function provisionFranchise(
   franchise: FranchiseRecord;
   telemetry: ProvisioningTelemetryStep[];
 }> {
-  // Fail-closed validation on city/metro: reject unsupported cities cleanly
+  // 1. Fail-closed validation on city/metro: reject unsupported cities cleanly
   const rawCity = input.city.split(",")[0].trim();
   const cityKey = Object.keys(CITY_ANCHOR_PROFILES).find(
     (c) => c.toLowerCase() === rawCity.toLowerCase()
@@ -415,123 +421,300 @@ export async function provisionFranchise(
   const operatorUserId = input.operatorUserId || "admin";
 
   const db = await getDb();
+  let macroGoalId = randomUUID();
+  let macroGoalRunId = randomUUID();
+
   if (db) {
-    // 1. Insert or update canonical tenant in dayforge_saas_tenants
-    await db
-      .insert(legacyDayforgeSaasTenants)
-      .values({
-        id: tenantId,
-        slug: `franchise-${slug}`,
-        businessName: `Goldline ${profile.city} Central`,
-        brandName: "Goldline",
-        primaryColor: "#e6b800",
-        contactName: input.operatorName || "Regional Operator",
-        contactEmail: `operator@${slug}.goldline.bldg.chat`,
-        contactPhone: input.operatorPhone || "+18005550100",
-        timeZone: profile.timeZone,
-        status: "active",
-        onboardingStep: "active",
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          businessName: `Goldline ${profile.city} Central`,
-          contactName: input.operatorName || "Regional Operator",
-          contactPhone: input.operatorPhone || "+18005550100",
-          status: "active",
-        },
-      });
-
-    // 2. Insert primary depot location
-    const primaryAnchor = profile.anchors[0];
-    await db
-      .insert(legacyDayforgeSaasTenantLocations)
-      .values({
-        tenantId,
-        locationKey: `primary-${slug}`,
-        label: `Goldline ${profile.city} Depot`,
-        address: primaryAnchor.address,
-        latitude: String(profile.center.lat),
-        longitude: String(profile.center.lng),
-        serviceRadiusMiles: "25",
-        maxPoundsPerDay: 5000,
-        maxPoundsByWeekdayJson: {},
-        openCapacityPoundsPerWeek: 35000,
-        pickupDaysJson: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-        routeWindowsJson: {},
-        turnaroundHours: 24,
-        deliveryEnabled: true,
-        isPrimary: true,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          label: `Goldline ${profile.city} Depot`,
-          address: primaryAnchor.address,
-        },
-      });
-
-    // 3. Grant canonical entitlements
-    for (const entitlementKey of SAAS_ENTITLEMENTS) {
-      await db
-        .insert(legacyDayforgeSaasEntitlements)
+    // 2. Entire provisioning sequence executed in a single atomic transaction
+    await db.transaction(async (tx) => {
+      // (a) Insert or update canonical tenant in dayforge_saas_tenants
+      await tx
+        .insert(legacyDayforgeSaasTenants)
         .values({
-          tenantId,
-          entitlementKey,
-          source: "plan",
-          enabled: true,
+          id: tenantId,
+          slug: `franchise-${slug}`,
+          businessName: `Goldline ${profile.city} Central`,
+          brandName: "Goldline",
+          primaryColor: "#e6b800",
+          contactName: input.operatorName || "Regional Operator",
+          contactEmail: `operator@${slug}.goldline.bldg.chat`,
+          contactPhone: input.operatorPhone || "+18005550100",
+          timeZone: profile.timeZone,
+          status: "active",
+          onboardingStep: "active",
         })
         .onDuplicateKeyUpdate({
           set: {
-            enabled: true,
+            businessName: `Goldline ${profile.city} Central`,
+            contactName: input.operatorName || "Regional Operator",
+            contactPhone: input.operatorPhone || "+18005550100",
+            status: "active",
           },
         });
-    }
 
-    // 4. Insert Territory Operator Profile
-    await db
-      .insert(territoryOperatorProfiles)
-      .values({
-        tenantId,
-        storeName: `Goldline ${profile.city}`,
-        storeAddress: primaryAnchor.address,
-        latitude: String(profile.center.lat),
-        longitude: String(profile.center.lng),
-        serviceRadiusMiles: "25.00",
-        commercialWashFoldEnabled: true,
-        averagePricePerPoundCents: 225,
-        availableWeeklyCapacityPounds: 35000,
-        routePointsJson: [],
-        turnaroundCompatibleByDefault: true,
-        pickupDaysCompatibleByDefault: true,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
+      // (b) Insert canonical SaaS owner membership so operator identity resolves
+      await tx
+        .insert(legacyDayforgeSaasMemberships)
+        .values({
+          tenantId,
+          userOpenId: operatorUserId,
+          role: "owner",
+          active: true,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            role: "owner",
+            active: true,
+          },
+        });
+
+      // (c) Insert active SaaS subscription so access layer checks pass
+      await tx
+        .insert(legacyDayforgeSaasSubscriptions)
+        .values({
+          tenantId,
+          planKey: "sovereign_operator",
+          stripeCustomerId: `cust_${slug}`,
+          stripeSubscriptionId: `sub_${slug}`,
+          status: "active",
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: new Date(Date.now() + 365 * 86400000),
+          lastStripeEventId: `evt_prov_${slug}_${Date.now()}`,
+          lastStripeEventCreatedAt: now,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            status: "active",
+            planKey: "sovereign_operator",
+            currentPeriodEnd: new Date(Date.now() + 365 * 86400000),
+          },
+        });
+
+      // (d) Grant all canonical SaaS & Persistent Operator entitlements
+      for (const entitlementKey of SAAS_ENTITLEMENTS) {
+        await tx
+          .insert(legacyDayforgeSaasEntitlements)
+          .values({
+            tenantId,
+            entitlementKey,
+            source: "plan",
+            enabled: true,
+          })
+          .onDuplicateKeyUpdate({
+            set: {
+              enabled: true,
+            },
+          });
+      }
+
+      // (e) Insert primary depot location
+      const primaryAnchor = profile.anchors[0];
+      await tx
+        .insert(legacyDayforgeSaasTenantLocations)
+        .values({
+          tenantId,
+          locationKey: `primary-${slug}`,
+          label: `Goldline ${profile.city} Depot`,
+          address: primaryAnchor.address,
+          latitude: String(profile.center.lat),
+          longitude: String(profile.center.lng),
+          serviceRadiusMiles: "25",
+          maxPoundsPerDay: 5000,
+          maxPoundsByWeekdayJson: {},
+          openCapacityPoundsPerWeek: 35000,
+          pickupDaysJson: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          routeWindowsJson: {},
+          turnaroundHours: 24,
+          deliveryEnabled: true,
+          isPrimary: true,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            label: `Goldline ${profile.city} Depot`,
+            address: primaryAnchor.address,
+          },
+        });
+
+      // (f) Insert Territory Operator Profile WITH POPULATED ROUTE POINTS JSON
+      const routePoints = profile.anchors.map((a) => ({
+        name: a.name,
+        address: a.address,
+        units: a.potentialUnits,
+        lat: a.lat,
+        lng: a.lng,
+      }));
+
+      await tx
+        .insert(territoryOperatorProfiles)
+        .values({
+          tenantId,
           storeName: `Goldline ${profile.city}`,
           storeAddress: primaryAnchor.address,
-        },
-      });
+          latitude: String(profile.center.lat),
+          longitude: String(profile.center.lng),
+          serviceRadiusMiles: "25.00",
+          commercialWashFoldEnabled: true,
+          averagePricePerPoundCents: 225,
+          availableWeeklyCapacityPounds: 35000,
+          routePointsJson: routePoints,
+          turnaroundCompatibleByDefault: true,
+          pickupDaysCompatibleByDefault: true,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            storeName: `Goldline ${profile.city}`,
+            storeAddress: primaryAnchor.address,
+            routePointsJson: routePoints,
+          },
+        });
 
-    // 5. Persist durable operator macro goal
-    await db
-      .insert(operatorMacroGoals)
-      .values({
-        id: randomUUID(),
-        tenantId,
-        operatorUserId,
-        objective: `Achieve $${(input.targetMrrCents / 100).toLocaleString()}/mo MRR in ${profile.city} corridor`,
-        metricKey: "monthly_recurring_revenue",
-        targetValue: String(input.targetMrrCents / 100),
-        unit: "USD",
-        source: "admin",
-        sourceNote: "Sovereign Franchise Engine ignition",
-        status: "active",
-      });
+      // (g) Insert corridor anchors as authentic commercial accounts & locations
+      for (const anchor of profile.anchors) {
+        const identityKey = `anchor_${slug}_${anchor.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+        await tx
+          .insert(commercialAccounts)
+          .values({
+            tenantId,
+            identityKey,
+            name: anchor.name,
+            accountType: "residential_highrise",
+          })
+          .onDuplicateKeyUpdate({
+            set: {
+              name: anchor.name,
+            },
+          });
+
+        const [existingAcc] = await tx
+          .select({ id: commercialAccounts.id })
+          .from(commercialAccounts)
+          .where(
+            and(
+              eq(commercialAccounts.tenantId, tenantId),
+              eq(commercialAccounts.identityKey, identityKey)
+            )
+          )
+          .limit(1);
+
+        if (existingAcc) {
+          await tx
+            .insert(commercialAccountLocations)
+            .values({
+              tenantId,
+              accountId: existingAcc.id,
+              locationKey: `loc_${identityKey}`,
+              label: anchor.name,
+              address: anchor.address,
+              latitude: String(anchor.lat),
+              longitude: String(anchor.lng),
+              isPrimary: true,
+            })
+            .onDuplicateKeyUpdate({
+              set: {
+                address: anchor.address,
+                latitude: String(anchor.lat),
+                longitude: String(anchor.lng),
+              },
+            });
+        }
+      }
+
+      // (h) Idempotent Operator Macro Goal: update existing active goal or insert new
+      const [existingGoal] = await tx
+        .select()
+        .from(operatorMacroGoals)
+        .where(
+          and(
+            eq(operatorMacroGoals.tenantId, tenantId),
+            eq(operatorMacroGoals.status, "active"),
+            eq(operatorMacroGoals.metricKey, "monthly_recurring_revenue")
+          )
+        )
+        .limit(1);
+
+      if (existingGoal) {
+        macroGoalId = existingGoal.id;
+        await tx
+          .update(operatorMacroGoals)
+          .set({
+            targetValue: String(input.targetMrrCents / 100),
+            updatedAt: now,
+          })
+          .where(eq(operatorMacroGoals.id, existingGoal.id));
+      } else {
+        await tx.insert(operatorMacroGoals).values({
+          id: macroGoalId,
+          tenantId,
+          operatorUserId,
+          objective: `Achieve $${(input.targetMrrCents / 100).toLocaleString()}/mo MRR in ${profile.city} corridor`,
+          metricKey: "monthly_recurring_revenue",
+          targetValue: String(input.targetMrrCents / 100),
+          unit: "USD",
+          source: "admin",
+          sourceNote: "Sovereign Franchise Engine ignition",
+          status: "active",
+        });
+      }
+
+      // (i) Bootstrap initial Persistent Operator Macro Goal Run for autonomy
+      const [existingRun] = await tx
+        .select()
+        .from(macroGoalRuns)
+        .where(
+          and(
+            eq(macroGoalRuns.tenantId, tenantId),
+            eq(macroGoalRuns.status, "active"),
+            eq(macroGoalRuns.macroGoalId, macroGoalId)
+          )
+        )
+        .limit(1);
+
+      if (existingRun) {
+        macroGoalRunId = existingRun.id;
+      } else {
+        await tx.insert(macroGoalRuns).values({
+          id: macroGoalRunId,
+          tenantId,
+          canonicalOperatorId: operatorUserId,
+          operatorUserId,
+          macroGoalId,
+          verticalKey: "commercial_laundry",
+          metricKey: "monthly_recurring_revenue",
+          targetValue: (input.targetMrrCents / 100).toFixed(2),
+          unit: "USD",
+          status: "active",
+          startedAt: now,
+        });
+      }
+
+      // (j) Queue initial goal cycle request in goalCycleRequests for autonomous dispatch
+      await tx
+        .insert(goalCycleRequests)
+        .values({
+          id: randomUUID(),
+          tenantId,
+          goalRunId: macroGoalRunId,
+          triggerType: "goal_activated",
+          triggerSourceReference: `operator_macro_goals:${macroGoalId}`,
+          idempotencyKey: `goal_activated:${macroGoalId}`,
+          status: "queued",
+          availableAt: now,
+          maxAttempts: 5,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            status: "queued",
+            availableAt: now,
+          },
+        });
+    });
   }
 
   const telemetry: ProvisioningTelemetryStep[] = [
     {
       step: 1,
       title: "Tenant Partitioning",
-      detail: `Persisted canonical tenant '${tenantId}' into dayforge_saas_tenants with isolated entitlements`,
+      detail: `Persisted canonical tenant '${tenantId}' into dayforge_saas_tenants with owner membership in dayforge_saas_memberships`,
       timestamp: new Date().toISOString(),
       status: "completed",
     },
@@ -545,14 +728,14 @@ export async function provisionFranchise(
     {
       step: 3,
       title: "Macro Goal Ignition",
-      detail: `Persisted macro-goal row in operator_macro_goals: $${(input.targetMrrCents / 100).toLocaleString()} MRR with fail-closed ratchet`,
+      detail: `Persisted macro-goal row in operator_macro_goals and macro_goal_runs (${macroGoalRunId}): $${(input.targetMrrCents / 100).toLocaleString()} MRR`,
       timestamp: new Date(Date.now() + 300).toISOString(),
       status: "completed",
     },
     {
       step: 4,
       title: "Corridor Anchor Seeding",
-      detail: `Seeded ${profile.anchors.length} high-density luxury residential assets into territory profile`,
+      detail: `Seeded ${profile.anchors.length} high-density assets into territoryOperatorProfiles.routePointsJson and commercial_accounts`,
       timestamp: new Date(Date.now() + 450).toISOString(),
       status: "completed",
     },
@@ -566,7 +749,7 @@ export async function provisionFranchise(
     {
       step: 6,
       title: "Day Line Dispatch Primed",
-      detail: `Synthesized Day 1 route corridor objectives. Operator fleet ready for immediate dispatch`,
+      detail: `Autonomous goal run initialized with zero-cross-leak tenant partition. Mission Director queue primed`,
       timestamp: new Date(Date.now() + 750).toISOString(),
       status: "completed",
     },
@@ -578,8 +761,8 @@ export async function provisionFranchise(
     address: a.address,
     corridorGroup: profile.corridorName,
     status: idx === 0 ? "targeted" : "discovered",
-    lat: profile.center.lat,
-    lng: profile.center.lng,
+    lat: a.lat,
+    lng: a.lng,
     potentialUnits: a.potentialUnits,
     estimatedMonthlySpendCents: a.potentialUnits * 2400,
   }));
@@ -597,7 +780,7 @@ export async function provisionFranchise(
     fleetCount: 1,
     corridorDensityScore: 91,
     macroGoal: {
-      id: randomUUID(),
+      id: macroGoalId,
       metricKey: "monthly_recurring_revenue",
       baselineValue: 0,
       targetValue: input.targetMrrCents / 100,

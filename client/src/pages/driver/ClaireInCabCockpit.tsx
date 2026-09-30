@@ -30,9 +30,8 @@ interface CockpitStop {
   units: number;
   objectiveType: "commercial_drop" | "pickup" | "conquest_brief";
   primaryObjective: string;
-  isRealMissionTask: boolean;
-  rawTaskId?: string;
-  rawMissionId?: string;
+  isRealDayLineWork: boolean;
+  executionType?: string;
 }
 
 // Sandbox practice stops for driver HUD onboarding (clearly marked training)
@@ -46,7 +45,8 @@ const TRAINING_STOPS: CockpitStop[] = [
     units: 250,
     objectiveType: "commercial_drop",
     primaryObjective: "Deliver commercial linen trial packet to lobby concierge desk",
-    isRealMissionTask: false,
+    isRealDayLineWork: false,
+    executionType: "field",
   },
   {
     id: "train-2",
@@ -57,7 +57,8 @@ const TRAINING_STOPS: CockpitStop[] = [
     units: 196,
     objectiveType: "conquest_brief",
     primaryObjective: "Conduct corridor density check with on-site management",
-    isRealMissionTask: false,
+    isRealDayLineWork: false,
+    executionType: "operator",
   },
   {
     id: "train-3",
@@ -68,19 +69,37 @@ const TRAINING_STOPS: CockpitStop[] = [
     units: 196,
     objectiveType: "pickup",
     primaryObjective: "Collect resident laundry bag from designated service drop",
-    isRealMissionTask: false,
+    isRealDayLineWork: false,
+    executionType: "field",
   },
 ];
 
 export default function ClaireInCabCockpit() {
   const urlParams = new URLSearchParams(window.location.search);
-  const tenantId = urlParams.get("tenant") || "default";
+  const requestedTenant = urlParams.get("tenant") || undefined;
 
-  const todayYmd = new Date().toISOString().split("T")[0];
+  // Server-authorized tenant resolution: prevents cosmetic mislabeling
+  const tenantResolution = trpc.system.franchise.resolveTenant.useQuery(
+    requestedTenant ? { targetTenantId: requestedTenant } : undefined,
+    { retry: false }
+  );
 
-  // Authoritative Day Line Mission and Cargo Queries
-  const openChannelMission = trpc.system.openChannel.current.useQuery(
-    { businessDate: todayYmd },
+  const effectiveTenantId = tenantResolution.data?.resolvedTenantId || (requestedTenant === "default" ? "default" : undefined);
+  const targetTenantId = effectiveTenantId && effectiveTenantId !== "default" ? effectiveTenantId : undefined;
+  const effectiveTenantDisplay = effectiveTenantId || "default";
+
+  // Clean invalid or unauthorized URL parameter if server rejected it
+  useEffect(() => {
+    if (tenantResolution.isError && requestedTenant) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tenant");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [tenantResolution.isError, requestedTenant]);
+
+  // CANONICAL JOYSTICK DAY LINE QUERY (system.currentDayLine backed by Mission Director)
+  const currentDayLine = trpc.system.currentDayLine.today.useQuery(
+    targetTenantId ? { targetTenantId } : undefined,
     { refetchInterval: 15_000, retry: false }
   );
 
@@ -89,7 +108,8 @@ export default function ClaireInCabCockpit() {
     retry: false,
   });
 
-  const completeTaskMutation = trpc.system.openChannel.completeTask.useMutation();
+  // AUTHORITATIVE PERSISTENT OPERATOR FIELD COMPLETION MUTATION
+  const bridgeDriverAction = trpc.system.persistentOperator.bridgeDriverAction.useMutation();
 
   const [trainingMode, setTrainingMode] = useState(false);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
@@ -102,25 +122,26 @@ export default function ClaireInCabCockpit() {
 
   const recognitionRef = useRef<any>(null);
 
-  // Derive stops from real Open Channel mission if active, otherwise offer training mode
-  const missionTasks = openChannelMission.data?.tasks ?? [];
-  const hasRealTasks = openChannelMission.data?.status === "active" && missionTasks.length > 0;
+  // Derive stops from canonical Day Line items and designated work
+  const dayLineItems = currentDayLine.data?.items ?? [];
+  const designated = currentDayLine.data?.designated;
+  const allDayLineWork = designated ? [designated, ...dayLineItems] : dayLineItems;
+  const hasRealDayLineWork = allDayLineWork.length > 0;
 
-  const realStops: CockpitStop[] = missionTasks.map((t, idx) => ({
-    id: t.id,
-    name: t.title,
-    address: t.navigationQuery || "En Route Corridor Stop",
+  const realStops: CockpitStop[] = allDayLineWork.map((item, idx) => ({
+    id: item.id,
+    name: item.title,
+    address: "Active Corridor Route Stop",
     distance: `${(idx + 1) * 0.4} mi`,
-    corridor: "Authoritative Day Line",
+    corridor: "Canonical Day Line",
     units: 0,
-    objectiveType: t.category === "sales" ? "conquest_brief" : t.category === "food" ? "commercial_drop" : "pickup",
-    primaryObjective: t.detail,
-    isRealMissionTask: true,
-    rawTaskId: t.id,
-    rawMissionId: openChannelMission.data?.id,
+    objectiveType: item.executionType === "operator" ? "conquest_brief" : "commercial_drop",
+    primaryObjective: item.objective || item.title,
+    isRealDayLineWork: true,
+    executionType: item.executionType,
   }));
 
-  const activeStops = hasRealTasks && !trainingMode ? realStops : TRAINING_STOPS;
+  const activeStops = hasRealDayLineWork && !trainingMode ? realStops : TRAINING_STOPS;
   const currentStop = activeStops[currentStopIndex] || activeStops[0];
 
   // Synthesize Web Audio chime for acoustic HUD alerts
@@ -136,9 +157,9 @@ export default function ClaireInCabCockpit() {
 
       if (type === "success") {
         osc.type = "sine";
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
         gain.gain.setValueAtTime(0.2, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
         osc.connect(gain);
@@ -216,7 +237,7 @@ export default function ClaireInCabCockpit() {
           handleCompleteObjective();
         } else if (text.includes("brief") || text.includes("repeat") || text.includes("what")) {
           speakAsClaire(
-            `At ${currentStop.name}. Objective: ${currentStop.primaryObjective}.`
+            `At ${currentStop.name}. Directive: ${currentStop.primaryObjective}.`
           );
         } else if (text.includes("next stop") || text.includes("skip")) {
           handleNextStop();
@@ -261,37 +282,42 @@ export default function ClaireInCabCockpit() {
     }
   };
 
-  // Truth-backed objective completion: executes real mutation when backed by Day Line
+  // Authoritative Day Line objective completion via bridgeDriverAction
   const handleCompleteObjective = async () => {
     const stopToComplete = currentStop;
     playTacticalChime("success");
 
-    if (stopToComplete.isRealMissionTask && stopToComplete.rawTaskId && stopToComplete.rawMissionId) {
+    if (stopToComplete.isRealDayLineWork) {
       setIsPersisting(true);
       try {
-        const requestId = crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}`;
-        await completeTaskMutation.mutateAsync({
-          missionId: stopToComplete.rawMissionId,
-          taskId: stopToComplete.rawTaskId,
-          requestId,
+        const result = await bridgeDriverAction.mutateAsync({
+          targetTenantId,
+          objectiveId: stopToComplete.id,
+          evidenceReference: `voice_incab_receipt_${Date.now()}`,
+          sourceSystem: "driver_cockpit_hud",
+          explanation: `Driver confirmed completion via in-cab HUD: ${stopToComplete.name}`,
         });
 
-        setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
-        setLastReceipt(`Durable receipt confirmed for task: ${stopToComplete.name}`);
+        if (result.bridged) {
+          setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
+          setLastReceipt(`Durable receipt confirmed for: ${stopToComplete.name}`);
 
-        const nextIndex = (currentStopIndex + 1) % activeStops.length;
-        const nextStop = activeStops[nextIndex];
+          const nextIndex = (currentStopIndex + 1) % activeStops.length;
+          const nextStop = activeStops[nextIndex];
 
-        speakAsClaire(
-          `Objective completed and verified on Day Line for ${stopToComplete.name}. Next stop: ${nextStop.name}.`
-        );
+          speakAsClaire(
+            `Objective completed and verified on Day Line for ${stopToComplete.name}. Next objective: ${nextStop.name}.`
+          );
 
-        setTimeout(() => {
-          setCurrentStopIndex(nextIndex);
-        }, 1200);
+          setTimeout(() => {
+            setCurrentStopIndex(nextIndex);
+          }, 1200);
+        } else {
+          speakAsClaire(`Day Line action not bridged: ${result.reason}. Task remains pending.`);
+        }
       } catch (err) {
-        console.error("Failed to complete task:", err);
-        speakAsClaire("Mutation failed on Day Line. Task was not marked complete.");
+        console.error("Failed to bridge driver action:", err);
+        speakAsClaire("Mutation error on Day Line bridge. Objective not marked complete.");
       } finally {
         setIsPersisting(false);
       }
@@ -325,9 +351,9 @@ export default function ClaireInCabCockpit() {
       <div className="cockpit-top-bar">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <span className="cockpit-status-tag">
-            <span className="cockpit-live-indicator" /> Claire Cockpit HUD · Tenant: {tenantId}
+            <span className="cockpit-live-indicator" /> Claire Cockpit HUD · Tenant: {effectiveTenantDisplay}
           </span>
-          {(!hasRealTasks || trainingMode) && (
+          {(!hasRealDayLineWork || trainingMode) && (
             <span style={{ fontSize: "0.75rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", padding: "4px 8px", borderRadius: 4, fontWeight: 700, border: "1px solid rgba(245, 158, 11, 0.4)" }}>
               TRAINING SIMULATOR MODE
             </span>
@@ -340,7 +366,7 @@ export default function ClaireInCabCockpit() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {hasRealTasks && (
+          {hasRealDayLineWork && (
             <button
               className="btn-tactical"
               style={{ fontSize: "0.75rem", padding: "6px 12px" }}
@@ -349,7 +375,7 @@ export default function ClaireInCabCockpit() {
               {trainingMode ? "Switch to Real Day Line" : "Switch to Training Simulator"}
             </button>
           )}
-          <Link href={`/war-room?tenant=${tenantId}`} className="btn-tactical" style={{ padding: "6px 12px", fontSize: "0.75rem" }}>
+          <Link href={`/war-room?tenant=${effectiveTenantDisplay}`} className="btn-tactical" style={{ padding: "6px 12px", fontSize: "0.75rem" }}>
             <Compass size={14} /> War Room
           </Link>
           <button
@@ -370,7 +396,7 @@ export default function ClaireInCabCockpit() {
           <div className="cockpit-stop-header">
             <div>
               <span className="cockpit-sequence-pill">
-                Stop {currentStopIndex + 1} of {activeStops.length} · {currentStop.isRealMissionTask ? "Authoritative Day Line" : "Training Practice"}
+                Stop {currentStopIndex + 1} of {activeStops.length} · {currentStop.isRealDayLineWork ? "Authoritative Mission Director Day Line" : "Training Practice"}
               </span>
               <h1 className="cockpit-stop-title">{currentStop.name}</h1>
               <div className="cockpit-stop-address">
@@ -387,7 +413,7 @@ export default function ClaireInCabCockpit() {
           {/* Tactical Directive Panel */}
           <div className="cockpit-objective-box">
             <div className="cockpit-objective-label">
-              <Sparkles size={16} color="#fbbf24" /> Primary Mission Directive
+              <Sparkles size={16} color="#fbbf24" /> Primary Mission Directive ({currentStop.executionType ?? "field"})
             </div>
             <div className="cockpit-objective-text">
               {currentStop.primaryObjective}
@@ -403,9 +429,9 @@ export default function ClaireInCabCockpit() {
             >
               <CheckCircle2 size={24} />
               {isPersisting
-                ? "Writing to Day Line..."
-                : currentStop.isRealMissionTask
-                  ? "Confirm & Complete Day Line Task"
+                ? "Bridging to Day Line..."
+                : currentStop.isRealDayLineWork
+                  ? "Confirm & Bridge Day Line Action"
                   : "Complete Practice Stop [Simulator]"}
             </button>
 
@@ -448,7 +474,7 @@ export default function ClaireInCabCockpit() {
           {/* Route Sequence Queue */}
           <div className="cockpit-queue-card">
             <div className="cockpit-queue-header">
-              <Radio size={16} color="#38bdf8" /> Day Line Route Sequence
+              <Radio size={16} color="#38bdf8" /> Mission Director Sequence Queue
             </div>
 
             <div className="cockpit-queue-list">

@@ -7,6 +7,7 @@
  * All endpoints are strictly authenticated and protected behind adminProcedure.
  */
 
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import {
@@ -16,6 +17,35 @@ import {
 } from "./franchiseService";
 
 export const franchiseRouter = router({
+  resolveTenant: adminProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const callerTenantId = ctx.tenantId || "default";
+      const target = input?.targetTenantId;
+      if (!target || target === "default" || target === callerTenantId) {
+        return {
+          resolvedTenantId: callerTenantId,
+          isCrossTenant: false,
+          authorized: true,
+        };
+      }
+
+      const franchise = await getFranchiseById(target);
+      if (!franchise) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Requested tenant "${target}" does not exist.`,
+        });
+      }
+
+      return {
+        resolvedTenantId: franchise.tenantId,
+        isCrossTenant: true,
+        authorized: true,
+        city: franchise.city,
+      };
+    }),
+
   list: adminProcedure.query(async () => {
     return listFranchises();
   }),

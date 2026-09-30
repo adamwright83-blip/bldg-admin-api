@@ -29,12 +29,12 @@ interface BuildingNode {
   status: "won" | "targeted" | "discovered";
   units: number;
   corridor: string;
-  xPercent: number; // 0-100% position on map
+  xPercent: number;
   yPercent: number;
   routeMarginBoost: string;
 }
 
-const INITIAL_NODES: BuildingNode[] = [
+const DEFAULT_LA_NODES: BuildingNode[] = [
   {
     id: "louise",
     name: "The Louise Los Feliz",
@@ -94,22 +94,58 @@ const INITIAL_NODES: BuildingNode[] = [
 
 export default function LivingWarRoom() {
   const urlParams = new URLSearchParams(window.location.search);
-  const tenantId = urlParams.get("tenant") || "default";
+  const requestedTenant = urlParams.get("tenant") || undefined;
 
-  // Authoritative Persistent Operator Scoreboard Read Model
-  const scoreboard = trpc.system.persistentOperator.scoreboard.useQuery(undefined, {
-    retry: false,
-    refetchInterval: 30_000,
-  });
+  // Server-authorized tenant resolution: prevents cosmetic mislabeling
+  const tenantResolution = trpc.system.franchise.resolveTenant.useQuery(
+    requestedTenant ? { targetTenantId: requestedTenant } : undefined,
+    { retry: false }
+  );
 
-  const baseObserved = scoreboard.data?.authoritativeObservedValue ?? 24;
-  const baseTarget = scoreboard.data?.targetValue ?? 50;
+  const effectiveTenantId = tenantResolution.data?.resolvedTenantId || (requestedTenant === "default" ? "default" : undefined);
+  const targetTenantId = effectiveTenantId && effectiveTenantId !== "default" ? effectiveTenantId : undefined;
+  const effectiveTenantDisplay = effectiveTenantId || "default";
+
+  // Clean invalid or unauthorized URL parameter if server rejected it
+  useEffect(() => {
+    if (tenantResolution.isError && requestedTenant) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tenant");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [tenantResolution.isError, requestedTenant]);
+
+  // Authoritative Persistent Operator Scoreboard Read Model scoped to targetTenantId
+  const scoreboard = trpc.system.persistentOperator.scoreboard.useQuery(
+    targetTenantId ? { targetTenantId } : undefined,
+    {
+      retry: false,
+      refetchInterval: 30_000,
+    }
+  );
+
+  // Authoritative Geographic Truth Atlas scoped to targetTenantId
+  const atlas = trpc.system.geographicTruth.atlas.useQuery(
+    targetTenantId ? { targetTenantId } : undefined,
+    {
+      retry: false,
+      refetchInterval: 60_000,
+    }
+  );
+
+  const isTargetTenantInitialized = scoreboard.isSuccess && scoreboard.data != null;
+  const baseObserved = isTargetTenantInitialized
+    ? (scoreboard.data?.authoritativeObservedValue ?? 0)
+    : (effectiveTenantDisplay === "default" ? 24 : 0);
+  const baseTarget = isTargetTenantInitialized
+    ? (scoreboard.data?.targetValue ?? (effectiveTenantDisplay === "default" ? 50 : 25))
+    : (effectiveTenantDisplay === "default" ? 50 : 25);
   const metricLabel = scoreboard.data?.metricKey
     ? scoreboard.data.metricKey.replace(/_/g, " ").toUpperCase()
     : "ACTIVE ACCOUNTS TARGET";
 
-  const [nodes, setNodes] = useState<BuildingNode[]>(INITIAL_NODES);
-  const [selectedNode, setSelectedNode] = useState<BuildingNode>(INITIAL_NODES[0]);
+  const [nodes, setNodes] = useState<BuildingNode[]>(DEFAULT_LA_NODES);
+  const [selectedNode, setSelectedNode] = useState<BuildingNode>(DEFAULT_LA_NODES[0]);
   const [isSimulatingWin, setIsSimulatingWin] = useState(false);
   const [hasSimulatedWin, setHasSimulatedWin] = useState(false);
   const [activeCustomers, setActiveCustomers] = useState(baseObserved);
@@ -125,7 +161,7 @@ export default function LivingWarRoom() {
       id: "act-2",
       timestamp: "01:11:45",
       kind: "normal",
-      text: `Autonomous operator decision engine evaluated loadout priorities for tenant '${tenantId}'.`,
+      text: `Autonomous operator decision engine evaluated loadout priorities for tenant '${effectiveTenantDisplay}'.`,
     },
     {
       id: "act-3",
@@ -142,6 +178,28 @@ export default function LivingWarRoom() {
     }
   }, [scoreboard.data?.authoritativeObservedValue, hasSimulatedWin]);
 
+  // If a target tenant with geographic atlas prospects loads, map them into the canvas
+  useEffect(() => {
+    if (atlas.data?.pursued && atlas.data.pursued.length > 0 && targetTenantId) {
+      const mapped: BuildingNode[] = atlas.data.pursued.slice(0, 8).map((prospect, idx) => ({
+        id: `prospect-${prospect.accountId}`,
+        name: prospect.name,
+        address: prospect.address,
+        status: (prospect.stage === "won" ? "won" : idx === 0 ? "targeted" : "discovered") as "won" | "targeted" | "discovered",
+        units: 200,
+        corridor: `${effectiveTenantDisplay.toUpperCase()} Corridor`,
+        xPercent: 30 + (idx % 4) * 15,
+        yPercent: 30 + Math.floor(idx / 4) * 20,
+        routeMarginBoost: `+${(12 + idx * 2.5).toFixed(1)}%`,
+      }));
+      setNodes(mapped);
+      setSelectedNode(mapped[0]);
+    } else if (!targetTenantId) {
+      setNodes(DEFAULT_LA_NODES);
+      setSelectedNode(DEFAULT_LA_NODES[0]);
+    }
+  }, [atlas.data, targetTenantId, effectiveTenantDisplay]);
+
   // Audio synthesizer for tactical sonic boom
   const playWarroomBoom = () => {
     try {
@@ -149,7 +207,6 @@ export default function LivingWarRoom() {
       if (!AudioContextClass) return;
       const ctx = new AudioContextClass();
       
-      // Sub-bass sweep
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
@@ -162,7 +219,6 @@ export default function LivingWarRoom() {
       osc.start();
       osc.stop(ctx.currentTime + 0.6);
 
-      // Treble sonar ping
       const ping = ctx.createOscillator();
       const pingGain = ctx.createGain();
       ping.type = "triangle";
@@ -198,23 +254,19 @@ export default function LivingWarRoom() {
     setIsSimulatingWin(true);
     playWarroomBoom();
 
-    // 1. Mark The Louise as simulated WON locally
     setNodes((prev) =>
       prev.map((n) => (n.id === "louise" ? { ...n, status: "won" } : n))
     );
 
-    // 2. Animate Macro Goal and Margin Boost
     setTimeout(() => {
       setActiveCustomers((c) => c + 1);
       setMarginBoost((m) => +(m + 6.4).toFixed(1));
     }, 400);
 
-    // 3. Claire vocal dispatch with strict truth discipline
     speakClaireDispatch(
       "Sandbox simulation active: Modeling corridor density impact for The Louise. No production mutations recorded."
     );
 
-    // 4. Append sandbox projection activities
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 
@@ -241,7 +293,7 @@ export default function LivingWarRoom() {
   };
 
   const handleResetSimulation = () => {
-    setNodes(INITIAL_NODES);
+    setNodes(DEFAULT_LA_NODES);
     setHasSimulatedWin(false);
     setActiveCustomers(baseObserved);
     setMarginBoost(68.4);
@@ -256,10 +308,12 @@ export default function LivingWarRoom() {
             <span className="pulse-dot" /> Sovereign War Room
           </span>
           <span style={{ fontSize: "0.85rem", color: "#fbbf24", fontWeight: 700, borderLeft: "1px solid #334155", paddingLeft: 10 }}>
-            Tenant: {tenantId}
+            Tenant: {effectiveTenantDisplay}
           </span>
           <span style={{ fontSize: "0.9rem", color: "#e2e8f0", fontWeight: 600 }}>
-            Autonomous Corridor Conquest Atlas · Los Angeles Hub
+            {effectiveTenantDisplay === "default"
+              ? "Autonomous Corridor Conquest Atlas · Los Angeles Flagship"
+              : `Autonomous Corridor Conquest Atlas · ${effectiveTenantDisplay.toUpperCase()}`}
           </span>
         </div>
 
@@ -270,9 +324,11 @@ export default function LivingWarRoom() {
             </span>
           )}
           <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
-            Scoreboard Precision: <strong style={{ color: "#4ade80" }}>{scoreboard.data?.precision ?? "exact"}</strong>
+            Scoreboard Status: <strong style={{ color: isTargetTenantInitialized ? "#4ade80" : "#fbbf24" }}>
+              {isTargetTenantInitialized ? "Active (Exact)" : "Pending Autonomy Initialization"}
+            </strong>
           </span>
-          <Link href={`/driver/cockpit?tenant=${tenantId}`} className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
+          <Link href={`/driver/cockpit?tenant=${effectiveTenantDisplay}`} className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
             <Radio size={14} /> Driver Cockpit
           </Link>
           <Link href="/franchise" className="btn-tactical" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
@@ -287,19 +343,17 @@ export default function LivingWarRoom() {
         <div className="warroom-canvas-container">
           <img
             src="/assets/sovereign/warroom-tactical-atlas.jpg"
-            alt="Los Angeles Tactical Satellite Atlas"
+            alt="Tactical Satellite Atlas"
             className="warroom-bg-image"
           />
 
           {/* SVG Vector Corridor Network */}
           <svg className="warroom-svg-overlay">
-            {/* Vector lines connecting nodes */}
             <line x1="54%" y1="38%" x2="66%" y2="36%" stroke="rgba(245, 158, 11, 0.6)" strokeWidth="2" className="corridor-beam" />
             <line x1="54%" y1="38%" x2="60%" y2="42%" stroke="rgba(245, 158, 11, 0.6)" strokeWidth="2" className="corridor-beam" />
             <line x1="54%" y1="38%" x2="38%" y2="49%" stroke="rgba(56, 189, 248, 0.5)" strokeWidth="1.5" strokeDasharray="4 4" />
             <line x1="38%" y1="49%" x2="46%" y2="44%" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="1" strokeDasharray="3 3" />
 
-            {/* Shockwave circle during win simulation */}
             {isSimulatingWin && (
               <circle
                 cx="54%"
@@ -373,7 +427,7 @@ export default function LivingWarRoom() {
           {/* Section 1: Active Macro Goal */}
           <div>
             <div className="rail-section-header">
-              <Activity size={14} color="#f59e0b" /> Authoritative Macro Goal
+              <Activity size={14} color="#f59e0b" /> Authoritative Macro Goal ({effectiveTenantDisplay})
             </div>
 
             <div className="macro-goal-card" style={{ marginTop: 10 }}>

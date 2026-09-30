@@ -124,15 +124,27 @@ export const persistentOperatorRouter = router({
     ),
 
   scoreboard: legacyDayforgeTenantOperatorProcedure
-    .input(z.object({ goalRunId: z.string().uuid().optional() }).optional())
+    .input(
+      z
+        .object({
+          goalRunId: z.string().uuid().optional(),
+          targetTenantId: z.string().trim().min(1).optional(),
+        })
+        .optional()
+    )
     .query(async ({ ctx, input }) => {
+      const effectiveTenantId =
+        ctx.user.role === "admin" && input?.targetTenantId
+          ? input.targetTenantId
+          : ctx.tenantId;
+
       const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: ctx.tenantId,
+        tenantId: effectiveTenantId,
         user: ctx.user,
         subsystem: "persistent_operator.scoreboard",
       });
       return getAuthoritativeScoreboard({
-        tenantId: ctx.tenantId,
+        tenantId: effectiveTenantId,
         canonicalOperatorId: identity.canonicalOperatorId,
         goalRunId: input?.goalRunId,
       });
@@ -171,6 +183,7 @@ export const persistentOperatorRouter = router({
   bridgeDriverAction: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
+        targetTenantId: z.string().trim().min(1).optional(),
         objectiveId: z.string().uuid().optional(),
         missionId: z.number().int().positive().optional(),
         orderId: z.number().int().positive().optional(),
@@ -184,13 +197,18 @@ export const persistentOperatorRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const effectiveTenantId =
+        ctx.user.role === "admin" && input?.targetTenantId
+          ? input.targetTenantId
+          : ctx.tenantId;
+
       const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: ctx.tenantId,
+        tenantId: effectiveTenantId,
         user: ctx.user,
         subsystem: "persistent_operator.field_bridge",
       });
       return bridgeDriverAction({
-        tenantId: ctx.tenantId,
+        tenantId: effectiveTenantId,
         actorId: identity.dayDirectorActorId,
         ...input,
       });

@@ -6,9 +6,11 @@ import {
 } from "./geographicTruthService";
 
 export const geographicTruthRouter = router({
-  atlas: adminProcedure.query(({ ctx }) =>
-    getGeographicTruth({ tenantId: ctx.tenantId })
-  ),
+  atlas: adminProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(({ ctx, input }) =>
+      getGeographicTruth({ tenantId: input?.targetTenantId || ctx.tenantId })
+    ),
   geocodePending: adminProcedure
     .input(
       z

@@ -120,7 +120,18 @@ export type { AdminCustomerAggregateDbRow };
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+export function setDbForTesting(mockDb: any) {
+  _db = mockDb;
+}
+
+export function resetDbForTesting() {
+  _db = null;
+}
+
 export async function getDb() {
+  if (process.env.NODE_ENV === "test" && !process.env.ALLOW_TEST_DB && !_db) {
+    return null;
+  }
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
