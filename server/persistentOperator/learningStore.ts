@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   goalCycleLearnedDeltas,
+  goalCycleOutcomes,
   macroGoalRuns,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -170,16 +171,21 @@ export async function findLearnedDeltaByIdempotencyKey(input: {
   return row ? toRecord(row) : null;
 }
 
-export async function listGoalCycleLearnedDeltas(input: {
+export type ListGoalCycleLearnedDeltasInput = {
   tenantId: string;
   canonicalOperatorId?: string;
   decisionId?: string;
   objectiveId?: string;
+  outcomeId?: string;
   goalRunId?: string;
   learningKind?: LearningKind;
   targetKey?: string;
   limit?: number;
-}): Promise<GoalCycleLearnedDeltaRecord[]> {
+};
+
+export async function listGoalCycleLearnedDeltas(
+  input: ListGoalCycleLearnedDeltasInput
+): Promise<GoalCycleLearnedDeltaRecord[]> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const where = [eq(goalCycleLearnedDeltas.tenantId, input.tenantId)];
@@ -194,6 +200,9 @@ export async function listGoalCycleLearnedDeltas(input: {
   }
   if (input.objectiveId) {
     where.push(eq(goalCycleLearnedDeltas.objectiveId, input.objectiveId));
+  }
+  if (input.outcomeId) {
+    where.push(eq(goalCycleLearnedDeltas.outcomeId, input.outcomeId));
   }
   if (input.goalRunId) {
     where.push(eq(goalCycleLearnedDeltas.goalRunId, input.goalRunId));
@@ -213,6 +222,68 @@ export async function listGoalCycleLearnedDeltas(input: {
     .limit(input.limit ?? 50);
 
   return rows.map(toRecord);
+}
+
+/**
+ * Crash-safe sweeper to process any settled outcomes (verified or rejected)
+ * that have not yet had their automatic learning deltas evaluated and persisted.
+ *
+ * Guarantees eventual consistency across runtime crashes and deferred executions.
+ */
+export async function processPendingOutcomeLearnings(input: {
+  tenantId?: string;
+  limit?: number;
+} = {}): Promise<{
+  processedCount: number;
+  errors: Array<{ outcomeId: string; error: string }>;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  const limit = input.limit ?? 50;
+  const baseWhere = [
+    inArray(goalCycleOutcomes.epistemicStatus, ["verified", "rejected"]),
+  ];
+  if (input.tenantId) {
+    baseWhere.push(eq(goalCycleOutcomes.tenantId, input.tenantId));
+  }
+
+  const pendingRows = await db
+    .select({
+      id: goalCycleOutcomes.id,
+      tenantId: goalCycleOutcomes.tenantId,
+    })
+    .from(goalCycleOutcomes)
+    .leftJoin(
+      goalCycleLearnedDeltas,
+      and(
+        eq(goalCycleOutcomes.id, goalCycleLearnedDeltas.outcomeId),
+        eq(goalCycleOutcomes.tenantId, goalCycleLearnedDeltas.tenantId)
+      )
+    )
+    .where(and(...baseWhere, isNull(goalCycleLearnedDeltas.id)))
+    .orderBy(goalCycleOutcomes.createdAt)
+    .limit(limit);
+
+  const errors: Array<{ outcomeId: string; error: string }> = [];
+  let processedCount = 0;
+
+  for (const row of pendingRows) {
+    try {
+      await evaluateOutcomeAndRecordLearning({
+        tenantId: row.tenantId,
+        outcomeId: row.id,
+      });
+      processedCount++;
+    } catch (err) {
+      errors.push({
+        outcomeId: row.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { processedCount, errors };
 }
 
 export async function getLearnedDeltasByDecision(input: {

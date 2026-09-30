@@ -47,6 +47,7 @@
     "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs",
     "goldline:admin:dev-setup": "tsx scripts/goldline-admin-dev-setup.ts",
     "goldline:design-partner:tenant": "tsx scripts/goldline-design-partner-tenant.ts",
+    "verify:goldline:growth-loop": "tsx scripts/verify-goldline-growth-loop.ts",
     "check:nomenclature": "node scripts/check-nomenclature.mjs",
     "check:tenant-ratchet": "node scripts/check-default-tenant-ratchet.mjs",
     "check:vertical-dependencies": "node scripts/check-vertical-dependencies.mjs"

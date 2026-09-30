@@ -11,6 +11,7 @@ import { optionalReceiptRows } from "./operationReceipt";
 import {
   getGoalCycleLearnedDelta,
   listGoalCycleLearnedDeltas,
+  processPendingOutcomeLearnings,
   type GoalCycleLearnedDeltaRecord,
 } from "./learningStore";
 import { operationReceipt } from "./operationReceipt";
@@ -141,7 +142,12 @@ export async function getAuthoritativeScoreboard(input: {
     activeRun?.canonicalOperatorId ??
     "unspecified";
 
-  // 2. Query decisions, objectives, outcomes, and learned deltas
+  // 2. Reconcile any pending outcome learnings to guarantee eventual consistency
+  await processPendingOutcomeLearnings({ tenantId: input.tenantId }).catch(err => {
+    console.warn("[proofReadModels] processPendingOutcomeLearnings deferred", err);
+  });
+
+  // 3. Query decisions, objectives, outcomes, and learned deltas
   const [decisions, objectives, outcomes, learnedDeltas] = await Promise.all([
     optionalReceiptRows(() =>
       db
@@ -337,9 +343,27 @@ export async function getAuthoritativeScoreboard(input: {
  */
 export async function getLoadoutDelta(input: {
   tenantId: string;
-  deltaId: string;
+  deltaId?: string;
+  canonicalOperatorId?: string;
 }): Promise<LoadoutDeltaExplainable | null> {
-  const delta = await getGoalCycleLearnedDelta(input);
+  await processPendingOutcomeLearnings({ tenantId: input.tenantId }).catch(err => {
+    console.warn("[proofReadModels] processPendingOutcomeLearnings deferred", err);
+  });
+
+  let delta: GoalCycleLearnedDeltaRecord | null = null;
+  if (input.deltaId) {
+    delta = await getGoalCycleLearnedDelta({
+      tenantId: input.tenantId,
+      deltaId: input.deltaId,
+    });
+  } else {
+    const deltas = await listGoalCycleLearnedDeltas({
+      tenantId: input.tenantId,
+      canonicalOperatorId: input.canonicalOperatorId,
+      limit: 1,
+    });
+    delta = deltas[0] ?? null;
+  }
   if (!delta) return null;
 
   return {

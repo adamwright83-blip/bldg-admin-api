@@ -592,6 +592,15 @@ export const cleancloudBrowserSyncRouter = router({
         physicalIds.set(row.cleancloudOrderId, row.buildingResolutionStatus === "resolved"
           ? await findPhysicalEntityIdByAddress({ tenantId: ctx.tenantId, address: row.address }) : null);
       }
+      const paidToBridge: Array<{
+        cleancloudOrderId: string;
+        cleancloudCustomerId?: string | null;
+        customerEmail?: string | null;
+        customerPhone?: string | null;
+        totalCents: number;
+        paidAt: Date;
+      }> = [];
+
       const committed = await db.transaction(async tx => {
         const [binding] = await tx
           .select()
@@ -641,6 +650,16 @@ export const cleancloudBrowserSyncRouter = router({
         for (const row of normalized) {
           const values = { ...row, importBatchId: batch.id, sourceFileName };
           await enqueueEconomicSnapshot(tx, values, physicalIds.get(row.cleancloudOrderId) ?? null);
+          if (row.paid && (row.totalCents ?? 0) > 0) {
+            paidToBridge.push({
+              cleancloudOrderId: String(row.cleancloudOrderId),
+              cleancloudCustomerId: row.cleancloudCustomerId != null ? String(row.cleancloudCustomerId) : null,
+              customerEmail: row.customerEmail ?? null,
+              customerPhone: row.customerPhone ?? null,
+              totalCents: row.totalCents ?? 0,
+              paidAt: row.paymentDateUtc || row.paidDateUtc || row.placedAtUtc || new Date(),
+            });
+          }
           const [existing] = await tx
             .select()
             .from(cleancloudPaidOrders)
@@ -717,6 +736,30 @@ export const cleancloudBrowserSyncRouter = router({
           .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
         return receipt;
       });
+
+      if (paidToBridge.length > 0) {
+        try {
+          const { bridgeCleanCloudPaidOrder } = await import("../persistentOperator/fieldEventBridge");
+          for (const order of paidToBridge) {
+            await bridgeCleanCloudPaidOrder({
+              tenantId: ctx.tenantId,
+              cleancloudOrderId: String(order.cleancloudOrderId),
+              cleancloudCustomerId: order.cleancloudCustomerId != null ? String(order.cleancloudCustomerId) : undefined,
+              customerEmail: order.customerEmail ?? undefined,
+              customerPhone: order.customerPhone ?? undefined,
+              paid: true,
+              totalCents: order.totalCents,
+              paidDateUtc: order.paidAt,
+              sourceFileName: `browser_sync:${input.requestId}`,
+            }).catch(err => {
+              console.warn("[PersistentOperator] cleancloud browser sync order bridge deferred", err);
+            });
+          }
+        } catch (err) {
+          console.warn("[PersistentOperator] failed to load fieldEventBridge for browser sync", err);
+        }
+      }
+
       return completeImportDownstream(
         ctx.tenantId,
         committed as Record<string, unknown>,

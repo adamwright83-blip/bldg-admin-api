@@ -580,6 +580,49 @@ describe("readCurrentDayLine", () => {
     );
   });
 
+  it("surfaces active Persistent Growth Objectives on today's Day Line with execution contract", async () => {
+    const mockObjective = {
+      id: "obj-growth-1001",
+      tenantId: "tenant-a",
+      goalRunId: "run-1",
+      cycleId: "cycle-1",
+      decisionId: "dec-1",
+      canonicalOperatorId: "tenant:tenant-a:operator:driver-1",
+      operatorUserId: "driver-1",
+      title: "Commercial Acquisition: Tower Alpha",
+      description: "Complete in-person commercial acquisition visit",
+      executionType: "mission" as const,
+      authority: "persisted_task" as const,
+      status: "presented" as const,
+      statusReason: null,
+      actionTargetType: "commercial_mission",
+      actionTargetId: "cm-9001",
+      actionTargetDisplayName: "Tower Alpha",
+      businessDate: "2026-09-23",
+      windowStart: null,
+      windowEnd: null,
+      loadout: [{ key: "doctrine:field_first", doctrineWeight: 1.2 }],
+      evidenceRefs: [],
+      completedAt: null,
+      createdAt: "2026-09-23T08:00:00.000Z",
+      updatedAt: "2026-09-23T08:00:00.000Z",
+    };
+
+    const line = await readCurrentDayLine(readerInput, {
+      planForDate: async () => storedPlan,
+      listCampaigns: async () => campaigns,
+      getDayDirectorState: async () => ({ ...directorState, commitments: [] }),
+      listObjectives: async () => [mockObjective],
+    });
+
+    expect(line.rankingStatus).toBe("ranked");
+    const surfacedGrowthItem = line.items.find(item => item.id === "obj-growth-1001");
+    expect(surfacedGrowthItem).toBeDefined();
+    expect(surfacedGrowthItem?.title).toBe("Commercial Acquisition: Tower Alpha");
+    expect(surfacedGrowthItem?.executionType).toBe("mission");
+    expect(surfacedGrowthItem?.executionContract.fieldRequired).toBe(true);
+  });
+
   it("returns unavailable for a zone that is not a real time zone", async () => {
     const planForDate = vi.fn();
     const line = await readCurrentDayLine(
@@ -591,3 +634,4 @@ describe("readCurrentDayLine", () => {
     expect(planForDate).not.toHaveBeenCalled();
   });
 });
+
