@@ -61,8 +61,10 @@ import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffbo
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
 import { persistentOperatorRouter } from "../persistentOperator/persistentOperatorRouter";
+import { franchiseRouter } from "../franchise/franchiseRouter";
 
 export const systemRouter = router({
+  franchise: franchiseRouter,
   strategy: strategyRouter,
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,

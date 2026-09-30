@@ -75,6 +75,34 @@ const CoastalMarketProofPage = lazy(
 );
 const COASTAL_MARKET_PROOF_PATH = "/goldline/coastal-market-proof";
 
+const LivingWarRoom = lazy(() => import("./pages/warroom/LivingWarRoom"));
+const ClaireInCabCockpit = lazy(() => import("./pages/driver/ClaireInCabCockpit"));
+const FranchiseFactoryPage = lazy(() => import("./pages/franchise/FranchiseFactoryPage"));
+
+function LivingWarRoomRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#040810" }} />}>
+      <LivingWarRoom />
+    </Suspense>
+  );
+}
+
+function ClaireCockpitRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#030712" }} />}>
+      <ClaireInCabCockpit />
+    </Suspense>
+  );
+}
+
+function FranchiseFactoryRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#06090e" }} />}>
+      <FranchiseFactoryPage />
+    </Suspense>
+  );
+}
+
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
 }
@@ -220,6 +248,9 @@ const SAAS_CUSTOMER_SAFE_PATHS = [
   "/onboarding",
   "/goldline/start",
   "/receipt/",
+  "/war-room",
+  "/driver/cockpit",
+  "/franchise",
 ] as const;
 
 function isSaasCustomerSafePath(pathname: string): boolean {
@@ -232,6 +263,9 @@ function isSaasCustomerSafePath(pathname: string): boolean {
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
+  "/war-room",
+  "/driver/cockpit",
+  "/franchise",
   "/gumballpals",
   "/admin",
   "/home",
@@ -451,6 +485,9 @@ function AdminHostRouter() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
+      <Route path="/driver/cockpit" component={ClaireCockpitRoute} />
+      <Route path="/war-room" component={LivingWarRoomRoute} />
+      <Route path="/franchise" component={FranchiseFactoryRoute} />
       <Route
         path="/commercial-proposal/:missionId"
         component={CommercialProposalPrintRoute}
@@ -665,6 +702,9 @@ function Router() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
+      <Route path="/driver/cockpit" component={ClaireCockpitRoute} />
+      <Route path="/war-room" component={LivingWarRoomRoute} />
+      <Route path="/franchise" component={FranchiseFactoryRoute} />
       <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route
         path="/commercial-proposal/:missionId"
