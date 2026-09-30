@@ -111,34 +111,35 @@ export function assembleReferencedDayLineWork(input: {
   history?: Array<{ speaker: string; text: string }>;
   surfacedAccounts?: Array<{ id: string; name: string }>;
 }): BriefingItem[] {
-  // Check for anaphoric recovery / dormant customer reference first: when the operator says
-  // "batch them all for today" or "put the dormant accounts on the Day Line", they are referencing
-  // the surfaced dormant recovery work, not random past clauses.
-  const refersToRecovery =
-    /\b(?:batch\s+(?:them|all|those)(?:\s+all)?\s+(?:for\s+today|today)|batch\s+them|batch\s+those|put\s+(?:them|the\s+dormant\s+accounts|the\s+recovery\s+texts)\s+on\s+(?:the\s+)?day\s*line|dormant\s+accounts|recovery\s+texts)\b/i.test(
+  // Recovery anaphora is resolved only from structured entities Claire
+  // actually surfaced. Conversation prose is not an identity database.
+  const explicitRecovery =
+    /\b(?:dormant\s+(?:accounts|customers)|recovery\s+(?:texts|messages|outreach)|win[- ]?back)\b/i.test(
+      input.utterance
+    );
+  const anaphoricGroup =
+    /\b(?:batch|do|send|put|add)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i.test(
       input.utterance
     ) ||
-    (refersToPriorWork(input.utterance) &&
-      (Boolean(input.surfacedAccounts?.length) ||
-        input.history?.some(h => /\b(?:dormant|recovery text)\b/i.test(h.text))));
+    /\b(?:those people|the people|that group|the whole group|everyone|everybody)\b[^.!?]{0,40}\b(?:mentioned|named|just mentioned)\b/i.test(
+      input.utterance
+    );
+  const structuredRefs = input.surfacedAccounts ?? [];
 
-  if (refersToRecovery) {
-    let count = input.surfacedAccounts?.length ?? 0;
-    if (!count && input.history) {
-      for (const entry of input.history) {
-        const match =
-          /\b(\d+)\s+(?:dormant|recovery)\b/i.exec(entry.text) ||
-          /\b(seven|six|five|four|eight)\s+(?:dormant|recovery)\b/i.exec(entry.text);
-        if (match) {
-          const word = match[1]!.toLowerCase();
-          count = word === "seven" ? 7 : word === "six" ? 6 : word === "five" ? 5 : word === "eight" ? 8 : Number(word);
-          break;
-        }
-      }
+  if ((explicitRecovery || anaphoricGroup) && (structuredRefs.length > 0 || explicitRecovery)) {
+    if (anaphoricGroup && structuredRefs.length === 0) {
+      // "Them" has no durable referent. Never invent a customer set from a
+      // number or a sentence in history.
+      return [];
     }
-    const countPrefix = count ? `${count} ` : "";
-    const title = count ? `Send ${count} dormant-customer recovery texts` : "Send dormant-customer recovery texts";
-    const quote = `Send dormant-customer recovery texts to the ${countPrefix ? `${countPrefix} ` : ""}previously identified customers today`;
+    const count = structuredRefs.length;
+    const title = count
+      ? `Send ${count} dormant-customer recovery texts`
+      : "Send dormant-customer recovery texts";
+    const names = structuredRefs.map(ref => ref.name);
+    const quote = count
+      ? `Send recovery texts today to ${names.join(", ")}`
+      : "Send dormant-customer recovery texts today";
     return [
       {
         kind: "new_work",
@@ -147,10 +148,16 @@ export function assembleReferencedDayLineWork(input: {
         businessDate: input.clock.today,
         timing: { kind: "none" },
         quantity: count || null,
-        people: [],
+        people: names,
         place: null,
         needs: null,
         existing: null,
+        references: structuredRefs.map(ref => ({
+          kind: "customer" as const,
+          id: ref.id,
+          name: ref.name,
+          source: "conversation_referent" as const,
+        })),
         executionType: "challenge",
       },
     ];
