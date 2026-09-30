@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   persistentOperatorIdentityBindings,
@@ -491,6 +492,91 @@ export async function requireCanonicalOperatorIdentityForUser(input: {
   });
   if (!result.ok) throw new CanonicalOperatorIdentityError(result.reason);
   return result.identity;
+}
+
+/**
+ * Resolves the dedicated canonical operator identity for a target tenant.
+ * Used for cross-tenant administration without mutating the platform admin's user record.
+ */
+export async function resolveTargetTenantCanonicalOperatorIdentity(input: {
+  tenantId: string;
+  subsystem: string;
+}): Promise<CanonicalOperatorIdentity> {
+  const tenantId = input.tenantId.trim();
+  if (!tenantId) {
+    throw new CanonicalOperatorIdentityError("identity_unresolved");
+  }
+
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database unavailable for cross-tenant operator resolution");
+  }
+
+  const candidateUsers = await db
+    .select({
+      id: users.id,
+      tenantId: users.tenantId,
+      openId: users.openId,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.tenantId, tenantId));
+
+  const targetUsers = candidateUsers.filter(u => u.tenantId === tenantId);
+  const targetUser =
+    targetUsers.find(u => u.openId.startsWith("operator_")) ||
+    targetUsers.find(u => u.role === "admin") ||
+    targetUsers.find(u => u.role === "driver") ||
+    targetUsers[0];
+
+  if (!targetUser) {
+    throw new CanonicalOperatorIdentityError("identity_unresolved");
+  }
+
+  return requireCanonicalOperatorIdentityForUser({
+    tenantId,
+    user: targetUser,
+    subsystem: input.subsystem,
+  });
+}
+
+/**
+ * Resolves the effective canonical operator identity for an API procedure:
+ * - If targetTenantId matches callerTenantId (or is omitted), uses the caller's own canonical identity.
+ * - If targetTenantId differs, validates caller is platform admin and resolves the target tenant's dedicated operator.
+ * - Non-admin callers attempting cross-tenant access are rejected with FORBIDDEN.
+ */
+export async function requireEffectiveOperatorIdentityForTenant(input: {
+  callerUser: { id?: unknown; openId: string; role: PlatformRole; tenantId?: string | null };
+  callerTenantId: string;
+  targetTenantId?: string | null;
+  subsystem: string;
+}): Promise<CanonicalOperatorIdentity> {
+  const callerTenantId = input.callerTenantId?.trim() || "default";
+  const targetTenantId = input.targetTenantId?.trim();
+
+  // 1. Same-tenant view: use caller's own canonical identity
+  if (!targetTenantId || targetTenantId === callerTenantId) {
+    return requireCanonicalOperatorIdentityForUser({
+      tenantId: callerTenantId,
+      user: input.callerUser,
+      subsystem: input.subsystem,
+    });
+  }
+
+  // 2. Cross-tenant view: strictly requires platform admin
+  if (input.callerUser.role !== "admin") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Cross-tenant inspection of tenant '${targetTenantId}' is restricted to platform administrators.`,
+    });
+  }
+
+  // 3. Resolve target tenant's dedicated operator identity without mutating caller's user record
+  return resolveTargetTenantCanonicalOperatorIdentity({
+    tenantId: targetTenantId,
+    subsystem: input.subsystem,
+  });
 }
 
 export async function bindOperatorIdentityAlias(input: {

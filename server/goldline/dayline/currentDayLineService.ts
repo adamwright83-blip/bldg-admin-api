@@ -82,6 +82,21 @@ function unavailableLine(businessDate: string): CurrentDayLine {
   });
 }
 
+let defaultDayLineDeps: {
+  planForDate?: PlanReader;
+  listCampaigns?: CampaignReader;
+  getDayDirectorState?: DayStateReader;
+  listObjectives?: ObjectiveReader;
+} = {};
+
+export function setDayLineDepsForTesting(deps: typeof defaultDayLineDeps) {
+  defaultDayLineDeps = deps;
+}
+
+export function resetDayLineDepsForTesting() {
+  defaultDayLineDeps = {};
+}
+
 export async function readCurrentDayLine(
   input: {
     tenantId: string;
@@ -121,10 +136,11 @@ export async function readCurrentDayLine(
     return unavailableLine(businessDate);
   }
 
-  const readPlan = deps.planForDate ?? planForDate;
-  const readCampaigns = deps.listCampaigns ?? listCampaigns;
-  const readState = deps.getDayDirectorState ?? getDayDirectorState;
-  const readObjectives = deps.listObjectives ?? listGoalCycleObjectives;
+  const activeDeps = { ...defaultDayLineDeps, ...deps };
+  const readPlan = activeDeps.planForDate ?? planForDate;
+  const readCampaigns = activeDeps.listCampaigns ?? listCampaigns;
+  const readState = activeDeps.getDayDirectorState ?? getDayDirectorState;
+  const readObjectives = activeDeps.listObjectives ?? listGoalCycleObjectives;
 
   try {
     const [plan, campaigns, objectives] = await Promise.all([
@@ -203,6 +219,27 @@ export async function readCurrentDayLine(
             kind: "campaign",
             sourceReference: `campaign:${id}`,
             campaignId: id,
+          },
+        });
+      }
+    }
+
+    // 3. Day Director Commitments
+    if (state?.commitments) {
+      for (const commitment of state.commitments) {
+        if (commitment.status !== "open") continue;
+        if (seen.has(commitment.id)) continue;
+        if (commitment.command?.role === "primary" && commitment.operatorMission) continue;
+        seen.add(commitment.id);
+        rankedWorks.push({
+          id: commitment.id,
+          title: commitment.title,
+          objective: commitment.sourceText ?? commitment.title,
+          completionCondition: commitment.operatorMission?.completionCondition ?? "Day Director commitment",
+          lineage: {
+            kind: "commitment",
+            sourceReference: `day_director_commitments:${commitment.id}`,
+            commitmentId: commitment.id,
           },
         });
       }

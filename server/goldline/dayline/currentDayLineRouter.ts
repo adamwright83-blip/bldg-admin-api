@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
-import { requireCanonicalOperatorIdentityForUser } from "../../persistentOperator/identity";
+import { requireEffectiveOperatorIdentityForTenant } from "../../persistentOperator/identity";
 import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
 import type { CampaignRun } from "../../../shared/campaignRun";
 import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
 import { bridgeDriverAction } from "../../persistentOperator/fieldEventBridge";
-import { getGoalCycleObjective } from "../../persistentOperator/objectiveStore";
 import { completeDayDirectorCommitment } from "../../dayDirector/dayDirectorService";
 import { readCurrentDayLine } from "./currentDayLineService";
 
@@ -36,15 +35,11 @@ export const currentDayLineRouter = router({
   today: legacyDayforgeTenantMemberProcedure
     .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const effectiveTenantId =
-        ctx.user.role === "admin" && input?.targetTenantId
-          ? input.targetTenantId
-          : ctx.tenantId;
-
-      const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: effectiveTenantId,
-        user: ctx.user,
-        subsystem: "day_line",
+      const identity = await requireEffectiveOperatorIdentityForTenant({
+        callerUser: ctx.user,
+        callerTenantId: ctx.tenantId,
+        targetTenantId: input?.targetTenantId,
+        subsystem: "day_line.today",
       });
       const line = await readCurrentDayLine({
         tenantId: identity.tenantId,
@@ -113,92 +108,122 @@ export const currentDayLineRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const effectiveTenantId =
-        ctx.user.role === "admin" && input.targetTenantId
-          ? input.targetTenantId
-          : ctx.tenantId;
-
-      const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: effectiveTenantId,
-        user: ctx.user,
+      const identity = await requireEffectiveOperatorIdentityForTenant({
+        callerUser: ctx.user,
+        callerTenantId: ctx.tenantId,
+        targetTenantId: input.targetTenantId,
         subsystem: "day_line.completeItem",
       });
 
       const tenantId = identity.tenantId;
-      const kind = input.lineage?.kind;
 
-      // 1. Lineage: Persistent Growth Objective
-      if (kind === "objective" || (!kind && (input.lineage?.objectiveId || input.itemId))) {
-        const objectiveId = input.lineage?.objectiveId || input.itemId;
-        const objective = await getGoalCycleObjective({
+      // 1. Authoritative truth check: reread today's Day Line for the effective tenant & operator
+      const dayLine = await readCurrentDayLine({
+        tenantId,
+        operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(a => a.openId),
+      });
+
+      // 2. Locate the exact item on today's authoritative Day Line
+      const lineItem = dayLine.items.find(item => item.id === input.itemId);
+      if (!lineItem) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Item '${input.itemId}' is not present on today's authoritative Day Line for tenant '${tenantId}'`,
+        });
+      }
+
+      // 3. Derive lineage authoritatively from the server-produced Day Line item
+      const serverLineage = lineItem.lineage;
+      if (!serverLineage) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Day Line item '${input.itemId}' lacks authoritative server lineage`,
+        });
+      }
+
+      // 4. Reject client-forged lineage: optimistic token must match server truth
+      if (input.lineage?.kind && input.lineage.kind !== serverLineage.kind) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Lineage conflict: client declared '${input.lineage.kind}' but authoritative Day Line item is '${serverLineage.kind}'`,
+        });
+      }
+
+      // 5. Execute completion contract strictly using server-derived lineage
+
+      // (a) Lineage: Persistent Growth Objective
+      if (serverLineage.kind === "objective") {
+        const objectiveId = serverLineage.objectiveId || lineItem.id;
+        const bridged = await bridgeDriverAction({
           tenantId,
+          actorId: identity.canonicalOpenId,
           objectiveId,
-        }).catch(() => null);
+          evidenceReference: input.evidenceReference,
+          sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
+          explanation: input.explanation ?? `Day Line objective completed via HUD: ${objectiveId}`,
+        });
 
-        if (objective || kind === "objective") {
-          const bridged = await bridgeDriverAction({
-            tenantId,
-            actorId: identity.canonicalOpenId,
-            objectiveId,
-            evidenceReference: input.evidenceReference,
-            sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
-            explanation: input.explanation ?? `Day Line objective completed via HUD: ${objectiveId}`,
-          });
+        if (!bridged.bridged) {
           return {
-            success: bridged.bridged,
+            success: false,
             lineageKind: "objective" as const,
-            itemId: objectiveId,
+            itemId: lineItem.id,
+            reason: bridged.reason,
+            message: bridged.message,
             receipt: bridged,
           };
         }
+
+        return {
+          success: true,
+          lineageKind: "objective" as const,
+          itemId: lineItem.id,
+          receipt: bridged,
+        };
       }
 
-      // 2. Lineage: Day Director Designated Commitment
-      if (kind === "commitment" || (!kind && input.lineage?.commitmentId)) {
-        const commitmentId = input.lineage?.commitmentId || input.itemId;
-        let commitmentResult: any = null;
-        try {
-          commitmentResult = await completeDayDirectorCommitment({
-            tenantId,
-            actorId: identity.dayDirectorActorId,
-            actorIds: identity.dayDirectorActorIds,
-            commitmentId,
-          });
-        } catch (err) {
-          if (kind === "commitment") throw err;
-        }
+      // (b) Lineage: Day Director Designated Commitment
+      if (serverLineage.kind === "commitment") {
+        const commitmentId = serverLineage.commitmentId || lineItem.id;
+        const commitmentResult = await completeDayDirectorCommitment({
+          tenantId,
+          actorId: identity.dayDirectorActorId,
+          actorIds: identity.dayDirectorActorIds,
+          commitmentId,
+        });
 
-        if (commitmentResult || kind === "commitment") {
-          const bridged = await bridgeDriverAction({
-            tenantId,
-            actorId: identity.dayDirectorActorId,
-            commitmentId,
-            evidenceReference: input.evidenceReference,
-            sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
-            explanation: input.explanation ?? `Day Director commitment completed via HUD: ${commitmentId}`,
-          }).catch(() => ({ bridged: false, reason: "no_linked_objective" }));
+        const bridged = await bridgeDriverAction({
+          tenantId,
+          actorId: identity.dayDirectorActorId,
+          commitmentId,
+          evidenceReference: input.evidenceReference,
+          sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
+          explanation: input.explanation ?? `Day Director commitment completed via HUD: ${commitmentId}`,
+        }).catch(() => ({ bridged: false as const, reason: "no_linked_objective" as const }));
 
-          await recordPersistentOperatorDiagnosticEvent({
-            tenantId,
-            canonicalOperatorId: identity.canonicalOperatorId,
-            operatorUserId: identity.canonicalOpenId,
-            subsystem: "day_line.completeItem",
-            eventKind: "objective_verified",
-            objectiveId: commitmentId,
-          }).catch(() => undefined);
+        await recordPersistentOperatorDiagnosticEvent({
+          tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          subsystem: "day_line.completeItem",
+          eventKind: "objective_verified",
+          objectiveId: commitmentId,
+        }).catch(() => undefined);
 
-          return {
-            success: true,
-            lineageKind: "commitment" as const,
-            itemId: commitmentId,
-            receipt: { commitment: commitmentResult, bridged },
-          };
-        }
+        return {
+          success: true,
+          lineageKind: "commitment" as const,
+          itemId: lineItem.id,
+          receipt: { commitment: commitmentResult, bridged },
+        };
       }
 
-      // 3. Lineage: Campaign
-      if (kind === "campaign" || (!kind && input.lineage?.campaignId)) {
-        const campaignId = input.lineage?.campaignId || input.itemId;
+      // (c) Lineage: Campaign
+      if (serverLineage.kind === "campaign") {
+        const campaignId = serverLineage.campaignId || lineItem.id;
         const numericMissionId = Number.parseInt(campaignId, 10);
         const bridged = await bridgeDriverAction({
           tenantId,
@@ -206,9 +231,21 @@ export const currentDayLineRouter = router({
           ...(Number.isFinite(numericMissionId) ? { missionId: numericMissionId } : {}),
           evidenceReference: input.evidenceReference,
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
-          explanation: input.explanation ?? `Campaign work completed via HUD: ${campaignId}`,
+          explanation: input.explanation ?? `Campaign work completion attempt via HUD: ${campaignId}`,
           metadata: { campaignId },
-        }).catch(() => ({ bridged: false, reason: "campaign_bridging_deferred" }));
+        }).catch(() => ({ bridged: false as const, reason: "campaign_bridging_unavailable" as const }));
+
+        // Authoritative truth guard: campaign completion NEVER succeeds without authoritative domain evidence
+        if (!bridged.bridged) {
+          return {
+            success: false,
+            lineageKind: "campaign" as const,
+            itemId: lineItem.id,
+            reason: "campaign_requires_evidence" as const,
+            message: `Campaign '${campaignId}' cannot complete through generic Day Line assertion. Authoritative campaign progress requires domain evidence (e.g. territory presence, flyer placement) via Campaign Run ledger.`,
+            receipt: { bridged },
+          };
+        }
 
         await recordPersistentOperatorDiagnosticEvent({
           tenantId,
@@ -222,14 +259,14 @@ export const currentDayLineRouter = router({
         return {
           success: true,
           lineageKind: "campaign" as const,
-          itemId: campaignId,
+          itemId: lineItem.id,
           receipt: { bridged },
         };
       }
 
       throw new TRPCError({
-        code: "NOT_FOUND",
-        message: `Day Line item '${input.itemId}' could not be resolved to an active objective, commitment, or campaign on tenant '${tenantId}'`,
+        code: "PRECONDITION_FAILED",
+        message: `Unsupported Day Line lineage kind '${(serverLineage as any).kind}'`,
       });
     }),
 });

@@ -11,6 +11,7 @@ import {
   CanonicalOperatorIdentityError,
   OPERATOR_IDENTITY_SURFACES,
   requireCanonicalOperatorIdentityForUser,
+  requireEffectiveOperatorIdentityForTenant,
   revokeOperatorIdentityAlias,
 } from "./identity";
 import { loadPersistentOperatorDiagnostics } from "./observability";
@@ -36,56 +37,62 @@ function identityFailure(error: unknown): never {
 }
 
 export const persistentOperatorRouter = router({
-  identity: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
-    try {
-      const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: ctx.tenantId,
-        user: ctx.user,
-        subsystem: "persistent_operator.identity",
-      });
-      return {
-        tenantId: identity.tenantId,
-        canonicalOperatorId: identity.canonicalOperatorId,
-        canonicalOpenId: identity.canonicalOpenId,
-        canonicalUserId: identity.canonicalUserId,
-        sourceOpenId: identity.sourceOpenId,
-        sourceUserId: identity.sourceUserId,
-        dayDirectorActorId: identity.dayDirectorActorId,
-        dayDirectorActorIds: identity.dayDirectorActorIds,
-        weeklyOperatorId: identity.weeklyOperatorId,
-        campaignOperatorUserId: identity.campaignOperatorUserId,
-        communicationOperatorUserId: identity.communicationOperatorUserId,
-        membership: identity.membership,
-        aliases: identity.aliases,
-      };
-    } catch (error) {
-      identityFailure(error);
-    }
-  }),
+  identity: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        const identity = await requireEffectiveOperatorIdentityForTenant({
+          callerUser: ctx.user,
+          callerTenantId: ctx.tenantId,
+          targetTenantId: input?.targetTenantId,
+          subsystem: "persistent_operator.identity",
+        });
+        return {
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          canonicalOpenId: identity.canonicalOpenId,
+          canonicalUserId: identity.canonicalUserId,
+          sourceOpenId: identity.sourceOpenId,
+          sourceUserId: identity.sourceUserId,
+          dayDirectorActorId: identity.dayDirectorActorId,
+          dayDirectorActorIds: identity.dayDirectorActorIds,
+          weeklyOperatorId: identity.weeklyOperatorId,
+          campaignOperatorUserId: identity.campaignOperatorUserId,
+          communicationOperatorUserId: identity.communicationOperatorUserId,
+          membership: identity.membership,
+          aliases: identity.aliases,
+        };
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
 
-  diagnostics: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
-    try {
-      const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: ctx.tenantId,
-        user: ctx.user,
-        subsystem: "persistent_operator.diagnostics",
-      });
-      return loadPersistentOperatorDiagnostics({
-        tenantId: identity.tenantId,
-        canonicalOperatorId: identity.canonicalOperatorId,
-        operatorUserId: identity.canonicalOpenId,
-        operatorUserIds: [
-          identity.canonicalOpenId,
-          identity.sourceOpenId,
-          ...identity.aliases.map(alias => alias.openId),
-        ],
-        dayDirectorActorId: identity.dayDirectorActorId,
-        dayDirectorActorIds: identity.dayDirectorActorIds,
-      });
-    } catch (error) {
-      identityFailure(error);
-    }
-  }),
+  diagnostics: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        const identity = await requireEffectiveOperatorIdentityForTenant({
+          callerUser: ctx.user,
+          callerTenantId: ctx.tenantId,
+          targetTenantId: input?.targetTenantId,
+          subsystem: "persistent_operator.diagnostics",
+        });
+        return loadPersistentOperatorDiagnostics({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          operatorUserIds: [
+            identity.canonicalOpenId,
+            identity.sourceOpenId,
+            ...identity.aliases.map(alias => alias.openId),
+          ],
+          dayDirectorActorId: identity.dayDirectorActorId,
+          dayDirectorActorIds: identity.dayDirectorActorIds,
+        });
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
 
   operationReceipt: legacyDayforgeTenantOperatorProcedure
     .input(z.object({ decisionId: z.string().uuid() }))
@@ -133,18 +140,14 @@ export const persistentOperatorRouter = router({
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const effectiveTenantId =
-        ctx.user.role === "admin" && input?.targetTenantId
-          ? input.targetTenantId
-          : ctx.tenantId;
-
-      const identity = await requireCanonicalOperatorIdentityForUser({
-        tenantId: effectiveTenantId,
-        user: ctx.user,
+      const identity = await requireEffectiveOperatorIdentityForTenant({
+        callerUser: ctx.user,
+        callerTenantId: ctx.tenantId,
+        targetTenantId: input?.targetTenantId,
         subsystem: "persistent_operator.scoreboard",
       });
       return getAuthoritativeScoreboard({
-        tenantId: effectiveTenantId,
+        tenantId: identity.tenantId,
         canonicalOperatorId: identity.canonicalOperatorId,
         goalRunId: input?.goalRunId,
       });

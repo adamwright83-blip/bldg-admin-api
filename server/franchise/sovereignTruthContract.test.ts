@@ -9,69 +9,127 @@ import {
   provisionFranchise,
 } from "./franchiseService";
 import { macroGoalRuns } from "../../drizzle/schema";
+import {
+  setDayLineDepsForTesting,
+  resetDayLineDepsForTesting,
+} from "../goldline/dayline/currentDayLineService";
 
 /**
  * Reusable mock database fixture with table tracking and in-memory row storage
  */
+interface SqlConstraint {
+  type: "eq" | "in";
+  col: string;
+  val?: any;
+  vals?: any[];
+}
+
+function extractConstraints(sqlObj: any): SqlConstraint[] {
+  if (!sqlObj) return [];
+  const constraints: SqlConstraint[] = [];
+
+  if (sqlObj.queryChunks && Array.isArray(sqlObj.queryChunks)) {
+    const chunks = sqlObj.queryChunks;
+    let currentCol: string | null = null;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk) continue;
+
+      if (typeof chunk === "object") {
+        if (chunk.queryChunks) {
+          constraints.push(...extractConstraints(chunk));
+        } else if (chunk.name && typeof chunk.name === "string" && !("value" in chunk)) {
+          currentCol = chunk.name;
+        } else if ("value" in chunk && !chunk.name && !Array.isArray(chunk.value)) {
+          if (currentCol) {
+            constraints.push({ type: "eq", col: currentCol, val: chunk.value });
+            currentCol = null;
+          }
+        } else if (Array.isArray(chunk)) {
+          const flatParams: any[] = [];
+          for (const item of chunk) {
+            if (Array.isArray(item)) {
+              for (const sub of item) {
+                if (sub && typeof sub === "object" && "value" in sub) {
+                  flatParams.push(sub.value);
+                }
+              }
+            } else if (item && typeof item === "object" && "value" in item) {
+              flatParams.push(item.value);
+            }
+          }
+          if (currentCol && flatParams.length > 0) {
+            constraints.push({ type: "in", col: currentCol, vals: flatParams });
+            currentCol = null;
+          }
+        }
+      }
+    }
+  }
+
+  return constraints;
+}
+
+function rowMatchesConstraints(row: any, constraints: SqlConstraint[]): boolean {
+  for (const c of constraints) {
+    if (c.type === "eq") {
+      if (row[c.col] === undefined) return false;
+      if (row[c.col] !== c.val) return false;
+    } else if (c.type === "in") {
+      if (row[c.col] === undefined) return false;
+      if (!c.vals?.includes(row[c.col])) return false;
+    }
+  }
+  return true;
+}
+
 function setupTestFranchiseDb() {
   const store = new Map<string, any[]>();
   const insertedRows = new Map<string, any[]>();
   const updatedRows = new Map<string, any[]>();
 
   const createQueryChain = (tableName: string) => {
-    const getRows = () => {
+    const getRows = (pred?: any) => {
       const rows = store.get(tableName) ?? [];
       if (tableName === "commercial_accounts" && rows.length === 0) {
         return [{ id: 42 }];
       }
-      return rows;
+      if (!pred) return rows;
+
+      const constraints = extractConstraints(pred);
+      if (constraints.length === 0) return rows;
+      return rows.filter(r => rowMatchesConstraints(r, constraints));
     };
 
-    const chain: any = {
-      where: vi.fn((_pred?: any) => {
-        const whereChain: any = {
-          orderBy: vi.fn(() => {
-            const orderChain: any = {
-              limit: vi.fn(async (n?: number) => {
-                const rows = getRows();
-                return typeof n === "number" ? rows.slice(0, n) : rows;
-              }),
-              then: (resolve: any, reject: any) => Promise.resolve(getRows()).then(resolve, reject),
-            };
-            return orderChain;
-          }),
-          limit: vi.fn(async (n?: number) => {
-            const rows = getRows();
-            return typeof n === "number" ? rows.slice(0, n) : rows;
-          }),
-          then: (resolve: any, reject: any) => Promise.resolve(getRows()).then(resolve, reject),
-        };
-        return whereChain;
-      }),
-      orderBy: vi.fn(() => {
-        const orderChain: any = {
-          limit: vi.fn(async (n?: number) => {
-            const rows = getRows();
-            return typeof n === "number" ? rows.slice(0, n) : rows;
-          }),
-          then: (resolve: any, reject: any) => Promise.resolve(getRows()).then(resolve, reject),
-        };
-        return orderChain;
-      }),
-      limit: vi.fn(async (n?: number) => {
-        const rows = getRows();
-        return typeof n === "number" ? rows.slice(0, n) : rows;
-      }),
-      then: (resolve: any, reject: any) => Promise.resolve(getRows()).then(resolve, reject),
+    const makeChain = (pred?: any) => {
+      const c: any = {
+        where: vi.fn((p?: any) => makeChain(p ?? pred)),
+        innerJoin: vi.fn(() => makeChain(pred)),
+        leftJoin: vi.fn(() => makeChain(pred)),
+        rightJoin: vi.fn(() => makeChain(pred)),
+        groupBy: vi.fn(() => makeChain(pred)),
+        having: vi.fn(() => makeChain(pred)),
+        orderBy: vi.fn(() => makeChain(pred)),
+        limit: vi.fn(async (n?: number) => {
+          const rows = getRows(pred);
+          return typeof n === "number" ? rows.slice(0, n) : rows;
+        }),
+        then: (resolve: any, reject: any) =>
+          Promise.resolve(getRows(pred)).then(resolve, reject),
+      };
+      return c;
     };
-    return chain;
+    return makeChain();
   };
 
+  let idCounter = 1000;
   const insertHandler = vi.fn((table: any) => ({
     values: vi.fn((values: any) => {
       const tableName = getTableName(table);
       const incoming = Array.isArray(values) ? values : [values];
       const withTimestamps = incoming.map((row: any) => ({
+        id: row.id ?? ++idCounter,
         createdAt: new Date(),
         updatedAt: new Date(),
         ...row,
@@ -103,10 +161,13 @@ function setupTestFranchiseDb() {
       updatedRows.set(tableName, updated);
 
       return {
-        where: vi.fn().mockImplementation(async () => {
+        where: vi.fn().mockImplementation(async (pred?: any) => {
           const rows = store.get(tableName) ?? [];
+          const constraints = pred ? extractConstraints(pred) : [];
           for (const r of rows) {
-            Object.assign(r, updates);
+            if (constraints.length === 0 || rowMatchesConstraints(r, constraints)) {
+              Object.assign(r, updates);
+            }
           }
           return [{ affectedRows: 1 }];
         }),
@@ -138,10 +199,12 @@ function setupTestFranchiseDb() {
 describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () => {
   beforeEach(() => {
     resetDbForTesting();
+    resetDayLineDepsForTesting();
   });
 
   afterEach(() => {
     resetDbForTesting();
+    resetDayLineDepsForTesting();
   });
 
   it("enforces that system.franchise procedures require admin authentication", async () => {
@@ -378,10 +441,9 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(insertedRows.get("goal_cycle_requests")?.length).toBe(1);
   });
 
-  it("verifies Day Line completion across all 3 lineage types (objective, commitment, campaign)", async () => {
+  it("verifies Day Line completion: objective completion creates durable outcome, commitment completion updates status", async () => {
     const { store } = setupTestFranchiseDb();
 
-    // Seed canonical operator user and membership
     store.set("users", [
       {
         id: 1,
@@ -403,7 +465,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
-    // Seed objective for Lineage 1
+    // Seed objective with status "presented" so it surfaces on today's Day Line
     store.set("goal_cycle_objectives", [
       {
         tenantId: "default",
@@ -419,7 +481,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
         description: "Visit building",
         executionType: "driver_visit",
         authority: "autonomous",
-        status: "dispatched",
+        status: "presented",
         businessDate: "2026-09-30",
         windowStart: "08:00",
         windowEnd: "17:00",
@@ -430,15 +492,15 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
-    // Seed commitment for Lineage 2
+    // Seed commitment with status "open"
     store.set("day_director_commitments", [
       {
         tenantId: "default",
         id: "commit-morning-door-tags",
-        actorId: "admin-owner-user",
+        actorId: "1",
         businessDate: "2026-09-30",
-        status: "active",
-        label: "Door tags",
+        status: "open",
+        title: "Franklin corridor door tags",
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -457,28 +519,28 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       res: { clearCookie: () => {} } as any,
     });
 
-    // 1. Complete Lineage 1: Persistent Growth Objective
+    // 1. Verify Day Line surfaces both items
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(true);
+    expect(todayLine.items.some(i => i.id === "commit-morning-door-tags")).toBe(true);
+
+    // 2. Complete Objective: succeeds with durable outcome
     const objectiveRes = await caller.system.currentDayLine.completeItem({
       itemId: "objective-conquest-1",
-      lineage: {
-        kind: "objective",
-        sourceReference: "goal_cycle_objectives:objective-conquest-1",
-        objectiveId: "objective-conquest-1",
-      },
       evidenceReference: "field_receipt_voice_01",
       explanation: "Driver confirmed completed at Argyle House",
     });
+    expect(objectiveRes.success).toBe(true);
     expect(objectiveRes.lineageKind).toBe("objective");
     expect(objectiveRes.itemId).toBe("objective-conquest-1");
 
-    // 2. Complete Lineage 2: Day Director Designated Commitment
+    // Verify durable outcome created in goal_cycle_outcomes
+    const outcomes = store.get("goal_cycle_outcomes") ?? [];
+    expect(outcomes.some(o => o.objectiveId === "objective-conquest-1")).toBe(true);
+
+    // 3. Complete Commitment: succeeds with durable mutation
     const commitmentRes = await caller.system.currentDayLine.completeItem({
       itemId: "commit-morning-door-tags",
-      lineage: {
-        kind: "commitment",
-        sourceReference: "day_director_commitments:commit-morning-door-tags",
-        commitmentId: "commit-morning-door-tags",
-      },
       evidenceReference: "field_receipt_voice_02",
       explanation: "Driver confirmed door tags placed on Franklin corridor",
     });
@@ -486,20 +548,259 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(commitmentRes.lineageKind).toBe("commitment");
     expect(commitmentRes.itemId).toBe("commit-morning-door-tags");
 
-    // 3. Complete Lineage 3: Campaign Work
+    // Verify commitment status updated to completed in day_director_commitments
+    const commitments = store.get("day_director_commitments") ?? [];
+    const updatedCommitment = commitments.find(c => c.id === "commit-morning-door-tags");
+    expect(updatedCommitment?.status).toBe("completed");
+  });
+
+  it("enforces campaign completion truth: generic assertion fails closed without required domain evidence", async () => {
+    const { store } = setupTestFranchiseDb();
+
+    store.set("users", [
+      {
+        id: 1,
+        tenantId: "default",
+        openId: "admin-owner-user",
+        role: "admin",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    store.set("dayforge_saas_memberships", [
+      {
+        tenantId: "default",
+        userOpenId: "admin-owner-user",
+        role: "owner",
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    // Inject campaign into Day Line planner
+    setDayLineDepsForTesting({
+      planForDate: async () => ({
+        outcome: {
+          status: "planned",
+          ranking: [{ campaignId: "camp-west-loop-pilot" }],
+        },
+      } as any),
+      listCampaigns: async () => [
+        {
+          campaignId: "camp-west-loop-pilot",
+          title: "West Loop Pilot",
+          objective: "Distribute flyers",
+          completionCondition: "Flyers distributed",
+        } as any,
+      ],
+    });
+
+    const caller = appRouter.createCaller({
+      user: {
+        id: 1,
+        openId: "admin-owner-user",
+        name: "Admin User",
+        email: "admin@test.com",
+        role: "admin",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    // 1. Verify campaign item is surfaced on Day Line
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(i => i.id === "camp-west-loop-pilot")).toBe(true);
+
+    // 2. Generic completeItem attempt fails closed without domain evidence
     const campaignRes = await caller.system.currentDayLine.completeItem({
       itemId: "camp-west-loop-pilot",
-      lineage: {
-        kind: "campaign",
-        sourceReference: "campaign:camp-west-loop-pilot",
-        campaignId: "camp-west-loop-pilot",
-      },
       evidenceReference: "field_receipt_voice_03",
       explanation: "Driver confirmed flyer drop completed",
     });
-    expect(campaignRes.success).toBe(true);
+
+    expect(campaignRes.success).toBe(false);
     expect(campaignRes.lineageKind).toBe("campaign");
-    expect(campaignRes.itemId).toBe("camp-west-loop-pilot");
+    expect((campaignRes as any).reason).toBe("campaign_requires_evidence");
+
+    // 3. Verify zero fake objective_verified diagnostic events emitted
+    const events = store.get("persistent_operator_diagnostic_events") ?? [];
+    const fakeVerification = events.find(
+      e => e.objectiveId === "camp-west-loop-pilot" && e.eventKind === "objective_verified"
+    );
+    expect(fakeVerification).toBeUndefined();
+  });
+
+  it("enforces server-side lineage authority: rejects non-Day-Line items and forged client lineage", async () => {
+    const { store } = setupTestFranchiseDb();
+
+    store.set("users", [
+      {
+        id: 1,
+        tenantId: "default",
+        openId: "admin-owner-user",
+        role: "admin",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    store.set("dayforge_saas_memberships", [
+      {
+        tenantId: "default",
+        userOpenId: "admin-owner-user",
+        role: "owner",
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    store.set("goal_cycle_objectives", [
+      {
+        tenantId: "default",
+        id: "objective-conquest-1",
+        cycleId: "cycle-1",
+        runId: "run-1",
+        decisionId: "decision-1",
+        canonicalOperatorId: "tenant:default:operator:admin-owner-user",
+        operatorUserId: "admin-owner-user",
+        selectionKind: "obligation",
+        selectedRef: "ref-1",
+        title: "Conquest Argyle House",
+        description: "Visit building",
+        executionType: "driver_visit",
+        authority: "autonomous",
+        status: "presented",
+        businessDate: "2026-09-30",
+        windowStart: "08:00",
+        windowEnd: "17:00",
+        loadoutJson: "[]",
+        evidenceRefsJson: "[]",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const caller = appRouter.createCaller({
+      user: {
+        id: 1,
+        openId: "admin-owner-user",
+        name: "Admin User",
+        email: "admin@test.com",
+        role: "admin",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    // 1. Non-Day-Line item is rejected
+    await expect(
+      caller.system.currentDayLine.completeItem({
+        itemId: "unregistered-phantom-stop",
+        evidenceReference: "fake_proof",
+      })
+    ).rejects.toThrow("Item 'unregistered-phantom-stop' is not present on today's authoritative Day Line");
+
+    // 2. Forged client lineage (claiming an objective is a campaign) is rejected
+    await expect(
+      caller.system.currentDayLine.completeItem({
+        itemId: "objective-conquest-1",
+        lineage: { kind: "campaign" },
+        evidenceReference: "fake_proof",
+      })
+    ).rejects.toThrow("Lineage conflict: client declared 'campaign' but authoritative Day Line item is 'objective'");
+  });
+
+  it("enforces platform-admin cross-tenant operator resolution: default admin inspects Austin operator without mutating admin user", async () => {
+    const { store } = setupTestFranchiseDb();
+
+    // Seed default admin in users and memberships
+    store.set("users", [
+      {
+        id: 1,
+        tenantId: "default",
+        openId: "admin-owner-user",
+        name: "Admin User",
+        role: "admin",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    store.set("dayforge_saas_memberships", [
+      {
+        tenantId: "default",
+        userOpenId: "admin-owner-user",
+        role: "owner",
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    // Provision Austin franchise (creates operator_austin on tenant_austin)
+    await provisionFranchise({
+      city: "Austin",
+      state: "TX",
+      vertical: "commercial_laundry",
+      targetMrrCents: 2500000,
+    });
+
+    const adminCaller = appRouter.createCaller({
+      user: {
+        id: 1,
+        openId: "admin-owner-user",
+        name: "Admin User",
+        email: "admin@test.com",
+        role: "admin",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    // 1. Cross-tenant Day Line query succeeds through explicit platform-admin resolver
+    const austinDayLine = await adminCaller.system.currentDayLine.today({
+      targetTenantId: "tenant_austin",
+    });
+    expect(austinDayLine).toBeDefined();
+
+    // 2. Cross-tenant scoreboard query resolves Austin's dedicated operator
+    const austinScoreboard = await adminCaller.system.persistentOperator.scoreboard({
+      targetTenantId: "tenant_austin",
+    });
+    expect(austinScoreboard.tenantId).toBe("tenant_austin");
+    expect(austinScoreboard.canonicalOperatorId).toBe("tenant:tenant_austin:operator:operator_austin");
+
+    // 3. Cross-tenant identity query resolves Austin's dedicated operator identity
+    const austinIdentity = await adminCaller.system.persistentOperator.identity({
+      targetTenantId: "tenant_austin",
+    });
+    expect(austinIdentity?.tenantId).toBe("tenant_austin");
+    expect(austinIdentity?.canonicalOpenId).toBe("operator_austin");
+
+    // 4. Verify admin caller's persisted user record was NOT mutated
+    const adminUser = store.get("users")?.find(u => u.openId === "admin-owner-user");
+    expect(adminUser?.tenantId).toBe("default");
+
+    // 5. Verify non-admin caller attempting cross-tenant access is rejected
+    const driverCaller = appRouter.createCaller({
+      user: {
+        id: 99,
+        openId: "regular-driver",
+        name: "Driver",
+        email: "driver@test.com",
+        role: "driver",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    await expect(
+      driverCaller.system.currentDayLine.today({ targetTenantId: "tenant_austin" })
+    ).rejects.toThrow();
   });
 
   it("verifies War Room Los Angeles default contains zero hardcoded WON statuses or fabricated route margins", async () => {
