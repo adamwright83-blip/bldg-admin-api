@@ -561,6 +561,48 @@ async function findDeterministicObjectivesForCleanCloudOrder(
         return accountMatches;
       }
     }
+
+    // Check 3: Commercial missions linked to this commercial account or providerAccountId
+    const missionObjectives = allObjectives.filter(
+      obj => obj.actionTargetType === "commercial_mission" && obj.actionTargetId != null
+    );
+    if (missionObjectives.length > 0) {
+      const missionIds = missionObjectives
+        .map(obj => Number(obj.actionTargetId))
+        .filter(id => !isNaN(id) && id > 0);
+      if (missionIds.length > 0) {
+        const missions = await db
+          .select({ id: commercialMissions.id, accountSnapshotJson: commercialMissions.accountSnapshotJson })
+          .from(commercialMissions)
+          .where(
+            and(
+              eq(commercialMissions.tenantId, input.tenantId),
+              inArray(commercialMissions.id, missionIds)
+            )
+          );
+
+        const matchedMissionIds = new Set<string>();
+        for (const m of missions) {
+          const snap = m.accountSnapshotJson as {
+            accountId?: number | string;
+            providerAccountId?: string;
+          } | null;
+          if (
+            (snap?.providerAccountId && String(snap.providerAccountId) === cleancloudCustomerId) ||
+            (snap?.accountId && accountIds.has(String(snap.accountId)))
+          ) {
+            matchedMissionIds.add(String(m.id));
+          }
+        }
+
+        const missionMatches = missionObjectives.filter(
+          obj => obj.actionTargetId != null && matchedMissionIds.has(obj.actionTargetId)
+        );
+        if (missionMatches.length > 0) {
+          return missionMatches;
+        }
+      }
+    }
   }
 
   return [];

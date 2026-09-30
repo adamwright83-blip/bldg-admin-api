@@ -303,7 +303,11 @@ export function normalizeCleanCloudPaidOrderRow(
     collectedAtUtc: parseCleanCloudPacificDate(pick(row, ["Collected"])),
     cleanedAtUtc: parseCleanCloudPacificDate(pick(row, ["Cleaned"])),
     orderStatus: pick(row, ["Status"]).trim() || null,
-    paid: parseCleanCloudBool(pick(row, ["Paid"])),
+    paid:
+      parseCleanCloudBool(pick(row, ["Paid"])) ||
+      Boolean(
+        parseCleanCloudPacificDate(pick(row, ["Payment Date", "Paid Date"]))
+      ),
     paymentType: pick(row, ["Payment Type"]).trim() || null,
     cardPaymentType: pick(row, ["Card Payment Type"]).trim() || null,
     totalCents,

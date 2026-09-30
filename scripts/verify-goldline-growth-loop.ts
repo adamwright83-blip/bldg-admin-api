@@ -30,6 +30,8 @@ import {
   transitionCommercialMission,
 } from "../server/commercialMissions/commercialMissionStore";
 import { readCurrentDayLine } from "../server/goldline/dayline/currentDayLineService";
+import { businessDateInZone } from "../shared/currentDayLine";
+import { getDashboardTimeZone } from "../server/dashboardZoned";
 import { importCleanCloudPaidOrders } from "../server/cleancloudPaidOrders";
 import {
   materializeGoalCycleObjective,
@@ -93,7 +95,7 @@ async function runWitness() {
   const canonicalOperatorId = `tenant:${tenantId}:operator:${operatorUserId}`;
   const cleancloudCustomerId = 80000 + Math.floor(Math.random() * 10000);
   const now = new Date();
-  const businessDate = now.toISOString().slice(0, 10);
+  const businessDate = businessDateInZone(now, getDashboardTimeZone());
 
   // ==========================================================================
   // SMOKE CHECK 1: Empty Production State
@@ -130,7 +132,7 @@ async function runWitness() {
     baselineValue: String(baselineValue),
     baselinePrecision: "exact",
     baselineCoverage: "complete",
-    startedAt: now,
+    startedAt: new Date(Date.now() - 3600 * 1000 * 12),
     policyVersion: "2026.1",
   });
 
@@ -237,7 +239,8 @@ async function runWitness() {
     loadout: candidateRef.recommendedLoadout,
   };
 
-  const decision = await appendGoalCycleDecision(decisionDraft);
+  const decisionResult = await appendGoalCycleDecision(decisionDraft);
+  const decision = decisionResult.decision;
   const { objective } = await materializeGoalCycleObjective({
     tenantId,
     decision,
@@ -282,14 +285,33 @@ async function runWitness() {
   // STEP 5: Real Driver Completion via transitionCommercialMission
   // ==========================================================================
   const transitionKey = `trans-visit-${runId}`;
-  const transitionedMission = await transitionCommercialMission({
-    tenantId,
-    missionId: realMission.id,
-    expectedVersion: realMission.version,
-    toStatus: "visit_completed",
-    actor: { type: "driver", id: operatorUserId, role: "field_operator" },
-    idempotencyKey: transitionKey,
-  });
+  const lifecycleStatuses = [
+    "selected",
+    "game_ready",
+    "game_active",
+    "game_completed",
+    "phone_ready",
+    "preparing",
+    "en_route",
+    "arrived",
+    "visit_completed",
+  ] as const;
+
+  let currentVersion = realMission.version;
+  let transitionedMission = realMission;
+  for (const toStatus of lifecycleStatuses) {
+    const isFinal = toStatus === "visit_completed";
+    const idempotencyKey = isFinal ? transitionKey : `trans-${toStatus}-${runId}`;
+    transitionedMission = await transitionCommercialMission({
+      tenantId,
+      missionId: realMission.id,
+      expectedVersion: currentVersion,
+      toStatus,
+      actor: { type: "driver", id: operatorUserId, role: "field_operator" },
+      idempotencyKey,
+    });
+    currentVersion = transitionedMission.version;
+  }
 
   // Query the persisted event in MySQL
   const [persistedEvent] = await db
@@ -359,8 +381,8 @@ async function runWitness() {
   const cleancloudOrderId = 90000 + Math.floor(Math.random() * 10000);
   const paidCents = 45000; // $450.00
   const orderCsv = [
-    "Order ID,Customer,Total,Payment Date,Email,Phone,Address,Customer ID",
-    `${cleancloudOrderId},Acme Industrial Laundry Partner,$450.00,${businessDate} 14:00,${customerEmail},555-0199,100 Industrial Parkway,${cleancloudCustomerId}`,
+    "Order ID,Customer,Total,Payment Date,Paid,Email,Phone,Address,Customer ID",
+    `${cleancloudOrderId},Acme Industrial Laundry Partner,$450.00,${businessDate} 14:00,TRUE,${customerEmail},555-0199,100 Industrial Parkway,${cleancloudCustomerId}`,
   ].join("\n");
 
   const importSummary = await importCleanCloudPaidOrders({
@@ -449,7 +471,7 @@ async function runWitness() {
   const expectedRemainingGap = Math.max(0, targetValue - expectedObservedValue); // 2000 - 950 = 1050
 
   logStep(9, "Authoritative Scoreboard Proven", {
-    baselineValue: `$${finalScoreboard.baselineValue}.00`,
+    baselineValue: `$${baselineValue}.00`,
     executedWorkCount: finalScoreboard.executedWorkCount,
     attributableEconomicValueCents: finalScoreboard.attributableEconomicValueCents,
     authoritativeObservedValue: `$${finalScoreboard.authoritativeObservedValue}.00`,
@@ -475,7 +497,7 @@ async function runWitness() {
     throw new Error("getLoadoutDelta returned null for learned tenant");
   }
 
-  const finalReceipt = await operationReceipt({ tenantId, decisionId });
+  const finalReceipt = await operationReceipt({ tenantId, decisionId: decision.id });
   if (!finalReceipt) {
     throw new Error("operationReceipt returned null for decision");
   }
@@ -493,7 +515,7 @@ async function runWitness() {
     tenantId,
     canonicalOperatorId,
   });
-  console.log(`  History Items: ${history.items.length}, Summary: ${history.summary.decisionsCount} decisions, ${history.summary.outcomesCount} outcomes`);
+  console.log(`  History Items: ${history.length}, Latest Decision: ${history[0]?.decisionId}`);
 
   console.log(`\n${BOLD}${GREEN}================================================================${RESET}`);
   console.log(`${BOLD}${GREEN}   FULL GOLDLINE GROWTH LOOP VERIFIED WITH DURABLE LINEAGE!   ${RESET}`);
@@ -501,7 +523,11 @@ async function runWitness() {
   console.log(`${BOLD}${GREEN}================================================================${RESET}\n`);
 }
 
-runWitness().catch(err => {
-  console.error(`\n${BOLD}${RED}Witness execution failed with error:${RESET}`, err);
-  process.exit(1);
-});
+runWitness()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch(err => {
+    console.error(`\n${BOLD}${RED}Witness execution failed with error:${RESET}`, err);
+    process.exit(1);
+  });

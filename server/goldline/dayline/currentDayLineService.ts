@@ -84,6 +84,7 @@ export async function readCurrentDayLine(
     operatorIds?: string[];
     operatorUserId?: string;
     operatorUserIds?: string[];
+    businessDate?: string;
     timeZone?: string;
     now?: Date;
   },
@@ -96,15 +97,17 @@ export async function readCurrentDayLine(
 ): Promise<CurrentDayLine> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone?.trim() || getDashboardTimeZone();
-  let businessDate: string;
-  try {
-    businessDate = businessDateInZone(now, timeZone);
-  } catch (error) {
-    console.warn(
-      "[day-line] operator zone is not a business date",
-      error instanceof Error ? error.message : error
-    );
-    return unavailableLine(businessDateInZone(now, "UTC"));
+  let businessDate = input.businessDate?.trim() || "";
+  if (!businessDate) {
+    try {
+      businessDate = businessDateInZone(now, timeZone);
+    } catch (error) {
+      console.warn(
+        "[day-line] operator zone is not a business date",
+        error instanceof Error ? error.message : error
+      );
+      return unavailableLine(businessDateInZone(now, "UTC"));
+    }
   }
 
   const tenantId = input.tenantId.trim();
