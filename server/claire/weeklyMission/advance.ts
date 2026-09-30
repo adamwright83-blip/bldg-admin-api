@@ -339,12 +339,17 @@ export function capturePrimary(
     return;
   }
 
-  // Unknown free-form speech is never persisted by the deterministic fallback.
-  // The model decision path may extract a normalized primary; if that path is
-  // unavailable or rejected, keep the day open and ask again.
-
-  day.primary = null;
-  day.uncertainty = "Unconfirmed mission.";
+  // A direct reply that already satisfies the semantic-primary contract is a
+  // normalized operator action, not an arbitrary transcript fallback. Persist
+  // it verbatim; conversational narration/questions were rejected above.
+  const normalizedAction = utterance.replace(/\s+/g, " ").trim();
+  day.primary = {
+    text: normalizedAction,
+    source: "operator_stated",
+    existingCommitmentId: null,
+    executionType: resolveWeeklyExecutionType({ text: normalizedAction, candidates }),
+  };
+  day.uncertainty = null;
 }
 
 function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): string | null {
