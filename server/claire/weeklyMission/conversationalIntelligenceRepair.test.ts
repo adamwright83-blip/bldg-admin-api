@@ -69,7 +69,7 @@ const testBrainV3 = vi.fn(async (input: any) => {
     });
   }
   if (/^what should i do today\??$/i.test(text)) {
-    return brainV3Shape({ act: "advice_request" });
+    return brainV3Shape({ act: "advice_request", broadBriefingRequest: true });
   }
   if (/\?$/.test(text)) return brainV3Shape({ act: "question" });
   if (/^(?:yeah|yes|yep|sure)[.!]?$/i.test(text)) return brainV3Shape({ act: "acknowledgement" });
