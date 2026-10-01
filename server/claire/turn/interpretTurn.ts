@@ -146,6 +146,8 @@ const ACTION_DIRECTIVE =
 
 const REFERENTIAL_ACTION_DIRECTIVE =
   /\b(?:do|send|put|add|batch|move)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i;
+const REFERENTIAL_ADVICE_QUESTION =
+  /^(?:what|who|which|when|where|why|how)\b|^(?:should|do|did|would|could|can)\s+(?:i|we)\b/i;
 
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
@@ -468,7 +470,10 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
-  const hasExplicitActionRequest = (ACTION_DIRECTIVE.test(text) || REFERENTIAL_ACTION_DIRECTIVE.test(text)) && !actionRefused;
+  const hasExplicitActionRequest =
+    (ACTION_DIRECTIVE.test(text) ||
+      (REFERENTIAL_ACTION_DIRECTIVE.test(text) && !REFERENTIAL_ADVICE_QUESTION.test(text))) &&
+    !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
 
   let cardinality = parseCardinality(text);

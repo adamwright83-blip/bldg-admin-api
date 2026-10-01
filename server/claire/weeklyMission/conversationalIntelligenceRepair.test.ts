@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WeeklyDraft } from "../../../shared/weeklyMissionReadiness";
 import { morningChiefOfStaffBrief, overloadJudgment } from "../../../shared/claireProactive";
 import { commitBriefing } from "../briefing/briefingCommit";
+import { referencesStructuredRecoveryGroup } from "../briefing/explicitDayLine";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "../turn/claireTurn";
+import { interpretTurn } from "../turn/interpretTurn";
 import {
   createMemoryConversationStateStore,
   setClaireConversationStateStoreForTests,
@@ -381,6 +383,29 @@ describe("Claire conversational-intelligence repair", () => {
 
     expect(session.draft.days.find(day => day.businessDate === "2026-10-01")?.primary).toBeNull();
     expect(JSON.stringify(session.draft)).not.toMatch(/I wanna batch|What blocks the week|don't know what you're saying/i);
+  });
+
+  it("still persists a direct weekly action after rejecting conversational raw speech", () => {
+    const session = openWeeklySession();
+    session.lastQuestionDate = "2026-10-01";
+
+    capturePrimary(session, "Text the dormant customers");
+
+    expect(session.draft.days.find(day => day.businessDate === "2026-10-01")?.primary).toMatchObject({
+      text: "Text the dormant customers",
+      source: "operator_stated",
+      executionType: "challenge",
+    });
+  });
+
+  it("does not confuse ordinary pronouns with the structured recovery group", () => {
+    expect(referencesStructuredRecoveryGroup("Add them together.")).toBe(false);
+    expect(referencesStructuredRecoveryGroup("Who was my latest sale, and what should I do about them?")).toBe(false);
+    expect(interpretTurn("Who was my latest sale, and what should I do about them?").hasExplicitActionRequest).toBe(false);
+
+    expect(referencesStructuredRecoveryGroup("Do the whole group this afternoon.")).toBe(true);
+    expect(referencesStructuredRecoveryGroup("Batch them for today.")).toBe(true);
+    expect(referencesStructuredRecoveryGroup("Put them on the Day Line.")).toBe(true);
   });
 
   it("parks an ambiguous operational utterance even while a readiness question is pending", async () => {
