@@ -33,6 +33,7 @@ const brainV3Shape = (partial: Record<string, unknown> = {}) => ({
   dayLineDisposition: "none" as const,
   priorClaim: "none" as const,
   weeklyDisposition: "none" as const,
+  broadBriefingRequest: false,
   canonicalWork: null,
   referent: null,
   rationale: "test semantic interpretation",
