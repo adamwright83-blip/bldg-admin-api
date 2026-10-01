@@ -1278,7 +1278,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brainV3.dayLineDisposition === "accept" ||
       brainV3.dayLineDisposition === "reopen" ||
       (pendingHasStructuredRecoveryRefs &&
-        (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit") &&
+        brainV3.workDisposition === "propose" &&
         referencesStructuredRecoveryGroup(utterance));
     const bindsPending =
       (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
