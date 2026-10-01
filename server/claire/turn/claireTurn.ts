@@ -65,8 +65,8 @@ import {
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
-import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
-import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
+import { explicitTrackingRequest } from "../briefing/titleContract";
+import { detectConversationControl } from "./interpretTurn";
 import {
   interpretClaireBrainV3,
   safeClaireBrainV3Fallback,
@@ -671,10 +671,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    const laneOpen =
-      brainV3.priorClaim !== "none" ||
-      brainV3.act === "prior_claim_probe" ||
-      priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
+    const laneOpen = brainV3.priorClaim !== "none";
     let conversational = result.speak;
     if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
       conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
@@ -838,35 +835,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
         .catch(() => null)
     : null;
-  const fallbackContext = {
-    pending: {
-      briefing: Boolean(state.pendingBriefing),
-      accountFollowUp: Boolean(state.pendingAccountFollowUp),
-      action: Boolean(
-        state.pendingProposal ||
-          state.pendingUpdate ||
-          state.pendingFieldCapture ||
-          state.pendingEngineeringOffer ||
-          state.pendingDayLineChoice ||
-          state.clarifyingUtterance
-      ),
-      weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
-    },
-    sessionKind: state.sessionKind,
-    morningSession,
-    dayLineSuppressed: Boolean(state.dayLineSuppressed),
-  };
   brainV3 =
     brainResult ??
     (explicitWeeklyControl
       ? {
-          ...safeClaireBrainV3Fallback(utterance, fallbackContext),
+          ...safeClaireBrainV3Fallback(),
           target: "weekly_planning",
           act: "action_request",
           weeklyDisposition: "continue",
           rationale: "Explicit weekly control while Brain V3 unavailable.",
         }
-      : safeClaireBrainV3Fallback(utterance, fallbackContext));
+      : safeClaireBrainV3Fallback());
 
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
@@ -1210,8 +1189,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (
     brainV3.act === "correction" ||
     brainV3.act === "rejection" ||
-    brainV3.dayLineDisposition === "decline" ||
-    interpretTurn(utterance).queryRefinement
+    brainV3.dayLineDisposition === "decline"
   ) {
     if (state.pendingProposal || state.pendingBriefing) {
       state.pendingProposal = null;
@@ -1300,12 +1278,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       )
     );
     const explicitPendingCommit =
-      (ownsPendingBriefing && brainV3.workDisposition === "commit") ||
-      brainV3.dayLineDisposition === "accept" ||
-      brainV3.dayLineDisposition === "reopen" ||
-      (pendingHasStructuredRecoveryRefs &&
-        brainV3.workDisposition === "propose" &&
-        referencesStructuredRecoveryGroup(utterance));
+      ownsPendingBriefing &&
+      (brainV3.workDisposition === "commit" ||
+        brainV3.dayLineDisposition === "accept" ||
+        brainV3.dayLineDisposition === "reopen" ||
+        (pendingHasStructuredRecoveryRefs &&
+          brainV3.workDisposition === "propose" &&
+          referencesStructuredRecoveryGroup(utterance)));
     const bindsPending =
       (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
       brainV3.dayLineDisposition === "decline" ||

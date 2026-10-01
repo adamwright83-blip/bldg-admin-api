@@ -21,9 +21,9 @@ export type CharacterContractValidationResult = {
  */
 const OPERATIONAL_QUESTION_CUE = new RegExp(
   [
-    String.raw`\b(?:day\s*line|task|tasks|items?|orders?|sales?|customers?|clients?|account|accounts?|property|properties)\b`,
+    String.raw`\b(?:day\s*line|task|tasks|items?|orders?|sales?|customers?|clients?|account|accounts?|property|properties|buildings?|prospects?|leads?)\b`,
     String.raw`\b(?:route|stop|stops|deliver(?:y|ies)?|pickup|pickups|cleancloud|unpaid|invoice|invoices|bill|billing)\b`,
-    String.raw`\b(?:batch|batching|recovery|dormant|outreach|call|contact|message|follow[-\s]?up)\b`,
+    String.raw`\b(?:batch|batching|recovery|dormant|outreach|call|contact|message|follow[-\s]?up|pitch|stall|objection|real\s+no|come[-\s]back)\b`,
     String.raw`\b(?:schedule|scheduled|reschedule|timing|tomorrow|today|thursday|friday|monday|tuesday|wednesday|saturday|sunday)\b`,
     String.raw`\b(?:anything\s+else|what\s+else|ready\s+to|what\s+do\s+you\s+need|need\s+anything|need\s+from\s+me|how\s+can\s+i\s+help)\b`,
     String.raw`\b(?:should\s+i|shall\s+i|do\s+you\s+want\s+me\s+to|want\s+to\s+put|want\s+to\s+add|want\s+to\s+lock)\b`,
@@ -32,21 +32,9 @@ const OPERATIONAL_QUESTION_CUE = new RegExp(
   "i"
 );
 
-/**
- * Recognizes non-business, social/leisure curiosity questions that probe into the
- * operator's personal life or extend small talk.
- */
-const SOCIAL_QUESTION_CUE = new RegExp(
-  [
-    String.raw`\b(?:what|which)\s+(?:movie|film|show|book|song|game|band|restaurant|bar|place)\b`,
-    String.raw`\b(?:who|who's|who\s+all)\s+(?:are\s+you|were\s+you|did\s+you)?\s*(?:seeing|going\s+with|hanging\s+with|with)\b`,
-    String.raw`\b(?:how\s+was|how\s+did)\s+(?:church|the\s+movie|the\s+film|the\s+service|the\s+trip|the\s+weekend|the\s+date|the\s+dinner|your\s+friend|your\s+weekend)\b`,
-    String.raw`\b(?:what|where)\s+(?:did\s+you|are\s+you\s+going\s+to)\s+(?:watch|see|eat|drink|go|hang\s+out|play|do)\b`,
-    String.raw`\b(?:what\s+are\s+you\s+up\s+to|what\s+are\s+your\s+plans|doing\s+anything\s+fun)\b`,
-    String.raw`\b(?:what\s+kind\s+of\s+movie|what\s+did\s+you\s+see)\b`,
-  ].join("|"),
-  "i"
-);
+export function isOperationalQuestion(sentence: string): boolean {
+  return OPERATIONAL_QUESTION_CUE.test(sentence);
+}
 
 /** Romance / flirtatious acceptance violating canon. */
 const ROMANTIC_ACCEPTANCE_CUE = new RegExp(
@@ -102,14 +90,9 @@ export function validateClaireCharacterContract(
 
     for (const sentence of sentences) {
       const hasQuestion = /\?/.test(sentence);
-      if (hasQuestion) {
-        const isExplicitSocial = SOCIAL_QUESTION_CUE.test(sentence);
-        const isOperational = OPERATIONAL_QUESTION_CUE.test(sentence);
-        const isSocial = isExplicitSocial || (!isOperationalMode && !isOperational);
-        if (isSocial) {
-          hadSocialQuestion = true;
-          continue; // Strip the unauthorized social follow-up question
-        }
+      if (hasQuestion && !isOperationalMode && !isOperationalQuestion(sentence)) {
+        hadSocialQuestion = true;
+        continue; // Strip unauthorized non-operational questions
       }
       nonSocialSentences.push(sentence);
     }

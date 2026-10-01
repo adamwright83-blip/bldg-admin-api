@@ -53,18 +53,10 @@ const testBrainV3 = vi.fn(async (input: any) => {
       rationale: "confirmation binds to the immediate Day Line proposal",
     });
   }
-  if (/\b(?:put|add)\b[\s\S]*\bday\s*line\b/i.test(text)) {
-    return brainV3Shape({
-      act: "action_request",
-      workDisposition: "commit",
-      dayLineDisposition: "reopen",
-      canonicalWork: text,
-    });
-  }
   if (
     input.pending?.briefing &&
-    /\b(?:those people|that work|the whole group|them)\b/i.test(text) &&
-    /\b(?:put|add|save|schedule)\b/i.test(text)
+    (/\b(?:those people|that work|the whole group|them)\b/i.test(text) ||
+      /\b(?:put|add)\b[\s\S]*\bday\s*line\b/i.test(text))
   ) {
     return brainV3Shape({
       target: "pending_briefing",
@@ -73,6 +65,14 @@ const testBrainV3 = vi.fn(async (input: any) => {
       dayLineDisposition: "reopen",
       canonicalWork: text,
       rationale: "Explicitly commits the structured work Claire is holding.",
+    });
+  }
+  if (/\b(?:put|add)\b[\s\S]*\bday\s*line\b/i.test(text)) {
+    return brainV3Shape({
+      act: "action_request",
+      workDisposition: "commit",
+      dayLineDisposition: "reopen",
+      canonicalWork: text,
     });
   }
   if (/\b(?:do the whole group|batch them|batch the whole group|do the whole group)\b/i.test(lower)) {

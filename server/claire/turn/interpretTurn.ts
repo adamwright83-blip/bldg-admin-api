@@ -1,7 +1,6 @@
 import {
   detectRequestedClaireTopic,
   isPersonalQuestionAboutClaire,
-  isEllipticalTemporalOrSocialFollowUp,
   isCasualOrSocialBid,
 } from "../topicDetection";
 
@@ -518,24 +517,12 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
   const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
 
-  // Contextual referent resolution for elliptical follow-ups (e.g. "On Saturday evening?"):
-  let resolvedPersonalReferent: string | null = null;
-  let isEllipticalPersonalFollowUp = false;
-  if (options.recentTurns && isEllipticalTemporalOrSocialFollowUp(text)) {
-    const priorOperatorTurn = [...options.recentTurns].reverse().find(t => t.speaker === "operator");
-    if (
-      priorOperatorTurn &&
-      (isPersonalQuestionAboutClaire(priorOperatorTurn.text) || Boolean(detectRequestedClaireTopic(priorOperatorTurn.text)))
-    ) {
-      resolvedPersonalReferent = priorOperatorTurn.text;
-      isEllipticalPersonalFollowUp = true;
-    }
-  }
+  const resolvedPersonalReferent: string | null = null;
+  const isEllipticalPersonalFollowUp = false;
 
   const personalProbe =
     isPersonalQuestionAboutClaire(text) ||
-    Boolean(detectRequestedClaireTopic(text)) ||
-    isEllipticalPersonalFollowUp;
+    Boolean(detectRequestedClaireTopic(text));
   const businessSubstance =
     cardinality != null ||
     listRequest ||
