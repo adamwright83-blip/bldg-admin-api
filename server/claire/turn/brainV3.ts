@@ -39,12 +39,19 @@ export type ClaireBrainV3PriorClaim =
   | "correctness"
   | "provenance";
 
+export type ClaireBrainV3WeeklyDisposition =
+  | "none"
+  | "continue"
+  | "lock"
+  | "cancel";
+
 export type ClaireBrainV3Interpretation = {
   target: ClaireBrainV3Target;
   act: ClaireBrainV3Act;
   workDisposition: ClaireBrainV3WorkDisposition;
   dayLineDisposition: ClaireBrainV3DayLineDisposition;
   priorClaim: ClaireBrainV3PriorClaim;
+  weeklyDisposition: ClaireBrainV3WeeklyDisposition;
   /**
    * The work the operator actually requested/committed to, resolved from the
    * current utterance plus recent dialogue. Null for narration, explanation,
@@ -105,6 +112,7 @@ export async function interpretClaireBrainV3(
             "workDisposition",
             "dayLineDisposition",
             "priorClaim",
+            "weeklyDisposition",
             "canonicalWork",
             "referent",
             "rationale",
@@ -149,6 +157,10 @@ export async function interpretClaireBrainV3(
               type: "string",
               enum: ["none", "correctness", "provenance"],
             },
+            weeklyDisposition: {
+              type: "string",
+              enum: ["none", "continue", "lock", "cancel"],
+            },
             canonicalWork: { type: ["string", "null"] },
             referent: { type: ["string", "null"] },
             rationale: { type: "string" },
@@ -172,10 +184,11 @@ export async function interpretClaireBrainV3(
             "6. If the operator says they do not want to discuss/use the Day Line, dayLineDisposition=decline. While dayLineSuppressed=true, do not propose Day Line work unless the operator explicitly reopens it or explicitly commands a tracking/scheduling action.",
             "7. A clear 'put that on the Day Line', 'schedule it', 'create that mission', or equivalent can reopen tracking even after suppression: dayLineDisposition=reopen.",
             "8. priorClaim is correctness/provenance ONLY when the operator is genuinely challenging a specific factual claim Claire made (e.g. 'are you sure?', 'where did that number come from?'). Complaints about Claire's verification behavior, ordinary corrections, fragments like 'so', statements like 'it's already 7 PM', or 'nobody asked you to verify that' are NOT prior-claim probes.",
-            "9. weekly_planning is selected only when the live dialogue is actually planning/revising/approving the week or the operator explicitly returns to it. Mentioning Thursday/Friday in ordinary strategic conversation does not automatically hand authority to a persisted weekly workflow.",
-            "10. If Claire proposes a concrete mission/route and the operator says 'I can commit to that', workDisposition=commit and canonicalWork must resolve to that concrete mission/route, not the operator's literal confirmation sentence.",
-            "11. If the operator asks what they SHOULD do, requests strategy, or is collaboratively shaping a mission but has not yet committed, use workDisposition=discuss.",
-            "12. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none. Ambiguity must never create work or trigger verification.",
+            "9. weekly_planning is selected only when the live dialogue is actually planning/revising/approving the week or the operator explicitly returns to it. Mentioning Thursday/Friday in ordinary strategic conversation does not automatically hand authority to a persisted weekly workflow. When selected, weeklyDisposition says whether this turn continues, locks, or cancels that workflow.",
+            "10. A bare confirmation may lock weekly planning ONLY when Claire's immediately preceding unresolved question was the weekly lock confirmation. Otherwise weeklyDisposition=continue or none.",
+            "11. If Claire proposes a concrete mission/route and the operator says 'I can commit to that', workDisposition=commit and canonicalWork must resolve to that concrete mission/route, not the operator's literal confirmation sentence. If that proposal was explicitly to schedule/create the mission, dayLineDisposition=reopen is allowed even if generic Day Line discussion was previously suppressed.",
+            "12. If the operator asks what they SHOULD do, requests strategy, or is collaboratively shaping a mission but has not yet committed, use workDisposition=discuss.",
+            "13. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none, weeklyDisposition=none. Ambiguity must never create work or trigger verification.",
             "",
             "TARGET meanings:",
             "- pending_briefing: answering/refining Claire's currently held Day Line/work bundle.",
@@ -229,7 +242,10 @@ export async function interpretClaireBrainV3(
     const validPrior = ["none", "correctness", "provenance"].includes(
       parsed.priorClaim ?? ""
     );
-    if (!validTarget || !validAct || !validWork || !validDayLine || !validPrior) {
+    const validWeekly = ["none", "continue", "lock", "cancel"].includes(
+      parsed.weeklyDisposition ?? ""
+    );
+    if (!validTarget || !validAct || !validWork || !validDayLine || !validPrior || !validWeekly) {
       return null;
     }
 
@@ -239,6 +255,7 @@ export async function interpretClaireBrainV3(
       workDisposition: parsed.workDisposition as ClaireBrainV3WorkDisposition,
       dayLineDisposition: parsed.dayLineDisposition as ClaireBrainV3DayLineDisposition,
       priorClaim: parsed.priorClaim as ClaireBrainV3PriorClaim,
+      weeklyDisposition: parsed.weeklyDisposition as ClaireBrainV3WeeklyDisposition,
       canonicalWork:
         typeof parsed.canonicalWork === "string" && parsed.canonicalWork.trim()
           ? parsed.canonicalWork.trim()
@@ -261,6 +278,7 @@ export function safeClaireBrainV3Fallback(): ClaireBrainV3Interpretation {
     workDisposition: "none",
     dayLineDisposition: "none",
     priorClaim: "none",
+    weeklyDisposition: "none",
     canonicalWork: null,
     referent: null,
     rationale: "Brain V3 unavailable; fail closed to conversation without mutation or verification.",
