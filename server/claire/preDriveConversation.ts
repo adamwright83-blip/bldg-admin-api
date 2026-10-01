@@ -238,6 +238,23 @@ export async function answerClairePreDriveFollowUp(
     /** The last turns of this conversation, so follow-ups like "is that…" have a referent. */
     recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
     /**
+     * Brain V3's authoritative meaning for this turn. The speaking model may
+     * phrase/respond to it, but may not reinterpret the raw utterance into a
+     * different act, referent, workflow, or work item.
+     */
+    semanticFrame?: {
+      target: string;
+      act: string;
+      workDisposition: string;
+      dayLineDisposition: string;
+      priorClaim: string;
+      weeklyDisposition: string;
+      broadBriefingRequest: boolean;
+      canonicalWork: string | null;
+      referent: string | null;
+      rationale: string;
+    };
+    /**
      * Claire Intelligence Repair Part 2, Slice C+D: authoritative evidence
      * retrieved for this exact question by a deterministic reader (business
      * query, day work, unpaid orders, account history), each labelled with
@@ -383,6 +400,12 @@ export async function answerClairePreDriveFollowUp(
       { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
       { label: "capability_briefing", text: formatCapabilityBriefing() },
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
+      {
+        label: "brain_v3_semantics",
+        text: input.semanticFrame
+          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Treat this as settled conversational meaning. Do not reinterpret the raw operator words into a different action, referent, workflow, Day Line request, prior-claim challenge, or work item. Your job is to respond intelligently and in character to this meaning.`
+          : null,
+      },
       {
         label: "job_and_clock",
         text: CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,

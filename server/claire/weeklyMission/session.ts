@@ -46,6 +46,8 @@ export type WeeklyCommittedRef = {
 };
 
 export type WeeklyPlanningSession = {
+  /** Brain V3 conversation-state schema. Older in-progress weekly sessions are intentionally inert. */
+  brainVersion: 3;
   key: string;
   tenantId: string;
   operatorId: string;
@@ -84,6 +86,10 @@ export async function loadWeeklySession(input: {
   const row = await store().load<WeeklyPlanningSession>(key, input.now);
   if (!row) return null;
   if (row.tenantId !== input.tenantId || row.operatorUserId !== input.operatorId) return null;
+  // V2 weekly conversation state may contain raw conversational speech captured
+  // as draft primaries. Never revive it inside Brain V3. Business commitments
+  // already written elsewhere remain untouched.
+  if ((row.state as Partial<WeeklyPlanningSession>).brainVersion !== 3) return null;
   const session = normalizeWeeklySession(row.state);
   if (session.weekStart !== input.weekStart) return null;
   return session;
@@ -135,6 +141,7 @@ export function newWeeklySession(input: {
   adjust?: boolean;
 }): WeeklyPlanningSession {
   return {
+    brainVersion: 3,
     key: weeklySessionKey(input.tenantId, input.operatorId, input.weekStart),
     tenantId: input.tenantId,
     operatorId: input.operatorId,
