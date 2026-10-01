@@ -1,5 +1,12 @@
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
+import { interpretTurn } from "./interpretTurn";
+import { detectConfirmation } from "../voiceCommitmentLoop";
+import {
+  explicitDayLineRefusal,
+  explicitPendingDayLineCommit,
+  explicitTrackingRequest,
+} from "../briefing/titleContract";
 
 export type ClaireBrainV3Target =
   | "open_conversation"
@@ -286,18 +293,153 @@ export async function interpretClaireBrainV3(
   }
 }
 
-export function safeClaireBrainV3Fallback(): ClaireBrainV3Interpretation {
+export type SafeClaireBrainV3FallbackContext = {
+  pending?: {
+    briefing?: boolean;
+    accountFollowUp?: boolean;
+    action?: boolean;
+    weeklyPlanning?: boolean;
+  };
+  sessionKind?: string | null;
+  morningSession?: string | null;
+  dayLineSuppressed?: boolean;
+};
+
+export function safeClaireBrainV3Fallback(
+  input?: string | ({ utterance?: string } & SafeClaireBrainV3FallbackContext),
+  options?: SafeClaireBrainV3FallbackContext
+): ClaireBrainV3Interpretation {
+  const utterance = typeof input === "string" ? input : input?.utterance;
+  const ctx: SafeClaireBrainV3FallbackContext =
+    typeof input === "object" && input !== null ? input : (options ?? {});
+
+  if (!utterance || !utterance.trim()) {
+    return {
+      target: "open_conversation",
+      act: "unclear",
+      workDisposition: "none",
+      dayLineDisposition: "none",
+      priorClaim: "none",
+      weeklyDisposition: "none",
+      broadBriefingRequest: false,
+      canonicalWork: null,
+      referent: null,
+      rationale: "Brain V3 unavailable; fail closed to conversation without mutation or verification.",
+    };
+  }
+
+  const text = utterance.trim();
+  const interpreted = interpretTurn(text);
+  const confirmation = detectConfirmation(text);
+
+  const priorClaim: ClaireBrainV3PriorClaim = interpreted.correctnessChallenge
+    ? "correctness"
+    : interpreted.provenanceQuestion
+      ? "provenance"
+      : "none";
+
+  let target: ClaireBrainV3Target = "open_conversation";
+  let act: ClaireBrainV3Act = "unclear";
+  let workDisposition: ClaireBrainV3WorkDisposition = "none";
+  let dayLineDisposition: ClaireBrainV3DayLineDisposition = "none";
+  let weeklyDisposition: ClaireBrainV3WeeklyDisposition = "none";
+
+  const isTracking = explicitTrackingRequest(text) || explicitPendingDayLineCommit(text);
+
+  if (interpreted.mayProposeWork) {
+    if (isTracking) {
+      workDisposition = "commit";
+    } else if (interpreted.operatorWorkCommitment || interpreted.hasExplicitActionRequest) {
+      workDisposition = "propose";
+    }
+  }
+
+  if (interpreted.correctnessChallenge || interpreted.provenanceQuestion) {
+    act = "prior_claim_probe";
+  } else if (interpreted.callControl === "end") {
+    act = "conversation_control";
+  } else if (interpreted.acknowledgement) {
+    act = "acknowledgement";
+  } else if (interpreted.correction) {
+    act = "correction";
+  } else if (confirmation === "yes") {
+    act = "confirmation";
+  } else if (confirmation === "no" || interpreted.actionRefused) {
+    act = "rejection";
+  } else if (interpreted.broadBriefingRequest) {
+    act = "question";
+  } else if (interpreted.hasBusinessQuestion) {
+    act = "question";
+  } else if (interpreted.operatorWorkCommitment) {
+    act = "work_commitment";
+  } else if (isTracking || interpreted.hasExplicitActionRequest) {
+    act = "action_request";
+  }
+
+  const isWeeklyInvite =
+    ctx.sessionKind === "weekly_planning_invite" ||
+    ctx.morningSession === "weekly_planning_invite" ||
+    Boolean(ctx.pending?.weeklyPlanning);
+
+  if (
+    isWeeklyInvite &&
+    (confirmation === "yes" || confirmation === "no" || /^(?:not now|forget it|cancel)\b/i.test(text))
+  ) {
+    target = "weekly_planning";
+    weeklyDisposition = confirmation === "yes" ? "continue" : "cancel";
+  } else if (ctx.pending?.briefing) {
+    if (confirmation === "yes" || explicitPendingDayLineCommit(text)) {
+      target = "pending_briefing";
+      act = "confirmation";
+      dayLineDisposition = "accept";
+    } else if (confirmation === "no" || interpreted.actionRefused || explicitDayLineRefusal(text)) {
+      target = "pending_briefing";
+      act = "rejection";
+      dayLineDisposition = "decline";
+    } else if (interpreted.correction) {
+      target = "pending_briefing";
+      act = "correction";
+    }
+  } else if (ctx.pending?.action) {
+    if (confirmation === "yes") {
+      target = "pending_action";
+      act = "confirmation";
+      dayLineDisposition = "accept";
+    } else if (confirmation === "no" || interpreted.actionRefused || explicitDayLineRefusal(text)) {
+      target = "pending_action";
+      act = "rejection";
+      dayLineDisposition = "decline";
+    } else if (interpreted.correction) {
+      target = "pending_action";
+      act = "correction";
+    }
+  } else if (ctx.pending?.accountFollowUp) {
+    if (confirmation === "yes") {
+      target = "pending_account_follow_up";
+      act = "confirmation";
+    } else if (confirmation === "no" || interpreted.actionRefused) {
+      target = "pending_account_follow_up";
+      act = "rejection";
+    }
+  } else {
+    // Nothing pending
+    if (interpreted.actionRefused || explicitDayLineRefusal(text)) {
+      dayLineDisposition = "decline";
+      act = "rejection";
+    }
+  }
+
   return {
-    target: "open_conversation",
-    act: "unclear",
-    workDisposition: "none",
-    dayLineDisposition: "none",
-    priorClaim: "none",
-    weeklyDisposition: "none",
-    broadBriefingRequest: false,
+    target,
+    act,
+    workDisposition,
+    dayLineDisposition,
+    priorClaim,
+    weeklyDisposition,
+    broadBriefingRequest: Boolean(interpreted.broadBriefingRequest),
     canonicalWork: null,
     referent: null,
-    rationale: "Brain V3 unavailable; fail closed to conversation without mutation or verification.",
+    rationale: "Deterministic fallback from interpretTurn and pending conversational state.",
   };
 }
 

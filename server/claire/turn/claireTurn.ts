@@ -66,7 +66,7 @@ import {
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
-import { detectConversationControl } from "./interpretTurn";
+import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import {
   interpretClaireBrainV3,
   safeClaireBrainV3Fallback,
@@ -671,7 +671,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    const laneOpen = brainV3.priorClaim !== "none";
+    const laneOpen =
+      brainV3.priorClaim !== "none" ||
+      brainV3.act === "prior_claim_probe" ||
+      priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
     let conversational = result.speak;
     if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
       conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
@@ -835,17 +838,35 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
         .catch(() => null)
     : null;
+  const fallbackContext = {
+    pending: {
+      briefing: Boolean(state.pendingBriefing),
+      accountFollowUp: Boolean(state.pendingAccountFollowUp),
+      action: Boolean(
+        state.pendingProposal ||
+          state.pendingUpdate ||
+          state.pendingFieldCapture ||
+          state.pendingEngineeringOffer ||
+          state.pendingDayLineChoice ||
+          state.clarifyingUtterance
+      ),
+      weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+    },
+    sessionKind: state.sessionKind,
+    morningSession,
+    dayLineSuppressed: Boolean(state.dayLineSuppressed),
+  };
   brainV3 =
     brainResult ??
     (explicitWeeklyControl
       ? {
-          ...safeClaireBrainV3Fallback(),
+          ...safeClaireBrainV3Fallback(utterance, fallbackContext),
           target: "weekly_planning",
           act: "action_request",
           weeklyDisposition: "continue",
           rationale: "Explicit weekly control while Brain V3 unavailable.",
         }
-      : safeClaireBrainV3Fallback());
+      : safeClaireBrainV3Fallback(utterance, fallbackContext));
 
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
@@ -1186,7 +1207,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * produced any pending proposal, so the proposal is cleared rather than left to be re-offered or
    * nagged about. Stale pending state must not survive the turn that contradicts it.
    */
-  if (brainV3.act === "correction" || brainV3.act === "rejection") {
+  if (
+    brainV3.act === "correction" ||
+    brainV3.act === "rejection" ||
+    brainV3.dayLineDisposition === "decline" ||
+    interpretTurn(utterance).queryRefinement
+  ) {
     if (state.pendingProposal || state.pendingBriefing) {
       state.pendingProposal = null;
       state.pendingBriefing = null;
@@ -1274,7 +1300,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       )
     );
     const explicitPendingCommit =
-      brainV3.workDisposition === "commit" ||
+      (ownsPendingBriefing && brainV3.workDisposition === "commit") ||
       brainV3.dayLineDisposition === "accept" ||
       brainV3.dayLineDisposition === "reopen" ||
       (pendingHasStructuredRecoveryRefs &&
