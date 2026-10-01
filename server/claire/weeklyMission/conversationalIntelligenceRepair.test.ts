@@ -214,6 +214,10 @@ describe("Claire conversational-intelligence repair", () => {
       classifyPriorClaim: (async () => false) as never,
       rerunBusinessQuery: vi.fn() as never,
       classifierBudgetMs: 30,
+      conversationDirector: vi.fn(async () => ({
+        target: "open_conversation" as const,
+        rationale: "test default",
+      })),
       ...extra,
     });
 
@@ -505,6 +509,124 @@ describe("Claire conversational-intelligence repair", () => {
       weekStart: WEEK_START,
     });
     expect(loaded?.draft).toEqual(session.draft);
+  });
+
+  it("binds a plain yes to Claire's immediate Day Line proposal instead of a stale weekly plan", async () => {
+    const session = openWeeklySession();
+    session.phase = "proposal";
+    await saveWeeklySession(session);
+    const weeklyBefore = JSON.stringify(session.draft);
+
+    const fixture = createTestFixture();
+    fixture.state.pendingBriefing = {
+      parsed: {
+        items: [
+          {
+            kind: "new_work",
+            title: "Drop off Daniel's dry cleaning",
+            quote: "Drop off Daniel's dry cleaning at OPUS LA",
+            businessDate: TUESDAY,
+            timing: { kind: "none" },
+            quantity: null,
+            people: ["Daniel"],
+            place: "OPUS LA",
+            needs: null,
+            existing: null,
+          },
+        ],
+        context: [],
+        questions: [],
+        unparsed: [],
+        source: "deterministic",
+      },
+      createdAt: NOW.getTime(),
+    };
+    fixture.state.history = [
+      {
+        speaker: "claire",
+        text: "Want me to put all of that on the Day Line?",
+        at: NOW.getTime() - 1_000,
+      },
+    ];
+
+    const director = vi.fn(async (input: any) => {
+      expect(input.pending.briefing).toBe(true);
+      expect(input.recentTurns.at(-1)?.text).toMatch(/Day Line/i);
+      return {
+        target: "pending_briefing" as const,
+        rationale: "Yes answers the immediately preceding Day Line proposal.",
+      };
+    });
+
+    const result = await fixture.say("Yes.", { conversationDirector: director });
+
+    expect(director).toHaveBeenCalledOnce();
+    expect(fixture.commitMock).toHaveBeenCalledTimes(1);
+    expect(result.receiptBackedCommit).toMatch(/Done\./i);
+    expect(result.receiptBackedCommit).not.toMatch(/Tuesday:|Wednesday:|Thursday:|Friday:/i);
+
+    const weeklyAfter = await loadWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      weekStart: WEEK_START,
+    });
+    expect(weeklyAfter?.phase).toBe("proposal");
+    expect(JSON.stringify(weeklyAfter?.draft)).toBe(weeklyBefore);
+  });
+
+  it("parks stale held work when Claude says the operator changed topics", async () => {
+    const session = openWeeklySession();
+    session.phase = "proposal";
+    await saveWeeklySession(session);
+
+    const fixture = createTestFixture();
+    fixture.state.pendingBriefing = {
+      parsed: {
+        items: [
+          {
+            kind: "new_work",
+            title: "Old held task",
+            quote: "Old held task",
+            businessDate: TUESDAY,
+            timing: { kind: "none" },
+            quantity: null,
+            people: [],
+            place: null,
+            needs: null,
+            existing: null,
+          },
+        ],
+        context: [],
+        questions: [],
+        unparsed: [],
+        source: "deterministic",
+      },
+      createdAt: NOW.getTime(),
+    };
+    fixture.state.history = [
+      {
+        speaker: "claire",
+        text: "What happened with Dana?",
+        at: NOW.getTime() - 1_000,
+      },
+    ];
+
+    await fixture.say("Yeah.", {
+      conversationDirector: vi.fn(async () => ({
+        target: "open_conversation" as const,
+        rationale: "The current reply belongs to the new conversation, not old held work.",
+      })),
+    });
+
+    expect(fixture.commitMock).not.toHaveBeenCalled();
+    expect(fixture.state.pendingBriefing?.parsed.items[0]?.title).toBe("Old held task");
+
+    const weeklyAfter = await loadWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      weekStart: WEEK_START,
+    });
+    expect(weeklyAfter?.phase).toBe("proposal");
   });
 
   it("weekly session lifetime is bounded to its target week", () => {

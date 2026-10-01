@@ -68,6 +68,7 @@ import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
 import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
+import { directClaireConversation, type ClaireConversationTarget } from "./conversationDirector";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
 import {
   parseWeeklyPlanningCallbackRequest,
@@ -288,6 +289,8 @@ export type ClaireTurnDeps = {
   /** Live-turn budget for a fresh recheck. */
   priorClaimBudgetMs?: number;
   classifierBudgetMs?: number;
+  /** Claude chooses which live conversational thread owns the current turn. */
+  conversationDirector?: typeof directClaireConversation | null;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -330,6 +333,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     doctrineTurn: handleDoctrineTurn,
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
+    conversationDirector: ENV.anthropicApiKey?.trim() ? directClaireConversation : null,
   };
 }
 
@@ -927,21 +931,62 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     });
   }
 
-  // An open weekly session is context, not automatic conversational authority.
-  // Check for deliberate weekly continuation or commit; operational turns escape to the operational lane.
+  /**
+   * MODEL-FIRST CONVERSATION OWNERSHIP.
+   *
+   * Claire's durable workflows are executors, not interpreters. Before any old
+   * Weekly Mission, pending Day Line bundle, or action proposal can consume this
+   * turn, Claude decides what the operator is actually responding to in the live
+   * dialogue. On classifier failure we park stale workflows; we never let array
+   * order or a regex become conversational authority.
+   */
+  const explicitWeeklyControl =
+    /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning|lock the week|that(?:'s| is) the week|forget the week|stop planning)\b/i.test(
+      utterance
+    );
+  const directed = deps.conversationDirector
+    ? await deps
+        .conversationDirector({
+          tenantId: input.tenantId,
+          operatorId: input.operatorUserId,
+          utterance,
+          recentTurns: history().slice(0, -1).slice(-10),
+          pending: {
+            briefing: Boolean(state.pendingBriefing),
+            accountFollowUp: Boolean(state.pendingAccountFollowUp),
+            action: Boolean(
+              state.pendingProposal ||
+                state.pendingUpdate ||
+                state.pendingFieldCapture ||
+                state.pendingEngineeringOffer ||
+                state.pendingDayLineChoice ||
+                state.clarifyingUtterance
+            ),
+          },
+        })
+        .catch(() => null)
+    : null;
+  const conversationTarget: ClaireConversationTarget =
+    directed?.target ?? (explicitWeeklyControl ? "weekly_planning" : "open_conversation");
+
+  // An open weekly session is background context. It is consulted only when the
+  // conversational control plane says this turn actually belongs to weekly planning.
   const currentWeekStart = weekStartMonday(today);
   if (state.weeklyPlanningWeekStart && state.weeklyPlanningWeekStart < currentWeekStart) {
     state.weeklyPlanningWeekStart = null;
   }
-  const weekly = await routeActiveWeeklySession({
-    tenantId: input.tenantId,
-    operatorId: input.operatorUserId,
-    dayDirectorActorId: input.dayDirectorActorId,
-    utterance,
-    now: deps.now(),
-    timeZone: deps.timeZone(),
-    weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
-  });
+  const weekly =
+    conversationTarget === "weekly_planning"
+      ? await routeActiveWeeklySession({
+          tenantId: input.tenantId,
+          operatorId: input.operatorUserId,
+          dayDirectorActorId: input.dayDirectorActorId,
+          utterance,
+          now: deps.now(),
+          timeZone: deps.timeZone(),
+          weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+        })
+      : null;
   if (weekly) {
     mark("fallback", { fallbackReason: "weekly_planning" });
     if (weekly.receiptBackedCommit) {
@@ -975,9 +1020,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     explicitPendingDayLineCommit(utterance) ||
     /\b(batch|put (?:them|it) on (?:the )?day line|add (?:this|them|it) to (?:the )?day line)\b/i.test(utterance);
 
-  const doctrineSpeak = (!isOperationalWorkOrDayLine && deps.doctrineTurn)
-    ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
-    : null;
+  const doctrineSpeak =
+    conversationTarget === "open_conversation" && !isOperationalWorkOrDayLine && deps.doctrineTurn
+      ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
+      : null;
   if (doctrineSpeak) {
     mark("doctrine");
     return finish({ speak: doctrineSpeak, kind: "answered" });
@@ -989,7 +1035,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * Molina and Mission 6 — an answer about nothing the operator asked. Scope is now a property of
    * the interpretation, not a prefix match.
    */
-  if (!state.proactiveMorning && interpreted.broadBriefingRequest) {
+  if (
+    conversationTarget === "open_conversation" &&
+    !state.proactiveMorning &&
+    interpreted.broadBriefingRequest
+  ) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
       const board = await deps.watchBoard({
@@ -1013,7 +1063,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
   const explicitPriorClaimProbe = interpreted.correctnessChallenge || interpreted.provenanceQuestion;
   const directResolution: ClaimResolution =
-    holdingSomething && !explicitPriorClaimProbe
+    (conversationTarget !== "open_conversation" || holdingSomething) && !explicitPriorClaimProbe
       ? { kind: "none" }
       : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
   const focusedReceipt =
@@ -1036,7 +1086,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  const priorClaimLane = priorClaimLaneOpen(interpreted);
+  const priorClaimLane =
+    (conversationTarget === "open_conversation" || explicitPriorClaimProbe) &&
+    priorClaimLaneOpen(interpreted);
   if (priorClaimLane && resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
@@ -1090,7 +1142,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       });
   }
 
-  if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
+  if (conversationTarget === "open_conversation" && /\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
     const why = await explainProactive(input.tenantId, input.operatorUserId, utterance).catch(() => null);
     if (why) {
       mark("doctrine");
@@ -1126,7 +1178,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
-  if (state.pendingAccountFollowUp) {
+  if (state.pendingAccountFollowUp && conversationTarget === "pending_account_follow_up") {
     const reply = replyDecision(utterance);
     const pending = state.pendingAccountFollowUp;
     if (reply.decision === "yes") {
@@ -1172,6 +1224,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
+    const ownsPendingBriefing = conversationTarget === "pending_briefing";
     const pendingHasStructuredRecoveryRefs = state.pendingBriefing.parsed.items.some(item =>
       item.references?.some(
         ref => ref.kind === "customer" && ref.source === "conversation_referent"
@@ -1183,8 +1236,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         interpreted.hasExplicitActionRequest &&
         referencesStructuredRecoveryGroup(utterance));
     const bindsPending =
-      reply.decision === "yes" ||
-      reply.decision === "no" ||
+      (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
       explicitDayLineRefusal(utterance) ||
       explicitPendingCommit;
     const looksLikeRevision = /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(utterance);
@@ -1197,9 +1249,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         interpreted.correctnessChallenge ||
         interpreted.provenanceQuestion);
     const revisionText =
-      reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
+      ownsPendingBriefing &&
+      reply.decision === "yes" &&
+      /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
         ? reply.remainder
-        : reply.decision === "other" && !explicitPendingCommit
+        : ownsPendingBriefing && reply.decision === "other" && !explicitPendingCommit
           ? utterance
           : null;
     if (revisionText) {
@@ -1215,7 +1269,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         });
       }
     }
-    if ((reply.decision === "yes" || explicitPendingCommit) && !revisionText) {
+    if (((ownsPendingBriefing && reply.decision === "yes") || explicitPendingCommit) && !revisionText) {
       const pending = state.pendingBriefing.parsed;
       const result = await deps.commit(pending, {
         tenantId: input.tenantId,
@@ -1256,7 +1310,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mutationReceipts: receipts,
       });
     }
-    if (reply.decision === "no" || explicitDayLineRefusal(utterance)) {
+    if ((ownsPendingBriefing && reply.decision === "no") || explicitDayLineRefusal(utterance)) {
       state.pendingBriefing = null;
       mark("briefing");
       const remainder = reply.decision === "no" ? reply.remainder : "";
@@ -1276,8 +1330,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     // Claire could read the full list back conversationally, then persist only
     // the newest fragment when the operator finally said yes.
     const additionalWork =
-      interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment;
-    if (newMatter && !additionalWork) {
+      ownsPendingBriefing &&
+      (interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment);
+    if (newMatter && !additionalWork && conversationTarget !== "pending_briefing") {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -1288,7 +1343,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let heldProposalTitle: string | null = null;
   // The single-item loop classifies with a model; never ask it twice about the same utterance.
   let commitmentTried = false;
-  if (state.pendingProposal || state.pendingUpdate || state.pendingFieldCapture || state.pendingEngineeringOffer || state.pendingDayLineChoice || state.clarifyingUtterance) {
+  if (
+    conversationTarget === "pending_action" &&
+    (state.pendingProposal ||
+      state.pendingUpdate ||
+      state.pendingFieldCapture ||
+      state.pendingEngineeringOffer ||
+      state.pendingDayLineChoice ||
+      state.clarifyingUtterance)
+  ) {
     const pendingReply = replyDecision(utterance);
     const pendingIsNew =
       pendingReply.decision === "other" &&
