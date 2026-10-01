@@ -1440,7 +1440,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         ? state.focusAccount ?? null
         : null;
   const followUpDay = account ? followUpDayIntent(utterance, today) : null;
-  if (account && followUpDay) {
+  if (
+    account &&
+    followUpDay &&
+    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit")
+  ) {
     try {
       const historyForAccount = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account });
       const pending = proposeAccountFollowUp({ history: historyForAccount, utterance, dueDate: followUpDay.ymd, conversationKey: input.conversationKey });
