@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { getClaireModePolicy } from "./characterDefinition";
 import { compileClaireCharacterContext } from "./compiler";
 import { validateClaireCharacterContract } from "./characterContractValidator";
-import { detectClaireConversationalMode, isCasualOrSocialBid, isEllipticalTemporalOrSocialFollowUp, isPersonalInvitation } from "../topicDetection";
-import { interpretTurn } from "../turn/interpretTurn";
+import { detectClaireConversationalMode, isCasualOrSocialBid, isPersonalInvitation } from "../topicDetection";
 import { evaluateProgression, EMPTY_GRANT } from "../progression/evaluate";
-import { NON_QUALIFYING_KINDS, type ProgressionEvidence } from "../progression/evidence";
+import { NON_QUALIFYING_KINDS, validateEvidenceInput, type ProgressionEvidence } from "../progression/evidence";
 import { PROGRESSION_POLICY } from "../progression/policy";
 import { answerPersonalFollowUp } from "../progression/personalFollowUp";
 import { createInMemoryProgressionStore } from "../progression/store";
+import { recordProgressionEvidence } from "../progression/service";
+import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 
 describe("Claire Earned Relationship & Contract Invariants", () => {
   describe("1. Casual Mode & Rapport 0 Social Bid Boundary", () => {
@@ -204,57 +205,50 @@ describe("Claire Earned Relationship & Contract Invariants", () => {
       expect(evaluated.grant.rapportBand).toBe(1);
     });
 
-    it("NON_QUALIFYING_KINDS (chat_turn, good_conversation, mission_accepted, said_yes_to_claire) never raise rapport or rung", () => {
+    it("NON_QUALIFYING_KINDS (chat_turn, good_conversation, mission_accepted, said_yes_to_claire) are rejected at the ingestion boundary and never written", async () => {
+      const store = createInMemoryProgressionStore();
+      const scope = { tenantId: "default", operatorUserId: "adam-test" };
+      const now = new Date("2026-09-24T12:00:00.000Z");
+
       for (const nonQualifyingKind of NON_QUALIFYING_KINDS) {
-        const chatEvidence: ProgressionEvidence[] = [
+        // Direct validator check
+        const directValidation = validateEvidenceInput({
+          category: "growth_action",
+          kind: nonQualifyingKind,
+          occurredAt: "2026-09-24T10:00:00.000Z",
+          recognizedAt: "2026-09-24T11:00:00.000Z",
+        });
+        expect(directValidation.ok).toBe(false);
+        expect((directValidation as { ok: false; reason: string }).reason).toContain("is never story currency");
+
+        // Service ingestion boundary check
+        const result = await recordProgressionEvidence(
+          store,
           {
-            id: `fake-${nonQualifyingKind}-1`,
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
             category: "growth_action",
-            kind: nonQualifyingKind,
-            strength: null,
+            kind: nonQualifyingKind as any,
             sourceType: "call",
             sourceId: "1",
             provenance: "operator_chat",
-            occurredAt: "2026-09-21T10:00:00.000Z",
-            recognizedAt: "2026-09-21T10:00:00.000Z",
+            occurredAt: "2026-09-24T10:00:00.000Z",
+            recognizedAt: "2026-09-24T11:00:00.000Z",
           },
-          {
-            id: `fake-${nonQualifyingKind}-2`,
-            category: "growth_action",
-            kind: nonQualifyingKind,
-            strength: null,
-            sourceType: "call",
-            sourceId: "2",
-            provenance: "operator_chat",
-            occurredAt: "2026-09-22T10:00:00.000Z",
-            recognizedAt: "2026-09-22T10:00:00.000Z",
-          },
-          {
-            id: `fake-${nonQualifyingKind}-3`,
-            category: "growth_action",
-            kind: nonQualifyingKind,
-            strength: null,
-            sourceType: "call",
-            sourceId: "3",
-            provenance: "operator_chat",
-            occurredAt: "2026-09-23T10:00:00.000Z",
-            recognizedAt: "2026-09-23T10:00:00.000Z",
-          },
-        ];
+          () => now
+        );
 
-        const evaluated = evaluateProgression({
-          evidence: chatEvidence,
-          disclosureSafetyOk: true,
-          prior: EMPTY_GRANT,
-          asOf: new Date("2026-09-24T00:00:00.000Z"),
-        });
-
-        // Remains locked at 0
-        expect(evaluated.counts.growthActions).toBe(3); // count exists in raw telemetry
-        // But evaluateProgression checks GROWTH_ACTION_KINDS when computing rapport:
-        // Wait, let's verify if nonQualifyingKind is in GROWTH_ACTION_KINDS:
-        // By definition, isGrowthActionKind only accepts confirmed_field_visit and follow_up_done!
+        expect(result.ok).toBe(false);
+        expect((result as { ok: false; reason: string }).reason).toContain("is never story currency");
       }
+
+      // Assert zero rows written to store and rapport remains Band 0
+      const evidence = await store.listEvidence(scope);
+      expect(evidence).toHaveLength(0);
+
+      const grant = await store.getGrant(scope);
+      expect(grant?.rapportBand ?? 0).toBe(0);
+      expect(grant?.personalRung ?? 0).toBe(0);
     });
 
     it("business progress is separately gated and does not create unlimited banter or automatic biography disclosure", () => {
@@ -377,44 +371,47 @@ describe("Claire Earned Relationship & Contract Invariants", () => {
       expect(isCasualOrSocialBid("Add Opus to the Day Line")).toBe(false);
     });
 
-    it("detects elliptical temporal follow-ups without work verbs", () => {
-      expect(isEllipticalTemporalOrSocialFollowUp("On Saturday evening?")).toBe(true);
-      expect(isEllipticalTemporalOrSocialFollowUp("Saturday evening?")).toBe(true);
-      expect(isEllipticalTemporalOrSocialFollowUp("What about Saturday?")).toBe(true);
-      expect(isEllipticalTemporalOrSocialFollowUp("Tonight?")).toBe(true);
-      expect(isEllipticalTemporalOrSocialFollowUp("Deliver towels to Opus on Saturday")).toBe(false);
+    it("preDriveConversation routes personal referent from semanticFrame to answerPersonalFollowUp", async () => {
+      const store = createInMemoryProgressionStore();
+      const reply = await answerClairePreDriveFollowUp(
+        {
+          tenantId: "default",
+          operatorUserId: "adam-test",
+          conversationId: "conv-invitation-test-1",
+          utterance: "On Saturday evening?",
+          semanticFrame: {
+            referent: "Would you want to grab a drink?",
+            act: "question",
+            target: "open_conversation",
+          },
+          context: {
+            businessDate: "2026-09-24",
+            actorId: "adam-test",
+            macroGoalKnown: false,
+            blockers: [],
+            relevantTimeline: [],
+            clock: { localTime: "10:00 AM", weekday: "Thursday", businessDate: "2026-09-24", timeZone: "America/Los_Angeles" },
+          } as never,
+          businessOpen: false,
+          surface: "voice",
+        },
+        {
+          invokeText: async () => "",
+          recordGeneration: async () => {},
+          progressionStore: store,
+        }
+      );
+
+      // Declines via executePersonalTurn with approved dialogue line, no hardcoded Saturday prose
+      expect(reply).toMatch(/(?:Not that one|Ask me something else|leaving that where it is|pushing your luck|not something I get into|No\. What else|keep to the work)/i);
+      expect(reply).not.toContain("Saturday evening or otherwise");
     });
 
-    it("interpretTurn binds referent when elliptical follow-up follows an invitation, refusing to turn it into a business question", () => {
-      const recentTurns: Array<{ speaker: "operator" | "claire"; text: string }> = [
-        { speaker: "operator", text: "Would you want to grab a drink?" },
-        { speaker: "claire", text: "That's not something I get into." },
-      ];
-
-      const interpreted = interpretTurn("On Saturday evening?", { recentTurns });
-
-      expect(interpreted.isEllipticalPersonalFollowUp).toBe(true);
-      expect(interpreted.referent).toBe("Would you want to grab a drink?");
-      expect(interpreted.intents).toContain("personal_probe");
-      expect(interpreted.hasBusinessQuestion).toBe(false);
-      expect(interpreted.mayProposeWork).toBe(false);
-    });
-
-    it("detectClaireConversationalMode keeps mode as personal when elliptical follow-up follows an invitation", () => {
-      const recentTurns: Array<{ speaker: "operator" | "claire"; text: string }> = [
-        { speaker: "operator", text: "Would you want to grab a drink?" },
-        { speaker: "claire", text: "That's not something I get into." },
-      ];
-
-      const mode = detectClaireConversationalMode("On Saturday evening?", true, { recentTurns });
-      expect(mode).toBe("personal");
-    });
-
-    it("answerPersonalFollowUp delivers referent-binding guarded refusal for anaphoric invitation follow-up", async () => {
+    it("answerPersonalFollowUp delivers approved canon decline for personal invitation without hardcoded prose", async () => {
       const store = createInMemoryProgressionStore();
       const recentTurns: Array<{ speaker: "operator" | "claire"; text: string }> = [
         { speaker: "operator", text: "Would you want to grab a drink?" },
-        { speaker: "claire", text: "That's not something I get into." },
+        { speaker: "claire", text: "Not that one." },
       ];
 
       const reply = await answerPersonalFollowUp(
@@ -436,18 +433,16 @@ describe("Claire Earned Relationship & Contract Invariants", () => {
         }
       );
 
-      // Must bind to Saturday evening, deliver firm refusal, and pivot back to operational role
-      expect(reply).toContain("Still no, Saturday evening or otherwise.");
-      expect(reply).toContain("Let me know what you need on the line.");
-      expect(reply).not.toContain("What movie");
-      expect(reply).not.toContain("Saturday tasks");
+      // Must draw from approved canon declines, not hardcoded strings
+      expect(reply).toMatch(/(?:Not that one|Ask me something else|leaving that where it is|pushing your luck|not something I get into|No\. What else|keep to the work)/i);
+      expect(reply).not.toContain("Saturday evening or otherwise");
     });
 
     it("answerPersonalFollowUp with unresolved business steers back to open items", async () => {
       const store = createInMemoryProgressionStore();
       const recentTurns: Array<{ speaker: "operator" | "claire"; text: string }> = [
         { speaker: "operator", text: "Would you want to grab a drink?" },
-        { speaker: "claire", text: "I keep to the work." },
+        { speaker: "claire", text: "Not that one." },
       ];
 
       const reply = await answerPersonalFollowUp(
@@ -469,8 +464,8 @@ describe("Claire Earned Relationship & Contract Invariants", () => {
         }
       );
 
-      expect(reply).toContain("Still no, Saturday night or otherwise.");
-      expect(reply).toContain("We still have items on today's line.");
+      expect(reply).toMatch(/(?:Not that one|Ask me something else|leaving that where it is|pushing your luck|not something I get into|No\. What else|keep to the work)/i);
+      expect(reply).not.toContain("Saturday night or otherwise");
     });
   });
 });

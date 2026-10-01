@@ -320,9 +320,15 @@ export async function answerClairePreDriveFollowUp(
     dependencies.recordGeneration ?? recordClaireGeneration;
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
   const progressionOn = isClaireProgressionEnabled(input.tenantId);
-  // Flag OFF reproduces the pre-feature routing exactly; ON adds the fail-closed personal classifier.
-  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
-  const requestedTopic = detectRequestedClaireTopic(input.utterance, progressionOn);
+  const referent = input.semanticFrame?.referent;
+  const referentIsPersonal =
+    Boolean(referent) &&
+    (isPersonalQuestionAboutClaire(referent!) || Boolean(detectRequestedClaireTopic(referent!, progressionOn)));
+  const baseMode = detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
+  const conversationalMode = referentIsPersonal ? "personal" : baseMode;
+  const requestedTopic =
+    detectRequestedClaireTopic(input.utterance, progressionOn) ??
+    (referentIsPersonal ? detectRequestedClaireTopic(referent!, progressionOn) : null);
   const inventory = buildClaireVerifiedFactInventory(input.context);
   const businessOpen =
     input.context.blockers.length > 0 ||

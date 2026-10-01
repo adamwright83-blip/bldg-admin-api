@@ -67,15 +67,6 @@ export function isCasualOrSocialBid(utterance: string): boolean {
   return false;
 }
 
-export function isEllipticalTemporalOrSocialFollowUp(utterance: string): boolean {
-  const trimmed = utterance.trim().replace(/[?!.,]+$/g, "");
-  if (trimmed.split(/\s+/).length > 6) return false;
-  if (/\b(?:deliver|pickup|pick\s*up|drop\s*off|call|invoice|bill|cleancloud|order|orders|sales?|task|tasks|line)\b/i.test(trimmed)) {
-    return false;
-  }
-  return /^(?:(?:on|at|around|for|by|in|what about|how about|maybe)\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tonight|tomorrow|this\s+weekend|next\s+weekend|weekend|morning|afternoon|evening|night|\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s+(?:morning|afternoon|evening|night))?$/i.test(trimmed);
-}
-
 export function isPersonalQuestionAboutClaire(utterance: string): boolean {
   return isPersonalInvitation(utterance) || PERSONAL_PATTERNS.some(pattern => pattern.test(utterance));
 }
@@ -88,7 +79,7 @@ export function detectClaireConversationalMode(
   utterance: string,
   /** Progression ON: fail-closed broad personal classification. OFF: exact legacy routing. */
   progressionOn = false,
-  context?: ConversationalModeContext
+  _context?: ConversationalModeContext
 ): "operational" | "casual" | "personal" | "post_action_review" {
   const isPersonalDirect = progressionOn
     ? detectRequestedClaireTopic(utterance, true) || isPersonalQuestionAboutClaire(utterance)
@@ -97,21 +88,6 @@ export function detectClaireConversationalMode(
 
   if (/\b(how (?:did|does) that go|what happened with|after you (?:finish|done)|let me tell you what happened)\b/i.test(utterance)) {
     return "post_action_review";
-  }
-
-  // Anaphoric / elliptical follow-up check:
-  // If the operator provides an elliptical temporal qualification ("On Saturday evening?"),
-  // look at recent operator turn to preserve the conversational referent.
-  if (context?.recentTurns && isEllipticalTemporalOrSocialFollowUp(utterance)) {
-    const priorOperatorTurn = [...context.recentTurns].reverse().find(t => t.speaker === "operator");
-    if (priorOperatorTurn) {
-      if (isPersonalQuestionAboutClaire(priorOperatorTurn.text) || detectRequestedClaireTopic(priorOperatorTurn.text, progressionOn)) {
-        return "personal";
-      }
-      if (isCasualOrSocialBid(priorOperatorTurn.text)) {
-        return "casual";
-      }
-    }
   }
 
   if (isCasualOrSocialBid(utterance)) return "casual";

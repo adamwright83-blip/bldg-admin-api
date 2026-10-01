@@ -14,6 +14,7 @@ import {
   type ClaireTurnState,
 } from "./claireTurn";
 import { interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
+import { safeClaireBrainV3Fallback } from "./brainV3";
 
 /**
  * 2026-09-23 production call. Conversation c79a543e-e77c-4196-a8df-ad0138624afc,
@@ -119,6 +120,69 @@ function turnDeps(store: Store, over: Partial<ClaireTurnDeps> = {}): Partial<Cla
     rerunBusinessQuery: async () => {
       throw new Error("prior-claim rerun ran on ordinary speech");
     },
+    brainV3: vi.fn(async (input: any) => {
+      const text = String(input.utterance ?? "").trim();
+      if (input.pending?.briefing && /^(?:yes|yeah|yep|sure)[.!]?$/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          target: "pending_briefing",
+          act: "confirmation",
+          dayLineDisposition: "accept",
+          rationale: "Operator confirms pending briefing",
+        };
+      }
+      if (/Where did that come from/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "prior_claim_probe",
+          priorClaim: "provenance",
+          rationale: "Operator asks for provenance of factual claim",
+        };
+      }
+      if (/Are you sure/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "prior_claim_probe",
+          priorClaim: "correctness",
+          workDisposition: /Add.*day\s*line/i.test(text) ? "commit" : "none",
+          canonicalWork: /Add.*day\s*line/i.test(text) ? "Instagram static ad" : null,
+          rationale: "Operator challenges prior claim and optionally adds ad to day line",
+        };
+      }
+      if (/Put the Instagram static ad on the day line as a challenge/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "action_request",
+          workDisposition: "commit",
+          dayLineDisposition: "reopen",
+          canonicalWork: "Instagram static ad as a challenge",
+          rationale: "Operator commits Instagram static ad as a challenge",
+        };
+      }
+      if (/Who was my most recent sale/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "question",
+          target: "open_conversation",
+          rationale: "Operator asks for most recent sale",
+        };
+      }
+      if (
+        /Just add what I told you to the day line/i.test(text) ||
+        /Add all that to the day line/i.test(text) ||
+        /put the Instagram static ad creation on the day line as a challenge/i.test(text)
+      ) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          target: "open_conversation",
+          act: "action_request",
+          workDisposition: "commit",
+          dayLineDisposition: "reopen",
+          rationale: "Operator commits referenced items to the day line",
+        };
+      }
+      return safeClaireBrainV3Fallback();
+    }) as never,
     ...over,
   };
 }
