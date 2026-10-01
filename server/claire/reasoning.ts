@@ -28,6 +28,10 @@ import {
   VOICE_NATIVE_ANSWER_GUIDANCE,
 } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
+import {
+  claireIdentityClaimViolation,
+  formatClaireIdentityAuthority,
+} from "./identityTruth";
 import { assertNoUnauthorizedClaireBiography, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { isClaireProgressionEnabled } from "./progression/progressionFlag";
 import { measureClairePromptSections } from "./answerPathTelemetry";
@@ -140,6 +144,7 @@ function compactContext(context: ClaireDriveContext): string {
   const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   return JSON.stringify({
     businessDate: context.businessDate,
+    identityTruth: context.identityTruth,
     clock: context.clock,
     workPicture: context.workPicture,
     macroGoalKnown: context.macroGoalKnown,
@@ -351,6 +356,7 @@ export async function writeClairePreDriveBrief(
         : null,
     },
     { label: "fact_inventory", text: inventory.toPromptSection() },
+    { label: "identity_authority", text: formatClaireIdentityAuthority(input.context.identityTruth) },
     { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
     { label: "capability_briefing", text: formatCapabilityBriefing() },
     { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
@@ -394,6 +400,10 @@ export async function writeClairePreDriveBrief(
     const trimmedToSentenceBoundary = trimmed !== text;
 
     assertPostGenerationStateVerbs(trimmed, inventory);
+    const identityViolation = claireIdentityClaimViolation(trimmed, input.context.identityTruth);
+    if (identityViolation) {
+      throw new Error(`Claire opening identity truth contradiction: ${identityViolation}`);
+    }
     await enforceClaireBiographyBoundary({ tenantId: input.tenantId, text: trimmed, allowedFacts: compiled.eligibleCanonFacts, invokeText, verifier: dependencies.biographyVerifier });
 
     // Guardrail G2 post-generation lint

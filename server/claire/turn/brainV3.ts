@@ -45,6 +45,13 @@ export type ClaireBrainV3WeeklyDisposition =
   | "lock"
   | "cancel";
 
+export type ClaireBrainV3IdentityTopic =
+  | "none"
+  | "platform"
+  | "goldline"
+  | "claire_role"
+  | "business_name";
+
 export type ClaireBrainV3Interpretation = {
   target: ClaireBrainV3Target;
   act: ClaireBrainV3Act;
@@ -52,6 +59,11 @@ export type ClaireBrainV3Interpretation = {
   dayLineDisposition: ClaireBrainV3DayLineDisposition;
   priorClaim: ClaireBrainV3PriorClaim;
   weeklyDisposition: ClaireBrainV3WeeklyDisposition;
+  /**
+   * Authority-0/1 identity subject for this turn. Optional so older test
+   * fixtures remain source-compatible; live Brain V3 always returns it.
+   */
+  identityTopic?: ClaireBrainV3IdentityTopic;
   /** True only for an unscoped chief-of-staff briefing request such as "what should I do today?". */
   broadBriefingRequest: boolean;
   /**
@@ -115,6 +127,7 @@ export async function interpretClaireBrainV3(
             "dayLineDisposition",
             "priorClaim",
             "weeklyDisposition",
+            "identityTopic",
             "broadBriefingRequest",
             "canonicalWork",
             "referent",
@@ -164,6 +177,10 @@ export async function interpretClaireBrainV3(
               type: "string",
               enum: ["none", "continue", "lock", "cancel"],
             },
+            identityTopic: {
+              type: "string",
+              enum: ["none", "platform", "goldline", "claire_role", "business_name"],
+            },
             broadBriefingRequest: { type: "boolean" },
             canonicalWork: { type: ["string", "null"] },
             referent: { type: ["string", "null"] },
@@ -196,6 +213,7 @@ export async function interpretClaireBrainV3(
             "14. rationale must be a concise plain-English semantic summary of what the operator means in this turn and what it refers to, not a policy explanation or classifier commentary. This summary is passed to Claire's speaking model so it can respond to the same meaning.",
             "15. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none, weeklyDisposition=none. Ambiguity must never create work or trigger verification.",
             "16. referent: If the current utterance is an elliptical fragment, temporal qualification, or follow-up question (e.g. 'On Saturday evening?', 'how about later?', 'are they open?'), resolve referent to the specific antecedent question, proposal, topic, or invitation from recent dialogue that the operator is qualifying or referring to. Otherwise null.",
+            "17. identityTopic is about immutable/server-owned identity, not ordinary facts. Use platform for what JOYSTICK is, goldline for what Goldline is, claire_role for Claire's job/role in the product, business_name for the operator/account business name or an attempted conversational rename of it. Use none when those names are merely incidental to another topic.",
             "",
             "TARGET meanings:",
             "- pending_briefing: answering/refining Claire's currently held Day Line/work bundle.",
@@ -252,6 +270,13 @@ export async function interpretClaireBrainV3(
     const validWeekly = ["none", "continue", "lock", "cancel"].includes(
       parsed.weeklyDisposition ?? ""
     );
+    const validIdentity = [
+      "none",
+      "platform",
+      "goldline",
+      "claire_role",
+      "business_name",
+    ].includes((parsed as Partial<ClaireBrainV3Interpretation>).identityTopic ?? "");
     if (
       !validTarget ||
       !validAct ||
@@ -259,6 +284,7 @@ export async function interpretClaireBrainV3(
       !validDayLine ||
       !validPrior ||
       !validWeekly ||
+      !validIdentity ||
       typeof parsed.broadBriefingRequest !== "boolean"
     ) {
       return null;
@@ -271,6 +297,7 @@ export async function interpretClaireBrainV3(
       dayLineDisposition: parsed.dayLineDisposition as ClaireBrainV3DayLineDisposition,
       priorClaim: parsed.priorClaim as ClaireBrainV3PriorClaim,
       weeklyDisposition: parsed.weeklyDisposition as ClaireBrainV3WeeklyDisposition,
+      identityTopic: parsed.identityTopic as ClaireBrainV3IdentityTopic,
       broadBriefingRequest: parsed.broadBriefingRequest as boolean,
       canonicalWork:
         typeof parsed.canonicalWork === "string" && parsed.canonicalWork.trim()
@@ -295,6 +322,7 @@ export function safeClaireBrainV3Fallback(): ClaireBrainV3Interpretation {
     dayLineDisposition: "none",
     priorClaim: "none",
     weeklyDisposition: "none",
+    identityTopic: "none",
     broadBriefingRequest: false,
     canonicalWork: null,
     referent: null,
