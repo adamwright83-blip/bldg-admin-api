@@ -264,6 +264,17 @@ export function claireIdentityClaimViolation(
     return "platform_product_used_as_tenant_business";
   }
 
+  const businessIdentityClaim = text.match(
+    /\b(?:your|the)\s+(?:business|company|brand)(?:'s name)?\s+(?:is|is called|is named)\s+([^.!?\n]{2,80})/i
+  );
+  if (
+    businessIdentityClaim &&
+    (truth?.tenant.businesses.length ?? 0) > 0 &&
+    !matchesConfiguredBusiness(businessIdentityClaim[1]!.trim(), truth)
+  ) {
+    return "unregistered_business_identity_claim";
+  }
+
   const introduction = text.match(
     /\bthis is\s+[^.!?\n]{1,80}?\s+(?:with|from)\s+([^.!?\n]{2,80})/i
   );
