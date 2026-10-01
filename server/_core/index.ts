@@ -61,6 +61,7 @@ import {
 import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "./posthogLogs";
+import { posthogBrowserConfig } from "./posthogServer";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
@@ -163,6 +164,14 @@ async function startServer() {
   attachConversationRelayUpgrade(server);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
+
+  // Public runtime analytics configuration. The PostHog project token (phc_)
+  // is an ingestion identifier intended for browser use; server secret keys
+  // are never returned here. no-store lets rotation take effect immediately.
+  app.get("/api/analytics-config", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(posthogBrowserConfig());
+  });
 
   // =============================================================================
   // PUBLIC LEADS SUBMISSION - REST endpoint with manual CORS (no middleware)
