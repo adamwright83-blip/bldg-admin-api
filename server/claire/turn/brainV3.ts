@@ -52,6 +52,8 @@ export type ClaireBrainV3Interpretation = {
   dayLineDisposition: ClaireBrainV3DayLineDisposition;
   priorClaim: ClaireBrainV3PriorClaim;
   weeklyDisposition: ClaireBrainV3WeeklyDisposition;
+  /** True only for an unscoped chief-of-staff briefing request such as "what should I do today?". */
+  broadBriefingRequest: boolean;
   /**
    * The work the operator actually requested/committed to, resolved from the
    * current utterance plus recent dialogue. Null for narration, explanation,
@@ -113,6 +115,7 @@ export async function interpretClaireBrainV3(
             "dayLineDisposition",
             "priorClaim",
             "weeklyDisposition",
+            "broadBriefingRequest",
             "canonicalWork",
             "referent",
             "rationale",
@@ -161,6 +164,7 @@ export async function interpretClaireBrainV3(
               type: "string",
               enum: ["none", "continue", "lock", "cancel"],
             },
+            broadBriefingRequest: { type: "boolean" },
             canonicalWork: { type: ["string", "null"] },
             referent: { type: ["string", "null"] },
             rationale: { type: "string" },
@@ -188,7 +192,8 @@ export async function interpretClaireBrainV3(
             "10. A bare confirmation may lock weekly planning ONLY when Claire's immediately preceding unresolved question was the weekly lock confirmation. Otherwise weeklyDisposition=continue or none.",
             "11. If Claire proposes a concrete mission/route and the operator says 'I can commit to that', workDisposition=commit and canonicalWork must resolve to that concrete mission/route, not the operator's literal confirmation sentence. If that proposal was explicitly to schedule/create the mission, dayLineDisposition=reopen is allowed even if generic Day Line discussion was previously suppressed.",
             "12. If the operator asks what they SHOULD do, requests strategy, or is collaboratively shaping a mission but has not yet committed, use workDisposition=discuss.",
-            "13. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none, weeklyDisposition=none. Ambiguity must never create work or trigger verification.",
+            "13. broadBriefingRequest=true only for an unscoped chief-of-staff request such as 'what should I do today?', 'what do I need to know?', or 'what's most important?'. It is false for questions scoped to a person, account, mission, or topic.",
+            "14. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none, weeklyDisposition=none. Ambiguity must never create work or trigger verification.",
             "",
             "TARGET meanings:",
             "- pending_briefing: answering/refining Claire's currently held Day Line/work bundle.",
@@ -245,7 +250,15 @@ export async function interpretClaireBrainV3(
     const validWeekly = ["none", "continue", "lock", "cancel"].includes(
       parsed.weeklyDisposition ?? ""
     );
-    if (!validTarget || !validAct || !validWork || !validDayLine || !validPrior || !validWeekly) {
+    if (
+      !validTarget ||
+      !validAct ||
+      !validWork ||
+      !validDayLine ||
+      !validPrior ||
+      !validWeekly ||
+      typeof parsed.broadBriefingRequest !== "boolean"
+    ) {
       return null;
     }
 
@@ -256,6 +269,7 @@ export async function interpretClaireBrainV3(
       dayLineDisposition: parsed.dayLineDisposition as ClaireBrainV3DayLineDisposition,
       priorClaim: parsed.priorClaim as ClaireBrainV3PriorClaim,
       weeklyDisposition: parsed.weeklyDisposition as ClaireBrainV3WeeklyDisposition,
+      broadBriefingRequest: parsed.broadBriefingRequest as boolean,
       canonicalWork:
         typeof parsed.canonicalWork === "string" && parsed.canonicalWork.trim()
           ? parsed.canonicalWork.trim()
@@ -279,6 +293,7 @@ export function safeClaireBrainV3Fallback(): ClaireBrainV3Interpretation {
     dayLineDisposition: "none",
     priorClaim: "none",
     weeklyDisposition: "none",
+    broadBriefingRequest: false,
     canonicalWork: null,
     referent: null,
     rationale: "Brain V3 unavailable; fail closed to conversation without mutation or verification.",
