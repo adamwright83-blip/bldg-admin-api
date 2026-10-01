@@ -806,10 +806,69 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
 
+  /**
+   * CLAIRE BRAIN V3 — ONE SEMANTIC INTERPRETATION.
+   *
+   * From here down, every mutation-capable or truth-adjudicating subsystem is
+   * an executor of this result. Nothing gets to reinterpret the raw sentence
+   * and steal the turn from another subsystem.
+   */
+  const explicitWeeklyControl =
+    /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning|lock the week|that(?:'s| is) the week|forget the week|stop planning)\b/i.test(
+      utterance
+    );
+  const brainResult = deps.brainV3
+    ? await deps
+        .brainV3({
+          tenantId: input.tenantId,
+          operatorId: input.operatorUserId,
+          utterance,
+          recentTurns: history().slice(0, -1).slice(-12),
+          pending: {
+            briefing: Boolean(state.pendingBriefing),
+            accountFollowUp: Boolean(state.pendingAccountFollowUp),
+            action: Boolean(
+              state.pendingProposal ||
+                state.pendingUpdate ||
+                state.pendingFieldCapture ||
+                state.pendingEngineeringOffer ||
+                state.pendingDayLineChoice ||
+                state.clarifyingUtterance
+            ),
+            weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+          },
+          dayLineSuppressed: Boolean(state.dayLineSuppressed),
+        })
+        .catch(() => null)
+    : null;
+  brainV3 =
+    brainResult ??
+    (explicitWeeklyControl
+      ? {
+          ...safeClaireBrainV3Fallback(),
+          target: "weekly_planning",
+          act: "action_request",
+          weeklyDisposition: "continue",
+          rationale: "Explicit weekly control while Brain V3 unavailable.",
+        }
+      : safeClaireBrainV3Fallback());
+
+  if (brainV3.dayLineDisposition === "decline") {
+    state.dayLineSuppressed = true;
+    state.pendingBriefing = null;
+    state.pendingProposal = null;
+    state.pendingReminded = false;
+  } else if (brainV3.dayLineDisposition === "accept" || brainV3.dayLineDisposition === "reopen") {
+    state.dayLineSuppressed = false;
+  }
+
+  const conversationTarget: ClaireBrainV3Target = brainV3.target;
+
   if (
     input.surface === "voice" &&
     morningSession === "weekly_planning_invite" &&
-    state.weeklyPlanningWeekStart
+    state.weeklyPlanningWeekStart &&
+    conversationTarget === "weekly_planning"
   ) {
     const affirmative = /^(?:yes|yeah|yep|sure|ok(?:ay)?|now|do it now|let'?s do it(?: now)?)\b/i.test(
       utterance.trim()
@@ -938,64 +997,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       kind: "answered",
     });
   }
-
-  /**
-   * CLAIRE BRAIN V3 — ONE SEMANTIC INTERPRETATION.
-   *
-   * From here down, every mutation-capable or truth-adjudicating subsystem is
-   * an executor of this result. Nothing gets to reinterpret the raw sentence
-   * and steal the turn from another subsystem.
-   */
-  const explicitWeeklyControl =
-    /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning|lock the week|that(?:'s| is) the week|forget the week|stop planning)\b/i.test(
-      utterance
-    );
-  const brainResult = deps.brainV3
-    ? await deps
-        .brainV3({
-          tenantId: input.tenantId,
-          operatorId: input.operatorUserId,
-          utterance,
-          recentTurns: history().slice(0, -1).slice(-12),
-          pending: {
-            briefing: Boolean(state.pendingBriefing),
-            accountFollowUp: Boolean(state.pendingAccountFollowUp),
-            action: Boolean(
-              state.pendingProposal ||
-                state.pendingUpdate ||
-                state.pendingFieldCapture ||
-                state.pendingEngineeringOffer ||
-                state.pendingDayLineChoice ||
-                state.clarifyingUtterance
-            ),
-            weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
-          },
-          dayLineSuppressed: Boolean(state.dayLineSuppressed),
-        })
-        .catch(() => null)
-    : null;
-  brainV3 =
-    brainResult ??
-    (explicitWeeklyControl
-      ? {
-          ...safeClaireBrainV3Fallback(),
-          target: "weekly_planning",
-          act: "action_request",
-          weeklyDisposition: "continue",
-          rationale: "Explicit weekly control while Brain V3 unavailable.",
-        }
-      : safeClaireBrainV3Fallback());
-
-  if (brainV3.dayLineDisposition === "decline") {
-    state.dayLineSuppressed = true;
-    state.pendingBriefing = null;
-    state.pendingProposal = null;
-    state.pendingReminded = false;
-  } else if (brainV3.dayLineDisposition === "accept" || brainV3.dayLineDisposition === "reopen") {
-    state.dayLineSuppressed = false;
-  }
-
-  const conversationTarget: ClaireBrainV3Target = brainV3.target;
 
   // An open weekly session is background context. It is consulted only when the
   // conversational control plane says this turn actually belongs to weekly planning.
