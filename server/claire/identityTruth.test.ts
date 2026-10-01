@@ -6,6 +6,7 @@ describe("Claire identity truth kernel", () => {
     const truth = await loadClaireIdentityTruth("default");
     expect(truth.platform.productName).toBe("JOYSTICK");
     expect(truth.platform.gameName).toBe("Goldline");
+    expect(truth.platform.claireRole).toContain("game master");
     expect(truth.tenant.businesses.map(item => item.brandName)).toEqual(["Laundry Butler", "Laundry Farm"]);
     expect(renderClaireIdentityAnswer("business_name", truth)).toBe("The businesses on this account are Laundry Butler and Laundry Farm.");
   });
