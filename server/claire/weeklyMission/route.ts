@@ -124,6 +124,11 @@ export async function routeActiveWeeklySession(
     now: Date;
     timeZone: string;
     weekStartOverride?: string;
+    /**
+     * Brain V3 authoritative semantic intent. When present, this route does
+     * not reinterpret the raw utterance or run its own semantic classifier.
+     */
+    authoritativeIntent?: "weekly_continue" | "weekly_lock" | "weekly_cancel";
   },
   deps: {
     classifyIntent?: typeof classifyWeeklyTurnWithClaire;
@@ -150,14 +155,16 @@ export async function routeActiveWeeklySession(
     return null;
   }
 
-  let intent = arbitrateWeeklyTurnIntent({
-    utterance: input.utterance,
-    session,
-    now: input.now,
-    timeZone: input.timeZone,
-  });
+  let intent: WeeklyTurnIntent =
+    input.authoritativeIntent ??
+    arbitrateWeeklyTurnIntent({
+      utterance: input.utterance,
+      session,
+      now: input.now,
+      timeZone: input.timeZone,
+    });
 
-  if (intent === "semantic_review") {
+  if (!input.authoritativeIntent && intent === "semantic_review") {
     const semantic = await (deps.classifyIntent ?? classifyWeeklyTurnWithClaire)({
       tenantId: input.tenantId,
       operatorId: input.operatorId,
@@ -172,7 +179,7 @@ export async function routeActiveWeeklySession(
   }
 
   try {
-    return await routeLoadedSession(input, horizon, session);
+    return await routeLoadedSession(input, horizon, session, intent);
   } catch (error) {
     if (isMissingTable(error)) throw error;
     return {
@@ -202,11 +209,16 @@ async function routeLoadedSession(
     now: Date;
     timeZone: string;
     weekStartOverride?: string;
+    authoritativeIntent?: "weekly_continue" | "weekly_lock" | "weekly_cancel";
   },
   horizon: ReturnType<typeof remainingWeekHorizon>,
-  session: WeeklyPlanningSession
+  session: WeeklyPlanningSession,
+  intent: WeeklyTurnIntent
 ): Promise<WeeklyRouteResult> {
-  if (lockBindApplies(session, input.utterance)) {
+  if (
+    intent === "weekly_lock" &&
+    (session.phase === "proposal" || session.phase === "awaiting_confirmation")
+  ) {
     const committed = await commitWeeklyPlan({
       session,
       dayDirectorActorIds: input.dayDirectorActorIds,
@@ -253,7 +265,8 @@ async function routeLoadedSession(
     {
       dossier,
       session,
-      operatorUtterance: input.utterance,
+      operatorUtterance:
+        intent === "weekly_cancel" ? "cancel weekly planning" : input.utterance,
     },
     {
       completeAct: modelInput =>
