@@ -1717,7 +1717,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
-    if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track") && !wantsBatchProposal) {
+    if (
+      addable &&
+      brainV3.workDisposition === "commit" &&
+      !state.dayLineSuppressed &&
+      !wantsBatchProposal
+    ) {
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
@@ -1756,7 +1761,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (isCombineRequest(lower) && parsed.items.length <= 1) {
     parsed = { ...parsed, items: [], questions: parsed.questions.length ? parsed.questions : [utterance] };
   }
-  if (!commitmentTried && !isCombineRequest(lower) && (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))) {
+  if (
+    brainAllowsWork &&
+    !commitmentTried &&
+    !isCombineRequest(lower) &&
+    (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -1768,8 +1778,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
 
-  // ── 6. Questions ──────────────────────────────────────────────────────────
-  const answer = await answerQuestion(utterance);
+  // ── 6. Questions / advice ─────────────────────────────────────────────────
+  // Readers are evidence tools, not interpreters. They run only after Brain V3
+  // says the operator actually asked a question or requested advice.
+  const mayRunReaders =
+    brainV3.act === "question" || brainV3.act === "advice_request";
+  const answer = mayRunReaders ? await answerQuestion(utterance) : null;
   if (answer) {
     /**
      * A pending item is surfaced ONCE. The operator still needs to know a proposal is alive, but
@@ -1787,7 +1801,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: `${answer}${reminder}`, kind: "answered" });
   }
 
-  if (!commitmentTried && !isCombineRequest(lower) && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !looksLikeQuestion(utterance)) {
+  if (
+    brainAllowsWork &&
+    !commitmentTried &&
+    !isCombineRequest(lower) &&
+    !parsed.questions.length &&
+    !singleFlow &&
+    parsed.items.length === 0
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -1810,6 +1831,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brief: input.brief ?? null,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      semanticFrame: {
+        target: brainV3.target,
+        act: brainV3.act,
+        workDisposition: brainV3.workDisposition,
+        dayLineDisposition: brainV3.dayLineDisposition,
+        priorClaim: brainV3.priorClaim,
+        weeklyDisposition: brainV3.weeklyDisposition,
+        broadBriefingRequest: brainV3.broadBriefingRequest,
+        canonicalWork: brainV3.canonicalWork,
+        referent: brainV3.referent,
+      },
       conversationId: input.conversationKey,
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
