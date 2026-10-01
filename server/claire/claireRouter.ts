@@ -19,6 +19,7 @@ import {
   joystickClaireDeskProcedure,
   router,
 } from "../_core/trpc";
+import { runWithLlmObservability } from "../_core/llmObservability";
 import { claireOperatorScope } from "../joystick/tenantIdentity";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
@@ -316,32 +317,43 @@ export const claireRouter = router({
           }
         );
 
-      const liveV2 = await runClaireBrainV2LiveTurn({
-        rawText: input.utterance,
-        assembledText: input.utterance,
-        state: readOnlyWorkingMemorySource(state),
-        tenantId: scope.tenantId,
-        operatorUserId: scope.operatorUserId,
-        surface: "text",
-        conversationKey: key,
-        live: {
+      const { brainV2LiveHandled, result } = await runWithLlmObservability(
+        {
           tenantId: scope.tenantId,
-          operatorUserId: scope.operatorUserId,
-          conversationId: input.conversationId ?? "desk",
-          dayDirectorActorId: actorId,
-          timeZone: input.timeZone ?? "America/Los_Angeles",
-          businessDate:
-            context.businessDate ?? new Date().toISOString().slice(0, 10),
-          surface: "text",
-          priorClaimReceipts: state.claimReceipts ?? [],
+          operatorOpenId: scope.operatorUserId,
+          conversationId: key,
+          surface: "desktop",
         },
-        executeLegacyAdapter: async () => runLegacyAdapter(),
-      });
-
-      const brainV2LiveHandled = liveV2.active;
-      const result = liveV2.active
-        ? liveV2.adapterResult ?? (await runLegacyAdapter())
-        : await runLegacyAdapter();
+        async () => {
+          const liveV2 = await runClaireBrainV2LiveTurn({
+            rawText: input.utterance,
+            assembledText: input.utterance,
+            state: readOnlyWorkingMemorySource(state),
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
+            surface: "text",
+            conversationKey: key,
+            live: {
+              tenantId: scope.tenantId,
+              operatorUserId: scope.operatorUserId,
+              conversationId: input.conversationId ?? "desk",
+              dayDirectorActorId: actorId,
+              timeZone: input.timeZone ?? "America/Los_Angeles",
+              businessDate:
+                context.businessDate ?? new Date().toISOString().slice(0, 10),
+              surface: "text",
+              priorClaimReceipts: state.claimReceipts ?? [],
+            },
+            executeLegacyAdapter: async () => runLegacyAdapter(),
+          });
+          return {
+            brainV2LiveHandled: liveV2.active,
+            result: liveV2.active
+              ? liveV2.adapterResult ?? (await runLegacyAdapter())
+              : await runLegacyAdapter(),
+          };
+        }
+      );
       await store.save(key, { tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
 
       /**

@@ -13,6 +13,7 @@ import { decideGoalCycle } from "../persistentOperator/decisionEngine";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "../persistentOperator/operatorAppointmentWorker";
+import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "../_core/posthogLogs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the procurement worker");
@@ -121,6 +122,8 @@ const server = http.createServer((request, response) => {
 });
 
 server.listen(port, () => console.log(`[ProcurementWorker] health listening on ${port}`));
+startServerLogs();
+emitServerLog("info", "Procurement worker started", { port });
 void worker.start();
 void goalCycleWorker.start();
 void operatorAppointmentWorker.start();
@@ -136,13 +139,20 @@ const shutdown = async (signal: string) => {
     operatorAppointmentWorker.stop(),
   ]);
   await new Promise<void>(resolve => server.close(() => resolve()));
+  emitServerLog("info", "Procurement worker shutting down", { signal });
+  await shutdownServerTelemetry();
   await pool.end();
 };
 
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
-    void shutdown(signal).then(() => process.exit(0), error => {
+    void shutdown(signal).then(() => process.exit(0), async error => {
       console.error("[ProcurementWorker] shutdown failed", error);
+      const message = error instanceof Error ? error.message : String(error);
+      emitServerLog("error", "Procurement worker shutdown failed", {
+        error_message: message.slice(0, 500),
+      });
+      await shutdownServerTelemetry().catch(() => undefined);
       process.exit(1);
     });
   });

@@ -60,6 +60,7 @@ import {
 } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
+import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "./posthogLogs";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
@@ -153,6 +154,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 async function startServer() {
   validateStripeEnv();
+  startServerLogs();
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
@@ -839,6 +841,10 @@ async function startServer() {
       createContext,
       onError({ path, error }) {
         console.error(`[tRPC] ${path ?? "<unknown>"} failed:`, error);
+        emitServerLog("error", "tRPC request failed", {
+          path: path ?? "unknown",
+          error_message: (error.message || "request failed").slice(0, 500),
+        });
       },
     })
   );
@@ -856,8 +862,13 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  server.on("close", () => {
+    void shutdownServerTelemetry();
+  });
+
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    emitServerLog("info", "API server listening", { port });
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
@@ -887,4 +898,14 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch(async error => {
+  console.error(error);
+  const message = error instanceof Error ? error.message : String(error);
+  emitServerLog("error", "API server failed to start", {
+    error_message: message.slice(0, 500),
+  });
+  await Promise.race([
+    shutdownServerTelemetry(),
+    new Promise(resolve => setTimeout(resolve, 2_500)),
+  ]);
+});

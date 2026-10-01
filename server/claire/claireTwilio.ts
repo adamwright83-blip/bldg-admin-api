@@ -78,6 +78,7 @@ import {
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import { runWithLlmObservability } from "../_core/llmObservability";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
@@ -970,6 +971,15 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             }
           );
 
+        result = await runWithLlmObservability(
+          {
+            tenantId: conversation.tenantId,
+            operatorOpenId: conversation.actorId,
+            conversationId: callStateKey(conversationId),
+            callId: conversationId,
+            surface: "voice",
+          },
+          async () => {
         const liveV2 = await runClaireBrainV2LiveTurn({
           rawText: turnUtterance,
           assembledText: conversation.pendingFragment
@@ -1001,17 +1011,14 @@ export function runAuthoritativeClaireVoiceTurn(input: {
 
         if (liveV2.active) {
           brainV2LiveHandled = true;
-          if (liveV2.adapterResult) {
-            result = liveV2.adapterResult;
-          } else {
-            // Call-control authority does not itself write business state. Keep
-            // the existing character/ledger adapter for the spoken close, but V2
-            // is the authority deciding that the call ends.
-            const adapted = await runLegacyAdapter();
-            result = liveV2.result.candidateEndCall
-              ? { ...adapted, endCall: true }
-              : adapted;
-          }
+          // Call-control authority does not itself write business state. Keep
+          // the existing character/ledger adapter for the spoken close, but V2
+          // is the authority deciding that the call ends.
+          const turnResult = liveV2.adapterResult
+            ? liveV2.adapterResult
+            : await runLegacyAdapter().then(adapted =>
+                liveV2.result.candidateEndCall ? { ...adapted, endCall: true } : adapted
+              );
           console.info("[ClaireBrainV2]", {
             event: "claire_brain_v2_live",
             surface: "voice",
@@ -1023,9 +1030,11 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
             receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
           });
-        } else {
-          result = await runLegacyAdapter();
+          return turnResult;
         }
+        return await runLegacyAdapter();
+          }
+        );
       }
       }
       conversation.touchedAt = Date.now();

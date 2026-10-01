@@ -1,3 +1,5 @@
+import { emitServerLog } from "../_core/posthogLogs";
+
 export type DurableLeasedStep = {
   id: string;
   attemptCount: number;
@@ -108,6 +110,10 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
       } catch (error) {
         this.lastPollError = errorMessage(error);
         console.error(`[${this.options.logPrefix ?? "DurableWorker"}] poll failed`, error);
+        emitServerLog("error", "Durable worker poll failed", {
+          worker: this.options.logPrefix ?? "DurableWorker",
+          error_message: this.lastPollError.slice(0, 500),
+        });
       }
 
       if (this.inFlight.size >= this.options.concurrency) {
@@ -125,6 +131,11 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
     const heartbeat = setInterval(() => {
       void this.store.heartbeat(step, this.options.leaseMs).catch(error => {
         console.error(`[${prefix}] heartbeat failed for step ${step.id}`, error);
+        emitServerLog("error", "Durable worker heartbeat failed", {
+          worker: prefix,
+          step_id: step.id,
+          error_message: errorMessage(error).slice(0, 500),
+        });
       });
     }, Math.max(100, Math.floor(this.options.leaseMs / 3)));
 
@@ -139,6 +150,12 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
       this.lastExecutionError = null;
     } catch (error) {
       const retryDelay = this.options.retryBaseMs * 2 ** Math.max(0, step.attemptCount - 1);
+      emitServerLog("error", "Durable worker step failed", {
+        worker: prefix,
+        step_id: step.id,
+        handler: handlerKey,
+        error_message: errorMessage(error).slice(0, 500),
+      });
       try {
         await this.store.failStep(step, error, retryDelay);
         this.lastExecutionError = null;
@@ -147,6 +164,12 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         // in-flight promise. The lease remains recoverable by the store.
         this.lastExecutionError = errorMessage(failure);
         console.error(`[${prefix}] failed to record step ${step.id} failure`, failure);
+        emitServerLog("error", "Durable worker failed to record step failure", {
+          worker: prefix,
+          step_id: step.id,
+          handler: handlerKey,
+          error_message: this.lastExecutionError.slice(0, 500),
+        });
       }
     } finally {
       clearInterval(heartbeat);

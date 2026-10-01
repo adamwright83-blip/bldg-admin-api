@@ -1,3 +1,4 @@
+import { initProductAnalytics } from "./lib/posthog";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +11,8 @@ import { apiBase } from "./lib/apiBase";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+void initProductAnalytics();
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
 

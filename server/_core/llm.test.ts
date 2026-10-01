@@ -31,10 +31,15 @@ vi.mock("../agents/costTracking", () => ({
 }));
 
 import { invokeLLM, invokeTextLLM, TextLLMInvocationError } from "./llm";
+import { resetServerPosthogForTests } from "./posthogServer";
 
 describe("E — shared Anthropic LLM behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.POSTHOG_PROJECT_TOKEN;
+    delete process.env.POSTHOG_AI_CAPTURE_CONTENT;
+    delete process.env.POSTHOG_SECRET_KEY;
+    resetServerPosthogForTests();
     mocks.assertSpend.mockResolvedValue(undefined);
     mocks.trackUsage.mockResolvedValue(undefined);
   });
@@ -87,6 +92,9 @@ describe("E — shared Anthropic LLM behavior", () => {
       outputTokens: 5,
     });
     expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("tools");
+    for (const key of Object.keys(mocks.create.mock.calls[0][0] as object)) {
+      expect(key.toLowerCase().includes("posthog")).toBe(false);
+    }
   });
 
   it("fails closed with a typed error for unsupported roles and spend denial", async () => {
@@ -265,5 +273,8 @@ describe("E — shared Anthropic LLM behavior", () => {
     expect(onFirstToken).toHaveBeenCalledTimes(1);
     expect(mocks.stream).toHaveBeenCalledTimes(1);
     expect(mocks.create).not.toHaveBeenCalled();
+    for (const key of Object.keys(mocks.stream.mock.calls[0][0] as object)) {
+      expect(key.toLowerCase().includes("posthog")).toBe(false);
+    }
   });
 });
