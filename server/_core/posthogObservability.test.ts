@@ -8,9 +8,29 @@ import {
   runWithLlmObservability,
 } from "./llmObservability";
 import { emitServerLog, resetServerLogsForTests } from "./posthogLogs";
-import { getServerPosthog, resetServerPosthogForTests } from "./posthogServer";
+import { getServerPosthog, posthogBrowserConfig, resetServerPosthogForTests } from "./posthogServer";
 
 describe("PostHog observability", () => {
+  it("exposes only the public browser ingestion config", () => {
+    const previousToken = process.env.POSTHOG_PROJECT_TOKEN;
+    const previousHost = process.env.POSTHOG_HOST;
+    const previousSecret = process.env.POSTHOG_SECRET_KEY;
+    process.env.POSTHOG_PROJECT_TOKEN = "phc_public_test";
+    process.env.POSTHOG_HOST = "https://us.i.posthog.com/";
+    process.env.POSTHOG_SECRET_KEY = "phs_must_not_leak";
+    expect(posthogBrowserConfig()).toEqual({
+      enabled: true,
+      key: "phc_public_test",
+      host: "https://us.i.posthog.com",
+    });
+    if (previousToken === undefined) delete process.env.POSTHOG_PROJECT_TOKEN;
+    else process.env.POSTHOG_PROJECT_TOKEN = previousToken;
+    if (previousHost === undefined) delete process.env.POSTHOG_HOST;
+    else process.env.POSTHOG_HOST = previousHost;
+    if (previousSecret === undefined) delete process.env.POSTHOG_SECRET_KEY;
+    else process.env.POSTHOG_SECRET_KEY = previousSecret;
+  });
+
   it("stays inert when the project token is missing", () => {
     delete process.env.POSTHOG_PROJECT_TOKEN;
     resetServerPosthogForTests();
