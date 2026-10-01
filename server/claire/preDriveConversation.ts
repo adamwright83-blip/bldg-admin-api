@@ -252,6 +252,7 @@ export async function answerClairePreDriveFollowUp(
       broadBriefingRequest: boolean;
       canonicalWork: string | null;
       referent: string | null;
+      rationale: string;
     };
     /**
      * Claire Intelligence Repair Part 2, Slice C+D: authoritative evidence
