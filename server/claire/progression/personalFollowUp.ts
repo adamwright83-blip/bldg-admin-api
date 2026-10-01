@@ -10,6 +10,7 @@ import { ENTAILMENT_VERIFIER_INSTRUCTION, parseVerifierReply } from "./personalE
 import { buildPersonalDisclosureGuidance, executePersonalTurn, type PersonalTurnResult } from "./personalReveal";
 import { syncProgressionForOperator } from "./evidenceSources";
 import type { ProgressionStore } from "./store";
+import { isEllipticalTemporalOrSocialFollowUp, isPersonalInvitation } from "../topicDetection";
 
 /**
  * The live personal-answer path. Replaces the old "generate against a tier's
@@ -49,6 +50,116 @@ export async function answerPersonalFollowUp(
 
   if (dependencies.syncProgression ?? !dependencies.progressionStore) {
     await syncProgressionForOperator({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+  }
+
+  // Anaphoric invitation follow-up referent preservation (e.g. "On Saturday evening?" after drink invitation)
+  const isElliptical = isEllipticalTemporalOrSocialFollowUp(input.utterance);
+  const priorOperatorTurn = input.recentTurns
+    ? [...input.recentTurns].reverse().find(t => t.speaker === "operator")
+    : null;
+  const isInvitationFollowUp = Boolean(
+    isElliptical && priorOperatorTurn && isPersonalInvitation(priorOperatorTurn.text)
+  );
+
+  if (isInvitationFollowUp) {
+    const grant = await store.getGrant({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+    const band = grant?.rapportBand ?? 0;
+    const rung = grant?.personalRung ?? 0;
+    const base = {
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      conversationId: input.conversationId,
+      rungAtTime: rung,
+      rapportBandAtTime: band,
+    };
+    await store.appendLedger({
+      ...base,
+      kind: "asked",
+      topic: "invitation_follow_up",
+      fragmentId: null,
+      entitlementId: null,
+      declineId: null,
+      failureReason: null,
+      hadUnusedEntitlement: null,
+      failurePhase: null,
+    });
+    await store.appendLedger({
+      ...base,
+      kind: "decline_fallback",
+      topic: "invitation_follow_up",
+      fragmentId: null,
+      entitlementId: null,
+      declineId: "invitation_referent_decline",
+      failureReason: "invitation_refusal",
+      hadUnusedEntitlement: false,
+      failurePhase: null,
+    });
+
+    const timeToken = input.utterance
+      .trim()
+      .replace(/[?!.,]+$/g, "")
+      .replace(/^(?:on|at|around|for|by|in|what about|how about|maybe)\s+/i, "");
+    const timePhrase = timeToken ? `${timeToken} or otherwise` : "either way";
+    const operationalReturn = input.businessOpen
+      ? "We still have items on today's line."
+      : "Let me know what you need on the line.";
+
+    let text: string;
+    if (band >= 2) {
+      text = `Still no on drinks, ${timePhrase}. You're persistent though. ${operationalReturn}`;
+    } else {
+      text = `Still no, ${timePhrase}. ${operationalReturn}`;
+    }
+
+    input.onPersonalTurn?.({
+      text,
+      outcome: "declined",
+      plan: {
+        kind: "decline",
+        reason: "no_canon_for_topic",
+        closeThread: false,
+        eligibleFragmentId: null,
+        hadUnusedEntitlement: false,
+      },
+      declineId: "invitation_referent_decline",
+      failureReason: "invitation_refusal",
+      fragmentId: null,
+      closedThread: false,
+      endCall: false,
+      returnToBusiness: input.businessOpen,
+      receipt: null,
+    });
+
+    const diagnostic: ClaireGenerationDiagnostic = {
+      kind: "follow_up",
+      source: "fallback",
+      answerOrigin: "fallback",
+      failureReason: "personal_decline:invitation_follow_up",
+      modelRequested: claireModelId(),
+      modelServed: null,
+      surface: input.surface,
+      stopReason: null,
+      trimmedToSentenceBoundary: false,
+    };
+    await dependencies.recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic,
+      latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.operatorUserId,
+        generatedText: text,
+        compiled: await compileClaireContextForOperator({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          mode: "personal",
+          progressionStore: store,
+          boundedCanonFragmentIds: [],
+        }),
+        businessContextSummary: "personal_invitation_follow_up",
+      },
+    });
+    input.onGeneration?.(diagnostic);
+    return text;
   }
 
   const result = await executePersonalTurn({

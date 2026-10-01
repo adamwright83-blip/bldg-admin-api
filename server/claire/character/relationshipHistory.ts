@@ -117,6 +117,7 @@ export async function compileClaireContextForOperator(input: {
   progressionStore?: ProgressionStore;
   /** Set by the personal-turn controller: the only canon this turn may draw on. */
   boundedCanonFragmentIds?: readonly string[];
+  unresolvedBusiness?: boolean;
 }): Promise<ClaireCompiledContext> {
   const relationshipState = await getClaireRelationshipState({
     tenantId: input.tenantId,
@@ -148,7 +149,10 @@ export async function compileClaireContextForOperator(input: {
   }
   return compileClaireCharacterContext({
     mode: input.mode,
-    progression,
+    progression: {
+      ...progression,
+      unresolvedBusiness: input.unresolvedBusiness,
+    },
     legacyTierDisclosure: !progressionEnabled,
     boundedCanonFragmentIds: input.boundedCanonFragmentIds,
     relationshipState,

@@ -1,4 +1,9 @@
-import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../topicDetection";
+import {
+  detectRequestedClaireTopic,
+  isPersonalQuestionAboutClaire,
+  isEllipticalTemporalOrSocialFollowUp,
+  isCasualOrSocialBid,
+} from "../topicDetection";
 
 /**
  * ONE authoritative interpretation of the operator's utterance, produced before any route acts.
@@ -100,6 +105,10 @@ export type InterpretedTurn = {
   conversationControl: boolean;
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
+  /** Resolved conversational referent for anaphoric / elliptical follow-ups. */
+  referent?: string | null;
+  /** Whether this turn is an elliptical follow-up to a preceding personal probe or invitation. */
+  isEllipticalPersonalFollowUp?: boolean;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -457,6 +466,8 @@ export type InterpretTurnOptions = {
    * there. Kept as a named field so the prohibition is explicit rather than implicit.
    */
   extractedWorkItems?: number;
+  /** Recent turns for anaphoric referent resolution across conversational beats. */
+  recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
 };
 
 export function interpretTurn(utterance: string, options: InterpretTurnOptions = {}): InterpretedTurn {
@@ -506,8 +517,25 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const broadBriefingRequest =
     BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
   const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
+
+  // Contextual referent resolution for elliptical follow-ups (e.g. "On Saturday evening?"):
+  let resolvedPersonalReferent: string | null = null;
+  let isEllipticalPersonalFollowUp = false;
+  if (options.recentTurns && isEllipticalTemporalOrSocialFollowUp(text)) {
+    const priorOperatorTurn = [...options.recentTurns].reverse().find(t => t.speaker === "operator");
+    if (
+      priorOperatorTurn &&
+      (isPersonalQuestionAboutClaire(priorOperatorTurn.text) || Boolean(detectRequestedClaireTopic(priorOperatorTurn.text)))
+    ) {
+      resolvedPersonalReferent = priorOperatorTurn.text;
+      isEllipticalPersonalFollowUp = true;
+    }
+  }
+
   const personalProbe =
-    isPersonalQuestionAboutClaire(text) || Boolean(detectRequestedClaireTopic(text));
+    isPersonalQuestionAboutClaire(text) ||
+    Boolean(detectRequestedClaireTopic(text)) ||
+    isEllipticalPersonalFollowUp;
   const businessSubstance =
     cardinality != null ||
     listRequest ||
@@ -528,6 +556,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   // A pure presence check is not a question. A later challenge in the same turn still is.
   const hasBusinessQuestion =
     !acknowledgement &&
+    !isEllipticalPersonalFollowUp &&
     !(conversationControl && !besideControl && !correctnessChallenge && !provenanceQuestion) &&
     looksLikeQuestion &&
     !(personalProbe && !businessSubstance);
@@ -587,5 +616,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     correctnessChallenge,
     provenanceQuestion,
     conversationControl,
+    referent: resolvedPersonalReferent,
+    isEllipticalPersonalFollowUp,
   };
 }

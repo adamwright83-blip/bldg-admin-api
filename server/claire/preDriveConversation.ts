@@ -41,6 +41,8 @@ import { deriveMomentStance, momentStanceGuidance, type MomentSignals } from "./
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
 import type { ProgressionStore } from "./progression/store";
 import type { PersonalTurnResult } from "./progression/personalReveal";
+import type { RapportBand, PersonalAccessRung } from "./progression/policy";
+import { validateClaireCharacterContract } from "./character/characterContractValidator";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
@@ -319,9 +321,13 @@ export async function answerClairePreDriveFollowUp(
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
   const progressionOn = isClaireProgressionEnabled(input.tenantId);
   // Flag OFF reproduces the pre-feature routing exactly; ON adds the fail-closed personal classifier.
-  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn);
+  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
   const requestedTopic = detectRequestedClaireTopic(input.utterance, progressionOn);
   const inventory = buildClaireVerifiedFactInventory(input.context);
+  const businessOpen =
+    input.context.blockers.length > 0 ||
+    Boolean(input.context.nextFixedCommitment) ||
+    (input.context.runtime?.workItems?.length ?? 0) > 0;
   // Personal questions never reach the general prompt. The server decides what may
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
@@ -334,10 +340,6 @@ export async function answerClairePreDriveFollowUp(
       // Unresolved identity fails closed: no progression state, no disclosure.
       return selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
     }
-    const businessOpen =
-      input.context.blockers.length > 0 ||
-      Boolean(input.context.nextFixedCommitment) ||
-      (input.context.runtime?.workItems?.length ?? 0) > 0;
     return answerPersonalFollowUp(
       {
         tenantId: input.tenantId,
@@ -369,6 +371,8 @@ export async function answerClairePreDriveFollowUp(
           : conversationalMode === "post_action_review"
             ? "post_action_review"
             : "pre_drive",
+    unresolvedBusiness: businessOpen,
+    progressionStore: dependencies.progressionStore,
   });
   let stopReason: string | null = null;
   let modelServed: string | null = null;
@@ -611,6 +615,20 @@ export async function answerClairePreDriveFollowUp(
         console.warn("[Claire] general answer leaked assistant ontology; replaced with authored decline");
         answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
         guardReason = "ontology_guard";
+      }
+    }
+
+    if (guardReason === null) {
+      const contract = validateClaireCharacterContract({
+        text: answer,
+        rapportBand: (compiled.rapportBand ?? 0) as RapportBand,
+        personalRung: (compiled.disclosureTier ?? 0) as PersonalAccessRung,
+        mode: compiled.mode,
+        unresolvedBusiness: businessOpen,
+      });
+      if (!contract.ok && contract.sanitizedText) {
+        console.warn("[Claire] general answer violated character contract; sanitized", contract.reason);
+        answer = contract.sanitizedText;
       }
     }
 

@@ -1,4 +1,5 @@
 import { CLAIRE_FIELD_MODE_OVERRIDE } from "./personalityLock";
+import type { RapportBand } from "../progression/policy";
 import type {
   CanonFragment,
   CharacterDefinition,
@@ -131,7 +132,12 @@ const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
   failure_review: { objective: "Own what went wrong and set the correction.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
   success_review: { objective: "Acknowledge the win without gushing, then move on.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
   strategy: { objective: "Reason through an approach with the operator.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
-  casual: { objective: "Ordinary conversational check-in.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
+  casual: {
+    objective:
+      "Acknowledge casual or social remarks very briefly without extending unnecessary small talk, naturally returning to your operational role.",
+    lengthGuidance: "One or two short sentences total. Acknowledge and return to your operational role.",
+    fieldOverride: false,
+  },
   personal: {
     objective: "Answer a directly asked personal question from eligible canon only.",
     lengthGuidance: CONCISE_BUT_FULL,
@@ -215,5 +221,54 @@ export const CLAIRE_CHARACTER_DEFINITION: CharacterDefinition = {
   },
   modes: MODE_POLICY,
 };
+
+export function getClaireModePolicy(
+  mode: ClaireMode,
+  options?: {
+    rapportBand?: RapportBand;
+    unresolvedBusiness?: boolean;
+  }
+): ClaireModePolicy {
+  const base = MODE_POLICY[mode];
+  if (mode !== "casual") return base;
+
+  const band = options?.rapportBand ?? 0;
+  const unresolved = options?.unresolvedBusiness === true;
+
+  if (band === 0) {
+    return {
+      objective: unresolved
+        ? "Acknowledge casual or social remarks very briefly (half a sentence to one short sentence). Do not ask open-ended social follow-up questions or prolong small talk. Pivot directly back to the open operational business."
+        : "Acknowledge casual or social remarks very briefly (half a sentence to one short sentence). Do not ask open-ended social follow-up questions or prolong small talk. Naturally return to your operational role.",
+      lengthGuidance: "One or two short sentences total. Acknowledge and return to your operational role.",
+      fieldOverride: false,
+    };
+  }
+
+  if (band === 1) {
+    return {
+      objective:
+        "Respond with slight informality or dry amusement. Acknowledge casual remarks directly without extending open-ended social interrogatives, keeping focus on the operational partnership.",
+      lengthGuidance: CONCISE_BUT_FULL,
+      fieldOverride: false,
+    };
+  }
+
+  if (band === 2) {
+    return {
+      objective:
+        "Comfortable casual exchange with dry asides, gentle teasing, or callbacks to shared experiences. Warm without being gushy.",
+      lengthGuidance: CONCISE_BUT_FULL,
+      fieldOverride: false,
+    };
+  }
+
+  return {
+    objective:
+      "Relaxed banter, familiar humor, and comfortable conversational give-and-take. Direct and authentic without generic AI companion enthusiasm.",
+    lengthGuidance: CONCISE_BUT_FULL,
+    fieldOverride: false,
+  };
+}
 
 export { CLAIRE_FIELD_MODE_OVERRIDE };
