@@ -45,6 +45,10 @@ import type { RapportBand, PersonalAccessRung } from "./progression/policy";
 import { validateClaireCharacterContract } from "./character/characterContractValidator";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
+  claireIdentityClaimViolation,
+  formatClaireIdentityAuthority,
+} from "./identityTruth";
+import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
   MISSION_SALES_BRIEF_INSTRUCTION,
   NO_EVIDENCE_INSTRUCTION,
@@ -204,6 +208,7 @@ function compactConversationContext(context: ClaireDriveContext): string {
   const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   return JSON.stringify({
     businessDate: context.businessDate,
+    identityTruth: context.identityTruth,
     clock: context.clock,
     macroGoalKnown: context.macroGoalKnown,
     macroGoal: context.macroGoal,
@@ -251,6 +256,7 @@ export async function answerClairePreDriveFollowUp(
       dayLineDisposition: string;
       priorClaim: string;
       weeklyDisposition: string;
+      identityTopic?: string;
       broadBriefingRequest: boolean;
       canonicalWork: string | null;
       referent: string | null;
@@ -407,6 +413,7 @@ export async function answerClairePreDriveFollowUp(
           : null,
       },
       { label: "fact_inventory", text: inventory.toPromptSection() },
+      { label: "identity_authority", text: formatClaireIdentityAuthority(input.context.identityTruth) },
       { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
       { label: "capability_briefing", text: formatCapabilityBriefing() },
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
@@ -520,6 +527,13 @@ export async function answerClairePreDriveFollowUp(
     const trimmed = trimToSentenceBoundary(text, FOLLOW_UP_TRIM_CHARS);
     const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
+    const identityViolation = claireIdentityClaimViolation(
+      trimmed,
+      input.context.identityTruth
+    );
+    if (identityViolation) {
+      throw new Error(`Claire identity truth contradiction: ${identityViolation}`);
+    }
 
     // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
     let answer = trimmed;
