@@ -116,6 +116,10 @@ import {
   type ClaireRookContactResidueContext,
 } from "../rookContactResidueContext";
 import type { NarrativePresentationPlan } from "../../narratorOs/presentationPlan";
+import {
+  claireIdentityEvidenceSources,
+  renderClaireIdentityAnswer,
+} from "../identityTruth";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -857,6 +861,31 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   const conversationTarget: ClaireBrainV3Target = brainV3.target;
+
+  /**
+   * Authority-0/1 identity is not a generative business answer. Brain V3 owns
+   * the semantic decision that this turn is about identity; the server then
+   * renders the authoritative answer without asking the language model to
+   * remember or infer names.
+   */
+  const identityTopic = brainV3.identityTopic ?? "none";
+  if (identityTopic !== "none") {
+    const identityAnswer = renderClaireIdentityAnswer(
+      identityTopic,
+      input.context?.identityTruth
+    );
+    if (identityAnswer) {
+      readerReceipt(
+        "identity_truth",
+        `identity:${identityTopic}`,
+        "deterministic",
+        claireIdentityEvidenceSources(identityTopic, input.context?.identityTruth),
+        identityAnswer
+      );
+      mark("identity_truth");
+      return finish({ speak: identityAnswer, kind: "answered" });
+    }
+  }
 
   if (
     input.surface === "voice" &&
@@ -1854,6 +1883,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         dayLineDisposition: brainV3.dayLineDisposition,
         priorClaim: brainV3.priorClaim,
         weeklyDisposition: brainV3.weeklyDisposition,
+        identityTopic: brainV3.identityTopic ?? "none",
         broadBriefingRequest: brainV3.broadBriefingRequest,
         canonicalWork: brainV3.canonicalWork,
         referent: brainV3.referent,
@@ -2037,6 +2067,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         dayLineDisposition: brainV3.dayLineDisposition,
         priorClaim: brainV3.priorClaim,
         weeklyDisposition: brainV3.weeklyDisposition,
+        identityTopic: brainV3.identityTopic ?? "none",
         broadBriefingRequest: brainV3.broadBriefingRequest,
         canonicalWork: brainV3.canonicalWork,
         referent: brainV3.referent,
