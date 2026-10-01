@@ -22,6 +22,7 @@ describe("Claire identity truth kernel", () => {
   it("rejects a reserved product name presented as the operating business", async () => {
     const truth = await loadClaireIdentityTruth("default");
     expect(claireIdentityClaimViolation("Your business is Goldline Laundry.", truth)).not.toBeNull();
+    expect(claireIdentityClaimViolation("Your business is Seaweed Burgers.", truth)).toBe("unregistered_business_identity_claim");
     expect(claireIdentityClaimViolation("This is Adam with Laundry Butler.", truth)).toBeNull();
   });
 
