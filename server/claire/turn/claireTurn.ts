@@ -66,7 +66,7 @@ import {
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
-import { detectConversationControl, interpretTurn } from "./interpretTurn";
+import { detectConversationControl } from "./interpretTurn";
 import {
   interpretClaireBrainV3,
   safeClaireBrainV3Fallback,
@@ -798,12 +798,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
 
-  /**
-   * THE authoritative interpretation of this turn. Produced once, here, before any route that can
-   * mutate, terminate, select truth, or consult pending state. Everything downstream consumes it;
-   * nothing downstream re-decides what Adam meant.
-   */
-  const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
 
   /**
@@ -1077,7 +1071,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     conversationTarget === "open_conversation" &&
     !state.proactiveMorning &&
     (brainV3.act === "question" || brainV3.act === "advice_request") &&
-    interpreted.broadBriefingRequest
+    brainV3.broadBriefingRequest
   ) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
@@ -1273,7 +1267,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const explicitPendingCommit =
       explicitPendingDayLineCommit(utterance) ||
       (pendingHasStructuredRecoveryRefs &&
-        interpreted.hasExplicitActionRequest &&
+        (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit") &&
         referencesStructuredRecoveryGroup(utterance));
     const bindsPending =
       (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
@@ -1994,6 +1988,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         dayLineDisposition: brainV3.dayLineDisposition,
         priorClaim: brainV3.priorClaim,
         weeklyDisposition: brainV3.weeklyDisposition,
+        broadBriefingRequest: brainV3.broadBriefingRequest,
         canonicalWork: brainV3.canonicalWork,
         referent: brainV3.referent,
       },
