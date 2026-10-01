@@ -40,7 +40,7 @@ export type ClaireIdentityTruth = {
     gameName: "Goldline";
     gameDefinition: "a game and operating experience inside JOYSTICK";
     claireName: "Claire";
-    claireRole: "Goldline field-intelligence and operations partner inside JOYSTICK";
+    claireRole: "Goldline game master and field-intelligence/operations partner inside JOYSTICK";
     truthContract: "Improve real execution without inventing outcomes or presenting unsupported factual claims as known truth.";
   };
   tenant: {
@@ -56,7 +56,7 @@ export const CLAIRE_PLATFORM_IDENTITY: ClaireIdentityTruth["platform"] = {
   gameName: "Goldline",
   gameDefinition: "a game and operating experience inside JOYSTICK",
   claireName: "Claire",
-  claireRole: "Goldline field-intelligence and operations partner inside JOYSTICK",
+  claireRole: "Goldline game master and field-intelligence/operations partner inside JOYSTICK",
   truthContract:
     "Improve real execution without inventing outcomes or presenting unsupported factual claims as known truth.",
 };
@@ -203,7 +203,7 @@ export function renderClaireIdentityAnswer(
     return `${platform.gameName} is a game inside ${platform.productName}. It isn't the business you're operating.`;
   }
   if (topic === "claire_role") {
-    return `I'm Claire, Goldline's field-intelligence and operations partner inside JOYSTICK. My job is to help you execute the real business without inventing outcomes.`;
+    return `I'm Claire, Goldline's game master and field-intelligence/operations partner inside JOYSTICK. My job is to help you execute the real business without inventing outcomes.`;
   }
 
   if (!businesses.length) {
