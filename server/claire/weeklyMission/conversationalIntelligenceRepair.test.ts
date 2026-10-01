@@ -26,6 +26,55 @@ const TUESDAY = "2026-09-29";
 const NOW = new Date("2026-09-29T16:00:00Z");
 const TIMEZONE = "America/Los_Angeles";
 
+const brainV3Shape = (partial: Record<string, unknown> = {}) => ({
+  target: "open_conversation" as const,
+  act: "narration" as const,
+  workDisposition: "none" as const,
+  dayLineDisposition: "none" as const,
+  priorClaim: "none" as const,
+  weeklyDisposition: "none" as const,
+  canonicalWork: null,
+  referent: null,
+  rationale: "test semantic interpretation",
+  ...partial,
+});
+
+const testBrainV3 = vi.fn(async (input: any) => {
+  const text = String(input.utterance ?? "").trim();
+  const lower = text.toLowerCase();
+  const lastClaire = [...(input.recentTurns ?? [])].reverse().find((turn: any) => turn.speaker === "claire")?.text ?? "";
+
+  if (input.pending?.briefing && /^(?:yes|yeah|yep|sure)[.!]?$/i.test(text) && /day line/i.test(lastClaire)) {
+    return brainV3Shape({
+      target: "pending_briefing",
+      act: "confirmation",
+      dayLineDisposition: "accept",
+      rationale: "confirmation binds to the immediate Day Line proposal",
+    });
+  }
+  if (/\b(?:put|add)\b[\s\S]*\bday\s*line\b/i.test(text)) {
+    return brainV3Shape({
+      act: "action_request",
+      workDisposition: "commit",
+      dayLineDisposition: "reopen",
+      canonicalWork: text,
+    });
+  }
+  if (/\b(?:do the whole group|batch them|batch the whole group|do the whole group)\b/i.test(lower)) {
+    return brainV3Shape({
+      act: "action_request",
+      workDisposition: "propose",
+      canonicalWork: text,
+    });
+  }
+  if (/^what should i do today\??$/i.test(text)) {
+    return brainV3Shape({ act: "advice_request" });
+  }
+  if (/\?$/.test(text)) return brainV3Shape({ act: "question" });
+  if (/^(?:yeah|yes|yep|sure)[.!]?$/i.test(text)) return brainV3Shape({ act: "acknowledgement" });
+  return brainV3Shape();
+});
+
 const RECOVERY_CUSTOMERS = [
   ["cust_1", "Sarah Connor"],
   ["cust_2", "John Miller"],
@@ -214,10 +263,7 @@ describe("Claire conversational-intelligence repair", () => {
       classifyPriorClaim: (async () => false) as never,
       rerunBusinessQuery: vi.fn() as never,
       classifierBudgetMs: 30,
-      conversationDirector: vi.fn(async () => ({
-        target: "open_conversation" as const,
-        rationale: "test default",
-      })),
+      brainV3: testBrainV3 as never,
       ...extra,
     });
 
@@ -549,18 +595,20 @@ describe("Claire conversational-intelligence repair", () => {
       },
     ];
 
-    const director = vi.fn(async (input: any) => {
+    const brain = vi.fn(async (input: any) => {
       expect(input.pending.briefing).toBe(true);
       expect(input.recentTurns.at(-1)?.text).toMatch(/Day Line/i);
-      return {
-        target: "pending_briefing" as const,
+      return brainV3Shape({
+        target: "pending_briefing",
+        act: "confirmation",
+        dayLineDisposition: "accept",
         rationale: "Yes answers the immediately preceding Day Line proposal.",
-      };
+      });
     });
 
-    const result = await fixture.say("Yes.", { conversationDirector: director });
+    const result = await fixture.say("Yes.", { brainV3: brain as never });
 
-    expect(director).toHaveBeenCalledOnce();
+    expect(brain).toHaveBeenCalledOnce();
     expect(fixture.commitMock).toHaveBeenCalledTimes(1);
     expect(result.receiptBackedCommit).toMatch(/Done\./i);
     expect(result.receiptBackedCommit).not.toMatch(/Tuesday:|Wednesday:|Thursday:|Friday:/i);
@@ -612,10 +660,13 @@ describe("Claire conversational-intelligence repair", () => {
     ];
 
     await fixture.say("Yeah.", {
-      conversationDirector: vi.fn(async () => ({
-        target: "open_conversation" as const,
-        rationale: "The current reply belongs to the new conversation, not old held work.",
-      })),
+      brainV3: vi.fn(async () =>
+        brainV3Shape({
+          target: "open_conversation",
+          act: "acknowledgement",
+          rationale: "The current reply belongs to the new conversation, not old held work.",
+        })
+      ) as never,
     });
 
     expect(fixture.commitMock).not.toHaveBeenCalled();
@@ -627,6 +678,116 @@ describe("Claire conversational-intelligence repair", () => {
       weekStart: WEEK_START,
     });
     expect(weeklyAfter?.phase).toBe("proposal");
+  });
+
+  it("keeps Day Line suppressed after the operator explicitly says not to discuss it", async () => {
+    const fixture = createTestFixture();
+
+    const declineBrain = vi.fn(async () =>
+      brainV3Shape({
+        target: "open_conversation",
+        act: "rejection",
+        dayLineDisposition: "decline",
+        rationale: "Operator explicitly does not want Day Line in this conversation.",
+      })
+    );
+    const declined = await fixture.say("Well, I don't wanna talk about the day line. It's already 7PM.", {
+      brainV3: declineBrain as never,
+    });
+    expect(fixture.state.dayLineSuppressed).toBe(true);
+    expect(declined.speak).not.toMatch(/want me to put|day line now|say yes/i);
+
+    const narration = await fixture.say(
+      "On Friday, I don't have any pickups or drop offs so far, but same-day orders can still happen.",
+      {
+        brainV3: vi.fn(async () =>
+          brainV3Shape({
+            target: "open_conversation",
+            act: "narration",
+            workDisposition: "none",
+            rationale: "Context about Friday capacity, not a tracking request.",
+          })
+        ) as never,
+      }
+    );
+    expect(fixture.state.pendingBriefing ?? null).toBeNull();
+    expect(narration.speak).not.toMatch(/want me to put|day line/i);
+  });
+
+  it("does not enter prior-claim verification when the operator is complaining about verification", async () => {
+    const fixture = createTestFixture();
+    fixture.state.claimReceipts = [
+      {
+        id: "claim_1",
+        conversationKey: "call:prod-repair",
+        claireTurnOrdinal: 1,
+        createdAt: NOW.getTime(),
+        answerText: "The Louise is overdue.",
+        answerPath: "business_reader",
+        claimType: "account_status",
+        grounding: "retrieved",
+        sources: ["ledger"],
+        assertsFact: true,
+        recheck: { kind: "none" },
+      } as any,
+    ];
+
+    for (const utterance of [
+      "No one asked you to verify a property. You already said that earlier.",
+      "So",
+      "You just say you can't verify the property when nobody is asking you to verify the property.",
+      "It's already 7PM, Claire.",
+    ]) {
+      const result = await fixture.say(utterance, {
+        brainV3: vi.fn(async () =>
+          brainV3Shape({
+            target: "open_conversation",
+            act: utterance === "So" ? "unclear" : "correction",
+            priorClaim: "none",
+            rationale: "This is conversation about Claire's behavior, not a factual challenge.",
+          })
+        ) as never,
+      });
+      expect(result.speak).not.toMatch(/can't verify that properly right now/i);
+      expect(result.priorClaimRan).toBe(false);
+    }
+  });
+
+  it("commits the referenced Friday route instead of literalizing 'I can commit to that'", async () => {
+    const fixture = createTestFixture();
+    fixture.state.dayLineSuppressed = true;
+    fixture.state.history = [
+      {
+        speaker: "claire",
+        text: "Want me to schedule Friday as a field day with Argyle House, Jardine Hollywood, and sageLA as the stops?",
+        at: NOW.getTime() - 1_000,
+      },
+    ];
+
+    const result = await fixture.say("I can commit to that.", {
+      brainV3: vi.fn(async () =>
+        brainV3Shape({
+          target: "open_conversation",
+          act: "confirmation",
+          workDisposition: "commit",
+          dayLineDisposition: "reopen",
+          canonicalWork:
+            "Visit Argyle House on Friday. Visit Jardine Hollywood on Friday. Visit sageLA on Friday.",
+          referent: "the three-stop Friday field mission",
+          rationale: "The confirmation resolves to the concrete route Claire just proposed.",
+        })
+      ) as never,
+    });
+
+    expect(fixture.state.dayLineSuppressed).toBe(false);
+    expect(fixture.commitMock).toHaveBeenCalledTimes(1);
+    expect(result.receiptBackedCommit).toMatch(/Done\./i);
+    expect(fixture.committedItems.map((item: any) => item.title).join(" | ")).toMatch(
+      /Argyle House|Jardine Hollywood|sageLA/i
+    );
+    expect(fixture.committedItems.map((item: any) => item.title).join(" | ")).not.toMatch(
+      /mentally prepare|commit to that/i
+    );
   });
 
   it("weekly session lifetime is bounded to its target week", () => {
