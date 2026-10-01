@@ -7,6 +7,38 @@ let clientPromise: Promise<PostHog | null> | null = null;
 let identifiedOpenId: string | null = null;
 let identityGeneration = 0;
 
+type RuntimePosthogConfig = {
+  enabled?: boolean;
+  key?: string | null;
+  host?: string | null;
+};
+
+async function resolvePosthogConfig(): Promise<{ key: string; host: string } | null> {
+  const buildKey = import.meta.env.VITE_POSTHOG_KEY?.trim();
+  const buildHost =
+    import.meta.env.VITE_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+  if (buildKey) return { key: buildKey, host: buildHost };
+
+  try {
+    const response = await fetch("/api/analytics-config", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const config = (await response.json()) as RuntimePosthogConfig;
+    const key = config.key?.trim() || "";
+    if (!config.enabled || !key) return null;
+    return {
+      key,
+      host: config.host?.trim() || "https://us.i.posthog.com",
+    };
+  } catch {
+    return null;
+  }
+}
+
 function scrubProperties(properties: Record<string, unknown> | undefined): void {
   if (!properties) return;
   for (const key of Object.keys(properties)) {
@@ -30,9 +62,9 @@ export function initProductAnalytics(): Promise<PostHog | null> {
 async function loadProductAnalytics(): Promise<PostHog | null> {
   if (typeof window === "undefined") return null;
   if (import.meta.env.DEV && import.meta.env.VITE_ADMIN_VISUAL_TEST === "1") return null;
-  const key = import.meta.env.VITE_POSTHOG_KEY?.trim();
-  if (!key) return null;
-  const host = import.meta.env.VITE_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+  const config = await resolvePosthogConfig();
+  if (!config) return null;
+  const { key, host } = config;
   try {
     const { default: posthog } = await import("posthog-js");
     if (!posthog.__loaded) {

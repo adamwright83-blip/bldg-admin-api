@@ -15,6 +15,25 @@ export function posthogHost(): string {
   return host.replace(/\/$/, "");
 }
 
+/**
+ * Public browser config. PostHog project tokens (phc_) are intentionally
+ * public ingestion identifiers; never expose POSTHOG_SECRET_KEY here.
+ * Keeping this server-backed lets the Vite frontend work without a separate
+ * Vercel build-time key and makes Railway the single source of truth.
+ */
+export function posthogBrowserConfig(): {
+  enabled: boolean;
+  key: string | null;
+  host: string;
+} {
+  const token = posthogProjectToken();
+  return {
+    enabled: Boolean(token),
+    key: token || null,
+    host: posthogHost(),
+  };
+}
+
 /** Opt-in. Default sends model, tokens, latency, and ids, not prompt text. */
 export function posthogAiCapturesContent(): boolean {
   return process.env.POSTHOG_AI_CAPTURE_CONTENT === "1";
