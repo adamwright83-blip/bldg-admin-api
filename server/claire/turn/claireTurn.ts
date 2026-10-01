@@ -1020,9 +1020,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     explicitPendingDayLineCommit(utterance) ||
     /\b(batch|put (?:them|it) on (?:the )?day line|add (?:this|them|it) to (?:the )?day line)\b/i.test(utterance);
 
-  const doctrineSpeak = (!isOperationalWorkOrDayLine && deps.doctrineTurn)
-    ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
-    : null;
+  const doctrineSpeak =
+    conversationTarget === "open_conversation" && !isOperationalWorkOrDayLine && deps.doctrineTurn
+      ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
+      : null;
   if (doctrineSpeak) {
     mark("doctrine");
     return finish({ speak: doctrineSpeak, kind: "answered" });
@@ -1034,7 +1035,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * Molina and Mission 6 — an answer about nothing the operator asked. Scope is now a property of
    * the interpretation, not a prefix match.
    */
-  if (!state.proactiveMorning && interpreted.broadBriefingRequest) {
+  if (
+    conversationTarget === "open_conversation" &&
+    !state.proactiveMorning &&
+    interpreted.broadBriefingRequest
+  ) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
       const board = await deps.watchBoard({
@@ -1058,7 +1063,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
   const explicitPriorClaimProbe = interpreted.correctnessChallenge || interpreted.provenanceQuestion;
   const directResolution: ClaimResolution =
-    holdingSomething && !explicitPriorClaimProbe
+    (conversationTarget !== "open_conversation" || holdingSomething) && !explicitPriorClaimProbe
       ? { kind: "none" }
       : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
   const focusedReceipt =
@@ -1081,7 +1086,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  const priorClaimLane = priorClaimLaneOpen(interpreted);
+  const priorClaimLane =
+    (conversationTarget === "open_conversation" || explicitPriorClaimProbe) &&
+    priorClaimLaneOpen(interpreted);
   if (priorClaimLane && resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
@@ -1135,7 +1142,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       });
   }
 
-  if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
+  if (conversationTarget === "open_conversation" && /\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
     const why = await explainProactive(input.tenantId, input.operatorUserId, utterance).catch(() => null);
     if (why) {
       mark("doctrine");
