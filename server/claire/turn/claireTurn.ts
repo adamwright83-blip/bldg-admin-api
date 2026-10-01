@@ -1044,10 +1044,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   const isOperationalWorkOrDayLine =
-    explicitTrackingRequest(utterance) ||
-    refersToPriorWork(utterance) ||
-    explicitPendingDayLineCommit(utterance) ||
-    /\b(batch|put (?:them|it) on (?:the )?day line|add (?:this|them|it) to (?:the )?day line)\b/i.test(utterance);
+    brainV3.workDisposition === "propose" ||
+    brainV3.workDisposition === "commit" ||
+    brainV3.dayLineDisposition !== "none";
 
   const doctrineSpeak =
     conversationTarget === "open_conversation" &&
@@ -1213,9 +1212,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
   if (state.pendingAccountFollowUp && conversationTarget === "pending_account_follow_up") {
-    const reply = replyDecision(utterance);
+    const pendingDecision =
+      brainV3.act === "confirmation" || brainV3.workDisposition === "commit"
+        ? "yes"
+        : brainV3.act === "rejection"
+          ? "no"
+          : "other";
     const pending = state.pendingAccountFollowUp;
-    if (reply.decision === "yes") {
+    if (pendingDecision === "yes") {
       state.pendingAccountFollowUp = null;
       const commit = await deps.commitFollowUp(pending, {
         tenantId: input.tenantId,
@@ -1247,7 +1251,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         kind: "follow_up_saved",
       });
     }
-    if (reply.decision === "no") {
+    if (pendingDecision === "no") {
       state.pendingAccountFollowUp = null;
       mark("account_follow_up");
       return finish({ speak: "Okay, I won't change it.", kind: "answered" });
@@ -1257,7 +1261,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
-    const reply = replyDecision(utterance);
+    const reply: ReplyDecision =
+      brainV3.act === "confirmation" ||
+      brainV3.dayLineDisposition === "accept" ||
+      brainV3.dayLineDisposition === "reopen"
+        ? { decision: "yes", remainder: "" }
+        : brainV3.act === "rejection" || brainV3.dayLineDisposition === "decline"
+          ? { decision: "no", remainder: "" }
+          : { decision: "other", remainder: utterance };
     const ownsPendingBriefing = conversationTarget === "pending_briefing";
     const pendingHasStructuredRecoveryRefs = state.pendingBriefing.parsed.items.some(item =>
       item.references?.some(
@@ -1265,15 +1276,18 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       )
     );
     const explicitPendingCommit =
-      explicitPendingDayLineCommit(utterance) ||
+      brainV3.workDisposition === "commit" ||
+      brainV3.dayLineDisposition === "accept" ||
+      brainV3.dayLineDisposition === "reopen" ||
       (pendingHasStructuredRecoveryRefs &&
         (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit") &&
         referencesStructuredRecoveryGroup(utterance));
     const bindsPending =
       (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
-      explicitDayLineRefusal(utterance) ||
+      brainV3.dayLineDisposition === "decline" ||
       explicitPendingCommit;
-    const looksLikeRevision = /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(utterance);
+    const looksLikeRevision =
+      ownsPendingBriefing && brainV3.act === "correction";
     const newMatter =
       !bindsPending &&
       !looksLikeRevision &&
@@ -1282,13 +1296,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         brainV3.act === "conversation_control" ||
         brainV3.priorClaim !== "none");
     const revisionText =
-      ownsPendingBriefing &&
-      reply.decision === "yes" &&
-      /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
-        ? reply.remainder
-        : ownsPendingBriefing && reply.decision === "other" && !explicitPendingCommit
-          ? utterance
-          : null;
+      ownsPendingBriefing && brainV3.act === "correction" && !explicitPendingCommit
+        ? brainV3.canonicalWork ?? utterance
+        : null;
     if (revisionText) {
       const revision = reviseBriefing(state.pendingBriefing.parsed, revisionText, clock);
       if (revision.changes.length) {
@@ -1343,7 +1353,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mutationReceipts: receipts,
       });
     }
-    if ((ownsPendingBriefing && reply.decision === "no") || explicitDayLineRefusal(utterance)) {
+    if (
+      (ownsPendingBriefing && reply.decision === "no") ||
+      brainV3.dayLineDisposition === "decline"
+    ) {
       state.pendingBriefing = null;
       mark("briefing");
       const remainder = reply.decision === "no" ? reply.remainder : "";
@@ -1385,9 +1398,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       state.pendingDayLineChoice ||
       state.clarifyingUtterance)
   ) {
-    const pendingReply = replyDecision(utterance);
+    const pendingDecision =
+      brainV3.act === "confirmation"
+        ? "yes"
+        : brainV3.act === "rejection"
+          ? "no"
+          : "other";
     const pendingIsNew =
-      pendingReply.decision === "other" &&
+      pendingDecision === "other" &&
       (brainV3.workDisposition === "propose" ||
         brainV3.workDisposition === "commit" ||
         brainV3.act === "conversation_control" ||
@@ -1397,14 +1415,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       state.pendingUpdate = null;
       state.clarifyingUtterance = null;
       state.pendingDayLineChoice = null;
-    } else if ((isShortReply(utterance) && !looksLikeQuestion(utterance)) || pendingReply.decision !== "other") {
+    } else if (pendingDecision !== "other") {
       commitmentTried = true;
       const turn = await deps.commitment(
         {
           tenantId: input.tenantId,
           actorId: input.dayDirectorActorId,
           businessDate: today,
-          utterance,
+          utterance: pendingDecision,
           state,
           conversationId: input.conversationKey,
         },
@@ -1749,11 +1767,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (state.pendingBriefing && !summary.asksConfirmation) speak = `${speak} Want me to put all of it on the Day Line?`;
     mark("briefing");
     return finish({ speak, kind: "briefing_proposed" });
-  }
-
-  if (!businessQuestion && !singleFlow && parsed.items.length === 1 && !looksLikeWorkRequest(utterance) && parsed.questions.length === 0) {
-    // A single new piece of work goes through the established proposal loop
-    // (campaign-aware new-vs-existing classification, NEEDS_DETAILS handling).
   }
 
   // ── 5. Established single-intent work flows ───────────────────────────────
