@@ -249,6 +249,7 @@ export async function answerClairePreDriveFollowUp(
       dayLineDisposition: string;
       priorClaim: string;
       weeklyDisposition: string;
+      broadBriefingRequest: boolean;
       canonicalWork: string | null;
       referent: string | null;
     };
