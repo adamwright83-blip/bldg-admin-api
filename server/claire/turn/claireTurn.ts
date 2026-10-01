@@ -864,12 +864,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.weeklyPlanningWeekStart &&
     conversationTarget === "weekly_planning"
   ) {
-    const affirmative = /^(?:yes|yeah|yep|sure|ok(?:ay)?|now|do it now|let'?s do it(?: now)?)\b/i.test(
-      utterance.trim()
-    );
-    const negative = /^(?:no|nope|not now|forget it|cancel)\b/i.test(
-      utterance.trim()
-    );
+    const affirmative =
+      brainV3.act === "confirmation" && brainV3.weeklyDisposition === "continue";
+    const negative =
+      brainV3.act === "rejection" || brainV3.weeklyDisposition === "cancel";
 
     if (state.pendingWeeklyPlanningCallback) {
       if (affirmative && deps.scheduleWeeklyCallback) {
@@ -999,7 +997,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.weeklyPlanningWeekStart = null;
   }
   const weekly =
-    conversationTarget === "weekly_planning"
+    conversationTarget === "weekly_planning" && brainV3.weeklyDisposition !== "none"
       ? await routeActiveWeeklySession({
           tenantId: input.tenantId,
           operatorId: input.operatorUserId,
