@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { captureClientException } from "@/lib/posthog";
 import { customerFatalNotice, createFatalCorrelationId } from "@shared/clientFatal";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import React, { ReactNode } from "react";
@@ -27,6 +28,7 @@ class ErrorBoundary extends React.Component<Props, State> {
     const correlationId = createFatalCorrelationId();
     this.setState({ correlationId });
     reportClientFatal(error, correlationId);
+    captureClientException(error, { correlation_id: correlationId });
   }
 
   render() {

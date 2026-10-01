@@ -8,6 +8,8 @@ import {
   assertAiSpendAvailable,
   trackModelUsage,
 } from "../agents/costTracking";
+import { logAnthropicProviderFailure, recordAnthropicGeneration } from "./posthogAi";
+import { posthogAiCapturesContent } from "./posthogServer";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -362,6 +364,76 @@ export function toAnthropicCallerError(err: unknown): Error {
   return new Error(String(err));
 }
 
+function captureInput(
+  system: string | undefined,
+  messages: Anthropic.MessageParam[]
+): unknown[] | undefined {
+  if (!posthogAiCapturesContent()) return undefined;
+  const input: Array<{ role: string; content: string }> = [];
+  if (system) input.push({ role: "system", content: system });
+  for (const message of messages) {
+    input.push({
+      role: message.role,
+      content:
+        typeof message.content === "string" ? message.content : "[non-text content omitted]",
+    });
+  }
+  return input;
+}
+
+/** Fire-and-forget. Does not add fields to the Anthropic request. */
+function observeAnthropicCall(input: {
+  tenantId: string;
+  requestedModel: string;
+  startedAt: number;
+  streamed: boolean;
+  temperature?: number;
+  maxTokens: number;
+  firstTokenAt?: number;
+  response?: {
+    id: string;
+    model: string;
+    stop_reason: string | null;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
+  error?: unknown;
+  inputMessages?: unknown;
+  outputText?: string;
+}): void {
+  const captureContent = posthogAiCapturesContent();
+  void recordAnthropicGeneration({
+    tenantId: input.tenantId,
+    requestedModel: input.requestedModel,
+    servedModel: input.response?.model,
+    latencySeconds: Math.max(0, (Date.now() - input.startedAt) / 1000),
+    timeToFirstTokenSeconds:
+      input.firstTokenAt === undefined
+        ? undefined
+        : Math.max(0, (input.firstTokenAt - input.startedAt) / 1000),
+    inputTokens: input.response?.usage?.input_tokens,
+    outputTokens: input.response?.usage?.output_tokens,
+    stopReason: input.response?.stop_reason,
+    completionId: input.response?.id,
+    streamed: input.streamed,
+    temperature: input.temperature,
+    maxTokens: input.maxTokens,
+    input: captureContent ? input.inputMessages : undefined,
+    output:
+      captureContent && input.outputText !== undefined
+        ? [{ role: "assistant", content: input.outputText }]
+        : undefined,
+    error: input.error,
+  }).catch(() => undefined);
+  if (input.error) {
+    const message = input.error instanceof Error ? input.error.message : String(input.error);
+    logAnthropicProviderFailure({
+      tenantId: input.tenantId,
+      requestedModel: input.requestedModel,
+      message,
+    });
+  }
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertAnthropicApiKey();
   const tenantId = params.tenantId ?? "default";
@@ -427,14 +499,18 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     params.maxTokens ?? params.max_tokens ?? 8192,
     8192
   );
+  const startedAt = Date.now();
+  const temperatureSent = params.omitTemperature ? undefined : (params.temperature ?? 0);
+  const system = systemParts.length ? systemParts.join("\n\n") : undefined;
 
+  let response: Anthropic.Message;
   try {
-    const response = await client.messages.create({
+    response = await client.messages.create({
       model,
       max_tokens: maxTokens,
       ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
       ...(params.disableThinking ? { thinking: { type: "disabled" } } : {}),
-      ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+      ...(system ? { system } : {}),
       messages: anthropicMessages,
       tools: [
         {
@@ -450,62 +526,83 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         disable_parallel_tool_use: true,
       },
     });
-
-    const toolBlock = response.content.find(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-    );
-    if (!toolBlock) {
-      const summary = response.content
-        .map(b => (b.type === "text" ? b.text : `[${b.type}]`))
-        .join(" ")
-        .slice(0, 500);
-      throw new Error(
-        `Anthropic returned no tool_use block for structured output. Content preview: ${summary || "(empty)"}`
-      );
-    }
-    if (toolBlock.name !== toolName) {
-      throw new Error(
-        `Anthropic tool mismatch: expected ${toolName}, got ${toolBlock.name}`
-      );
-    }
-
-    const jsonStr = JSON.stringify(toolBlock.input ?? {});
-    if (!jsonStr || jsonStr === "{}") {
-      throw new Error("Anthropic tool returned empty input object.");
-    }
-
-    const result: InvokeResult = {
-      id: response.id,
-      created: Date.now(),
-      model: response.model,
-      choices: [
-        {
-          index: 0,
-          message: { role: "assistant" as const, content: jsonStr },
-          finish_reason: response.stop_reason,
-        },
-      ],
-      usage: response.usage
-        ? {
-            prompt_tokens: response.usage.input_tokens,
-            completion_tokens: response.usage.output_tokens,
-            total_tokens:
-              response.usage.input_tokens + response.usage.output_tokens,
-          }
-        : undefined,
-    };
-    if (result.usage) {
-      await trackModelUsage({
-        tenantId,
-        modelUsed: result.model,
-        inputTokens: result.usage.prompt_tokens,
-        outputTokens: result.usage.completion_tokens,
-      });
-    }
-    return result;
   } catch (e) {
+    observeAnthropicCall({
+      tenantId,
+      requestedModel: model,
+      startedAt,
+      streamed: false,
+      temperature: temperatureSent,
+      maxTokens,
+      error: e,
+      inputMessages: captureInput(system, anthropicMessages),
+    });
     throw toAnthropicCallerError(e);
   }
+
+  const toolBlock = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+  );
+  observeAnthropicCall({
+    tenantId,
+    requestedModel: model,
+    startedAt,
+    streamed: false,
+    temperature: temperatureSent,
+    maxTokens,
+    response,
+    inputMessages: captureInput(system, anthropicMessages),
+    outputText: toolBlock ? JSON.stringify(toolBlock.input ?? {}) : undefined,
+  });
+  if (!toolBlock) {
+    const summary = response.content
+      .map(b => (b.type === "text" ? b.text : `[${b.type}]`))
+      .join(" ")
+      .slice(0, 500);
+    throw new Error(
+      `Anthropic returned no tool_use block for structured output. Content preview: ${summary || "(empty)"}`
+    );
+  }
+  if (toolBlock.name !== toolName) {
+    throw new Error(
+      `Anthropic tool mismatch: expected ${toolName}, got ${toolBlock.name}`
+    );
+  }
+
+  const jsonStr = JSON.stringify(toolBlock.input ?? {});
+  if (!jsonStr || jsonStr === "{}") {
+    throw new Error("Anthropic tool returned empty input object.");
+  }
+
+  const result: InvokeResult = {
+    id: response.id,
+    created: Date.now(),
+    model: response.model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant" as const, content: jsonStr },
+        finish_reason: response.stop_reason,
+      },
+    ],
+    usage: response.usage
+      ? {
+          prompt_tokens: response.usage.input_tokens,
+          completion_tokens: response.usage.output_tokens,
+          total_tokens:
+            response.usage.input_tokens + response.usage.output_tokens,
+        }
+      : undefined,
+  };
+  if (result.usage) {
+    await trackModelUsage({
+      tenantId,
+      modelUsed: result.model,
+      inputTokens: result.usage.prompt_tokens,
+      outputTokens: result.usage.completion_tokens,
+    });
+  }
+  return result;
 }
 
 type TextMessageRequest = {
@@ -580,17 +677,43 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     }
 
     const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+    const requestedModel = params.model ?? ENV.anthropicModel;
+    const maxTokens = Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192);
+    const temperatureSent = params.omitTemperature ? undefined : (params.temperature ?? 0);
+    const system = systemParts.length ? systemParts.join("\n\n") : undefined;
     const request = {
-      model: params.model ?? ENV.anthropicModel,
-      max_tokens: Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192),
+      model: requestedModel,
+      max_tokens: maxTokens,
       ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
       ...(params.disableThinking ? { thinking: { type: "disabled" } as const } : {}),
-      ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+      ...(system ? { system } : {}),
       messages: anthropicMessages,
     };
-    const response = params.onFirstToken
-      ? await completeTextMessageStream(client, request, params.onFirstToken)
-      : await client.messages.create(request);
+    const streamed = Boolean(params.onFirstToken);
+    const startedAt = Date.now();
+    let firstTokenAt: number | undefined;
+    let response: Anthropic.Message;
+    try {
+      response = streamed
+        ? await completeTextMessageStream(client, request, () => {
+            if (firstTokenAt === undefined) firstTokenAt = Date.now();
+            params.onFirstToken?.();
+          })
+        : await client.messages.create(request);
+    } catch (error) {
+      observeAnthropicCall({
+        tenantId,
+        requestedModel,
+        startedAt,
+        streamed,
+        temperature: temperatureSent,
+        maxTokens,
+        firstTokenAt,
+        error,
+        inputMessages: captureInput(system, anthropicMessages),
+      });
+      throw error;
+    }
     params.onStopReason?.(response.stop_reason ?? null);
     params.onModelServed?.(response.model ?? null);
     const text = response.content
@@ -598,6 +721,18 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
       .map(block => block.text)
       .join("\n")
       .trim();
+    observeAnthropicCall({
+      tenantId,
+      requestedModel,
+      startedAt,
+      streamed,
+      temperature: temperatureSent,
+      maxTokens,
+      firstTokenAt,
+      response,
+      inputMessages: captureInput(system, anthropicMessages),
+      outputText: text,
+    });
     if (!text) {
       throw new TextLLMInvocationError(
         "provider_failure",
