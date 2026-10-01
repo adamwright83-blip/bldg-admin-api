@@ -977,7 +977,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   brainV3 =
     brainResult ??
     (explicitWeeklyControl
-      ? { ...safeClaireBrainV3Fallback(), target: "weekly_planning", act: "action_request", rationale: "Explicit weekly control while Brain V3 unavailable." }
+      ? {
+          ...safeClaireBrainV3Fallback(),
+          target: "weekly_planning",
+          act: "action_request",
+          weeklyDisposition: "continue",
+          rationale: "Explicit weekly control while Brain V3 unavailable.",
+        }
       : safeClaireBrainV3Fallback());
 
   if (brainV3.dayLineDisposition === "decline") {
@@ -1007,6 +1013,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           now: deps.now(),
           timeZone: deps.timeZone(),
           weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+          authoritativeIntent:
+            brainV3.weeklyDisposition === "lock"
+              ? "weekly_lock"
+              : brainV3.weeklyDisposition === "cancel"
+                ? "weekly_cancel"
+                : "weekly_continue",
         })
       : null;
   if (weekly) {
