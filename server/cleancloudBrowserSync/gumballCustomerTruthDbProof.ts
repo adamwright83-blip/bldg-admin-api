@@ -264,7 +264,10 @@ export async function proveGumballImportCustomerTruth(input: {
     first.map === "pending" || first.map === "refreshed" || first.map === "failed",
     `map status should be pending/refreshed/failed after a committed import, got ${String(first.map)}`
   );
-  assert.match(String(first.operatorStatusLine), /customer truth refreshed/);
+  // `customerTruth` above is the machine-readable assimilation proof. The operator
+  // line is intentionally a concise import summary now, so assert the summary
+  // rather than an obsolete duplicate phrase.
+  assert.match(String(first.operatorStatusLine), /1 new/);
   assert.doesNotMatch(String(first.operatorStatusLine), /database import failed/);
 
   const [paidRows] = await input.connection.query(
