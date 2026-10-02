@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained route literals only; canonical product is JOYSTICK. */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
 import { captureProductEvent } from "@/lib/posthog";
