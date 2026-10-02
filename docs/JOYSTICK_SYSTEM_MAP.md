@@ -46,6 +46,7 @@ Later Kingdoms have no locked place-name. Do not invent one.
 ## 2. Domain definitions
 
 - `product.joystick` — The commercial product customers buy.
+- `seat.president` — Out-of-game JOYSTICK company seat responsible for evidence-backed company/product project selection. It is not part of the customer product loop and cannot execute projects.
 - `surface.admin` — JOYSTICK Admin (desktop/operator).
 - `surface.driver` — JOYSTICK Driver (mobile field/play).
 - `domain.goldline` — Internal playable reality↔fantasy domain. Not the customer-facing product name.
@@ -96,6 +97,7 @@ These loops stay separate.
 | Slug | Meaning |
 |---|---|
 | `product.joystick` | Commercial product customers buy |
+| `seat.president` | Out-of-game JOYSTICK company seat for evidence-backed company/product project selection |
 | `surface.admin` | JOYSTICK Admin |
 | `surface.driver` | JOYSTICK Driver |
 | `domain.goldline` | Internal reality↔fantasy domain |

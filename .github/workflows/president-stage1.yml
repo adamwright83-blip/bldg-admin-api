@@ -1,0 +1,47 @@
+name: President Stage 1 database witness
+on:
+  pull_request:
+    paths:
+      - "server/president/**"
+      - "shared/presidentContracts.ts"
+      - "scripts/president-stage1-witness.ts"
+      - ".github/workflows/president-stage1.yml"
+      - "drizzle/0109_president_stage1.sql"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  president-stage1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3411:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/president
+        env:
+          PRESIDENT_MYSQL_TEST: "1"
+      - run: pnpm president:stage1:witness
+      - uses: actions/upload-artifact@v7
+        with:
+          name: president-stage1-database-witness
+          path: artifacts/president-stage1/database-witness.json
