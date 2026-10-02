@@ -30,11 +30,12 @@ import type {
   MitchExecutionRun,
   MitchWorkOrder,
 } from "../../shared/mitchContracts";
-import {
-  assertValidBuildIdentity,
-  mitchExecutionHandbackSchema,
-} from "../../shared/mitchContracts";
+import { assertValidBuildIdentity, mitchExecutionHandbackSchema } from "../../shared/mitchContracts";
 import type { IMitchProductionStore } from "./mitchStore";
+import {
+  AutonomousRuntimeCodingAgentProvider,
+  type AutonomousRuntimeCodingAgentProviderOptions,
+} from "./autonomousRuntimeCodingAgentProvider";
 
 export class MissingExecutionProviderError extends Error {
   public readonly missingProviderName = "AutonomousRuntimeCodingAgentProvider";
@@ -297,11 +298,10 @@ export type { AutonomousRuntimeCodingAgentProviderOptions } from "./autonomousRu
 
 export function createAutonomousDispatcher(
   store: IMitchProductionStore,
-  providerOptions?: import("./autonomousRuntimeCodingAgentProvider").AutonomousRuntimeCodingAgentProviderOptions
+  providerOptions?: AutonomousRuntimeCodingAgentProviderOptions
 ): MitchGameDispatcher {
   const dispatcher = new MitchGameDispatcher(store);
-  const { AutonomousRuntimeCodingAgentProvider: Provider } = require("./autonomousRuntimeCodingAgentProvider");
-  const provider = new Provider(providerOptions);
+  const provider = new AutonomousRuntimeCodingAgentProvider(providerOptions);
   dispatcher.registerExecutionProvider(provider);
   return dispatcher;
 }
