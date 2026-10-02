@@ -66,7 +66,7 @@ import {
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitTrackingRequest } from "../briefing/titleContract";
-import { detectConversationControl } from "./interpretTurn";
+import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import {
   interpretClaireBrainV3,
   safeClaireBrainV3Fallback,
@@ -675,7 +675,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    const laneOpen = brainV3.priorClaim !== "none";
+    const laneOpen =
+      brainV3.priorClaim !== "none" ||
+      brainV3.act === "prior_claim_probe" ||
+      priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
     let conversational = result.speak;
     if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
       conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
@@ -839,17 +842,35 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
         .catch(() => null)
     : null;
+  const fallbackContext = {
+    pending: {
+      briefing: Boolean(state.pendingBriefing),
+      accountFollowUp: Boolean(state.pendingAccountFollowUp),
+      action: Boolean(
+        state.pendingProposal ||
+          state.pendingUpdate ||
+          state.pendingFieldCapture ||
+          state.pendingEngineeringOffer ||
+          state.pendingDayLineChoice ||
+          state.clarifyingUtterance
+      ),
+      weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+    },
+    sessionKind: state.sessionKind,
+    morningSession,
+    dayLineSuppressed: Boolean(state.dayLineSuppressed),
+  };
   brainV3 =
     brainResult ??
     (explicitWeeklyControl
       ? {
-          ...safeClaireBrainV3Fallback(),
+          ...safeClaireBrainV3Fallback(utterance, fallbackContext),
           target: "weekly_planning",
           act: "action_request",
           weeklyDisposition: "continue",
           rationale: "Explicit weekly control while Brain V3 unavailable.",
         }
-      : safeClaireBrainV3Fallback());
+      : safeClaireBrainV3Fallback(utterance, fallbackContext));
 
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
@@ -1077,7 +1098,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   const doctrineSpeak =
     conversationTarget === "open_conversation" &&
-    (brainV3.act === "question" || brainV3.act === "advice_request") &&
     !isOperationalWorkOrDayLine &&
     deps.doctrineTurn
       ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
@@ -1120,10 +1140,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const explicitPriorClaimProbe = brainV3.priorClaim !== "none";
-  const directResolution: ClaimResolution = explicitPriorClaimProbe
-    ? resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal)
-    : { kind: "none" };
+  const interpreted = interpretTurn(utterance, { recentTurns: history() });
+  const explicitPriorClaimProbe =
+    brainV3.priorClaim !== "none" ||
+    brainV3.act === "prior_claim_probe" ||
+    interpreted.correctnessChallenge ||
+    interpreted.provenanceQuestion;
+  const directResolution: ClaimResolution =
+    holdingSomething && !explicitPriorClaimProbe
+      ? { kind: "none" }
+      : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
   const focusedReceipt =
     explicitPriorClaimProbe &&
     directResolution.kind === "none" &&
@@ -1144,7 +1170,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  const priorClaimLane = explicitPriorClaimProbe;
+  const priorClaimLane =
+    explicitPriorClaimProbe ||
+    brainV3.act === "prior_claim_probe" ||
+    priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
   if (priorClaimLane && resolution.kind !== "none") {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
@@ -2138,7 +2167,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * deterministic routes only honour a result that has already landed, so they never wait.
    */
   async function semanticChallengeSpeech(wait: boolean, presentation: "deterministic" | "guard_replacement"): Promise<string | null> {
-    if (brainV3.priorClaim === "none") return null;
+    if (brainV3.priorClaim === "none" && !priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }))) return null;
     if (!semantic) return null;
     const reading = wait ? await semantic.promise : semantic.settled ?? null;
     if (!reading) {
