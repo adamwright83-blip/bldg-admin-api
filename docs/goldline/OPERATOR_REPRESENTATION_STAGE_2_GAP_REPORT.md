@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Stage 1 established a deterministic, typed, read-only read model (`OperatorContextPacket` in [`server/persistentOperator/operatorContext.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts)) that synthesizes canonical identity, onboarding facts, bounded Behavioral Ledger events, and goal cycle learned deltas on demand.
+Stage 1 established a deterministic, typed, read-only read model (`OperatorContextPacket` in `server/persistentOperator/operatorContext.ts`) that synthesizes canonical identity, onboarding facts, bounded Behavioral Ledger events, and goal cycle learned deltas on demand.
 
 This Stage 2 discovery investigation evaluates whether any useful Operator Representation capability exists that cannot be answered safely and efficiently by the existing Stage 1 read model.
 
@@ -16,23 +16,23 @@ This Stage 2 discovery investigation evaluates whether any useful Operator Repre
 2. **Durable Learning Already Exists:** Meaningful operational adaptations (doctrine weights, execution constraints, channel affinities, time preferences, loadout recommendations) are already durably persisted in `goalCycleLearnedDeltas` and surfaced in `OperatorContextPacket.learnedSignals`.
 3. **Query Bounds Are Not Belief Gaps:** The 200-row Behavioral Ledger limit is an engineering read boundary, not an ontological defect. *Real operator event velocity and the actual frequency of the 200-row truncation condition in production are currently unverified.* If longitudinal history across thousands of events is needed later, deterministic SQL aggregation or date-windowed query readers solve it cleanly without durable state.
 4. **Missing Capabilities Stem from Missing Source Semantics:** The inability to discern communication transport channels or attribute unbound onboarding sessions stems from upstream schema definitions, not the absence of a belief store. Incurring durable representations would violate truth boundaries and fabricate data.
-5. **Epistemic Constraints Forbid Causal Beliefs:** Storing durable "beliefs", "traits", or "motives" from observational data violates the project's behavioral science constitution ([`BEHAVIORAL_SCIENCE_FOUNDATION.md`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md)) and the strict psychology firewall.
+5. **Epistemic Constraints Forbid Causal Beliefs:** Storing durable "beliefs", "traits", or "motives" from observational data violates the project's behavioral science constitution (`docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md`) and the strict psychology firewall.
 
 ---
 
 ## 1. Current Stage 1 Capability
 
-The Stage 1 architecture centers on `buildOperatorContextPacket(input)` in [`server/persistentOperator/operatorContext.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts). It provides an ephemeral, typed, fully auditable snapshot of operator context constructed on demand with zero background workers and zero durable representation tables.
+The Stage 1 architecture centers on `buildOperatorContextPacket(input)` in `server/persistentOperator/operatorContext.ts`. It provides an ephemeral, typed, fully auditable snapshot of operator context constructed on demand with zero background workers and zero durable representation tables.
 
 ### What `OperatorContextPacket` Answers Today
 
 1. **Canonical Identity and Aliases:**
-   - Resolves tenant-scoped canonical operator identities through `resolveCanonicalOperatorIdentity` in [`server/persistentOperator/identity.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/identity.ts).
+   - Resolves tenant-scoped canonical operator identities through `resolveCanonicalOperatorIdentity` in `server/persistentOperator/identity.ts`.
    - Maps open IDs, user IDs, and role aliases to the canonical operator ID (`canonicalOperatorId`) and an authorized list of `mappedUserIds`.
    - Records provenance and references in `card.explicitFacts` and `evidenceRefs`.
 
 2. **Explicit Operator-Declared Facts (Onboarding):**
-   - Reads declared onboarding responses from `goldline_onboarding_sessions` via `readSession(tenantId)` in [`server/goldlineOnboarding/store.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/goldlineOnboarding/store.ts).
+   - Reads declared onboarding responses from `goldline_onboarding_sessions` via `readSession(tenantId)` in `server/goldlineOnboarding/store.ts`.
    - Extracts factual trade (`declared_trade`), service area (`declared_service_area`), and declared avoidance (`declared_avoided_task`).
    - Strictly enforces identity binding: answers are surfaced on `card.explicitFacts` only when the session contains an authoritative operator binding (`operatorUserId` or `canonicalOperatorId`). If unbound, answers are omitted from the card and `operator_binding_unavailable` uncertainty is emitted.
 
@@ -56,7 +56,7 @@ The Stage 1 architecture centers on `buildOperatorContextPacket(input)` in [`ser
    - Requires $\ge 3$ independent decision points/correlations before emitting any pattern, preventing small-sample overinterpretation. If fewer exist, emits `insufficient_observations`.
 
 7. **Normalized Goal Cycle Learned Deltas:**
-   - Reads up to 50 records from `goalCycleLearnedDeltas` in [`server/persistentOperator/learningStore.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/learningStore.ts).
+   - Reads up to 50 records from `goalCycleLearnedDeltas` in `server/persistentOperator/learningStore.ts`.
    - Normalizes `learningKind` (`doctrine_weight`, `loadout_recommendation`, `channel_affinity`, `time_preference`, `candidate_boost`, `execution_constraint`), `deltaType` (`boost`, `suppress`, `reinforce`, `constraint`), `confidence`, and before/after states into `learnedSignals`.
    - Suppresses LLM explanatory dialogue prose from being exposed as Claire speech or factual claims.
 
@@ -77,14 +77,14 @@ The following table details the specific limits present in Stage 1, their exact 
 
 | Limit | Code Location | Description | Classification |
 |---|---|---|---|
-| **200-Row Behavioral Ledger Bound** | [`server/behavioralLedger/behavioralLedger.ts#L23-L24`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/behavioralLedger/behavioralLedger.ts#L23-L24), [`server/persistentOperator/operatorContext.ts#L567-L594`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L567-L594) | The index-backed reader loads at most 200 events (max 500). Older events beyond this limit are not in memory, and the packet emits `evidence_window_truncated`. (*Real operator truncation frequency is unverified in tree.*) | **Bounded-history coverage / Query capability** |
-| **Tenant-Scoped Onboarding Binding** | [`server/persistentOperator/operatorContext.ts#L258-L281`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L258-L281), [`#L463-L477`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L463-L477) | `goldline_onboarding_sessions` has no native `operatorUserId` or `canonicalOperatorId` foreign key. Unbound sessions emit `operator_binding_unavailable`. | **Missing identity binding / Missing source data** |
-| **No Communication Channel Semantics in `assignedOption`** | [`server/persistentOperator/operatorContext.ts#L114-L129`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L114-L129), [`shared/behavioralInterventionMapping.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/shared/behavioralInterventionMapping.ts) | `assignedOption` records intervention arms (e.g. narrative fiction templates or prompt variations), not communication channels (SMS vs email vs push). Cannot infer channel preferences from arm names. | **Missing evidence semantics** |
-| **Missing Predefined Outcome Window** | [`server/persistentOperator/operatorContext.ts#L684-L708`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L684-L708), [`#L742-L748`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L742-L748) | If `proximalOutcomeWindowMinutes` is not set on the assignment event, `startedWithinWindow` is `"unknown"`, latency is `null`, and `proximal_outcome_window_unavailable` is emitted. | **Correctness / Missing source data** |
-| **Pattern Threshold Constraint ($\ge 3$)** | [`server/persistentOperator/operatorContext.ts#L220`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L220), [`#L758-L864`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L758-L864) | Patterns require at least 3 distinct decision points/correlations. Fewer observations emit `insufficient_observations` and suppress patterns. | **Correctness (Epistemic guardrail)** |
-| **Missing Timezone Suppresses Time Claims** | [`server/persistentOperator/operatorContext.ts#L548-L564`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L548-L564) | If `legacyDayforgeSaasTenants.timeZone` is null or empty, local time-of-day claims are suppressed and `timezone_unavailable` is emitted. | **Missing source data / Correctness** |
-| **In-Memory Windowing Rather Than SQL Aggregation** | [`server/persistentOperator/operatorContext.ts#L567-L865`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L567-L865) | Stage 1 performs start sequencing and latency arithmetic in memory over the loaded slice rather than executing database-level aggregate expressions across long horizons. | **Query capability** |
-| **50-Record Bound on Learned Deltas** | [`server/persistentOperator/operatorContext.ts#L874`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/operatorContext.ts#L874) | Stage 1 queries the 50 most recent `goalCycleLearnedDeltas` ordered by creation date. Older historical cycles are not projected. | **Bounded-history coverage** |
+| **200-Row Behavioral Ledger Bound** | `server/behavioralLedger/behavioralLedger.ts#L23-L24`, `server/persistentOperator/operatorContext.ts#L567-L594` | The index-backed reader loads at most 200 events (max 500). Older events beyond this limit are not in memory, and the packet emits `evidence_window_truncated`. (*Real operator truncation frequency is unverified in tree.*) | **Bounded-history coverage / Query capability** |
+| **Tenant-Scoped Onboarding Binding** | `server/persistentOperator/operatorContext.ts#L258-L281`, `#L463-L477` | `goldline_onboarding_sessions` has no native `operatorUserId` or `canonicalOperatorId` foreign key. Unbound sessions emit `operator_binding_unavailable`. | **Missing identity binding / Missing source data** |
+| **No Communication Channel Semantics in `assignedOption`** | `server/persistentOperator/operatorContext.ts#L114-L129`, `shared/behavioralInterventionMapping.ts` | `assignedOption` records intervention arms (e.g. narrative fiction templates or prompt variations), not communication channels (SMS vs email vs push). Cannot infer channel preferences from arm names. | **Missing evidence semantics** |
+| **Missing Predefined Outcome Window** | `server/persistentOperator/operatorContext.ts#L684-L708`, `#L742-L748` | If `proximalOutcomeWindowMinutes` is not set on the assignment event, `startedWithinWindow` is `"unknown"`, latency is `null`, and `proximal_outcome_window_unavailable` is emitted. | **Correctness / Missing source data** |
+| **Pattern Threshold Constraint ($\ge 3$)** | `server/persistentOperator/operatorContext.ts#L220`, `#L758-L864` | Patterns require at least 3 distinct decision points/correlations. Fewer observations emit `insufficient_observations` and suppress patterns. | **Correctness (Epistemic guardrail)** |
+| **Missing Timezone Suppresses Time Claims** | `server/persistentOperator/operatorContext.ts#L548-L564` | If `legacyDayforgeSaasTenants.timeZone` is null or empty, local time-of-day claims are suppressed and `timezone_unavailable` is emitted. | **Missing source data / Correctness** |
+| **In-Memory Windowing Rather Than SQL Aggregation** | `server/persistentOperator/operatorContext.ts#L567-L865` | Stage 1 performs start sequencing and latency arithmetic in memory over the loaded slice rather than executing database-level aggregate expressions across long horizons. | **Query capability** |
+| **50-Record Bound on Learned Deltas** | `server/persistentOperator/operatorContext.ts#L874` | Stage 1 queries the 50 most recent `goalCycleLearnedDeltas` ordered by creation date. Older historical cycles are not projected. | **Bounded-history coverage** |
 | **Production Packet Latency** | *Unverified on current `main`* | No production latency measurements or benchmarks are committed in the repository. Structural design is lightweight, but live latency is unverified. | **Unverified (Requires production measurement)** |
 | **Production Source Failure Frequency** | *Unverified on current `main`* | Rates of database or store failures in live deployment are unverified in tree. | **Unverified (Requires production measurement)** |
 
@@ -120,18 +120,18 @@ Below is an evaluation of candidate questions often proposed for "Stage 2 Operat
 
 ### Question 4: "Does the operator work better under pressure, or are they avoidant of specific tasks?"
 - **Can Stage 1 answer it now?** **No, and it MUST NEVER answer this.**
-- **Why / Why not:** Violates the Psychology Firewall and Epistemic Principles of the project ([`BEHAVIORAL_SCIENCE_FOUNDATION.md`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md) §2 and §7; `DIAGNOSIS_FORBIDDEN_PATTERNS`). Declared avoidance is captured solely as a literal string fact (`"Declared avoided task: ..."`). Inferring traits like "avoidant", "fearful", "intimidated", or "ADHD" is strictly forbidden.
+- **Why / Why not:** Violates the Psychology Firewall and Epistemic Principles of the project (`docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` §2 and §7; `DIAGNOSIS_FORBIDDEN_PATTERNS`). Declared avoidance is captured solely as a literal string fact (`"Declared avoided task: ..."`). Inferring traits like "avoidant", "fearful", "intimidated", or "ADHD" is strictly forbidden.
 - **Exact source evidence:** None. These constructs are prohibited.
 - **Would persistence duplicate existing rows?** N/A (prohibited).
 - **Could deterministic code solve it?** N/A (prohibited).
 - **Is a durable object justified?** **Absolutely not.**
 
-### Question 5: "Has the operator achieved verified commercial or operational outcomes?"
-- **Can Stage 1 answer it now?** **Yes.**
-- **Why / Why not:** Stage 1 checks both the Behavioral Ledger (`verificationClass = 'VERIFIED'`) and `goalCycleLearnedDeltas` after-state fields (`verifiedDeliveries`, `verifiedRevenueCents`). If neither contains verified outcomes, it emits `no_verified_outcome`.
-- **Exact source evidence:** `behavioral_ledger_events` and `goal_cycle_learned_deltas`.
-- **Would persistence duplicate existing rows?** Yes. Storing a separate "verified status" record would duplicate authoritative ledger rows and cycle outcomes.
-- **Could deterministic code solve it?** Stage 1 already solves it deterministically.
+### Question 5: "What verified-class source evidence is visible to Stage 1?"
+- **Can Stage 1 answer it now?** **Yes, as bounded evidence citations only.**
+- **Why / Why not:** A `VERIFIED` Behavioral Ledger row and a learned-delta `afterState` field (such as `verifiedDeliveries` or `verifiedRevenueCents`) are source rows the packet can cite as evidence references or use to gate uncertainty inputs (e.g. emitting `no_verified_outcome` if absent in the bounded read). Neither field authorizes Operator Context itself to prove that revenue occurred, a payment happened, a call happened, a visit happened, a customer replied, or an objective was completed. Those claims remain governed strictly by their authoritative business readers.
+- **Exact source evidence:** Bounded `behavioral_ledger_events` (checking `verificationClass = 'VERIFIED'`) and `goal_cycle_learned_deltas` after-state records.
+- **Would persistence duplicate existing rows?** Yes. Storing a persistent "verified outcome" or "commercial success" representation would duplicate authoritative ledger events and goal cycle records, while violating truth boundaries.
+- **Could deterministic code solve it?** Stage 1 already cites and indexes these source rows deterministically without claiming business-truth authority.
 - **Is a durable object justified?** **No.**
 
 ### Question 6: "What intervention adjustments or doctrine weights have been learned from past goal cycles?"
@@ -154,7 +154,7 @@ Below is an evaluation of candidate questions often proposed for "Stage 2 Operat
 
 ## 4. 200-Row Behavioral Ledger Bound Analysis
 
-The bounded read in [`server/behavioralLedger/behavioralLedger.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/behavioralLedger/behavioralLedger.ts) retrieves a default of 200 rows (`MAX_BOUNDED_OPERATOR_LEDGER_LIMIT = 500`).
+The bounded read in `server/behavioralLedger/behavioralLedger.ts` retrieves a default of 200 rows (`MAX_BOUNDED_OPERATOR_LEDGER_LIMIT = 500`).
 
 ### What Information Can Be Missed?
 1. **Historical Decision Points:** If an operator accumulates more than 200 ledger events over time, events beyond the 200 most recent fall outside the in-memory window. (*The real-world distribution of operator event depth in production is currently unverified.*)
@@ -175,7 +175,7 @@ A query limit on a raw SELECT statement is an engineering query design choice. I
 
 ## 5. Existing Learned Deltas Analysis
 
-The codebase already contains a durable learning subsystem: `goalCycleLearnedDeltas` in [`server/persistentOperator/learningStore.ts`](file:///Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/server/persistentOperator/learningStore.ts).
+The codebase already contains a durable learning subsystem: `goalCycleLearnedDeltas` in `server/persistentOperator/learningStore.ts`.
 
 ### What `goalCycleLearnedDeltas` Already Provides
 - **Disciplined Learning Kinds:**
@@ -231,7 +231,7 @@ Every candidate durable representation record proposed for Stage 2 duplicates ex
 | **Durable "Intervention Responsiveness Score"** | `behavioral_ledger_events` (decision point rows) | Duplicates raw ledger counts. A persistent score becomes stale whenever new ledger events are appended unless maintained via triggers. |
 | **Durable "Learned Weights / Preferences"** | `goal_cycle_learned_deltas` | Duplicates structured deltas already managed by the goal cycle learning engine. Creates competing sources of truth. |
 | **Durable "Canonical Operator Binding"** | `persistent_operator_identity_bindings` | Duplicates authoritative identity mappings established in `server/persistentOperator/identity.ts`. |
-| **Durable "Outcome / Success Summary"** | `behavioral_ledger_events` (`VERIFIED`), `goal_cycle_outcomes` | Duplicates verified commercial event streams. Risks drifting out of sync with business reality. |
+| **Durable "Verified Evidence Summary"** | `behavioral_ledger_events` (`VERIFIED`), `goal_cycle_outcomes` | Duplicates existing evidence rows and risks conflating evidence citations with business truth. Authoritative business reality remains governed by business readers. |
 
 Any such persistent record is merely a cached projection of existing data, introducing cache invalidation risk without proven performance need.
 
@@ -252,7 +252,7 @@ We evaluate three potential architectural paths:
 ### Rationale:
 1. **On-Demand Projection is Structurally Lean:** `buildOperatorContextPacket` performs indexed reads against existing tables. While *production packet latency is currently unverified*, there is no structural indication of query bottlenecks requiring durable state.
 2. **Production Truncation Frequency is Unverified:** The necessity of expanding beyond the 200-row limit has not been established by empirical data. If and when expansion is needed, deterministic query changes (SQL aggregation, date windowing) solve it cleanly.
-3. **No Unmet Capability Requires Persistence:** All defensible questions (identity, explicit facts, observed descriptive sequences, learned deltas, verification absence) are answered by Stage 1.
+3. **No Unmet Capability Requires Persistence:** All defensible questions (identity, explicit facts, observed descriptive sequences, learned deltas, evidence citations) are answered by Stage 1.
 4. **Missing Semantics Cannot Be Cured by Storage:** Where Stage 1 cannot answer a question (e.g., channel preference, unbound onboarding), the blocker is upstream data instrumentation, not the lack of a representation table.
 5. **Epistemic Integrity:** Creating a durable "beliefs" or "representation" store risks persisting speculative inferences, violating the core behavioral science foundation.
 
