@@ -33,6 +33,9 @@ describe("paid JOYSTICK product path", () => {
     expect(app).toContain("<DriverMembershipGate>");
     expect(app).toContain("<TenantOperatorGate>");
     expect(app).toContain('me.data?.membership.role === "field"');
+    expect(app).toContain('kingdom.kingdomId === "kingdom-2-the-last-valet"');
+    expect(app).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(app).toContain("<JoystickChapterRoute />");
   });
 
   it("retires the duplicate HQ/FIELD entry points in favor of World and Play", () => {
