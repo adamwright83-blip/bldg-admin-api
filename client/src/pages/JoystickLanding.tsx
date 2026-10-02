@@ -1,5 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
 import "./joystick-landing.css";
+import { captureProductEvent } from "@/lib/posthog";
 
 const START_PATH = "/joystick-start";
 
@@ -25,12 +26,14 @@ export default function JoystickLanding() {
         <a
           className="joystick-desktop__cta joystick-desktop__cta--header"
           href={START_PATH}
+          onClick={() => captureProductEvent("joystick_start_clicked", { source: "landing" })}
         >
           <span className="sr-only">Start playing</span>
         </a>
         <a
           className="joystick-desktop__cta joystick-desktop__cta--hero"
           href={START_PATH}
+          onClick={() => captureProductEvent("joystick_start_clicked", { source: "landing" })}
         >
           <span className="sr-only">Start playing</span>
         </a>
@@ -44,7 +47,7 @@ export default function JoystickLanding() {
             </span>
             JOYSTICK
           </div>
-          <a className="joystick-mobile__mini-cta" href={START_PATH}>
+          <a className="joystick-mobile__mini-cta" href={START_PATH} onClick={() => captureProductEvent("joystick_start_clicked", { source: "landing_header" })}>
             START
           </a>
         </header>
@@ -62,7 +65,7 @@ export default function JoystickLanding() {
             The sales, follow-ups and admin you keep avoiding become missions
             that move your actual business.
           </p>
-          <a className="joystick-mobile__cta" href={START_PATH}>
+          <a className="joystick-mobile__cta" href={START_PATH} onClick={() => captureProductEvent("joystick_start_clicked", { source: "landing_hero" })}>
             START PLAYING <span aria-hidden="true">→</span>
           </a>
           <p className="joystick-mobile__tagline">
