@@ -56,6 +56,9 @@ export default function JoystickAcquisitionPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const previewViewed = useRef(false);
+  const checkoutReturnedTracked = useRef(false);
+  const provisionedTracked = useRef(false);
   const checkoutSucceeded = useMemo(
     () => new URLSearchParams(window.location.search).get("checkout") === "success",
     []
@@ -107,6 +110,34 @@ export default function JoystickAcquisitionPage() {
     setContactName(value => value || configuration?.contactName || "");
   }, [resume.data]);
 
+  useEffect(() => {
+    const data = resume.data;
+    if (!data?.draftPreview || previewViewed.current) return;
+    previewViewed.current = true;
+    captureProductEvent("onboarding_preview_viewed", { funnel_step: "prepay" });
+  }, [resume.data]);
+
+  useEffect(() => {
+    if (checkoutReturnedTracked.current) return;
+    const result = new URLSearchParams(window.location.search).get("checkout");
+    if (!result) return;
+    checkoutReturnedTracked.current = true;
+    captureProductEvent("onboarding_checkout_returned", { result });
+  }, []);
+
+  useEffect(() => {
+    const data = resume.data;
+    if (
+      provisionedTracked.current ||
+      !data?.tenantId ||
+      (data.status !== "provisioned" && data.status !== "configuring")
+    ) return;
+    provisionedTracked.current = true;
+    captureProductEvent("onboarding_tenant_provisioned", {
+      tenant_id: data.tenantId,
+    });
+  }, [resume.data]);
+
   const data = resume.data;
   const answers = (data?.draftAnswers ?? {}) as JoystickDraftAnswerMap;
   const preview = (data?.draftPreview ?? null) as JoystickDraftPreview | null;
@@ -150,7 +181,6 @@ export default function JoystickAcquisitionPage() {
         expectedVersion: data.version,
       });
       captureProductEvent("onboarding_preview_generated", { funnel_step: "prepay" });
-      captureProductEvent("onboarding_preview_viewed", { funnel_step: "prepay" });
       await resume.refetch();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not build your preview.");
