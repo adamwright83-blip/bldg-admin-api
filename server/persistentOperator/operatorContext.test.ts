@@ -219,8 +219,8 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
   // 2. Explicit Information & The Three Acquisition Answers
   // -------------------------------------------------------------------------
   describe("Explicit Information Boundaries", () => {
-    it("surfaces declared acquisition facts conservatively without transforming them into preferences", async () => {
-      const session: GoldlineOnboardingSession = {
+    it("surfaces declared acquisition facts conservatively without transforming them into preferences when bound", async () => {
+      const session: GoldlineOnboardingSession & { operatorUserId?: string } = {
         id: "sess_1",
         tenantId: "tenant_alpha",
         status: "READY",
@@ -231,6 +231,7 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
           service_area: "Pasadena, CA",
           avoidance: "Calling cold leads",
         },
+        operatorUserId: "101",
         startedAt: "2026-10-01T10:00:00Z",
         completedAt: null,
         version: 1,
@@ -253,11 +254,11 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
 
       const tradeFact = packet.card.explicitFacts.find(f => f.kind === "declared_trade");
       const areaFact = packet.card.explicitFacts.find(f => f.kind === "declared_service_area");
-      const avoidanceFact = packet.card.explicitFacts.find(f => f.kind === "declared_avoidance");
+      const avoidanceFact = packet.card.explicitFacts.find(f => f.kind === "declared_avoided_task");
 
       expect(tradeFact?.statement).toContain("Residential plumbing");
       expect(areaFact?.statement).toContain("Pasadena, CA");
-      expect(avoidanceFact?.statement).toContain("Calling cold leads");
+      expect(avoidanceFact?.statement).toBe('Declared avoided task: "Calling cold leads"');
 
       // MUST NOT be transformed into contact preference or psychological diagnosis
       expect(packet.card.explicitPreferences).toHaveLength(0);
@@ -267,17 +268,17 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(json).not.toContain("phone_preference");
     });
 
-    it("does not classify free text into structured preference fields", async () => {
+    it("omits tenant-scoped onboarding facts when authoritative operator binding is absent and emits operator_binding_unavailable", async () => {
       const session: GoldlineOnboardingSession = {
-        id: "sess_2",
+        id: "sess_tenant_only",
         tenantId: "tenant_alpha",
         status: "READY",
         currentQuestion: 3,
-        answers: ["General contracting", "Downtown", "Hate early morning calls"],
+        answers: ["Electrical", "Glendale, CA", "Filing taxes"],
         answersByKey: {
-          daily_work: "General contracting",
-          service_area: "Downtown",
-          avoidance: "Hate early morning calls",
+          daily_work: "Electrical",
+          service_area: "Glendale, CA",
+          avoidance: "Filing taxes",
         },
         startedAt: "2026-10-01T10:00:00Z",
         completedAt: null,
@@ -295,10 +296,46 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
         deps: { loadOnboardingSession: async () => session },
       });
 
-      // Avoidance text "Hate early morning calls" must remain an explicit declared avoidance fact,
+      // Tenant onboarding facts are omitted from operator card
+      expect(packet.card.explicitFacts.filter(f => f.kind !== "canonical_identity")).toHaveLength(0);
+      expect(packet.uncertainty.some(u => u.reason === "operator_binding_unavailable")).toBe(true);
+    });
+
+    it("does not classify free text into structured preference fields", async () => {
+      const session: GoldlineOnboardingSession & { operatorUserId?: string } = {
+        id: "sess_2",
+        tenantId: "tenant_alpha",
+        status: "READY",
+        currentQuestion: 3,
+        answers: ["General contracting", "Downtown", "Hate early morning calls"],
+        answersByKey: {
+          daily_work: "General contracting",
+          service_area: "Downtown",
+          avoidance: "Hate early morning calls",
+        },
+        operatorUserId: "101",
+        startedAt: "2026-10-01T10:00:00Z",
+        completedAt: null,
+        version: 1,
+        acquisitionSessionId: null,
+        interpretation: null,
+        optionalUploadReference: null,
+        world: null,
+        mission: null,
+      };
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadOnboardingSession: async () => session },
+      });
+
+      // Avoidance text "Hate early morning calls" must remain an explicit declared avoided task fact,
       // NOT classified into morningPreference or contactMethod.
       expect(packet.card.explicitPreferences).toHaveLength(0);
-      expect(packet.card.explicitFacts.some(f => f.kind === "declared_avoidance")).toBe(true);
+      expect(packet.card.explicitFacts.some(f => f.kind === "declared_avoided_task")).toBe(true);
+      const fact = packet.card.explicitFacts.find(f => f.kind === "declared_avoided_task");
+      expect(fact?.statement).toBe('Declared avoided task: "Hate early morning calls"');
     });
 
     it("never manufactures a fake placeholder card fact when no preference exists", async () => {
@@ -321,13 +358,14 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
     });
 
     it("does not turn one explicit statement into an observed behavioral pattern", async () => {
-      const session: GoldlineOnboardingSession = {
+      const session: GoldlineOnboardingSession & { operatorUserId?: string } = {
         id: "sess_3",
         tenantId: "tenant_alpha",
         status: "READY",
         currentQuestion: 1,
         answers: ["Welding"],
         answersByKey: { daily_work: "Welding" },
+        operatorUserId: "101",
         startedAt: "2026-10-01T10:00:00Z",
         completedAt: null,
         version: 1,
@@ -487,6 +525,38 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(json).not.toContain("lazy");
       expect(json).not.toContain("ignored");
     });
+
+    it("does not count decision points with missing outcome window toward qualifying pattern threshold", async () => {
+      const baseTime = new Date("2026-10-01T10:00:00Z").getTime();
+      const events: BoundedLedgerReadEvent[] = [1, 2, 3].flatMap(i => [
+        makeLedgerEvent({
+          id: i * 2 - 1,
+          decisionPointId: `dp_${i}`,
+          eventType: "DELIVERED",
+          occurredAt: new Date(baseTime + i * 3600_000),
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: null, // missing window!
+        }),
+        makeLedgerEvent({
+          id: i * 2,
+          decisionPointId: `dp_${i}`,
+          eventType: "STARTED",
+          occurredAt: new Date(baseTime + i * 3600_000 + 60_000),
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: null,
+        }),
+      ]);
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      // Because proximalOutcomeWindowMinutes is missing, none qualify for start-window sequence pattern
+      expect(packet.observedPatterns).toHaveLength(0);
+      expect(packet.uncertainty.some(u => u.reason === "proximal_outcome_window_unavailable")).toBe(true);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -544,6 +614,73 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       const intervention = packet.interventionEvidence.find(ie => ie.decisionPointId === "dp_1");
       expect(intervention?.startLatencySeconds).toBe(120);
       expect(intervention?.startedWithinWindow).toBe(true);
+    });
+
+    it("marks startedWithinWindow as unknown and startLatencySeconds as null when proximalOutcomeWindowMinutes is missing", async () => {
+      const base = new Date("2026-10-01T12:00:00Z");
+      const events: BoundedLedgerReadEvent[] = [
+        makeLedgerEvent({
+          id: 1,
+          decisionPointId: "dp_1",
+          eventType: "DELIVERED",
+          occurredAt: base,
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: null,
+        }),
+        makeLedgerEvent({
+          id: 2,
+          decisionPointId: "dp_1",
+          eventType: "STARTED",
+          occurredAt: new Date(base.getTime() + 120_000),
+          proximalOutcomeWindowMinutes: null,
+        }),
+      ];
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      const intervention = packet.interventionEvidence.find(ie => ie.decisionPointId === "dp_1");
+      expect(intervention?.startedWithinWindow).toBe("unknown");
+      expect(intervention?.startLatencySeconds).toBeNull();
+      expect(intervention?.outcomeWindowMinutes).toBeNull();
+      expect(packet.uncertainty.some(u => u.reason === "proximal_outcome_window_unavailable")).toBe(true);
+    });
+
+    it("does not treat non-assignment lifecycle events as assignment when assignedOption is absent", async () => {
+      const base = new Date("2026-10-01T12:00:00Z");
+      const events: BoundedLedgerReadEvent[] = [
+        makeLedgerEvent({
+          id: 1,
+          decisionPointId: "dp_1",
+          eventType: "DELIVERED",
+          occurredAt: base,
+          assignedOption: null,
+          proximalOutcomeWindowMinutes: null,
+        }),
+        makeLedgerEvent({
+          id: 2,
+          decisionPointId: "dp_1",
+          eventType: "STARTED",
+          occurredAt: new Date(base.getTime() + 120_000),
+          assignedOption: null,
+          proximalOutcomeWindowMinutes: null,
+        }),
+      ];
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      const intervention = packet.interventionEvidence.find(ie => ie.decisionPointId === "dp_1");
+      expect(intervention?.assignedOption).toBeNull();
+      expect(intervention?.startedWithinWindow).toBe("unknown");
+      expect(intervention?.startLatencySeconds).toBeNull();
+      expect(packet.uncertainty.some(u => u.reason === "missing_paired_timestamps")).toBe(true);
     });
 
     it("emits timezone_unavailable when authoritative timezone is absent", async () => {
@@ -709,7 +846,7 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(packet.uncertainty.some(u => u.reason === "no_records")).toBe(true);
     });
 
-    it("emits no_verified_outcome when no verified events or receipts exist", async () => {
+    it("emits no_verified_outcome with bounded evidence wording when no verified events or receipts exist", async () => {
       const events: BoundedLedgerReadEvent[] = [
         makeLedgerEvent({ id: 1, eventType: "DELIVERED", verificationClass: null }),
         makeLedgerEvent({ id: 2, eventType: "STARTED", verificationClass: null }),
@@ -721,10 +858,14 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
         deps: { loadLedgerEvents: async () => events },
       });
 
-      expect(packet.uncertainty.some(u => u.reason === "no_verified_outcome")).toBe(true);
+      const uncert = packet.uncertainty.find(u => u.reason === "no_verified_outcome");
+      expect(uncert).toBeDefined();
+      expect(uncert?.detail).toBe(
+        "No verified action or commercial outcome was observed within the bounded Behavioral Ledger evidence read used for this packet."
+      );
     });
 
-    it("emits conflicting_signals uncertainty when explicit preference conflicts with observed behavior", async () => {
+    it("does not infer communication channel conflicts between explicit channel preference and intervention option names", async () => {
       const events: BoundedLedgerReadEvent[] = [
         makeLedgerEvent({ id: 1, decisionPointId: "dp_1", eventType: "DELIVERED", assignedOption: "phone_call" }),
         makeLedgerEvent({ id: 2, decisionPointId: "dp_1", eventType: "STARTED", assignedOption: "phone_call" }),
@@ -756,10 +897,39 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(packet.card.explicitPreferences[0]?.preference).toBe("sms");
       expect(packet.observedPatterns).toHaveLength(1);
 
-      // Conflict uncertainty is emitted
-      const conflict = packet.uncertainty.find(u => u.reason === "conflicting_signals");
-      expect(conflict).toBeDefined();
-      expect(conflict?.detail).toContain("Explicit preference states 'sms'");
+      // Conflict uncertainty must NOT be emitted by inferring channel from intervention option name
+      expect(packet.uncertainty.some(u => u.reason === "conflicting_signals")).toBe(false);
+    });
+
+    it("emits evidence_window_truncated uncertainty when ledger read reaches limit", async () => {
+      const events: BoundedLedgerReadEvent[] = Array.from({ length: 200 }, (_, i) =>
+        makeLedgerEvent({ id: i + 1, decisionPointId: `dp_${i + 1}` })
+      );
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      const truncation = packet.uncertainty.find(u => u.reason === "evidence_window_truncated");
+      expect(truncation).toBeDefined();
+      expect(truncation?.scope).toBe("behavioral_ledger");
+      expect(truncation?.detail).toContain("200-row Stage 1 limit");
+    });
+
+    it("does not emit evidence_window_truncated uncertainty when ledger read is below limit", async () => {
+      const events: BoundedLedgerReadEvent[] = [
+        makeLedgerEvent({ id: 1, decisionPointId: "dp_1" }),
+      ];
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      expect(packet.uncertainty.some(u => u.reason === "evidence_window_truncated")).toBe(false);
     });
 
     it("treats multiple rows sharing a correlationId without decisionPointId as ONE observation", async () => {

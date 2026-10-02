@@ -51,7 +51,7 @@ export type OperatorExplicitFact = {
     | "canonical_identity"
     | "declared_trade"
     | "declared_service_area"
-    | "declared_avoidance"
+    | "declared_avoided_task"
     | "explicit_onboarding_fact";
   statement: string;
   sourceSystem: string;
@@ -137,6 +137,9 @@ export const OPERATOR_CONTEXT_UNCERTAINTY_REASONS = [
   "conflicting_signals",
   "stale_evidence",
   "no_verified_outcome",
+  "proximal_outcome_window_unavailable",
+  "evidence_window_truncated",
+  "operator_binding_unavailable",
 ] as const;
 
 export type OperatorContextUncertaintyReason =
@@ -249,6 +252,31 @@ function assertNoForbiddenDerivedPatterns(packet: OperatorContextPacket): void {
       }
     }
   }
+}
+
+export function getOnboardingOperatorBinding(session: GoldlineOnboardingSession): {
+  operatorUserId?: string | null;
+  canonicalOperatorId?: string | null;
+} | null {
+  const s = session as Record<string, unknown>;
+  const opUserId =
+    typeof s.operatorUserId === "string"
+      ? s.operatorUserId.trim()
+      : typeof s.operatorUserId === "number"
+        ? String(s.operatorUserId)
+        : typeof s.userId === "string"
+          ? s.userId.trim()
+          : typeof s.userId === "number"
+            ? String(s.userId)
+            : null;
+
+  const canOpId =
+    typeof s.canonicalOperatorId === "string"
+      ? s.canonicalOperatorId.trim()
+      : null;
+
+  if (!opUserId && !canOpId) return null;
+  return { operatorUserId: opUserId, canonicalOperatorId: canOpId };
 }
 
 async function defaultResolveIdentity(input: {
@@ -436,55 +464,71 @@ export async function buildOperatorContextPacket(
   }
 
   if (onboardingSession?.answersByKey) {
-    const answers = onboardingSession.answersByKey;
-    const sessionRefId = generateRefId("onboarding");
-    evidenceRefs.push({
-      id: sessionRefId,
-      sourceSystem: "goldline_onboarding_sessions",
-      sourceRecordId: onboardingSession.id,
-      tenantId,
-      operatorUserId: String(resolvedIdentity.canonicalUserId),
-      canonicalOperatorId,
-      timestamp: onboardingSession.startedAt ?? generatedAt,
-      metadata: {
-        status: onboardingSession.status,
-      },
-    });
+    const binding = getOnboardingOperatorBinding(onboardingSession);
+    const isBoundToThisOperator =
+      binding != null &&
+      ((binding.canonicalOperatorId && binding.canonicalOperatorId === canonicalOperatorId) ||
+        (binding.operatorUserId && mappedUserIds.includes(binding.operatorUserId)));
 
-    if (answers.daily_work?.trim()) {
-      explicitFacts.push({
-        kind: "declared_trade",
-        field: "daily_work",
-        statement: `Declared daily work: "${answers.daily_work.trim()}"`,
-        sourceSystem: "goldline_onboarding",
-        provenance: "operator_declared",
-        observedAt: onboardingSession.startedAt ?? undefined,
-        evidenceRefId: sessionRefId,
+    if (!isBoundToThisOperator) {
+      uncertainty.push({
+        reason: "operator_binding_unavailable",
+        scope: "goldline_onboarding",
+        detail:
+          "Onboarding answers in goldline_onboarding_sessions are tenant-scoped and lack an authoritative binding to this canonical operator; omitted from operator card.",
       });
-    }
+    } else {
+      const answers = onboardingSession.answersByKey;
+      const sessionRefId = generateRefId("onboarding");
+      evidenceRefs.push({
+        id: sessionRefId,
+        sourceSystem: "goldline_onboarding_sessions",
+        sourceRecordId: onboardingSession.id,
+        tenantId,
+        operatorUserId: binding?.operatorUserId ?? String(resolvedIdentity.canonicalUserId),
+        canonicalOperatorId,
+        timestamp: onboardingSession.startedAt ?? generatedAt,
+        metadata: {
+          status: onboardingSession.status,
+          operatorBinding: binding,
+        },
+      });
 
-    if (answers.service_area?.trim()) {
-      explicitFacts.push({
-        kind: "declared_service_area",
-        field: "service_area",
-        statement: `Declared service area: "${answers.service_area.trim()}"`,
-        sourceSystem: "goldline_onboarding",
-        provenance: "operator_declared",
-        observedAt: onboardingSession.startedAt ?? undefined,
-        evidenceRefId: sessionRefId,
-      });
-    }
+      if (answers.daily_work?.trim()) {
+        explicitFacts.push({
+          kind: "declared_trade",
+          field: "daily_work",
+          statement: `Declared daily work: "${answers.daily_work.trim()}"`,
+          sourceSystem: "goldline_onboarding",
+          provenance: "operator_declared",
+          observedAt: onboardingSession.startedAt ?? undefined,
+          evidenceRefId: sessionRefId,
+        });
+      }
 
-    if (answers.avoidance?.trim()) {
-      explicitFacts.push({
-        kind: "declared_avoidance",
-        field: "avoidance",
-        statement: `Declared friction / avoided task: "${answers.avoidance.trim()}"`,
-        sourceSystem: "goldline_onboarding",
-        provenance: "operator_declared",
-        observedAt: onboardingSession.startedAt ?? undefined,
-        evidenceRefId: sessionRefId,
-      });
+      if (answers.service_area?.trim()) {
+        explicitFacts.push({
+          kind: "declared_service_area",
+          field: "service_area",
+          statement: `Declared service area: "${answers.service_area.trim()}"`,
+          sourceSystem: "goldline_onboarding",
+          provenance: "operator_declared",
+          observedAt: onboardingSession.startedAt ?? undefined,
+          evidenceRefId: sessionRefId,
+        });
+      }
+
+      if (answers.avoidance?.trim()) {
+        explicitFacts.push({
+          kind: "declared_avoided_task",
+          field: "avoidance",
+          statement: `Declared avoided task: "${answers.avoidance.trim()}"`,
+          sourceSystem: "goldline_onboarding",
+          provenance: "operator_declared",
+          observedAt: onboardingSession.startedAt ?? undefined,
+          evidenceRefId: sessionRefId,
+        });
+      }
     }
   }
 
@@ -523,13 +567,14 @@ export async function buildOperatorContextPacket(
   }
 
   // 5. Bounded read from Behavioral Ledger
+  const ledgerLimit = DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT;
   let ledgerEvents: BoundedLedgerReadEvent[] = [];
   try {
     if (deps.loadLedgerEvents) {
       ledgerEvents = await deps.loadLedgerEvents({
         tenantId,
         operatorUserIds: mappedUserIds,
-        limit: DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT,
+        limit: ledgerLimit,
       });
     }
   } catch (error) {
@@ -537,6 +582,15 @@ export async function buildOperatorContextPacket(
       reason: "source_unavailable",
       scope: "behavioral_ledger",
       detail: `Behavioral ledger query failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  // Check truncation: If the read returned the requested limit, flag that older evidence may exist
+  if (ledgerEvents.length >= ledgerLimit) {
+    uncertainty.push({
+      reason: "evidence_window_truncated",
+      scope: "behavioral_ledger",
+      detail: `Behavioral Ledger read reached the ${ledgerLimit}-row Stage 1 limit; older evidence may not be represented in this packet.`,
     });
   }
 
@@ -553,6 +607,7 @@ export async function buildOperatorContextPacket(
 
   let hasVerifiedOutcomeInLedger = false;
   let missingPairedTimestampCount = 0;
+  let missingOutcomeWindowCount = 0;
 
   for (const event of ledgerEvents) {
     if (event.eventType === "VERIFIED" || event.verificationClass === "VERIFIED") {
@@ -617,32 +672,38 @@ export async function buildOperatorContextPacket(
       (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
     );
     const firstEvent = sorted[0]!;
-    const assignmentEvent = sorted.find(e => e.assignedOption != null) ?? firstEvent;
+    // Do not fall back to firstEvent if no event has actual assignment fields
+    const assignmentEvent = sorted.find(e => e.assignedOption != null) ?? null;
 
-    const assignedOption = assignmentEvent.assignedOption ?? null;
+    const assignedOption = assignmentEvent?.assignedOption ?? null;
     const assignmentProb =
-      assignmentEvent.assignmentProbability != null
+      assignmentEvent?.assignmentProbability != null
         ? Number(assignmentEvent.assignmentProbability)
         : null;
 
-    const outcomeWindowMinutes = assignmentEvent.proximalOutcomeWindowMinutes ?? 120;
-    const windowMs = outcomeWindowMinutes * 60_000;
-    const assignmentTime = assignmentEvent.occurredAt;
-    const windowEnd = new Date(assignmentTime.getTime() + windowMs);
+    const outcomeWindowMinutes = assignmentEvent?.proximalOutcomeWindowMinutes ?? null;
 
     const startedEvent = sorted.find(e => e.eventType === "STARTED");
     let startedWithinWindow: boolean | "unknown" = "unknown";
     let startLatencySeconds: number | null = null;
 
     if (startedEvent) {
-      if (assignmentTime) {
+      if (assignmentEvent && outcomeWindowMinutes != null) {
+        const assignmentTime = assignmentEvent.occurredAt;
+        const windowMs = outcomeWindowMinutes * 60_000;
+        const windowEnd = new Date(assignmentTime.getTime() + windowMs);
+
         startedWithinWindow = startedEvent.occurredAt.getTime() <= windowEnd.getTime();
         startLatencySeconds = Math.max(
           0,
           (startedEvent.occurredAt.getTime() - assignmentTime.getTime()) / 1000
         );
       } else {
-        missingPairedTimestampCount++;
+        if (!assignmentEvent) {
+          missingPairedTimestampCount++;
+        } else if (outcomeWindowMinutes == null) {
+          missingOutcomeWindowCount++;
+        }
       }
     }
 
@@ -656,9 +717,9 @@ export async function buildOperatorContextPacket(
           : "deterministic_or_observational",
       assignedOption,
       assignmentProbability: assignmentProb,
-      policyVersion: assignmentEvent.interventionPolicyVersion ?? null,
-      definitionVersion: assignmentEvent.interventionDefinitionVersion ?? null,
-      outcomeWindowMinutes: assignmentEvent.proximalOutcomeWindowMinutes ?? null,
+      policyVersion: assignmentEvent?.interventionPolicyVersion ?? null,
+      definitionVersion: assignmentEvent?.interventionDefinitionVersion ?? null,
+      outcomeWindowMinutes,
       lifecycleEvents: sorted.map(e => e.eventType),
       startedWithinWindow,
       startLatencySeconds,
@@ -675,19 +736,29 @@ export async function buildOperatorContextPacket(
     });
   }
 
+  if (missingOutcomeWindowCount > 0) {
+    uncertainty.push({
+      reason: "proximal_outcome_window_unavailable",
+      scope: "intervention_window",
+      detail: `${missingOutcomeWindowCount} decision point(s) had observed start actions but lacked a persisted proximalOutcomeWindowMinutes; predefined outcome window was unavailable so startedWithinWindow was marked unknown and latency was omitted.`,
+    });
+  }
+
   // 6. Pattern derivation (Requires >= 3 independent observations)
   if (totalIndependentObservations >= MINIMUM_PATTERN_INDEPENDENT_OBSERVATIONS) {
-    // Descriptive sequence pattern over qualifying decision points
+    // Descriptive sequence pattern over qualifying decision points with valid assignment AND predefined window
     const qualifyingDecisionPoints = distinctDecisionPoints.filter(
-      dp => dp.events.some(e => e.assignedOption != null)
+      dp => dp.events.some(e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null)
     );
 
     if (qualifyingDecisionPoints.length >= MINIMUM_PATTERN_INDEPENDENT_OBSERVATIONS) {
       const startedInWindow = qualifyingDecisionPoints.filter(dp => {
-        const assignment = dp.events.find(e => e.assignedOption != null);
+        const assignment = dp.events.find(
+          e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
+        );
         const started = dp.events.find(e => e.eventType === "STARTED");
-        if (!assignment || !started) return false;
-        const windowMin = assignment.proximalOutcomeWindowMinutes ?? 120;
+        if (!assignment || !started || assignment.proximalOutcomeWindowMinutes == null) return false;
+        const windowMin = assignment.proximalOutcomeWindowMinutes;
         return (
           started.occurredAt.getTime() <=
           assignment.occurredAt.getTime() + windowMin * 60_000
@@ -696,9 +767,11 @@ export async function buildOperatorContextPacket(
 
       const latencies = qualifyingDecisionPoints
         .map(dp => {
-          const assignment = dp.events.find(e => e.assignedOption != null);
+          const assignment = dp.events.find(
+            e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
+          );
           const started = dp.events.find(e => e.eventType === "STARTED");
-          if (!assignment || !started) return null;
+          if (!assignment || !started || assignment.proximalOutcomeWindowMinutes == null) return null;
           return Math.max(
             0,
             (started.occurredAt.getTime() - assignment.occurredAt.getTime()) / 1000
@@ -842,7 +915,7 @@ export async function buildOperatorContextPacket(
       reason: "no_verified_outcome",
       scope: "operational_verification",
       detail:
-        "No verified action or commercial outcome was observed in source records for this operator.",
+        "No verified action or commercial outcome was observed within the bounded Behavioral Ledger evidence read used for this packet.",
     });
   }
 
@@ -861,28 +934,6 @@ export async function buildOperatorContextPacket(
       scope: "operator_profile",
       detail: "No behavioral ledger events, learned deltas, or declared onboarding facts exist for this operator.",
     });
-  }
-
-  // 9. Conflict detection
-  // Check if explicit preference conflicts with observed intervention evidence
-  for (const pref of explicitPreferences) {
-    if (pref.kind === "contact_channel") {
-      const channelStarts = interventionEvidence.filter(
-        ie => ie.startedWithinWindow === true && ie.assignedOption != null
-      );
-      const conflictingStarts = channelStarts.filter(
-        ie =>
-          !ie.assignedOption?.toLowerCase().includes(pref.preference.toLowerCase())
-      );
-      if (conflictingStarts.length >= MINIMUM_PATTERN_INDEPENDENT_OBSERVATIONS) {
-        uncertainty.push({
-          reason: "conflicting_signals",
-          scope: "contact_channel",
-          detail: `Explicit preference states '${pref.preference}', but ${conflictingStarts.length} independent starts occurred under alternative presentations.`,
-          relatedEvidenceRefs: conflictingStarts.flatMap(cs => cs.evidenceRefIds),
-        });
-      }
-    }
   }
 
   // Build final packet
