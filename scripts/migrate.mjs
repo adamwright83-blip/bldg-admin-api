@@ -4552,6 +4552,12 @@ await ensureRequiredIndex(
   "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_operator (tenantId,canonicalOperatorId,learningKind,targetKey)"
 );
 
+// Mitch v1 — Game Production Operating System tables
+await applyHistoricalCreateTables(
+  "../drizzle/0108_mitch_game_production.sql",
+  "Mitch v1 game production operating system tables"
+);
+
 // END schema-path-normalized
 
 await conn.end();

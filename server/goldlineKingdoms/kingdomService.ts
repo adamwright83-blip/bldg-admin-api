@@ -131,6 +131,8 @@ export async function setKingdomCompanion(input: {
 }): Promise<GoldlineKingdom> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const existing = await getKingdom(input);
+  if (!existing) throw new Error(`Unknown kingdom: ${input.kingdomId}`);
   await db
     .update(goldlineKingdoms)
     .set({ companionEarnedId: input.companionEarnedId })
@@ -152,6 +154,8 @@ export async function setKingdomStatus(input: {
 }): Promise<GoldlineKingdom> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const existing = await getKingdom(input);
+  if (!existing) throw new Error(`Unknown kingdom: ${input.kingdomId}`);
   await db
     .update(goldlineKingdoms)
     .set({ lanternCityStatus: input.lanternCityStatus })
