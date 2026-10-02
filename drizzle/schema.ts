@@ -9218,3 +9218,264 @@ export const communicationReceipts = mysqlTable(
 );
 
 export type CommunicationReceiptRow = typeof communicationReceipts.$inferSelect;
+
+/**
+ * Mitch v1 — Game Production Operating System Tables
+ *
+ * Durable game-production operating system tables attaching to existing
+ * canonical Kingdom / game IDs without becoming a second source of truth.
+ */
+export const mitchGameProductionStates = mysqlTable(
+  "mitch_game_production_states",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    storedRowId: varchar("storedRowId", { length: 64 }),
+    title: varchar("title", { length: 191 }).notNull(),
+    lifecycleState: varchar("lifecycleState", { length: 64 }).notNull().default("concept"),
+    realBusinessBinding: text("realBusinessBinding"),
+    coreMechanic: text("coreMechanic"),
+    companionDependency: varchar("companionDependency", { length: 64 }),
+    requiredAssetsJson: json("requiredAssetsJson"),
+    blockingDependenciesJson: json("blockingDependenciesJson"),
+    currentAvailableBuildId: varchar("currentAvailableBuildId", { length: 128 }),
+    lastVerifiedBuildId: varchar("lastVerifiedBuildId", { length: 128 }),
+    creativeAcceptanceState: varchar("creativeAcceptanceState", { length: 64 }).notNull().default("pending"),
+    creativeAcceptanceNote: text("creativeAcceptanceNote"),
+    creativeAcceptanceDecidedAt: timestamp("creativeAcceptanceDecidedAt"),
+    releaseState: varchar("releaseState", { length: 64 }).notNull().default("unreleased"),
+    releasedAt: timestamp("releasedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    gameUnique: uniqueIndex("uq_mitch_game_production_state").on(
+      table.tenantId,
+      table.gameId
+    ),
+    lifecycleLookup: index("idx_mitch_game_lifecycle").on(
+      table.tenantId,
+      table.lifecycleState
+    ),
+  })
+);
+
+export const mitchMilestones = mysqlTable(
+  "mitch_milestones",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneKey: varchar("milestoneKey", { length: 64 }).notNull(),
+    sequence: int("sequence").notNull().default(0),
+    title: varchar("title", { length: 191 }).notNull(),
+    desiredPlayerVisibleResult: text("desiredPlayerVisibleResult").notNull(),
+    acceptanceCriteriaJson: json("acceptanceCriteriaJson").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("pending"),
+    currentAvailableBuildId: varchar("currentAvailableBuildId", { length: 128 }),
+    lastVerifiedBuildId: varchar("lastVerifiedBuildId", { length: 128 }),
+    blockedReason: text("blockedReason"),
+    isHumanCreativeBlocker: boolean("isHumanCreativeBlocker").notNull().default(false),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    milestoneUnique: uniqueIndex("uq_mitch_milestones").on(
+      table.tenantId,
+      table.gameId,
+      table.milestoneKey
+    ),
+    statusLookup: index("idx_mitch_milestones_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+  })
+);
+
+export const mitchWorkOrders = mysqlTable(
+  "mitch_work_orders",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    milestoneKey: varchar("milestoneKey", { length: 64 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    desiredPlayerVisibleResult: text("desiredPlayerVisibleResult").notNull(),
+    acceptanceCriteriaJson: json("acceptanceCriteriaJson").notNull(),
+    canonConstraintsJson: json("canonConstraintsJson").notNull(),
+    relevantDependenciesJson: json("relevantDependenciesJson").notNull(),
+    realBusinessEvidenceConstraintsJson: json("realBusinessEvidenceConstraintsJson").notNull(),
+    baseBranch: varchar("baseBranch", { length: 191 }).notNull(),
+    baseSha: varchar("baseSha", { length: 64 }).notNull(),
+    requiredArtifact: text("requiredArtifact").notNull(),
+    requiredTestsJson: json("requiredTestsJson").notNull(),
+    requiredEvidenceJson: json("requiredEvidenceJson").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("pending"),
+    claimedBy: varchar("claimedBy", { length: 128 }),
+    claimedAt: timestamp("claimedAt"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    attemptCount: int("attemptCount").notNull().default(0),
+    maxAttempts: int("maxAttempts").notNull().default(3),
+    lastError: text("lastError"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    statusLookup: index("idx_mitch_work_orders_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+    leaseLookup: index("idx_mitch_work_orders_lease").on(
+      table.status,
+      table.leaseExpiresAt
+    ),
+    milestoneLookup: index("idx_mitch_work_orders_milestone").on(
+      table.tenantId,
+      table.milestoneId
+    ),
+  })
+);
+
+export const mitchExecutionRuns = mysqlTable(
+  "mitch_execution_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    workOrderId: varchar("workOrderId", { length: 36 }).notNull(),
+    executorId: varchar("executorId", { length: 128 }).notNull(),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    completedAt: timestamp("completedAt"),
+    status: varchar("status", { length: 64 }).notNull().default("running"),
+    returnedBranch: varchar("returnedBranch", { length: 191 }),
+    returnedCommitSha: varchar("returnedCommitSha", { length: 64 }),
+    exactBuildId: varchar("exactBuildId", { length: 128 }),
+    whatChanged: text("whatChanged"),
+    testsActuallyRunJson: json("testsActuallyRunJson"),
+    testsNotRunJson: json("testsNotRunJson"),
+    previewLaunchInstructions: text("previewLaunchInstructions"),
+    evidenceJson: json("evidenceJson"),
+    knownLimitations: text("knownLimitations"),
+    errorMessage: text("errorMessage"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    workOrderLookup: index("idx_mitch_execution_runs_work_order").on(
+      table.tenantId,
+      table.workOrderId
+    ),
+  })
+);
+
+export const mitchBuilds = mysqlTable(
+  "mitch_builds",
+  {
+    id: varchar("id", { length: 128 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    workOrderId: varchar("workOrderId", { length: 36 }).notNull(),
+    executionRunId: varchar("executionRunId", { length: 36 }).notNull(),
+    commitSha: varchar("commitSha", { length: 64 }).notNull(),
+    branch: varchar("branch", { length: 191 }).notNull(),
+    buildArtifactType: varchar("buildArtifactType", { length: 64 }).notNull(),
+    buildArtifactId: varchar("buildArtifactId", { length: 255 }).notNull(),
+    sourceCompiled: boolean("sourceCompiled").notNull().default(false),
+    unitTestsPassed: boolean("unitTestsPassed").notNull().default(false),
+    isVerified: boolean("isVerified").notNull().default(false),
+    verifiedAt: timestamp("verifiedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    gameLookup: index("idx_mitch_builds_game").on(
+      table.tenantId,
+      table.gameId,
+      table.isVerified
+    ),
+  })
+);
+
+export const mitchQaRuns = mysqlTable(
+  "mitch_qa_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    buildId: varchar("buildId", { length: 128 }).notNull(),
+    testerId: varchar("testerId", { length: 128 }).notNull(),
+    scenario: text("scenario").notNull(),
+    expectedBehavior: text("expectedBehavior").notNull(),
+    observedBehavior: text("observedBehavior").notNull(),
+    gameActuallyExercised: boolean("gameActuallyExercised").notNull().default(false),
+    acceptancePassed: boolean("acceptancePassed").notNull().default(false),
+    status: varchar("status", { length: 64 }).notNull(),
+    evidenceArtifact: text("evidenceArtifact").notNull(),
+    issueId: varchar("issueId", { length: 36 }),
+    previousFailedQaRunId: varchar("previousFailedQaRunId", { length: 36 }),
+    isRetest: boolean("isRetest").notNull().default(false),
+    completedAt: timestamp("completedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    buildLookup: index("idx_mitch_qa_runs_build").on(
+      table.tenantId,
+      table.buildId,
+      table.status
+    ),
+    milestoneLookup: index("idx_mitch_qa_runs_milestone").on(
+      table.tenantId,
+      table.milestoneId
+    ),
+  })
+);
+
+export const mitchIssues = mysqlTable(
+  "mitch_issues",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    originatingQaRunId: varchar("originatingQaRunId", { length: 36 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    description: text("description").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("open"),
+    fixWorkOrderId: varchar("fixWorkOrderId", { length: 36 }),
+    fixBuildId: varchar("fixBuildId", { length: 128 }),
+    closingQaRunId: varchar("closingQaRunId", { length: 36 }),
+    closedAt: timestamp("closedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    statusLookup: index("idx_mitch_issues_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+  })
+);
+
+export const mitchAuditEvents = mysqlTable(
+  "mitch_audit_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    detailsJson: json("detailsJson").notNull(),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    gameLookup: index("idx_mitch_audit_events_game").on(
+      table.tenantId,
+      table.gameId,
+      table.occurredAt
+    ),
+  })
+);

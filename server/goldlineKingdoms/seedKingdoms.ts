@@ -33,10 +33,10 @@ export async function seedGoldlineKingdoms(tenantId: string) {
     kingdomId: "kingdom-2-the-last-valet",
     kingdom: {
       sequence: 2,
+      // Stored row ID remains kingdom-2-the-last-valet and stored title remains
+      // "The Last Valet" per docs/JOYSTICK_SYSTEM_MAP.md. This legacy row belongs
+      // to The Last Valet chapter content and is NOT the storage target of kingdom.boreslay.
       title: "The Last Valet",
-      // Slice 3: the real controllable campaign, assigned. See
-      // docs/goldline/campaigns/KINGDOM_2_COMPANION_EVALUATION.md for why
-      // Rook is the companion this campaign earns.
       realCampaignId: "the-last-valet-recurring-account-pitch",
       fictionalFieldMission: "the-last-valet",
       lanternCityStatus: "locked",
