@@ -53,8 +53,10 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL required");
     db = await mysql.createConnection(process.env.DATABASE_URL);
-    const [[database]] = await db.query("SELECT DATABASE() AS name");
-    const name = String((database as { name?: string })?.name ?? "");
+    const [databaseRows] = await db.query<RowDataPacket[]>(
+      "SELECT DATABASE() AS name"
+    );
+    const name = String(databaseRows[0]?.name ?? "");
     if (!name.includes("acquisition_funnel")) {
       throw new Error(`Refusing acquisition exam outside disposable DB: ${name}`);
     }
