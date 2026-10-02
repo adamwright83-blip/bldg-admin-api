@@ -1,3 +1,4 @@
+// Operator Representation architecture: docs/goldline/OPERATOR_REPRESENTATION.md
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
