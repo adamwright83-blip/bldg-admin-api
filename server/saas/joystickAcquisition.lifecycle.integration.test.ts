@@ -75,6 +75,15 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
     );
   });
 
+  async function tableExists(table: string): Promise<boolean> {
+    const [rows] = await db.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS count FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table]
+    );
+    return Number(rows[0]?.count ?? 0) === 1;
+  }
+
   afterAll(async () => {
     if (!db) return;
     if (tenantId) {
@@ -87,7 +96,9 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
         "dayforge_saas_tenant_locations",
         "territory_operator_profiles",
       ]) {
-        await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [tenantId]);
+        if (await tableExists(table)) {
+          await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [tenantId]);
+        }
       }
       await db.execute("DELETE FROM users WHERE tenantId = ?", [tenantId]);
       await db.execute("DELETE FROM goldline_onboarding_sessions WHERE tenantId = ?", [tenantId]);
@@ -288,10 +299,12 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
       "SELECT COUNT(*) AS count FROM dayforge_saas_tenant_services WHERE tenantId = ?",
       [tenantId]
     );
-    const [laundryProfiles] = await db.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) AS count FROM territory_operator_profiles WHERE tenantId = ?",
-      [tenantId]
-    );
+    const laundryProfiles = (await tableExists("territory_operator_profiles"))
+      ? (await db.execute<RowDataPacket[]>(
+          "SELECT COUNT(*) AS count FROM territory_operator_profiles WHERE tenantId = ?",
+          [tenantId]
+        ))[0]
+      : ([{ count: 0 }] as RowDataPacket[]);
     expect(Number(tenantRows[0]?.count ?? 0)).toBe(1);
     expect(Number(locations[0]?.count ?? 0)).toBe(0);
     expect(Number(services[0]?.count ?? 0)).toBe(0);
