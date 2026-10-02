@@ -70,9 +70,9 @@ export default function LegacyDayforgeOnboardingPage() {
 
   useEffect(() => {
     if (!resume.data) return;
-    setBusinessName(value => value || resume.data.businessName);
-    setSlug(value => value || resume.data.slug);
-    setEmail(value => value || resume.data.ownerEmail);
+    setBusinessName(value => value || resume.data.businessName || "");
+    setSlug(value => value || resume.data.slug || "");
+    setEmail(value => value || resume.data.ownerEmail || "");
   }, [resume.data]);
 
   const busy =
