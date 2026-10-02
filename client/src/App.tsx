@@ -11,6 +11,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
 import { useAuth } from "./_core/hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
+import { trpc } from "@/lib/trpc";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
@@ -226,15 +227,38 @@ function DriverMembershipGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function TenantOperatorGate({ children }: { children: ReactNode }) {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const me = trpc.system.saas.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  if (authLoading || (isAuthenticated && me.isLoading)) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        role="driver"
+        mode="membership"
+        onSuccess={() => window.location.reload()}
+      />
+    );
+  }
+  if (me.data?.membership.role === "field") return <Redirect to="/play" />;
+  if (me.isError) return <Redirect to="/product" />;
+  return <>{children}</>;
+}
+
 function JoystickWorldRoute() {
   const { user } = useAuth();
   if (user?.role === "admin") return <AdminHostApp />;
   return (
-    <DriverMembershipGate>
+    <TenantOperatorGate>
       <Suspense fallback={<PublicLandingFallback />}>
         <JoystickWorld />
       </Suspense>
-    </DriverMembershipGate>
+    </TenantOperatorGate>
   );
 }
 
@@ -484,11 +508,11 @@ function AdminHostRouter() {
         </AdminAuthGate>
       </Route>
       <Route path="/goldline-chapter">
-        <DriverMembershipGate>
+        <TenantOperatorGate>
           <Suspense fallback={<PublicLandingFallback />}>
             <GoldlineChapterHost />
           </Suspense>
-        </DriverMembershipGate>
+        </TenantOperatorGate>
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -692,11 +716,11 @@ function Router() {
         <JoystickWorldRoute />
       </Route>
       <Route path="/goldline-chapter">
-        <DriverMembershipGate>
+        <TenantOperatorGate>
           <Suspense fallback={<PublicLandingFallback />}>
             <GoldlineChapterHost />
           </Suspense>
-        </DriverMembershipGate>
+        </TenantOperatorGate>
       </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
