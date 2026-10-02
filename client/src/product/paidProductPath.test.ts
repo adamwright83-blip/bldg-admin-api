@@ -31,6 +31,8 @@ describe("paid JOYSTICK product path", () => {
     expect(app).toContain('"/goldline-chapter"');
     expect(app).toContain("<JoystickWorldRoute />");
     expect(app).toContain("<DriverMembershipGate>");
+    expect(app).toContain("<TenantOperatorGate>");
+    expect(app).toContain('me.data?.membership.role === "field"');
   });
 
   it("retires the duplicate HQ/FIELD entry points in favor of World and Play", () => {
