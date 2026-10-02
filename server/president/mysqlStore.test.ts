@@ -6,8 +6,10 @@ import { MysqlPresidentAssessmentStore } from "./mysqlStore";
 import { MemoryPresidentAssessmentStore } from "./store";
 import { inspectPresidentEvidence } from "./evidence";
 import { assessPresidentStage1 } from "./assessment";
+
 const root = resolve(import.meta.dirname, "../..");
 let pool: Pool;
+
 describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
   "President real MySQL store",
   () => {
@@ -34,9 +36,11 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         .filter(Boolean))
         await pool.query(statement);
     });
+
     afterAll(async () => {
       await pool?.end();
     });
+
     it("persists complete metadata/provenance and recovers across adapter instances and concurrent retries", async () => {
       const snapshot = await inspectPresidentEvidence({
         repositoryRoot: root,
@@ -54,10 +58,12 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
       ]);
       expect(await store.count()).toBe(1);
       expect(await store.candidateCount()).toBe(assessment.candidates.length);
+
       const recovered = await new MysqlPresidentAssessmentStore(
         pool
       ).findByEvidence(snapshot.repositorySha, snapshot.id);
       expect(recovered).toEqual(assessment);
+
       const retry = await assessPresidentStage1({
         snapshot,
         store: new MysqlPresidentAssessmentStore(pool),
@@ -65,8 +71,9 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
       expect(retry.reused).toBe(true);
       expect(retry.assessment.id).toBe(assessment.id);
       expect(await store.count()).toBe(1);
-      expect(await store.candidateCount()).toBe(5);
+      expect(await store.candidateCount()).toBe(2);
     });
+
     it("rolls back the entire assessment when a candidate insert fails", async () => {
       const snapshot = await inspectPresidentEvidence({
         repositoryRoot: root,
@@ -79,7 +86,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         store: new MemoryPresidentAssessmentStore(),
       });
       // Duplicate a candidate PK inside the transaction: no partial assessment/menu may survive.
-      assessment.candidates.push({ ...assessment.candidates[0], rank: 6 });
+      assessment.candidates.push({ ...assessment.candidates[0], rank: 3 });
       const store = new MysqlPresidentAssessmentStore(pool);
       await expect(store.saveIfAbsent(assessment)).rejects.toThrow(
         "did not persist"
@@ -88,7 +95,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         await store.findByEvidence(snapshot.repositorySha, snapshot.id)
       ).toBeNull();
       expect(await store.count()).toBe(1);
-      expect(await store.candidateCount()).toBe(5);
+      expect(await store.candidateCount()).toBe(2);
       const [tables] = await pool.query<RowDataPacket[]>("SHOW TABLES");
       expect(tables).toHaveLength(2);
     });

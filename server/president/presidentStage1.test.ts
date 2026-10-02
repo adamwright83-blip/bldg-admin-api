@@ -8,21 +8,25 @@ import {
   FilePresidentAssessmentStore,
   MemoryPresidentAssessmentStore,
 } from "./store";
+
 const root = resolve(import.meta.dirname, "../..");
 const sha = "38b20810be8575ef85fed60ba25e6c229bc10170";
 const cleanup: string[] = [];
+
 afterEach(async () =>
   Promise.all(
     cleanup.splice(0).map(path => rm(path, { recursive: true, force: true }))
   )
 );
+
 const snapshot = () =>
   inspectPresidentEvidence({
     repositoryRoot: root,
     repositorySha: sha,
   });
+
 describe("seat.president Stage 1", () => {
-  it("retains exact SHA, fingerprint, candidates, provenance, epistemic distinctions, and unavailable sources", async () => {
+  it("retains exact SHA, fingerprint, supported candidates, provenance, and unavailable sources", async () => {
     const evidence = await snapshot();
     const { assessment } = await assessPresidentStage1({
       snapshot: evidence,
@@ -31,12 +35,12 @@ describe("seat.president Stage 1", () => {
     });
     expect(assessment.inspectedRepositorySha).toBe(sha);
     expect(assessment.evidenceSnapshotId).toBe(evidence.id);
-    expect(assessment.candidates).toHaveLength(5);
-    expect(assessment.candidates.map(x => x.rank)).toEqual([1, 2, 3, 4, 5]);
+    expect(assessment.candidates).toHaveLength(2);
+    expect(assessment.candidates.map(x => x.rank)).toEqual([1, 2]);
     expect(assessment.candidates.every(x => x.evidence.length >= 2)).toBe(true);
     expect(
       new Set(assessment.candidates.flatMap(x => x.evidence.map(e => e.kind)))
-    ).toEqual(new Set(["FACT", "INFERENCE", "UNKNOWN"]));
+    ).toEqual(new Set(["FACT", "INFERENCE"]));
     expect(assessment.evidenceSourcesUnavailable).toEqual(
       expect.arrayContaining([
         "posthog_live_product_data",
@@ -46,6 +50,7 @@ describe("seat.president Stage 1", () => {
       ])
     );
   });
+
   it("stops at human selection with no execution or later-stage state", async () => {
     const { assessment } = await assessPresidentStage1({
       snapshot: await snapshot(),
@@ -67,6 +72,7 @@ describe("seat.president Stage 1", () => {
     ])
       expect(assessment).not.toHaveProperty(key);
   });
+
   it("reuses identical SHA and evidence durably across retries", async () => {
     const dir = await mkdtemp(join(tmpdir(), "president-stage1-"));
     cleanup.push(dir);
@@ -79,6 +85,7 @@ describe("seat.president Stage 1", () => {
     expect(retry.assessment.id).toBe(first.assessment.id);
     expect(await store.count()).toBe(1);
   });
+
   it("does not derive a backlog from open, stale, or red unmerged PRs", async () => {
     const { assessment } = await assessPresidentStage1({
       snapshot: await snapshot(),
@@ -91,6 +98,7 @@ describe("seat.president Stage 1", () => {
       /#354|#355|#358|stale PR|branch CI/i
     );
   });
+
   it("has no customer, Claire, Day Line, growth, Goldline, Kingdom, or Mitch mutation dependency", async () => {
     const sources = await Promise.all(
       ["assessment.ts", "evidence.ts", "store.ts"].map(x =>
@@ -110,7 +118,8 @@ describe("seat.president Stage 1", () => {
     ])
       expect(code, forbidden).not.toContain(forbidden);
   });
-  it("keeps unavailable and fake evidence unverified", async () => {
+
+  it("never marks UNKNOWN evidence as verified if one is later retained", async () => {
     const { assessment } = await assessPresidentStage1({
       snapshot: await snapshot(),
       store: new MemoryPresidentAssessmentStore(),
@@ -118,6 +127,7 @@ describe("seat.president Stage 1", () => {
     for (const e of assessment.candidates.flatMap(x => x.evidence))
       if (e.kind === "UNKNOWN") expect(e.verified).toBe(false);
   });
+
   it("adds only Stage-1 persistence tables", async () => {
     const sql = await readFile(
       resolve(root, "drizzle/0109_president_stage1.sql"),

@@ -9,7 +9,9 @@ import {
 } from "../../shared/presidentContracts";
 import type { PresidentAssessmentStore } from "./store";
 import { assertEvidenceIntegrity, LAUNCH_OPS_SOURCE } from "./evidence";
+
 const doc = "docs/JOYSTICK-SAAS-LAUNCH-OPS.md";
+
 const claim = (
   kind: PresidentEvidenceClaim["kind"],
   location: string,
@@ -22,67 +24,128 @@ const claim = (
   statement,
   verified,
 });
+
 const id = (prefix: string, value: string) =>
   `${prefix}-${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
 
-/** Bounded admission rules interpret requirements within their cited section.
- * Completion declarations suppress admission. Unrecognized wording fails closed.
+export type PresidentGateEvidenceState = "UNMET" | "COMPLETE" | "UNKNOWN";
+
+export type PresidentGateEvidence = {
+  heading: string;
+  text: string;
+  state: PresidentGateEvidenceState;
+  unmetStatement?: string;
+};
+
+function gateForHeading(heading: string): string | null {
+  if (/recovery gate/i.test(heading)) return "recovery";
+  if (/stripe activation/i.test(heading)) return "billing";
+  if (/retention activation/i.test(heading)) return "retention";
+  if (/customer launch canary/i.test(heading)) return "isolation";
+  if (/production log gate/i.test(heading)) return "logs";
+  return null;
+}
+
+function classifyGate(
+  gate: string,
+  heading: string,
+  text: string
+): PresidentGateEvidence {
+  const explicitComplete =
+    /^\s*(?:status|gate status)\s*:\s*(?:complete|completed|passed|satisfied)\b/im.test(
+      text
+    );
+  if (explicitComplete) return { heading, text, state: "COMPLETE" };
+
+  const explicitUnmet =
+    /^\s*(?:status|gate status)\s*:\s*(?:unmet|incomplete|blocked|not complete|not completed)\b/im.test(
+      text
+    );
+  if (explicitUnmet) {
+    return {
+      heading,
+      text,
+      state: "UNMET",
+      unmetStatement: `The inspected "${heading}" section explicitly marks this gate as unmet.`,
+    };
+  }
+
+  if (gate === "recovery" && /launch is blocked until/i.test(text)) {
+    const unmet: string[] = [];
+    if (/scheduled volume backups? (?:are )?not configured/i.test(text))
+      unmet.push("scheduled volume backups are not configured");
+    if (/no restore drill has been proven/i.test(text))
+      unmet.push("no restore drill has been proven");
+    if (unmet.length) {
+      return {
+        heading,
+        text,
+        state: "UNMET",
+        unmetStatement: `The inspected launch-operations document states that ${unmet.join(
+          " and "
+        )}.`,
+      };
+    }
+  }
+
+  if (
+    gate === "retention" &&
+    /intentionally inert until production configuration is supplied/i.test(text)
+  ) {
+    return {
+      heading,
+      text,
+      state: "UNMET",
+      unmetStatement:
+        "The inspected launch-operations document states that the scheduled retention workflow is intentionally inert until production configuration is supplied.",
+    };
+  }
+
+  return { heading, text, state: "UNKNOWN" };
+}
+
+/**
+ * Classifies only recognized launch gates. A documented procedure is not proof
+ * that the procedure remains incomplete. UNKNOWN therefore fails closed.
  */
-export function extractUnmetSections(
+export function extractGateStates(
   content: string
-): Map<string, { heading: string; text: string }> {
-  const result = new Map<string, { heading: string; text: string }>();
+): Map<string, PresidentGateEvidence> {
+  const result = new Map<string, PresidentGateEvidence>();
   for (const match of content.matchAll(
     /^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm
   )) {
-    const heading = match[1],
-      text = match[2].trim();
-    if (
-      /^\s*(?:status|gate status)\s*:\s*(?:complete|completed|passed|satisfied)\b/im.test(
-        text
-      )
-    )
-      continue;
-    let gate: string | undefined;
-    if (
-      /recovery gate/i.test(heading) &&
-      /(?:backups? (?:are )?not configured|no restore drill has been proven)/i.test(
-        text
-      ) &&
-      /launch is blocked until/i.test(text)
-    )
-      gate = "recovery";
-    if (
-      /stripe activation/i.test(heading) &&
-      /before putting the public purchase CTA live/i.test(text) &&
-      /complete Checkout/i.test(text) &&
-      /live Stripe Product\/Price/i.test(text)
-    )
-      gate = "billing";
-    if (
-      /retention activation/i.test(heading) &&
-      /intentionally inert until/i.test(text) &&
-      /dry_run=true/i.test(text) &&
-      /bounded non-dry batch/i.test(text)
-    )
-      gate = "retention";
-    if (
-      /customer launch canary/i.test(heading) &&
-      /Create Customer A/i.test(text) &&
-      /Create Customer B independently/i.test(text) &&
-      /Verify A cannot/i.test(text)
-    )
-      gate = "isolation";
-    if (
-      /production log gate/i.test(heading) &&
-      /Inspect production logs for/i.test(text) &&
-      /Do not call launch complete while/i.test(text)
-    )
-      gate = "logs";
-    if (gate) result.set(gate, { heading, text });
+    const heading = match[1];
+    const text = match[2].trim();
+    const gate = gateForHeading(heading);
+    if (!gate) continue;
+    result.set(gate, classifyGate(gate, heading, text));
   }
   return result;
 }
+
+/**
+ * Stage 1 admits a project only from affirmative evidence that a recognized
+ * gate is currently unmet. COMPLETE and UNKNOWN both produce no candidate.
+ */
+export function extractUnmetSections(
+  content: string
+): Map<string, PresidentGateEvidence & { state: "UNMET"; unmetStatement: string }> {
+  const result = new Map<
+    string,
+    PresidentGateEvidence & { state: "UNMET"; unmetStatement: string }
+  >();
+  for (const [gate, section] of extractGateStates(content)) {
+    if (section.state !== "UNMET" || !section.unmetStatement) continue;
+    result.set(gate, {
+      ...section,
+      state: "UNMET",
+      unmetStatement: section.unmetStatement,
+    });
+  }
+  return result;
+}
+
 const priorityOrder = [
   "recovery",
   "commercial",
@@ -95,6 +158,7 @@ type Seed = Omit<
   PresidentCandidateProject,
   "id" | "assessmentId" | "rank" | "status"
 > & { priority: string };
+
 const pitches: Record<
   string,
   {
@@ -121,7 +185,7 @@ const pitches: Record<
     capability:
       "verify paid signup, provisioning, entitlements, and webhook retry behavior",
     build:
-      "Complete the documented live billing configuration and controlled canary, preserving $49 monthly, $468 annual, card required, and the seven-day trial.",
+      "Configure the documented live billing path using the currently authorized plan and pricing policy. President does not choose or alter pricing or trial terms.",
     afterward: "JOYSTICK can demonstrate the real paid onboarding path.",
     reason: "Billing proof directly gates commercial operation.",
   },
@@ -160,6 +224,7 @@ const pitches: Record<
     reason: "Log clearance verifies the deployed launch candidate.",
   },
 };
+
 function candidates(snapshot: PresidentEvidenceSnapshot): Seed[] {
   return [
     ...extractUnmetSections(snapshot.sourceContents[LAUNCH_OPS_SOURCE]),
@@ -168,23 +233,17 @@ function candidates(snapshot: PresidentEvidenceSnapshot): Seed[] {
     return {
       priority: pitch.priority,
       title: pitch.title,
-      missingCapability: `This snapshot has no current production verification that JOYSTICK can ${pitch.capability}.`,
-      currentGap: `The inspected document establishes the "${section.heading}" gate; current completion remains unverified.`,
+      missingCapability: `The inspected evidence states JOYSTICK has not yet satisfied the requirement to ${pitch.capability}.`,
+      currentGap: section.unmetStatement,
       proposedBuild: pitch.build,
       resultingCapability: pitch.afterward,
       rankReason: pitch.reason,
       evidence: [
-        claim("FACT", section.heading, section.text),
+        claim("FACT", section.heading, section.unmetStatement),
         claim(
           "INFERENCE",
           section.heading,
-          "Verifying this documented gate may deserve attention before public launch. The document alone does not prove current production failure."
-        ),
-        claim(
-          "UNKNOWN",
-          "production_runtime",
-          "Current production completion is unavailable; missing access is not evidence of failure.",
-          false
+          "Verifying this affirmatively unmet documented gate may deserve attention before public launch."
         ),
       ],
       blockers: [
@@ -196,6 +255,7 @@ function candidates(snapshot: PresidentEvidenceSnapshot): Seed[] {
     };
   });
 }
+
 export async function assessPresidentStage1(input: {
   snapshot: PresidentEvidenceSnapshot;
   store: PresidentAssessmentStore;
@@ -207,6 +267,7 @@ export async function assessPresidentStage1(input: {
     input.snapshot.id
   );
   if (prior) return { assessment: prior, reused: true };
+
   const assessmentId = id(
     "president-assessment",
     `${input.snapshot.repositorySha}:${input.snapshot.id}`
@@ -225,6 +286,7 @@ export async function assessPresidentStage1(input: {
       rank: i + 1,
       status: "PROPOSED_AWAITING_HUMAN_SELECTION" as const,
     }));
+
   const assessment: PresidentAssessment = {
     id: assessmentId,
     seat: PRESIDENT_SEAT,
@@ -237,10 +299,11 @@ export async function assessPresidentStage1(input: {
     startedAt: at,
     completedAt: at,
     provider: "deterministic-policy",
-    model: "president-stage1-v2",
+    model: "president-stage1-v3",
     candidates: ranked,
     executionCount: 0,
   };
+
   return {
     assessment: await input.store.saveIfAbsent(assessment),
     reused: false,
