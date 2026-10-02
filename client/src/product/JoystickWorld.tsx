@@ -1,5 +1,9 @@
+import { lazy, Suspense } from "react";
 import { Link, useLocation } from "wouter";
-import LanternCityIslands from "@/components/admin/control-room/LanternCityIslands/LanternCityIslands";
+
+const LanternCityIslands = lazy(
+  () => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands")
+);
 import { PRODUCT_NAME } from "@shared/productIdentity";
 import "./product.css";
 
@@ -38,11 +42,13 @@ export default function JoystickWorld() {
         </div>
       </header>
       <div className="cc-shell-body">
-        <LanternCityIslands
-          showUtilityDock={false}
-          onOpenCustomer={() => navigate("/product/customers")}
-          onNavigate={navigate}
-        />
+        <Suspense fallback={<div className="cc-empty">Raising Lantern City…</div>}>
+          <LanternCityIslands
+            showUtilityDock={false}
+            onOpenCustomer={() => navigate("/product/customers")}
+            onNavigate={navigate}
+          />
+        </Suspense>
       </div>
     </main>
   );
