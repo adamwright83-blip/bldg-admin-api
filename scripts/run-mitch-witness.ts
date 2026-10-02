@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { MitchProductionStore } from "../server/mitch/mitchStore";
 import { MitchProductionService } from "../server/mitch/mitchService";
-import { MitchWorkOrderDispatcher } from "../server/mitch/mitchDispatcher";
+import { createAutonomousDispatcher } from "../server/mitch/mitchDispatcher";
 import { MitchQaService } from "../server/mitch/mitchQaService";
 import { AutonomousRuntimeCodingAgentProvider } from "../server/mitch/autonomousRuntimeCodingAgentProvider";
 
@@ -91,41 +91,34 @@ async function main() {
   console.log(`[Step 3] Created authorized work order: ${workOrder.id}`);
   console.log(`         Status: ${workOrder.status}, Base SHA: ${workOrder.baseSha}`);
 
-  // Configure AutonomousRuntimeCodingAgentProvider
-  const provider = new AutonomousRuntimeCodingAgentProvider({
+  // Configure AutonomousRuntimeCodingAgentProvider with dispatcher
+  const dispatcher = createAutonomousDispatcher(store, {
     model: "gemini-flash-latest",
     timeoutMs: 180_000,
   });
-  const isAvail = await provider.isAvailable();
-  console.log(`[Step 4] Registered AutonomousRuntimeCodingAgentProvider. Available: ${isAvail}`);
-  if (!isAvail) {
-    throw new Error("Provider is NOT available. GOOGLE_API_KEY required for live witness.");
-  }
-
-  const dispatcher = new MitchWorkOrderDispatcher(store, provider);
+  console.log(`[Step 4] Registered AutonomousRuntimeCodingAgentProvider with MitchGameDispatcher.`);
 
   // Dispatch work order through durable lease and real provider
   console.log(`[Step 5] Dispatching work order to autonomous coding agent...`);
   const startTime = Date.now();
   const dispatchResult = await dispatcher.dispatchAutonomous({
+    tenantId,
     workOrderId: workOrder.id,
-    claimedBy: "mitch-autonomous-worker-witness",
-    leaseDurationMs: 180_000,
   });
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`[Step 6] Execution completed in ${durationSec}s! Handback received:`);
-  console.log(`         Resulting SHA: ${dispatchResult.handback.commitSha}`);
-  console.log(`         Branch: ${dispatchResult.handback.branch}`);
-  console.log(`         What Changed: ${dispatchResult.handback.whatChanged}`);
-  console.log(`         Tests Run: ${dispatchResult.handback.testsActuallyRun.join(", ")}`);
-  console.log(`         Changed Files: ${dispatchResult.handback.evidence.changedFiles.join(", ")}`);
+  console.log(`         Resulting SHA: ${dispatchResult.build.commitSha}`);
+  console.log(`         Branch: ${dispatchResult.executionRun.returnedBranch}`);
+  console.log(`         What Changed: ${dispatchResult.executionRun.whatChanged}`);
+  console.log(`         Tests Run: ${dispatchResult.executionRun.testsActuallyRun.join(", ")}`);
+  console.log(`         Changed Files: ${dispatchResult.executionRun.evidence.changedFiles.join(", ")}`);
 
   // Verify Work Order status in store
   const updatedOrder = await store.getWorkOrder(tenantId, workOrder.id);
   console.log(`[Step 7] Work order status in store: ${updatedOrder?.status}`);
 
   // Inspect build registered in store
-  const build = await store.getBuild(tenantId, dispatchResult.handback.exactBuildId);
+  const build = await store.getBuild(tenantId, dispatchResult.build.id);
   console.log(`[Step 8] Mitch Build Record:`);
   console.log(`         Build ID: ${build?.id}`);
   console.log(`         Commit SHA: ${build?.commitSha}`);
@@ -138,7 +131,7 @@ async function main() {
   console.log(`         Last Verified Build: ${updatedMilestone?.lastVerifiedBuildId} (MUST BE NULL)`);
 
   // Verify Invariants
-  if (dispatchResult.handback.commitSha === baseSha) {
+  if (dispatchResult.build.commitSha === baseSha) {
     throw new Error("FATAL: Resulting SHA equals base SHA!");
   }
   if (build?.isVerified !== false) {
@@ -154,13 +147,13 @@ async function main() {
 
   return {
     workOrderId: workOrder.id,
-    attemptId: dispatchResult.attemptId,
+    attemptId: dispatchResult.executionRun.id,
     startingSha: baseSha,
-    resultingSha: dispatchResult.handback.commitSha,
-    branch: dispatchResult.handback.branch,
-    changedFiles: dispatchResult.handback.evidence.changedFiles,
-    testsActuallyRun: dispatchResult.handback.testsActuallyRun,
-    exactBuildId: dispatchResult.handback.exactBuildId,
+    resultingSha: dispatchResult.build.commitSha,
+    branch: dispatchResult.executionRun.returnedBranch,
+    changedFiles: dispatchResult.executionRun.evidence.changedFiles,
+    testsActuallyRun: dispatchResult.executionRun.testsActuallyRun,
+    exactBuildId: dispatchResult.build.id,
     buildVerified: build?.isVerified,
     lastVerifiedBuildId: updatedMilestone?.lastVerifiedBuildId,
   };
