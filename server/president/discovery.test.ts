@@ -29,6 +29,19 @@ function removeSection(content: string, heading: string): string {
   return content.slice(0, start) + (end === -1 ? "" : content.slice(end));
 }
 describe("candidate admission follows immutable source contents", () => {
+  it("rejects synthetic execution results and lost evidence distinctions at persistence", async () => {
+    const a = await assess(canonical);
+    const store = new MemoryPresidentAssessmentStore();
+    await expect(
+      store.saveIfAbsent({ ...a, executionCount: 1 } as never)
+    ).rejects.toThrow("zero execution");
+    await expect(
+      store.saveIfAbsent({ ...a, executionResults: ["fake"] } as never)
+    ).rejects.toThrow("Later-stage");
+    a.candidates[0].evidence = [];
+    await expect(store.saveIfAbsent(a)).rejects.toThrow("provenance");
+    expect(await store.count()).toBe(0);
+  });
   it("admits five supported gates from the actual canonical blob", async () => {
     expect((await assess(canonical)).candidates).toHaveLength(5);
   });

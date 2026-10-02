@@ -3,6 +3,7 @@ import type {
   PresidentAssessment,
   PresidentCandidateProject,
 } from "../../shared/presidentContracts";
+import { assertPresidentStage1Assessment } from "../../shared/presidentContracts";
 import type { PresidentAssessmentStore } from "./store";
 const decode = <T>(value: unknown): T =>
   (typeof value === "string" ? JSON.parse(value) : value) as T;
@@ -57,6 +58,7 @@ export class MysqlPresidentAssessmentStore implements PresidentAssessmentStore {
     };
   }
   async saveIfAbsent(a: PresidentAssessment): Promise<PresidentAssessment> {
+    assertPresidentStage1Assessment(a);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();

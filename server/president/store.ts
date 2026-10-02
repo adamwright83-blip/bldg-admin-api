@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { PresidentAssessment } from "../../shared/presidentContracts";
+import { assertPresidentStage1Assessment } from "../../shared/presidentContracts";
 export interface PresidentAssessmentStore {
   findByEvidence(
     sha: string,
@@ -20,6 +21,7 @@ export class MemoryPresidentAssessmentStore
     return this.rows.get(this.key(a, b)) ?? null;
   }
   async saveIfAbsent(value: PresidentAssessment) {
+    assertPresidentStage1Assessment(value);
     const key = this.key(
       value.inspectedRepositorySha,
       value.evidenceSnapshotId
@@ -52,6 +54,7 @@ export class FilePresidentAssessmentStore implements PresidentAssessmentStore {
     );
   }
   async saveIfAbsent(value: PresidentAssessment) {
+    assertPresidentStage1Assessment(value);
     const all = await this.all();
     const prior = all.find(
       x =>

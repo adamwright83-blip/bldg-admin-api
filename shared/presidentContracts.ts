@@ -47,3 +47,44 @@ export interface PresidentEvidenceSnapshot {
   sourceDigests: Record<string, string>;
   sourceContents: Record<string, string>;
 }
+
+/** Fail closed on fabricated execution claims or silently stripped provenance. */
+export function assertPresidentStage1Assessment(a: PresidentAssessment): void {
+  if (
+    a.seat !== PRESIDENT_SEAT ||
+    a.resultState !== PRESIDENT_STAGE_1_RESULT ||
+    a.status !== "COMPLETED" ||
+    a.executionCount !== 0
+  )
+    throw new Error(
+      "Only a completed Stage 1 menu with zero execution can be stored"
+    );
+  for (const key of [
+    "execution",
+    "executionResults",
+    "workOrders",
+    "preflight",
+    "reviews",
+    "internalCandidates",
+  ])
+    if (key in a)
+      throw new Error("Later-stage President state cannot be stored");
+  for (const c of a.candidates) {
+    if (
+      c.assessmentId !== a.id ||
+      c.status !== "PROPOSED_AWAITING_HUMAN_SELECTION" ||
+      !c.evidence.some(e => e.kind === "FACT") ||
+      !c.evidence.some(e => e.kind === "INFERENCE")
+    )
+      throw new Error("Candidate lacks Stage 1 identity or provenance");
+    for (const e of c.evidence)
+      if (
+        !["FACT", "INFERENCE", "UNKNOWN"].includes(e.kind) ||
+        !e.sourceId ||
+        !e.sourceLocation ||
+        !e.statement ||
+        (e.kind === "UNKNOWN" && e.verified)
+      )
+        throw new Error("Invalid President evidence distinction");
+  }
+}
