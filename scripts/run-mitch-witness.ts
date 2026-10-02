@@ -93,7 +93,7 @@ async function main() {
 
   // Configure AutonomousRuntimeCodingAgentProvider with dispatcher
   const dispatcher = createAutonomousDispatcher(store, {
-    model: "gemini-flash-latest",
+    model: process.env.MITCH_CODING_AGENT_MODEL ?? "gemini-flash-lite-latest",
     timeoutMs: 180_000,
   });
   console.log(`[Step 4] Registered AutonomousRuntimeCodingAgentProvider with MitchGameDispatcher.`);

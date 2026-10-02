@@ -147,7 +147,7 @@ export class AutonomousRuntimeCodingAgentProvider implements IMitchExecutionProv
 
   constructor(options: AutonomousRuntimeCodingAgentProviderOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.GOOGLE_API_KEY ?? null;
-    this.model = options.model ?? process.env.MITCH_CODING_AGENT_MODEL ?? "gemini-flash-latest";
+    this.model = options.model ?? process.env.MITCH_CODING_AGENT_MODEL ?? "gemini-flash-lite-latest";
     this.repoRoot = options.repoRoot ?? this.detectRepoRoot();
     this.worktreeBaseDir = options.worktreeBaseDir ?? path.join(this.repoRoot, ".mitch-worktrees");
     this.customRunner = options.workerRunner;
