@@ -1,0 +1,209 @@
+[
+  {
+    "id": "president-assessment-87068758619f7441a55cf038",
+    "seat": "seat.president",
+    "inspectedRepositorySha": "38b20810be8575ef85fed60ba25e6c229bc10170",
+    "evidenceSnapshotId": "evidence-3d13137f8d78bfeb9fa5253a7a2dff9d8f8390e62fe8fc75f00bd2b66bfc2ec5",
+    "status": "COMPLETED",
+    "resultState": "WAITING_FOR_HUMAN_SELECTION",
+    "evidenceSourcesAvailable": [
+      "canonical_repository_documents",
+      "current_repository_source",
+      "github_pull_request_metadata"
+    ],
+    "evidenceSourcesUnavailable": [
+      "posthog_live_product_data",
+      "production_runtime",
+      "railway_production",
+      "stripe_live"
+    ],
+    "startedAt": "2026-10-02T07:51:38.508Z",
+    "completedAt": "2026-10-02T07:51:38.508Z",
+    "provider": "deterministic-policy",
+    "model": "president-stage1-v1",
+    "candidates": [
+      {
+        "title": "Prove production database recovery",
+        "missingCapability": "JOYSTICK cannot currently demonstrate that production customer data can be restored safely after database loss.",
+        "currentGap": "The canonical launch operations document records no scheduled backup and no proven restore drill, and blocks public paid launch on both.",
+        "proposedBuild": "Configure the required daily backup and perform a restore drill into an isolated copy, recording auditable evidence without restoring over production.",
+        "resultingCapability": "JOYSTICK can recover production data through a tested procedure and satisfy the highest-risk launch gate.",
+        "rankReason": "Ranked #1 because it is an explicit launch blocker and reduces the largest irreversible operational risk without changing product policy.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§1 Production MySQL recovery gate",
+            "statement": "Public paid launch is blocked until a scheduled backup and restore drill on a copy are completed.",
+            "verified": true
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§1",
+            "statement": "Recovery proof deserves first priority because loss without a verified restore path is high-impact and blocks launch.",
+            "verified": true
+          },
+          {
+            "kind": "UNKNOWN",
+            "sourceId": "production_runtime",
+            "sourceLocation": "unavailable",
+            "statement": "Current production runtime health was not verified; unavailable evidence is not evidence of failure.",
+            "verified": false
+          }
+        ],
+        "blockers": [
+          "Requires Adam-authorized, human-controlled Railway production operations."
+        ],
+        "humanDecisionDependency": "Adam must authorize and supervise production backup configuration and the isolated restore drill.",
+        "id": "president-candidate-5f65cf71ba2c351e0a246c7a",
+        "assessmentId": "president-assessment-87068758619f7441a55cf038",
+        "rank": 1,
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      },
+      {
+        "title": "Prove live billing with a controlled canary",
+        "missingCapability": "JOYSTICK cannot yet prove that a real paid signup provisions exactly one isolated tenant with correct subscription entitlements.",
+        "currentGap": "The launch operations contract requires deliberate live Stripe setup and a controlled canary before the public purchase CTA is enabled.",
+        "proposedBuild": "Configure the locked $49 monthly / $468 annual, card-required seven-day-trial plans in live Stripe, wire the webhook secrets, and run the documented controlled canary.",
+        "resultingCapability": "JOYSTICK can accept a controlled real payment and verify provisioning, entitlement, portal, cancellation, and retry idempotency behavior.",
+        "rankReason": "Ranked #2 because it directly gates commercial operation, after recoverability is proven; it preserves the locked pricing and trial decisions.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§2 Live Stripe activation",
+            "statement": "Live plans, secrets, webhook, and a controlled canary are required before the public purchase CTA goes live.",
+            "verified": true
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§2",
+            "statement": "Billing proof follows recovery because it creates production commercial data that must be recoverable.",
+            "verified": true
+          },
+          {
+            "kind": "UNKNOWN",
+            "sourceId": "stripe_live",
+            "sourceLocation": "unavailable",
+            "statement": "Current live Stripe configuration was unavailable and is not treated as zero or broken.",
+            "verified": false
+          }
+        ],
+        "blockers": [
+          "Requires live Stripe credentials and Adam-controlled canary actions."
+        ],
+        "humanDecisionDependency": "Adam must authorize live Stripe configuration and the canary charge/refund/cancellation path.",
+        "id": "president-candidate-725b3eeeda89c9cab72aec1a",
+        "assessmentId": "president-assessment-87068758619f7441a55cf038",
+        "rank": 2,
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      },
+      {
+        "title": "Activate and verify retention safely",
+        "missingCapability": "JOYSTICK cannot yet demonstrate that production retention runs are configured, bounded, and deleting only eligible expired data.",
+        "currentGap": "The canonical launch operations document says the scheduled retention workflow is intentionally inert until production configuration, dry run, and one bounded live run are completed.",
+        "proposedBuild": "Configure matching retention secrets and URL, run the existing workflow dry, inspect eligibility, then perform one bounded authorized live run and retain the evidence.",
+        "resultingCapability": "JOYSTICK can enforce its retention policy predictably without an unbounded first production run.",
+        "rankReason": "Ranked #3 because it is an explicit public-launch gate with privacy and operational leverage, but follows recovery and billing proof.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§3 Retention activation",
+            "statement": "Retention remains inert until configuration, a dry run, and a bounded live run are verified.",
+            "verified": true
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§3",
+            "statement": "Bounded activation is a prerequisite to claiming production retention readiness.",
+            "verified": true
+          }
+        ],
+        "blockers": [
+          "Requires production secret configuration and explicit authorization for the bounded live run."
+        ],
+        "humanDecisionDependency": "Adam must authorize production retention activation.",
+        "id": "president-candidate-071f5f78b720e2abeb03bd8c",
+        "assessmentId": "president-assessment-87068758619f7441a55cf038",
+        "rank": 3,
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      },
+      {
+        "title": "Run the two-customer isolation launch canary",
+        "missingCapability": "JOYSTICK cannot yet prove end-to-end that two newly paid businesses remain isolated across product data, AI usage, and Claire metadata.",
+        "currentGap": "The canonical customer launch canary requires two independently created customers and reciprocal access checks after recovery, billing, and retention gates pass.",
+        "proposedBuild": "Execute the documented Customer A/Customer B canary with scoped test books and record cross-tenant denial, entitlement, cost attribution, and log-privacy evidence.",
+        "resultingCapability": "JOYSTICK can demonstrate end-to-end tenant isolation on the real paid onboarding path before public launch.",
+        "rankReason": "Ranked #4 because it is broad launch proof but depends on the first three operational gates being completed.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§4 Customer launch canary",
+            "statement": "The launch procedure requires reciprocal isolation checks for two independently provisioned customers.",
+            "verified": true
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§4",
+            "statement": "This proof has high product leverage but cannot responsibly precede recovery, billing, and retention readiness.",
+            "verified": true
+          }
+        ],
+        "blockers": [
+          "Depends on recovery, live billing, and retention gates."
+        ],
+        "humanDecisionDependency": "Adam must authorize the production canary identities and timing.",
+        "id": "president-candidate-41adb65a920b8031820dd653",
+        "assessmentId": "president-assessment-87068758619f7441a55cf038",
+        "rank": 4,
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      },
+      {
+        "title": "Establish post-launch production log clearance",
+        "missingCapability": "JOYSTICK cannot yet certify that its first launch deployment is free of recurring schema failures, transcript leakage, and cross-tenant request contamination.",
+        "currentGap": "The launch contract requires production-log inspection after the first hardened deployment and forbids declaring launch complete while required schema errors recur.",
+        "proposedBuild": "Run a bounded, privacy-aware production log review against the documented failure classes and preserve a signed clearance record or explicit blockers.",
+        "resultingCapability": "JOYSTICK can make an evidence-backed launch-readiness claim instead of assuming green CI proves healthy production behavior.",
+        "rankReason": "Ranked #5 because it is a required final verification gate whose evidence only becomes meaningful after the preceding production operations.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "§5 Production log gate",
+            "statement": "Production logs must be checked for schema errors, hidden migration failures, transcript bodies, and cross-tenant identifiers.",
+            "verified": true
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "sourceLocation": "Launch definition",
+            "statement": "Log clearance is final-stage evidence because it depends on a deployed launch candidate.",
+            "verified": true
+          },
+          {
+            "kind": "UNKNOWN",
+            "sourceId": "production_runtime",
+            "sourceLocation": "unavailable",
+            "statement": "Current production runtime health was not verified; unavailable evidence is not evidence of failure.",
+            "verified": false
+          }
+        ],
+        "blockers": [
+          "Requires an authorized production deployment and read-only production log access."
+        ],
+        "humanDecisionDependency": "Adam must authorize the launch deployment and production log review window.",
+        "id": "president-candidate-1962e52be67950729e2eafde",
+        "assessmentId": "president-assessment-87068758619f7441a55cf038",
+        "rank": 5,
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      }
+    ],
+    "executionCount": 0
+  }
+]

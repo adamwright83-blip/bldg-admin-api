@@ -4557,6 +4557,10 @@ await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",
   "Mitch v1 game production operating system tables"
 );
+await applyHistoricalCreateTables(
+  "../drizzle/0109_president_stage1.sql",
+  "President Stage 1 assessment and candidate tables"
+);
 
 // END schema-path-normalized
 
