@@ -494,10 +494,10 @@ Available Actions:
 `;
 
       const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
-        { role: "user", parts: [{ text: systemPrompt + "\nPlease begin by inspecting the relevant files or running tests." }] },
+        { role: "user", parts: [{ text: "Please begin executing the work order. Inspect files, modify code, run tests, commit, and finish. Respond with the first JSON action." }] },
       ];
 
-      const maxTurns = 10;
+      const maxTurns = 15;
       let committed = false;
       let commitMessage = "";
 
@@ -506,7 +506,13 @@ Available Actions:
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents }),
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            generationConfig: {
+              responseMimeType: "application/json",
+            },
+          }),
         });
 
         if (!res.ok) {
@@ -527,54 +533,43 @@ Available Actions:
 
         contents.push({ role: "model", parts: [{ text: responseText }] });
 
-        // Parse action JSON
-        const actionMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ?? [null, responseText];
-        const jsonStr = (actionMatch[1] ?? responseText).trim();
-
         let actionObj: Record<string, unknown>;
         try {
-          actionObj = JSON.parse(jsonStr);
+          actionObj = JSON.parse(responseText);
         } catch {
-          // If response isn't raw JSON, attempt to find first JSON object in text
-          const start = jsonStr.indexOf("{");
-          const end = jsonStr.lastIndexOf("}");
-          if (start >= 0 && end > start) {
-            try {
-              actionObj = JSON.parse(jsonStr.slice(start, end + 1));
-            } catch {
-              contents.push({
-                role: "user",
-                parts: [{ text: "Error: Please respond only with a valid JSON action." }],
-              });
-              continue;
-            }
-          } else {
+          // Fallback if wrapped in markdown
+          const actionMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+          const jsonStr = (actionMatch ? actionMatch[1] : responseText).trim();
+          try {
+            actionObj = JSON.parse(jsonStr);
+          } catch {
             contents.push({
               role: "user",
-              parts: [{ text: "Error: Please respond with a valid JSON action." }],
+              parts: [{ text: "Error: Please respond only with a valid JSON action. Respond with next JSON action." }],
             });
             continue;
           }
         }
 
         const action = String(actionObj.action ?? "");
+        console.log(`[Worker Turn ${turn + 1}] Action: ${action} ${actionObj.path ?? actionObj.command ?? actionObj.message ?? ""}`);
 
         if (action === "read_file") {
           const filePath = String(actionObj.path ?? "");
           try {
             const content = await ctx.readFile(filePath);
-            contents.push({ role: "user", parts: [{ text: `File content of ${filePath}:\n${content}` }] });
+            contents.push({ role: "user", parts: [{ text: `File content of ${filePath}:\n${content}\n\nRespond with next JSON action.` }] });
           } catch (e) {
-            contents.push({ role: "user", parts: [{ text: `Error reading file ${filePath}: ${e instanceof Error ? e.message : String(e)}` }] });
+            contents.push({ role: "user", parts: [{ text: `Error reading file ${filePath}: ${e instanceof Error ? e.message : String(e)}\n\nRespond with next JSON action.` }] });
           }
         } else if (action === "write_file") {
           const filePath = String(actionObj.path ?? "");
           const content = String(actionObj.content ?? "");
           try {
             await ctx.writeFile(filePath, content);
-            contents.push({ role: "user", parts: [{ text: `File ${filePath} written successfully.` }] });
+            contents.push({ role: "user", parts: [{ text: `File ${filePath} written successfully.\n\nRespond with next JSON action.` }] });
           } catch (e) {
-            contents.push({ role: "user", parts: [{ text: `Error writing file ${filePath}: ${e instanceof Error ? e.message : String(e)}` }] });
+            contents.push({ role: "user", parts: [{ text: `Error writing file ${filePath}: ${e instanceof Error ? e.message : String(e)}\n\nRespond with next JSON action.` }] });
           }
         } else if (action === "run_command") {
           const cmd = String(actionObj.command ?? "");
@@ -582,20 +577,20 @@ Available Actions:
           const result = await ctx.runCommand(cmd, args);
           contents.push({
             role: "user",
-            parts: [{ text: `Command exited with code ${result.exitCode}.\nSTDOUT:\n${result.stdout.slice(0, 2000)}\nSTDERR:\n${result.stderr.slice(0, 1000)}` }],
+            parts: [{ text: `Command exited with code ${result.exitCode}.\nSTDOUT:\n${result.stdout.slice(0, 2000)}\nSTDERR:\n${result.stderr.slice(0, 1000)}\n\nRespond with next JSON action.` }],
           });
         } else if (action === "git_diff") {
           const diff = await ctx.gitDiff();
-          contents.push({ role: "user", parts: [{ text: `Current git diff:\n${diff || "(no changes)"}` }] });
+          contents.push({ role: "user", parts: [{ text: `Current git diff:\n${diff || "(no changes)"}\n\nRespond with next JSON action.` }] });
         } else if (action === "commit") {
           const message = String(actionObj.message ?? `feat: implement ${ctx.workOrder.title}`);
           try {
             const sha = await ctx.commit(message);
             committed = true;
             commitMessage = message;
-            contents.push({ role: "user", parts: [{ text: `Committed successfully. HEAD is now ${sha}. Please call finish.` }] });
+            contents.push({ role: "user", parts: [{ text: `Committed successfully. HEAD is now ${sha}. Respond with finish action.` }] });
           } catch (e) {
-            contents.push({ role: "user", parts: [{ text: `Commit failed: ${e instanceof Error ? e.message : String(e)}` }] });
+            contents.push({ role: "user", parts: [{ text: `Commit failed: ${e instanceof Error ? e.message : String(e)}\n\nRespond with next JSON action.` }] });
           }
         } else if (action === "finish") {
           if (!committed) {
