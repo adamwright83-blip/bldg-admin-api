@@ -85,7 +85,7 @@ const CLEAR_ADD_WORK_FAST_PATH =
   /\b(add (?:a|this) (?:task|to-do|commitment)|make a note|remind me to|put (?:this|that) on (?:my|the) list)\b/i;
 
 const YES_PATTERN = /\b(yes|yeah|yep|confirm|confirmed|correct|do it|go ahead|add it|save it)\b/i;
-const NO_PATTERN = /\b(no|nope|nah|cancel|never ?mind|don'?t|do not|stop|not now)\b/i;
+const NO_PATTERN = /\b(no(?!\s+longer\b)|nope|nah|cancel|never ?mind|don'?t|do not|stop|not now)\b/i;
 
 export function detectConfirmation(utterance: string): "yes" | "no" | "ambiguous" {
   const hasYes = YES_PATTERN.test(utterance);

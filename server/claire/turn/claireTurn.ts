@@ -856,6 +856,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ),
       weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
     },
+    hasActiveAnalyticsQuery: Boolean(state.analytics?.query || state.analytics?.pendingClarification),
     sessionKind: state.sessionKind,
     morningSession,
     dayLineSuppressed: Boolean(state.dayLineSuppressed),
@@ -1170,10 +1171,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  const priorClaimLane =
-    explicitPriorClaimProbe ||
-    brainV3.act === "prior_claim_probe" ||
-    priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
+  const priorClaimLane = explicitPriorClaimProbe;
   if (priorClaimLane && resolution.kind !== "none") {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
@@ -1186,7 +1184,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // "Immediately preceding" is only a default for a bare reaction. If the classifier read the utterance as
       // pointing at a specific (older) statement, or could not tell which, that reading outranks recency.
       let effective: ClaimResolution = resolution;
-      if (reading?.probe && resolution.kind === "resolved" && resolution.via === "immediately_preceding") {
+      if (reading?.probe && resolution.kind === "resolved" && (resolution.via === "immediately_preceding" || resolution.receipt === focusedReceipt)) {
         const named = reading.receiptId ? (state.claimReceipts ?? []).find(receipt => receipt.id === reading.receiptId) : undefined;
         if (reading.ambiguous || (reading.receiptId && !named)) effective = { kind: "ambiguous", candidates: [resolution.receipt] };
         else if (named) effective = { kind: "resolved", receipt: named, via: "explicit_reference" };
@@ -1249,8 +1247,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.act === "rejection" ||
     brainV3.dayLineDisposition === "decline"
   ) {
-    if (state.pendingProposal || state.pendingBriefing) {
+    if (state.pendingProposal && conversationTarget !== "pending_action") {
       state.pendingProposal = null;
+      state.pendingReminded = false;
+    }
+    if (state.pendingBriefing && conversationTarget !== "pending_briefing") {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -1262,9 +1263,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (
     brainV3.act === "rejection" &&
     brainV3.workDisposition === "none" &&
+    conversationTarget !== "pending_action" &&
     !state.pendingBriefing &&
     !state.pendingProposal &&
-    !state.pendingAccountFollowUp
+    !state.pendingAccountFollowUp &&
+    !state.clarifyingUtterance
   ) {
     mark("fallback", { fallbackReason: "action_refusal_settled" });
     return finish({ speak: "Understood — I won't add anything.", kind: "answered" });
@@ -1472,6 +1475,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         brainV3.act === "conversation_control" ||
         brainV3.priorClaim !== "none");
     if (pendingIsNew) {
+      heldProposalTitle = state.pendingProposal?.title ?? null;
+      if (state.pendingProposal) {
+        carried.push(proposalAsItem(state.pendingProposal, today, clock.minutesNow));
+      }
       state.pendingProposal = null;
       state.pendingUpdate = null;
       state.clarifyingUtterance = null;
@@ -1623,7 +1630,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.workDisposition === "commit" &&
     !state.dayLineSuppressed &&
     !wantsBatchProposal &&
-    parsed.items.length > 0;
+    parsed.items.length > 0 &&
+    parsed.questions.length === 0;
   if (explicitCommitNow) {
     const dates = Array.from(new Set(parsed.items.map(item => item.businessDate)));
     const [existing] = await Promise.all([
@@ -2167,7 +2175,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * deterministic routes only honour a result that has already landed, so they never wait.
    */
   async function semanticChallengeSpeech(wait: boolean, presentation: "deterministic" | "guard_replacement"): Promise<string | null> {
-    if (brainV3.priorClaim === "none" && !priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }))) return null;
+    if (brainV3.priorClaim === "none") return null;
     if (!semantic) return null;
     const reading = wait ? await semantic.promise : semantic.settled ?? null;
     if (!reading) {

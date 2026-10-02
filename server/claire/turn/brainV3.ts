@@ -331,6 +331,7 @@ export type SafeClaireBrainV3FallbackContext = {
   sessionKind?: string | null;
   morningSession?: string | null;
   dayLineSuppressed?: boolean;
+  hasActiveAnalyticsQuery?: boolean;
 };
 
 export function safeClaireBrainV3Fallback(
@@ -361,11 +362,16 @@ export function safeClaireBrainV3Fallback(
   const interpreted = interpretTurn(text);
   const confirmation = detectConfirmation(text);
 
-  const priorClaim: ClaireBrainV3PriorClaim = interpreted.correctnessChallenge
-    ? "correctness"
-    : interpreted.provenanceQuestion
-      ? "provenance"
-      : "none";
+  const isSemanticPriorClaimChallenge =
+    /\b(?:earlier\s+you\s+said|you\s+told\s+me\s+earlier|what\s+you\s+said\s+earlier|source\s+for\s+what\s+you\s+said|a\s+while\s+back|was\s+it\s+in\s+the\s+records|lying|made\s+up|did\s+you\s+make|why\s+should\s+i\s+believe|are\s+you\s+(?:sure|certain)|really\?)\b/i.test(text) ||
+    /\b(?:was|is|did|were)\b[^!?\n]{0,50}\b(?:right|real|actually|really|records?|accurate|true|correct)\b/i.test(text);
+
+  const priorClaim: ClaireBrainV3PriorClaim =
+    interpreted.correctnessChallenge || isSemanticPriorClaimChallenge
+      ? "correctness"
+      : interpreted.provenanceQuestion
+        ? "provenance"
+        : "none";
 
   let target: ClaireBrainV3Target = "open_conversation";
   let act: ClaireBrainV3Act = "unclear";
@@ -383,7 +389,11 @@ export function safeClaireBrainV3Fallback(
     }
   }
 
-  if (interpreted.correctnessChallenge || interpreted.provenanceQuestion) {
+  const isBusinessContinuation =
+    /^(?:compare|add\s+them|this\s+(?:month|year|week)|last\s+(?:month|year|week)|dry\s+cleaning|now\s+include|exclude|include|only\b|no,?\s+use\b)/i.test(text) ||
+    (Boolean(ctx.hasActiveAnalyticsQuery) && !isTracking && !interpreted.operatorWorkCommitment && confirmation !== "yes" && confirmation !== "no");
+
+  if (priorClaim !== "none") {
     act = "prior_claim_probe";
   } else if (interpreted.callControl === "end") {
     act = "conversation_control";
@@ -393,11 +403,9 @@ export function safeClaireBrainV3Fallback(
     act = "correction";
   } else if (confirmation === "yes") {
     act = "confirmation";
-  } else if (confirmation === "no" || interpreted.actionRefused) {
+  } else if (!isBusinessContinuation && (confirmation === "no" || interpreted.actionRefused)) {
     act = "rejection";
-  } else if (interpreted.broadBriefingRequest) {
-    act = "question";
-  } else if (interpreted.hasBusinessQuestion) {
+  } else if (interpreted.broadBriefingRequest || interpreted.hasBusinessQuestion || isBusinessContinuation) {
     act = "question";
   } else if (interpreted.operatorWorkCommitment) {
     act = "work_commitment";
@@ -416,18 +424,13 @@ export function safeClaireBrainV3Fallback(
   ) {
     target = "weekly_planning";
     weeklyDisposition = confirmation === "yes" ? "continue" : "cancel";
-  } else if (ctx.pending?.briefing) {
-    if (confirmation === "yes" || explicitPendingDayLineCommit(text)) {
-      target = "pending_briefing";
+  } else if (ctx.pending?.accountFollowUp) {
+    if (confirmation === "yes") {
+      target = "pending_account_follow_up";
       act = "confirmation";
-      dayLineDisposition = "accept";
-    } else if (confirmation === "no" || interpreted.actionRefused || explicitDayLineRefusal(text)) {
-      target = "pending_briefing";
+    } else if (confirmation === "no" || interpreted.actionRefused) {
+      target = "pending_account_follow_up";
       act = "rejection";
-      dayLineDisposition = "decline";
-    } else if (interpreted.correction) {
-      target = "pending_briefing";
-      act = "correction";
     }
   } else if (ctx.pending?.action) {
     if (confirmation === "yes") {
@@ -441,14 +444,23 @@ export function safeClaireBrainV3Fallback(
     } else if (interpreted.correction) {
       target = "pending_action";
       act = "correction";
+    } else {
+      target = "pending_action";
     }
-  } else if (ctx.pending?.accountFollowUp) {
-    if (confirmation === "yes") {
-      target = "pending_account_follow_up";
+  } else if (ctx.pending?.briefing) {
+    if (confirmation === "yes" || explicitPendingDayLineCommit(text)) {
+      target = "pending_briefing";
       act = "confirmation";
-    } else if (confirmation === "no" || interpreted.actionRefused) {
-      target = "pending_account_follow_up";
+      dayLineDisposition = "accept";
+    } else if (confirmation === "no" || interpreted.actionRefused || explicitDayLineRefusal(text)) {
+      target = "pending_briefing";
       act = "rejection";
+      dayLineDisposition = "decline";
+    } else if (interpreted.correction || /^(?:make|move|change|push|set|put|switch|actually|drop|skip|remove|take off|leave off|forget|scratch)\b/i.test(text)) {
+      target = "pending_briefing";
+      act = "correction";
+    } else if (workDisposition === "propose" || workDisposition === "commit" || interpreted.mayProposeWork) {
+      target = "pending_briefing";
     }
   } else {
     // Nothing pending

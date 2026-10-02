@@ -150,7 +150,7 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
 /** A directive aimed at Claire's tracking systems: "add…", "put… on the Day Line", "remind me…". */
 const ACTION_DIRECTIVE =
-  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|batch)\b/i;
+  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|batch|remove|cancel|take\s+off|drop(?!\s+off\b))\b/i;
 
 const REFERENTIAL_ACTION_DIRECTIVE =
   /\b(?:do|send|put|add|batch|move)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i;
