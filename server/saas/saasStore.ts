@@ -1278,7 +1278,7 @@ export async function activateOnboardingOwner(input: {
     throw new Error("Tenant subscription is not active for owner activation");
   }
   const openId = `dayforge:${createHash("sha256")
-    .update(`${tenantId}:${session.ownerEmail}`)
+    .update(`${tenantId}:${ownerEmail}`)
     .digest("hex")
     .slice(0, 48)}`;
   await db.transaction(async tx => {
