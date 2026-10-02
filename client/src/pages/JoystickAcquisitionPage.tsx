@@ -363,6 +363,10 @@ export default function JoystickAcquisitionPage() {
         ) : !data.businessName || !data.ownerEmail ? (
           <>
             <div className="ja-reveal">
+              <div className="ja-world-preview" aria-label="Draft territory projection">
+                <img src="/assets/goldline/procedural-world-v1/02-territory-island-generic.png" alt="" />
+                <span>{preview.area.canonicalAddress || preview.area.declared}</span>
+              </div>
               <p className="ja-kicker">CLAIRE'S OPENING READ</p>
               <h1>{preview.area.canonicalAddress || preview.area.declared}</h1>
               <p>{preview.briefing.text}</p>
@@ -392,6 +396,10 @@ export default function JoystickAcquisitionPage() {
         ) : (
           <>
             <div className="ja-reveal ja-reveal--compact">
+              <div className="ja-world-preview ja-world-preview--compact" aria-label="Saved draft territory projection">
+                <img src="/assets/goldline/procedural-world-v1/02-territory-island-generic.png" alt="" />
+                <span>{preview.area.canonicalAddress || preview.area.declared}</span>
+              </div>
               <p className="ja-kicker">YOUR STARTING POINT IS SAVED</p>
               <h1>{preview.area.canonicalAddress || preview.area.declared}</h1>
               <div className="ja-dayline">
