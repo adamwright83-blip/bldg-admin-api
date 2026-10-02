@@ -123,6 +123,22 @@ export function syncPosthogIdentity(input: {
   });
 }
 
+export function captureProductEvent(
+  name: string,
+  properties?: Record<string, unknown>
+): void {
+  if (typeof window === "undefined") return;
+  const safe = properties ? { ...properties } : undefined;
+  scrubProperties(safe);
+  void initProductAnalytics().then(client => {
+    try {
+      client?.capture(name, safe);
+    } catch {
+      // Telemetry must never block product flow.
+    }
+  });
+}
+
 export function captureClientException(
   error: unknown,
   properties?: Record<string, string>
