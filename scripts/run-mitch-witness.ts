@@ -17,7 +17,7 @@
  * 13. Explicit assertion that no Boreslay order was created or executed
  */
 import { execFileSync } from "node:child_process";
-import { InMemoryMitchProductionStore } from "../server/mitch/mitchStore";
+import { MitchProductionStore } from "../server/mitch/mitchStore";
 import { MitchProductionService } from "../server/mitch/mitchService";
 import { MitchWorkOrderDispatcher } from "../server/mitch/mitchDispatcher";
 import { MitchQaService } from "../server/mitch/mitchQaService";
@@ -39,7 +39,7 @@ async function main() {
   console.log(`[Witness Setup] Base Commit SHA: ${baseSha}`);
 
   // 1. Initialize store, service, and dispatcher
-  const store = new InMemoryMitchProductionStore();
+  const store = new MitchProductionStore(true);
   const service = new MitchProductionService(store);
   const qaService = new MitchQaService(store);
 
@@ -121,11 +121,11 @@ async function main() {
   console.log(`         Changed Files: ${dispatchResult.handback.evidence.changedFiles.join(", ")}`);
 
   // Verify Work Order status in store
-  const updatedOrder = await store.getWorkOrder(workOrder.id);
+  const updatedOrder = await store.getWorkOrder(tenantId, workOrder.id);
   console.log(`[Step 7] Work order status in store: ${updatedOrder?.status}`);
 
   // Inspect build registered in store
-  const build = await store.getBuild(dispatchResult.handback.exactBuildId);
+  const build = await store.getBuild(tenantId, dispatchResult.handback.exactBuildId);
   console.log(`[Step 8] Mitch Build Record:`);
   console.log(`         Build ID: ${build?.id}`);
   console.log(`         Commit SHA: ${build?.commitSha}`);
