@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { recordBehavioralLedgerEvent, listBehavioralLedgerEventsForCorrelation, listBehavioralLedgerEventsForOperatorSource, listBehavioralLedgerEventsForOperatorCorrelation } from "./behavioralLedger";
+import {
+  recordBehavioralLedgerEvent,
+  listBehavioralLedgerEventsForCorrelation,
+  listBehavioralLedgerEventsForOperatorSource,
+  listBehavioralLedgerEventsForOperatorCorrelation,
+  listBehavioralLedgerEventsForOperatorBounded,
+  DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT,
+  MAX_BOUNDED_OPERATOR_LEDGER_LIMIT,
+} from "./behavioralLedger";
 import type { BehavioralLedgerStore } from "./behavioralLedger";
 import type { BehavioralLedgerEvent, InsertBehavioralLedgerEvent } from "../../drizzle/schema";
 
@@ -43,6 +51,12 @@ function createFakeStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEven
     },
     async listByDecisionPoint(tenantId: string, decisionPointId: string) {
       return rows.filter(r => r.tenantId === tenantId && r.decisionPointId === decisionPointId);
+    },
+    async listByOperatorBounded(tenantId: string, operatorUserIds: string[], limit = 200) {
+      return rows
+        .filter(r => r.tenantId === tenantId && operatorUserIds.includes(r.operatorUserId))
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+        .slice(0, Math.min(Math.max(1, limit), 500));
     },
   };
 }
@@ -276,5 +290,70 @@ describe("listBehavioralLedgerEventsForOperatorCorrelation", () => {
     );
     expect(rows.map(row => row.eventType).sort()).toEqual(["ACCEPTED", "DELIVERED"]);
     expect(new Set(rows.map(row => row.sourceEntityId))).toEqual(new Set(["101", "102"]));
+  });
+
+  describe("listBehavioralLedgerEventsForOperatorBounded", () => {
+    it("returns events filtered strictly by tenantId and mapped operator user IDs with an enforced bound", async () => {
+      const store = createFakeStore();
+      for (let i = 1; i <= 10; i++) {
+        await recordBehavioralLedgerEvent(
+          {
+            ...baseInput,
+            tenantId: "tenant-a",
+            operatorUserId: i % 2 === 0 ? "operator-1" : "operator-2",
+            correlationId: `ops_task:${i}`,
+            sourceEntityType: "ops_task_event",
+            sourceEntityId: `event-${i}`,
+            eventType: "DELIVERED",
+            occurredAt: new Date(1700000000000 + i * 1000),
+            idempotencyKey: `event:${i}`,
+          },
+          store
+        );
+      }
+
+      // Add cross-tenant row
+      await recordBehavioralLedgerEvent(
+        {
+          ...baseInput,
+          tenantId: "tenant-b",
+          operatorUserId: "operator-1",
+          correlationId: "ops_task:999",
+          sourceEntityType: "ops_task_event",
+          sourceEntityId: "event-999",
+          eventType: "DELIVERED",
+          idempotencyKey: "event:999",
+        },
+        store
+      );
+
+      const rows = await listBehavioralLedgerEventsForOperatorBounded(
+        {
+          tenantId: "tenant-a",
+          operatorUserIds: ["operator-1"],
+          limit: 3,
+        },
+        store
+      );
+
+      expect(rows).toHaveLength(3);
+      expect(rows.every(r => r.tenantId === "tenant-a")).toBe(true);
+      expect(rows.every(r => r.operatorUserId === "operator-1")).toBe(true);
+    });
+
+    it("returns empty array safely when tenantId or operatorUserIds are empty", async () => {
+      const store = createFakeStore();
+      const empty1 = await listBehavioralLedgerEventsForOperatorBounded(
+        { tenantId: "", operatorUserIds: ["operator-1"] },
+        store
+      );
+      expect(empty1).toEqual([]);
+
+      const empty2 = await listBehavioralLedgerEventsForOperatorBounded(
+        { tenantId: "tenant-a", operatorUserIds: [] },
+        store
+      );
+      expect(empty2).toEqual([]);
+    });
   });
 });
