@@ -495,14 +495,15 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!existing) return null;
 
     const now = new Date();
-    // Eligible if pending, OR if claimed but lease has expired
+    // Eligible if pending, OR if claimed but lease has expired, OR if failed and remaining attempts exist
     const isPending = existing.status === "pending";
     const isExpired =
       (existing.status === "claimed" || existing.status === "executing") &&
       existing.leaseExpiresAt !== null &&
       new Date(existing.leaseExpiresAt).getTime() < now.getTime();
+    const isRetryableFailed = existing.status === "failed" && existing.attemptCount < existing.maxAttempts;
 
-    if (!isPending && !isExpired) {
+    if (!isPending && !isExpired && !isRetryableFailed) {
       return null;
     }
 

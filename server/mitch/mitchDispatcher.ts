@@ -178,6 +178,15 @@ export class MitchGameDispatcher {
       );
     }
 
+    // Verify work order is in active execution state (reject duplicate completion or canceled/failed)
+    if (existing.status !== "claimed" && existing.status !== "executing") {
+      throw new StaleWorkerOverwrittenViolationError(
+        input.workOrderId,
+        input.executorId,
+        existing.status
+      );
+    }
+
     // Verify lease has not expired
     const now = new Date();
     if (existing.leaseExpiresAt && new Date(existing.leaseExpiresAt).getTime() < now.getTime()) {
@@ -281,4 +290,18 @@ export class MitchGameDispatcher {
       throw err;
     }
   }
+}
+
+export { AutonomousRuntimeCodingAgentProvider } from "./autonomousRuntimeCodingAgentProvider";
+export type { AutonomousRuntimeCodingAgentProviderOptions } from "./autonomousRuntimeCodingAgentProvider";
+
+export function createAutonomousDispatcher(
+  store: IMitchProductionStore,
+  providerOptions?: import("./autonomousRuntimeCodingAgentProvider").AutonomousRuntimeCodingAgentProviderOptions
+): MitchGameDispatcher {
+  const dispatcher = new MitchGameDispatcher(store);
+  const { AutonomousRuntimeCodingAgentProvider: Provider } = require("./autonomousRuntimeCodingAgentProvider");
+  const provider = new Provider(providerOptions);
+  dispatcher.registerExecutionProvider(provider);
+  return dispatcher;
 }
