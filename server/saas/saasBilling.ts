@@ -41,7 +41,8 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   stripe?: Stripe;
 }) {
   const existingOnboarding = await requireOnboardingSession(input);
-  if (!existingOnboarding.ownerEmail) {
+  const customerEmail = existingOnboarding.ownerEmail;
+  if (!customerEmail) {
     throw new Error("Complete account identity before checkout");
   }
   const returnPath =
@@ -78,7 +79,7 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   const session = await stripe.checkout.sessions.create(
     {
       mode: "subscription",
-      customer_email: onboarding.ownerEmail,
+      customer_email: customerEmail,
       client_reference_id: onboarding.id,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
       success_url: `${appUrl()}${returnPath}?session=${onboarding.id}&checkout=success`,
