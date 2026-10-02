@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { captureProductEvent } from "@/lib/posthog";
 import type { GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
 import type { TerritoryDefinition, TerritoryDerivedState } from "@shared/goldlineTerritories";
 import GoldlineOverworld from "@/pages/goldline/GoldlineOverworld";
@@ -13,7 +14,7 @@ export function FirstMissionDriver({session}:{session:GoldlineOnboardingSession}
  const utils=trpc.useUtils();
  const refresh=()=>utils.system.goldlineOnboarding.state.invalidate();
  const traversal=trpc.system.goldlineOnboarding.traversal.useMutation({onSuccess:refresh});
- const report=trpc.system.goldlineOnboarding.fieldOutcome.useMutation({onSuccess:()=>{setBriefing(false);void refresh();}});
+ const report=trpc.system.goldlineOnboarding.fieldOutcome.useMutation({onSuccess:()=>{if(session.acquisitionSessionId)captureProductEvent("joystick_first_real_action_completed",{action_kind:"field_outcome"});setBriefing(false);void refresh();}});
  const defeat=trpc.system.goldlineOnboarding.defeat.useMutation({onSuccess:refresh});
  const [briefing,setBriefing]=useState(false),[text,setText]=useState(""),[confirmed,setConfirmed]=useState(false),[encounter,setEncounter]=useState(false);
  const [gps,setGps]=useState<{latitude:number;longitude:number;accuracy:number}|null>(null),[gpsStatus,setGpsStatus]=useState("GPS optional; confirm your own presence below.");
