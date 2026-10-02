@@ -95,7 +95,7 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
     .insert(legacyDayforgeSaasBillingPlans)
     .values({
       planKey,
-      displayName: process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "DayForge",
+      displayName: process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "JOYSTICK",
       stripePriceId: priceId,
       stripeProductId: process.env.DAYFORGE_STRIPE_PRODUCT_ID?.trim() || null,
       trialDays: Math.max(
@@ -114,7 +114,7 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
     .onDuplicateKeyUpdate({
       set: {
         displayName:
-          process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "DayForge",
+          process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "JOYSTICK",
         stripePriceId: priceId,
         stripeProductId: process.env.DAYFORGE_STRIPE_PRODUCT_ID?.trim() || null,
         trialDays: Math.max(
@@ -170,7 +170,7 @@ export async function getActiveSaasPlan(planKey: string) {
       )
     )
     .limit(1);
-  if (!plan) throw new Error("The selected DayForge plan is unavailable");
+  if (!plan) throw new Error("The selected JOYSTICK plan is unavailable");
   return plan;
 }
 
@@ -182,7 +182,7 @@ export async function assertSaasPlanCanCheckout(planKey: string) {
     (plan.availabilityEndsAt && plan.availabilityEndsAt <= now)
   ) {
     throw new Error(
-      "The selected DayForge plan is outside its availability window"
+      "The selected JOYSTICK plan is outside its availability window"
     );
   }
   if (plan.maxSubscriptions) {
@@ -193,7 +193,7 @@ export async function assertSaasPlanCanCheckout(planKey: string) {
       .from(legacyDayforgeSaasSubscriptions)
       .where(eq(legacyDayforgeSaasSubscriptions.planKey, plan.planKey));
     if (Number(row?.total ?? 0) >= plan.maxSubscriptions) {
-      throw new Error("The selected DayForge plan has reached capacity");
+      throw new Error("The selected JOYSTICK plan has reached capacity");
     }
   }
   return plan;
@@ -732,7 +732,7 @@ export async function reserveSaasCheckoutSlot(input: {
           )
         );
       if (affectedRows(claim) !== 1) {
-        throw new Error("The selected DayForge plan has reached capacity");
+        throw new Error("The selected JOYSTICK plan has reached capacity");
       }
     });
   } catch (error) {
@@ -1698,6 +1698,6 @@ export async function getStripeCustomerForTenant(
     .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId))
     .limit(1);
   if (!subscription)
-    throw new Error("Tenant does not have a DayForge subscription");
+    throw new Error("Tenant does not have a JOYSTICK subscription");
   return subscription.stripeCustomerId;
 }
