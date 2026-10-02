@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical SaaS table literal only; canonical product is JOYSTICK.
 -- JOYSTICK acquisition funnel: evolve the existing SaaS onboarding spine.
 -- No parallel acquisition table. Existing rows remain legacy_laundry.
 
