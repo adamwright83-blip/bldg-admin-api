@@ -262,6 +262,43 @@ function JoystickWorldRoute() {
   );
 }
 
+function TenantUnlockedChapter() {
+  const kingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
+    retry: false,
+  });
+  if (kingdoms.isLoading) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  const unlocked = kingdoms.data?.some(
+    kingdom =>
+      kingdom.kingdomId === "kingdom-2-the-last-valet" &&
+      kingdom.lanternCityStatus !== "locked"
+  );
+  if (!unlocked || kingdoms.isError) return <Redirect to="/play" />;
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <GoldlineChapterHost />
+    </Suspense>
+  );
+}
+
+function JoystickChapterRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  if (user?.role === "admin") {
+    return (
+      <Suspense fallback={<PublicLandingFallback />}>
+        <GoldlineChapterHost />
+      </Suspense>
+    );
+  }
+  return (
+    <TenantOperatorGate>
+      <TenantUnlockedChapter />
+    </TenantOperatorGate>
+  );
+}
+
 function AdminAuthGate({ children }: { children: ReactNode }) {
   const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
@@ -508,11 +545,7 @@ function AdminHostRouter() {
         </AdminAuthGate>
       </Route>
       <Route path="/goldline-chapter">
-        <TenantOperatorGate>
-          <Suspense fallback={<PublicLandingFallback />}>
-            <GoldlineChapterHost />
-          </Suspense>
-        </TenantOperatorGate>
+        <JoystickChapterRoute />
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -716,11 +749,7 @@ function Router() {
         <JoystickWorldRoute />
       </Route>
       <Route path="/goldline-chapter">
-        <TenantOperatorGate>
-          <Suspense fallback={<PublicLandingFallback />}>
-            <GoldlineChapterHost />
-          </Suspense>
-        </TenantOperatorGate>
+        <JoystickChapterRoute />
       </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
