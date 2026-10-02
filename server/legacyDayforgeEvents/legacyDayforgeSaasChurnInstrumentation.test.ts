@@ -37,11 +37,11 @@ describe("DayForge SaaS and Churn Radar event projection", () => {
   it("projects signup start and completion without analytics PII", () => {
     expect(saas).toContain('name: "tenant_signup_started"');
     expect(saas).toContain('name: "tenant_signup_completed"');
-    expect(saas.match(/writeLegacyDayforgeEventWith\(tx/g)).toHaveLength(2);
+    expect(saas.match(/writeLegacyDayforgeEventWith\(tx/g)).toHaveLength(3);
     expect(saas).toContain('sourcePlacement: "dayforge_onboarding"');
 
     const productBlocks = saas.match(/productEvent: \{[\s\S]*?\n\s+\},/g) ?? [];
-    expect(productBlocks).toHaveLength(2);
+    expect(productBlocks).toHaveLength(3);
     for (const block of productBlocks) {
       expect(block).not.toMatch(/ownerEmail|businessName|contact|phone|address/);
     }

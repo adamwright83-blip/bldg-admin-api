@@ -13,6 +13,8 @@ export const CLAIRE_DYNAMIC_PROMPT_LABELS = new Set([
   "compiled_canon",
   "few_shot_voice",
   "fact_inventory",
+  "identity_authority",
+  "brain_v3_semantics",
 ]);
 
 export function claireStaticInstructionChars(

@@ -66,7 +66,7 @@ import {
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitTrackingRequest } from "../briefing/titleContract";
-import { detectConversationControl } from "./interpretTurn";
+import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import {
   interpretClaireBrainV3,
   safeClaireBrainV3Fallback,
@@ -675,7 +675,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    const laneOpen = brainV3.priorClaim !== "none";
+    const laneOpen =
+      brainV3.priorClaim !== "none" ||
+      brainV3.act === "prior_claim_probe" ||
+      priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
     let conversational = result.speak;
     if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
       conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
@@ -839,17 +842,36 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
         .catch(() => null)
     : null;
+  const fallbackContext = {
+    pending: {
+      briefing: Boolean(state.pendingBriefing),
+      accountFollowUp: Boolean(state.pendingAccountFollowUp),
+      action: Boolean(
+        state.pendingProposal ||
+          state.pendingUpdate ||
+          state.pendingFieldCapture ||
+          state.pendingEngineeringOffer ||
+          state.pendingDayLineChoice ||
+          state.clarifyingUtterance
+      ),
+      weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+    },
+    hasActiveAnalyticsQuery: Boolean(state.analytics?.query || state.analytics?.pendingClarification),
+    sessionKind: state.sessionKind,
+    morningSession,
+    dayLineSuppressed: Boolean(state.dayLineSuppressed),
+  };
   brainV3 =
     brainResult ??
     (explicitWeeklyControl
       ? {
-          ...safeClaireBrainV3Fallback(),
+          ...safeClaireBrainV3Fallback(utterance, fallbackContext),
           target: "weekly_planning",
           act: "action_request",
           weeklyDisposition: "continue",
           rationale: "Explicit weekly control while Brain V3 unavailable.",
         }
-      : safeClaireBrainV3Fallback());
+      : safeClaireBrainV3Fallback(utterance, fallbackContext));
 
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
@@ -1077,7 +1099,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   const doctrineSpeak =
     conversationTarget === "open_conversation" &&
-    (brainV3.act === "question" || brainV3.act === "advice_request") &&
     !isOperationalWorkOrDayLine &&
     deps.doctrineTurn
       ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
@@ -1120,10 +1141,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const explicitPriorClaimProbe = brainV3.priorClaim !== "none";
-  const directResolution: ClaimResolution = explicitPriorClaimProbe
-    ? resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal)
-    : { kind: "none" };
+  const interpreted = interpretTurn(utterance, { recentTurns: history() });
+  const explicitPriorClaimProbe =
+    brainV3.priorClaim !== "none" ||
+    brainV3.act === "prior_claim_probe" ||
+    interpreted.correctnessChallenge ||
+    interpreted.provenanceQuestion;
+  const directResolution: ClaimResolution =
+    holdingSomething && !explicitPriorClaimProbe
+      ? { kind: "none" }
+      : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
   const focusedReceipt =
     explicitPriorClaimProbe &&
     directResolution.kind === "none" &&
@@ -1157,7 +1184,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // "Immediately preceding" is only a default for a bare reaction. If the classifier read the utterance as
       // pointing at a specific (older) statement, or could not tell which, that reading outranks recency.
       let effective: ClaimResolution = resolution;
-      if (reading?.probe && resolution.kind === "resolved" && resolution.via === "immediately_preceding") {
+      if (reading?.probe && resolution.kind === "resolved" && (resolution.via === "immediately_preceding" || resolution.receipt === focusedReceipt)) {
         const named = reading.receiptId ? (state.claimReceipts ?? []).find(receipt => receipt.id === reading.receiptId) : undefined;
         if (reading.ambiguous || (reading.receiptId && !named)) effective = { kind: "ambiguous", candidates: [resolution.receipt] };
         else if (named) effective = { kind: "resolved", receipt: named, via: "explicit_reference" };
@@ -1220,8 +1247,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.act === "rejection" ||
     brainV3.dayLineDisposition === "decline"
   ) {
-    if (state.pendingProposal || state.pendingBriefing) {
+    if (state.pendingProposal && conversationTarget !== "pending_action") {
       state.pendingProposal = null;
+      state.pendingReminded = false;
+    }
+    if (state.pendingBriefing && conversationTarget !== "pending_briefing") {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -1233,9 +1263,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (
     brainV3.act === "rejection" &&
     brainV3.workDisposition === "none" &&
+    conversationTarget !== "pending_action" &&
     !state.pendingBriefing &&
     !state.pendingProposal &&
-    !state.pendingAccountFollowUp
+    !state.pendingAccountFollowUp &&
+    !state.clarifyingUtterance
   ) {
     mark("fallback", { fallbackReason: "action_refusal_settled" });
     return finish({ speak: "Understood — I won't add anything.", kind: "answered" });
@@ -1443,6 +1475,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         brainV3.act === "conversation_control" ||
         brainV3.priorClaim !== "none");
     if (pendingIsNew) {
+      heldProposalTitle = state.pendingProposal?.title ?? null;
+      if (state.pendingProposal) {
+        carried.push(proposalAsItem(state.pendingProposal, today, clock.minutesNow));
+      }
       state.pendingProposal = null;
       state.pendingUpdate = null;
       state.clarifyingUtterance = null;
@@ -1594,7 +1630,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.workDisposition === "commit" &&
     !state.dayLineSuppressed &&
     !wantsBatchProposal &&
-    parsed.items.length > 0;
+    parsed.items.length > 0 &&
+    parsed.questions.length === 0;
   if (explicitCommitNow) {
     const dates = Array.from(new Set(parsed.items.map(item => item.businessDate)));
     const [existing] = await Promise.all([
