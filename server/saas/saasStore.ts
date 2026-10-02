@@ -1260,7 +1260,8 @@ export async function activateOnboardingOwner(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const tenantId = session.tenantId;
-  if (!session.ownerEmail) throw new Error("Tenant owner email is missing");
+  const ownerEmail = session.ownerEmail;
+  if (!ownerEmail) throw new Error("Tenant owner email is missing");
   const [subscription] = await db
     .select()
     .from(legacyDayforgeSaasSubscriptions)
@@ -1299,7 +1300,7 @@ export async function activateOnboardingOwner(input: {
         tenantId,
         openId,
         name: input.name,
-        email: session.ownerEmail,
+        email: ownerEmail,
         loginMethod: "dayforge_password",
         role: "user",
       })
@@ -1307,7 +1308,7 @@ export async function activateOnboardingOwner(input: {
         set: {
           tenantId,
           name: input.name,
-          email: session.ownerEmail,
+          email: ownerEmail,
         },
       });
     await tx
@@ -1324,7 +1325,7 @@ export async function activateOnboardingOwner(input: {
       .values({
         tenantId,
         userOpenId: openId,
-        emailNormalized: session.ownerEmail,
+        emailNormalized: ownerEmail,
         passwordHash: input.passwordHash,
       })
       .onDuplicateKeyUpdate({
