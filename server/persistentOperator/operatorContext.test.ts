@@ -557,6 +557,43 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(packet.observedPatterns).toHaveLength(0);
       expect(packet.uncertainty.some(u => u.reason === "proximal_outcome_window_unavailable")).toBe(true);
     });
+
+    it("does not count decision points with STARTED predating assignment toward pattern startedInWindow", async () => {
+      const baseTime = new Date("2026-10-01T10:00:00Z").getTime();
+      // 3 qualifying decision points, but in all 3 the STARTED occurred BEFORE assignment
+      const events: BoundedLedgerReadEvent[] = [1, 2, 3].flatMap(i => [
+        makeLedgerEvent({
+          id: i * 2 - 1,
+          decisionPointId: `dp_${i}`,
+          eventType: "DELIVERED",
+          occurredAt: new Date(baseTime + i * 3600_000),
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: 60,
+        }),
+        makeLedgerEvent({
+          id: i * 2,
+          decisionPointId: `dp_${i}`,
+          eventType: "STARTED",
+          occurredAt: new Date(baseTime + i * 3600_000 - 30_000), // 30s before presentation!
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: 60,
+        }),
+      ]);
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      // Pattern is derived over qualifying decision points
+      expect(packet.observedPatterns).toHaveLength(1);
+      const pattern = packet.observedPatterns[0]!;
+      expect(pattern.metrics?.startedWithinWindowCount).toBe(0); // 0 of 3 started in window!
+      expect(pattern.metrics?.startedLatencyMeanSeconds).toBeNull(); // latency was not clamped to 0
+      expect(pattern.summary).toContain("0 of 3 qualifying decision points were followed by a STARTED event");
+      expect(packet.uncertainty.some(u => u.reason === "invalid_temporal_evidence")).toBe(true);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -681,6 +718,40 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(intervention?.startedWithinWindow).toBe("unknown");
       expect(intervention?.startLatencySeconds).toBeNull();
       expect(packet.uncertainty.some(u => u.reason === "missing_paired_timestamps")).toBe(true);
+    });
+
+    it("rejects STARTED events that predate assignment without clamping negative latency to zero", async () => {
+      const base = new Date("2026-10-01T12:00:00Z");
+      const events: BoundedLedgerReadEvent[] = [
+        makeLedgerEvent({
+          id: 1,
+          decisionPointId: "dp_1",
+          eventType: "STARTED",
+          occurredAt: new Date(base.getTime() - 60_000), // 60s BEFORE assignment!
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: 60,
+        }),
+        makeLedgerEvent({
+          id: 2,
+          decisionPointId: "dp_1",
+          eventType: "DELIVERED",
+          occurredAt: base,
+          assignedOption: "option_a",
+          proximalOutcomeWindowMinutes: 60,
+        }),
+      ];
+
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: { loadLedgerEvents: async () => events },
+      });
+
+      const intervention = packet.interventionEvidence.find(ie => ie.decisionPointId === "dp_1");
+      expect(intervention?.startedWithinWindow).not.toBe(true);
+      expect(intervention?.startedWithinWindow).toBe(false);
+      expect(intervention?.startLatencySeconds).toBeNull(); // NOT clamped to 0!
+      expect(packet.uncertainty.some(u => u.reason === "invalid_temporal_evidence")).toBe(true);
     });
 
     it("emits timezone_unavailable when authoritative timezone is absent", async () => {

@@ -63,6 +63,7 @@ Outcome windows are never guessed (no 120-minute fallback). If `proximalOutcomeW
    - If the query returns the limit ($\ge 200$), `evidence_window_truncated` uncertainty is emitted to signify that older records may exist.
    - Absence claims are bounded to the window read: `"No verified action or commercial outcome was observed within the bounded Behavioral Ledger evidence read used for this packet."`
    - Only computes `startedWithinWindow` and `startLatencySeconds` when paired with an actual assignment event and a persisted `proximalOutcomeWindowMinutes`. Missing window emits `proximal_outcome_window_unavailable`.
+   - Enforces strict temporal ordering: A `STARTED` event qualifies only when `startedAt >= assignmentAt && startedAt <= assignmentAt + windowMs`. Negative latencies are never clamped to zero. If `startedAt < assignmentAt`, latency is `null`, window is `false`, observed patterns exclude it from `startedWithinWindowCount`, and `invalid_temporal_evidence` uncertainty is emitted.
 
 4. **Goal Cycle Learned Deltas (`server/persistentOperator/learningStore.ts`)**:
    - Normalizes existing rows from `goalCycleLearnedDeltas`.

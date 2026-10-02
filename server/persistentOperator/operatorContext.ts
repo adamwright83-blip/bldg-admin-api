@@ -140,6 +140,7 @@ export const OPERATOR_CONTEXT_UNCERTAINTY_REASONS = [
   "proximal_outcome_window_unavailable",
   "evidence_window_truncated",
   "operator_binding_unavailable",
+  "invalid_temporal_evidence",
 ] as const;
 
 export type OperatorContextUncertaintyReason =
@@ -608,6 +609,7 @@ export async function buildOperatorContextPacket(
   let hasVerifiedOutcomeInLedger = false;
   let missingPairedTimestampCount = 0;
   let missingOutcomeWindowCount = 0;
+  let outOfOrderEvidenceCount = 0;
 
   for (const event of ledgerEvents) {
     if (event.eventType === "VERIFIED" || event.verificationClass === "VERIFIED") {
@@ -672,8 +674,8 @@ export async function buildOperatorContextPacket(
       (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
     );
     const firstEvent = sorted[0]!;
-    // Do not fall back to firstEvent if no event has actual assignment fields
-    const assignmentEvent = sorted.find(e => e.assignedOption != null) ?? null;
+    // Do not fall back to firstEvent if no event has actual assignment fields, and an assignment cannot be the STARTED outcome event itself
+    const assignmentEvent = sorted.find(e => e.eventType !== "STARTED" && e.assignedOption != null) ?? null;
 
     const assignedOption = assignmentEvent?.assignedOption ?? null;
     const assignmentProb =
@@ -688,22 +690,25 @@ export async function buildOperatorContextPacket(
     let startLatencySeconds: number | null = null;
 
     if (startedEvent) {
-      if (assignmentEvent && outcomeWindowMinutes != null) {
-        const assignmentTime = assignmentEvent.occurredAt;
-        const windowMs = outcomeWindowMinutes * 60_000;
-        const windowEnd = new Date(assignmentTime.getTime() + windowMs);
+      if (assignmentEvent) {
+        const assignmentTime = assignmentEvent.occurredAt.getTime();
+        const startedTime = startedEvent.occurredAt.getTime();
 
-        startedWithinWindow = startedEvent.occurredAt.getTime() <= windowEnd.getTime();
-        startLatencySeconds = Math.max(
-          0,
-          (startedEvent.occurredAt.getTime() - assignmentTime.getTime()) / 1000
-        );
-      } else {
-        if (!assignmentEvent) {
-          missingPairedTimestampCount++;
-        } else if (outcomeWindowMinutes == null) {
+        if (startedTime < assignmentTime) {
+          startedWithinWindow = false;
+          startLatencySeconds = null;
+          outOfOrderEvidenceCount++;
+        } else if (outcomeWindowMinutes != null) {
+          const windowMs = outcomeWindowMinutes * 60_000;
+          const windowEnd = assignmentTime + windowMs;
+
+          startedWithinWindow = startedTime <= windowEnd;
+          startLatencySeconds = (startedTime - assignmentTime) / 1000;
+        } else {
           missingOutcomeWindowCount++;
         }
+      } else {
+        missingPairedTimestampCount++;
       }
     }
 
@@ -744,38 +749,48 @@ export async function buildOperatorContextPacket(
     });
   }
 
+  if (outOfOrderEvidenceCount > 0) {
+    uncertainty.push({
+      reason: "invalid_temporal_evidence",
+      scope: "start_latency",
+      detail: `${outOfOrderEvidenceCount} decision point(s) had observed start actions occurring before the paired assignment timestamp; out-of-order temporal evidence cannot establish positive post-assignment latency or window compliance.`,
+    });
+  }
+
   // 6. Pattern derivation (Requires >= 3 independent observations)
   if (totalIndependentObservations >= MINIMUM_PATTERN_INDEPENDENT_OBSERVATIONS) {
     // Descriptive sequence pattern over qualifying decision points with valid assignment AND predefined window
     const qualifyingDecisionPoints = distinctDecisionPoints.filter(
-      dp => dp.events.some(e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null)
+      dp => dp.events.some(e => e.eventType !== "STARTED" && e.assignedOption != null && e.proximalOutcomeWindowMinutes != null)
     );
 
     if (qualifyingDecisionPoints.length >= MINIMUM_PATTERN_INDEPENDENT_OBSERVATIONS) {
       const startedInWindow = qualifyingDecisionPoints.filter(dp => {
         const assignment = dp.events.find(
-          e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
+          e => e.eventType !== "STARTED" && e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
         );
         const started = dp.events.find(e => e.eventType === "STARTED");
         if (!assignment || !started || assignment.proximalOutcomeWindowMinutes == null) return false;
         const windowMin = assignment.proximalOutcomeWindowMinutes;
+        const assignmentTime = assignment.occurredAt.getTime();
+        const startedTime = started.occurredAt.getTime();
         return (
-          started.occurredAt.getTime() <=
-          assignment.occurredAt.getTime() + windowMin * 60_000
+          startedTime >= assignmentTime &&
+          startedTime <= assignmentTime + windowMin * 60_000
         );
       });
 
       const latencies = qualifyingDecisionPoints
         .map(dp => {
           const assignment = dp.events.find(
-            e => e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
+            e => e.eventType !== "STARTED" && e.assignedOption != null && e.proximalOutcomeWindowMinutes != null
           );
           const started = dp.events.find(e => e.eventType === "STARTED");
           if (!assignment || !started || assignment.proximalOutcomeWindowMinutes == null) return null;
-          return Math.max(
-            0,
-            (started.occurredAt.getTime() - assignment.occurredAt.getTime()) / 1000
-          );
+          const assignmentTime = assignment.occurredAt.getTime();
+          const startedTime = started.occurredAt.getTime();
+          if (startedTime < assignmentTime) return null;
+          return (startedTime - assignmentTime) / 1000;
         })
         .filter((l): l is number => l != null);
 
