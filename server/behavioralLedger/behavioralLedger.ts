@@ -169,7 +169,9 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
   async listByOperatorBounded(tenantId, operatorUserIds, limit = DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT) {
     if (!tenantId || !operatorUserIds.length) return [];
     const db = await getDb();
-    if (!db) return [];
+    if (!db) {
+      throw new Error("Behavioral ledger database unavailable for bounded read");
+    }
     const boundedLimit = Math.min(Math.max(1, limit), MAX_BOUNDED_OPERATOR_LEDGER_LIMIT);
     const where =
       operatorUserIds.length === 1
@@ -324,9 +326,9 @@ export async function listBehavioralLedgerEventsForOperatorBounded(
   const tenantId = input.tenantId?.trim();
   const operatorUserIds = (input.operatorUserIds ?? []).map(id => id.trim()).filter(Boolean);
   if (!tenantId || !operatorUserIds.length) return [];
-  if (store.listByOperatorBounded) {
-    return store.listByOperatorBounded(tenantId, operatorUserIds, input.limit);
+  if (!store.listByOperatorBounded) {
+    throw new Error("Behavioral ledger store does not implement listByOperatorBounded");
   }
-  return [];
+  return store.listByOperatorBounded(tenantId, operatorUserIds, input.limit);
 }
 

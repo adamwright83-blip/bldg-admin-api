@@ -607,6 +607,8 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
           requestedLimit = limit;
           throw new Error("Connection timeout");
         },
+        loadLearnedDeltas: async () => [],
+        loadOnboardingSession: async () => null,
       };
 
       const packet = await buildOperatorContextPacket({
@@ -617,7 +619,12 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
 
       expect(requestedLimit).toBeGreaterThan(0);
       expect(requestedLimit).toBeLessThanOrEqual(500);
-      expect(packet.uncertainty.some(u => u.reason === "source_unavailable")).toBe(true);
+      // 1. ledger loader failure emits source_unavailable
+      expect(packet.uncertainty.some(u => u.reason === "source_unavailable" && u.scope === "behavioral_ledger")).toBe(true);
+      // 2. ledger loader failure does NOT emit no_records
+      expect(packet.uncertainty.some(u => u.reason === "no_records")).toBe(false);
+      // 3. ledger loader failure does NOT emit no_verified_outcome
+      expect(packet.uncertainty.some(u => u.reason === "no_verified_outcome")).toBe(false);
     });
   });
 
@@ -899,7 +906,7 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
   // 8. Conflict & Empty State Behavior
   // -------------------------------------------------------------------------
   describe("Uncertainty & Empty State", () => {
-    it("returns empty collections and no_records uncertainty for an operator with no evidence", async () => {
+    it("successful ledger read returning [], successful learned-delta read returning [], and successful onboarding read returning null may emit no_records", async () => {
       const packet = await buildOperatorContextPacket({
         tenantId: "tenant_alpha",
         identity: makeCanonicalIdentity(),
@@ -915,6 +922,24 @@ describe("Stage 1 JOYSTICK Operator Context", () => {
       expect(packet.learnedSignals).toHaveLength(0);
       expect(packet.interventionEvidence).toHaveLength(0);
       expect(packet.uncertainty.some(u => u.reason === "no_records")).toBe(true);
+      expect(packet.uncertainty.some(u => u.reason === "source_unavailable")).toBe(false);
+    });
+
+    it("onboarding loader failure emits source_unavailable rather than being treated as no session and suppresses no_records", async () => {
+      const packet = await buildOperatorContextPacket({
+        tenantId: "tenant_alpha",
+        identity: makeCanonicalIdentity(),
+        deps: {
+          loadLedgerEvents: async () => [],
+          loadLearnedDeltas: async () => [],
+          loadOnboardingSession: async () => {
+            throw new Error("Onboarding store connection failure");
+          },
+        },
+      });
+
+      expect(packet.uncertainty.some(u => u.reason === "source_unavailable" && u.scope === "goldline_onboarding")).toBe(true);
+      expect(packet.uncertainty.some(u => u.reason === "no_records")).toBe(false);
     });
 
     it("emits no_verified_outcome with bounded evidence wording when no verified events or receipts exist", async () => {

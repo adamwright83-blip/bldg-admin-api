@@ -324,13 +324,7 @@ const defaultDeps: OperatorContextDeps = {
       limit: input.limit,
     }),
   loadTenantTimezone: defaultLoadTenantTimezone,
-  loadOnboardingSession: async tenantId => {
-    try {
-      return await readSession(tenantId);
-    } catch {
-      return null;
-    }
-  },
+  loadOnboardingSession: async tenantId => readSession(tenantId),
 };
 
 // ---------------------------------------------------------------------------
@@ -451,12 +445,14 @@ export async function buildOperatorContextPacket(
   });
 
   // 3. Load explicit onboarding facts (Goldline/JOYSTICK onboarding)
+  let onboardingReadSuccessful = true;
   let onboardingSession: GoldlineOnboardingSession | null = null;
   try {
     if (deps.loadOnboardingSession) {
       onboardingSession = await deps.loadOnboardingSession(tenantId);
     }
   } catch {
+    onboardingReadSuccessful = false;
     uncertainty.push({
       reason: "source_unavailable",
       scope: "goldline_onboarding",
@@ -569,6 +565,7 @@ export async function buildOperatorContextPacket(
 
   // 5. Bounded read from Behavioral Ledger
   const ledgerLimit = DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT;
+  let ledgerReadSuccessful = true;
   let ledgerEvents: BoundedLedgerReadEvent[] = [];
   try {
     if (deps.loadLedgerEvents) {
@@ -579,6 +576,7 @@ export async function buildOperatorContextPacket(
       });
     }
   } catch (error) {
+    ledgerReadSuccessful = false;
     uncertainty.push({
       reason: "source_unavailable",
       scope: "behavioral_ledger",
@@ -866,6 +864,7 @@ export async function buildOperatorContextPacket(
   }
 
   // 7. Load existing goalCycleLearnedDeltas
+  let learnedDeltasReadSuccessful = true;
   let learnedDeltas: GoalCycleLearnedDeltaRecord[] = [];
   try {
     if (deps.loadLearnedDeltas) {
@@ -876,6 +875,7 @@ export async function buildOperatorContextPacket(
       });
     }
   } catch (error) {
+    learnedDeltasReadSuccessful = false;
     uncertainty.push({
       reason: "source_unavailable",
       scope: "goal_cycle_learned_deltas",
@@ -925,7 +925,8 @@ export async function buildOperatorContextPacket(
     )
   );
 
-  if (!hasVerifiedOutcomeInLedger && !hasVerifiedOutcomeInDeltas) {
+  // Absence claims require successful reads: do not claim absence when read failed
+  if (ledgerReadSuccessful && !hasVerifiedOutcomeInLedger && !hasVerifiedOutcomeInDeltas) {
     uncertainty.push({
       reason: "no_verified_outcome",
       scope: "operational_verification",
@@ -943,7 +944,10 @@ export async function buildOperatorContextPacket(
     interventionEvidence.length === 0 &&
     ledgerEvents.length === 0;
 
-  if (isCompletelyEmpty) {
+  const allRequiredSourcesReadSuccessfully =
+    ledgerReadSuccessful && learnedDeltasReadSuccessful && onboardingReadSuccessful;
+
+  if (allRequiredSourcesReadSuccessfully && isCompletelyEmpty) {
     uncertainty.unshift({
       reason: "no_records",
       scope: "operator_profile",

@@ -355,5 +355,18 @@ describe("listBehavioralLedgerEventsForOperatorCorrelation", () => {
       );
       expect(empty2).toEqual([]);
     });
+
+    it("throws when bounded store implementation is unavailable rather than returning empty array", async () => {
+      const storeWithoutBounded: BehavioralLedgerStore = {
+        insertIfAbsent: async () => null,
+        listByCorrelation: async () => [],
+      };
+      await expect(
+        listBehavioralLedgerEventsForOperatorBounded(
+          { tenantId: "tenant-a", operatorUserIds: ["operator-1"] },
+          storeWithoutBounded
+        )
+      ).rejects.toThrow("Behavioral ledger store does not implement listByOperatorBounded");
+    });
   });
 });
