@@ -1,21 +1,104 @@
 import { execFileSync } from "node:child_process";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import mysql, { type RowDataPacket } from "mysql2/promise";
 import { assessPresidentStage1 } from "../server/president/assessment";
 import { inspectPresidentEvidence } from "../server/president/evidence";
-import { FilePresidentAssessmentStore } from "../server/president/store";
+import { MysqlPresidentAssessmentStore } from "../server/president/mysqlStore";
 const root = resolve(import.meta.dirname, "..");
-// The branch base is the main tree this isolated stream was authorized to inspect.
-// Later parallel merges into main are deliberately not consumed by this branch.
-const sha = execFileSync("git", ["merge-base", "HEAD", "origin/main"], { cwd: root, encoding: "utf8" }).trim();
-let githubAvailable = false; try { execFileSync("gh", ["pr", "view", "355", "--json", "number"], { cwd: root, stdio: "ignore" }); githubAvailable = true; } catch {}
-const snapshot = await inspectPresidentEvidence({
-  repositoryRoot: root,
-  repositorySha: sha,
-  githubAvailable,
-  readSource: async path => execFileSync("git", ["show", `${sha}:${path}`], { cwd: root }),
-});
-const path = process.env.PRESIDENT_WITNESS_STORE || resolve(root, "artifacts/president-stage1/witness-store.json");
-const store = new FilePresidentAssessmentStore(path); const first = await assessPresidentStage1({ snapshot, store }); const second = await assessPresidentStage1({ snapshot, store });
-console.log(`Inspected main SHA: ${sha}\nEvidence snapshot: ${snapshot.id}\nAvailable evidence: ${snapshot.availableSources.join(", ")}\nUnavailable evidence: ${snapshot.unavailableSources.join(", ")}\nAssessment ID: ${first.assessment.id}\nCandidate IDs: ${first.assessment.candidates.map(x => x.id).join(", ")}`);
-for (const c of first.assessment.candidates) { console.log(`\n#${c.rank} ${c.title}\n${c.missingCapability} ${c.currentGap} ${c.proposedBuild} Afterward, ${c.resultingCapability} ${c.rankReason}`); for (const e of c.evidence) console.log(`  ${e.kind}: ${e.statement} [${e.sourceId} ${e.sourceLocation}]`); }
-console.log(`\nFinal state: ${first.assessment.resultState}\nExecution count: ${first.assessment.executionCount}\nSame-evidence rerun reused: ${second.reused}\nSame assessment ID: ${second.assessment.id === first.assessment.id}\nStored assessment count: ${await store.count()}\nWitness store: ${path}`);
+const sha =
+  process.env.PRESIDENT_INSPECTED_SHA ||
+  "38b20810be8575ef85fed60ba25e6c229bc10170";
+// This witness accepts only the dedicated disposable loopback database. It never
+// reads DATABASE_URL, preventing accidental use of the application's production DB.
+const url = new URL(
+  process.env.PRESIDENT_TEST_DATABASE_URL ||
+    "mysql://root:root@127.0.0.1:3411/president_stage1_witness"
+);
+if (
+  !["127.0.0.1", "localhost"].includes(url.hostname) ||
+  url.pathname !== "/president_stage1_witness"
+)
+  throw new Error(
+    "Witness requires the dedicated local non-production president_stage1_witness database"
+  );
+const adminUrl = new URL(url);
+adminUrl.pathname = "/";
+const admin = await mysql.createConnection(adminUrl.toString());
+try {
+  await admin.query("CREATE DATABASE IF NOT EXISTS president_stage1_witness");
+} finally {
+  await admin.end();
+}
+const pool = mysql.createPool({ uri: url.toString(), timezone: "Z" });
+try {
+  const migration = await readFile(
+    resolve(root, "drizzle/0109_president_stage1.sql"),
+    "utf8"
+  );
+  for (const sql of migration
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .map(x => x.trim())
+    .filter(Boolean))
+    await pool.query(sql);
+  const [tables] = await pool.query<RowDataPacket[]>("SHOW TABLES");
+  const snapshot = await inspectPresidentEvidence({
+    repositoryRoot: root,
+    repositorySha: sha,
+  });
+  const store = new MysqlPresidentAssessmentStore(pool);
+  const first = await assessPresidentStage1({ snapshot, store });
+  const afterFirst = {
+    assessments: await store.count(),
+    candidates: await store.candidateCount(),
+  };
+  // Recreate the adapter to prove recovery from MySQL, not an in-process cache.
+  const recoveredStore = new MysqlPresidentAssessmentStore(pool);
+  const second = await assessPresidentStage1({
+    snapshot,
+    store: recoveredStore,
+  });
+  const afterRerun = {
+    assessments: await recoveredStore.count(),
+    candidates: await recoveredStore.candidateCount(),
+  };
+  const report = {
+    database: {
+      host: url.hostname,
+      port: url.port,
+      name: "president_stage1_witness",
+      productionTouched: false,
+      migration: "0109",
+      tables: tables.map(x => Object.values(x)[0]),
+    },
+    inspectedSha: sha,
+    snapshot,
+    assessment: first.assessment,
+    afterFirst,
+    afterRerun,
+    reused: second.reused,
+    sameAssessmentId: first.assessment.id === second.assessment.id,
+    finalState: second.assessment.resultState,
+    executionCount: second.assessment.executionCount,
+  };
+  if (
+    !report.reused ||
+    !report.sameAssessmentId ||
+    afterFirst.assessments !== afterRerun.assessments ||
+    afterFirst.candidates !== afterRerun.candidates
+  )
+    throw new Error("Database witness idempotency failed");
+  console.log(JSON.stringify(report, null, 2));
+  for (const c of first.assessment.candidates)
+    console.log(
+      `#${c.rank} ${c.title}\n${c.missingCapability} ${c.currentGap} Build: ${c.proposedBuild} Afterward: ${c.resultingCapability} ${c.rankReason}`
+    );
+  await mkdir(resolve(root, "artifacts/president-stage1"), { recursive: true });
+  await writeFile(
+    resolve(root, "artifacts/president-stage1/database-witness.json"),
+    JSON.stringify(report, null, 2) + "\n"
+  );
+} finally {
+  await pool.end();
+}

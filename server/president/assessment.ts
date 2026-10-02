@@ -1,24 +1,248 @@
 import { createHash } from "node:crypto";
-import { PRESIDENT_SEAT, PRESIDENT_STAGE_1_RESULT, type PresidentAssessment, type PresidentCandidateProject, type PresidentEvidenceClaim, type PresidentEvidenceSnapshot } from "../../shared/presidentContracts";
+import {
+  PRESIDENT_SEAT,
+  PRESIDENT_STAGE_1_RESULT,
+  type PresidentAssessment,
+  type PresidentCandidateProject,
+  type PresidentEvidenceClaim,
+  type PresidentEvidenceSnapshot,
+} from "../../shared/presidentContracts";
 import type { PresidentAssessmentStore } from "./store";
+import { assertEvidenceIntegrity, LAUNCH_OPS_SOURCE } from "./evidence";
 const doc = "docs/JOYSTICK-SAAS-LAUNCH-OPS.md";
-const claim = (kind: PresidentEvidenceClaim["kind"], location: string, statement: string, verified = true): PresidentEvidenceClaim => ({ kind, sourceId: kind === "UNKNOWN" ? location : doc, sourceLocation: kind === "UNKNOWN" ? "unavailable" : location, statement, verified });
-const id = (prefix: string, value: string) => `${prefix}-${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
-type Seed = Omit<PresidentCandidateProject, "id" | "assessmentId" | "rank" | "status"> & { score: number };
-function candidates(snapshot: PresidentEvidenceSnapshot): Seed[] {
-  const productionUnknown = snapshot.unavailableSources.includes("production_runtime") ? [claim("UNKNOWN", "production_runtime", "Current production runtime health was not verified; unavailable evidence is not evidence of failure.", false)] : [];
-  return [
-    { score: 100, title: "Prove production database recovery", missingCapability: "JOYSTICK cannot currently demonstrate that production customer data can be restored safely after database loss.", currentGap: "The canonical launch operations document records no scheduled backup and no proven restore drill, and blocks public paid launch on both.", proposedBuild: "Configure the required daily backup and perform a restore drill into an isolated copy, recording auditable evidence without restoring over production.", resultingCapability: "JOYSTICK can recover production data through a tested procedure and satisfy the highest-risk launch gate.", rankReason: "Ranked #1 because it is an explicit launch blocker and reduces the largest irreversible operational risk without changing product policy.", evidence: [claim("FACT", "§1 Production MySQL recovery gate", "Public paid launch is blocked until a scheduled backup and restore drill on a copy are completed."), claim("INFERENCE", "§1", "Recovery proof deserves first priority because loss without a verified restore path is high-impact and blocks launch."), ...productionUnknown], blockers: ["Requires Adam-authorized, human-controlled Railway production operations."], humanDecisionDependency: "Adam must authorize and supervise production backup configuration and the isolated restore drill." },
-    { score: 90, title: "Prove live billing with a controlled canary", missingCapability: "JOYSTICK cannot yet prove that a real paid signup provisions exactly one isolated tenant with correct subscription entitlements.", currentGap: "The launch operations contract requires deliberate live Stripe setup and a controlled canary before the public purchase CTA is enabled.", proposedBuild: "Configure the locked $49 monthly / $468 annual, card-required seven-day-trial plans in live Stripe, wire the webhook secrets, and run the documented controlled canary.", resultingCapability: "JOYSTICK can accept a controlled real payment and verify provisioning, entitlement, portal, cancellation, and retry idempotency behavior.", rankReason: "Ranked #2 because it directly gates commercial operation, after recoverability is proven; it preserves the locked pricing and trial decisions.", evidence: [claim("FACT", "§2 Live Stripe activation", "Live plans, secrets, webhook, and a controlled canary are required before the public purchase CTA goes live."), claim("INFERENCE", "§2", "Billing proof follows recovery because it creates production commercial data that must be recoverable."), claim("UNKNOWN", "stripe_live", "Current live Stripe configuration was unavailable and is not treated as zero or broken.", false)], blockers: ["Requires live Stripe credentials and Adam-controlled canary actions."], humanDecisionDependency: "Adam must authorize live Stripe configuration and the canary charge/refund/cancellation path." },
-    { score: 80, title: "Activate and verify retention safely", missingCapability: "JOYSTICK cannot yet demonstrate that production retention runs are configured, bounded, and deleting only eligible expired data.", currentGap: "The canonical launch operations document says the scheduled retention workflow is intentionally inert until production configuration, dry run, and one bounded live run are completed.", proposedBuild: "Configure matching retention secrets and URL, run the existing workflow dry, inspect eligibility, then perform one bounded authorized live run and retain the evidence.", resultingCapability: "JOYSTICK can enforce its retention policy predictably without an unbounded first production run.", rankReason: "Ranked #3 because it is an explicit public-launch gate with privacy and operational leverage, but follows recovery and billing proof.", evidence: [claim("FACT", "§3 Retention activation", "Retention remains inert until configuration, a dry run, and a bounded live run are verified."), claim("INFERENCE", "§3", "Bounded activation is a prerequisite to claiming production retention readiness.")], blockers: ["Requires production secret configuration and explicit authorization for the bounded live run."], humanDecisionDependency: "Adam must authorize production retention activation." },
-    { score: 70, title: "Run the two-customer isolation launch canary", missingCapability: "JOYSTICK cannot yet prove end-to-end that two newly paid businesses remain isolated across product data, AI usage, and Claire metadata.", currentGap: "The canonical customer launch canary requires two independently created customers and reciprocal access checks after recovery, billing, and retention gates pass.", proposedBuild: "Execute the documented Customer A/Customer B canary with scoped test books and record cross-tenant denial, entitlement, cost attribution, and log-privacy evidence.", resultingCapability: "JOYSTICK can demonstrate end-to-end tenant isolation on the real paid onboarding path before public launch.", rankReason: "Ranked #4 because it is broad launch proof but depends on the first three operational gates being completed.", evidence: [claim("FACT", "§4 Customer launch canary", "The launch procedure requires reciprocal isolation checks for two independently provisioned customers."), claim("INFERENCE", "§4", "This proof has high product leverage but cannot responsibly precede recovery, billing, and retention readiness.")], blockers: ["Depends on recovery, live billing, and retention gates."], humanDecisionDependency: "Adam must authorize the production canary identities and timing." },
-    { score: 60, title: "Establish post-launch production log clearance", missingCapability: "JOYSTICK cannot yet certify that its first launch deployment is free of recurring schema failures, transcript leakage, and cross-tenant request contamination.", currentGap: "The launch contract requires production-log inspection after the first hardened deployment and forbids declaring launch complete while required schema errors recur.", proposedBuild: "Run a bounded, privacy-aware production log review against the documented failure classes and preserve a signed clearance record or explicit blockers.", resultingCapability: "JOYSTICK can make an evidence-backed launch-readiness claim instead of assuming green CI proves healthy production behavior.", rankReason: "Ranked #5 because it is a required final verification gate whose evidence only becomes meaningful after the preceding production operations.", evidence: [claim("FACT", "§5 Production log gate", "Production logs must be checked for schema errors, hidden migration failures, transcript bodies, and cross-tenant identifiers."), claim("INFERENCE", "Launch definition", "Log clearance is final-stage evidence because it depends on a deployed launch candidate."), ...productionUnknown], blockers: ["Requires an authorized production deployment and read-only production log access."], humanDecisionDependency: "Adam must authorize the launch deployment and production log review window." },
-  ].sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+const claim = (
+  kind: PresidentEvidenceClaim["kind"],
+  location: string,
+  statement: string,
+  verified = true
+): PresidentEvidenceClaim => ({
+  kind,
+  sourceId: kind === "UNKNOWN" ? location : doc,
+  sourceLocation: kind === "UNKNOWN" ? "unavailable" : location,
+  statement,
+  verified,
+});
+const id = (prefix: string, value: string) =>
+  `${prefix}-${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
+
+/** Bounded admission rules interpret requirements within their cited section.
+ * Completion declarations suppress admission. Unrecognized wording fails closed.
+ */
+export function extractUnmetSections(
+  content: string
+): Map<string, { heading: string; text: string }> {
+  const result = new Map<string, { heading: string; text: string }>();
+  for (const match of content.matchAll(
+    /^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm
+  )) {
+    const heading = match[1],
+      text = match[2].trim();
+    if (
+      /^\s*(?:status|gate status)\s*:\s*(?:complete|completed|passed|satisfied)\b/im.test(
+        text
+      )
+    )
+      continue;
+    let gate: string | undefined;
+    if (
+      /recovery gate/i.test(heading) &&
+      /(?:backups? (?:are )?not configured|no restore drill has been proven)/i.test(
+        text
+      ) &&
+      /launch is blocked until/i.test(text)
+    )
+      gate = "recovery";
+    if (
+      /stripe activation/i.test(heading) &&
+      /before putting the public purchase CTA live/i.test(text) &&
+      /complete Checkout/i.test(text) &&
+      /live Stripe Product\/Price/i.test(text)
+    )
+      gate = "billing";
+    if (
+      /retention activation/i.test(heading) &&
+      /intentionally inert until/i.test(text) &&
+      /dry_run=true/i.test(text) &&
+      /bounded non-dry batch/i.test(text)
+    )
+      gate = "retention";
+    if (
+      /customer launch canary/i.test(heading) &&
+      /Create Customer A/i.test(text) &&
+      /Create Customer B independently/i.test(text) &&
+      /Verify A cannot/i.test(text)
+    )
+      gate = "isolation";
+    if (
+      /production log gate/i.test(heading) &&
+      /Inspect production logs for/i.test(text) &&
+      /Do not call launch complete while/i.test(text)
+    )
+      gate = "logs";
+    if (gate) result.set(gate, { heading, text });
+  }
+  return result;
 }
-export async function assessPresidentStage1(input: { snapshot: PresidentEvidenceSnapshot; store: PresidentAssessmentStore; now?: () => Date }) {
-  const prior = await input.store.findByEvidence(input.snapshot.repositorySha, input.snapshot.id); if (prior) return { assessment: prior, reused: true };
-  const assessmentId = id("president-assessment", `${input.snapshot.repositorySha}:${input.snapshot.id}`); const at = (input.now ?? (() => new Date()))().toISOString();
-  const ranked = candidates(input.snapshot).map(({ score: _, ...seed }, i) => ({ ...seed, id: id("president-candidate", `${assessmentId}:${seed.title}`), assessmentId, rank: i + 1, status: "PROPOSED_AWAITING_HUMAN_SELECTION" as const }));
-  const assessment: PresidentAssessment = { id: assessmentId, seat: PRESIDENT_SEAT, inspectedRepositorySha: input.snapshot.repositorySha, evidenceSnapshotId: input.snapshot.id, status: "COMPLETED", resultState: PRESIDENT_STAGE_1_RESULT, evidenceSourcesAvailable: input.snapshot.availableSources, evidenceSourcesUnavailable: input.snapshot.unavailableSources, startedAt: at, completedAt: at, provider: "deterministic-policy", model: "president-stage1-v1", candidates: ranked, executionCount: 0 };
-  return { assessment: await input.store.saveIfAbsent(assessment), reused: false };
+const priorityOrder = [
+  "recovery",
+  "commercial",
+  "privacy",
+  "isolation",
+  "verification",
+];
+
+type Seed = Omit<
+  PresidentCandidateProject,
+  "id" | "assessmentId" | "rank" | "status"
+> & { priority: string };
+const pitches: Record<
+  string,
+  {
+    priority: string;
+    title: string;
+    capability: string;
+    build: string;
+    afterward: string;
+    reason: string;
+  }
+> = {
+  recovery: {
+    priority: "recovery",
+    title: "Prove production database recovery",
+    capability: "restore customer data safely after database loss",
+    build:
+      "Configure daily backups and record a restore drill on an isolated copy, under Adam's authorization.",
+    afterward: "JOYSTICK can demonstrate a tested recovery procedure.",
+    reason: "Recovery proof reduces irreversible data-loss risk.",
+  },
+  billing: {
+    priority: "commercial",
+    title: "Prove live billing with a controlled canary",
+    capability:
+      "verify paid signup, provisioning, entitlements, and webhook retry behavior",
+    build:
+      "Complete the documented live billing configuration and controlled canary, preserving $49 monthly, $468 annual, card required, and the seven-day trial.",
+    afterward: "JOYSTICK can demonstrate the real paid onboarding path.",
+    reason: "Billing proof directly gates commercial operation.",
+  },
+  retention: {
+    priority: "privacy",
+    title: "Activate and verify retention safely",
+    capability:
+      "demonstrate bounded production retention of eligible expired data",
+    build:
+      "Configure the existing workflow, verify a dry run, then record one human-authorized bounded live run.",
+    afterward: "JOYSTICK can demonstrate retention policy enforcement.",
+    reason:
+      "Retention proof protects privacy through bounded operational activation.",
+  },
+  isolation: {
+    priority: "isolation",
+    title: "Run the two-customer isolation launch canary",
+    capability:
+      "demonstrate reciprocal isolation for independently paid businesses",
+    build:
+      "Perform the documented Customer A and Customer B access-denial, entitlement, cost-attribution, and log-privacy checks.",
+    afterward:
+      "JOYSTICK can demonstrate tenant isolation through real paid onboarding.",
+    reason:
+      "The two-customer canary verifies broad tenant safety after operational prerequisites.",
+  },
+  logs: {
+    priority: "verification",
+    title: "Establish production log clearance",
+    capability:
+      "certify launch logs against schema errors, transcript leakage, and cross-tenant contamination",
+    build:
+      "Record a bounded read-only log review against the documented failure classes after an authorized launch deployment.",
+    afterward:
+      "JOYSTICK can support a production readiness claim with log evidence.",
+    reason: "Log clearance verifies the deployed launch candidate.",
+  },
+};
+function candidates(snapshot: PresidentEvidenceSnapshot): Seed[] {
+  return [
+    ...extractUnmetSections(snapshot.sourceContents[LAUNCH_OPS_SOURCE]),
+  ].map(([gate, section]) => {
+    const pitch = pitches[gate];
+    return {
+      priority: pitch.priority,
+      title: pitch.title,
+      missingCapability: `This snapshot has no current production verification that JOYSTICK can ${pitch.capability}.`,
+      currentGap: `The inspected document establishes the "${section.heading}" gate; current completion remains unverified.`,
+      proposedBuild: pitch.build,
+      resultingCapability: pitch.afterward,
+      rankReason: pitch.reason,
+      evidence: [
+        claim("FACT", section.heading, section.text),
+        claim(
+          "INFERENCE",
+          section.heading,
+          "Verifying this documented gate may deserve attention before public launch. The document alone does not prove current production failure."
+        ),
+        claim(
+          "UNKNOWN",
+          "production_runtime",
+          "Current production completion is unavailable; missing access is not evidence of failure.",
+          false
+        ),
+      ],
+      blockers: [
+        "Requires Adam's authorization and the documented operational prerequisites.",
+      ],
+      humanDecisionDependency:
+        "Adam controls production operations and the launch decision.",
+      status: "PROPOSED_AWAITING_HUMAN_SELECTION",
+    };
+  });
+}
+export async function assessPresidentStage1(input: {
+  snapshot: PresidentEvidenceSnapshot;
+  store: PresidentAssessmentStore;
+  now?: () => Date;
+}) {
+  assertEvidenceIntegrity(input.snapshot);
+  const prior = await input.store.findByEvidence(
+    input.snapshot.repositorySha,
+    input.snapshot.id
+  );
+  if (prior) return { assessment: prior, reused: true };
+  const assessmentId = id(
+    "president-assessment",
+    `${input.snapshot.repositorySha}:${input.snapshot.id}`
+  );
+  const at = (input.now ?? (() => new Date()))().toISOString();
+  const ranked = candidates(input.snapshot)
+    .sort(
+      (a, b) =>
+        priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority)
+    )
+    .map(({ priority: _priority, ...seed }, i) => ({
+      ...seed,
+      rankReason: `Rank ${i + 1} of the supported menu. ${seed.rankReason}`,
+      id: id("president-candidate", `${assessmentId}:${seed.title}`),
+      assessmentId,
+      rank: i + 1,
+      status: "PROPOSED_AWAITING_HUMAN_SELECTION" as const,
+    }));
+  const assessment: PresidentAssessment = {
+    id: assessmentId,
+    seat: PRESIDENT_SEAT,
+    inspectedRepositorySha: input.snapshot.repositorySha,
+    evidenceSnapshotId: input.snapshot.id,
+    status: "COMPLETED",
+    resultState: PRESIDENT_STAGE_1_RESULT,
+    evidenceSourcesAvailable: input.snapshot.availableSources,
+    evidenceSourcesUnavailable: input.snapshot.unavailableSources,
+    startedAt: at,
+    completedAt: at,
+    provider: "deterministic-policy",
+    model: "president-stage1-v2",
+    candidates: ranked,
+    executionCount: 0,
+  };
+  return {
+    assessment: await input.store.saveIfAbsent(assessment),
+    reused: false,
+  };
 }
