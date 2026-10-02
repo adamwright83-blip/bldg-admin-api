@@ -128,6 +128,29 @@ describe("DayForge SaaS production contract", () => {
     expect(field).not.toContain('href="/new-order"');
   });
 
+  it("evolves the existing SaaS onboarding spine for JOYSTICK acquisition", () => {
+    const schema = source("../../drizzle/schema.ts");
+    const migration = source("../../scripts/migrate.mjs");
+    const store = source("./saasStore.ts");
+    const router = source("./saasRouter.ts");
+    const landing = source("../../client/src/pages/JoystickLanding.tsx");
+
+    expect(schema).toContain('onboardingMode: varchar("onboardingMode"');
+    expect(schema).toContain('draftAnswersJson: json("draftAnswersJson")');
+    expect(schema).toContain('draftPreviewJson: json("draftPreviewJson")');
+    expect(schema).not.toContain("joystickAcquisitionSessions");
+    expect(migration).toContain("JOYSTICK anonymous acquisition nullable identity");
+    expect(store).toContain('onboardingMode: "joystick_generic"');
+    expect(store).toContain("seedSessionFromAcquisition");
+    expect(store).toContain("locations: []");
+    expect(store).toContain("services: []");
+    expect(router).toContain("startJoystickDraft");
+    expect(router).toContain("saveJoystickDraftAnswer");
+    expect(router).toContain("generateJoystickDraftPreview");
+    expect(router).toContain("saveJoystickIdentity");
+    expect(landing).toContain('const START_PATH = "/joystick-start"');
+  });
+
   it("authorizes Strategy through tenant membership rather than platform admin", () => {
     const strategy = source("../strategy/strategyRouter.ts");
     expect(strategy).toContain("legacyDayforgeTenantOperatorProcedure");
