@@ -3442,9 +3442,14 @@ export const legacyDayforgeSaasOnboardingSessions = mysqlTable(
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     resumeTokenHash: varchar("resumeTokenHash", { length: 64 }).notNull(),
-    businessName: varchar("businessName", { length: 255 }).notNull(),
-    slug: varchar("slug", { length: 64 }).notNull(),
-    ownerEmail: varchar("ownerEmail", { length: 320 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }),
+    slug: varchar("slug", { length: 64 }),
+    ownerEmail: varchar("ownerEmail", { length: 320 }),
+    onboardingMode: varchar("onboardingMode", { length: 32 })
+      .notNull()
+      .default("legacy_laundry"),
+    draftAnswersJson: json("draftAnswersJson"),
+    draftPreviewJson: json("draftPreviewJson"),
     currentStep: varchar("currentStep", { length: 64 })
       .notNull()
       .default("business"),
