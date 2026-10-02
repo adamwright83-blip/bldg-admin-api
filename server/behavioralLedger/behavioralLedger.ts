@@ -10,7 +10,7 @@
  * React render, a poll, or an incidental read. A UI opening or a mission
  * animation must never produce a STARTED or COMPLETED row.
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   behavioralLedgerEvents,
   type BehavioralLedgerEvent,
@@ -18,7 +18,34 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
-import type { LedgerEventInput } from "../../shared/behavioralLedger";
+import type { LedgerEventInput, LedgerEventType, LedgerSourceSystem } from "../../shared/behavioralLedger";
+
+export const DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT = 200;
+export const MAX_BOUNDED_OPERATOR_LEDGER_LIMIT = 500;
+
+export type BoundedLedgerReadEvent = {
+  id: number;
+  tenantId: string;
+  operatorUserId: string;
+  correlationId: string;
+  sourceSystem: LedgerSourceSystem;
+  sourceEntityType: string;
+  sourceEntityId: string;
+  eventType: LedgerEventType;
+  occurredAt: Date;
+  verificationClass: "VERIFIED" | "ATTESTED" | "CLAIMED" | null;
+  provenance: string;
+  evidenceSource: string | null;
+  decisionPointId: string | null;
+  availability: boolean | null;
+  eligibleOptionsJson: unknown;
+  assignedOption: string | null;
+  assignmentProbability: string | null;
+  interventionPolicyVersion: number | null;
+  interventionDefinitionVersion: number | null;
+  proximalOutcomeWindowMinutes: number | null;
+  idempotencyKey: string;
+};
 
 export type BehavioralLedgerStore = {
   insertIfAbsent(input: InsertBehavioralLedgerEvent): Promise<BehavioralLedgerEvent | null>;
@@ -37,6 +64,11 @@ export type BehavioralLedgerStore = {
     tenantId: string,
     decisionPointId: string
   ): Promise<BehavioralLedgerEvent[]>;
+  listByOperatorBounded?(
+    tenantId: string,
+    operatorUserIds: string[],
+    limit?: number
+  ): Promise<BoundedLedgerReadEvent[]>;
 };
 
 async function findExistingByIdempotencyKey(
@@ -134,6 +166,53 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
       )
       .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
   },
+  async listByOperatorBounded(tenantId, operatorUserIds, limit = DEFAULT_BOUNDED_OPERATOR_LEDGER_LIMIT) {
+    if (!tenantId || !operatorUserIds.length) return [];
+    const db = await getDb();
+    if (!db) {
+      throw new Error("Behavioral ledger database unavailable for bounded read");
+    }
+    const boundedLimit = Math.min(Math.max(1, limit), MAX_BOUNDED_OPERATOR_LEDGER_LIMIT);
+    const where =
+      operatorUserIds.length === 1
+        ? and(
+            eq(behavioralLedgerEvents.tenantId, tenantId),
+            eq(behavioralLedgerEvents.operatorUserId, operatorUserIds[0])
+          )
+        : and(
+            eq(behavioralLedgerEvents.tenantId, tenantId),
+            inArray(behavioralLedgerEvents.operatorUserId, operatorUserIds)
+          );
+
+    return db
+      .select({
+        id: behavioralLedgerEvents.id,
+        tenantId: behavioralLedgerEvents.tenantId,
+        operatorUserId: behavioralLedgerEvents.operatorUserId,
+        correlationId: behavioralLedgerEvents.correlationId,
+        sourceSystem: behavioralLedgerEvents.sourceSystem,
+        sourceEntityType: behavioralLedgerEvents.sourceEntityType,
+        sourceEntityId: behavioralLedgerEvents.sourceEntityId,
+        eventType: behavioralLedgerEvents.eventType,
+        occurredAt: behavioralLedgerEvents.occurredAt,
+        verificationClass: behavioralLedgerEvents.verificationClass,
+        provenance: behavioralLedgerEvents.provenance,
+        evidenceSource: behavioralLedgerEvents.evidenceSource,
+        decisionPointId: behavioralLedgerEvents.decisionPointId,
+        availability: behavioralLedgerEvents.availability,
+        eligibleOptionsJson: behavioralLedgerEvents.eligibleOptionsJson,
+        assignedOption: behavioralLedgerEvents.assignedOption,
+        assignmentProbability: behavioralLedgerEvents.assignmentProbability,
+        interventionPolicyVersion: behavioralLedgerEvents.interventionPolicyVersion,
+        interventionDefinitionVersion: behavioralLedgerEvents.interventionDefinitionVersion,
+        proximalOutcomeWindowMinutes: behavioralLedgerEvents.proximalOutcomeWindowMinutes,
+        idempotencyKey: behavioralLedgerEvents.idempotencyKey,
+      })
+      .from(behavioralLedgerEvents)
+      .where(where)
+      .orderBy(desc(behavioralLedgerEvents.occurredAt), desc(behavioralLedgerEvents.id))
+      .limit(boundedLimit);
+  },
 };
 
 /**
@@ -227,3 +306,29 @@ export async function listBehavioralLedgerEventsForDecisionPoint(
   }
   return [];
 }
+
+/**
+ * Stage 1 Operator Context bounded read:
+ * - Scoped by tenantId
+ * - Scoped by authorized mapped operatorUserId(s)
+ * - Fixed explicit maximum limit
+ * - Backed by index `idx_behavioral_ledger_tenant_operator`
+ * - Never performs a tenant-wide full table scan
+ */
+export async function listBehavioralLedgerEventsForOperatorBounded(
+  input: {
+    tenantId: string;
+    operatorUserIds: string[];
+    limit?: number;
+  },
+  store: BehavioralLedgerStore = drizzleBehavioralLedgerStore
+): Promise<BoundedLedgerReadEvent[]> {
+  const tenantId = input.tenantId?.trim();
+  const operatorUserIds = (input.operatorUserIds ?? []).map(id => id.trim()).filter(Boolean);
+  if (!tenantId || !operatorUserIds.length) return [];
+  if (!store.listByOperatorBounded) {
+    throw new Error("Behavioral ledger store does not implement listByOperatorBounded");
+  }
+  return store.listByOperatorBounded(tenantId, operatorUserIds, input.limit);
+}
+
