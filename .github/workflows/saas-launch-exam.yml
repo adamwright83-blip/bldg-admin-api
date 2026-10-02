@@ -59,6 +59,7 @@ jobs:
               'joystick_saas_cogs',
               'joystick_tenant_lifecycle',
               'joystick_launch_two_tenants',
+              'joystick_acquisition_funnel',
             ]) {
               await conn.query(`DROP DATABASE IF EXISTS \`${name}\``);
               await conn.query(`CREATE DATABASE \`${name}\``);
@@ -101,3 +102,10 @@ jobs:
         run: |
           node scripts/migrate.mjs
           pnpm vitest run --config vitest.integration.config.ts server/saas/saasLaunchExam.integration.test.ts
+      - name: Public JOYSTICK acquisition binds without fake laundry truth
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_acquisition_funnel
+          JOYSTICK_ACQUISITION_EXAM: "1"
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/joystickAcquisition.lifecycle.integration.test.ts
