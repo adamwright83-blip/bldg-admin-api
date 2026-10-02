@@ -565,6 +565,9 @@ export async function saveOnboardingConfiguration(input: {
   configuration: SaasTenantOnboardingConfiguration;
 }) {
   const session = await requireOnboardingSession(input);
+  if (session.onboardingMode !== "legacy_laundry") {
+    throw new Error("Use JOYSTICK account setup for this onboarding session");
+  }
   if (!onboardingConfigurationIsOperational(input.configuration)) {
     throw new Error(
       "Store, capacity, service, radius, and turnaround configuration is incomplete"
