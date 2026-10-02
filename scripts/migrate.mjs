@@ -1209,10 +1209,34 @@ await ensureRequiredIndex(
   ["authContinuationId"],
   "ALTER TABLE dayforge_saas_onboarding_sessions ADD KEY idx_dayforge_saas_onboarding_continuation (authContinuationId)"
 );
+
+// JOYSTICK public acquisition reuses the existing SaaS onboarding row before
+// business identity exists. Existing sessions remain legacy_laundry.
+for (const [columnName, definition] of [
+  ["onboardingMode", "varchar(32) NOT NULL DEFAULT 'legacy_laundry' AFTER ownerEmail"],
+  ["draftAnswersJson", "json NULL AFTER onboardingMode"],
+  ["draftPreviewJson", "json NULL AFTER draftAnswersJson"],
+]) {
+  await ensureRequiredColumn(
+    "dayforge_saas_onboarding_sessions",
+    columnName,
+    `ALTER TABLE dayforge_saas_onboarding_sessions ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await runRequired(
+  `ALTER TABLE dayforge_saas_onboarding_sessions
+     MODIFY COLUMN businessName varchar(255) NULL,
+     MODIFY COLUMN slug varchar(64) NULL,
+     MODIFY COLUMN ownerEmail varchar(320) NULL`,
+  "JOYSTICK anonymous acquisition nullable identity"
+);
 await assertRequiredColumns("dayforge_saas_onboarding_sessions", [
   "id",
   "resumeTokenHash",
   "ownerEmail",
+  "onboardingMode",
+  "draftAnswersJson",
+  "draftPreviewJson",
   "status",
   "tenantId",
   "authContinuationId",

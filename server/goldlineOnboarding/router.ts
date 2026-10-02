@@ -4,7 +4,7 @@ import { previewCustomerCsv } from "./customerImport";
 import { runTenantImport } from "../saas/tenantImportService";
 import { z } from "zod";
 import { router, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
-import { answerSession } from "../../shared/goldlineOnboarding";
+import { answerSession, orderedGoldlineOnboardingAnswers } from "../../shared/goldlineOnboarding";
 import { hasExistingWorld, readSession, saveSession, startSession } from "./store";
 import { interpretAnswers } from "./interpreter";
 export const goldlineOnboardingRouter = router({
@@ -23,5 +23,5 @@ export const goldlineOnboardingRouter = router({
   if (input.version !== session.version) throw new Error("Reload to resume the latest answer.");
   return saveSession(answerSession(session, input.question, input.answer), session.version);
  }),
- interpret: procedure.mutation(async ({ ctx }) => { const session = await startSession(ctx.tenantId); if (session.interpretation) return session; if (session.status !== "READY") throw new Error("Answer all five questions first."); const interpretation = await interpretAnswers(ctx.tenantId, session.answers); return saveSession({ ...session, interpretation, version: session.version + 1 }, session.version); }),
+ interpret: procedure.mutation(async ({ ctx }) => { const session = await startSession(ctx.tenantId); if (session.interpretation) return session; if (session.status !== "READY") throw new Error("Answer all five questions first."); const interpretation = await interpretAnswers(ctx.tenantId, orderedGoldlineOnboardingAnswers(session)); return saveSession({ ...session, interpretation, version: session.version + 1 }, session.version); }),
 });

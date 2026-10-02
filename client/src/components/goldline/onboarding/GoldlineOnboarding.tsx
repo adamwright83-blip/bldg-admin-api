@@ -4,7 +4,7 @@ import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { ONBOARDING_QUESTIONS, type GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
+import { ONBOARDING_QUESTIONS, getGoldlineOnboardingAnswer, type GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 import "./onboarding.css";
 const art = "/assets/goldline/procedural-world-v1/";
@@ -36,7 +36,7 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
     <div className="gl-answer-footer"><button type="button" disabled={!canSpeak || busy} aria-pressed={listening} onClick={()=>{if(listening)stopSpeech();else{speech.current=startBrowserSpeechTranscript({initialText:answer,onTranscript:setAnswer});setListening(Boolean(speech.current));}}}>{listening ? "STOP MIC" : canSpeak ? "USE MIC" : "TYPE YOUR STORY"}</button><span>Your words are saved after each scene.</span><button type="submit" disabled={busy || !answer.trim()}>{busy ? "SAVING…" : "CONTINUE →"}</button></div>
    </form> : session.interpretation ? children : <button className="gl-primary" disabled={busy} onClick={()=>void onInterpret().catch(()=>{})}>{busy ? "READING YOUR STORY…" : "ASSEMBLE MY WORLD"}</button>}
    {error && <p role="alert" className="gl-onboarding-error">{error}</p>}
-   {question > 1 && question < 5 && <p className="gl-story-echo">{question === 4 ? `The resistance takes shape: “${session.answers[3]}”` : `Your world begins in “${session.answers[1]}”`}</p>}
+   {question > 1 && question < 5 && <p className="gl-story-echo">{question === 4 ? `The resistance takes shape: “${getGoldlineOnboardingAnswer(session, "avoidance") ?? ""}”` : `Your world begins in “${getGoldlineOnboardingAnswer(session, "service_area") ?? ""}”`}</p>}
   </section>
   <footer>Fantasy scenery · Your real customers and outcomes only appear from evidence.</footer>
  </main>;
@@ -76,5 +76,14 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
   }
   return <DesignPartnerWorld session={session}/>;
  }
- return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
+ return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}>
+  {session.acquisitionSessionId ? (
+   <section className="gl-customer-import">
+    <h2>Your first world is ready.</h2>
+    <p>Start with the business truth you gave us. Connections and customer imports can wait until after your first real action.</p>
+    <div className="gl-import-actions"><button disabled={reveal.isPending} onClick={()=>reveal.mutate()}>{reveal.isPending?"ASSEMBLING…":"REVEAL MY WORLD"}</button></div>
+   </section>
+  ) : <CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />}
+  {reveal.error&&<p role="alert">{reveal.error.message}</p>}
+ </OnboardingInterview>;
 }

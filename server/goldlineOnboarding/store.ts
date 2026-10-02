@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
-import type { GoldlineOnboardingSession } from "../../shared/goldlineOnboarding";
+import { nextGoldlineOnboardingQuestion, onboardingAnswersByKey, type GoldlineOnboardingQuestionKey, type GoldlineOnboardingSession } from "../../shared/goldlineOnboarding";
 export async function onboardingDb() { const db = await getDb(); if (!db) throw new Error("Database not available"); return db; }
 export function resultRows(result: unknown): any[] { return (result as any)[0] ?? []; }
 export async function readSession(tenantId: string): Promise<GoldlineOnboardingSession | null> {
@@ -41,7 +41,7 @@ export async function hasExistingWorld(tenantId: string) {
 export async function startSession(tenantId: string) {
  const existing = await readSession(tenantId); if (existing) return existing;
  if (await hasExistingWorld(tenantId)) throw new TRPCError({ code: "CONFLICT", message: "Existing Goldline world is preserved." });
- const session: GoldlineOnboardingSession = { id: randomUUID(), tenantId, status: "INTERVIEW", currentQuestion: 0, answers: [], interpretation: null, optionalUploadReference: null, startedAt: new Date().toISOString(), completedAt: null, version: 0, world: null, mission: null };
+ const session: GoldlineOnboardingSession = { id: randomUUID(), tenantId, status: "INTERVIEW", currentQuestion: 0, answers: [], answersByKey: {}, answerProvenanceByKey: {}, acquisitionSessionId: null, interpretation: null, optionalUploadReference: null, startedAt: new Date().toISOString(), completedAt: null, version: 0, world: null, mission: null };
  const db = await onboardingDb();
  await db.execute(sql`INSERT IGNORE INTO goldline_onboarding_sessions (tenantId,id,version,payload) VALUES (${tenantId},${session.id},0,${JSON.stringify(session)})`);
  return (await readSession(tenantId))!;
@@ -51,4 +51,40 @@ export async function saveSession(session: GoldlineOnboardingSession, expectedVe
  const result: any = await db.execute(sql`UPDATE goldline_onboarding_sessions SET payload=${JSON.stringify(session)}, version=${session.version} WHERE tenantId=${session.tenantId} AND version=${expectedVersion}`);
  if (result[0].affectedRows !== 1) throw new TRPCError({ code: "CONFLICT", message: "Your world changed in another session. Reload to resume." });
  return session;
+}
+
+
+export async function seedSessionFromAcquisition(input: {
+ tenantId: string;
+ acquisitionSessionId: string;
+ answers: Partial<Record<GoldlineOnboardingQuestionKey, string>>;
+}) {
+ const session = await startSession(input.tenantId);
+ if (session.status === "COMPLETE") return session;
+ const keyed = onboardingAnswersByKey(session);
+ const provenance = { ...(session.answerProvenanceByKey ?? {}) };
+ let changed = session.acquisitionSessionId !== input.acquisitionSessionId;
+ for (const [key, value] of Object.entries(input.answers) as Array<[GoldlineOnboardingQuestionKey, string | undefined]>) {
+  const normalized = value?.trim();
+  if (!normalized || keyed[key]?.trim()) continue;
+  keyed[key] = normalized;
+  provenance[key] = "operator_declared";
+  changed = true;
+ }
+ const currentQuestion = nextGoldlineOnboardingQuestion(keyed);
+ if (
+  !changed &&
+  session.currentQuestion === currentQuestion &&
+  session.answersByKey
+ ) return session;
+ const next: GoldlineOnboardingSession = {
+  ...session,
+  answersByKey: keyed,
+  answerProvenanceByKey: provenance,
+  acquisitionSessionId: input.acquisitionSessionId,
+  currentQuestion,
+  status: currentQuestion === 5 ? "READY" : "INTERVIEW",
+  version: session.version + 1,
+ };
+ return saveSession(next, session.version);
 }

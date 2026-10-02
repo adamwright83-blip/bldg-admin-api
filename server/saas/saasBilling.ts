@@ -41,6 +41,14 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   stripe?: Stripe;
 }) {
   const existingOnboarding = await requireOnboardingSession(input);
+  const customerEmail = existingOnboarding.ownerEmail;
+  if (!customerEmail) {
+    throw new Error("Complete account identity before checkout");
+  }
+  const returnPath =
+    existingOnboarding.onboardingMode === "joystick_generic"
+      ? "/joystick-start"
+      : "/dayforge-onboarding";
   const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   if (existingOnboarding.stripeCheckoutSessionId) {
     if (existingOnboarding.planKey !== input.planKey) {
@@ -71,11 +79,11 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   const session = await stripe.checkout.sessions.create(
     {
       mode: "subscription",
-      customer_email: onboarding.ownerEmail,
+      customer_email: customerEmail,
       client_reference_id: onboarding.id,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      success_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=success`,
-      cancel_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=cancelled`,
+      success_url: `${appUrl()}${returnPath}?session=${onboarding.id}&checkout=success`,
+      cancel_url: `${appUrl()}${returnPath}?session=${onboarding.id}&checkout=cancelled`,
       metadata: {
         legacyDayforgeOnboardingSessionId: onboarding.id,
         legacyDayforgePlanKey: plan.planKey,
