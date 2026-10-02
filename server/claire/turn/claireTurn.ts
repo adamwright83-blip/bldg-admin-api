@@ -120,6 +120,14 @@ import {
   claireIdentityEvidenceSources,
   renderClaireIdentityAnswer,
 } from "../identityTruth";
+import {
+  isClaireOperatorContextShadowEnabled,
+  loadClaireOperatorAdaptationContext,
+  defaultEmitClaireOperatorContextShadowTelemetry,
+  runClaireOperatorContextShadow,
+  type ClaireOperatorAdaptationContext,
+  type ClaireOperatorContextShadowTelemetryEvent,
+} from "../operatorAdaptationContext";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -301,6 +309,15 @@ export type ClaireTurnDeps = {
   classifierBudgetMs?: number;
   /** Claire Brain V3: the sole semantic interpretation of the live turn. */
   brainV3?: typeof interpretClaireBrainV3 | null;
+  /** Stage 3A: Operator Context Claire Shadow Adaptation (flag-gated, default off). */
+  operatorContextShadowEnabled?: (tenantId: string) => boolean;
+  loadOperatorAdaptationContext?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+  }) => Promise<ClaireOperatorAdaptationContext | null>;
+  onOperatorContextShadowTelemetry?: (
+    event: ClaireOperatorContextShadowTelemetryEvent
+  ) => void;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -344,6 +361,9 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
+    operatorContextShadowEnabled: isClaireOperatorContextShadowEnabled,
+    loadOperatorAdaptationContext: loadClaireOperatorAdaptationContext,
+    onOperatorContextShadowTelemetry: defaultEmitClaireOperatorContextShadowTelemetry,
   };
 }
 
@@ -546,6 +566,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     await commitPendingDisclosuresForConversation(getProgressionStore(), { tenantId: input.tenantId, conversationId: input.conversationKey });
   }
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
+
+  // Stage 3A: Operator Context Claire Shadow Integration
+  // Awaited within turn lifetime, measured explicitly, strictly isolated from prompt/LLM/Brain V3.
+  const shadowEnabled = (deps.operatorContextShadowEnabled ?? isClaireOperatorContextShadowEnabled)(input.tenantId);
+  if (shadowEnabled) {
+    await runClaireOperatorContextShadow({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      deps: {
+        loadOperatorAdaptationContext: deps.loadOperatorAdaptationContext,
+        onOperatorContextShadowTelemetry: deps.onOperatorContextShadowTelemetry,
+      },
+    });
+  }
   const now = deps.now();
   const nowMs = now.getTime();
   const timeZone = deps.timeZone();
