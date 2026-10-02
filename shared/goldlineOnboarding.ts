@@ -98,9 +98,13 @@ export function answerSession(session: GoldlineOnboardingSession, question: numb
   keyed[key] = parsed;
   const nextQuestion = nextGoldlineOnboardingQuestion(keyed);
   const provenance = { ...(session.answerProvenanceByKey ?? {}), [key]: "operator_declared" as const };
-  // Preserve legacy positional storage for pre-migration sessions while making
-  // semantic keys authoritative for all new/continued sessions.
-  const legacyAnswers = session.answersByKey ? session.answers : [...session.answers, parsed];
+  // Keep the legacy positional projection contiguous up to the next unanswered
+  // canonical question. Sparse acquisition state (Q0/Q1/Q3) is never padded:
+  // after Q2 is supplied the first four answers become contiguous naturally.
+  const legacyAnswers = ONBOARDING_QUESTION_KEYS
+    .slice(0, nextQuestion)
+    .map(answerKey => keyed[answerKey]!)
+    .filter(Boolean);
   return {
     ...session,
     answers: legacyAnswers,
