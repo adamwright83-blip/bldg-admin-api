@@ -3,6 +3,10 @@ import path from "path";
 
 const templateRoot = path.resolve(import.meta.dirname);
 
+// Integration suites opt in to the real disposable DATABASE_URL supplied by CI.
+// The default Vitest config remains fail-closed against accidental database access.
+process.env.ALLOW_TEST_DB ??= "1";
+
 /** Optional: DB + local server + Twilio. Not part of default `pnpm test`. */
 export default defineConfig({
   root: templateRoot,

@@ -11,6 +11,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
 import { useAuth } from "./_core/hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
+import { trpc } from "@/lib/trpc";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
@@ -67,6 +68,7 @@ const LegacyDayforgeDemoControlPage = lazy(
   () => import("./pages/LegacyDayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
+const JoystickWorld = lazy(() => import("./product/JoystickWorld"));
 // Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
 // imports this module, so normal Goldline never downloads three.js; it is not
 // a corridor, not linked, and carries no business state.
@@ -225,6 +227,78 @@ function DriverMembershipGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function TenantOperatorGate({ children }: { children: ReactNode }) {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const me = trpc.system.saas.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  if (authLoading || (isAuthenticated && me.isLoading)) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        role="driver"
+        mode="membership"
+        onSuccess={() => window.location.reload()}
+      />
+    );
+  }
+  if (me.data?.membership.role === "field") return <Redirect to="/play" />;
+  if (me.isError) return <Redirect to="/product" />;
+  return <>{children}</>;
+}
+
+function JoystickWorldRoute() {
+  const { user } = useAuth();
+  if (user?.role === "admin") return <AdminHostApp />;
+  return (
+    <TenantOperatorGate>
+      <Suspense fallback={<PublicLandingFallback />}>
+        <JoystickWorld />
+      </Suspense>
+    </TenantOperatorGate>
+  );
+}
+
+function TenantUnlockedChapter() {
+  const kingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
+    retry: false,
+  });
+  if (kingdoms.isLoading) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  const unlocked = kingdoms.data?.some(
+    kingdom =>
+      kingdom.kingdomId === "kingdom-2-the-last-valet" &&
+      kingdom.lanternCityStatus !== "locked"
+  );
+  if (!unlocked || kingdoms.isError) return <Redirect to="/play" />;
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <GoldlineChapterHost />
+    </Suspense>
+  );
+}
+
+function JoystickChapterRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  if (user?.role === "admin") {
+    return (
+      <Suspense fallback={<PublicLandingFallback />}>
+        <GoldlineChapterHost />
+      </Suspense>
+    );
+  }
+  return (
+    <TenantOperatorGate>
+      <TenantUnlockedChapter />
+    </TenantOperatorGate>
+  );
+}
+
 function AdminAuthGate({ children }: { children: ReactNode }) {
   const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
@@ -240,6 +314,9 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
 
 const SAAS_CUSTOMER_SAFE_PATHS = [
   "/product",
+  "/play",
+  "/growth/lantern-city",
+  "/goldline-chapter",
   "/dayforge-settings",
   "/billing",
   "/dayforge-invite",
@@ -358,6 +435,14 @@ function AdminHostRouter() {
         <GoldlineOnboarding />
       </Route>
       <Route path="/gumballpals" component={Gumballpals} />
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
@@ -459,13 +544,8 @@ function AdminHostRouter() {
           </Suspense>
         </AdminAuthGate>
       </Route>
-      {/* Slice 11: internal, unlinked chapter host. Not the final player entry point. */}
       <Route path="/goldline-chapter">
-        <AdminAuthGate>
-          <Suspense fallback={<PublicLandingFallback />}>
-            <GoldlineChapterHost />
-          </Suspense>
-        </AdminAuthGate>
+        <JoystickChapterRoute />
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -659,6 +739,17 @@ function Router() {
       </Route>
       <Route path="/goldline/start">
         <GoldlineOnboarding />
+      </Route>
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
+      <Route path="/goldline-chapter">
+        <JoystickChapterRoute />
       </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>

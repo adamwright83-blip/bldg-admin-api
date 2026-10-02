@@ -17,7 +17,9 @@ export default function ProductShell() {
   const [location, navigate] = useLocation();
   const me = trpc.system.saas.me.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const isProductRoot = location === "/product" || location === "/driver";
-  const isField = location.startsWith("/product/field") || location === "/product/unload" || location === "/product/hunt" || location === "/driver";
+  const isLegacyProductWorld = location === "/product/hq";
+  const isLegacyProductField = location === "/product/field" || location === "/driver";
+  const isField = isLegacyProductField || location === "/product/unload" || location === "/product/hunt";
   const isHq = !isField;
   const canUseHq = me.data?.membership.role !== "field";
 
@@ -25,9 +27,27 @@ export default function ProductShell() {
     if (!me.data) return;
     if (isProductRoot) {
       const mobile = window.matchMedia("(max-width: 760px)").matches;
-      navigate(mobile || !canUseHq ? "/product/field" : "/product/hq", { replace: true });
-    } else if (!canUseHq && isHq) navigate("/product/field", { replace: true });
-  }, [me.data, isProductRoot, isHq, canUseHq, navigate]);
+      navigate(mobile || !canUseHq ? "/play" : "/growth/lantern-city", { replace: true });
+      return;
+    }
+    if (isLegacyProductField) {
+      navigate("/play", { replace: true });
+      return;
+    }
+    if (isLegacyProductWorld) {
+      navigate(canUseHq ? "/growth/lantern-city" : "/play", { replace: true });
+      return;
+    }
+    if (!canUseHq && isHq) navigate("/play", { replace: true });
+  }, [
+    me.data,
+    isProductRoot,
+    isLegacyProductField,
+    isLegacyProductWorld,
+    isHq,
+    canUseHq,
+    navigate,
+  ]);
 
   if (loading || (isAuthenticated && me.isLoading)) return <main className="cc-product grid place-items-center"><Loader2 className="animate-spin" /></main>;
   if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
@@ -35,10 +55,10 @@ export default function ProductShell() {
   return (
     <main className="cc-product">
       <header className="cc-topbar">
-        <Link href={canUseHq ? "/product/hq" : "/product/field"} className="cc-brand"><strong>{PRODUCT_NAME}</strong><small>{operatingName ?? "Operate the real business"}</small></Link>
-        <nav className="cc-camera-switch" aria-label="Business camera">
-          <Link href="/product/field" className={isField ? "active" : ""}>Field</Link>
-          {canUseHq ? <Link href="/product/hq" className={isHq ? "active" : ""}>HQ</Link> : null}
+        <Link href={canUseHq ? "/growth/lantern-city" : "/play"} className="cc-brand"><strong>{PRODUCT_NAME}</strong><small>{operatingName ?? "Operate the real business"}</small></Link>
+        <nav className="cc-camera-switch" aria-label="JOYSTICK view">
+          <Link href="/play" className={isField ? "active" : ""}>Play</Link>
+          {canUseHq ? <Link href="/growth/lantern-city" className={isHq ? "active" : ""}>World</Link> : null}
         </nav>
         <div className="cc-top-actions">
           <Link href="/dayforge-settings" className="cc-button">Account</Link>

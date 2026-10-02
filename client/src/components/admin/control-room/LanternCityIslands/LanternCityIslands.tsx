@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import type { GeographicCustomer } from "../customerGeography";
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
@@ -32,10 +33,14 @@ const day = (iso?: string) => {
 export default function LanternCityIslands({
   onOpenCustomer,
   onNavigate,
+  showUtilityDock = true,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
+  /** Commercial members get the world without Laundry Butler admin shortcuts. */
+  showUtilityDock?: boolean;
 }) {
+  const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
   const board = useRef<IslandBoard | null>(null);
   const [ready, setReady] = useState(false);
@@ -45,10 +50,26 @@ export default function LanternCityIslands({
   const [hover, setHover] = useState<{ keys: string[]; x: number; y: number; tower?: string } | null>(null);
   const [tower, setTower] = useState<string | null>(null);
 
-  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 10_000, refetchInterval: 15_000, retry: 1 });
+  const isPlatformAdmin = user?.role === "admin";
+  const adminAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
+    enabled: isPlatformAdmin,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    retry: 1,
+  });
+  const memberAtlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
+    enabled: !isPlatformAdmin,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    retry: 1,
+  });
+  const atlas = isPlatformAdmin ? adminAtlas : memberAtlas;
   const usingSample = import.meta.env.DEV && atlas.isError;
   const allCustomers = useMemo<GeographicCustomer[]>(
-    () => (usingSample ? devSampleCustomers() : ((atlas.data?.customers ?? []) as GeographicCustomer[])),
+    () =>
+      usingSample
+        ? devSampleCustomers()
+        : ((atlas.data?.customers ?? []) as GeographicCustomer[]),
     [atlas.data, usingSample],
   );
   const customers = useMemo(() => allCustomers.filter(c => c.location), [allCustomers]);
@@ -135,11 +156,13 @@ export default function LanternCityIslands({
       ) : null}
 
       {usingSample ? <div className={styles.sample}>Sample customers · dev build, no database</div> : null}
-      <nav className={styles.dock} aria-label="Actions">
-        <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
-        <button type="button" onClick={() => onNavigate?.("/customers")}>Customers <b className={styles.count}>{customers.length}</b></button>
-        <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
-      </nav>
+      {showUtilityDock ? (
+        <nav className={styles.dock} aria-label="Actions">
+          <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
+          <button type="button" onClick={() => onNavigate?.("/customers")}>Customers <b className={styles.count}>{customers.length}</b></button>
+          <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
+        </nav>
+      ) : null}
       {!ready && !failed ? <div className={styles.loading} data-lantern-state="loading">Raising the islands…</div> : null}
       {failed ? <div className={styles.loading} data-lantern-state="failed">Lantern City could not load its map. Reload to try again.</div> : null}
     </div>

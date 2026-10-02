@@ -106,14 +106,22 @@ describe("DayForge SaaS production contract", () => {
   });
 
 
-  it("quarantines commercial SaaS members from legacy product routes", () => {
+  it("quarantines commercial SaaS members from legacy routes while exposing canonical JOYSTICK", () => {
     const app = source("../../client/src/App.tsx");
     const shell = source("../../client/src/product/ProductShell.tsx");
     const field = source("../../client/src/product/FieldHome.tsx");
+    const atlas = source("../geography/geographicTruthRouter.ts");
 
     expect(app).toContain("isSaasCustomerSafePath");
     expect(app).toContain('user?.role === "user"');
     expect(app).toContain('<Redirect to="/product" />');
+    expect(app).toContain('"/play"');
+    expect(app).toContain('"/growth/lantern-city"');
+    expect(app).toContain('"/goldline-chapter"');
+    expect(app).toContain("TenantOperatorGate");
+    expect(app).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(atlas).toContain("myAtlas: legacyDayforgeTenantOperatorProcedure");
+    expect(atlas).toContain("getGeographicTruth({ tenantId: ctx.tenantId })");
     expect(shell).not.toContain("Legacy operations");
     expect(shell).not.toContain('href="/admin"');
     expect(shell).not.toContain('href="/new-order"');
