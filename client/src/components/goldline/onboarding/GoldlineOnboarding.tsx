@@ -76,5 +76,14 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
   }
   return <DesignPartnerWorld session={session}/>;
  }
- return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
+ return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}>
+  {session.acquisitionSessionId ? (
+   <section className="gl-customer-import">
+    <h2>Your first world is ready.</h2>
+    <p>Start with the business truth you gave us. Connections and customer imports can wait until after your first real action.</p>
+    <div className="gl-import-actions"><button disabled={reveal.isPending} onClick={()=>reveal.mutate()}>{reveal.isPending?"ASSEMBLING…":"REVEAL MY WORLD"}</button></div>
+   </section>
+  ) : <CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />}
+  {reveal.error&&<p role="alert">{reveal.error.message}</p>}
+ </OnboardingInterview>;
 }
