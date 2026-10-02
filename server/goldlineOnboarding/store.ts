@@ -63,13 +63,20 @@ export async function seedSessionFromAcquisition(input: {
  if (session.status === "COMPLETE") return session;
  const keyed = onboardingAnswersByKey(session);
  const provenance = { ...(session.answerProvenanceByKey ?? {}) };
+ let changed = session.acquisitionSessionId !== input.acquisitionSessionId;
  for (const [key, value] of Object.entries(input.answers) as Array<[GoldlineOnboardingQuestionKey, string | undefined]>) {
   const normalized = value?.trim();
   if (!normalized || keyed[key]?.trim()) continue;
   keyed[key] = normalized;
   provenance[key] = "operator_declared";
+  changed = true;
  }
  const currentQuestion = nextGoldlineOnboardingQuestion(keyed);
+ if (
+  !changed &&
+  session.currentQuestion === currentQuestion &&
+  session.answersByKey
+ ) return session;
  const next: GoldlineOnboardingSession = {
   ...session,
   answersByKey: keyed,
