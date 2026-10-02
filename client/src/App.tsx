@@ -67,6 +67,7 @@ const LegacyDayforgeDemoControlPage = lazy(
   () => import("./pages/LegacyDayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
+const JoystickWorld = lazy(() => import("./product/JoystickWorld"));
 // Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
 // imports this module, so normal Goldline never downloads three.js; it is not
 // a corridor, not linked, and carries no business state.
@@ -225,6 +226,18 @@ function DriverMembershipGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function JoystickWorldRoute() {
+  const { user } = useAuth();
+  if (user?.role === "admin") return <AdminHostApp />;
+  return (
+    <DriverMembershipGate>
+      <Suspense fallback={<PublicLandingFallback />}>
+        <JoystickWorld />
+      </Suspense>
+    </DriverMembershipGate>
+  );
+}
+
 function AdminAuthGate({ children }: { children: ReactNode }) {
   const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
@@ -240,6 +253,9 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
 
 const SAAS_CUSTOMER_SAFE_PATHS = [
   "/product",
+  "/play",
+  "/growth/lantern-city",
+  "/goldline-chapter",
   "/dayforge-settings",
   "/billing",
   "/dayforge-invite",
@@ -358,6 +374,14 @@ function AdminHostRouter() {
         <GoldlineOnboarding />
       </Route>
       <Route path="/gumballpals" component={Gumballpals} />
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
@@ -459,13 +483,12 @@ function AdminHostRouter() {
           </Suspense>
         </AdminAuthGate>
       </Route>
-      {/* Slice 11: internal, unlinked chapter host. Not the final player entry point. */}
       <Route path="/goldline-chapter">
-        <AdminAuthGate>
+        <DriverMembershipGate>
           <Suspense fallback={<PublicLandingFallback />}>
             <GoldlineChapterHost />
           </Suspense>
-        </AdminAuthGate>
+        </DriverMembershipGate>
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -659,6 +682,21 @@ function Router() {
       </Route>
       <Route path="/goldline/start">
         <GoldlineOnboarding />
+      </Route>
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
+      <Route path="/goldline-chapter">
+        <DriverMembershipGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <GoldlineChapterHost />
+          </Suspense>
+        </DriverMembershipGate>
       </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
