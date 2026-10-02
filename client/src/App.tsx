@@ -30,6 +30,7 @@ const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
+const JoystickAcquisitionPage = lazy(() => import("./pages/JoystickAcquisitionPage"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -322,6 +323,7 @@ const SAAS_CUSTOMER_SAFE_PATHS = [
   "/dayforge-invite",
   "/dayforge-login",
   "/dayforge-onboarding",
+  "/joystick-start",
   "/onboarding",
   "/goldline/start",
   "/receipt/",
@@ -404,6 +406,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/dayforge",
   "/landingfinal",
   "/territory-preview",
+  "/joystick-start",
   "/dayforge-onboarding",
   "/dayforge-login",
   "/dayforge-today",
@@ -459,6 +462,11 @@ function AdminHostRouter() {
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/joystick" component={JoystickLandingRoute} />
+      <Route path="/joystick-start">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <JoystickAcquisitionPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
           <LegacyDayforgeOnboardingPage />
@@ -766,6 +774,11 @@ function Router() {
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/joystick" component={JoystickLandingRoute} />
+      <Route path="/joystick-start">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <JoystickAcquisitionPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
           <LegacyDayforgeOnboardingPage />
