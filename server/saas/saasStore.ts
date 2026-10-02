@@ -41,6 +41,10 @@ import type {
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as duplicateKey } from "../mysqlErrors";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { GoogleGeocoder } from "../geography/googleGeocoder";
+import { seedSessionFromAcquisition } from "../goldlineOnboarding/store";
+import { JOYSTICK_PREPAY_QUESTION_KEYS, type GoldlineOnboardingQuestionKey } from "../../shared/goldlineOnboarding";
+import { buildJoystickDraftPreview, type JoystickDraftAnswerMap, type JoystickDraftPreview } from "../../shared/joystickAcquisition";
 
 export type PublicSaasPlan = {
   planKey: string;
@@ -223,6 +227,7 @@ export async function startSaasOnboarding(input: {
         businessName: input.businessName.trim(),
         slug,
         ownerEmail: normalizeSaasEmail(input.ownerEmail),
+        onboardingMode: "legacy_laundry",
         currentStep: "business",
         version: 1,
         startRequestId: input.requestId,
@@ -265,6 +270,262 @@ export async function startSaasOnboarding(input: {
     .where(eq(legacyDayforgeSaasOnboardingSessions.id, sessionId))
     .limit(1);
   return { session, resumeToken };
+}
+
+export async function startJoystickOnboardingDraft(input: { requestId: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select()
+    .from(legacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyDayforgeSaasOnboardingSessions.startRequestId, input.requestId))
+    .limit(1);
+  if (existing[0]) {
+    return { session: existing[0], resumeToken: null as string | null };
+  }
+  const sessionId = randomUUID();
+  const resumeToken = randomBytes(32).toString("base64url");
+  await db.transaction(async tx => {
+    await tx.insert(legacyDayforgeSaasOnboardingSessions).values({
+      id: sessionId,
+      resumeTokenHash: hashSecret(resumeToken),
+      businessName: null,
+      slug: null,
+      ownerEmail: null,
+      onboardingMode: "joystick_generic",
+      draftAnswersJson: {},
+      draftPreviewJson: null,
+      currentStep: "draft_questions",
+      version: 1,
+      startRequestId: input.requestId,
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    });
+    const correlationId = `saas-onboarding:${sessionId}`;
+    await writeLegacyDayforgeEventWith(tx, {
+      anonymousSessionId: sessionId,
+      actor: { type: "public", id: null },
+      entityType: "saas_onboarding_session",
+      entityId: sessionId,
+      eventName: "tenant_signup_started",
+      before: null,
+      after: {
+        sessionId,
+        status: "draft",
+        currentStep: "draft_questions",
+        onboardingMode: "joystick_generic",
+      },
+      source: "joystick_acquisition",
+      correlationId,
+      idempotencyKey: `${correlationId}:signup_started`,
+      productEvent: {
+        name: "tenant_signup_started",
+        properties: {
+          sourcePlacement: "joystick_acquisition",
+          planKey: "unselected",
+        },
+      },
+    });
+  });
+  const [session] = await db
+    .select()
+    .from(legacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyDayforgeSaasOnboardingSessions.id, sessionId))
+    .limit(1);
+  return { session, resumeToken };
+}
+
+function joystickDraftAnswers(session: {
+  draftAnswersJson: unknown;
+}): JoystickDraftAnswerMap {
+  const value = session.draftAnswersJson;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return { ...(value as JoystickDraftAnswerMap) };
+}
+
+function joystickDraftComplete(answers: JoystickDraftAnswerMap): boolean {
+  return JOYSTICK_PREPAY_QUESTION_KEYS.every(key => Boolean(answers[key]?.trim()));
+}
+
+export async function saveJoystickDraftAnswer(input: {
+  sessionId: string;
+  resumeToken: string;
+  expectedVersion: number;
+  questionKey: GoldlineOnboardingQuestionKey;
+  answer: string;
+}) {
+  const session = await requireOnboardingSession(input);
+  if (session.onboardingMode !== "joystick_generic" || session.status !== "draft") {
+    throw new Error("Onboarding is not accepting JOYSTICK draft answers");
+  }
+  if (!JOYSTICK_PREPAY_QUESTION_KEYS.includes(input.questionKey as any)) {
+    throw new Error("This question belongs after checkout");
+  }
+  const answer = input.answer.trim();
+  if (!answer) throw new Error("An answer is required");
+  const answers = joystickDraftAnswers(session);
+  answers[input.questionKey] = answer;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(legacyDayforgeSaasOnboardingSessions)
+    .set({
+      draftAnswersJson: answers,
+      draftPreviewJson: null,
+      currentStep: joystickDraftComplete(answers) ? "draft_preview" : "draft_questions",
+      version: input.expectedVersion + 1,
+    })
+    .where(
+      and(
+        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
+        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+      )
+    );
+  if (affectedRows(result) !== 1) {
+    throw new Error("Onboarding changed in another session; reload before saving");
+  }
+  return requireOnboardingSession(input);
+}
+
+export async function generateJoystickDraftPreview(input: {
+  sessionId: string;
+  resumeToken: string;
+  expectedVersion: number;
+}) {
+  const session = await requireOnboardingSession(input);
+  if (session.onboardingMode !== "joystick_generic" || session.status !== "draft") {
+    throw new Error("Onboarding is not ready for a JOYSTICK preview");
+  }
+  if (session.draftPreviewJson) return session;
+  const answers = joystickDraftAnswers(session);
+  if (!joystickDraftComplete(answers)) {
+    throw new Error("Complete the three JOYSTICK preview questions first");
+  }
+  let geocode: { canonicalAddress: string; latitude: number; longitude: number } | null = null;
+  try {
+    const result = await new GoogleGeocoder().geocode(answers.service_area!);
+    if (result.status === "success") {
+      geocode = {
+        canonicalAddress: result.canonicalAddress,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      };
+    }
+  } catch {
+    // A public preview never turns a declared service area into fake evidence.
+    // If geocoding is unavailable, retain the operator's own declaration only.
+  }
+  const preview = buildJoystickDraftPreview({ answers, geocode });
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(legacyDayforgeSaasOnboardingSessions)
+    .set({
+      draftPreviewJson: preview,
+      currentStep: "draft_reveal",
+      version: input.expectedVersion + 1,
+    })
+    .where(
+      and(
+        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
+        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+      )
+    );
+  if (affectedRows(result) !== 1) {
+    throw new Error("Onboarding changed in another session; reload before revealing");
+  }
+  return requireOnboardingSession(input);
+}
+
+function joystickTechnicalSlug(businessName: string, sessionId: string): string {
+  const stem = normalizeSaasTenantSlug(businessName) || "business";
+  const suffix = createHash("sha256").update(sessionId).digest("hex").slice(0, 6);
+  return `${stem.slice(0, 56)}-${suffix}`;
+}
+
+export async function saveJoystickOnboardingIdentity(input: {
+  sessionId: string;
+  resumeToken: string;
+  expectedVersion: number;
+  businessName: string;
+  contactName: string;
+  ownerEmail: string;
+  timeZone: string;
+}) {
+  const session = await requireOnboardingSession(input);
+  const answers = joystickDraftAnswers(session);
+  if (
+    session.onboardingMode !== "joystick_generic" ||
+    session.status !== "draft" ||
+    !session.draftPreviewJson ||
+    !joystickDraftComplete(answers)
+  ) {
+    throw new Error("Complete the JOYSTICK preview before account setup");
+  }
+  const businessName = input.businessName.trim();
+  const contactName = input.contactName.trim();
+  const ownerEmail = normalizeSaasEmail(input.ownerEmail);
+  if (!businessName || !contactName || !ownerEmail) {
+    throw new Error("Business and owner identity are required before checkout");
+  }
+  const slug = joystickTechnicalSlug(businessName, session.id);
+  const configuration: SaasTenantOnboardingConfiguration & { kind: "joystick_generic" } = {
+    kind: "joystick_generic",
+    businessName,
+    slug,
+    contactName,
+    contactEmail: ownerEmail,
+    contactPhone: null,
+    website: null,
+    timeZone: input.timeZone.trim() || "UTC",
+    brandName: businessName,
+    logoUrl: null,
+    primaryColor: "#111111",
+    proposalTemplateKey: null,
+    locations: [],
+    services: [],
+    importProviderKey: null,
+  };
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(legacyDayforgeSaasOnboardingSessions)
+    .set({
+      businessName,
+      slug,
+      ownerEmail,
+      configurationJson: configuration,
+      currentStep: "checkout",
+      version: input.expectedVersion + 1,
+    })
+    .where(
+      and(
+        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
+        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+      )
+    );
+  if (affectedRows(result) !== 1) {
+    throw new Error("Onboarding changed in another session; reload before checkout");
+  }
+  return requireOnboardingSession(input);
+}
+
+function onboardingSessionCanCheckout(session: Awaited<ReturnType<typeof requireOnboardingSession>>): boolean {
+  const configuration = session.configurationJson as (SaasTenantOnboardingConfiguration & { kind?: string }) | null;
+  if (!configuration) return false;
+  if (session.onboardingMode === "joystick_generic") {
+    return Boolean(
+      session.businessName?.trim() &&
+      session.slug?.trim() &&
+      session.ownerEmail?.trim() &&
+      session.draftPreviewJson &&
+      joystickDraftComplete(joystickDraftAnswers(session)) &&
+      configuration.kind === "joystick_generic"
+    );
+  }
+  return onboardingConfigurationIsOperational(configuration);
 }
 
 export async function requireOnboardingSession(input: {
@@ -382,8 +643,12 @@ export async function reserveOnboardingCheckout(input: {
   requestId: string;
 }) {
   const session = await requireOnboardingSession(input);
-  if (!session.configurationJson) {
-    throw new Error("Complete and save store configuration before checkout");
+  if (!onboardingSessionCanCheckout(session)) {
+    throw new Error(
+      session.onboardingMode === "joystick_generic"
+        ? "Complete the JOYSTICK preview and account identity before checkout"
+        : "Complete and save store configuration before checkout"
+    );
   }
   if (session.checkoutRequestId) {
     return session;
@@ -663,8 +928,14 @@ export async function provisionTenantFromSubscription(input: {
   if (!session)
     throw new Error("Stripe subscription is not linked to onboarding");
   const configuration =
-    session.configurationJson as SaasTenantOnboardingConfiguration | null;
-  if (!configuration || !onboardingConfigurationIsOperational(configuration)) {
+    session.configurationJson as (SaasTenantOnboardingConfiguration & { kind?: string }) | null;
+  const isJoystickGeneric = session.onboardingMode === "joystick_generic";
+  if (
+    !configuration ||
+    (isJoystickGeneric
+      ? !onboardingSessionCanCheckout(session as Awaited<ReturnType<typeof requireOnboardingSession>>)
+      : !onboardingConfigurationIsOperational(configuration))
+  ) {
     throw new Error(
       "Stripe subscription is linked to incomplete onboarding configuration"
     );
@@ -966,6 +1237,13 @@ export async function provisionTenantFromSubscription(input: {
       .set({ status: "completed" })
       .where(eq(legacyDayforgeSaasCheckoutSessions.onboardingSessionId, session.id));
   });
+  if (isJoystickGeneric) {
+    await seedSessionFromAcquisition({
+      tenantId,
+      acquisitionSessionId: session.id,
+      answers: joystickDraftAnswers(session),
+    });
+  }
   return { tenantId, ignoredAsStale: false };
 }
 
@@ -982,6 +1260,7 @@ export async function activateOnboardingOwner(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const tenantId = session.tenantId;
+  if (!session.ownerEmail) throw new Error("Tenant owner email is missing");
   const [subscription] = await db
     .select()
     .from(legacyDayforgeSaasSubscriptions)
