@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { COLS, ROWS, DOOR, Layout, Item, ItemKind, Rot, emptyLayout, canPlace, footprint, blockedSet, findPath, key, prune } from "./grid";
 import { planGuest, GUEST_ORDER, NOTES } from "./guests";
+import { ITEM_DEFINITIONS, GUEST_PROFILES } from "./content";
+import { suitcaseAnatomy } from "./container";
 
 let nid = 1;
 function build(spec: { kind: ItemKind; x: number; z: number; rot?: Rot }[], windowCut = false, windowCol = 3): Layout {
@@ -100,5 +102,100 @@ describe("guest plans", () => {
   it("footprint of beds rotates", () => {
     expect(footprint("bed", 1, 1, 0).map(key)).toEqual([7, 13]);
     expect(footprint("bed", 1, 1, 1).map(key)).toEqual([7, 8]);
+  });
+});
+
+
+describe("vertical-slice systems", () => {
+  it("describes every current furniture kind with gameplay tags", () => {
+    const kinds: ItemKind[] = ["bed", "blanket", "armchair", "lamp", "table", "rug"];
+    for (const kind of kinds) {
+      expect(ITEM_DEFINITIONS[kind].kind).toBe(kind);
+      expect(ITEM_DEFINITIONS[kind].tags.length).toBeGreaterThan(0);
+    }
+    expect(ITEM_DEFINITIONS.lamp.tags).toContain("operable");
+    expect(ITEM_DEFINITIONS.blanket.tags).toContain("thermal_cover");
+    expect(ITEM_DEFINITIONS.armchair.tags).toContain("reading_seat");
+  });
+
+  it("models the suitcase as anatomy rather than a blank room", () => {
+    const l = emptyLayout();
+    const closed = suitcaseAnatomy(l);
+    expect(closed.kind).toBe("vintage_suitcase");
+    expect(closed.features.map(f => f.id)).toEqual(expect.arrayContaining([
+      "brass_latch",
+      "lid_pocket",
+      "elastic_straps",
+      "fabric_lining",
+      "brass_corners",
+      "lining_window",
+    ]));
+    expect(closed.features.find(f => f.id === "lining_window")?.active).toBe(false);
+
+    l.windowCut = true;
+    const opened = suitcaseAnatomy(l);
+    const window = opened.features.find(f => f.id === "lining_window");
+    expect(window?.active).toBe(true);
+    expect(window?.tags).toEqual(expect.arrayContaining(["view_outside", "draft_source", "opening"]));
+  });
+
+  it("gives the Conductor extended reach as data and uses it for an out-of-reach lamp", () => {
+    expect(GUEST_PROFILES.conductor.capabilities).toContainEqual(
+      expect.objectContaining({ id: "umbrella", kind: "extended_reach", maxDistance: 2 })
+    );
+    const l = build([{ kind: "bed", x: 0, z: 0, rot: 1 }, { kind: "lamp", x: 3, z: 0 }], true);
+    const p = planGuest("conductor", l);
+    expect(p.lamp.method).toBe("flick");
+    expect(p.interactions).toContainEqual(
+      expect.objectContaining({
+        need: "darkness",
+        outcome: "use_capability",
+        capabilityId: "umbrella",
+        distance: 2,
+      })
+    );
+  });
+
+  it("makes the Night Baker react to a draft from the suitcase opening", () => {
+    const l = build([{ kind: "bed", x: 0, z: 1, rot: 1 }], true, 3);
+    const p = planGuest("baker", l);
+    expect(p.pre).toBe("scarf");
+    expect(p.interactions).toContainEqual(
+      expect.objectContaining({
+        need: "stay_warm",
+        outcome: "use_capability",
+        source: { kind: "container", id: "lining_window" },
+        capabilityId: "scarf",
+        reason: "draft_exposure",
+      })
+    );
+  });
+
+  it("lets a blanket solve the Baker's draft problem", () => {
+    const l = build([
+      { kind: "bed", x: 0, z: 1, rot: 1 },
+      { kind: "blanket", x: 0, z: 1 },
+    ], true, 3);
+    const p = planGuest("baker", l);
+    expect(p.pre).toBe("wrap-up");
+    expect(p.interactions).toContainEqual(
+      expect.objectContaining({
+        need: "stay_warm",
+        outcome: "use_item",
+        reason: "insulates_against_lining_window",
+      })
+    );
+  });
+
+  it("has the Conductor use suitcase anatomy for the train-view need", () => {
+    const l = build([{ kind: "bed", x: 0, z: 1, rot: 1 }], true, 3);
+    const p = planGuest("conductor", l);
+    expect(p.interactions).toContainEqual(
+      expect.objectContaining({
+        need: "observe_trains",
+        outcome: "use_container_feature",
+        source: { kind: "container", id: "lining_window" },
+      })
+    );
   });
 });
