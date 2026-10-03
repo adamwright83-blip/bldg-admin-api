@@ -218,6 +218,8 @@ export type ClaireTurnInput = {
    * only; nothing in the turn reads it back.
    */
   turnStartedAtMs?: number;
+  /** Provider/session lifecycle evidence that the telephony session itself ended. */
+  telephonySessionEnded?: boolean;
 };
 
 export type ClaireTurnResult = {
