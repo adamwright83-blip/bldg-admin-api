@@ -215,6 +215,7 @@ describe("Claire PR1 live closed-decision branch", () => {
     expect(row?.decision.providerSelectedOutput).toBe("correction");
     expect(row?.decision.abstained).toBe(true);
     expect(row?.decision.abstentionReason).toBe("margin_below_threshold");
+    expect(row?.decision.confidence).toBe(0.38);
     expect(row?.decision.effectiveOutput).toBe("clarify");
     expect(row?.branchExecuted).toBe(true);
   });
