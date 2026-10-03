@@ -4574,6 +4574,7 @@ await runRequired(
     allowed_outputs_json json NOT NULL,
     provider_selected_output varchar(96) NULL,
     distribution_json json NULL,
+    confidence decimal(10,8) NULL,
     abstained tinyint(1) NOT NULL DEFAULT 0,
     abstention_reason enum('margin_below_threshold','confidence_below_threshold','provider_unavailable') NULL,
     effective_output varchar(96) NOT NULL,
@@ -4595,6 +4596,7 @@ await assertRequiredColumns("claire_decision_records", [
   "turn_id",
   "decision_type",
   "provider_selected_output",
+  "confidence",
   "effective_output",
   "branch_executed",
 ]);
