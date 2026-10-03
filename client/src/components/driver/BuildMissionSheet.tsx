@@ -55,6 +55,7 @@ export function BuildMissionSheet({
   const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
   const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
   const [placeSuggestionsLoading, setPlaceSuggestionsLoading] = useState(false);
+  const [placeSuggestionsError, setPlaceSuggestionsError] = useState(false);
   const [lastSuggestionsQuery, setLastSuggestionsQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRequestRef = useRef(0);
@@ -65,6 +66,7 @@ export function BuildMissionSheet({
       setSearchNearValue(searchNear);
       setSelectedPlace(null);
       setPlaceSuggestions([]);
+      setPlaceSuggestionsError(false);
       setLastSuggestionsQuery("");
     }
   }, [open, searchNear]);
@@ -73,30 +75,32 @@ export function BuildMissionSheet({
     const query = searchNearValue.trim();
     const requestNumber = ++autocompleteRequestRef.current;
 
-    if (
-      !open ||
-      targetMode !== "exact_property" ||
-      selectedPlace ||
-      query.length < 2
-    ) {
+    if (!open || selectedPlace || query.length < 2) {
       setPlaceSuggestions([]);
       setPlaceSuggestionsLoading(false);
+      setPlaceSuggestionsError(false);
       setLastSuggestionsQuery("");
       return;
     }
 
     setPlaceSuggestionsLoading(true);
+    setPlaceSuggestionsError(false);
     const timeout = window.setTimeout(() => {
       setLastSuggestionsQuery(query);
-      void utils.system.commercialMission.placeSuggestions
-        .fetch({ query })
+      const fetchSuggestions = () =>
+        utils.system.commercialMission.placeSuggestions.fetch({ query });
+
+      void fetchSuggestions()
+        .catch(() => fetchSuggestions())
         .then(results => {
           if (autocompleteRequestRef.current !== requestNumber) return;
           setPlaceSuggestions(results as PlaceSuggestion[]);
+          setPlaceSuggestionsError(false);
         })
         .catch(() => {
           if (autocompleteRequestRef.current !== requestNumber) return;
           setPlaceSuggestions([]);
+          setPlaceSuggestionsError(true);
         })
         .finally(() => {
           if (autocompleteRequestRef.current !== requestNumber) return;
@@ -252,16 +256,12 @@ export function BuildMissionSheet({
                     autoComplete="off"
                     className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
                     aria-label="Mission search location"
-                    aria-autocomplete={targetMode === "exact_property" ? "list" : undefined}
-                    aria-expanded={
-                      targetMode === "exact_property" &&
-                      !selectedPlace &&
-                      placeSuggestions.length > 0
-                    }
+                    aria-autocomplete="list"
+                    aria-expanded={!selectedPlace && placeSuggestions.length > 0}
                   />
                 </label>
 
-                {targetMode === "exact_property" && selectedPlace ? (
+                {selectedPlace ? (
                   <div className="mt-2 rounded-[12px] border border-violet-300/35 bg-violet-300/10 px-4 py-3">
                     <div className="text-[15px] font-black text-white">
                       {selectedPlace.name}
@@ -274,18 +274,22 @@ export function BuildMissionSheet({
                   </div>
                 ) : null}
 
-                {targetMode === "exact_property" &&
-                !selectedPlace &&
-                searchNearValue.trim().length >= 2 ? (
+                {!selectedPlace && searchNearValue.trim().length >= 2 ? (
                   <div
                     className="mt-2 overflow-hidden rounded-[14px] border border-white/15 bg-[#182235] shadow-[0_18px_38px_rgba(0,0,0,.35)]"
                     role="listbox"
-                    aria-label="Google Places property suggestions"
+                    aria-label="Google Places suggestions"
                   >
                     {placeSuggestionsLoading ? (
                       <div className="flex items-center gap-2 px-4 py-3 text-[14px] font-semibold text-white/60">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Finding the property…
+                        {targetMode === "exact_property"
+                          ? "Finding the property…"
+                          : "Finding the location…"}
+                      </div>
+                    ) : placeSuggestionsError ? (
+                      <div className="px-4 py-3 text-[13px] font-semibold text-rose-200">
+                        Google Places could not load suggestions. Try typing again.
                       </div>
                     ) : placeSuggestions.length ? (
                       <>
@@ -297,9 +301,14 @@ export function BuildMissionSheet({
                             aria-selected="false"
                             onClick={() => {
                               setSelectedPlace(suggestion);
-                              setSearchNearValue(suggestion.text);
+                              setSearchNearValue(
+                                targetMode === "nearby_discovery"
+                                  ? suggestion.address || suggestion.text
+                                  : suggestion.text
+                              );
                               autocompleteRequestRef.current += 1;
                               setPlaceSuggestions([]);
+                              setPlaceSuggestionsError(false);
                               setLastSuggestionsQuery("");
                               sounds.press();
                               haptics.impact();
@@ -322,7 +331,7 @@ export function BuildMissionSheet({
                       </>
                     ) : lastSuggestionsQuery ? (
                       <div className="px-4 py-3 text-[13px] font-semibold text-white/45">
-                        No Google Places matches yet. Keep typing or enter the full property.
+                        No Google Places matches yet. Keep typing.
                       </div>
                     ) : null}
                   </div>
