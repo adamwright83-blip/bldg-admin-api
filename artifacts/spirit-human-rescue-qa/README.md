@@ -1,1 +1,1 @@
-Deterministic Spirit Human rescue visual QA. Art is provisional Level 4 mechanical donor. No real customer send.
+Deterministic Spirit Human rescue visual QA with final Pack 10 runtime art. No real customer send.
