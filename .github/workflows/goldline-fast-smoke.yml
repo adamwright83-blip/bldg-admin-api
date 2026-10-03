@@ -185,6 +185,9 @@ jobs:
         run: >-
           pnpm vitest run
           server/claire/weeklyMission/conversationalIntelligenceRepair.test.ts
+          server/claire/turn/decisionRecord.test.ts
+          server/claire/turn/decisionRecordLive.test.ts
+          server/claire/voice/conversationRelayAuthoritative.test.ts
 
   linked-debrief-contracts:
     name: linked-debrief-contracts
