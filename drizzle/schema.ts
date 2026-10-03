@@ -9501,6 +9501,7 @@ export const claireDecisionRecords = mysqlTable(
     allowedOutputsJson: json("allowed_outputs_json").notNull(),
     providerSelectedOutput: varchar("provider_selected_output", { length: 96 }),
     distributionJson: json("distribution_json"),
+    confidence: decimal("confidence", { precision: 10, scale: 8 }),
     abstained: boolean("abstained").notNull().default(false),
     abstentionReason: mysqlEnum("abstention_reason", [
       "margin_below_threshold",
