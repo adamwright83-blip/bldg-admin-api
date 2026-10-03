@@ -684,6 +684,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let knownAccounts: CoverageAccountRef[] = [];
   let uncertainChallenge: ClaimResolution | null = null;
   let deferredPriorClaimSpeech: string | null = null;
+  let branchResultProduced = false;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
   // Initialized fail-closed so early exits cannot accidentally open a truth/mutation lane.
@@ -757,7 +758,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       answerPath: trace.path ?? null,
       ...(narratorContextSupplied ? { narratorContextSupplied: true as const } : {}),
     };
-    return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+    const finalResult = personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+    branchResultProduced = true;
+    return finalResult;
   };
   const morningSession =
     state.sessionKind ?? input.context?.workday?.session ?? null;
@@ -969,6 +972,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
 
   if (closedDecisionBranch === "incomplete") {
+    branchResultProduced = true;
     return {
       speak: "",
       kind: "listening",
@@ -2607,9 +2611,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return null;
   }
   } finally {
-    await deps.decisionStore.seal({
-      tenantId: input.tenantId,
-      turnId: decisionTurnId,
-    });
+    if (branchResultProduced) {
+      await deps.decisionStore.seal({
+        tenantId: input.tenantId,
+        turnId: decisionTurnId,
+      });
+    }
   }
 }
