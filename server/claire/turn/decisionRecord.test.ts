@@ -167,6 +167,7 @@ describe("Claire PR1 closed decisions", () => {
         conversation: 0.03,
         unknown: 0.02,
       },
+      confidence: 0.38,
       abstained: false,
       abstentionReason: null,
       effectiveOutput: "correction",
