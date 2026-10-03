@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import type { ClaireBrainV3Interpretation } from "./brainV3";
@@ -37,6 +38,7 @@ export type ClaireAbstentionReason =
 export type ClaireDecisionCandidate<T extends string> = {
   decisionType: ClaireDecisionType;
   provider: string;
+  allowedOutputs: readonly T[];
   providerSelectedOutput: T | null;
   distribution: Record<string, number> | null;
   abstained: boolean;
@@ -75,12 +77,21 @@ type DeriveInput = {
   telephonySessionEnded?: boolean;
 };
 
+export const TURN_TYPE_OUTPUTS = ["correction", "new_work", "question", "interruption", "conversation", "unknown"] as const;
+export const TURN_READINESS_OUTPUTS = ["ready", "incomplete", "ambiguous", "unknown"] as const;
+export const PENDING_RELATIONSHIP_OUTPUTS = ["continues_pending", "replaces_pending", "unrelated", "unknown"] as const;
+
+export function claireDecisionId(turnId: string, decisionType: ClaireDecisionType): string {
+  return createHash("sha256").update(`${turnId}:${decisionType}`).digest("hex").slice(0, 40);
+}
+
 const oneHot = (label: string | null): Record<string, number> | null =>
   label == null ? null : { [label]: 1 };
 
 function resolved<T extends string>(
   decisionType: ClaireDecisionType,
   provider: string,
+  allowedOutputs: readonly T[],
   selected: T,
   effective: T | "clarify" = selected,
   fallbackUsed = false
@@ -88,6 +99,7 @@ function resolved<T extends string>(
   return {
     decisionType,
     provider,
+    allowedOutputs,
     providerSelectedOutput: selected,
     distribution: oneHot(selected),
     abstained: false,
@@ -102,11 +114,13 @@ function resolved<T extends string>(
 function unavailable<T extends string>(
   decisionType: ClaireDecisionType,
   provider: string,
+  allowedOutputs: readonly T[],
   effectiveOutput: T | "clarify"
 ): ClaireDecisionCandidate<T> {
   return {
     decisionType,
     provider,
+    allowedOutputs,
     providerSelectedOutput: null,
     distribution: null,
     abstained: true,
@@ -121,15 +135,17 @@ function unavailable<T extends string>(
 export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDecisionSet {
   if (!input.brain) {
     return {
-      turnType: unavailable<ClaireTurnType>("turn_type", input.provider, "clarify"),
+      turnType: unavailable<ClaireTurnType>("turn_type", input.provider, TURN_TYPE_OUTPUTS, "clarify"),
       turnReadiness: unavailable<ClaireTurnReadiness>(
         "turn_readiness",
         input.provider,
+        TURN_READINESS_OUTPUTS,
         "incomplete"
       ),
       pendingActionRelationship: unavailable<ClairePendingActionRelationship>(
         "pending_action_relationship",
         input.provider,
+        PENDING_RELATIONSHIP_OUTPUTS,
         "continues_pending"
       ),
     };
@@ -192,6 +208,7 @@ export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDec
     turnType: resolved(
       "turn_type",
       input.provider,
+      TURN_TYPE_OUTPUTS,
       turnType,
       turnType,
       input.fallbackUsed
@@ -199,6 +216,7 @@ export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDec
     turnReadiness: resolved(
       "turn_readiness",
       input.provider,
+      TURN_READINESS_OUTPUTS,
       readiness,
       readiness,
       input.fallbackUsed
@@ -206,6 +224,7 @@ export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDec
     pendingActionRelationship: resolved(
       "pending_action_relationship",
       input.provider,
+      PENDING_RELATIONSHIP_OUTPUTS,
       relationship,
       relationship,
       input.fallbackUsed
