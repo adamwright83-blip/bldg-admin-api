@@ -193,7 +193,8 @@ export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDec
     if (
       input.brain.target === "pending_action" ||
       input.brain.target === "pending_briefing" ||
-      input.brain.target === "pending_account_follow_up"
+      input.brain.target === "pending_account_follow_up" ||
+      input.brain.act === "correction"
     ) {
       relationship = "continues_pending";
     } else if (
@@ -351,7 +352,7 @@ export const claireDecisionStore: ClaireDecisionStore = {
               ${row.agent},
               ${row.decision.decisionType},
               ${row.decision.provider},
-              ${JSON.stringify(Object.keys(row.decision.distribution ?? {}))},
+              ${JSON.stringify(row.decision.allowedOutputs)},
               ${selected},
               ${distributionJson},
               ${row.decision.abstained},
