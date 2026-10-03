@@ -5,6 +5,10 @@
 **Audience:** Codex / Claude / engineers.
 **Purpose:** ten laws implementation may not violate.
 
+## Canonical subsystem architecture
+
+- Operator Representation: `docs/goldline/OPERATOR_REPRESENTATION.md`
+
 ## Law 1 — GPS proves arrival, not interaction
 
 A valid position event may establish arrival according to configured accuracy/time constraints.
