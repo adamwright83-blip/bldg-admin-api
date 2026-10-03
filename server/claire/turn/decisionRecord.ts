@@ -41,6 +41,8 @@ export type ClaireDecisionCandidate<T extends string> = {
   allowedOutputs: readonly T[];
   providerSelectedOutput: T | null;
   distribution: Record<string, number> | null;
+  /** Derived from distribution; providers do not supply a second confidence signal. */
+  confidence: number | null;
   abstained: boolean;
   abstentionReason: ClaireAbstentionReason | null;
   effectiveOutput: T | "clarify";
@@ -115,6 +117,7 @@ function resolved<T extends string>(
     allowedOutputs,
     providerSelectedOutput: selected,
     distribution: oneHot(selected),
+    confidence: 1,
     abstained: false,
     abstentionReason: null,
     effectiveOutput: effective,
@@ -136,6 +139,7 @@ function unavailable<T extends string>(
     allowedOutputs,
     providerSelectedOutput: null,
     distribution: null,
+    confidence: null,
     abstained: true,
     abstentionReason: "provider_unavailable",
     effectiveOutput,
@@ -277,6 +281,7 @@ export function applyClaireDecisionAbstention<T extends string>(input: {
   if (!distribution || input.decision.providerSelectedOutput == null) {
     return {
       ...input.decision,
+      confidence: null,
       abstained: true,
       abstentionReason: "provider_unavailable",
       effectiveOutput: input.fallback,
@@ -286,10 +291,14 @@ export function applyClaireDecisionAbstention<T extends string>(input: {
   const ranked = Object.values(distribution).sort((a, b) => b - a);
   const confidence = ranked[0] ?? 0;
   const margin = confidence - (ranked[1] ?? 0);
+  const withConfidence = {
+    ...input.decision,
+    confidence,
+  };
 
   if (confidence < input.confidenceThreshold) {
     return {
-      ...input.decision,
+      ...withConfidence,
       abstained: true,
       abstentionReason: "confidence_below_threshold",
       effectiveOutput: input.fallback,
@@ -297,13 +306,13 @@ export function applyClaireDecisionAbstention<T extends string>(input: {
   }
   if (margin < input.marginThreshold) {
     return {
-      ...input.decision,
+      ...withConfidence,
       abstained: true,
       abstentionReason: "margin_below_threshold",
       effectiveOutput: input.fallback,
     };
   }
-  return input.decision;
+  return withConfidence;
 }
 
 function rowsFromExecute(result: unknown): any[] {
@@ -424,6 +433,7 @@ export const claireDecisionStore: ClaireDecisionStore = {
             SET provider = ${row.decision.provider},
                 provider_selected_output = ${selected},
                 distribution_json = ${distributionJson},
+                confidence = ${row.decision.confidence},
                 abstained = ${row.decision.abstained},
                 abstention_reason = ${row.decision.abstentionReason},
                 effective_output = ${row.decision.effectiveOutput},
@@ -448,6 +458,7 @@ export const claireDecisionStore: ClaireDecisionStore = {
               allowed_outputs_json,
               provider_selected_output,
               distribution_json,
+              confidence,
               abstained,
               abstention_reason,
               effective_output,
@@ -468,6 +479,7 @@ export const claireDecisionStore: ClaireDecisionStore = {
               ${JSON.stringify(row.decision.allowedOutputs)},
               ${selected},
               ${distributionJson},
+              ${row.decision.confidence},
               ${row.decision.abstained},
               ${row.decision.abstentionReason},
               ${row.decision.effectiveOutput},
