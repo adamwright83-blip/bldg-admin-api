@@ -64,11 +64,17 @@ export type ClaireDecisionRecordInput = {
   decision: ClaireDecisionCandidate<string>;
 };
 
-export type ClaireDecisionStore = {
-  writeAndSeal: (rows: ClaireDecisionRecordInput[]) => Promise<void>;
+export type ClaireDecisionSealKey = {
+  tenantId: string;
+  turnId: string;
 };
 
-type DeriveInput = {
+export type ClaireDecisionStore = {
+  write: (rows: ClaireDecisionRecordInput[]) => Promise<void>;
+  seal: (key: ClaireDecisionSealKey) => Promise<void>;
+};
+
+export type ClaireClosedDecisionProviderInput = {
   brain: ClaireBrainV3Interpretation | null;
   provider: string;
   fallbackUsed: boolean;
@@ -81,8 +87,15 @@ export const TURN_TYPE_OUTPUTS = ["correction", "new_work", "question", "interru
 export const TURN_READINESS_OUTPUTS = ["ready", "incomplete", "ambiguous", "unknown"] as const;
 export const PENDING_RELATIONSHIP_OUTPUTS = ["continues_pending", "replaces_pending", "unrelated", "unknown"] as const;
 
-export function claireDecisionId(turnId: string, decisionType: ClaireDecisionType): string {
-  return createHash("sha256").update(`${turnId}:${decisionType}`).digest("hex").slice(0, 40);
+export function claireDecisionId(
+  tenantId: string,
+  turnId: string,
+  decisionType: ClaireDecisionType
+): string {
+  return createHash("sha256")
+    .update(`${tenantId}:${turnId}:${decisionType}`)
+    .digest("hex")
+    .slice(0, 40);
 }
 
 const oneHot = (label: string | null): Record<string, number> | null =>
@@ -132,7 +145,13 @@ function unavailable<T extends string>(
   };
 }
 
-export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDecisionSet {
+export type ClaireClosedDecisionProvider = (
+  input: ClaireClosedDecisionProviderInput
+) => ClaireClosedDecisionSet | Promise<ClaireClosedDecisionSet>;
+
+export function deriveClaireClosedDecisions(
+  input: ClaireClosedDecisionProviderInput
+): ClaireClosedDecisionSet {
   if (!input.brain) {
     return {
       turnType: unavailable<ClaireTurnType>("turn_type", input.provider, TURN_TYPE_OUTPUTS, "clarify"),
@@ -293,7 +312,7 @@ function rowsFromExecute(result: unknown): any[] {
 }
 
 export const claireDecisionStore: ClaireDecisionStore = {
-  async writeAndSeal(rows) {
+  async write(rows) {
     if (!rows.length) return;
     const db = await getDb();
     if (!db) return;
@@ -309,7 +328,8 @@ export const claireDecisionStore: ClaireDecisionStore = {
         const existingResult = await tx.execute(sql`
           SELECT decision_id, branch_executed
           FROM claire_decision_records
-          WHERE turn_id = ${row.turnId}
+          WHERE tenant_id = ${row.tenantId}
+            AND turn_id = ${row.turnId}
             AND decision_type = ${row.decision.decisionType}
           FOR UPDATE
         `);
@@ -334,7 +354,8 @@ export const claireDecisionStore: ClaireDecisionStore = {
                 estimated_cost_usd = ${row.decision.estimatedCostUsd},
                 fallback_used = ${row.decision.fallbackUsed},
                 updated_at = CURRENT_TIMESTAMP
-            WHERE turn_id = ${row.turnId}
+            WHERE tenant_id = ${row.tenantId}
+              AND turn_id = ${row.turnId}
               AND decision_type = ${row.decision.decisionType}
           `);
         } else {
@@ -384,13 +405,28 @@ export const claireDecisionStore: ClaireDecisionStore = {
         }
       }
 
-      const turnId = rows[0]!.turnId;
+    });
+  },
+
+  async seal(key) {
+    const db = await getDb();
+    if (!db) return;
+
+    await db.transaction(async tx => {
+      await tx.execute(sql`
+        SELECT decision_id
+        FROM claire_decision_records
+        WHERE tenant_id = ${key.tenantId}
+          AND turn_id = ${key.turnId}
+        FOR UPDATE
+      `);
       await tx.execute(sql`
         UPDATE claire_decision_records
         SET branch_executed = TRUE,
             branch_executed_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
-        WHERE turn_id = ${turnId}
+        WHERE tenant_id = ${key.tenantId}
+          AND turn_id = ${key.turnId}
           AND branch_executed = FALSE
       `);
     });
