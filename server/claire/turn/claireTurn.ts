@@ -77,6 +77,7 @@ import {
   claireDecisionId,
   claireDecisionStore,
   deriveClaireClosedDecisions,
+  selectClaireClosedDecisionBranch,
   type ClaireDecisionStore,
 } from "./decisionRecord";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
@@ -915,11 +916,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   await deps.decisionStore.writeAndSeal(decisionRows);
 
   const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
-  const effectiveReadiness = closedDecisions.turnReadiness.effectiveOutput;
   const effectivePendingRelationship =
     closedDecisions.pendingActionRelationship.effectiveOutput;
+  const closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
 
-  if (effectiveReadiness === "incomplete") {
+  if (closedDecisionBranch === "incomplete") {
     return {
       speak: "",
       kind: "listening",
@@ -929,7 +930,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     };
   }
 
-  if (effectiveTurnType === "clarify" || effectiveTurnType === "unknown") {
+  if (closedDecisionBranch === "clarify") {
     mark("fallback", {
       fallbackReason:
         effectiveTurnType === "clarify"
