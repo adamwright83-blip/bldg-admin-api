@@ -1539,28 +1539,35 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const toT = new THREE.Vector3(x, TOP, z);
     fly = { t: 0, fromT, fromP, toT, toP: toT.clone().add(off), done };
   }
-  /** the lost-property suitcase under the pointer (within 64px of its middle on screen) */
-  function suitcaseAt(cx: number, cy: number) {
+  /** the lost-property suitcase under the pointer. Touch gets a larger hit target than a mouse. */
+  function suitcaseAt(cx: number, cy: number, radius = 64) {
     if (!suitcase) return null;
     const r = renderer.domElement.getBoundingClientRect();
     const v = new THREE.Vector3(suitcase.x, H(suitcase.x, suitcase.z) + suitcase.h * 0.5, suitcase.z).project(camera);
     if (v.z >= 1) return null;
-    return Math.hypot(r.left + ((v.x + 1) / 2) * r.width - cx, r.top + ((1 - v.y) / 2) * r.height - cy) < 64 ? suitcase : null;
+    return Math.hypot(r.left + ((v.x + 1) / 2) * r.width - cx, r.top + ((1 - v.y) / 2) * r.height - cy) < radius ? suitcase : null;
   }
-  /** zoom two: only once you've flown in to the island (zoom one) */
-  const SUITCASE_ZOOM = 6500;
+  /** zoom two is available only after Hollywood was chosen as zoom one. */
+  let activeIslandName: string | null = null;
   let entering = false;
 
   // ----------------------------------------------------------------- picking: click an island
   const ray = new THREE.Raycaster();
-  let downAt: [number, number] | null = null;
-  const onDown = (e: PointerEvent) => { downAt = [e.clientX, e.clientY]; };
+  let downAt: { x: number; y: number; pointerId: number; pointerType: string } | null = null;
+  const onDown = (e: PointerEvent) => {
+    downAt = { x: e.clientX, y: e.clientY, pointerId: e.pointerId, pointerType: e.pointerType };
+  };
   const onUp = (e: PointerEvent) => {
-    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || !ready) return;
+    const down = downAt;
+    downAt = null;
+    if (!down || down.pointerId !== e.pointerId || !ready) return;
+    const tapSlop = down.pointerType === "touch" ? 22 : down.pointerType === "pen" ? 12 : 6;
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > tapSlop) return;
     const tw = towerAt(e.clientX, e.clientY);
     if (tw) { events.onTower?.(tw.id); return; }
-    const sc = suitcaseAt(e.clientX, e.clientY);
-    if (sc && !entering && camera.position.distanceTo(controls.target) < SUITCASE_ZOOM) {
+    const suitcaseRadius = down.pointerType === "touch" ? 108 : down.pointerType === "pen" ? 84 : 64;
+    const sc = suitcaseAt(e.clientX, e.clientY, suitcaseRadius);
+    if (sc && !entering && activeIslandName === "Hollywood") {
       entering = true;
       events.onSuitcaseHover?.(null);
       flyTo(sc.x, sc.z, 420, () => { entering = false; events.onSuitcase?.(); });
@@ -1576,6 +1583,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const own = ownerAt(F, x, z);
       if (own >= 0 && y < H(x, z, own)) {
         const l = islands[own];
+        activeIslandName = l.name;
         events.onIsland?.({ name: l.name, lanterns: islandCounts.get(own) ?? 0, served: l.served, x: l.label[0], z: l.label[1] });
         flyTo(l.label[0], l.label[1], Math.max(2400, Math.sqrt(l.area) * 1.6));
         return;
@@ -1595,7 +1603,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     }
     const keys = best ? placed.filter(q => q.plan && q.plan === best!.plan).map(q => q.key) : [];
     const tw = towerAt(e.clientX, e.clientY);
-    const sc = !entering && camera.position.distanceTo(controls.target) < SUITCASE_ZOOM ? suitcaseAt(e.clientX, e.clientY) : null;
+    const sc = !entering && activeIslandName === "Hollywood" ? suitcaseAt(e.clientX, e.clientY) : null;
     events.onSuitcaseHover?.(sc ? { x: e.clientX, y: e.clientY } : null);
     const sig = keys.join("|") + (tw ? tw.id : "");
     if (sig !== hoverSig || keys.length || tw) events.onHover?.(keys.length || tw ? { keys, x: e.clientX, y: e.clientY, tower: tw?.id } : null);
@@ -1674,7 +1682,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       fly = null;
       frame(x, z, dist, yaw, pitch);
     },
-    board() { frameBoard(); },
+    board() { activeIslandName = null; frameBoard(); },
     /** the game sits on top: stop drawing the city underneath */
     setPaused(p: boolean) { paused = p; entering = false; },
     /** the camera as jump() takes it */
@@ -1714,7 +1722,10 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     },
     focusIsland(name: string) {
       const l = islands.find(i => i.name === name);
-      if (l) flyTo(l.label[0], l.label[1], Math.max(2400, Math.sqrt(l.area) * 1.6));
+      if (l) {
+        activeIslandName = l.name;
+        flyTo(l.label[0], l.label[1], Math.max(2400, Math.sqrt(l.area) * 1.6));
+      }
     },
     stats() {
       return { islands: islands.map(l => ({ name: l.name, buildings: l.plans.length, trees: l.trees.length, lanterns: islandCounts.get(l.index) ?? 0 })), puffs: puffList.length, boats: boats.length };
