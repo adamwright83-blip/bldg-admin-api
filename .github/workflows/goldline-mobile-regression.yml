@@ -142,6 +142,7 @@ jobs:
               client/src/game/state/MissionDirector.test.ts
               client/src/game/state/worldMemory.test.ts
               client/src/game/session/checkpointStorage.test.ts
+              client/src/components/admin/control-room/SmallComforts/logic/logic.test.ts
               shared/goldlineProgression.test.ts
           - name: mobile-android-journal
             command: >-
