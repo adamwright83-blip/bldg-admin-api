@@ -4560,5 +4560,44 @@ await applyHistoricalCreateTables(
 
 // END schema-path-normalized
 
+
+// ── Claire Brain V3 closed decisions ───────────────────────────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_decision_records (
+    decision_id varchar(64) NOT NULL,
+    turn_id varchar(191) NOT NULL,
+    tenant_id varchar(64) NOT NULL,
+    operator_user_id varchar(128) NOT NULL,
+    agent varchar(32) NOT NULL DEFAULT 'claire',
+    decision_type enum('turn_type','turn_readiness','pending_action_relationship') NOT NULL,
+    provider varchar(96) NOT NULL,
+    allowed_outputs_json json NOT NULL,
+    provider_selected_output varchar(96) NULL,
+    distribution_json json NULL,
+    abstained tinyint(1) NOT NULL DEFAULT 0,
+    abstention_reason enum('margin_below_threshold','confidence_below_threshold','provider_unavailable') NULL,
+    effective_output varchar(96) NOT NULL,
+    latency_ms int NULL,
+    estimated_cost_usd decimal(12,8) NULL,
+    fallback_used tinyint(1) NOT NULL DEFAULT 0,
+    branch_executed tinyint(1) NOT NULL DEFAULT 0,
+    branch_executed_at timestamp NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (decision_id),
+    UNIQUE KEY uq_claire_decision_turn_type (turn_id, decision_type),
+    KEY idx_claire_decision_tenant_created (tenant_id, created_at)
+  )`,
+  "CREATE TABLE claire_decision_records"
+);
+await assertRequiredColumns("claire_decision_records", [
+  "decision_id",
+  "turn_id",
+  "decision_type",
+  "provider_selected_output",
+  "effective_output",
+  "branch_executed",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
