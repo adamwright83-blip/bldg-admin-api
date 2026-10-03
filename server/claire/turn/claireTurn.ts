@@ -1519,7 +1519,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const additionalWork =
       ownsPendingBriefing &&
       (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
-    if (newMatter && !additionalWork && conversationTarget !== "pending_briefing") {
+    if (
+      newMatter &&
+      !additionalWork &&
+      conversationTarget !== "pending_briefing" &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
