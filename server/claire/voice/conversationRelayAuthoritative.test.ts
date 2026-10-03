@@ -229,8 +229,17 @@ describe("Relay authoritative voice turn", () => {
     );
   });
 
-  it("passes the persisted telephony session-end signal into the shared Claire turn", async () => {
-    const token = await save(conversation({ relayIntentionalEnd: true }));
+  it("passes the provider session-end event into the shared Claire turn", async () => {
+    const token = await save();
+    const ended = await renderConversationRelayConnectAction({
+      token,
+      body: {
+        CallSid: "CA_session_end",
+        SessionStatus: "ended",
+      },
+    });
+    expect(ended).toContain("<Hangup");
+
     hoisted.runClaireTurn.mockResolvedValue({
       speak: "Say that last part again.",
       kind: "answered",
