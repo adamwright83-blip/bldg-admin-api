@@ -39,6 +39,10 @@ export type IslandEvents = {
   onHover?: (h: { keys: string[]; x: number; y: number; tower?: string } | null) => void;
   /** one of our towers was clicked: open its floors */
   onTower?: (id: string) => void;
+  /** the lost-property suitcase was clicked up close: the camera has arrived, open the game */
+  onSuitcase?: () => void;
+  /** the pointer is over the suitcase (page px), or left it */
+  onSuitcaseHover?: (h: { x: number; y: number } | null) => void;
 };
 
 const DEFAULT_BASE = "/assets/goldline/lantern-city";
@@ -344,6 +348,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const nearLake = (x: number, z: number) => lakes.some(p => pointInRing(x, z, p) || p.some(([a, b]) => Math.hypot(a - x, b - z) < 60));
     islands = layoutIslands(M, { field: F, height: H, road, roadNamed, park: (x, z) => bigParks.some(p => pointInRing(x, z, p)), lake: nearLake });
     addLandmarks();
+    try { addSuitcase(); } catch (e) { console.warn("[islands] suitcase landmark skipped", e); }   // never let the easter egg take the city down
     buildCoastTexture();
     paintGround(segs, bigParks);
     buildLand();
@@ -369,6 +374,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     { name: "Round tower", lat: 34.1032, lon: -118.3267, kind: "round" },
   ];
   const extraMeshes: THREE.BufferGeometry[] = [];
+  /** Small Comforts: the lost-property suitcase on Hollywood. Zoom to the island, click it, you're inside. */
+  let suitcase: { x: number; z: number; h: number } | null = null;
   const ourTowers: { id: string; planId: number; x: number; z: number; h: number }[] = [];
   /** the tower of ours under the pointer (within 40px of its shaft on screen) */
   function towerAt(cx: number, cy: number) {
@@ -411,6 +418,41 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         id++;
       }
     }
+  }
+  function addSuitcase() {
+    const isl = islands.find(i => i.name === "Hollywood") ?? islands.find(i => i.plans.length);
+    if (!isl) return;
+    let { x, z } = ontoLand(F, isl.label[0], isl.label[1], 90);   // dead centre once you've flown to the island
+    const own = ownerAt(F, x, z);
+    if (own !== isl.index) ({ x, z } = { x: isl.label[0], z: isl.label[1] });
+    isl.plans = isl.plans.filter(p => Math.hypot(p.x - x / S, p.z - z / S) > 56);
+    isl.trees = isl.trees.filter(t => Math.hypot(t.x - x / S, t.z - z / S) > 40);
+    const mx = x / S, mz = z / S, y = H(x, z) / S;
+    const blue = "#2f5f7a", blueD = "#244b61", brass = "#d8a93d", cream = "#f6ebd3", burg = "#8e2f3f";
+    const f = 1.5;   // a giant suitcase: it has to read from the island view
+    const box = (w: number, h: number, d: number, px: number, py: number, pz: number) => new THREE.BoxGeometry(w * f, h * f, d * f).translate(mx + px * f, y + py * f, mz + pz * f);
+    const parts: { g: THREE.BufferGeometry; col: string; k: number }[] = [
+      { g: box(40, 12, 28, 0, 6, 0), col: blue, k: K.TRIM },
+      { g: box(42, 2, 30, 0, 12.5, 0), col: blueD, k: K.TRIM },
+      { g: box(42, 1.2, 4, 0, 7, 0), col: brass, k: K.TRIM },
+      { g: box(5, 3, 3, -9, 7, 14.6), col: brass, k: K.TRIM },
+      { g: box(5, 3, 3, 9, 7, 14.6), col: brass, k: K.TRIM },
+      { g: box(14, 1.5, 1.5, 0, 15.6, 0), col: cream, k: K.TRIM },
+      { g: box(1.5, 4, 1.5, -7, 14.5, 0), col: cream, k: K.TRIM },
+      { g: box(1.5, 4, 1.5, 7, 14.5, 0), col: cream, k: K.TRIM },
+      { g: box(8, 7, 0.8, -12, 6, 14.3), col: burg, k: K.TRIM },
+    ];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push({ g: new THREE.SphereGeometry(2.4 * f, 10, 8).translate(mx + sx * 20 * f, y + 12.5 * f, mz + sz * 14 * f), col: brass, k: K.TRIM });
+    // a gold pin floating over it, so it reads as the thing to click
+    parts.push({ g: new THREE.ConeGeometry(5, 11, 12).rotateX(Math.PI).translate(mx, y + 36, mz), col: brass, k: K.TRIM });
+    parts.push({ g: new THREE.SphereGeometry(4.2, 12, 8).translate(mx, y + 46, mz), col: brass, k: K.TRIM });
+    extraMeshes.push(kitGeo(parts, 900300));
+    suitcase = { x, z, h: 40 * S };
+    // a warm pool of light so the eye finds it from the island view
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(520, 520).rotateX(-Math.PI / 2), haloMat);
+    halo.position.set(x, H(x, z) + 3, z);
+    halo.layers.set(INK_SKIP);
+    scene.add(halo);
   }
   // tiny geometry builders in mini space with the building shader's attributes
   function kitGeo(parts: { g: THREE.BufferGeometry; col: string; k: number }[], id: number) {
@@ -1490,13 +1532,24 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const dist = (Math.max(ex / aspect, ez * 1.25) / (2 * Math.tan((14 * Math.PI) / 180))) * 0.98;
     frame((x0 + x1) / 2, (z0 + z1) / 2 + ez * 0.06, dist, 0, 0.86);
   }
-  let fly: null | { t: number; fromT: THREE.Vector3; fromP: THREE.Vector3; toT: THREE.Vector3; toP: THREE.Vector3 } = null;
-  function flyTo(x: number, z: number, dist: number) {
+  let fly: null | { t: number; fromT: THREE.Vector3; fromP: THREE.Vector3; toT: THREE.Vector3; toP: THREE.Vector3; done?: () => void } = null;
+  function flyTo(x: number, z: number, dist: number, done?: () => void) {
     const fromT = controls.target.clone(), fromP = camera.position.clone();
     const off = fromP.clone().sub(fromT).normalize().multiplyScalar(dist);
     const toT = new THREE.Vector3(x, TOP, z);
-    fly = { t: 0, fromT, fromP, toT, toP: toT.clone().add(off) };
+    fly = { t: 0, fromT, fromP, toT, toP: toT.clone().add(off), done };
   }
+  /** the lost-property suitcase under the pointer (within 64px of its middle on screen) */
+  function suitcaseAt(cx: number, cy: number) {
+    if (!suitcase) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector3(suitcase.x, H(suitcase.x, suitcase.z) + suitcase.h * 0.5, suitcase.z).project(camera);
+    if (v.z >= 1) return null;
+    return Math.hypot(r.left + ((v.x + 1) / 2) * r.width - cx, r.top + ((1 - v.y) / 2) * r.height - cy) < 64 ? suitcase : null;
+  }
+  /** zoom two: only once you've flown in to the island (zoom one) */
+  const SUITCASE_ZOOM = 6500;
+  let entering = false;
 
   // ----------------------------------------------------------------- picking: click an island
   const ray = new THREE.Raycaster();
@@ -1506,6 +1559,13 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || !ready) return;
     const tw = towerAt(e.clientX, e.clientY);
     if (tw) { events.onTower?.(tw.id); return; }
+    const sc = suitcaseAt(e.clientX, e.clientY);
+    if (sc && !entering && camera.position.distanceTo(controls.target) < SUITCASE_ZOOM) {
+      entering = true;
+      events.onSuitcaseHover?.(null);
+      flyTo(sc.x, sc.z, 420, () => { entering = false; events.onSuitcase?.(); });
+      return;
+    }
     const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     // march the ray until it meets an island top
@@ -1535,10 +1595,12 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     }
     const keys = best ? placed.filter(q => q.plan && q.plan === best!.plan).map(q => q.key) : [];
     const tw = towerAt(e.clientX, e.clientY);
+    const sc = !entering && camera.position.distanceTo(controls.target) < SUITCASE_ZOOM ? suitcaseAt(e.clientX, e.clientY) : null;
+    events.onSuitcaseHover?.(sc ? { x: e.clientX, y: e.clientY } : null);
     const sig = keys.join("|") + (tw ? tw.id : "");
     if (sig !== hoverSig || keys.length || tw) events.onHover?.(keys.length || tw ? { keys, x: e.clientX, y: e.clientY, tower: tw?.id } : null);
     hoverSig = sig;
-    renderer.domElement.style.cursor = keys.length || tw ? "pointer" : "";
+    renderer.domElement.style.cursor = keys.length || tw || sc ? "pointer" : "";
   };
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
@@ -1548,8 +1610,10 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   let raf = 0;
   let simTime = 0;
   let last = performance.now();
+  let paused = false;
   function tick() {
     if (disposed) return;
+    if (paused) { last = performance.now(); raf = requestAnimationFrame(tick); return; }
     const now = performance.now();
     step(Math.min((now - last) / 1000, 0.05));
     last = now;
@@ -1564,7 +1628,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const e = fly.t >= 1 ? 1 : 1 - Math.pow(1 - fly.t, 3);
       controls.target.lerpVectors(fly.fromT, fly.toT, e);
       camera.position.lerpVectors(fly.fromP, fly.toP, e);
-      if (fly.t >= 1) fly = null;
+      if (fly.t >= 1) { const done = fly.done; fly = null; done?.(); }
     }
     controls.update();
     const cd = camera.position.distanceTo(controls.target);
@@ -1611,6 +1675,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       frame(x, z, dist, yaw, pitch);
     },
     board() { frameBoard(); },
+    /** the game sits on top: stop drawing the city underneath */
+    setPaused(p: boolean) { paused = p; entering = false; },
     /** the camera as jump() takes it */
     cam() {
       const t = controls.target, off = camera.position.clone().sub(t), d = off.length();
@@ -1630,6 +1696,13 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const w = container.clientWidth || 1, h = container.clientHeight || 1;
       const x = ((v.x + 1) / 2) * w, y = ((1 - v.y) / 2) * h;
       return { x, y, visible: v.z < 1 && x >= -40 && y >= -40 && x <= w + 40 && y <= h + 40 };
+    },
+    /** where the lost-property suitcase is on screen, in container pixels (null until loaded) */
+    suitcaseScreen() {
+      if (!suitcase) return null;
+      const v = new THREE.Vector3(suitcase.x, H(suitcase.x, suitcase.z) + suitcase.h * 0.5, suitcase.z).project(camera);
+      const w = container.clientWidth || 1, h = container.clientHeight || 1;
+      return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, visible: v.z < 1 };
     },
     lanternAt(key: string) {
       const p = placed.find(q => q.key === key);

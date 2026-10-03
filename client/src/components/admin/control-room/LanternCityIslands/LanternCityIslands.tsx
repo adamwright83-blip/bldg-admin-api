@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import type { GeographicCustomer } from "../customerGeography";
@@ -7,6 +7,9 @@ import TowerFloors from "./TowerFloors";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
+
+// Small Comforts: the playable room inside the lost-property suitcase on Hollywood (zoom to the island, click the suitcase)
+const SmallComforts = lazy(() => import("../SmallComforts/SmallComforts"));
 
 // Fonts load as their own <link> (a failed @import would take the lazy chunk's CSS down with it)
 const FONTS_HREF =
@@ -49,6 +52,8 @@ export default function LanternCityIslands({
   const [island, setIsland] = useState<IslandInfo | null>(null);
   const [hover, setHover] = useState<{ keys: string[]; x: number; y: number; tower?: string } | null>(null);
   const [tower, setTower] = useState<string | null>(null);
+  const [inSuitcase, setInSuitcase] = useState(false);
+  const [suitcaseTip, setSuitcaseTip] = useState<{ x: number; y: number } | null>(null);
 
   const isPlatformAdmin = user?.role === "admin";
   const adminAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
@@ -86,6 +91,8 @@ export default function LanternCityIslands({
         onIsland: setIsland,
         onHover: setHover,
         onTower: setTower,
+        onSuitcase: () => setInSuitcase(true),
+        onSuitcaseHover: setSuitcaseTip,
       });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
@@ -101,6 +108,12 @@ export default function LanternCityIslands({
     // islands open only on real customers: one lantern per customer with a located home
     board.current?.setLanterns(customers.map(c => ({ key: c.identityKey, latitude: c.location!.latitude, longitude: c.location!.longitude, name: c.displayName })));
   }, [customers]);
+
+  useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
+  const leaveSuitcase = () => {
+    setInSuitcase(false);
+    board.current?.focusIsland("Hollywood");
+  };
 
   const hovered = (hover?.keys ?? []).map(k => byKey.get(k)).filter((c): c is GeographicCustomer => !!c);
 
@@ -149,6 +162,18 @@ export default function LanternCityIslands({
           {hovered.length > 4 ? <span>+{hovered.length - 4} more here</span> : null}
           {hover.tower ? <span className={styles.tipHint}>Click to open every floor</span> : null}
         </div>
+      ) : null}
+
+      {suitcaseTip ? (
+        <div className={styles.tip} style={{ left: Math.min(suitcaseTip.x + 16, window.innerWidth - 280), top: Math.max(suitcaseTip.y - 60, 8) }}>
+          <b>Lost property</b>
+          <span className={styles.tipHint}>Click to look inside</span>
+        </div>
+      ) : null}
+      {inSuitcase ? (
+        <Suspense fallback={null}>
+          <SmallComforts onExit={leaveSuitcase} />
+        </Suspense>
       ) : null}
 
       {tower ? (
