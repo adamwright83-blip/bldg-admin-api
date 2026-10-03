@@ -361,7 +361,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
     decisionStore:
-      process.env.NODE_ENV === "test"
+      process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
         ? createInMemoryClaireDecisionStore()
         : claireDecisionStore,
     decisionProvider: deriveClaireClosedDecisions,
