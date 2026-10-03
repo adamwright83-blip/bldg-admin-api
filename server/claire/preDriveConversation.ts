@@ -415,7 +415,7 @@ export async function answerClairePreDriveFollowUp(
       { label: "fact_inventory", text: inventory.toPromptSection() },
       { label: "identity_authority", text: formatClaireIdentityAuthority(input.context.identityTruth) },
       { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
-      { label: "capability_briefing", text: formatCapabilityBriefing() },
+      { label: "capability_briefing", text: formatCapabilityBriefing(undefined, input.surface === "desktop" ? "desktop" : "phone") },
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
       {
         label: "brain_v3_semantics",
