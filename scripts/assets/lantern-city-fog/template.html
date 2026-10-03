@@ -1,0 +1,959 @@
+<title>Lantern City Silver Lake</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --paper: #eef0f2;
+    --card: #fbfbfa;
+    --ink: #0b0f14;
+    --ink-2: #4a5160;
+    --line: #dcdfe4;
+    --amber: #ff8a00;
+    --gold: #ffc84d;
+    --gold-ink: #9a6400;
+    color-scheme: light;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.4 Barlow, system-ui, sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  .frame { position: fixed; inset: 0; pointer-events: none; border: 10px solid var(--card); border-radius: 0; box-shadow: inset 0 0 0 1px var(--line); }
+  .top { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 22px); left: 24px; right: 24px; display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; pointer-events: none; }
+  .brand { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 16px 11px; box-shadow: 0 6px 24px rgba(40, 48, 64, .10); pointer-events: auto; }
+  .brand .mark { font: 26px/1 Anton, Impact, sans-serif; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
+  .brand .mark i { width: 12px; height: 12px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 3px rgba(255, 138, 0, .18); }
+  .brand .sub { font: 600 13px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin-top: 4px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; }
+  .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font: 600 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 16px rgba(40, 48, 64, .08); font-variant-numeric: tabular-nums; }
+  .pill b { font-weight: 700; color: var(--ink); }
+  .pill .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px 2px rgba(255, 200, 77, .9); }
+  .pill .fog { width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1px solid #c9ced6; }
+
+  .mission { position: fixed; left: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); width: min(360px, calc(100vw - 48px)); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 16px; box-shadow: 0 10px 34px rgba(40, 48, 64, .16); }
+  .mission .who { display: flex; align-items: center; gap: 8px; font: 700 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--gold-ink); }
+  .mission .who i { width: 8px; height: 8px; transform: rotate(45deg); background: var(--gold); }
+  .mission h2 { margin: 8px 0 4px; font: 700 22px/1.1 "Barlow Condensed", sans-serif; text-wrap: balance; }
+  .mission p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  .mission .meta { display: flex; gap: 14px; margin-top: 10px; font: 600 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .mission .meta span { color: var(--ink-2); font-weight: 500; }
+  .mission .row { display: flex; gap: 8px; margin-top: 14px; }
+  .btn { appearance: none; border: 0; border-radius: 10px; padding: 10px 14px; font: 700 15px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+  .btn.go { background: var(--ink); color: #fff; flex: 1; }
+  .btn.go:disabled { opacity: .45; cursor: default; }
+  .btn.ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
+
+  .pin { position: fixed; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; display: flex; flex-direction: column; align-items: center; transition: opacity .4s; }
+  .pin .tag { background: var(--ink); color: #fff; font: 700 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .14em; text-transform: uppercase; padding: 6px 9px; border-radius: 7px; white-space: nowrap; }
+  .pin .stem { width: 2px; height: 26px; background: linear-gradient(var(--ink), rgba(11, 15, 20, 0)); }
+
+  .seg { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 24px); transform: translateX(-50%); display: flex; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; box-shadow: 0 4px 16px rgba(40, 48, 64, .1); }
+  .seg button { white-space: nowrap; appearance: none; border: 0; background: transparent; border-radius: 999px; padding: 7px 13px; font: 700 13px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
+  .seg button.on { background: var(--ink); color: #fff; }
+  .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 90px); transform: translateX(-50%); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; font: 700 16px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; box-shadow: 0 10px 30px rgba(40, 48, 64, .18); display: flex; gap: 8px; align-items: center; }
+  .toast i { width: 10px; height: 10px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px 3px rgba(255, 200, 77, .9); }
+  .hint { position: fixed; right: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); font: 600 12px/1.3 "Barlow Condensed", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #7d8594; text-align: right; }
+  .loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 16px "Barlow Condensed", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); background: var(--paper); }
+
+  @media (max-width: 640px) {
+    .top { left: 16px; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+    .brand .mark { font-size: 21px; }
+    .stats .pill:nth-child(3) { display: none; }
+    .mission { left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); width: calc(100vw - 32px); padding: 12px 14px 14px; box-sizing: border-box; }
+    .mission h2 { font-size: 19px; }
+    .hint { display: none; }
+    .seg { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 212px); }
+    .frame { border-width: 6px; }
+  }
+</style>
+
+<div id="stage"></div>
+<div class="frame"></div>
+<div class="top">
+  <div class="brand">
+    <div class="mark"><i></i>JOYSTICK</div>
+    <div class="sub">Lantern City · Silver Lake</div>
+  </div>
+  <div class="stats">
+    <div class="pill"><span class="dot"></span><b id="nLanterns">0</b>&nbsp;lanterns</div>
+    <div class="pill"><span class="fog"></span><b id="pctCharted">0%</b>&nbsp;charted</div>
+    <div class="pill"><b id="nDoors">0</b>&nbsp;doors in your light</div>
+  </div>
+</div>
+<div class="seg" id="seg" role="group" aria-label="Building style"><button data-m="kit" class="on">Kit buildings</button><button data-m="box">Grey boxes</button></div>
+<div class="pin" id="pin" hidden><div class="tag" id="pinTag">Uncharted</div><div class="stem"></div></div>
+<div class="toast" id="toast" hidden><i></i><span id="toastText"></span></div>
+<div class="mission" id="mission" hidden>
+  <div class="who"><i></i>Claire · new mission</div>
+  <h2 id="mTitle"></h2>
+  <p id="mBody"></p>
+  <div class="meta"><div><b id="mDoors"></b> <span>doors</span></div><div><b id="mBldg"></b> <span>buildings</span></div><div><b id="mDist"></b> <span>from your light</span></div></div>
+  <div class="row"><button class="btn go" id="winBtn">Simulate the win</button><button class="btn ghost" id="flyBtn">Show me</button></div>
+</div>
+<div class="hint">Drag to pan · pinch or scroll to zoom<br>Map data © OpenStreetMap contributors</div>
+<div class="loading" id="loading">Lifting the fog…</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script id="district" type="application/json">/*__DISTRICT__*/</script>
+<script id="kit" type="application/json">/*__KIT__*/</script>
+<script type="module">
+import * as THREE from 'three';
+import { MapControls } from 'three/addons/controls/MapControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const D = JSON.parse(document.getElementById('district').textContent);
+const T = D.terrain;
+const VEX = 1.35;           // vertical exaggeration of the hills, for the diorama read
+const HSCALE = 2.1;        // building height scale
+const EXT = { x0: T.x0, z0: T.z0, x1: T.x0 + T.cell * (T.nx - 1), z1: T.z0 + T.cell * (T.nz - 1) };
+const MARGIN = 1400;        // fog runs past the district edge into the page
+
+// ---------- terrain sampling ----------
+function ground(x, z) {
+  const fx = Math.min(Math.max((x - T.x0) / T.cell, 0), T.nx - 1.001);
+  const fz = Math.min(Math.max((z - T.z0) / T.cell, 0), T.nz - 1.001);
+  const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz;
+  const h = (i, j) => T.h[j * T.nx + i];
+  const a = h(ix, iz) * (1 - tx) + h(ix + 1, iz) * tx;
+  const b = h(ix, iz + 1) * (1 - tx) + h(ix + 1, iz + 1) * tx;
+  return (a * (1 - tz) + b * tz) * VEX;
+}
+
+// ---------- deterministic noise (shared by the reveal field) ----------
+function hash2(x, y) { let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy), b = hash2(ix + 1, iy), c = hash2(ix, iy + 1), d = hash2(ix + 1, iy + 1);
+  return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy;
+}
+function fbm(x, y) { let s = 0, a = .5, f = 1; for (let i = 0; i < 4; i++) { s += a * vnoise(x * f, y * f); f *= 2.03; a *= .5; } return s; }
+
+// ---------- buildings, customers, mission ----------
+const B = D.buildings.map((b, i) => {
+  let cx = 0, cz = 0; for (const p of b.p) { cx += p[0]; cz += p[1]; }
+  cx /= b.p.length; cz /= b.p.length;
+  return { ...b, i, cx, cz };
+}).filter(b => b.cx > EXT.x0 + 20 && b.cx < EXT.x1 - 20 && b.cz > EXT.z0 + 20 && b.cz < EXT.z1 - 20);
+
+function roadPts(name) { return D.roads.filter(r => r.n === name).flatMap(r => r.p); }
+let junction = [0, 0];
+{ // Sunset Junction: where Santa Monica Blvd meets Sunset
+  const s = roadPts('West Sunset Boulevard'), m = roadPts('Santa Monica Boulevard');
+  let best = 1e9; for (const a of s) for (const b of m) { const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d < best) { best = d; junction = a; } }
+}
+
+// Sample customers: real multi-unit buildings near three anchors. (Placeholders for the proof —
+// the live version lights the operator's actual customer addresses.)
+const anchors = [
+  { x: junction[0] + 260, z: junction[1] + 300, n: 3 },   // below Sunset Junction
+  { x: 620, z: -420, n: 3 },                               // south end of the reservoir
+  { x: -80, z: 430, n: 2 },                                // Sunset near Silver Lake Blvd
+];
+const footprint = b => { let a = 0; for (let i = 0; i < b.p.length; i++) { const p = b.p[i], q = b.p[(i + 1) % b.p.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; };
+const apt = B.filter(b => b.u >= 8 && (b.t === 'apartments' || b.t === 'residential'));
+for (const b of apt) b.score = footprint(b) * b.h;
+const customers = [];
+for (const a of anchors) {
+  const near = apt.filter(b => Math.hypot(b.cx - a.x, b.cz - a.z) < 230).sort((p, q) => q.score - p.score);
+  const picked = [];
+  for (const b of near) { if (picked.every(p => Math.hypot(p.cx - b.cx, p.cz - b.cz) > 70)) picked.push(b); if (picked.length >= a.n) break; }
+  customers.push(...picked);
+}
+const customerSet = new Set(customers.map(b => b.i));
+
+// the Claire mission: three blocks north of Sunset Junction (north is -z)
+const missionAt = { x: junction[0] + 40, z: junction[1] - 270 };
+const missionBldgs = B.filter(b => Math.hypot(b.cx - missionAt.x, b.cz - missionAt.z) < 140);
+const missionDoors = missionBldgs.reduce((s, b) => s + Math.max(1, b.u), 0);
+const missionTarget = missionBldgs.filter(b => b.u >= 4).sort((p, q) => q.u - p.u)[0] || missionBldgs[0];
+
+// ---------- reveal field (signed distance, metres; <0 = charted) ----------
+const regions = customers.map(b => ({ x: b.cx, z: b.cz, r: 230 + Math.min(b.u, 60) * 1.2, k: 1 }));
+const MW = 256, MH = 256;
+const MX0 = EXT.x0 - MARGIN, MZ0 = EXT.z0 - MARGIN, MX1 = EXT.x1 + MARGIN, MZ1 = EXT.z1 + MARGIN;
+const warp = new Float32Array(MW * MH);
+for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+  const x = MX0 + (MX1 - MX0) * i / (MW - 1), z = MZ0 + (MZ1 - MZ0) * j / (MH - 1);
+  warp[j * MW + i] = (fbm(x * 0.0065 + 11, z * 0.0065 - 7) - 0.5) * 120;
+}
+const maskData = new Float32Array(MW * MH);
+const maskTex = new THREE.DataTexture(maskData, MW, MH, THREE.RedFormat, THREE.FloatType);
+maskTex.magFilter = maskTex.minFilter = THREE.LinearFilter;
+function sdAt(x, z) {
+  let sd = 1e4; for (const r of regions) sd = Math.min(sd, Math.hypot(x - r.x, z - r.z) - r.r * r.k);
+  return sd;
+}
+function rebuildMask() {
+  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+    const x = MX0 + (MX1 - MX0) * i / (MW - 1), z = MZ0 + (MZ1 - MZ0) * j / (MH - 1);
+    let sd = sdAt(x, z) + warp[j * MW + i];
+    // the district edge is always fog
+    const edge = Math.max(EXT.x0 - x, x - EXT.x1, EXT.z0 - z, z - EXT.z1);
+    if (edge > -60) sd = Math.max(sd, edge + 60);
+    maskData[j * MW + i] = Math.max(-400, Math.min(900, sd));
+  }
+  maskTex.needsUpdate = true;
+}
+function sdField(x, z) { // bilinear read of the mask for CPU-side stats
+  const fx = (x - MX0) / (MX1 - MX0) * (MW - 1), fz = (z - MZ0) / (MZ1 - MZ0) * (MH - 1);
+  const i = Math.max(0, Math.min(MW - 2, Math.floor(fx))), j = Math.max(0, Math.min(MH - 2, Math.floor(fz)));
+  const tx = fx - i, tz = fz - j, m = (a, b) => maskData[b * MW + a];
+  return (m(i, j) * (1 - tx) + m(i + 1, j) * tx) * (1 - tz) + (m(i, j + 1) * (1 - tx) + m(i + 1, j + 1) * tx) * tz;
+}
+rebuildMask();
+
+// ---------- renderer ----------
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
+stage.appendChild(renderer.domElement);
+
+const PAPER = new THREE.Color('#e9ecf0');
+const scene = new THREE.Scene();
+scene.background = PAPER;
+scene.fog = new THREE.Fog(PAPER, 3400, 7200);
+
+const camera = new THREE.PerspectiveCamera(26, innerWidth / innerHeight, 20, 20000);
+const controls = new MapControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 450; controls.maxDistance = 5200;
+controls.minPolarAngle = 0.35; controls.maxPolarAngle = 1.18;
+controls.screenSpacePanning = false;
+
+const SUN = new THREE.Vector3(-0.55, 0.62, -0.56).normalize();  // low evening sun from the north-west
+
+// shared GLSL
+const common = /* glsl */`
+  uniform sampler2D uMask; uniform vec4 uMaskRect; uniform vec3 uSun; uniform float uTime;
+  float sdMask(vec2 xz) { return texture2D(uMask, (xz - uMaskRect.xy) / (uMaskRect.zw - uMaskRect.xy)).r; }
+  float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float vn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y); }
+  float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+`;
+const uniforms = {
+  uMask: { value: maskTex },
+  uMaskRect: { value: new THREE.Vector4(MX0, MZ0, MX1, MZ1) },
+  uSun: { value: SUN },
+  uTime: { value: 0 },
+};
+const fogChunk = { fogColor: { value: PAPER }, fogNear: { value: 3400 }, fogFar: { value: 7200 } };
+
+// palette (linear-ish, tuned by eye)
+const DUSK_GROUND = '#5b6680', DUSK_BLDG = '#7a86a3', DUSK_ROOF = '#8b95b0';
+
+// ---------- terrain (charted ground at dusk; hidden under fog elsewhere) ----------
+{
+  const g = new THREE.PlaneGeometry(EXT.x1 - EXT.x0, EXT.z1 - EXT.z0, T.nx - 1, T.nz - 1);
+  g.rotateX(-Math.PI / 2);
+  g.translate((EXT.x0 + EXT.x1) / 2, 0, (EXT.z0 + EXT.z1) / 2);
+  const pos = g.attributes.position;
+  for (let k = 0; k < pos.count; k++) pos.setY(k, ground(pos.getX(k), pos.getZ(k)));
+  g.computeVertexNormals();
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, uCol: { value: new THREE.Color(DUSK_GROUND) } },
+    fog: true,
+    vertexShader: /* glsl */`
+      varying vec3 vN; varying vec3 vW;
+      #include <fog_pars_vertex>
+      void main() { vN = normal; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`
+      uniform vec3 uCol; varying vec3 vN; varying vec3 vW;
+      #include <fog_pars_fragment>
+      void main() {
+        float sd = sdMask(vW.xz);
+        if (sd > 40.) discard;
+        float l = .55 + .45 * max(dot(normalize(vN), uSun), 0.);
+        vec3 c = uCol * l * 1.3 * (.9 + .2 * fbm(vW.xz * .02));
+        gl_FragColor = vec4(c, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+  scene.add(new THREE.Mesh(g, m));
+}
+
+// ---------- flat features draped on the ground: roads, parks, water ----------
+function clipRing(ring) { // Sutherland–Hodgman against the district rectangle
+  const edges = [[p => p[0] >= EXT.x0, (a, b) => EXT.x0, 0], [p => p[0] <= EXT.x1, () => EXT.x1, 0], [p => p[1] >= EXT.z0, () => EXT.z0, 1], [p => p[1] <= EXT.z1, () => EXT.z1, 1]];
+  let out = ring;
+  for (const [inside, val, ax] of edges) {
+    const src = out; out = [];
+    for (let i = 0; i < src.length; i++) {
+      const a = src[i], b = src[(i + 1) % src.length];
+      const ia = inside(a), ib = inside(b);
+      if (ia) out.push(a);
+      if (ia !== ib) { const v = val(); const t = (v - a[ax]) / (b[ax] - a[ax]); out.push(ax === 0 ? [v, a[1] + t * (b[1] - a[1])] : [a[0] + t * (b[0] - a[0]), v]); }
+    }
+    if (!out.length) break;
+  }
+  return out;
+}
+function drapeShape(rings, lift) {
+  const pos = [], idx = [];
+  for (const raw of rings) {
+    const ring = clipRing(raw); if (ring.length < 3) continue;
+    const v2 = ring.map(p => new THREE.Vector2(p[0], p[1]));
+    const tris = THREE.ShapeUtils.triangulateShape(v2, []);
+    const base = pos.length / 3;
+    for (const p of ring) pos.push(p[0], 0, p[1]);
+    for (const t of tris) idx.push(base + t[0], base + t[1], base + t[2]);
+  }
+  return { pos, idx };
+}
+function flatMaterial(frag, extraUniforms = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, ...extraUniforms }, fog: true,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: /* glsl */`
+      varying vec3 vW; attribute float aAlong;  varying float vAlong;
+      #include <fog_pars_vertex>
+      void main() { vAlong = aAlong; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`varying vec3 vW; varying float vAlong;
+      #include <fog_pars_fragment>
+      ` + frag,
+  });
+}
+// water sits flat at the lowest ground its outline touches
+{
+  const pos = [], idx = [];
+  for (const w of D.water) {
+    const ring = clipRing(w.p); if (ring.length < 3) continue;
+    let lo = 1e9; for (const p of ring) lo = Math.min(lo, ground(p[0], p[1]));
+    const tris = THREE.ShapeUtils.triangulateShape(ring.map(p => new THREE.Vector2(p[0], p[1])), []);
+    const base = pos.length / 3;
+    for (const p of ring) pos.push(p[0], lo - 1.5, p[1]);
+    for (const t of tris) idx.push(base + t[0], base + t[1], base + t[2]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
+  g.setIndex(idx);
+  const m = flatMaterial(/* glsl */`
+    void main() {
+      float sd = sdMask(vW.xz); if (sd > 40.) discard;
+      vec3 deep = vec3(.05, .11, .20), sky = vec3(.30, .40, .56);
+      float ripple = fbm(vW.xz * .045 + vec2(uTime * .05, -uTime * .03));
+      vec3 c = mix(deep, sky, .25 + .5 * ripple);
+      float glint = smoothstep(.72, .8, fbm(vW.xz * .09 + uTime * .08));
+      c += vec3(1., .78, .45) * glint * .35;
+      gl_FragColor = vec4(c, 1.);
+      #include <fog_fragment>
+    }`);
+  m.polygonOffset = false;
+  const mesh = new THREE.Mesh(g, m);
+  scene.add(mesh);
+  // terrain dips under the water so the shoreline reads
+}
+// parks
+{
+  const { pos, idx } = drapeShape(D.parks.filter(p => p.p.length >= 3).map(p => p.p), 0);
+  for (let k = 0; k < pos.length; k += 3) pos[k + 1] = ground(pos[k], pos[k + 2]) + 0.6;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
+  g.setIndex(idx);
+  scene.add(new THREE.Mesh(g, flatMaterial(/* glsl */`
+    void main() { float sd = sdMask(vW.xz); if (sd > 40.) discard;
+      vec3 c = mix(vec3(.13, .21, .16), vec3(.2, .3, .2), fbm(vW.xz * .05));
+      gl_FragColor = vec4(c, 1.);
+      #include <fog_fragment>
+    }`)));
+}
+// roads as ribbons, subdivided and draped
+{
+  const W = { trunk: 16, primary: 15, secondary: 12, tertiary: 10, residential: 7, unclassified: 7, living_street: 6 };
+  const pos = [], idx = [], along = [];
+  for (const r of D.roads) {
+    const w = (W[r.k] || 6) / 2;
+    const pts = [];
+    for (let i = 0; i < r.p.length - 1; i++) {
+      const a = r.p[i], b = r.p[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 12));
+      for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    }
+    pts.push(r.p[r.p.length - 1]);
+    let s = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[Math.min(i + 1, pts.length - 1)], o = pts[Math.max(i - 1, 0)];
+      let dx = q[0] - o[0], dz = q[1] - o[1]; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+      if (i) s += Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]);
+      const y = ground(p[0], p[1]) + 0.9;
+      pos.push(p[0] - dz * w, y, p[1] + dx * w, p[0] + dz * w, y, p[1] - dx * w);
+      along.push(s, s);
+      if (i) { const b = pos.length / 3 - 4; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 1));
+  g.setIndex(idx);
+  const m = flatMaterial(/* glsl */`
+    void main() { float sd = sdMask(vW.xz); if (sd > 30.) discard;
+      vec3 c = vec3(.36, .40, .50);
+      // soft street lamps every 38 m, cool so they never compete with the lanterns
+      float lamp = 1. - smoothstep(0., 2.2, abs(mod(vAlong, 38.) - 19.));
+      c += vec3(.55, .6, .7) * lamp * .35;
+      gl_FragColor = vec4(c, 1.);
+      #include <fog_fragment>
+    }`);
+  m.side = THREE.DoubleSide;
+  scene.add(new THREE.Mesh(g, m));
+}
+
+// ---------- buildings: one merged mesh; customers become lanterns ----------
+function buildBuildings(list, isCustomer) {
+  const pos = [], nrm = [], cen = [], fac = [], roof = [], idx = [];
+  for (const b of list) {
+    const base = ground(b.cx, b.cz), h = b.h * HSCALE, y0 = base - 8, y1 = base + h;
+    const ring = b.p;
+    // walls
+    let u = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], c = ring[(i + 1) % ring.length];
+      const dx = c[0] - a[0], dz = c[1] - a[1], L = Math.hypot(dx, dz); if (L < 0.05) continue;
+      const nx = dz / L, nz = -dx / L;
+      const k = pos.length / 3;
+      pos.push(a[0], y0, a[1], c[0], y0, c[1], c[0], y1, c[1], a[0], y1, a[1]);
+      for (let q = 0; q < 4; q++) { nrm.push(nx, 0, nz); cen.push(b.cx, b.cz); roof.push(0); }
+      fac.push(u, -8, u + L, -8, u + L, h, u, h);
+      u += L;
+      idx.push(k, k + 1, k + 2, k, k + 2, k + 3);
+    }
+    // roof
+    const tris = THREE.ShapeUtils.triangulateShape(ring.map(p => new THREE.Vector2(p[0], p[1])), []);
+    const k = pos.length / 3;
+    for (const p of ring) { pos.push(p[0], y1, p[1]); nrm.push(0, 1, 0); cen.push(b.cx, b.cz); roof.push(1); fac.push(p[0], p[1]); }
+    for (const t of tris) idx.push(k + t[0], k + t[2], k + t[1]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aCen', new THREE.Float32BufferAttribute(cen, 2));
+  g.setAttribute('aFac', new THREE.Float32BufferAttribute(fac, 2));
+  g.setAttribute('aRoof', new THREE.Float32BufferAttribute(roof, 1));
+  g.setIndex(idx);
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, uLit: { value: 1 } }, fog: true,
+    vertexShader: /* glsl */`
+      attribute vec2 aCen; attribute vec2 aFac; attribute float aRoof;
+      varying vec2 vCen; varying vec2 vFac; varying float vRoof; varying vec3 vN; varying vec3 vW;
+      #include <fog_pars_vertex>
+      void main() { vCen = aCen; vFac = aFac; vRoof = aRoof; vN = normal;
+        vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`
+      uniform float uLit;
+      varying vec2 vCen; varying vec2 vFac; varying float vRoof; varying vec3 vN; varying vec3 vW;
+      #include <fog_pars_fragment>
+      void main() {
+        float sd = sdMask(vCen);
+        vec3 n = normalize(vN);
+        float lam = max(dot(n, uSun), 0.);
+        float seed = h21(vCen * .013);
+        ${isCustomer ? /* glsl */`
+        // a lantern: warm facade, every window lit, bright roof edge
+        vec3 facade = mix(vec3(1., .55, .16), vec3(1., .72, .3), seed) * (.9 + .5 * lam);
+        vec2 cell = vec2(fract(vFac.x / 3.1), fract(vFac.y / 3.3));
+        float win = step(.22, cell.x) * step(cell.x, .78) * step(.25, cell.y) * step(cell.y, .8) * step(1.5, vFac.y);
+        float flick = .9 + .1 * sin(uTime * 2. + seed * 40.);
+        float ao = mix(.6, 1., smoothstep(0., 9., vFac.y));
+        vec3 c = facade * (.55 + .7 * lam) * ao * 1.3 + vec3(1., .86, .52) * win * 5.0 * flick;
+        if (vRoof > .5) c = vec3(1., .8, .42) * 2.2;
+        c *= uLit;
+        ` : /* glsl */`
+        // charted-but-not-yours: dimmed dusk; uncharted: plaster white under the fog
+        float ao = vRoof > .5 ? 1. : mix(.55, 1., smoothstep(0., 9., vFac.y));
+        vec3 dusk = mix(vec3(${hex(DUSK_BLDG)}), vec3(${hex(DUSK_ROOF)}), vRoof) * (.5 + .62 * lam) * (.85 + .3 * seed) * ao;
+        vec2 cell = vec2(fract(vFac.x / 3.4), fract(vFac.y / 3.3));
+        float glass = (1. - vRoof) * step(.25, cell.x) * step(cell.x, .75) * step(.3, cell.y) * step(cell.y, .78) * step(1.2, vFac.y);
+        float litWin = glass * step(.93, h21(floor(vec2(vFac.x / 3.4, vFac.y / 3.3)) + vCen));
+        dusk = mix(dusk, dusk * .55, glass) + vec3(.9, .8, .6) * litWin * .35;
+        vec3 plaster = vec3(.93, .93, .92) * (.78 + .24 * lam);
+        vec3 c = mix(dusk, plaster, smoothstep(-6., 10., sd));
+        `}
+        gl_FragColor = vec4(c, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+  return new THREE.Mesh(g, m);
+}
+function hex(h) { const c = new THREE.Color(h); return `${c.r.toFixed(3)}, ${c.g.toFixed(3)}, ${c.b.toFixed(3)}`; }
+// ---------- the city: kit buildings dropped on the real footprints, or the old grey boxes ----------
+const KIT = JSON.parse(document.getElementById('kit').textContent);
+const kitBin = Uint8Array.from(atob(KIT.blob), ch => ch.charCodeAt(0)).buffer;
+const TA = { float32: Float32Array, int8: Int8Array, uint16: Uint16Array, uint32: Uint32Array };
+const kview = (spec, n) => new TA[spec[1]](kitBin, spec[0], n);
+const kitGeo = KIT.models.map(m => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(kview(m.p, m.nv * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(kview(m.n, m.nv * 3), 3, true));
+  g.setAttribute('uv', new THREE.BufferAttribute(kview(m.uv, m.nv * 2), 2));
+  g.setIndex(new THREE.BufferAttribute(kview(m.i, m.ni), 1));
+  return g;
+});
+const atlasTex = KIT.atlases.map(src => { const t = new THREE.TextureLoader().load(src); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return t; });
+
+// nearest street, so every building turns its front door to the road
+const RCELL = 60, roadGrid = new Map();
+for (const r of D.roads) for (let i = 0; i < r.p.length - 1; i++) {
+  const a = r.p[i], c = r.p[i + 1], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 6));
+  for (let k = 0; k <= n; k++) {
+    const x = a[0] + (c[0] - a[0]) * k / n, z = a[1] + (c[1] - a[1]) * k / n, key = Math.floor(x / RCELL) + ',' + Math.floor(z / RCELL);
+    if (!roadGrid.has(key)) roadGrid.set(key, []); roadGrid.get(key).push(x, z);
+  }
+}
+function nearestRoad(x, z) {
+  let best = null, bd = 1e9; const gx = Math.floor(x / RCELL), gz = Math.floor(z / RCELL);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const arr = roadGrid.get((gx + i) + ',' + (gz + j)); if (!arr) continue;
+    for (let k = 0; k < arr.length; k += 2) { const d = (arr[k] - x) ** 2 + (arr[k + 1] - z) ** 2; if (d < bd) { bd = d; best = [arr[k], arr[k + 1]]; } }
+  }
+  return best;
+}
+function obb(pts) {
+  let best = null;
+  for (let k = 0; k < pts.length; k++) {
+    const a = pts[k], b = pts[(k + 1) % pts.length], ang = Math.atan2(b[1] - a[1], b[0] - a[0]), c = Math.cos(ang), s = Math.sin(ang);
+    let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+    for (const p of pts) { const u = p[0] * c + p[1] * s, v = -p[0] * s + p[1] * c; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+    const A = (u1 - u0) * (v1 - v0);
+    if (!best || A < best.A) best = { A, c, s, U: u1 - u0, V: v1 - v0, cu: (u0 + u1) / 2, cv: (v0 + v1) / 2 };
+  }
+  best.x = best.cu * best.c - best.cv * best.s; best.z = best.cu * best.s + best.cv * best.c;
+  return best;
+}
+const byCls = { house: [], mid: [], brick: [] };
+KIT.models.forEach((m, k) => byCls[m.cls].push(k));
+function kitClass(b, area) {
+  if (b.t === 'house' || b.t === 'garage' || b.t === 'shed' || (b.u <= 2 && b.h < 9)) return 'house';
+  if (b.t === 'apartments' || b.t === 'residential') return (h21js(b.i) < 0.55 && area < 900) ? 'brick' : 'mid';
+  return 'mid';
+}
+function h21js(i) { return hash2(i, 91); }
+function placeKit(b) {
+  const o = obb(b.p), area = o.U * o.V;
+  const cls = kitClass(b, area);
+  const rd = nearestRoad(o.x, o.z) || [o.x + 1, o.z];
+  let vx = rd[0] - o.x, vz = rd[1] - o.z; const vl = Math.hypot(vx, vz) || 1; vx /= vl; vz /= vl;
+  const axes = [[o.c, o.s, 'u'], [-o.c, -o.s, 'u'], [-o.s, o.c, 'v'], [o.s, -o.c, 'v']];
+  let f = axes[0], fd = -2; for (const a of axes) { const d = a[0] * vx + a[1] * vz; if (d > fd) { fd = d; f = a; } }
+  const depth = f[2] === 'u' ? o.U : o.V, width = f[2] === 'u' ? o.V : o.U;
+  const H = b.h * (cls === 'house' ? 1.75 : 1.6);
+  const cand = byCls[cls].map(k => { const sz = KIT.models[k].size;
+    const e = Math.abs(Math.log((width / depth) / (sz[0] / sz[2]))) + 0.5 * Math.abs(Math.log((H / width) / (sz[1] / sz[0])));
+    return [e, k]; }).sort((a, b2) => a[0] - b2[0]);
+  const k = cand[Math.floor(h21js(b.i + 7) * Math.min(3, cand.length))][1];
+  const sz = KIT.models[k].size;
+  const m4 = new THREE.Matrix4().compose(new THREE.Vector3(o.x, ground(o.x, o.z) - 0.3, o.z),
+    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(f[0], f[1])),
+    new THREE.Vector3(Math.max(width * 0.94, 2) / sz[0], H / sz[1], Math.max(depth * 0.94, 2) / sz[2]));
+  return { k, m4, cx: b.cx, cz: b.cz };
+}
+function kitMaterial(atlas, isCustomer) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, uAtlas: { value: atlasTex[atlas] }, uLit: { value: 1 } }, fog: true,
+    vertexShader: /* glsl */`
+      attribute vec2 aCen; attribute float aSeed;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec2 vCen; varying float vSeed; varying float vBase;
+      #include <fog_pars_vertex>
+      void main() { vUv = uv; vCen = aCen; vSeed = aSeed; vBase = instanceMatrix[3].y;
+        mat3 nm = transpose(inverse(mat3(instanceMatrix)));
+        vN = normalize(nm * normal);
+        vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`
+      uniform sampler2D uAtlas; uniform float uLit;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec2 vCen; varying float vSeed; varying float vBase;
+      #include <fog_pars_fragment>
+      void main() {
+        vec3 c = texture2D(uAtlas, vUv).rgb;
+        float L = dot(c, vec3(.2126, .7152, .0722));
+        float win = smoothstep(.03, .12, c.b - max(c.r, c.g));
+        vec3 n = normalize(vN);
+        float lam = max(dot(n, uSun), 0.);
+        float sd = sdMask(vCen);
+        ${isCustomer ? /* glsl */`
+        // a lantern: the kit's own shapes in warm gold, every storey's windows lit
+        vec3 facade = mix(vec3(1., .5, .14), vec3(1., .76, .38), smoothstep(.1, .7, L)) * (.55 + .7 * lam) * 1.45;
+        float flick = .9 + .1 * sin(uTime * 2. + vSeed * 40.);
+        float wall = 1. - smoothstep(.3, .6, abs(n.y));
+        vec3 tng = normalize(cross(n, vec3(0., 1., 0.)) + 1e-4);
+        vec2 cell = vec2(fract(dot(vW, tng) / 2.9), fract((vW.y - vBase) / 3.2));
+        float pw = wall * step(.24, cell.x) * step(cell.x, .76) * step(.28, cell.y) * step(cell.y, .78) * step(1.6, vW.y - vBase);
+        vec3 col = facade + vec3(1., .86, .52) * max(pw, win) * 4.6 * flick;
+        if (n.y > .6) col = mix(facade, vec3(1., .8, .42) * 2.1, .7);
+        col *= uLit;
+        ` : /* glsl */`
+        vec3 tint = mix(vec3(${hex(DUSK_BLDG)}), vec3(${hex(DUSK_ROOF)}), step(.5, n.y));
+        vec3 dusk = mix(tint * (.45 + .95 * L), c * .7, .22) * (.5 + .62 * lam) * (.9 + .2 * vSeed);
+        dusk = mix(dusk, dusk * .42, win);
+        float lit = win * step(.93, h21(floor(vW.xz * .45) + floor(vW.y * .33) + vSeed * 13.));
+        dusk += vec3(.95, .8, .55) * lit * .5;
+        vec3 plaster = vec3(.93, .93, .92) * (.78 + .24 * lam);
+        vec3 col = mix(dusk, plaster, smoothstep(-6., 10., sd));
+        `}
+        gl_FragColor = vec4(col, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+}
+function kitInstances(places, isCustomer) {
+  const group = new THREE.Group(), byModel = new Map();
+  places.forEach((pl, j) => { if (!byModel.has(pl.k)) byModel.set(pl.k, []); byModel.get(pl.k).push(j); });
+  const slot = new Map();
+  for (const [k, idx] of byModel) {
+    const geo = kitGeo[k].clone();
+    const cen = new Float32Array(idx.length * 2), seed = new Float32Array(idx.length);
+    idx.forEach((j, q) => { cen[q * 2] = places[j].cx; cen[q * 2 + 1] = places[j].cz; seed[q] = hash2(q, k); });
+    geo.setAttribute('aCen', new THREE.InstancedBufferAttribute(cen, 2));
+    geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1));
+    const im = new THREE.InstancedMesh(geo, kitMaterial(KIT.models[k].atlas, isCustomer), idx.length);
+    idx.forEach((j, q) => { im.setMatrixAt(q, places[j].m4); slot.set(places[j].bi, [im, q]); });
+    im.frustumCulled = false;
+    group.add(im);
+  }
+  return { group, slot };
+}
+
+// kit everywhere the player can see now, plus the land the mission would reveal
+const kitSet = new Set(B.filter(b => sdField(b.cx, b.cz) < 60 || Math.hypot(b.cx - missionAt.x, b.cz - missionAt.z) < 330).map(b => b.i));
+const kitCity = kitInstances(B.filter(b => kitSet.has(b.i) && !customerSet.has(b.i)).map(b => ({ ...placeKit(b), bi: b.i })), false);
+scene.add(kitCity.group);
+let cityAll = null, cityRest = null;
+let MODE = 'kit';
+function rebuildBoxes() {
+  for (const m of [cityAll, cityRest]) if (m) { scene.remove(m); m.geometry.dispose(); }
+  cityAll = buildBuildings(B.filter(b => !customerSet.has(b.i)), false);
+  cityRest = buildBuildings(B.filter(b => !customerSet.has(b.i) && !kitSet.has(b.i)), false);
+  scene.add(cityAll, cityRest);
+  applyMode();
+}
+const lanternGroup = new THREE.Group(); scene.add(lanternGroup);       // grey-box lanterns
+const lanternKitGroup = new THREE.Group(); scene.add(lanternKitGroup); // kit lanterns
+const haloGroup = new THREE.Group(); scene.add(haloGroup);
+function applyMode() {
+  const kit = MODE === 'kit';
+  kitCity.group.visible = kit; lanternKitGroup.visible = kit;
+  if (cityRest) cityRest.visible = kit;
+  if (cityAll) cityAll.visible = !kit;
+  lanternGroup.visible = !kit;
+}
+function addLantern(b, rise = 1) {
+  const mesh = buildBuildings([b], true); lanternGroup.add(mesh);
+  const kit = kitInstances([{ ...placeKit(b), bi: b.i }], true);
+  lanternKitGroup.add(kit.group);
+  const kmesh = kit.group.children[0];
+  // a warm pool of light on the ground around the building
+  const r = 80 + Math.sqrt(Math.max(b.u, 4)) * 7;
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(r, 48).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uA: { value: rise } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `uniform float uA; varying vec2 vUv; void main(){ float d = length(vUv - .5) * 2.; float a = pow(1. - clamp(d,0.,1.), 1.8) * .75 * uA; gl_FragColor = vec4(vec3(1., .66, .25) * a, a); }`,
+  }));
+  halo.position.set(b.cx, ground(b.cx, b.cz) + 1.6, b.cz);
+  haloGroup.add(halo);
+  return { mesh, kmesh, halo };
+}
+for (const b of customers) addLantern(b);
+rebuildBoxes();
+
+// ---------- trees: street trees, yard trees, and LA palms on the boulevards ----------
+{
+  // rasterise footprints so trees never grow through a roof
+  const PX = 2, cw = Math.ceil((EXT.x1 - EXT.x0) / PX), ch = Math.ceil((EXT.z1 - EXT.z0) / PX);
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const cx2 = cv.getContext('2d'); cx2.fillStyle = '#000';
+  for (const b of B) { cx2.beginPath(); b.p.forEach((q, k) => { const X = (q[0] - EXT.x0) / PX, Y = (q[1] - EXT.z0) / PX; k ? cx2.lineTo(X, Y) : cx2.moveTo(X, Y); }); cx2.closePath(); cx2.fill(); }
+  cx2.lineWidth = 3; cx2.strokeStyle = '#000'; cx2.stroke();
+  const occ = cx2.getImageData(0, 0, cw, ch).data;
+  const blocked = (x, z) => { const i = Math.floor((x - EXT.x0) / PX), j = Math.floor((z - EXT.z0) / PX); if (i < 1 || j < 1 || i >= cw - 1 || j >= ch - 1) return true; return occ[(j * cw + i) * 4 + 3] > 0 || occ[((j + 1) * cw + i) * 4 + 3] > 0 || occ[(j * cw + i + 1) * 4 + 3] > 0; };
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const trees = [], palms = [];
+  const RW = { trunk: 8, primary: 7.5, secondary: 6, tertiary: 5, residential: 3.5, unclassified: 3.5, living_street: 3 };
+  for (const r of D.roads) {
+    const big = r.k === 'primary' || r.k === 'secondary' || r.k === 'trunk';
+    const step = big ? 26 : 13, off = (RW[r.k] || 3) + 4.5;
+    for (let i = 0; i < r.p.length - 1; i++) {
+      const a = r.p[i], c = r.p[i + 1], L = Math.hypot(c[0] - a[0], c[1] - a[1]); if (L < 1) continue;
+      const dx = (c[0] - a[0]) / L, dz = (c[1] - a[1]) / L;
+      for (let s0 = rnd() * step; s0 < L; s0 += step * (0.8 + rnd() * 0.5)) {
+        for (const side of [-1, 1]) {
+          if (rnd() < (big ? 0.25 : 0.35)) continue;
+          const x = a[0] + dx * s0 - dz * off * side, z = a[1] + dz * s0 + dx * off * side;
+          if (blocked(x, z)) continue;
+          (big && rnd() < 0.75 ? palms : trees).push([x, z, rnd()]);
+        }
+      }
+    }
+  }
+  for (let k = 0; k < 9000; k++) { // yards and parks
+    const x = EXT.x0 + rnd() * (EXT.x1 - EXT.x0), z = EXT.z0 + rnd() * (EXT.z1 - EXT.z0);
+    if (!blocked(x, z) && sdField(x, z) < 200) trees.push([x, z, rnd()]);
+  }
+  const treeMat = (col) => new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, uCol: { value: new THREE.Color(col) } }, fog: true,
+    vertexShader: /* glsl */`
+      varying vec3 vN; varying vec3 vW; varying float vY;
+      #include <fog_pars_vertex>
+      void main() { vN = normalize(mat3(instanceMatrix) * normal); vY = position.y;
+        vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`
+      uniform vec3 uCol; varying vec3 vN; varying vec3 vW; varying float vY;
+      #include <fog_pars_fragment>
+      void main() { if (sdMask(vW.xz) > 6.) discard;
+        float lam = max(dot(normalize(vN), uSun), 0.);
+        vec3 c = uCol * (.55 + .7 * lam) * (.8 + .4 * h21(floor(vW.xz)));
+        gl_FragColor = vec4(c, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3();
+  const canopy = new THREE.IcosahedronGeometry(1, 1);
+  const tMesh = new THREE.InstancedMesh(canopy, treeMat('#3f5a4a'), trees.length);
+  trees.forEach(([x, z, r], k) => {
+    const s = 3.2 + r * 3.4; V.set(x, ground(x, z) + s * 1.35, z); Sc.set(s, s * 1.15, s);
+    Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r * 6.28); tMesh.setMatrixAt(k, M.compose(V, Q, Sc));
+  });
+  scene.add(tMesh);
+  const trunk = new THREE.CylinderGeometry(0.35, 0.55, 1, 5).translate(0, 0.5, 0);
+  const frond = new THREE.ConeGeometry(1, 0.6, 7).translate(0, -0.3, 0);
+  const pT = new THREE.InstancedMesh(trunk, treeMat('#6b6a70'), palms.length);
+  const pC = new THREE.InstancedMesh(frond, treeMat('#4d6b50'), palms.length);
+  palms.forEach(([x, z, r], k) => {
+    const h = 18 + r * 12, y = ground(x, z);
+    V.set(x, y, z); Sc.set(1, h, 1); Q.identity(); pT.setMatrixAt(k, M.compose(V, Q, Sc));
+    V.set(x, y + h + 1.2, z); Sc.set(4.2, 2.4, 4.2); Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r * 6.28); pC.setMatrixAt(k, M.compose(V, Q, Sc));
+  });
+  scene.add(pT, pC);
+}
+
+// ---------- the fog: a white plaster cloud sea with gold cracks at the frontier ----------
+const fogMesh = (() => {
+  const S = 340;
+  const g = new THREE.PlaneGeometry(MX1 - MX0, MZ1 - MZ0, S, S).rotateX(-Math.PI / 2).translate((MX0 + MX1) / 2, 0, (MZ0 + MZ1) / 2);
+  const gh = new Float32Array(g.attributes.position.count);
+  for (let k = 0; k < gh.length; k++) gh[k] = ground(g.attributes.position.getX(k), g.attributes.position.getZ(k));
+  g.setAttribute('aGround', new THREE.BufferAttribute(gh, 1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, ...fogChunk, uExt: { value: new THREE.Vector4(EXT.x0, EXT.z0, EXT.x1, EXT.z1) } }, fog: true,
+    vertexShader: common + /* glsl */`
+      attribute float aGround; varying vec3 vW; varying float vSd; varying vec3 vN;
+      #include <fog_pars_vertex>
+      float lift(vec2 p) {
+        float sd = sdMask(p);
+        float body = smoothstep(-10., 90., sd);
+        float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
+        return body * (30. + billow * 1.9) - (1. - body) * 30.;
+      }
+      void main() {
+        vec3 p = position;
+        float y0 = aGround + lift(p.xz);
+        float e = 12.;
+        float yx = aGround + lift(p.xz + vec2(e, 0.)), yz = aGround + lift(p.xz + vec2(0., e));
+        vN = normalize(vec3(y0 - yx, e, y0 - yz));
+        p.y = y0; vSd = sdMask(p.xz);
+        vec4 w = modelMatrix * vec4(p, 1.); vW = w.xyz;
+        vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: common + /* glsl */`
+      uniform vec4 uExt; varying vec3 vW; varying float vSd; varying vec3 vN;
+      #include <fog_pars_fragment>
+      // voronoi edge distance for the cracks
+      vec2 vor(vec2 p) {
+        vec2 n = floor(p), f = fract(p); float d1 = 8., d2 = 8.;
+        for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+          vec2 g = vec2(i, j); vec2 o = vec2(h21(n + g), h21(n + g + 31.7));
+          float d = length(g + o - f); if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+        }
+        return vec2(d1, d2 - d1);
+      }
+      void main() {
+        float sd = sdMask(vW.xz);
+        if (sd < -12.) discard;
+        vec3 n = normalize(vN);
+        float lam = max(dot(n, uSun), 0.);
+        float sky = .5 + .5 * n.y;
+        vec3 plaster = vec3(.97, .965, .955) * (.66 + .36 * lam) * (.9 + .1 * sky);
+        plaster = mix(plaster, vec3(.80, .84, .91), (1. - lam) * .45);     // cool shadow side
+        plaster *= .96 + .06 * fbm(vW.xz * .09);                          // plaster grain
+        // gold cracks: a crazed band along the frontier, fading out into the fog
+        float band = pow(1. - smoothstep(0., 260., sd), 1.6);
+        vec2 v = vor(vW.xz / 58. + fbm(vW.xz * .012) * 1.6);
+        float crack = (1. - smoothstep(0.0, .03 + .05 * band, v.y)) * band * step(0., sd);
+        float rim = (1. - smoothstep(0., 8., abs(sd - 3.))) * .5;
+        vec3 gold = vec3(1., .72, .28);
+        vec3 c = mix(plaster, gold * 1.5, clamp(crack * 1.2 + rim, 0., 1.));
+        // the page edge: soften into the paper beyond the district
+        float edge = max(max(uExt.x - vW.x, vW.x - uExt.z), max(uExt.y - vW.z, vW.z - uExt.w));
+        c = mix(c, vec3(.913, .925, .941), smoothstep(-200., 900., edge) * .85);
+        gl_FragColor = vec4(c, 1.);
+        #include <fog_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  scene.add(mesh);
+  return mesh;
+})();
+
+// mission marker: a slow gold ring pulsing on the cloud
+const pinY = ground(missionAt.x, missionAt.z) + 60;
+const ring = new THREE.Mesh(new THREE.RingGeometry(40, 46, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.5, .5), transparent: true, depthWrite: false }));
+ring.position.set(missionAt.x, pinY, missionAt.z); scene.add(ring);
+
+// ---------- post: bloom (only the lanterns and cracks exceed 1.0) + tilt-shift ----------
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.3, 1.05);
+composer.addPass(bloom);
+const tilt = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(innerWidth, innerHeight) }, uFocus: { value: 0.5 }, uAmt: { value: 2.0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uFocus, uAmt; varying vec2 vUv;
+    void main() {
+      float b = smoothstep(.22, .6, abs(vUv.y - uFocus)) * uAmt;
+      vec4 s = vec4(0.); float wsum = 0.;
+      for (int i = -4; i <= 4; i++) for (int j = -4; j <= 4; j++) {
+        vec2 o = vec2(float(i), float(j)) * b / uRes; float w = 1. - length(vec2(i, j)) / 6.;
+        if (w > 0.) { s += texture2D(tDiffuse, vUv + o) * w; wsum += w; }
+      }
+      gl_FragColor = s / wsum;
+    }`,
+});
+composer.addPass(tilt);
+composer.addPass(new OutputPass());
+
+// ---------- camera framing ----------
+function centroid(list) { let x = 0, z = 0; for (const b of list) { x += b.cx; z += b.cz; } return { x: x / list.length, z: z / list.length }; }
+const home = centroid(customers);
+function frame(target, dist, yaw = -0.35, pitch = 0.82) {
+  const ty = ground(target.x, target.z);
+  controls.target.set(target.x, ty, target.z);
+  camera.position.set(target.x + Math.sin(yaw) * Math.sin(pitch) * dist, ty + Math.cos(pitch) * dist, target.z + Math.cos(yaw) * Math.sin(pitch) * dist);
+  controls.update();
+}
+const portrait = innerHeight > innerWidth;
+if (portrait) frame({ x: junction[0] + 60, z: junction[1] + 150 }, 2500, -0.3, 0.95);
+else frame({ x: junction[0] + 300, z: junction[1] + 20 }, 1750, -0.3, 1.0);
+
+// fly-to helper
+let fly = null;
+function flyTo(target, dist, dur = 1.6) {
+  const fromT = controls.target.clone(), fromP = camera.position.clone();
+  const off = fromP.clone().sub(fromT).normalize().multiplyScalar(dist);
+  const toT = new THREE.Vector3(target.x, ground(target.x, target.z), target.z);
+  fly = { t: 0, dur, fromT, fromP, toT, toP: toT.clone().add(off) };
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+function stats() {
+  let lit = 0, charted = 0;
+  const lanternDoors = customers.reduce((s, b) => s + b.u, 0);
+  for (const b of B) if (sdField(b.cx, b.cz) < 0) { charted++; lit += Math.max(1, b.u); }
+  $('nLanterns').textContent = customers.length;
+  $('pctCharted').textContent = Math.max(1, Math.round(charted / B.length * 100)) + '%';
+  $('nDoors').textContent = lit.toLocaleString();
+}
+stats();
+let nearest = 1e9; for (const b of customers) nearest = Math.min(nearest, Math.hypot(b.cx - missionAt.x, b.cz - missionAt.z));
+$('mTitle').textContent = 'Uncharted: 3 blocks north of Sunset Junction';
+$('mBody').textContent = 'Nobody has knocked here yet. Win one building and the whole block comes out of the fog.';
+$('mDoors').textContent = '~' + Math.round(missionDoors / 5) * 5;
+$('mBldg').textContent = missionBldgs.length;
+$('mDist').textContent = (nearest / 1609).toFixed(1) + ' mi';
+$('pinTag').textContent = 'Uncharted · ~' + Math.round(missionDoors / 5) * 5 + ' doors';
+$('mission').hidden = false; $('pin').hidden = false;
+
+let reveal = null;
+document.querySelectorAll('#seg button').forEach(bt => bt.onclick = () => {
+  MODE = bt.dataset.m; document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === bt)); applyMode();
+});
+$('flyBtn').onclick = () => flyTo(missionAt, 1500);
+$('winBtn').onclick = () => {
+  $('winBtn').disabled = true;
+  flyTo(missionAt, 1400, 1.2);
+  setTimeout(() => {
+    const b = missionTarget;
+    customers.push(b); customerSet.add(b.i);
+    const sl = kitCity.slot.get(b.i);
+    if (sl) { sl[0].setMatrixAt(sl[1], new THREE.Matrix4().makeScale(0, 0, 0)); sl[0].instanceMatrix.needsUpdate = true; }
+    const L = addLantern(b, 0);
+    rebuildBoxes();
+    const reg = { x: b.cx, z: b.cz, r: 230, k: 0 };
+    regions.push(reg);
+    reveal = { t: 0, reg, L };
+    $('pin').hidden = true; ring.visible = false;
+  }, 1300);
+};
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  tilt.uniforms.uRes.value.set(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+const tmp = new THREE.Vector3();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  uniforms.uTime.value = t;
+  if (fly) {
+    fly.t += dt / fly.dur; const e = fly.t >= 1 ? 1 : 1 - Math.pow(1 - fly.t, 3);
+    controls.target.lerpVectors(fly.fromT, fly.toT, e); camera.position.lerpVectors(fly.fromP, fly.toP, e);
+    if (fly.t >= 1) fly = null;
+  }
+  if (reveal) {
+    reveal.t += dt / 2.8; const e = Math.min(1, reveal.t), k = 1 - Math.pow(1 - e, 3);
+    reveal.reg.k = k; rebuildMask();
+    reveal.L.halo.material.uniforms.uA.value = k;
+    reveal.L.mesh.material.uniforms.uLit.value = Math.min(1, e * 2.2);
+    reveal.L.kmesh.material.uniforms.uLit.value = Math.min(1, e * 2.2);
+    if (e >= 1) {
+      reveal = null; stats();
+      $('toastText').textContent = 'New lantern · the block is yours'; $('toast').hidden = false;
+      setTimeout(() => { $('toast').hidden = true; }, 3200);
+      $('mission').hidden = true;
+    }
+  }
+  ring.scale.setScalar(1 + 0.25 * Math.sin(t * 2.2)); ring.material.opacity = 0.65 + 0.35 * Math.sin(t * 2.2);
+  controls.update();
+  // project the mission tag
+  tmp.set(missionAt.x, pinY + 10, missionAt.z).project(camera);
+  const pin = $('pin');
+  if (!pin.hidden) { pin.style.left = ((tmp.x + 1) / 2 * innerWidth) + 'px'; pin.style.top = ((1 - tmp.y) / 2 * innerHeight) + 'px'; pin.style.opacity = tmp.z < 1 ? 1 : 0; }
+  composer.render();
+  requestAnimationFrame(tick);
+}
+$('loading').remove();
+tick();
+window.__lantern = { customers, junction, missionAt, missionDoors, renderer, camera, controls, frame, flyTo, setMode: m => { MODE = m; applyMode(); } };
+</script>

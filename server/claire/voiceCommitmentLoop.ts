@@ -27,6 +27,7 @@ import {
 } from "../../shared/claireRuntime";
 import { recordClaireConversionJoin } from "./conversionJoins";
 import { confirmTomorrowUtterance } from "../../shared/claireWorkday";
+import { classifyObjectiveExecution, explicitOperatorExecutionType } from "../../shared/objectiveExecution";
 import {
   classifyDayDirectorKind,
   commandMetadataFromUtterance,
@@ -84,7 +85,7 @@ const CLEAR_ADD_WORK_FAST_PATH =
   /\b(add (?:a|this) (?:task|to-do|commitment)|make a note|remind me to|put (?:this|that) on (?:my|the) list)\b/i;
 
 const YES_PATTERN = /\b(yes|yeah|yep|confirm|confirmed|correct|do it|go ahead|add it|save it)\b/i;
-const NO_PATTERN = /\b(no|nope|nah|cancel|never ?mind|don'?t|do not|stop|not now)\b/i;
+const NO_PATTERN = /\b(no(?!\s+longer\b)|nope|nah|cancel|never ?mind|don'?t|do not|stop|not now)\b/i;
 
 export function detectConfirmation(utterance: string): "yes" | "no" | "ambiguous" {
   const hasYes = YES_PATTERN.test(utterance);
@@ -127,6 +128,20 @@ export function decorateCommitmentProposal(
   proposal.targetBusinessDate = targetBusinessDate;
   proposal.command = command;
   proposal.kind = classifyDayDirectorKind(utterance);
+  // Execution type is a separate axis from Day Director kind. Preserve an
+  // operator's explicit Mission/Challenge instruction, then fall back to the
+  // shared execution contract for obvious physical/remote work. The previous
+  // single-item voice path dropped this field entirely, so Claire could say
+  // "challenge" and still persist an untyped/prep-looking row.
+  const explicitExecutionType = explicitOperatorExecutionType(utterance);
+  const derivedExecutionType = classifyObjectiveExecution({
+    contract: utterance,
+    title: proposal.title,
+    objective: proposal.title,
+  }).executionType;
+  if (explicitExecutionType ?? derivedExecutionType) {
+    proposal.executionType = explicitExecutionType ?? derivedExecutionType;
+  }
   const weekday = detectRecurrenceWeekday(utterance);
   if (weekday) {
     proposal.recurrence = { weekday, windowStart: null, windowEnd: null };
@@ -281,7 +296,19 @@ export type PendingProposalState = {
   pendingFieldCapture?: ConversationalFieldOutcome | null;
   lastAcceptedCommitmentId?: string | null;
   blockerKind?: BlockerKind | null;
-  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  sessionKind?:
+    | "evening_planning"
+    | "morning_reconciliation"
+    | "field_debrief"
+    | "pre_drive"
+    | "weekly_planning_invite"
+    | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
+  pendingWeeklyPlanningCallback?: {
+    scheduledForIso: string;
+    readback: string;
+    sourceReference: string;
+  } | null;
   pendingEngineeringOffer?: {
     capabilityKey: string;
     operatorRequest: string;

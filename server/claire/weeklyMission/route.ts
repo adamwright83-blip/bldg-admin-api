@@ -1,23 +1,109 @@
 /**
  * Thin weekly-planning route. One seam for runClaireTurn.
- * While a session is interview, proposal, or awaiting confirmation,
- * the completed thought comes here and does not fall through to generic capture.
+ * An open weekly session is context, not automatic conversational authority.
+ * Deterministic rules own explicit controls; ambiguous turns are semantically
+ * classified and fail toward parking the weekly session.
  */
 
 import { formatInTimeZone } from "date-fns-tz";
 import type { MutationReceipt } from "../assertionGuard";
 import {
+  isWeeklyCancel,
   isWeeklyLockBind,
+  isWeeklyRejection,
   parseDayMove,
   remainingWeekHorizon,
+  targetWeekHorizon,
   type WeeklyAct,
 } from "../../../shared/weeklyMissionReadiness";
 import { advanceWeeklySession, type WeeklyAdvanceResult } from "./advance";
 import { commitWeeklyPlan } from "./commit";
 import { loadWeeklyDossier } from "./dossier";
 import { readWeeklyDossierFacts, readWeeklyGrowthCandidatesForDossier } from "./productionReaders";
-import { loadWeeklySession, type WeeklyPlanningSession } from "./session";
-import { completeWeeklyActWithClaire } from "./weeklyModel";
+import { isWeeklySessionValid, loadWeeklySession, type WeeklyPlanningSession } from "./session";
+import {
+  classifyWeeklyTurnWithClaire,
+  completeWeeklyActWithClaire,
+} from "./weeklyModel";
+import { interpretTurn } from "../turn/interpretTurn";
+
+export type WeeklyTurnIntent =
+  | "weekly_continue"
+  | "weekly_lock"
+  | "weekly_cancel"
+  | "operational_today"
+  | "clarify"
+  | "chit_chat"
+  | "semantic_review";
+
+/**
+ * Cheap deterministic boundary checks only. This deliberately does not decide
+ * that arbitrary work-like speech answers the weekly planner. Ambiguous turns
+ * are sent to a bounded semantic classifier; classifier failure parks the
+ * weekly session rather than hijacking the conversation.
+ */
+export function arbitrateWeeklyTurnIntent(input: {
+  utterance: string;
+  session: WeeklyPlanningSession;
+  now?: Date;
+  timeZone?: string;
+}): WeeklyTurnIntent {
+  const utterance = input.utterance.trim();
+  const session = input.session;
+
+  if (isWeeklyCancel(utterance)) return "weekly_cancel";
+  if (lockBindApplies(session, utterance)) return "weekly_lock";
+  if (parseDayMove(utterance)) return "weekly_continue";
+
+  if (
+    /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning)\b/i.test(
+      utterance
+    )
+  ) {
+    return "weekly_continue";
+  }
+
+  if (/\b(?:day ?line|to-?do|my list|today'?s line)\b/i.test(utterance)) {
+    return "operational_today";
+  }
+
+  if (/\b(?:stop|hold on|wait|pause|hang on)\b/i.test(utterance)) {
+    return "chit_chat";
+  }
+
+  const interpreted = interpretTurn(utterance);
+  if (interpreted.callControl === "end" || interpreted.conversationControl) {
+    return "chit_chat";
+  }
+  if (
+    interpreted.correction ||
+    interpreted.correctnessChallenge ||
+    interpreted.provenanceQuestion ||
+    interpreted.hasBusinessQuestion
+  ) {
+    return "clarify";
+  }
+
+  const openDay = session.lastQuestionDate
+    ? session.draft.days.find(day => day.businessDate === session.lastQuestionDate)?.weekday ?? null
+    : null;
+  if (openDay && new RegExp(`\\b${openDay}\\b`, "i").test(utterance)) {
+    return "weekly_continue";
+  }
+
+  // A direct action command that did not name the open weekly day belongs to
+  // Claire's normal action lifecycle. Weekly planning may observe it later; it
+  // does not get to own the command merely because a session is open.
+  if (interpreted.hasExplicitActionRequest) {
+    return "operational_today";
+  }
+
+  if (isWeeklyRejection(utterance) && session.phase !== "interview") {
+    return "weekly_continue";
+  }
+
+  return "semantic_review";
+}
 
 export type WeeklyRouteResult = {
   speak: string;
@@ -27,17 +113,36 @@ export type WeeklyRouteResult = {
   act: WeeklyAct;
 };
 
-export async function routeActiveWeeklySession(input: {
-  tenantId: string;
-  operatorId: string;
-  dayDirectorActorId: string;
-  utterance: string;
-  now: Date;
-  timeZone: string;
-}): Promise<WeeklyRouteResult | null> {
+export async function routeActiveWeeklySession(
+  input: {
+    tenantId: string;
+    operatorId: string;
+    operatorIds?: readonly string[];
+    dayDirectorActorId: string;
+    dayDirectorActorIds?: readonly string[];
+    utterance: string;
+    now: Date;
+    timeZone: string;
+    weekStartOverride?: string;
+    /**
+     * Brain V3 authoritative semantic intent. When present, this route does
+     * not reinterpret the raw utterance or run its own semantic classifier.
+     */
+    authoritativeIntent?: "weekly_continue" | "weekly_lock" | "weekly_cancel";
+  },
+  deps: {
+    classifyIntent?: typeof classifyWeeklyTurnWithClaire;
+  } = {}
+): Promise<WeeklyRouteResult | null> {
   const businessDate = formatInTimeZone(input.now, input.timeZone, "yyyy-MM-dd");
   const localTime = formatInTimeZone(input.now, input.timeZone, "HH:mm");
-  const horizon = remainingWeekHorizon({ businessDate, localTime });
+  const horizon = input.weekStartOverride
+    ? targetWeekHorizon({
+        businessDate,
+        localTime,
+        weekStart: input.weekStartOverride,
+      })
+    : remainingWeekHorizon({ businessDate, localTime });
   const session = await loadWeeklySession({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
@@ -46,8 +151,35 @@ export async function routeActiveWeeklySession(input: {
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
 
+  if (!isWeeklySessionValid(session, { now: input.now, timeZone: input.timeZone, businessDate })) {
+    return null;
+  }
+
+  let intent: WeeklyTurnIntent =
+    input.authoritativeIntent ??
+    arbitrateWeeklyTurnIntent({
+      utterance: input.utterance,
+      session,
+      now: input.now,
+      timeZone: input.timeZone,
+    });
+
+  if (!input.authoritativeIntent && intent === "semantic_review") {
+    const semantic = await (deps.classifyIntent ?? classifyWeeklyTurnWithClaire)({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      session,
+      utterance: input.utterance,
+    }).catch(() => null);
+    intent = semantic === "continue_weekly" ? "weekly_continue" : "operational_today";
+  }
+
+  if (intent === "operational_today" || intent === "clarify" || intent === "chit_chat") {
+    return null;
+  }
+
   try {
-    return await routeLoadedSession(input, horizon, session);
+    return await routeLoadedSession(input, horizon, session, intent);
   } catch (error) {
     if (isMissingTable(error)) throw error;
     return {
@@ -59,7 +191,9 @@ export async function routeActiveWeeklySession(input: {
 }
 
 function isMissingTable(error: unknown): boolean {
-  const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : "";
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code: unknown }).code)
+    : "";
   const message = error instanceof Error ? error.message : "";
   return code === "ER_NO_SUCH_TABLE" || message.includes("ER_NO_SUCH_TABLE");
 }
@@ -68,16 +202,28 @@ async function routeLoadedSession(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: readonly string[];
     dayDirectorActorId: string;
+    dayDirectorActorIds?: readonly string[];
     utterance: string;
     now: Date;
     timeZone: string;
+    weekStartOverride?: string;
+    authoritativeIntent?: "weekly_continue" | "weekly_lock" | "weekly_cancel";
   },
   horizon: ReturnType<typeof remainingWeekHorizon>,
-  session: WeeklyPlanningSession
+  session: WeeklyPlanningSession,
+  intent: WeeklyTurnIntent
 ): Promise<WeeklyRouteResult> {
-  if (lockBindApplies(session, input.utterance)) {
-    const committed = await commitWeeklyPlan({ session, now: input.now });
+  if (
+    intent === "weekly_lock" &&
+    (session.phase === "proposal" || session.phase === "awaiting_confirmation")
+  ) {
+    const committed = await commitWeeklyPlan({
+      session,
+      dayDirectorActorIds: input.dayDirectorActorIds,
+      now: input.now,
+    });
     return {
       speak: committed.speech,
       receiptBackedCommit: committed.locked ? committed.speech : undefined,
@@ -86,6 +232,7 @@ async function routeLoadedSession(
       act: committed.locked ? "AWAIT_CONFIRMATION" : "REVISE",
     };
   }
+
   const dossier = await loadWeeklyDossier(
     { horizon },
     {
@@ -93,7 +240,9 @@ async function routeLoadedSession(
         readWeeklyDossierFacts({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates,
           now: input.now,
           timeZone: input.timeZone,
@@ -102,18 +251,22 @@ async function routeLoadedSession(
         readWeeklyGrowthCandidatesForDossier({
           tenantId: input.tenantId,
           operatorId: input.operatorId,
+          operatorUserIds: input.operatorIds,
           dayDirectorActorId: input.dayDirectorActorId,
+          dayDirectorActorIds: input.dayDirectorActorIds,
           dates: horizon.remainingDates,
           now: input.now,
           timeZone: input.timeZone,
         }),
     }
   );
+
   const advanced = await advanceWeeklySession(
     {
       dossier,
       session,
-      operatorUtterance: input.utterance,
+      operatorUtterance:
+        intent === "weekly_cancel" ? "cancel weekly planning" : input.utterance,
     },
     {
       completeAct: modelInput =>
@@ -124,6 +277,7 @@ async function routeLoadedSession(
         }),
     }
   );
+
   return {
     speak: advanced.speech,
     act: advanced.act,

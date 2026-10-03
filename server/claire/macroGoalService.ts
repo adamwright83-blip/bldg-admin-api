@@ -204,6 +204,33 @@ export async function getActiveMacroGoal(
   return normalize(await persistence.getActive(input));
 }
 
+export async function getActiveMacroGoalForOperators(
+  input: { tenantId: string; operatorUserIds: readonly string[]; metricKey?: string },
+  persistence: MacroGoalPersistence = databasePersistence
+): Promise<MacroGoal | null> {
+  const operatorUserIds = [...new Set(input.operatorUserIds.map(id => id.trim()).filter(Boolean))];
+  if (!operatorUserIds.length) return null;
+  const goals = (
+    await Promise.all(
+      operatorUserIds.map(operatorUserId =>
+        getActiveMacroGoal(
+          {
+            tenantId: input.tenantId,
+            operatorUserId,
+            ...(input.metricKey ? { metricKey: input.metricKey } : {}),
+          },
+          persistence
+        )
+      )
+    )
+  ).filter((goal): goal is MacroGoal => Boolean(goal));
+  goals.sort((a, b) => {
+    const updated = b.updatedAt.getTime() - a.updatedAt.getTime();
+    return updated || String(b.id).localeCompare(String(a.id));
+  });
+  return goals[0] ?? null;
+}
+
 /**
  * Structured write contract for an admin today and Prompt B's later explicit
  * proposal/confirmation path. It accepts no transcript or model-generated blob.

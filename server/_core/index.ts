@@ -60,9 +60,13 @@ import {
 } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
+import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "./posthogLogs";
+import { posthogBrowserConfig } from "./posthogServer";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
+import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
+import { startAutonomousPersistentOperatorWorkers } from "../persistentOperator/autonomousWorkerService";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -151,6 +155,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 async function startServer() {
   validateStripeEnv();
+  startServerLogs();
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
@@ -159,6 +164,14 @@ async function startServer() {
   attachConversationRelayUpgrade(server);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
+
+  // Public runtime analytics configuration. The PostHog project token (phc_)
+  // is an ingestion identifier intended for browser use; server secret keys
+  // are never returned here. no-store lets rotation take effect immediately.
+  app.get("/api/analytics-config", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(posthogBrowserConfig());
+  });
 
   // =============================================================================
   // PUBLIC LEADS SUBMISSION - REST endpoint with manual CORS (no middleware)
@@ -837,6 +850,10 @@ async function startServer() {
       createContext,
       onError({ path, error }) {
         console.error(`[tRPC] ${path ?? "<unknown>"} failed:`, error);
+        emitServerLog("error", "tRPC request failed", {
+          path: path ?? "unknown",
+          error_message: (error.message || "request failed").slice(0, 500),
+        });
       },
     })
   );
@@ -854,11 +871,18 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  server.on("close", () => {
+    void shutdownServerTelemetry();
+  });
+
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    emitServerLog("info", "API server listening", { port });
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      const stopCleanCloudDirectScheduler = startCleanCloudDirectScheduler();
+      server.once("close", stopCleanCloudDirectScheduler);
       void import("../claire/conversation/transcriptLog")
         .then(({ emitLatestConfiguredClaireTranscripts }) =>
           emitLatestConfiguredClaireTranscripts()
@@ -874,7 +898,23 @@ async function startServer() {
       const stopOutbox = startEconomicOutboxDrainer();
       server.once("close", stopOutbox);
     }
+    if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_AUTONOMOUS_WORKERS === "1") {
+      const stopAutonomousWorkers = startAutonomousPersistentOperatorWorkers();
+      server.once("close", () => {
+        void stopAutonomousWorkers();
+      });
+    }
   });
 }
 
-startServer().catch(console.error);
+startServer().catch(async error => {
+  console.error(error);
+  const message = error instanceof Error ? error.message : String(error);
+  emitServerLog("error", "API server failed to start", {
+    error_message: message.slice(0, 500),
+  });
+  await Promise.race([
+    shutdownServerTelemetry(),
+    new Promise(resolve => setTimeout(resolve, 2_500)),
+  ]);
+});

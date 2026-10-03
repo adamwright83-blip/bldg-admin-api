@@ -24,6 +24,43 @@ export function buildClaireVerifiedFactInventory(
   if (!context) return builder.build();
 
   const seen = new Set<string>();
+
+  const identity = context.identityTruth;
+  if (identity) {
+    builder.addGeneralFact({
+      claimId: "identity:platform:joystick",
+      statement: `${identity.platform.productName} is the ${identity.platform.productDefinition}`,
+      entityRef: "platform:joystick",
+      status: "verified",
+      provenance: "claire.identityTruth.platform",
+    });
+    builder.addGeneralFact({
+      claimId: "identity:platform:goldline",
+      statement: `${identity.platform.gameName} is ${identity.platform.gameDefinition} and is not the operator business name`,
+      entityRef: "platform:goldline",
+      status: "verified",
+      provenance: "claire.identityTruth.platform",
+    });
+    builder.addGeneralFact({
+      claimId: "identity:platform:claire",
+      statement: `${identity.platform.claireName} is the ${identity.platform.claireRole}`,
+      entityRef: "platform:claire",
+      status: "verified",
+      provenance: "claire.identityTruth.platform",
+    });
+    identity.tenant.businesses.forEach((business, index) => {
+      builder.addGeneralFact({
+        claimId: `identity:tenant:business:${index + 1}`,
+        statement:
+          business.registeredName === business.brandName
+            ? `Registered business/brand: ${business.brandName}`
+            : `Registered business: ${business.registeredName}; operating brand: ${business.brandName}`,
+        entityRef: `tenant:${identity.tenant.tenantId}`,
+        status: "verified",
+        provenance: `claire.identityTruth.${business.provenance}`,
+      });
+    });
+  }
   const addScheduled = (item: Pick<ClaireTimelineItem, "id" | "title" | "scheduledAt">, provenance: string) => {
     if (!item.scheduledAt) return;
     const claimId = `scheduled:${item.id}`;

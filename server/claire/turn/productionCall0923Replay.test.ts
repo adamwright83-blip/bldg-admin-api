@@ -14,6 +14,7 @@ import {
   type ClaireTurnState,
 } from "./claireTurn";
 import { interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
+import { safeClaireBrainV3Fallback } from "./brainV3";
 
 /**
  * 2026-09-23 production call. Conversation c79a543e-e77c-4196-a8df-ad0138624afc,
@@ -119,6 +120,69 @@ function turnDeps(store: Store, over: Partial<ClaireTurnDeps> = {}): Partial<Cla
     rerunBusinessQuery: async () => {
       throw new Error("prior-claim rerun ran on ordinary speech");
     },
+    brainV3: vi.fn(async (input: any) => {
+      const text = String(input.utterance ?? "").trim();
+      if (input.pending?.briefing && /^(?:yes|yeah|yep|sure)[.!]?$/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          target: "pending_briefing",
+          act: "confirmation",
+          dayLineDisposition: "accept",
+          rationale: "Operator confirms pending briefing",
+        };
+      }
+      if (/Where did that come from/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "prior_claim_probe",
+          priorClaim: "provenance",
+          rationale: "Operator asks for provenance of factual claim",
+        };
+      }
+      if (/Are you sure/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "prior_claim_probe",
+          priorClaim: "correctness",
+          workDisposition: /Add.*day\s*line/i.test(text) ? "commit" : "none",
+          canonicalWork: /Add.*day\s*line/i.test(text) ? "Instagram static ad" : null,
+          rationale: "Operator challenges prior claim and optionally adds ad to day line",
+        };
+      }
+      if (/Put the Instagram static ad on the day line as a challenge/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "action_request",
+          workDisposition: "commit",
+          dayLineDisposition: "reopen",
+          canonicalWork: "Instagram static ad as a challenge",
+          rationale: "Operator commits Instagram static ad as a challenge",
+        };
+      }
+      if (/Who was my most recent sale/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "question",
+          target: "open_conversation",
+          rationale: "Operator asks for most recent sale",
+        };
+      }
+      if (
+        /Just add what I told you to the day line/i.test(text) ||
+        /Add all that to the day line/i.test(text) ||
+        /put the Instagram static ad creation on the day line as a challenge/i.test(text)
+      ) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          target: "open_conversation",
+          act: "action_request",
+          workDisposition: "commit",
+          dayLineDisposition: "reopen",
+          rationale: "Operator commits referenced items to the day line",
+        };
+      }
+      return safeClaireBrainV3Fallback();
+    }) as never,
     ...over,
   };
 }
@@ -461,5 +525,171 @@ describe("prior-claim truth still holds when the turn is actually a challenge", 
     expect(mixed.speak).toMatch(/checks out|CleanCloud|came from/i);
     expect(h.store.rows.some(row => /instagram/i.test(row.title))).toBe(true);
     expect(mixed.speak).toMatch(/Done\./);
+  });
+});
+
+
+describe("Monday morning voice handoff into Weekly Mission Readiness", () => {
+  it("starts or resumes weekly planning immediately after today's reconciliation is saved", async () => {
+    const monday = new Date("2026-09-28T17:00:00Z");
+    const store: Store = { rows: [] };
+    const markReconciliation = vi.fn(async () => ({
+      status: "complete" as const,
+      askedAt: null,
+      completedAt: monday.toISOString(),
+    }));
+    const weeklyPicture = vi.fn(async () => ({ status: "UNPLANNED", canBegin: true } as never));
+    const beginWeekly = vi.fn(async () => ({
+      speech: "We still need to lock the week. Let's set the remaining days now.",
+      resumed: false,
+      card: {} as never,
+    }));
+    const state: ClaireTurnState = {
+      sessionKind: "morning_reconciliation",
+      pendingBriefing: {
+        createdAt: monday.getTime(),
+        parsed: {
+          items: [
+            {
+              kind: "new_work",
+              title: "Morning admin",
+              quote: "Morning admin",
+              businessDate: "2026-09-28",
+              timing: { kind: "none" },
+              quantity: null,
+              people: [],
+              place: null,
+              needs: null,
+              existing: null,
+            },
+          ],
+          context: [],
+          questions: [],
+          unparsed: [],
+          source: "deterministic",
+        },
+      },
+    };
+
+    const result = await runClaireTurn(
+      {
+        ...base,
+        utterance: "yes",
+        state,
+        allowFragmentWait: false,
+        context: {
+          ...base.context,
+          businessDate: "2026-09-28",
+          workday: {
+            session: "morning_reconciliation",
+            eveningSpeak: "",
+            morningSpeak: "",
+            tomorrowCount: 0,
+            deltaCount: 0,
+            hasConfirmedPlan: true,
+          },
+          clock: {
+            localTime: "10:00 AM",
+            weekday: "Monday",
+            businessDate: "2026-09-28",
+            timeZone: "America/Los_Angeles",
+          },
+        } as never,
+      },
+      turnDeps(store, {
+        now: () => monday,
+        markReconciliation: markReconciliation as never,
+        weeklyPicture: weeklyPicture as never,
+        beginWeekly: beginWeekly as never,
+      })
+    );
+
+    expect(result.kind).toBe("briefing_saved");
+    expect(markReconciliation).toHaveBeenCalledWith(
+      expect.objectContaining({ businessDate: "2026-09-28", status: "complete" })
+    );
+    expect(weeklyPicture).toHaveBeenCalledTimes(1);
+    expect(beginWeekly).toHaveBeenCalledTimes(1);
+    expect(result.speak).toMatch(/lock the week|remaining days/i);
+  });
+
+  it("does not reopen a declined or otherwise ineligible unplanned week", async () => {
+    const monday = new Date("2026-09-28T17:00:00Z");
+    const store: Store = { rows: [] };
+    const markReconciliation = vi.fn(async () => ({
+      status: "complete" as const,
+      askedAt: null,
+      completedAt: monday.toISOString(),
+    }));
+    const weeklyPicture = vi.fn(async () => ({
+      status: "UNPLANNED",
+      showCard: false,
+      canBegin: false,
+    } as never));
+    const beginWeekly = vi.fn(async () => ({
+      speech: "should not run",
+      resumed: false,
+      card: {} as never,
+    }));
+    const state: ClaireTurnState = {
+      sessionKind: "morning_reconciliation",
+      pendingBriefing: {
+        createdAt: monday.getTime(),
+        parsed: {
+          items: [{
+            kind: "new_work",
+            title: "Morning admin",
+            quote: "Morning admin",
+            businessDate: "2026-09-28",
+            timing: { kind: "none" },
+            quantity: null,
+            people: [],
+            place: null,
+            needs: null,
+            existing: null,
+          }],
+          context: [],
+          questions: [],
+          unparsed: [],
+          source: "deterministic",
+        },
+      },
+    };
+
+    await runClaireTurn(
+      {
+        ...base,
+        utterance: "yes",
+        state,
+        allowFragmentWait: false,
+        context: {
+          ...base.context,
+          businessDate: "2026-09-28",
+          workday: {
+            session: "morning_reconciliation",
+            eveningSpeak: "",
+            morningSpeak: "",
+            tomorrowCount: 0,
+            deltaCount: 0,
+            hasConfirmedPlan: true,
+          },
+          clock: {
+            localTime: "10:00 AM",
+            weekday: "Monday",
+            businessDate: "2026-09-28",
+            timeZone: "America/Los_Angeles",
+          },
+        } as never,
+      },
+      turnDeps(store, {
+        now: () => monday,
+        markReconciliation: markReconciliation as never,
+        weeklyPicture: weeklyPicture as never,
+        beginWeekly: beginWeekly as never,
+      })
+    );
+
+    expect(weeklyPicture).toHaveBeenCalledTimes(1);
+    expect(beginWeekly).not.toHaveBeenCalled();
   });
 });

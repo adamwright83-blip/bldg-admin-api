@@ -145,6 +145,10 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
   test("CASE A — PREP INCOMPLETE: required field prep is completed in-game, with no fallback to the legacy sales-mission page anywhere in the VISIT lifecycle", async ({
     page,
   }) => {
+    // The whole lifecycle (login, a shell that may take up to 30s to load, prep, depart, arrive,
+    // debrief) runs in this one test; the default 30s budget left no room and it timed out at
+    // ~36s on CI.
+    test.setTimeout(60_000);
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await enterNeutralizeMission(page);
@@ -205,28 +209,29 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
     await surface
       .getByRole("button", { name: /ARRIVED · RECORD VISIT/ })
       .click();
-    // #113: the agreed-date field appears only when the operator actually
-    // says a follow-up was agreed. The default outcome is "no_decision" —
-    // uncertainty — so the date is deliberately absent until then.
-    await surface.getByTestId("visit-outcome-select").selectOption("follow_up");
-    await surface.getByLabel("WHAT HAPPENED").fill("Real visit completed.");
-    await surface.getByTestId("visit-follow-up-at").fill("2026-08-20T10:00");
-    await surface
-      .getByRole("button", { name: "RECORD VISIT RESULT" })
-      .click();
 
-    // The visit outcome is durable first. Slice 2 deliberately keeps the
-    // same in-game surface open for one operator-reported Clerk observation;
-    // this is not another mission or a substitute for the visit evidence.
-    await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
-    await page
-      .getByTestId("parking-lot-clerk-text")
-      .fill("She said to call next week.");
-    await page.getByTestId("parking-lot-clerk-save").click();
+    // Production no longer falls back to the manual CRM outcome form here.
+    // The property is mission-bound, and Claire's debrief is the only in-game
+    // completion path when those services are available.
+    await expect(page.getByTestId("mission-linked-debrief")).toBeVisible();
+    await expect(page.getByTestId("visit-outcome-select")).toHaveCount(0);
+    expect(await surface.locator("a[href*='/driver/sales-mission/']").count()).toBe(
+      0
+    );
 
-    // Only after the Clerk testimony persists does the action surface close.
-    // The player is back at the SAME NEUTRALIZE mission with server-derived
-    // visit coverage increased by exactly one real stop.
+    // The deterministic harness stands in for the already-covered audio/journal
+    // capture layer. Opening Claire comms yields a grounded proposal; the
+    // operator still supplies the one missing fact and explicitly confirms it
+    // before authoritative visit coverage changes.
+    await page.getByTestId("open-mission-debrief").click();
+    const debriefAnswer = page.getByTestId("mission-debrief-answer");
+    await expect(debriefAnswer).toBeVisible({ timeout: 5_000 });
+    await debriefAnswer.fill("2026-10-20T10:00");
+    await page.getByTestId("confirm-mission-debrief").click();
+
+    // Confirmation persists the authoritative outcome, closes the action
+    // surface, and returns the player to the SAME NEUTRALIZE mission with
+    // server-derived visit coverage increased by exactly one real stop.
     await expect(surface).not.toBeVisible({ timeout: 5_000 });
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-authoritative-count", "1");

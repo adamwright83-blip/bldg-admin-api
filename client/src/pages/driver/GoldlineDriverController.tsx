@@ -428,6 +428,22 @@ function LiveGoldlineDriverController({
       null
     );
   }, [campaignRuns.data]);
+  /**
+   * Lantern City's "Open in Driver" names a Campaign Run. Open it exactly the
+   * way this screen's own campaign-run card does, and only when it is the run
+   * this driver already carries. Any other id changes nothing. Following the
+   * link creates no evidence.
+   */
+  const launchCampaignRunId = launchSearch.get("lanternCampaignRun");
+  const launchedCampaignRun = useRef(false);
+  useEffect(() => {
+    if (launchedCampaignRun.current || !launchCampaignRunId) return;
+    if (bioContainmentRun?.campaignRunId !== launchCampaignRunId) return;
+    launchedCampaignRun.current = true;
+    setDayBriefingOpen(false);
+    setCampaignRunMissionOpen(true);
+    setDriverScene("game");
+  }, [launchCampaignRunId, bioContainmentRun]);
   const bioContainmentIcon =
     resolveFictionPackVisuals(bioContainmentRun?.fictionPackId)?.missionIcon ??
     null;
@@ -626,6 +642,8 @@ function LiveGoldlineDriverController({
   const arriveVisit = trpc.system.commercialMission.fieldArrive.useMutation();
   const recordVisitOutcome =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const finalizeMissionDebriefMutation =
+    trpc.system.commercialMission.finalizeMissionDebrief.useMutation();
   const recordParkingLotClerk =
     trpc.system.commercialMission.fieldParkingLotClerk.useMutation();
   const updateFieldChecklist =
@@ -1077,6 +1095,40 @@ function LiveGoldlineDriverController({
     return state;
   }
 
+  async function loadClairePreVisitIntel(missionId: number) {
+    return utils.system.missionSalesBrief.preVisitIntel.fetch({ missionId });
+  }
+
+  async function loadMissionDebriefAction(missionId: number) {
+    return utils.system.commercialMission.missionDebriefState.fetch({ missionId });
+  }
+
+  function openMissionDebriefAction(input: {
+    missionId: number;
+    buildingName: string;
+  }) {
+    // The mission already supplies the property identity. Never ask the
+    // operator to identify the building a second time.
+    setDebrief(input);
+    setJournalOpen(true);
+  }
+
+  async function finalizeMissionDebriefAction(
+    input: Parameters<NonNullable<GoldlineActionServices["finalizeMissionDebrief"]>>[0]
+  ) {
+    const state = await finalizeMissionDebriefMutation.mutateAsync(input);
+    await Promise.all([
+      utils.system.commercialMission.fieldState.invalidate({
+        missionId: input.missionId,
+      }),
+      utils.system.commercialMission.missionDebriefState.invalidate({
+        missionId: input.missionId,
+      }),
+      utils.system.commercialMission.mySalesJournals.invalidate(),
+    ]);
+    return state;
+  }
+
   async function startVisitAction(input: {
     missionId: number;
     requestId: string;
@@ -1244,12 +1296,16 @@ function LiveGoldlineDriverController({
   const actionServices: GoldlineActionServices = {
     recordCall: handlePersistEncounterAction,
     loadVisit: loadVisitContext,
+    loadPreVisitIntel: loadClairePreVisitIntel,
     startVisitPreparation: startVisitAction,
     updateChecklistItem: updateChecklistItemAction,
     departVisit: departVisitAction,
     arriveVisit: arriveVisitAction,
     recordVisitOutcome: recordVisitAction,
     recordParkingLotClerkObservation: recordParkingLotClerkAction,
+    loadMissionDebrief: loadMissionDebriefAction,
+    openMissionDebrief: openMissionDebriefAction,
+    finalizeMissionDebrief: finalizeMissionDebriefAction,
     loadFollowUp: loadAuthoritativeFollowUp,
     completeFollowUp: completeFollowUpAction,
     rescheduleFollowUp: rescheduleFollowUpAction,

@@ -22,17 +22,31 @@ import {
   weekdayName,
   type WeeklyAct,
   type WeeklyDayDraft,
+  type WeeklyDossierFact,
   type WeeklyDraft,
   type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
-import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
-import { clearWeeklySession, normalizeWeeklySession, saveWeeklySession, type WeeklyPlanningSession } from "./session";
+import {
+  acceptPlanningDecision,
+  applyPlanningDecision,
+  type WeeklyPlanningDecision,
+} from "./planningDecision";
+import { isSemanticallyNormalizedPrimary } from "./semanticPrimary";
+import {
+  clearWeeklySession,
+  loadWeeklySurface,
+  normalizeWeeklySession,
+  saveWeeklySession,
+  saveWeeklySurface,
+  type WeeklyPlanningSession,
+} from "./session";
 
 export type WeeklyAdvanceDeps = {
   /**
    * Existing Claire model. It chooses the next planning act.
-   * Null or an invalid decision falls back to the deterministic questionnaire.
+   * Model absence/outage falls back to deterministic handling. A non-null
+   * model response that fails validation is rejected without mutating the draft.
    */
   completeAct?: (input: {
     dossier: WeeklyDossier;
@@ -59,6 +73,21 @@ export async function advanceWeeklySession(
     return finish(session, "CANCEL", "The weekday week is already over. I won't invent another one.", input.dossier);
   }
   if (utterance && isWeeklyCancel(utterance)) {
+    const nowIso = new Date().toISOString();
+    const surface = await loadWeeklySurface({
+      tenantId: session.tenantId,
+      operatorId: session.operatorId,
+      weekStart: session.weekStart,
+    });
+    await saveWeeklySurface({
+      tenantId: session.tenantId,
+      operatorId: session.operatorId,
+      weekStart: session.weekStart,
+      receipt: {
+        surfacedAt: surface.surfacedAt ?? nowIso,
+        declinedAt: nowIso,
+      },
+    });
     await clearWeeklySession(session);
     return {
       act: "CANCEL",
@@ -114,25 +143,26 @@ export async function advanceWeeklySession(
     session.internalHypothesis = deriveInternalHypothesis(input.dossier);
   }
   if (utterance) session.operatorEvidence.push(utterance.slice(0, 500));
-  const decision = await modelDecision(input, deps, session);
-  if (decision) {
-    applyPlanningDecision(session, decision, input.dossier.growthCandidates);
-    return finish(session, decision.act, decision.speech, input.dossier);
+  const modelAttempt = await modelDecision(input, deps, session);
+  if (modelAttempt.kind === "accepted") {
+    applyPlanningDecision(session, modelAttempt.decision, input.dossier.growthCandidates);
+    return finish(session, modelAttempt.decision.act, modelAttempt.decision.speech, input.dossier);
   }
+  const modelRejected = modelAttempt.kind === "rejected";
 
-  if (!move && utterance && session.lastQuestionKind === "readiness" && session.lastQuestionDate) {
+  if (!modelRejected && !move && utterance && session.lastQuestionKind === "readiness" && session.lastQuestionDate) {
     captureReadiness(session, utterance, input.dossier);
     session.substantiveQuestions += 1;
     revised = true;
-  } else if (utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
-    capturePrimary(session, utterance, input.dossier.growthCandidates);
+  } else if (!modelRejected && utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
+    capturePrimary(session, utterance, input.dossier.growthCandidates, input.dossier.facts);
     session.substantiveQuestions += 1;
     revised = true;
-  } else if (utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
+  } else if (!modelRejected && utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
     const target = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
     if (target) session.lastQuestionDate = target.businessDate;
     session.lastQuestionKind = "primary";
-    capturePrimary(session, utterance, input.dossier.growthCandidates);
+    capturePrimary(session, utterance, input.dossier.growthCandidates, input.dossier.facts);
     session.substantiveQuestions += 1;
     revised = true;
   }
@@ -149,23 +179,32 @@ export async function advanceWeeklySession(
   return finish(session, revised ? "REVISE" : "ASK", speech, input.dossier);
 }
 
+type ModelDecisionAttempt =
+  | { kind: "unavailable" }
+  | { kind: "rejected" }
+  | { kind: "accepted"; decision: WeeklyPlanningDecision };
+
 async function modelDecision(
   input: { dossier: WeeklyDossier; session: WeeklyPlanningSession; operatorUtterance: string },
   deps: WeeklyAdvanceDeps,
   session: WeeklyPlanningSession
-): Promise<ReturnType<typeof acceptPlanningDecision>> {
-  if (!deps.completeAct) return null;
+): Promise<ModelDecisionAttempt> {
+  if (!deps.completeAct) return { kind: "unavailable" };
   let raw: unknown = null;
   try {
     raw = await deps.completeAct({ dossier: input.dossier, session, operatorUtterance: input.operatorUtterance });
   } catch {
-    return null;
+    return { kind: "unavailable" };
   }
-  return acceptPlanningDecision(raw, {
+  if (raw == null) return { kind: "unavailable" };
+  const decision = acceptPlanningDecision(raw, {
     dossier: input.dossier,
     session,
     utterance: input.operatorUtterance,
   });
+  return decision
+    ? { kind: "accepted", decision }
+    : { kind: "rejected" };
 }
 
 function dayMoveConflicts(
@@ -225,10 +264,47 @@ function captureReadiness(session: WeeklyPlanningSession, utterance: string, dos
   day.readinessRequirements = capReadiness([...day.readinessRequirements, ...additions]);
 }
 
-function capturePrimary(
-  session: WeeklyPlanningSession,
+export function isActionablePrimaryCandidate(utterance: string): boolean {
+  return isSemanticallyNormalizedPrimary(utterance);
+}
+
+function findMatchingGrowthCandidate(
   utterance: string,
   candidates?: readonly WeeklyExecutionCandidateContract[]
+): WeeklyExecutionCandidateContract | null {
+  if (!candidates?.length) return null;
+  const lower = utterance.toLowerCase();
+  for (const c of candidates) {
+    if (lower.includes(c.title.toLowerCase()) || lower.includes(c.objective.toLowerCase())) {
+      return c;
+    }
+  }
+  const words = lower.replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length >= 4);
+  for (const c of candidates) {
+    const cWords = `${c.title} ${c.objective}`.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/);
+    const shared = words.filter(w => cWords.includes(w));
+    if (shared.length >= 2) return c;
+  }
+  return null;
+}
+
+function findMatchingDossierFact(
+  utterance: string,
+  facts?: readonly WeeklyDossierFact[]
+): WeeklyDossierFact | null {
+  if (!facts?.length) return null;
+  const lower = utterance.toLowerCase();
+  for (const f of facts) {
+    if (lower.includes(f.title.toLowerCase())) return f;
+  }
+  return null;
+}
+
+export function capturePrimary(
+  session: WeeklyPlanningSession,
+  utterance: string,
+  candidates?: readonly WeeklyExecutionCandidateContract[],
+  facts?: readonly WeeklyDossierFact[]
 ): void {
   const today = session.draft.days[0];
   const namedSkip = /\bskip\s+(monday|tuesday|wednesday|thursday|friday|today)\b/i.exec(utterance);
@@ -244,12 +320,49 @@ function capturePrimary(
   const date = session.lastQuestionDate ?? session.draft.days.find(day => !day.primary && day.disposition === "primary")?.businessDate;
   const day = session.draft.days.find(item => item.businessDate === date);
   if (!day || day.disposition === "stand_down") return;
-  const text = utterance.replace(/\s+/g, " ").trim().slice(0, 255);
+
+  // Reject conversational filler, questions, confusion, today-referencing speech
+  if (!isActionablePrimaryCandidate(utterance)) {
+    day.primary = null;
+    day.uncertainty = "Unconfirmed mission.";
+    return;
+  }
+
+  // 1. Try binding to an existing candidate in growthCandidates
+  const boundCandidate = findMatchingGrowthCandidate(utterance, candidates);
+  if (boundCandidate) {
+    day.primary = {
+      text: boundCandidate.title,
+      source: "operator_stated",
+      existingCommitmentId: boundCandidate.id ?? null,
+      executionType: resolveWeeklyExecutionType({ text: boundCandidate.title, candidates }),
+    };
+    day.uncertainty = null;
+    return;
+  }
+
+  // 2. Try binding to a known dossier fact / commitment
+  const boundFact = findMatchingDossierFact(utterance, facts);
+  if (boundFact) {
+    day.primary = {
+      text: boundFact.title,
+      source: "operator_stated",
+      existingCommitmentId: boundFact.id,
+      executionType: resolveWeeklyExecutionType({ text: boundFact.title, candidates }),
+    };
+    day.uncertainty = null;
+    return;
+  }
+
+  // A direct reply that already satisfies the semantic-primary contract is a
+  // normalized operator action, not an arbitrary transcript fallback. Persist
+  // it verbatim; conversational narration/questions were rejected above.
+  const normalizedAction = utterance.replace(/\s+/g, " ").trim();
   day.primary = {
-    text,
+    text: normalizedAction,
     source: "operator_stated",
     existingCommitmentId: null,
-    executionType: resolveWeeklyExecutionType({ text, candidates }),
+    executionType: resolveWeeklyExecutionType({ text: normalizedAction, candidates }),
   };
   day.uncertainty = null;
 }
@@ -267,14 +380,14 @@ function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): s
     session.lastQuestionKind = "blocking";
     session.lastQuestionDate = empty.businessDate;
     empty.uncertainty = "Still no mission.";
-    return `One thing still blocks the week. What owns ${empty.weekday}?`;
+    return `We have most of the week in place, but ${empty.weekday} is still open. What's the main focus for ${empty.weekday}, or should we leave it open?`;
   }
   if (bounded && empty && !session.askedBlocking) {
     session.askedBlocking = true;
     session.lastQuestionKind = "blocking";
     session.lastQuestionDate = empty.businessDate;
     empty.uncertainty = "Still no mission.";
-    return `One thing still blocks the week. What owns ${empty.weekday}?`;
+    return `We have most of the week in place, but ${empty.weekday} is still open. What's the main focus for ${empty.weekday}, or should we leave it open?`;
   }
   if (bounded && !empty) return null;
   if (session.askedBlocking && !empty) return null;
@@ -315,7 +428,7 @@ function askPrimary(day: WeeklyDayDraft, dossier: WeeklyDossier): string {
     const listed = known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ");
     return `${day.weekday} already has ${listed}. What is the one mission that owns the rest of ${day.weekday}?`;
   }
-  return `What is the one mission for ${day.weekday}?`;
+  return `What is the focus for ${day.weekday}?`;
 }
 export function speakProposal(draft: WeeklyDraft): string {
   const lines = draft.days.map(day => {

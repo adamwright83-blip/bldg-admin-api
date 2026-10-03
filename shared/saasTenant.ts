@@ -11,6 +11,13 @@ export const DAYFORGE_ENTITLEMENTS = [
 
 export type LegacyDayforgeEntitlement = (typeof DAYFORGE_ENTITLEMENTS)[number];
 
+export const PERSISTENT_OPERATOR_ENTITLEMENT = "persistent_operator" as const;
+export const SAAS_ENTITLEMENTS = [
+  ...DAYFORGE_ENTITLEMENTS,
+  PERSISTENT_OPERATOR_ENTITLEMENT,
+] as const;
+export type SaasEntitlement = (typeof SAAS_ENTITLEMENTS)[number];
+
 export const SAAS_SUBSCRIPTION_STATUSES = [
   "none",
   "trialing",

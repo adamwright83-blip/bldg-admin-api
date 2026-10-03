@@ -12,6 +12,11 @@ import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { planForDate } from "../../missionDirector/missionDirectorService";
+import {
+  listGoalCycleObjectives,
+  projectToRankedDayWork,
+  type PersistentGrowthObjective,
+} from "../../persistentOperator/objectiveStore";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
 import {
   businessDateInZone,
@@ -23,6 +28,7 @@ import {
 type PlanReader = typeof planForDate;
 type CampaignReader = typeof listCampaigns;
 type DayStateReader = typeof getDayDirectorState;
+type ObjectiveReader = typeof listGoalCycleObjectives;
 type DayState = Awaited<ReturnType<DayStateReader>>;
 
 function rankingOf(outcome: MissionPlanOutcome): Array<{ campaignId: string }> {
@@ -35,7 +41,7 @@ function rankingStatusFor(
   outcome: MissionPlanOutcome,
   rankedCount: number
 ): CurrentDayLine["rankingStatus"] {
-  if (outcome.status === "no_plan") return "no_plan";
+  if (outcome.status === "no_plan" && rankedCount === 0) return "no_plan";
   if (rankedCount === 0) return "unavailable";
   return "ranked";
 }
@@ -59,6 +65,11 @@ function operatorDesignation(state: DayState | null): RankedDayWork & {
     objective: chosen.sourceText ?? "",
     completionCondition: chosen.operatorMission.completionCondition,
     compatibilityPhrase: "todays_mission",
+    lineage: {
+      kind: "commitment",
+      sourceReference: `day_director_commitments:${chosen.id}`,
+      commitmentId: chosen.id,
+    },
   };
 }
 
@@ -71,10 +82,29 @@ function unavailableLine(businessDate: string): CurrentDayLine {
   });
 }
 
+let defaultDayLineDeps: {
+  planForDate?: PlanReader;
+  listCampaigns?: CampaignReader;
+  getDayDirectorState?: DayStateReader;
+  listObjectives?: ObjectiveReader;
+} = {};
+
+export function setDayLineDepsForTesting(deps: typeof defaultDayLineDeps) {
+  defaultDayLineDeps = deps;
+}
+
+export function resetDayLineDepsForTesting() {
+  defaultDayLineDeps = {};
+}
+
 export async function readCurrentDayLine(
   input: {
     tenantId: string;
     operatorId: string;
+    operatorIds?: string[];
+    operatorUserId?: string;
+    operatorUserIds?: string[];
+    businessDate?: string;
     timeZone?: string;
     now?: Date;
   },
@@ -82,19 +112,22 @@ export async function readCurrentDayLine(
     planForDate?: PlanReader;
     listCampaigns?: CampaignReader;
     getDayDirectorState?: DayStateReader;
+    listObjectives?: ObjectiveReader;
   } = {}
 ): Promise<CurrentDayLine> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone?.trim() || getDashboardTimeZone();
-  let businessDate: string;
-  try {
-    businessDate = businessDateInZone(now, timeZone);
-  } catch (error) {
-    console.warn(
-      "[day-line] operator zone is not a business date",
-      error instanceof Error ? error.message : error
-    );
-    return unavailableLine(businessDateInZone(now, "UTC"));
+  let businessDate = input.businessDate?.trim() || "";
+  if (!businessDate) {
+    try {
+      businessDate = businessDateInZone(now, timeZone);
+    } catch (error) {
+      console.warn(
+        "[day-line] operator zone is not a business date",
+        error instanceof Error ? error.message : error
+      );
+      return unavailableLine(businessDateInZone(now, "UTC"));
+    }
   }
 
   const tenantId = input.tenantId.trim();
@@ -103,25 +136,41 @@ export async function readCurrentDayLine(
     return unavailableLine(businessDate);
   }
 
-  const readPlan = deps.planForDate ?? planForDate;
-  const readCampaigns = deps.listCampaigns ?? listCampaigns;
-  const readState = deps.getDayDirectorState ?? getDayDirectorState;
+  const activeDeps = { ...defaultDayLineDeps, ...deps };
+  const readPlan = activeDeps.planForDate ?? planForDate;
+  const readCampaigns = activeDeps.listCampaigns ?? listCampaigns;
+  const readState = activeDeps.getDayDirectorState ?? getDayDirectorState;
+  const readObjectives = activeDeps.listObjectives ?? listGoalCycleObjectives;
 
   try {
-    const [plan, campaigns] = await Promise.all([
+    const [plan, campaigns, objectives] = await Promise.all([
       readPlan({
         tenantId,
         operatorId,
+        ...(input.operatorIds?.length ? { operatorIds: input.operatorIds } : {}),
+        ...(input.operatorUserId ? { operatorUserId: input.operatorUserId } : {}),
+        ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
         businessDate,
         timeZone,
       }),
       readCampaigns({ tenantId, includeDisabled: true }),
+      readObjectives({
+        tenantId,
+        businessDate,
+      }).catch(err => {
+        console.warn(
+          "[day-line] persistent objectives are unavailable",
+          err instanceof Error ? err.message : err
+        );
+        return [] as PersistentGrowthObjective[];
+      }),
     ]);
     let state: DayState | null = null;
     try {
       state = await readState({
         tenantId,
         actorId: operatorId,
+        actorIds: input.operatorIds,
         businessDate,
       });
     } catch (error) {
@@ -133,18 +182,69 @@ export async function readCurrentDayLine(
     const byCampaign = new Map(campaigns.map(campaign => [campaign.campaignId, campaign]));
     const seen = new Set<string>();
     const rankedWorks: RankedDayWork[] = [];
-    for (const evidence of rankingOf(plan.outcome)) {
-      const id = evidence.campaignId.trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const campaign = byCampaign.get(id);
-      rankedWorks.push({
-        id,
-        title: campaign?.title ?? "Unspecified work",
-        objective: campaign?.objective ?? "",
-        completionCondition: campaign?.completionCondition ?? "",
-      });
+
+    // 1. Persistent Growth Objectives (active operator commitments for today)
+    for (const obj of objectives) {
+      if (
+        obj.status !== "presented" &&
+        obj.status !== "accepted" &&
+        obj.status !== "in_progress"
+      ) {
+        continue;
+      }
+      const work = projectToRankedDayWork(obj);
+      if (!work.id || seen.has(work.id)) continue;
+      seen.add(work.id);
+      work.lineage = {
+        kind: "objective",
+        sourceReference: `goal_cycle_objectives:${obj.id}`,
+        objectiveId: obj.id,
+      };
+      rankedWorks.push(work);
     }
+
+    // 2. Mission Plan Campaign Ranking
+    if (plan.outcome.status !== "no_plan") {
+      for (const evidence of rankingOf(plan.outcome)) {
+        const id = evidence.campaignId.trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const campaign = byCampaign.get(id);
+        rankedWorks.push({
+          id,
+          title: campaign?.title ?? "Unspecified work",
+          objective: campaign?.objective ?? "",
+          completionCondition: campaign?.completionCondition ?? "",
+          lineage: {
+            kind: "campaign",
+            sourceReference: `campaign:${id}`,
+            campaignId: id,
+          },
+        });
+      }
+    }
+
+    // 3. Day Director Commitments
+    if (state?.commitments) {
+      for (const commitment of state.commitments) {
+        if (commitment.status !== "open") continue;
+        if (seen.has(commitment.id)) continue;
+        if (commitment.command?.role === "primary" && commitment.operatorMission) continue;
+        seen.add(commitment.id);
+        rankedWorks.push({
+          id: commitment.id,
+          title: commitment.title,
+          objective: commitment.sourceText ?? commitment.title,
+          completionCondition: commitment.operatorMission?.completionCondition ?? "Day Director commitment",
+          lineage: {
+            kind: "commitment",
+            sourceReference: `day_director_commitments:${commitment.id}`,
+            commitmentId: commitment.id,
+          },
+        });
+      }
+    }
+
     return projectCurrentDayLine({
       businessDate,
       rankingStatus: rankingStatusFor(plan.outcome, rankedWorks.length),

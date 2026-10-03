@@ -65,12 +65,29 @@ import {
 } from "../episodicMemory/adapter";
 import { noSelfMemory, retrieveSelfEvidence, type SelfMemoryContext, type SelfMemoryDeps } from "../selfMemory/adapter";
 import { noGoals, retrieveGoalEvidence, type GoalsContext, type GoalsDeps } from "../goals/adapter";
+import {
+  BUSINESS_METRICS,
+  type BusinessQuery,
+} from "../../../analytics/businessQuery";
 
 export type RetrievalRunner = (request: RetrievalRequest) => Promise<EvidenceItem[]>;
+
+export type BusinessQueryPlanner = (input: {
+  tenantId: string;
+  utterance: string;
+  previous: BusinessQuery | null;
+  today: string;
+}) => Promise<BusinessQuery | null>;
 
 export type ExecutiveDeps = {
   retrieve: RetrievalRunner;
   ctx: IntegrationContext;
+  /**
+   * Optional semantic interpretation of an arbitrary business question.
+   * It may return only a typed BusinessQuery (criteria). Authoritative readers
+   * still produce every business fact and number.
+   */
+  planBusinessQuery?: BusinessQueryPlanner;
   nowMs?: () => number;
   /**
    * Production authority is explicit and injected by the live cutover
@@ -153,6 +170,53 @@ function recheckFrom(evidence: readonly EvidenceItem[]): PriorClaimRecheckResult
   return (item.payload as { recheck?: PriorClaimRecheckResult }).recheck ?? null;
 }
 
+function priorBusinessQuery(memory: WorkingMemorySnapshot): BusinessQuery | null {
+  const value = memory.orderedQuery?.parameters;
+  if (!value || typeof value !== "object") return null;
+  const metric = (value as { metric?: unknown }).metric;
+  if (
+    typeof metric !== "string" ||
+    !BUSINESS_METRICS.includes(metric as (typeof BUSINESS_METRICS)[number])
+  ) {
+    return null;
+  }
+  return value as BusinessQuery;
+}
+
+function semanticPlanningEligible(
+  perceived: PerceivedTurn,
+  attention: ReturnType<typeof planAttention>
+): boolean {
+  if (!perceived.hasBusinessQuestion || attention.continueOrderedQuery) return false;
+  return (
+    perceived.businessIntent !== "correctness_challenge" &&
+    perceived.businessIntent !== "provenance_question" &&
+    perceived.businessIntent !== "none"
+  );
+}
+
+function explicitScopedFollowUp(perceived: PerceivedTurn): boolean {
+  const text = perceived.assembledText.trim();
+  // Perception intentionally does not make every short "what about" a re-query.
+  // The semantic planner may inherit prior criteria only when the operator uses
+  // explicit continuation language AND names a business scope/filter dimension.
+  // This covers natural forms such as "And what about through CleanCloud?" while
+  // keeping unrelated fresh questions isolated from stale query context.
+  const continuation = /^(?:(?:and|also|okay|ok|so|then)\b[\s,.-]*)?(?:what|how)\s+about\b|^(?:and|also)\b/i.test(text);
+  const scoped =
+    /\b(?:through|via|from|at|for|inside|within|only|just)\b|\b(?:clean\s?cloud|stripe|clearent|laundry\s+(?:butler|farm)|wash(?:\s*(?:and|&)\s*)?fold|fluff(?:\s*(?:and|&)\s*)?fold|dry[\s-]?clean(?:ing)?)\b|\b(?:building|property|address|there)\b/i.test(text);
+  return continuation && scoped;
+}
+
+function plannerMayUsePriorQuery(perceived: PerceivedTurn): boolean {
+  return (
+    perceived.businessIntent === "query_refinement" ||
+    perceived.businessIntent === "query_requery" ||
+    perceived.priorQueryReference ||
+    explicitScopedFollowUp(perceived)
+  );
+}
+
 export async function decideTurn(
   perceived: PerceivedTurn,
   memory: WorkingMemorySnapshot,
@@ -200,7 +264,26 @@ export async function decideTurn(
     };
 
     // ── Pass A: cheap and unscoped ──────────────────────────────────────────
-    await run(planRetrievalPassA(perceived, memory, attention));
+    // Natural-language interpretation can be model-assisted, but the model can
+    // only choose a typed query. Retrieval remains the sole source of truth.
+    let semanticBusinessQuery: BusinessQuery | null = null;
+    if (deps.planBusinessQuery && semanticPlanningEligible(perceived, attention)) {
+      try {
+        semanticBusinessQuery = await deps.planBusinessQuery({
+          tenantId: memory.currentCallContext.tenantId,
+          utterance: perceived.assembledText,
+          previous: plannerMayUsePriorQuery(perceived)
+            ? priorBusinessQuery(memory)
+            : null,
+          today: deps.ctx.today,
+        });
+      } catch {
+        // Planner failure is not a data failure. Fall back to the deterministic
+        // parser below rather than turning a model outage into invented truth.
+        semanticBusinessQuery = null;
+      }
+    }
+    await run(planRetrievalPassA(perceived, memory, attention, semanticBusinessQuery));
 
     // ── Scope resolution ────────────────────────────────────────────────────
     scope = resolveScope(evidence);

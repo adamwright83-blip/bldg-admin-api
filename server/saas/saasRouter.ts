@@ -22,10 +22,15 @@ import {
   listPublicSaasPlans,
   listTenantMembers,
   requireOnboardingSession,
+  generateJoystickDraftPreview,
+  saveJoystickDraftAnswer,
+  saveJoystickOnboardingIdentity,
   saveOnboardingConfiguration,
+  startJoystickOnboardingDraft,
   startSaasOnboarding,
 } from "./saasStore";
 import { runTenantImport } from "./tenantImportService";
+import { JOYSTICK_PREPAY_QUESTION_KEYS } from "../../shared/goldlineOnboarding";
 
 const locationSchema = z.object({
   label: z.string().trim().min(1).max(128),
@@ -78,6 +83,9 @@ function publicOnboarding(
     businessName: session.businessName,
     slug: session.slug,
     ownerEmail: session.ownerEmail,
+    onboardingMode: session.onboardingMode,
+    draftAnswers: session.draftAnswersJson,
+    draftPreview: session.draftPreviewJson,
     currentStep: session.currentStep,
     version: session.version,
     configuration: session.configurationJson,
@@ -91,11 +99,11 @@ function publicOnboarding(
 function publicError(error: unknown): never {
   const message = error instanceof Error ? error.message : "";
   const safeMessage =
-    /^(A valid|Onboarding|Store,|The selected|Checkout|Complete and|Tenant is|Invite is|This retry|Stripe did not)/.test(
+    /^(A valid|Onboarding|Store,|The selected|Checkout|Complete|Business and|Tenant is|Invite is|This retry|Stripe did not)/.test(
       message
     )
       ? message
-      : "The DayForge request could not be completed.";
+      : "The JOYSTICK request could not be completed.";
   throw new TRPCError({
     code: "BAD_REQUEST",
     message: safeMessage,
@@ -153,6 +161,74 @@ export const saasRouter = router({
     },
   })),
   plans: publicProcedure.query(() => listPublicSaasPlans()),
+
+  startJoystickDraft: publicProcedure
+    .input(z.object({ requestId: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      try {
+        const result = await startJoystickOnboardingDraft(input);
+        return {
+          onboarding: result.session ? publicOnboarding(result.session) : null,
+          resumeToken: result.resumeToken,
+        };
+      } catch (error) {
+        publicError(error);
+      }
+    }),
+
+  saveJoystickDraftAnswer: publicProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        resumeToken: z.string().min(32).max(128),
+        expectedVersion: z.number().int().positive(),
+        questionKey: z.enum(JOYSTICK_PREPAY_QUESTION_KEYS),
+        answer: z.string().trim().min(1).max(2000),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        return publicOnboarding(await saveJoystickDraftAnswer(input));
+      } catch (error) {
+        publicError(error);
+      }
+    }),
+
+  generateJoystickDraftPreview: publicProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        resumeToken: z.string().min(32).max(128),
+        expectedVersion: z.number().int().positive(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        return publicOnboarding(await generateJoystickDraftPreview(input));
+      } catch (error) {
+        publicError(error);
+      }
+    }),
+
+  saveJoystickIdentity: publicProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        resumeToken: z.string().min(32).max(128),
+        expectedVersion: z.number().int().positive(),
+        businessName: z.string().trim().min(1).max(255),
+        contactName: z.string().trim().min(1).max(255),
+        ownerEmail: z.string().trim().email().max(320),
+        timeZone: z.string().trim().min(1).max(64),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        return publicOnboarding(await saveJoystickOnboardingIdentity(input));
+      } catch (error) {
+        publicError(error);
+      }
+    }),
 
   start: publicProcedure
     .input(

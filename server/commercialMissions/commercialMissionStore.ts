@@ -278,11 +278,18 @@ async function upsertCommercialAccountLocationWith(
   const existing = locations.find(
     location => normalizedContactText(location.address) === normalizedAddress,
   );
+  if (!input.address?.trim()) return;
   const values = {
     label: "Primary",
-    address: input.address,
-    latitude: input.latitude === null ? null : String(input.latitude),
-    longitude: input.longitude === null ? null : String(input.longitude),
+    address: input.address.trim(),
+    latitude:
+      input.latitude === null || input.latitude === undefined
+        ? (existing?.latitude ?? null)
+        : String(input.latitude),
+    longitude:
+      input.longitude === null || input.longitude === undefined
+        ? (existing?.longitude ?? null)
+        : String(input.longitude),
     isPrimary: true,
   };
   if (existing) {
@@ -494,14 +501,16 @@ export async function createCommercialMission(input: {
       )).limit(1).for("update");
       const accountId = accountRows[0]?.id;
       if (!accountId) throw new Error("Commercial account identity was not persisted");
-      await upsertCommercialAccountLocationWith(tx, {
-        tenantId: input.tenantId,
-        accountId,
-        address: input.account.address,
-        latitude: input.account.latitude,
-        longitude: input.account.longitude,
-      });
-      if (Object.values(input.account.decisionMaker).some(value => value !== null && value !== undefined && value !== "")) {
+      if (input.account.address?.trim()) {
+        await upsertCommercialAccountLocationWith(tx, {
+          tenantId: input.tenantId,
+          accountId,
+          address: input.account.address,
+          latitude: input.account.latitude,
+          longitude: input.account.longitude,
+        });
+      }
+      if (input.account.decisionMaker && Object.values(input.account.decisionMaker).some(value => value !== null && value !== undefined && value !== "")) {
         await upsertCommercialAccountContactWith(tx, {
           tenantId: input.tenantId,
           accountId,
@@ -509,22 +518,37 @@ export async function createCommercialMission(input: {
           fallbackIdentity: `${input.idempotencyKey}:primary-contact`,
         });
       }
+      const score = typeof (input.opportunity as any)?.score === "number" ? (input.opportunity as any).score : 50;
+      const estimateConfidence = (input.opportunity as any)?.estimateConfidence ?? "medium";
+      const primarySignal = (input.opportunity as any)?.primarySignal ?? (input.opportunity as any)?.title ?? "commercial_lead";
+      const reasonsJson = Array.isArray((input.opportunity as any)?.reasons) ? (input.opportunity as any).reasons : [];
+      const risksJson = Array.isArray((input.opportunity as any)?.risks) ? (input.opportunity as any).risks : [];
+      const evidenceJson = Array.isArray((input.opportunity as any)?.evidence) ? (input.opportunity as any).evidence : [];
+      const estimatedAnnualValueCents = input.opportunity.estimatedAnnualValueCents ?? ((input.opportunity as any)?.estimatedMonthlyCents ? (input.opportunity as any).estimatedMonthlyCents * 12 : null);
+
       const opportunityInsert = await tx.insert(commercialOpportunities).values({
         tenantId: input.tenantId,
         accountId,
-        score: input.opportunity.score,
-        grade: input.opportunity.estimateConfidence,
-        estimatedAnnualValueCents: input.opportunity.estimatedAnnualValueCents,
-        estimateConfidence: input.opportunity.estimateConfidence,
-        primarySignal: input.opportunity.primarySignal,
-        reasonsJson: input.opportunity.reasons,
-        risksJson: input.opportunity.risks,
-        evidenceJson: input.opportunity.evidence ?? [],
+        score,
+        grade: estimateConfidence,
+        estimatedAnnualValueCents,
+        estimateConfidence,
+        primarySignal,
+        reasonsJson,
+        risksJson,
+        evidenceJson,
       });
       const opportunityId = Number(opportunityInsert[0].insertId);
       const accountSnapshot: CommercialMissionAccountSnapshot = { ...input.account, accountId };
       const opportunitySnapshot: CommercialMissionOpportunitySnapshot = {
         ...input.opportunity,
+        score,
+        estimateConfidence,
+        primarySignal,
+        reasons: reasonsJson,
+        risks: risksJson,
+        evidence: evidenceJson,
+        estimatedAnnualValueCents,
         opportunityId,
       };
 
@@ -534,18 +558,18 @@ export async function createCommercialMission(input: {
         level: "4",
         taskType: "gm_followup",
         title: `Commercial opportunity · ${input.account.name}`,
-        description: input.brief.laundryOpportunity,
+        description: input.brief.laundryOpportunity ?? input.brief.salesAngle ?? "Commercial opportunity follow-up",
         source: "agent_suggested",
         createdBy: input.actor.id ?? "legacy-dayforge-radar",
         assignedTo: input.assignedTo ?? null,
         status: "open",
-        priority: input.opportunity.estimateConfidence === "high" ? "high" : "normal",
-        revenueAtRiskCents: input.opportunity.estimatedAnnualValueCents ?? 0,
+        priority: estimateConfidence === "high" ? "high" : "normal",
+        revenueAtRiskCents: estimatedAnnualValueCents ?? 0,
         revenueRecoveredCents: 0,
         metadataJson: {
           commercialOpportunityId: opportunityId,
           revenueEstimateStatus:
-            input.opportunity.estimatedAnnualValueCents === null
+            estimatedAnnualValueCents === null
               ? "unavailable"
               : "estimated",
         },
@@ -791,8 +815,9 @@ export async function transitionCommercialMission(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  let mission: CommercialMission;
   try {
-    return await db.transaction(tx => transitionCommercialMissionWith(tx, input));
+    mission = await db.transaction(tx => transitionCommercialMissionWith(tx, input));
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
     const replay = await getCommercialMissionByIdempotencyKey({
@@ -800,8 +825,42 @@ export async function transitionCommercialMission(input: {
       idempotencyKey: input.idempotencyKey,
     });
     if (!replay || replay.id !== input.missionId) throw error;
-    return replay;
+    mission = replay;
   }
+
+  // POST-COMMIT: Run bridge when transaction has committed durably to the database
+  if (input.toStatus === "visit_completed") {
+    try {
+      const [persistedEvent] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.idempotencyKey, input.idempotencyKey)
+          )
+        )
+        .limit(1);
+
+      if (persistedEvent) {
+        const { bridgeDriverAction } = await import("../persistentOperator/fieldEventBridge");
+        await bridgeDriverAction({
+          tenantId: input.tenantId,
+          actorId: input.actor.id ?? "system",
+          missionId: input.missionId,
+          evidenceReference: `commercial_mission_events:${persistedEvent.id}`,
+          sourceSystem: "dayforge_field",
+          outcomeKind: "visit_completed",
+          metadata: input.metadata,
+        });
+      }
+    } catch (err) {
+      console.warn("[PersistentOperator] field event bridge deferred", err);
+    }
+  }
+
+
+  return mission;
 }
 
 export async function transitionCommercialMissionWith(
@@ -914,6 +973,7 @@ export async function transitionCommercialMissionWith(
             }
           : undefined,
       });
+
       return transitioned;
 }
 

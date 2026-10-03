@@ -41,6 +41,7 @@ import {
 } from "./conversation/ledgerService";
 import {
   endClaireCallLedger,
+  finalizeClaireCallLedger,
   linkClaireActionIds,
   linkClaireCallAction,
   persistOperatorAndClaire,
@@ -73,9 +74,11 @@ import {
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
+  executePersistentOperatorAction,
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import { runWithLlmObservability } from "../_core/llmObservability";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
@@ -93,6 +96,8 @@ import {
   renderClaireOpeningVoice,
 } from "./voice/claireVoiceTransport";
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
+import { getDefaultGoalCyclePool } from "../persistentOperator/goalCycleStore";
+import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
 import {
   abandonAuthorizedAmdHandoff,
   amdDetectionTwiml,
@@ -129,6 +134,12 @@ const DEFAULT_HINTS = "got it, I'm good, that's enough, end call, hang up, goodb
 /** Seconds of silence after a held fragment before we treat the thought as finished. */
 export const CONTINUATION_GRACE_SECONDS = 3;
 
+export async function executeClairePersistentOperatorAction(
+  input: Parameters<typeof executePersistentOperatorAction>[0]
+) {
+  return executePersistentOperatorAction(input);
+}
+
 /**
  * A live call's working state. It is persisted (claire_conversation_states),
  * so a deploy, a restart, or a webhook landing on another replica does not
@@ -144,7 +155,15 @@ type PreDriveConversation = ClaireTurnState & {
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
   touchedAt: number;
-  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  sessionKind?:
+    | "evening_planning"
+    | "morning_reconciliation"
+    | "field_debrief"
+    | "pre_drive"
+    | "weekly_planning_invite"
+    | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
+  appointmentTimeZone?: string | null;
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
   /** True after inbound context assembly was applied or conservatively given up. */
@@ -449,6 +468,35 @@ export function claireVoiceCallCreateOptions(): {
     statusCallbackEvent: ["completed"],
     statusCallbackMethod: "POST",
   };
+}
+
+const MISSED_APPOINTMENT_CALL_STATUSES = new Set([
+  "no-answer",
+  "busy",
+  "failed",
+  "canceled",
+  "cancelled",
+]);
+
+async function handlePlanningAppointmentMissedStatus(
+  body: Record<string, string>
+): Promise<void> {
+  const callSid = String(body.CallSid ?? "").trim();
+  const status = String(body.CallStatus ?? body.CallStatusEvent ?? "")
+    .trim()
+    .toLowerCase();
+  const answeredBy = String(body.AnsweredBy ?? "").trim().toLowerCase();
+  const missed =
+    MISSED_APPOINTMENT_CALL_STATUSES.has(status) ||
+    answeredBy.startsWith("machine") ||
+    answeredBy === "fax";
+  if (!callSid || !missed) return;
+
+  // The Sunday standing authorization covers a call only. A missed call does
+  // not manufacture SMS authority. Record the miss and wait for an explicitly
+  // authorized follow-up channel in a later slice.
+  const store = new OperatorAppointmentStore(getDefaultGoalCyclePool());
+  await store.markMissedByCallSid(callSid);
 }
 
 function callSidFrom(req: Request): string | undefined {
@@ -906,6 +954,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               rookContactResidues,
             },
             {
+              timeZone: () =>
+                conversation.appointmentTimeZone || getDashboardTimeZone(),
               confirmPlan: () =>
                 confirmWorkdayPlan({
                   tenantId: conversation.tenantId,
@@ -921,6 +971,15 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             }
           );
 
+        result = await runWithLlmObservability(
+          {
+            tenantId: conversation.tenantId,
+            operatorOpenId: conversation.actorId,
+            conversationId: callStateKey(conversationId),
+            callId: conversationId,
+            surface: "voice",
+          },
+          async () => {
         const liveV2 = await runClaireBrainV2LiveTurn({
           rawText: turnUtterance,
           assembledText: conversation.pendingFragment
@@ -952,17 +1011,14 @@ export function runAuthoritativeClaireVoiceTurn(input: {
 
         if (liveV2.active) {
           brainV2LiveHandled = true;
-          if (liveV2.adapterResult) {
-            result = liveV2.adapterResult;
-          } else {
-            // Call-control authority does not itself write business state. Keep
-            // the existing character/ledger adapter for the spoken close, but V2
-            // is the authority deciding that the call ends.
-            const adapted = await runLegacyAdapter();
-            result = liveV2.result.candidateEndCall
-              ? { ...adapted, endCall: true }
-              : adapted;
-          }
+          // Call-control authority does not itself write business state. Keep
+          // the existing character/ledger adapter for the spoken close, but V2
+          // is the authority deciding that the call ends.
+          const turnResult = liveV2.adapterResult
+            ? liveV2.adapterResult
+            : await runLegacyAdapter().then(adapted =>
+                liveV2.result.candidateEndCall ? { ...adapted, endCall: true } : adapted
+              );
           console.info("[ClaireBrainV2]", {
             event: "claire_brain_v2_live",
             surface: "voice",
@@ -974,9 +1030,11 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
             receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
           });
-        } else {
-          result = await runLegacyAdapter();
+          return turnResult;
         }
+        return await runLegacyAdapter();
+          }
+        );
       }
       }
       conversation.touchedAt = Date.now();
@@ -1066,11 +1124,10 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         const gatherTwiml = speakAndHangUp(result.speak);
         // A guarded personal turn closed the thread with business complete and an authored exit line.
         await dropCall(conversationId);
-        await endClaireCallLedger({
+        await finalizeClaireCallLedger({
           callSid: input.callSid,
           claireConversationId: conversationId,
-          claireText: result.speak,
-          reason: "personal_thread_closed",
+          reason: result.endCallReason ?? "personal_thread_closed",
         });
         return { speak: result.speak, endCall: true, listenOnly: false, gatherTwiml };
       }
@@ -1191,6 +1248,9 @@ async function persistClaireVoiceConversation(input: {
   loadVocabulary?: boolean;
   /** Outbound already has assembled context. Inbound pickup bootstraps and waits until the first turn. */
   inboundContextReady?: boolean;
+  sessionKindOverride?: PreDriveConversation["sessionKind"];
+  weeklyPlanningWeekStart?: string | null;
+  appointmentTimeZone?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -1207,7 +1267,9 @@ async function persistClaireVoiceConversation(input: {
     context: input.context,
     turns: 0,
     touchedAt: now,
-    sessionKind: input.context.workday?.session,
+    sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
+    weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
+    appointmentTimeZone: input.appointmentTimeZone ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
@@ -1223,7 +1285,8 @@ async function persistClaireVoiceConversation(input: {
       tenantId: input.tenantId,
       operatorUserId: input.actorId,
       claireConversationId: conversationId,
-      conversationKind: input.context.workday?.session ?? "pre_drive",
+      conversationKind:
+        input.sessionKindOverride ?? input.context.workday?.session ?? "pre_drive",
       missionId: input.missionId ?? null,
       recordingEnabled: isClaireVoiceRecordingEnabled(),
     })
@@ -1238,6 +1301,10 @@ export async function startClairePreDriveCall(input: {
   missionId?: number;
   /** The identity Day Director commitments (and Driver's dayline) are actually keyed by — see dayDirectorActorId(ctx). */
   dayDirectorActorId?: string;
+  /** Reuses the authorized Claire dialer while supplying a bounded authored opening. */
+  openingOverride?: string;
+  sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
+  weeklyPlanningWeekStart?: string | null;
 }): Promise<{ callSid: string; brief: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1247,7 +1314,8 @@ export async function startClairePreDriveCall(input: {
     missionId: input.missionId,
     dayDirectorActorId: input.dayDirectorActorId,
   });
-  const { brief, context } = generated;
+  const context = generated.context;
+  const brief = input.openingOverride?.trim() || generated.brief;
   const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -1256,6 +1324,9 @@ export async function startClairePreDriveCall(input: {
     context,
     spokenOpening: spokenClaireText(brief, true),
     missionId: input.missionId,
+    sessionKindOverride: input.sessionKindOverride,
+    weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
+    appointmentTimeZone: input.timeZone ?? null,
   });
   try {
     const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });
@@ -2193,6 +2264,7 @@ export function registerClaireRoutes(app: Express): void {
         callSid: String(body.CallSid ?? ""),
         callStatus: String(body.CallStatus ?? body.CallStatusEvent ?? ""),
       });
+      await handlePlanningAppointmentMissedStatus(body);
     })().catch(error => {
       console.error("[ClaireLedger] call-status failed", error);
     });
@@ -2212,6 +2284,16 @@ export function registerClaireRoutes(app: Express): void {
         from: body.From,
         to: body.To,
       });
+      if (
+        String(body.AnsweredBy ?? "")
+          .trim()
+          .toLowerCase()
+          .match(/^(machine|fax)/)
+      ) {
+        void handlePlanningAppointmentMissedStatus(body).catch(error => {
+          console.warn("[Claire] planning appointment missed-call follow-up failed", error);
+        });
+      }
       return res.status(result.status).send(result.twiml);
     } catch (error) {
       console.error("[Claire] amd webhook error", error instanceof Error ? error.name : "error");

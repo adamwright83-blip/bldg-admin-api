@@ -276,6 +276,7 @@ export async function commitBriefing(
             detailState: item.needs ? "NEEDS_DETAILS" : "COMPLETE",
             missingDetails: item.needs ? [item.needs] : [],
             detailNote: detailNote(item),
+            references: item.references ?? [],
             targetBusinessDate: item.businessDate,
             command: commandForItem(item, parsed),
             ...(item.executionType ? { executionType: item.executionType } : {}),
@@ -323,7 +324,8 @@ export async function commitBriefing(
           detailState: "COMPLETE",
           missingDetails: [],
           detailNote: "Operator reported this as already done",
-          targetBusinessDate: item.businessDate,
+          references: item.references ?? [],
+            targetBusinessDate: item.businessDate,
           command: commandForItem(item, parsed),
         },
       });
@@ -357,10 +359,11 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
     sentences.push(parts.length ? `Done. ${joinList(parts).replace(/^./, c => c.toUpperCase())}.` : "Nothing new needed saving.");
   } else {
     const saved = result.added.length + result.completed.length;
+    const failureTitle = (f: any) => f?.item?.title ?? f?.title ?? "item";
     sentences.push(
       saved
-        ? `I saved ${saved} ${plural(saved, "item")}, but ${result.failed.length} didn't save: ${joinList(result.failed.map(failure => failure.item.title))}.`
-        : `I understood it, but nothing saved: ${joinList(result.failed.map(failure => failure.item.title))}.`
+        ? `I saved ${saved} ${plural(saved, "item")}, but ${result.failed.length} didn't save: ${joinList(result.failed.map(failureTitle))}.`
+        : `I understood it, but nothing saved: ${joinList(result.failed.map(failureTitle))}.`
     );
     sentences.push("Want me to try those again?");
   }

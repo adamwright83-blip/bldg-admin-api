@@ -338,3 +338,133 @@ export async function createWalkInFollowUpCalendarEvent(input: {
     return { status: "failed" as const, eventId: null as string | null, htmlLink: null as string | null };
   }
 }
+
+
+export function stableOperatorAppointmentCalendarEventId(input: {
+  tenantId: string;
+  userId: string;
+  appointmentId: string;
+}) {
+  return crypto
+    .createHash("sha256")
+    .update(`${input.tenantId}:${input.userId}:operator-appointment:${input.appointmentId}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+export async function createClairePlanningCalendarEvent(input: {
+  tenantId: string;
+  userId: string;
+  appointmentId: string;
+  scheduledFor: Date;
+  timeZone: string;
+}) {
+  try {
+    const authorized = await authorizedCalendar({
+      tenantId: input.tenantId,
+      userId: input.userId,
+    });
+    if (!authorized) {
+      return {
+        status: "not_connected" as const,
+        eventId: null as string | null,
+        htmlLink: null as string | null,
+      };
+    }
+
+    const eventId = stableOperatorAppointmentCalendarEventId(input);
+    const end = new Date(input.scheduledFor.getTime() + 30 * 60_000);
+    try {
+      const created = await authorized.calendar.events.insert({
+        calendarId: authorized.row.calendarId || "primary",
+        requestBody: {
+          id: eventId,
+          summary: "Claire — weekly planning",
+          description:
+            "Weekly planning callback requested in JOYSTICK. The durable appointment remains authoritative if Calendar is unavailable.",
+          start: {
+            dateTime: input.scheduledFor.toISOString(),
+            timeZone: input.timeZone,
+          },
+          end: {
+            dateTime: end.toISOString(),
+            timeZone: input.timeZone,
+          },
+          reminders: {
+            useDefault: false,
+            overrides: [{ method: "popup", minutes: 5 }],
+          },
+        },
+      });
+      return {
+        status: "created" as const,
+        eventId: created.data.id || eventId,
+        htmlLink: created.data.htmlLink || null,
+      };
+    } catch (error: any) {
+      if (error?.code === 409 || error?.response?.status === 409) {
+        const existing = await authorized.calendar.events.get({
+          calendarId: authorized.row.calendarId || "primary",
+          eventId,
+        });
+        return {
+          status: "already_exists" as const,
+          eventId,
+          htmlLink: existing.data.htmlLink || null,
+        };
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      "[GoogleCalendar] Claire planning appointment failed without deleting durable callback:",
+      error
+    );
+    return {
+      status: "failed" as const,
+      eventId: null as string | null,
+      htmlLink: null as string | null,
+    };
+  }
+}
+
+
+export async function deleteClairePlanningCalendarEvent(input: {
+  tenantId: string;
+  userId: string;
+  appointmentId: string;
+}) {
+  try {
+    const authorized = await authorizedCalendar({
+      tenantId: input.tenantId,
+      userId: input.userId,
+    });
+    if (!authorized) {
+      return { status: "not_connected" as const };
+    }
+    const eventId = stableOperatorAppointmentCalendarEventId(input);
+    try {
+      await authorized.calendar.events.delete({
+        calendarId: authorized.row.calendarId || "primary",
+        eventId,
+      });
+      return { status: "deleted" as const };
+    } catch (error: any) {
+      if (
+        error?.code === 404 ||
+        error?.response?.status === 404 ||
+        error?.code === 410 ||
+        error?.response?.status === 410
+      ) {
+        return { status: "already_absent" as const };
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      "[GoogleCalendar] Claire planning appointment deletion failed without restoring cancelled callback:",
+      error
+    );
+    return { status: "failed" as const };
+  }
+}

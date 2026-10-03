@@ -16,7 +16,7 @@
  * does not resolve `level.colosseum`, own `companion.rook`, or complete
  * the Kingdom. Those flags are the read in `server/goldlineProgression/`.
  */
-import { getOrCreateDay1TenDoorsMission } from "../openChannel/day1TenDoorsService";
+import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
 import { colosseumKingdomBindingSatisfied } from "../goldlineProgression/colosseumKingdomBinding";
 import { getKingdom, listKingdoms, setKingdomStatus } from "./kingdomService";
 import type { GoldlineKingdom } from "./kingdomTypes";
@@ -32,23 +32,25 @@ function isColosseumComplete(outcomes: Record<string, unknown>): boolean {
 }
 
 /**
- * Idempotent. Safe to call on every read (matches the nightShift
- * getOrAuthor pattern) — it only ever moves a Kingdom forward, never back,
- * and only when the real underlying campaign proves it.
+ * Idempotent. Safe to call on every read. The Day 1 evidence lookup is
+ * read-only: opening the Kingdom list must never create a mission row.
+ * Stored Kingdom status may still move forward only when real campaign
+ * evidence proves it.
  */
 export async function deriveKingdomStatuses(input: {
   tenantId: string;
+  /** Signed-in openId, matching day1TenDoorsRouter's durable driver key. */
   operatorId: string;
 }): Promise<GoldlineKingdom[]> {
   const kingdom1 = await getKingdom({ tenantId: input.tenantId, kingdomId: "kingdom-1-colosseum" });
   const kingdom2 = await getKingdom({ tenantId: input.tenantId, kingdomId: "kingdom-2-the-last-valet" });
   if (kingdom1 && kingdom1.lanternCityStatus !== "complete") {
     try {
-      const mission = await getOrCreateDay1TenDoorsMission({
+      const mission = await getDay1TenDoorsMissionReadOnly({
         tenantId: input.tenantId,
         driverId: input.operatorId,
       });
-      if (isColosseumComplete(mission.outcomes)) {
+      if (mission && isColosseumComplete(mission.outcomes)) {
         await setKingdomStatus({
           tenantId: input.tenantId,
           kingdomId: "kingdom-1-colosseum",

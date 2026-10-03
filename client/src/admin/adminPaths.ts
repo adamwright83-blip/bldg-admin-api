@@ -58,6 +58,23 @@ export function isAdminCommandCenterPath(path: string): boolean {
   return path === "/" || path === "/home" || path.startsWith("/home/");
 }
 
+export type LanternScene = "islands" | "map" | "v6" | "atlas" | null;
+/**
+ * Which Lantern City a path shows. The island board is the one Lantern City: the returning-user
+ * home and /growth/lantern-city both mount it. The street map (V7) and the older scenes survive
+ * only behind explicit QA parameters (?scene=map, or ?scene=v7; ?scene=v6; ?scene=atlas, and
+ * ?scene=v5 its old name). Anywhere else no world is mounted, so no 3D scene runs hidden behind
+ * another page.
+ */
+export function lanternSceneFor(path: string, search: string): LanternScene {
+  if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
+  const scene = new URLSearchParams(search).get("scene");
+  if (scene === "map" || scene === "v7") return "map";
+  if (scene === "v6") return "v6";
+  if (scene === "atlas" || scene === "v5") return "atlas";
+  return "islands";
+}
+
 export type AdminNorthDomain =
   | "home"
   | "operations"

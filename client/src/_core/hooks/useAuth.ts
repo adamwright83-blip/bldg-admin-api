@@ -1,4 +1,5 @@
 import { getLoginUrl } from "@/const";
+import { syncPosthogIdentity } from "@/lib/posthog";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
@@ -82,6 +83,23 @@ export function useAuth(options?: UseAuthOptions) {
     meQuery.isLoading,
     state.user,
   ]);
+
+  useEffect(() => {
+    const user = state.user;
+    syncPosthogIdentity({
+      loading: state.loading,
+      visualTest: visualTestMode,
+      user: user
+        ? {
+            openId: user.openId,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            tenantId: "tenantId" in user ? user.tenantId : null,
+          }
+        : null,
+    });
+  }, [state.loading, state.user, visualTestMode]);
 
   return {
     ...state,

@@ -8,6 +8,27 @@ export const ONBOARDING_QUESTIONS = [
   "Where do your best customers come from?", "What's the part of the job you avoid?",
   "If one thing changed in the next 90 days, what would it be?",
 ] as const;
+
+export const ONBOARDING_QUESTION_KEYS = [
+  "daily_work",
+  "service_area",
+  "customer_source",
+  "avoidance",
+  "objective_90_day",
+] as const;
+export type GoldlineOnboardingQuestionKey = typeof ONBOARDING_QUESTION_KEYS[number];
+export const JOYSTICK_PREPAY_QUESTION_KEYS = [
+  "daily_work",
+  "service_area",
+  "avoidance",
+] as const satisfies readonly GoldlineOnboardingQuestionKey[];
+
+export type GoldlineAnswerProvenance = "operator_declared" | "geocoded_declaration";
+export function onboardingQuestionKey(index: number): GoldlineOnboardingQuestionKey {
+  const key = ONBOARDING_QUESTION_KEYS[index];
+  if (!key) throw new Error("Unknown onboarding question.");
+  return key;
+}
 const statement = z.string().trim().min(1).max(2000);
 export const businessProfileSchema = z.object({
   whatTheyDo: statement, servicePattern: statement, localServiceAreaDescription: statement,
@@ -24,13 +45,73 @@ export type LocalTopology = { id: string; revision: number; mode: "LOCAL_PHYSICA
 export type FirstMission = { id: string; archetype: "TERRITORY_SCOUT"; title: string; objective: string; avoidance: string; guardianId: string; territoryId: string; checkpoint: WorldAnchor; status: "active" | "completed"; outcome: { text: string; reportedAt: string; actorId: string; provenance: "operator_reported"; gps: { latitude: number; longitude: number; accuracy: number } | null } | null; traversalCompletedAt: string | null; gameplayCompletedAt: string | null };
 export type GoldlineOnboardingSession = {
   id: string; tenantId: string; status: "INTERVIEW" | "READY" | "COMPLETE";
-  currentQuestion: number; answers: string[]; interpretation: { provenance: "ai_interpretation"; model: string; profile: GoldlineBusinessProfile } | null;
+  currentQuestion: number; answers: string[];
+  /** Stable semantic answer identity. Older sessions may omit this and remain positional. */
+  answersByKey?: Partial<Record<GoldlineOnboardingQuestionKey, string>>;
+  answerProvenanceByKey?: Partial<Record<GoldlineOnboardingQuestionKey, GoldlineAnswerProvenance>>;
+  acquisitionSessionId?: string | null;
+  interpretation: { provenance: "ai_interpretation"; model: string; profile: GoldlineBusinessProfile } | null;
   optionalUploadReference: string | null; startedAt: string; completedAt: string | null; version: number;
   world: { mode: "LOCAL_PHYSICAL"; skinId: "WATER_LAND"; topologyId: string; topologyRevision: number; compositionRevision: number; topology: LocalTopology } | null;
   mission: FirstMission | null;
 };
+export function onboardingAnswersByKey(
+  session: Pick<GoldlineOnboardingSession, "answers" | "answersByKey">
+): Partial<Record<GoldlineOnboardingQuestionKey, string>> {
+  if (session.answersByKey) return { ...session.answersByKey };
+  const mapped: Partial<Record<GoldlineOnboardingQuestionKey, string>> = {};
+  session.answers.forEach((value, index) => {
+    const key = ONBOARDING_QUESTION_KEYS[index];
+    if (key && value?.trim()) mapped[key] = value;
+  });
+  return mapped;
+}
+
+export function getGoldlineOnboardingAnswer(
+  session: Pick<GoldlineOnboardingSession, "answers" | "answersByKey">,
+  key: GoldlineOnboardingQuestionKey
+): string | null {
+  return onboardingAnswersByKey(session)[key] ?? null;
+}
+
+export function nextGoldlineOnboardingQuestion(
+  answers: Partial<Record<GoldlineOnboardingQuestionKey, string>>
+): number {
+  const index = ONBOARDING_QUESTION_KEYS.findIndex(key => !answers[key]?.trim());
+  return index === -1 ? ONBOARDING_QUESTION_KEYS.length : index;
+}
+
+export function orderedGoldlineOnboardingAnswers(
+  session: Pick<GoldlineOnboardingSession, "answers" | "answersByKey">
+): string[] {
+  const answers = onboardingAnswersByKey(session);
+  const ordered = ONBOARDING_QUESTION_KEYS.map(key => answers[key]?.trim() ?? "");
+  if (ordered.some(value => !value)) throw new Error("Answer all five questions first.");
+  return ordered;
+}
+
 export function answerSession(session: GoldlineOnboardingSession, question: number, answer: string): GoldlineOnboardingSession {
   if (session.status !== "INTERVIEW" || question !== session.currentQuestion || question > 4) throw new Error("This question has already changed. Reload to resume.");
-  const answers = [...session.answers, statement.parse(answer)];
-  return { ...session, answers, currentQuestion: answers.length, status: answers.length === 5 ? "READY" : "INTERVIEW", version: session.version + 1 };
+  const parsed = statement.parse(answer);
+  const key = onboardingQuestionKey(question);
+  const keyed = onboardingAnswersByKey(session);
+  keyed[key] = parsed;
+  const nextQuestion = nextGoldlineOnboardingQuestion(keyed);
+  const provenance = { ...(session.answerProvenanceByKey ?? {}), [key]: "operator_declared" as const };
+  // Keep the legacy positional projection contiguous up to the next unanswered
+  // canonical question. Sparse acquisition state (Q0/Q1/Q3) is never padded:
+  // after Q2 is supplied the first four answers become contiguous naturally.
+  const legacyAnswers = ONBOARDING_QUESTION_KEYS
+    .slice(0, nextQuestion)
+    .map(answerKey => keyed[answerKey]!)
+    .filter(Boolean);
+  return {
+    ...session,
+    answers: legacyAnswers,
+    answersByKey: keyed,
+    answerProvenanceByKey: provenance,
+    currentQuestion: nextQuestion,
+    status: nextQuestion === ONBOARDING_QUESTION_KEYS.length ? "READY" : "INTERVIEW",
+    version: session.version + 1,
+  };
 }

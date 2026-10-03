@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissionFieldChecklistItems,
@@ -344,6 +344,51 @@ export async function recordParkingLotClerkObservation(input: {
   if (!state?.parkingLotClerkObservation) {
     throw new Error("Parking-lot Clerk observation was not persisted");
   }
+
+  // Post-commit: Synchronously bridge parking-lot clerk observation to Persistent Growth Operator learning
+  try {
+    const db = await getDb();
+    if (db) {
+      const [persistedEvent] = await db
+        .select({ id: commercialMissionEvents.id })
+        .from(commercialMissionEvents)
+        .where(
+          and(
+            eq(commercialMissionEvents.tenantId, input.tenantId),
+            eq(commercialMissionEvents.missionId, input.missionId),
+            eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
+          )
+        )
+        .orderBy(desc(commercialMissionEvents.id))
+        .limit(1);
+
+      if (persistedEvent) {
+        const { bridgeParkingLotDebrief } = await import(
+          "../persistentOperator/fieldEventBridge"
+        );
+        await bridgeParkingLotDebrief({
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+          missionId: input.missionId,
+          evidenceReference: `commercial_mission_events:${persistedEvent.id}`,
+          debriefText: input.text,
+          visitOutcome: state.visitOutcome
+            ? {
+                outcome: state.visitOutcome.outcome,
+                notes: state.visitOutcome.notes,
+                decisionMakerStatus: state.visitOutcome.decisionMakerStatus,
+                reason: state.visitOutcome.reason,
+                quoteRequested: Boolean(state.visitOutcome.quoteRequested),
+                pilotRequested: Boolean(state.visitOutcome.pilotRequested),
+              }
+            : null,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[PersistentOperator] parking-lot debrief immediate bridge deferred to sweeper", err);
+  }
+
   return state;
 }
 
@@ -763,6 +808,49 @@ export async function saveCommercialMissionFieldNotes(input: {
   return getCommercialMissionFieldState(input);
 }
 
+export async function reconcileCommercialMissionVisitScore(input: {
+  tenantId: string;
+  driverId: string;
+  missionId: number;
+  requestId: string;
+}) {
+  const state = await getCommercialMissionFieldState({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+  });
+  if (!state?.visitOutcome) throw new Error("Visit outcome was not persisted");
+  if (state.mission.assignedTo !== input.driverId) {
+    throw new Error("Visit score cannot be awarded to another operator");
+  }
+
+  const outcome = state.visitOutcome.outcome;
+  const outcomePoints =
+    outcome === "won" ? 100 : outcome === "follow_up" ? 22 : 0;
+  const proofPoints =
+    (state.visitOutcome.decisionMakerStatus === "met" ? 10 : 0) +
+    (state.visitOutcome.quoteRequested ? 25 : 0) +
+    (state.visitOutcome.pilotRequested ? 25 : 0);
+  await awardDriverSalesPoints({
+    tenantId: input.tenantId,
+    driverId: input.driverId,
+    missionId: input.missionId,
+    eventType: outcome === "won" ? "deal_closed" : "in_person_visit",
+    points: 10 + outcomePoints + proofPoints,
+    // The score belongs to the durable visit outcome, not to whichever
+    // request happened to reconcile it. A lost response followed by a fresh
+    // request UUID must not award the same visit twice.
+    dedupeKey: `score:field-outcome:${state.visitOutcome.id}`,
+    metadata: {
+      outcome,
+      reconciledFromRequestId: input.requestId,
+      decisionMakerStatus: state.visitOutcome.decisionMakerStatus,
+      quoteRequested: state.visitOutcome.quoteRequested,
+      pilotRequested: state.visitOutcome.pilotRequested,
+    },
+  });
+  return state;
+}
+
 export async function recordCommercialMissionVisitOutcome(input: {
   tenantId: string;
   missionId: number;
@@ -877,28 +965,24 @@ export async function recordCommercialMissionVisitOutcome(input: {
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
   }
-  const state = await getCommercialMissionFieldState(input);
-  if (!state?.visitOutcome) throw new Error("Visit outcome was not persisted");
-  const outcomePoints = input.outcome === "won" ? 100 : input.outcome === "follow_up" ? 22 : 0;
-  const proofPoints =
-    (input.decisionMakerStatus === "met" ? 10 : 0) +
-    (input.quoteRequested ? 25 : 0) +
-    (input.pilotRequested ? 25 : 0);
-  await awardDriverSalesPoints({
+  const persisted = await getCommercialMissionFieldState({
     tenantId: input.tenantId,
-    driverId: input.actorId,
     missionId: input.missionId,
-    eventType: input.outcome === "won" ? "deal_closed" : "in_person_visit",
-    points: 10 + outcomePoints + proofPoints,
-    dedupeKey: `score:field-outcome:${input.requestId}`,
-    metadata: {
-      outcome: input.outcome,
-      decisionMakerStatus: input.decisionMakerStatus,
-      quoteRequested: input.quoteRequested,
-      pilotRequested: input.pilotRequested,
-    },
   });
-  return state;
+  if (!persisted?.visitOutcome) throw new Error("Visit outcome was not persisted");
+
+  // Admins may record an outcome for an assigned field mission. The durable
+  // visit credit belongs to the assigned operator, not whichever authorized
+  // admin happened to persist the outcome. Retries reconcile the same assignee
+  // through the idempotent score dedupe key.
+  const scoreDriverId = persisted.mission.assignedTo;
+  if (!scoreDriverId) return persisted;
+  return reconcileCommercialMissionVisitScore({
+    tenantId: input.tenantId,
+    driverId: scoreDriverId,
+    missionId: input.missionId,
+    requestId: input.requestId,
+  });
 }
 
 export async function createCommercialMissionPhoneHandoff(input: {

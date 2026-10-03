@@ -6,8 +6,11 @@ import {
   legacyDayforgeSaasSubscriptions,
 } from "../../drizzle/schema";
 import {
+  DAYFORGE_ENTITLEMENTS,
+  PERSISTENT_OPERATOR_ENTITLEMENT,
   subscriptionAllowsLegacyDayforgeAccess,
   type LegacyDayforgeEntitlement,
+  type SaasEntitlement,
   type SaasTenantMemberRole,
 } from "../../shared/saasTenant";
 import { getDb } from "../db";
@@ -77,10 +80,42 @@ export async function hasLegacyDayforgeEntitlement(input: {
   entitlement: LegacyDayforgeEntitlement;
   now?: Date;
 }): Promise<boolean> {
-  if (legacyTenantIds().has(input.tenantId)) return true;
+  return hasTenantEntitlement(input);
+}
+
+export async function hasTenantEntitlement(input: {
+  tenantId: string;
+  entitlement: SaasEntitlement;
+  now?: Date;
+}): Promise<boolean> {
+  const legacyCompatible =
+    DAYFORGE_ENTITLEMENTS.includes(
+      input.entitlement as LegacyDayforgeEntitlement
+    ) || input.entitlement === PERSISTENT_OPERATOR_ENTITLEMENT;
+  if (legacyCompatible && legacyTenantIds().has(input.tenantId)) return true;
   const db = await getDb();
   if (!db) return false;
 
+  const now = input.now ?? new Date();
+  const rows = await db
+    .select()
+    .from(legacyDayforgeSaasEntitlements)
+    .where(
+      and(
+        eq(legacyDayforgeSaasEntitlements.tenantId, input.tenantId),
+        eq(legacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
+      )
+    );
+
+  const activeRows = rows.filter(
+    row => !row.expiresAt || row.expiresAt.getTime() > now.getTime()
+  );
+
+  // 1. Explicit internal/platform manual entitlements grant access without requiring Stripe billing
+  const manual = activeRows.find(row => row.source === "manual");
+  if (manual) return manual.enabled;
+
+  // 2. Real paying JOYSTICK tenants receive subscription truth only from canonical Stripe billing
   const [subscription] = await db
     .select()
     .from(legacyDayforgeSaasSubscriptions)
@@ -98,22 +133,6 @@ export async function hasLegacyDayforgeEntitlement(input: {
     return false;
   }
 
-  const now = input.now ?? new Date();
-  const rows = await db
-    .select()
-    .from(legacyDayforgeSaasEntitlements)
-    .where(
-      and(
-        eq(legacyDayforgeSaasEntitlements.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
-      )
-    );
-
-  const activeRows = rows.filter(
-    row => !row.expiresAt || row.expiresAt.getTime() > now.getTime()
-  );
-  const manual = activeRows.find(row => row.source === "manual");
-  if (manual) return manual.enabled;
   return activeRows.some(row => row.source === "plan" && row.enabled);
 }
 

@@ -4,19 +4,41 @@
  */
 
 import {
+  addDaysYmd,
   emptyWeeklyHypothesis,
   weeklySessionKey,
   weeklySurfaceKey,
+  weekStartMonday,
   type WeeklyDraft,
   type WeeklyInternalHypothesis,
   type WeeklySessionPhase,
 } from "../../../shared/weeklyMissionReadiness";
+import { formatInTimeZone } from "date-fns-tz";
 import {
   claireConversationStateStore,
   type ClaireConversationStateStore,
 } from "../turn/conversationStateStore";
 
-export const WEEKLY_SESSION_TTL_MS = 12 * 24 * 60 * 60 * 1000;
+export const WEEKLY_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isWeeklySessionValid(
+  session: WeeklyPlanningSession,
+  reference?: { businessDate?: string; now?: Date; timeZone?: string }
+): boolean {
+  if ((session.phase as string) === "locked" || (session.phase as string) === "cancelled") return false;
+  const timeZone = reference?.timeZone ?? "America/Los_Angeles";
+  const businessDate =
+    reference?.businessDate ??
+    (reference?.now ? formatInTimeZone(reference.now, timeZone, "yyyy-MM-dd") : new Date().toISOString().slice(0, 10));
+  const friday = addDaysYmd(session.weekStart, 4);
+  // After the week ends (past Friday), the session cannot route turns.
+  if (businessDate > friday) return false;
+  // If the current week start is past the session week start, the session has expired.
+  const currentWeekMonday = weekStartMonday(businessDate);
+  if (session.weekStart < currentWeekMonday) return false;
+  return true;
+}
+
 
 export type WeeklyCommittedRef = {
   commitmentId: string;
@@ -24,6 +46,8 @@ export type WeeklyCommittedRef = {
 };
 
 export type WeeklyPlanningSession = {
+  /** Brain V3 conversation-state schema. Older in-progress weekly sessions are intentionally inert. */
+  brainVersion: 3;
   key: string;
   tenantId: string;
   operatorId: string;
@@ -62,7 +86,13 @@ export async function loadWeeklySession(input: {
   const row = await store().load<WeeklyPlanningSession>(key, input.now);
   if (!row) return null;
   if (row.tenantId !== input.tenantId || row.operatorUserId !== input.operatorId) return null;
-  return normalizeWeeklySession(row.state);
+  // V2 weekly conversation state may contain raw conversational speech captured
+  // as draft primaries. Never revive it inside Brain V3. Business commitments
+  // already written elsewhere remain untouched.
+  if ((row.state as Partial<WeeklyPlanningSession>).brainVersion !== 3) return null;
+  const session = normalizeWeeklySession(row.state);
+  if (session.weekStart !== input.weekStart) return null;
+  return session;
 }
 
 export async function saveWeeklySession(session: WeeklyPlanningSession, now = Date.now()): Promise<void> {
@@ -111,6 +141,7 @@ export function newWeeklySession(input: {
   adjust?: boolean;
 }): WeeklyPlanningSession {
   return {
+    brainVersion: 3,
     key: weeklySessionKey(input.tenantId, input.operatorId, input.weekStart),
     tenantId: input.tenantId,
     operatorId: input.operatorId,

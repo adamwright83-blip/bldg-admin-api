@@ -23,7 +23,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
   }) => {
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();
     await expect(page.locator("[data-scene-world]")).toBeVisible();
     await expect
@@ -46,7 +46,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
   test("customer selection opens the real inspector and returns to the city", async ({
     page,
   }) => {
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     const target = page.locator('[data-scene-object="lantern"]').first();
     await expect(target).toBeVisible();
     await target.click();
@@ -66,7 +66,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
     for (const id of ["opus_la", "century_park_east"]) {
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       await page.locator(`[data-scene-id="${id}"]`).click();
       if (id === "opus_la") {
         await expect(page).toHaveURL(/\/growth\/opus-la-inspection/);
@@ -84,7 +84,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     page,
   }) => {
     for (const id of ["opus_la", "century_park_east"]) {
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       const light = page.locator(
         `[data-scene-id="${id}"] [data-scene-target="light"]`
       );
@@ -104,7 +104,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await expect(page).toHaveURL(/\/growth\/lantern-city/);
       await expect(page).not.toHaveURL(/tower-wars/);
 
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       await page
         .locator(`[data-scene-id="${id}"] [data-scene-target="tower"]`)
         .click();
@@ -116,6 +116,35 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await expect(page.locator(".tw-arena")).toBeVisible();
     }
   });
+  for (const [name, url, scene] of [
+    ["the Lantern City route opens the island board", "/growth/lantern-city", "islands"],
+    ["?scene=map still opens the V7 street map for QA", "/growth/lantern-city?scene=map", "v7"],
+  ] as const) {
+    test(name, async ({ page }, testInfo) => {
+      // the 3D boards are the desktop view (the driver Day Line app is the mobile experience)
+      test.skip(testInfo.project.name === "mobile", "3D boards are desktop-only");
+      // No WebGL here on purpose: CI's software renderer spends ~15 s just starting a 3D world, and
+      // this lane has a 5-minute budget. What this proves is the route, the React board, the
+      // customer atlas arriving, and the plain "could not load" fallback a no-WebGL browser gets:
+      // never a crash.
+      await page.addInitScript(() => {
+        const get = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+          return /webgl/i.test(type) ? null : (get as (...a: unknown[]) => RenderingContext | null).call(this, type, ...rest);
+        } as typeof HTMLCanvasElement.prototype.getContext;
+      });
+      const errors: string[] = [];
+      page.on("pageerror", e => errors.push(String(e)));
+      const atlas = page.waitForResponse(r => r.url().includes("geographicTruth.atlas"));
+      await page.goto(url, { waitUntil: "commit" });
+      const board = page.locator(`[data-lantern-city="${scene}"]`);
+      await expect(board).toBeVisible({ timeout: 30_000 });
+      await expect(board.locator('[data-lantern-state="failed"]')).toBeVisible();
+      await atlas;
+      await expect(board).toBeVisible();
+      expect(errors).toEqual([]);
+    });
+  }
   test("legacy scene=v5 query still opens the live V6 city", async ({ page }) => {
     await page.goto("/growth/lantern-city?scene=v5");
     await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();

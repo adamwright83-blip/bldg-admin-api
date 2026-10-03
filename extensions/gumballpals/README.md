@@ -20,8 +20,8 @@ No copying files or cookies. The normal report download may remain in Chrome; th
 - `storage`: local progress and receipts; transient download metadata in session storage. Raw CSV stays in memory, not extension storage.
 - `downloads`: a passive `onCreated` listener for the active report; no history search, file access, deletion, or arbitrary download actions.
 - `alarms`: the daily 6:00 PM America/Los_Angeles target, adjusted for DST. Missed runs catch up on browser startup. This cannot wake a closed browser or sleeping computer.
-- Optional hosts: exactly `https://cleancloudapp.com/*` and `https://admin.bldg.chat/*`.
-- No cookies, debugger, all-sites, browsing history, native messaging, remote executable code, or model API. Source page contents cannot issue extension commands.
+- Optional hosts: `https://cleancloudapp.com/*` and `https://admin.bldg.chat/*`. Chrome also requires `<all_urls>` for `captureVisibleTab`; that broader origin is declared optional, requested only from a manual Confirm gesture, never acquired by scheduled sync, and revoked on Disconnect. The capture code still refuses any target except the active CleanCloud `/store` tab.
+- No required all-sites permission, cookies, debugger, browsing history, native messaging, remote executable code, or model API. Source page contents cannot issue extension commands.
 
 ## Observed source journey
 
@@ -34,7 +34,8 @@ The dropdown, calendar selectors and one-store label are grounded in observed DO
 ## Current scope and limitations
 
 - One gumball store per Goldline tenant. Store reassignment requires an administrator migration because existing paid-order keys do not include a store ID.
-- Only **Orders (Sales)**, up to 32 calendar days / 4 MB / 15,000 rows. No invented Revenue endpoint mapping.
+- Orders (Sales) and a second Orders (Revenue) pass. Sales dates are orders created. Revenue dates are payments. The revenue export type is taken from the captured CleanCloud URL and is never hardcoded. A sales span does not prove payment completeness.
+- After a confirmed import, Gumball opens Metrics and reads Overview by the visible label `Overview`. Sales, Revenue, and Orders are taken from the text beside those exact labels. Comparison totals are currently withheld because the observed DOM does not yet prove which comparison dates belong to those totals. Date controls that have not been observed are not clicked; if the page is not already on the requested dates, the witness is not saved. Chrome requires `activeTab` or `<all_urls>` for `captureVisibleTab`, so Gumball declares `<all_urls>` only as an optional permission and requests it only from a manual Confirm gesture; scheduled syncs never prompt for it. Even when granted, code refuses to capture anything except the active `https://cleancloudapp.com/store` tab. The screenshot is private supporting evidence and does not supply a number.
 - Re-running the same period performs changed-row reconciliation. This is **not complete incremental coverage of older orders**: a payment/refund/correction on an order created outside the selected period is not captured. Revenue-report support and coverage tracking remain required before claiming full automatic reconciliation.
 - Manual sync plus opt-in daily sync after a successful manual import verifies the pairing. Automatic runs require the saved actor, tenant and store to match, and never prompt for new permissions or pair an unknown account. Chrome/computer and the sync tab must remain open. Failed automatic runs expose their status and wait for attention rather than silently retrying uncertain imports.
 - The Cancel button is available before import only. An interrupted import is marked outcome unknown. **Check interrupted import** waits on the server's transaction lock and either returns the committed receipt or installs a cancellation tombstone, preventing a late original request from executing. Only then is a fresh run allowed.

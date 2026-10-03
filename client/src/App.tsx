@@ -11,6 +11,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
 import { useAuth } from "./_core/hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
+import { trpc } from "@/lib/trpc";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
@@ -29,6 +30,7 @@ const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
+const JoystickAcquisitionPage = lazy(() => import("./pages/JoystickAcquisitionPage"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -67,6 +69,7 @@ const LegacyDayforgeDemoControlPage = lazy(
   () => import("./pages/LegacyDayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
+const JoystickWorld = lazy(() => import("./product/JoystickWorld"));
 // Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
 // imports this module, so normal Goldline never downloads three.js; it is not
 // a corridor, not linked, and carries no business state.
@@ -74,6 +77,34 @@ const CoastalMarketProofPage = lazy(
   () => import("./pages/goldline/coastalMarketProof/CoastalMarketProofPage")
 );
 const COASTAL_MARKET_PROOF_PATH = "/goldline/coastal-market-proof";
+
+const LivingWarRoom = lazy(() => import("./pages/warroom/LivingWarRoom"));
+const ClaireInCabCockpit = lazy(() => import("./pages/driver/ClaireInCabCockpit"));
+const FranchiseFactoryPage = lazy(() => import("./pages/franchise/FranchiseFactoryPage"));
+
+function LivingWarRoomRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#040810" }} />}>
+      <LivingWarRoom />
+    </Suspense>
+  );
+}
+
+function ClaireCockpitRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#030712" }} />}>
+      <ClaireInCabCockpit />
+    </Suspense>
+  );
+}
+
+function FranchiseFactoryRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#06090e" }} />}>
+      <FranchiseFactoryPage />
+    </Suspense>
+  );
+}
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -197,6 +228,78 @@ function DriverMembershipGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function TenantOperatorGate({ children }: { children: ReactNode }) {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const me = trpc.system.saas.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  if (authLoading || (isAuthenticated && me.isLoading)) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        role="driver"
+        mode="membership"
+        onSuccess={() => window.location.reload()}
+      />
+    );
+  }
+  if (me.data?.membership.role === "field") return <Redirect to="/play" />;
+  if (me.isError) return <Redirect to="/product" />;
+  return <>{children}</>;
+}
+
+function JoystickWorldRoute() {
+  const { user } = useAuth();
+  if (user?.role === "admin") return <AdminHostApp />;
+  return (
+    <TenantOperatorGate>
+      <Suspense fallback={<PublicLandingFallback />}>
+        <JoystickWorld />
+      </Suspense>
+    </TenantOperatorGate>
+  );
+}
+
+function TenantUnlockedChapter() {
+  const kingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
+    retry: false,
+  });
+  if (kingdoms.isLoading) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  const unlocked = kingdoms.data?.some(
+    kingdom =>
+      kingdom.kingdomId === "kingdom-2-the-last-valet" &&
+      kingdom.lanternCityStatus !== "locked"
+  );
+  if (!unlocked || kingdoms.isError) return <Redirect to="/play" />;
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <GoldlineChapterHost />
+    </Suspense>
+  );
+}
+
+function JoystickChapterRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  if (user?.role === "admin") {
+    return (
+      <Suspense fallback={<PublicLandingFallback />}>
+        <GoldlineChapterHost />
+      </Suspense>
+    );
+  }
+  return (
+    <TenantOperatorGate>
+      <TenantUnlockedChapter />
+    </TenantOperatorGate>
+  );
+}
+
 function AdminAuthGate({ children }: { children: ReactNode }) {
   const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
@@ -212,11 +315,15 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
 
 const SAAS_CUSTOMER_SAFE_PATHS = [
   "/product",
+  "/play",
+  "/growth/lantern-city",
+  "/goldline-chapter",
   "/dayforge-settings",
   "/billing",
   "/dayforge-invite",
   "/dayforge-login",
   "/dayforge-onboarding",
+  "/joystick-start",
   "/onboarding",
   "/goldline/start",
   "/receipt/",
@@ -232,6 +339,9 @@ function isSaasCustomerSafePath(pathname: string): boolean {
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
+  "/war-room",
+  "/driver/cockpit",
+  "/franchise",
   "/gumballpals",
   "/admin",
   "/home",
@@ -296,6 +406,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/dayforge",
   "/landingfinal",
   "/territory-preview",
+  "/joystick-start",
   "/dayforge-onboarding",
   "/dayforge-login",
   "/dayforge-today",
@@ -327,6 +438,14 @@ function AdminHostRouter() {
         <GoldlineOnboarding />
       </Route>
       <Route path="/gumballpals" component={Gumballpals} />
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
@@ -343,6 +462,11 @@ function AdminHostRouter() {
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/joystick" component={JoystickLandingRoute} />
+      <Route path="/joystick-start">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <JoystickAcquisitionPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
           <LegacyDayforgeOnboardingPage />
@@ -428,13 +552,8 @@ function AdminHostRouter() {
           </Suspense>
         </AdminAuthGate>
       </Route>
-      {/* Slice 11: internal, unlinked chapter host. Not the final player entry point. */}
       <Route path="/goldline-chapter">
-        <AdminAuthGate>
-          <Suspense fallback={<PublicLandingFallback />}>
-            <GoldlineChapterHost />
-          </Suspense>
-        </AdminAuthGate>
+        <JoystickChapterRoute />
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -451,6 +570,21 @@ function AdminHostRouter() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
+      <Route path="/driver/cockpit">
+        <AdminAuthGate>
+          <ClaireCockpitRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/war-room">
+        <AdminAuthGate>
+          <LivingWarRoomRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/franchise">
+        <AdminAuthGate>
+          <FranchiseFactoryRoute />
+        </AdminAuthGate>
+      </Route>
       <Route
         path="/commercial-proposal/:missionId"
         component={CommercialProposalPrintRoute}
@@ -614,6 +748,17 @@ function Router() {
       <Route path="/goldline/start">
         <GoldlineOnboarding />
       </Route>
+      <Route path="/play">
+        <DriverMembershipGate>
+          <Driver />
+        </DriverMembershipGate>
+      </Route>
+      <Route path="/growth/lantern-city">
+        <JoystickWorldRoute />
+      </Route>
+      <Route path="/goldline-chapter">
+        <JoystickChapterRoute />
+      </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
@@ -629,6 +774,11 @@ function Router() {
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/joystick" component={JoystickLandingRoute} />
+      <Route path="/joystick-start">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <JoystickAcquisitionPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
           <LegacyDayforgeOnboardingPage />
@@ -665,6 +815,21 @@ function Router() {
         component={CommercialSalesMissionRoute}
       />
       <Route path="/driver" component={Driver} />
+      <Route path="/driver/cockpit">
+        <AdminAuthGate>
+          <ClaireCockpitRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/war-room">
+        <AdminAuthGate>
+          <LivingWarRoomRoute />
+        </AdminAuthGate>
+      </Route>
+      <Route path="/franchise">
+        <AdminAuthGate>
+          <FranchiseFactoryRoute />
+        </AdminAuthGate>
+      </Route>
       <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route
         path="/commercial-proposal/:missionId"

@@ -21,8 +21,14 @@ import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayP
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "../briefing/briefingTypes";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
-import { assembleReferencedDayLineWork, confirmExistingDayLineSpeech } from "../briefing/explicitDayLine";
+import {
+  assembleReferencedDayLineWork,
+  confirmExistingDayLineSpeech,
+  referencesStructuredRecoveryGroup,
+  refersToPriorWork,
+} from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
+import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
 import { reviseBriefing } from "../briefing/reviseBriefing";
 import {
@@ -48,7 +54,7 @@ import { businessDateFor, loadDayWork, operationsQuestion, speakDayWork } from "
 import { isUnpaidQuestion, loadUnpaidOrders, speakUnpaidOrders } from "../knowledge/openOrdersKnowledge";
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
-import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
+import { ensureAdamBoard, explainProactive, handleDoctrineTurn, loadObligations } from "../proactive/boardService";
 import {
   beginClaireTurnTrace,
   classifyClaireBlend,
@@ -59,10 +65,20 @@ import {
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
-import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
-import { classifyOpenDialogueAct } from "./dialogueAct";
+import { explicitTrackingRequest } from "../briefing/titleContract";
 import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
+import {
+  interpretClaireBrainV3,
+  safeClaireBrainV3Fallback,
+  type ClaireBrainV3Interpretation,
+  type ClaireBrainV3Target,
+} from "./brainV3";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
+import {
+  parseWeeklyPlanningCallbackRequest,
+  scheduleWeeklyPlanningCallbackForOperator,
+} from "../../persistentOperator/operatorAppointmentPolicy";
+import { beginWeeklyMission, loadWeeklyMissionPicture } from "../weeklyMission/driver";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -100,6 +116,10 @@ import {
   type ClaireRookContactResidueContext,
 } from "../rookContactResidueContext";
 import type { NarrativePresentationPlan } from "../../narratorOs/presentationPlan";
+import {
+  claireIdentityEvidenceSources,
+  renderClaireIdentityAnswer,
+} from "../identityTruth";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -152,6 +172,10 @@ export type ClaireTurnState = PendingProposalState &
     pendingReminded?: boolean;
     /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
     coverage?: CoveredSubject[];
+    /** Known customer recovery accounts surfaced to the operator during this conversation. */
+    surfacedRecoveryAccounts?: Array<{ id: string; name: string }>;
+    /** Brain V3: the operator has said not to use/discuss Day Line in this live conversation. */
+    dayLineSuppressed?: boolean;
   };
 
 export type ClaireTurnInput = {
@@ -208,8 +232,10 @@ export type ClaireTurnResult = {
   assembledUtterance?: string;
   /** How the assembled utterance was released. Incomplete holds must not feed V2 as a real turn. */
   thoughtCompleteness?: "complete" | "incomplete" | "forced_flush";
-  /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
+  /** The authoritative voice adapter should hang up after speaking. */
   endCall?: boolean;
+  /** Auditable call-ledger completion reason for non-generic authored exits. */
+  endCallReason?: string;
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
   mutationReceipts?: MutationReceipt[];
@@ -245,6 +271,9 @@ export type ClaireTurnDeps = {
   campaign: typeof getClaireCampaignSummary;
   markReconciliation?: typeof markWorkdayReconciliation;
   loadWorkdayPlan?: typeof loadConfirmedWorkdayPlan;
+  weeklyPicture?: typeof loadWeeklyMissionPicture;
+  beginWeekly?: typeof beginWeeklyMission;
+  scheduleWeeklyCallback?: typeof scheduleWeeklyPlanningCallbackForOperator;
   vocabulary: typeof loadBusinessVocabulary;
   accounts: typeof listAccountRefs;
   accountHistory: typeof loadAccountHistory;
@@ -254,7 +283,8 @@ export type ClaireTurnDeps = {
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
-  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
+  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; recoveryAccounts?: Array<{ id: string; name: string }> }>;
+  recoveryObligations?: typeof loadObligations;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
    * Slice A (routing audit): the completed per-turn trace, handed back before
@@ -269,6 +299,8 @@ export type ClaireTurnDeps = {
   /** Live-turn budget for a fresh recheck. */
   priorClaimBudgetMs?: number;
   classifierBudgetMs?: number;
+  /** Claire Brain V3: the sole semantic interpretation of the live turn. */
+  brainV3?: typeof interpretClaireBrainV3 | null;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -284,6 +316,9 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     campaign: getClaireCampaignSummary,
     markReconciliation: markWorkdayReconciliation,
     loadWorkdayPlan: loadConfirmedWorkdayPlan,
+    weeklyPicture: loadWeeklyMissionPicture,
+    beginWeekly: beginWeeklyMission,
+    scheduleWeeklyCallback: scheduleWeeklyPlanningCallbackForOperator,
     vocabulary: loadBusinessVocabulary,
     accounts: listAccountRefs,
     accountHistory: loadAccountHistory,
@@ -293,10 +328,22 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     searchMemory: searchOperatorConversation,
     memoryBetween: operatorTurnsBetween,
     encyclopedia: null,
-    watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
+    watchBoard: async ({ tenantId, operatorUserId, actorId }) => {
+      const board = await ensureAdamBoard({ tenantId, operatorUserId, actorId });
+      const recoveryAccounts = (await loadObligations(tenantId, operatorUserId))
+        .filter(
+          item =>
+            item.kind === "dormant_recovery" &&
+            (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
+        )
+        .map(item => ({ id: item.subjectKey, name: item.subjectName }));
+      return { brief: board.brief, recoveryAccounts };
+    },
+    recoveryObligations: loadObligations,
     doctrineTurn: handleDoctrineTurn,
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
+    brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
   };
 }
 
@@ -309,6 +356,27 @@ const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
   if (!text.trim()) return;
   state.history = [...(state.history ?? []), { speaker, text: text.slice(0, 1_200), at }].slice(-HISTORY_LIMIT);
+}
+
+function recoveryRefsNamedInSpeech(
+  spokenText: string,
+  refs: Array<{ id: string; name: string }>
+): Array<{ id: string; name: string }> {
+  if (!spokenText.trim() || !refs.length) return [];
+  if (!/\b(?:dormant|dormancy|recovery|win[- ]?back|customer)\b/i.test(spokenText)) return [];
+  const spoken = spokenText.toLowerCase();
+  const spokenTokens = spoken.split(/[^a-z0-9]+/).filter(Boolean);
+  const firstNameCounts = new Map<string, number>();
+  for (const ref of refs) {
+    const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase();
+    if (first) firstNameCounts.set(first, (firstNameCounts.get(first) ?? 0) + 1);
+  }
+  return refs.filter(ref => {
+    const full = ref.name.trim().toLowerCase();
+    if (full && spoken.includes(full)) return true;
+    const first = ref.name.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    return Boolean(first && firstNameCounts.get(first) === 1 && spokenTokens.includes(first));
+  });
 }
 
 /**
@@ -548,6 +616,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.fragmentHolds = 0;
   }
   remember(state, "operator", utterance, nowMs);
+  const liveRecoveryRefs = deps.recoveryObligations
+    ? (await deps.recoveryObligations(input.tenantId, input.operatorUserId).catch(() => []))
+        .filter(
+          item =>
+            item.kind === "dormant_recovery" &&
+            (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
+        )
+        .map(item => ({ id: item.subjectKey, name: item.subjectName }))
+        .filter(ref => ref.id.trim().length > 0 && ref.name.trim().length > 0)
+    : [];
   /**
    * Claire Intelligence Repair Part 2, Slice A: one trace per turn, recording
    * which of the many answer paths below produced the spoken text. Measurement
@@ -591,11 +669,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let deferredPriorClaimSpeech: string | null = null;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
+  // Initialized fail-closed so early exits cannot accidentally open a truth/mutation lane.
+  let brainV3: ClaireBrainV3Interpretation = safeClaireBrainV3Fallback();
   const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    const laneOpen = priorClaimLaneOpen(interpretTurn(utterance));
+    const laneOpen =
+      brainV3.priorClaim !== "none" ||
+      brainV3.act === "prior_claim_probe" ||
+      priorClaimLaneOpen(interpretTurn(utterance, { recentTurns: history() }));
     let conversational = result.speak;
     if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
       conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
@@ -612,6 +695,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       mutationReceipts: result.mutationReceipts,
     });
     const guarded = speak === result.speak ? result : { ...result, speak };
+
+    // Capture customer referents from authoritative recovery obligations only
+    // when Claire actually names them aloud. Later "them/those people" can
+    // therefore resolve to identities, not to a count scraped from prose.
+    const matchedRecoveryRefs = recoveryRefsNamedInSpeech(guarded.speak, liveRecoveryRefs);
+    if (matchedRecoveryRefs.length) {
+      state.surfacedRecoveryAccounts = Array.from(
+        new Map(matchedRecoveryRefs.map(ref => [ref.id, ref])).values()
+      );
+    }
+
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
@@ -650,8 +744,30 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   };
   const morningSession =
     state.sessionKind ?? input.context?.workday?.session ?? null;
-  const completeMorningReconciliation = async () => {
-    if (morningSession !== "morning_reconciliation" || !deps.markReconciliation) return;
+  const weeklyScope = {
+    tenantId: input.tenantId,
+    operatorId: input.operatorUserId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    timeZone,
+    now,
+    weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+  };
+  const beginWeeklyAfterMorningReconciliation = async (): Promise<string> => {
+    if (
+      input.surface !== "voice" ||
+      morningSession !== "morning_reconciliation" ||
+      !deps.weeklyPicture ||
+      !deps.beginWeekly
+    ) {
+      return "";
+    }
+    const picture = await deps.weeklyPicture(weeklyScope).catch(() => null);
+    if (!picture || (picture.status !== "IN_PROGRESS" && !picture.canBegin)) return "";
+    const turn = await deps.beginWeekly(weeklyScope).catch(() => null);
+    return turn?.speech?.trim() ?? "";
+  };
+  const completeMorningReconciliation = async (): Promise<string> => {
+    if (morningSession !== "morning_reconciliation" || !deps.markReconciliation) return "";
     await deps
       .markReconciliation({
         tenantId: input.tenantId,
@@ -660,6 +776,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         status: "complete",
       })
       .catch(() => undefined);
+    // Weekly Mission Readiness is a real Monday/first-call contract, not a UI-only
+    // feature. Once today's reconciliation is actually complete, hand the same
+    // voice call into the weekly session instead of falling back to generic
+    // briefing capture and waiting for the operator to remind Claire.
+    return beginWeeklyAfterMorningReconciliation();
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -684,23 +805,266 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
 
-  /**
-   * THE authoritative interpretation of this turn. Produced once, here, before any route that can
-   * mutate, terminate, select truth, or consult pending state. Everything downstream consumes it;
-   * nothing downstream re-decides what Adam meant.
-   */
-  const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
 
-  // Incomplete fragments already returned. A weekly session owns this completed thought.
-  const weekly = await routeActiveWeeklySession({
-    tenantId: input.tenantId,
-    operatorId: input.operatorUserId,
-    dayDirectorActorId: input.dayDirectorActorId,
-    utterance,
-    now: deps.now(),
-    timeZone: deps.timeZone(),
-  });
+  /**
+   * CLAIRE BRAIN V3 — ONE SEMANTIC INTERPRETATION.
+   *
+   * From here down, every mutation-capable or truth-adjudicating subsystem is
+   * an executor of this result. Nothing gets to reinterpret the raw sentence
+   * and steal the turn from another subsystem.
+   */
+  const explicitWeeklyControl =
+    /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning|lock the week|that(?:'s| is) the week|forget the week|stop planning)\b/i.test(
+      utterance
+    );
+  const brainResult = deps.brainV3
+    ? await deps
+        .brainV3({
+          tenantId: input.tenantId,
+          operatorId: input.operatorUserId,
+          utterance,
+          recentTurns: history().slice(0, -1).slice(-12),
+          pending: {
+            briefing: Boolean(state.pendingBriefing),
+            accountFollowUp: Boolean(state.pendingAccountFollowUp),
+            action: Boolean(
+              state.pendingProposal ||
+                state.pendingUpdate ||
+                state.pendingFieldCapture ||
+                state.pendingEngineeringOffer ||
+                state.pendingDayLineChoice ||
+                state.clarifyingUtterance
+            ),
+            weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+          },
+          dayLineSuppressed: Boolean(state.dayLineSuppressed),
+        })
+        .catch(() => null)
+    : null;
+  const fallbackContext = {
+    pending: {
+      briefing: Boolean(state.pendingBriefing),
+      accountFollowUp: Boolean(state.pendingAccountFollowUp),
+      action: Boolean(
+        state.pendingProposal ||
+          state.pendingUpdate ||
+          state.pendingFieldCapture ||
+          state.pendingEngineeringOffer ||
+          state.pendingDayLineChoice ||
+          state.clarifyingUtterance
+      ),
+      weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
+    },
+    hasActiveAnalyticsQuery: Boolean(state.analytics?.query || state.analytics?.pendingClarification),
+    sessionKind: state.sessionKind,
+    morningSession,
+    dayLineSuppressed: Boolean(state.dayLineSuppressed),
+  };
+  brainV3 =
+    brainResult ??
+    (explicitWeeklyControl
+      ? {
+          ...safeClaireBrainV3Fallback(utterance, fallbackContext),
+          target: "weekly_planning",
+          act: "action_request",
+          weeklyDisposition: "continue",
+          rationale: "Explicit weekly control while Brain V3 unavailable.",
+        }
+      : safeClaireBrainV3Fallback(utterance, fallbackContext));
+
+  if (brainV3.dayLineDisposition === "decline") {
+    state.dayLineSuppressed = true;
+    state.pendingBriefing = null;
+    state.pendingProposal = null;
+    state.pendingReminded = false;
+  } else if (brainV3.dayLineDisposition === "accept" || brainV3.dayLineDisposition === "reopen") {
+    state.dayLineSuppressed = false;
+  }
+
+  const conversationTarget: ClaireBrainV3Target = brainV3.target;
+
+  /**
+   * Authority-0/1 identity is not a generative business answer. Brain V3 owns
+   * the semantic decision that this turn is about identity; the server then
+   * renders the authoritative answer without asking the language model to
+   * remember or infer names.
+   */
+  const identityTopic = brainV3.identityTopic ?? "none";
+  if (identityTopic !== "none") {
+    const identityAnswer = renderClaireIdentityAnswer(
+      identityTopic,
+      input.context?.identityTruth
+    );
+    if (identityAnswer) {
+      readerReceipt(
+        "identity_truth",
+        `identity:${identityTopic}`,
+        "deterministic",
+        claireIdentityEvidenceSources(identityTopic, input.context?.identityTruth),
+        identityAnswer
+      );
+      mark("identity_truth");
+      return finish({ speak: identityAnswer, kind: "answered" });
+    }
+  }
+
+  if (
+    input.surface === "voice" &&
+    morningSession === "weekly_planning_invite" &&
+    state.weeklyPlanningWeekStart &&
+    conversationTarget === "weekly_planning"
+  ) {
+    const affirmative =
+      brainV3.act === "confirmation" && brainV3.weeklyDisposition === "continue";
+    const negative =
+      brainV3.act === "rejection" || brainV3.weeklyDisposition === "cancel";
+
+    if (state.pendingWeeklyPlanningCallback) {
+      if (affirmative && deps.scheduleWeeklyCallback) {
+        const pending = state.pendingWeeklyPlanningCallback;
+        try {
+          const scheduled = await deps.scheduleWeeklyCallback({
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            timeZone,
+            weekStart: state.weeklyPlanningWeekStart,
+            scheduledFor: new Date(pending.scheduledForIso),
+            sourceReference: pending.sourceReference,
+          });
+          state.pendingWeeklyPlanningCallback = null;
+          mark("fallback", { fallbackReason: "weekly_planning_callback_scheduled" });
+          return finish({
+            speak: `Booked. I'll call you at ${scheduled.readback}.`,
+            kind: "answered",
+          });
+        } catch {
+          mark("fallback", { fallbackReason: "weekly_planning_callback_failed" });
+          return finish({
+            speak: "I couldn't safely save that callback, so I didn't schedule it.",
+            kind: "answered",
+          });
+        }
+      }
+      if (negative) {
+        state.pendingWeeklyPlanningCallback = null;
+        mark("fallback", { fallbackReason: "weekly_planning_callback_declined" });
+        return finish({
+          speak: "All right. I won't schedule it.",
+          kind: "answered",
+        });
+      }
+    }
+
+    const callback = parseWeeklyPlanningCallbackRequest({
+      utterance,
+      now,
+      timeZone,
+    });
+    if (callback.kind === "invalid") {
+      mark("fallback", { fallbackReason: "weekly_planning_callback_invalid" });
+      return finish({ speak: callback.speech, kind: "answered" });
+    }
+    if (callback.kind === "request") {
+      if (callback.inferredMeridiem) {
+        state.pendingWeeklyPlanningCallback = {
+          scheduledForIso: callback.scheduledFor.toISOString(),
+          readback: callback.readback,
+          sourceReference: input.conversationKey,
+        };
+        mark("fallback", { fallbackReason: "weekly_planning_callback_readback" });
+        return finish({
+          speak: `${callback.readback} tonight. Say yes and I'll schedule it.`,
+          kind: "answered",
+        });
+      }
+      if (!deps.scheduleWeeklyCallback) {
+        return finish({
+          speak: "I can't safely schedule that callback from this call.",
+          kind: "answered",
+        });
+      }
+      try {
+        const scheduled = await deps.scheduleWeeklyCallback({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          timeZone,
+          weekStart: state.weeklyPlanningWeekStart,
+          scheduledFor: callback.scheduledFor,
+          sourceReference: input.conversationKey,
+        });
+        mark("fallback", { fallbackReason: "weekly_planning_callback_scheduled" });
+        return finish({
+          speak: `Booked. I'll call you at ${scheduled.readback}.`,
+          kind: "answered",
+        });
+      } catch {
+        mark("fallback", { fallbackReason: "weekly_planning_callback_failed" });
+        return finish({
+          speak: "I couldn't safely save that callback, so I didn't schedule it.",
+          kind: "answered",
+        });
+      }
+    }
+
+    if (affirmative && deps.beginWeekly) {
+      state.sessionKind = "weekly_planning";
+      state.pendingWeeklyPlanningCallback = null;
+      const turn = await deps.beginWeekly(weeklyScope).catch(() => null);
+      mark("fallback", { fallbackReason: "weekly_planning_begin" });
+      return finish({
+        speak: turn?.speech?.trim() || "I couldn't safely open the week.",
+        kind: "answered",
+      });
+    }
+
+    if (negative) {
+      // A declined proactive planning invite is terminal for this appointment.
+      // Clear the invite state before hanging up so a persisted/replayed turn
+      // cannot trap later operator speech back inside the invitation.
+      delete state.sessionKind;
+      state.weeklyPlanningWeekStart = null;
+      state.pendingWeeklyPlanningCallback = null;
+      mark("fallback", { fallbackReason: "weekly_planning_invite_declined" });
+      return finish({
+        speak: "All right.",
+        kind: "answered",
+        endCall: true,
+        endCallReason: "weekly_planning_invite_declined",
+      });
+    }
+
+    mark("fallback", { fallbackReason: "weekly_planning_invite_reask" });
+    return finish({
+      speak: "Want to do it now, or what time tonight?",
+      kind: "answered",
+    });
+  }
+
+  // An open weekly session is background context. It is consulted only when the
+  // conversational control plane says this turn actually belongs to weekly planning.
+  const currentWeekStart = weekStartMonday(today);
+  if (state.weeklyPlanningWeekStart && state.weeklyPlanningWeekStart < currentWeekStart) {
+    state.weeklyPlanningWeekStart = null;
+  }
+  const weekly =
+    conversationTarget === "weekly_planning" && brainV3.weeklyDisposition !== "none"
+      ? await routeActiveWeeklySession({
+          tenantId: input.tenantId,
+          operatorId: input.operatorUserId,
+          dayDirectorActorId: input.dayDirectorActorId,
+          utterance,
+          now: deps.now(),
+          timeZone: deps.timeZone(),
+          weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+          authoritativeIntent:
+            brainV3.weeklyDisposition === "lock"
+              ? "weekly_lock"
+              : brainV3.weeklyDisposition === "cancel"
+                ? "weekly_cancel"
+                : "weekly_continue",
+        })
+      : null;
   if (weekly) {
     mark("fallback", { fallbackReason: "weekly_planning" });
     if (weekly.receiptBackedCommit) {
@@ -723,14 +1087,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
   // reach prior-claim adjudication, which answered "I'm good." with "I can't verify that properly
   // right now." on the live call.
-  if (interpreted.acknowledgement && !state.pendingBriefing && !state.pendingProposal && !state.pendingAccountFollowUp) {
+  if (brainV3.act === "acknowledgement" && !state.pendingBriefing && !state.pendingProposal && !state.pendingAccountFollowUp) {
     mark("fallback", { fallbackReason: "acknowledgement" });
     return finish({ speak: "All right.", kind: "answered" });
   }
 
-  const doctrineSpeak = deps.doctrineTurn
-    ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
-    : null;
+  const isOperationalWorkOrDayLine =
+    brainV3.workDisposition === "propose" ||
+    brainV3.workDisposition === "commit" ||
+    brainV3.dayLineDisposition !== "none";
+
+  const doctrineSpeak =
+    conversationTarget === "open_conversation" &&
+    !isOperationalWorkOrDayLine &&
+    deps.doctrineTurn
+      ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
+      : null;
   if (doctrineSpeak) {
     mark("doctrine");
     return finish({ speak: doctrineSpeak, kind: "answered" });
@@ -742,15 +1114,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * Molina and Mission 6 — an answer about nothing the operator asked. Scope is now a property of
    * the interpretation, not a prefix match.
    */
-  if (!state.proactiveMorning && interpreted.broadBriefingRequest) {
+  if (
+    conversationTarget === "open_conversation" &&
+    !state.proactiveMorning &&
+    (brainV3.act === "question" || brainV3.act === "advice_request") &&
+    brainV3.broadBriefingRequest
+  ) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
       const board = await deps.watchBoard({
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
         actorId: input.dayDirectorActorId,
-      }).catch(() => ({ brief: "" }));
+      }).catch(() => ({ brief: "", recoveryAccounts: [] }));
       if (board.brief) {
+        const surfaced = recoveryRefsNamedInSpeech(board.brief, board.recoveryAccounts ?? []);
+        if (surfaced.length) state.surfacedRecoveryAccounts = surfaced;
         mark("proactive_board");
         return finish({ speak: board.brief, kind: "answered" });
       }
@@ -762,7 +1141,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const explicitPriorClaimProbe = interpreted.correctnessChallenge || interpreted.provenanceQuestion;
+  const interpreted = interpretTurn(utterance, { recentTurns: history() });
+  const explicitPriorClaimProbe =
+    brainV3.priorClaim !== "none" ||
+    brainV3.act === "prior_claim_probe" ||
+    interpreted.correctnessChallenge ||
+    interpreted.provenanceQuestion;
   const directResolution: ClaimResolution =
     holdingSomething && !explicitPriorClaimProbe
       ? { kind: "none" }
@@ -787,8 +1171,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  const priorClaimLane = priorClaimLaneOpen(interpreted);
-  if (priorClaimLane && resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
+  const priorClaimLane = explicitPriorClaimProbe;
+  if (priorClaimLane && resolution.kind !== "none") {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -800,7 +1184,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // "Immediately preceding" is only a default for a bare reaction. If the classifier read the utterance as
       // pointing at a specific (older) statement, or could not tell which, that reading outranks recency.
       let effective: ClaimResolution = resolution;
-      if (reading?.probe && resolution.kind === "resolved" && resolution.via === "immediately_preceding") {
+      if (reading?.probe && resolution.kind === "resolved" && (resolution.via === "immediately_preceding" || resolution.receipt === focusedReceipt)) {
         const named = reading.receiptId ? (state.claimReceipts ?? []).find(receipt => receipt.id === reading.receiptId) : undefined;
         if (reading.ambiguous || (reading.receiptId && !named)) effective = { kind: "ambiguous", candidates: [resolution.receipt] };
         else if (named) effective = { kind: "resolved", receipt: named, via: "explicit_reference" };
@@ -811,7 +1195,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       } else if (reading?.probe) {
         const spoken = await adjudicateResolution(effective, "deterministic", classifierMs);
         mark("prior_claim_verification");
-        if (interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment) {
+        if (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit") {
           deferredPriorClaimSpeech = spoken;
         } else {
           return finish({ speak: spoken, kind: "answered" });
@@ -841,7 +1225,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       });
   }
 
-  if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
+  if (
+    conversationTarget === "open_conversation" &&
+    (brainV3.act === "question" || brainV3.act === "advice_request") &&
+    /\bwhy (?:is|are|did you|are you)\b/.test(lower)
+  ) {
     const why = await explainProactive(input.tenantId, input.operatorUserId, utterance).catch(() => null);
     if (why) {
       mark("doctrine");
@@ -854,9 +1242,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * produced any pending proposal, so the proposal is cleared rather than left to be re-offered or
    * nagged about. Stale pending state must not survive the turn that contradicts it.
    */
-  if (interpreted.correction || interpreted.actionRefused || interpreted.queryRefinement || interpreted.queryParameterChange) {
-    if (state.pendingProposal || state.pendingBriefing) {
+  if (
+    brainV3.act === "correction" ||
+    brainV3.act === "rejection" ||
+    brainV3.dayLineDisposition === "decline"
+  ) {
+    if (state.pendingProposal && conversationTarget !== "pending_action") {
       state.pendingProposal = null;
+      state.pendingReminded = false;
+    }
+    if (state.pendingBriefing && conversationTarget !== "pending_briefing") {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -866,21 +1261,28 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // "Do you want me to add something, change something, or are you just catching me up?" —
   // reopening a question the operator had already closed.
   if (
-    interpreted.actionRefused &&
-    !interpreted.hasExplicitActionRequest &&
+    brainV3.act === "rejection" &&
+    brainV3.workDisposition === "none" &&
+    conversationTarget !== "pending_action" &&
     !state.pendingBriefing &&
     !state.pendingProposal &&
-    !state.pendingAccountFollowUp
+    !state.pendingAccountFollowUp &&
+    !state.clarifyingUtterance
   ) {
     mark("fallback", { fallbackReason: "action_refusal_settled" });
     return finish({ speak: "Understood — I won't add anything.", kind: "answered" });
   }
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
-  if (state.pendingAccountFollowUp) {
-    const reply = replyDecision(utterance);
+  if (state.pendingAccountFollowUp && conversationTarget === "pending_account_follow_up") {
+    const pendingDecision =
+      brainV3.act === "confirmation" || brainV3.workDisposition === "commit"
+        ? "yes"
+        : brainV3.act === "rejection"
+          ? "no"
+          : "other";
     const pending = state.pendingAccountFollowUp;
-    if (reply.decision === "yes") {
+    if (pendingDecision === "yes") {
       state.pendingAccountFollowUp = null;
       const commit = await deps.commitFollowUp(pending, {
         tenantId: input.tenantId,
@@ -912,7 +1314,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         kind: "follow_up_saved",
       });
     }
-    if (reply.decision === "no") {
+    if (pendingDecision === "no") {
       state.pendingAccountFollowUp = null;
       mark("account_follow_up");
       return finish({ speak: "Okay, I won't change it.", kind: "answered" });
@@ -922,28 +1324,45 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
-    const reply = replyDecision(utterance);
-    const explicitPendingCommit = explicitPendingDayLineCommit(utterance);
+    const reply: ReplyDecision =
+      brainV3.act === "confirmation" ||
+      brainV3.dayLineDisposition === "accept" ||
+      brainV3.dayLineDisposition === "reopen"
+        ? { decision: "yes", remainder: "" }
+        : brainV3.act === "rejection" || brainV3.dayLineDisposition === "decline"
+          ? { decision: "no", remainder: "" }
+          : { decision: "other", remainder: utterance };
+    const ownsPendingBriefing = conversationTarget === "pending_briefing";
+    const pendingHasStructuredRecoveryRefs = state.pendingBriefing.parsed.items.some(item =>
+      item.references?.some(
+        ref => ref.kind === "customer" && ref.source === "conversation_referent"
+      )
+    );
+    const explicitPendingCommit =
+      ownsPendingBriefing &&
+      (brainV3.workDisposition === "commit" ||
+        brainV3.dayLineDisposition === "accept" ||
+        brainV3.dayLineDisposition === "reopen" ||
+        (pendingHasStructuredRecoveryRefs &&
+          brainV3.workDisposition === "propose" &&
+          referencesStructuredRecoveryGroup(utterance)));
     const bindsPending =
-      reply.decision === "yes" ||
-      reply.decision === "no" ||
-      explicitDayLineRefusal(utterance) ||
+      (ownsPendingBriefing && (reply.decision === "yes" || reply.decision === "no")) ||
+      brainV3.dayLineDisposition === "decline" ||
       explicitPendingCommit;
-    const looksLikeRevision = /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(utterance);
+    const looksLikeRevision =
+      ownsPendingBriefing && brainV3.act === "correction";
     const newMatter =
       !bindsPending &&
       !looksLikeRevision &&
-      (interpreted.hasExplicitActionRequest ||
-        interpreted.operatorWorkCommitment ||
-        interpreted.conversationControl ||
-        interpreted.correctnessChallenge ||
-        interpreted.provenanceQuestion);
+      (brainV3.workDisposition === "propose" ||
+        brainV3.workDisposition === "commit" ||
+        brainV3.act === "conversation_control" ||
+        brainV3.priorClaim !== "none");
     const revisionText =
-      reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
-        ? reply.remainder
-        : reply.decision === "other" && !explicitPendingCommit
-          ? utterance
-          : null;
+      ownsPendingBriefing && brainV3.act === "correction" && !explicitPendingCommit
+        ? brainV3.canonicalWork ?? utterance
+        : null;
     if (revisionText) {
       const revision = reviseBriefing(state.pendingBriefing.parsed, revisionText, clock);
       if (revision.changes.length) {
@@ -957,41 +1376,51 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         });
       }
     }
-    if ((reply.decision === "yes" || explicitPendingCommit) && !revisionText) {
+    if (((ownsPendingBriefing && reply.decision === "yes") || explicitPendingCommit) && !revisionText) {
       const pending = state.pendingBriefing.parsed;
-      state.pendingBriefing = null;
       const result = await deps.commit(pending, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
         conversationKey: input.conversationKey,
         vehicleId: input.operatorUserId,
       });
+      const writeSucceeded = Boolean(
+        (result?.added?.length ?? 0) + (result?.completed?.length ?? 0) > 0 ||
+        (result?.receipts?.length ?? 0) > 0 ||
+        (result?.commitmentIds?.length ?? 0) > 0
+      );
+      if (writeSucceeded) {
+        state.pendingBriefing = null;
+      }
       mark("briefing");
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
       const commitSpeak = speakBriefingCommit(result, today);
       const receipts = result.receipts ?? [];
       // A referential bundle authorization is one complete command. Some older
       // confirmation parsing can leave "to the Day Line" as a remainder; replaying
       // that fragment after the save can route back through Day Line logic and write twice.
-      if (reply.remainder && !explicitPendingCommit) {
+      if (reply.remainder && !explicitPendingCommit && !weeklySpeech) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
         return finish({
-          speak: more.speak,
-          receiptBackedCommit: commitSpeak,
-          kind: "briefing_saved",
+          speak: more.speak || (writeSucceeded ? "" : commitSpeak),
+          receiptBackedCommit: writeSucceeded ? commitSpeak : undefined,
+          kind: writeSucceeded ? "briefing_saved" : "answered",
           actionIds: [...result.commitmentIds, ...(more.actionIds ?? [])],
           mutationReceipts: [...receipts, ...(more.mutationReceipts ?? [])],
         });
       }
       return finish({
-        speak: "",
-        receiptBackedCommit: commitSpeak,
-        kind: "briefing_saved",
+        speak: weeklySpeech || (writeSucceeded ? "" : commitSpeak),
+        receiptBackedCommit: writeSucceeded ? commitSpeak : undefined,
+        kind: writeSucceeded ? "briefing_saved" : "answered",
         actionIds: result.commitmentIds,
         mutationReceipts: receipts,
       });
     }
-    if (reply.decision === "no" || explicitDayLineRefusal(utterance)) {
+    if (
+      (ownsPendingBriefing && reply.decision === "no") ||
+      brainV3.dayLineDisposition === "decline"
+    ) {
       state.pendingBriefing = null;
       mark("briefing");
       const remainder = reply.decision === "no" ? reply.remainder : "";
@@ -1011,8 +1440,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     // Claire could read the full list back conversationally, then persist only
     // the newest fragment when the operator finally said yes.
     const additionalWork =
-      interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment;
-    if (newMatter && !additionalWork) {
+      ownsPendingBriefing &&
+      (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
+    if (newMatter && !additionalWork && conversationTarget !== "pending_briefing") {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -1023,27 +1453,44 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let heldProposalTitle: string | null = null;
   // The single-item loop classifies with a model; never ask it twice about the same utterance.
   let commitmentTried = false;
-  if (state.pendingProposal || state.pendingUpdate || state.pendingFieldCapture || state.pendingEngineeringOffer || state.pendingDayLineChoice || state.clarifyingUtterance) {
-    const pendingReply = replyDecision(utterance);
+  if (
+    conversationTarget === "pending_action" &&
+    (state.pendingProposal ||
+      state.pendingUpdate ||
+      state.pendingFieldCapture ||
+      state.pendingEngineeringOffer ||
+      state.pendingDayLineChoice ||
+      state.clarifyingUtterance)
+  ) {
+    const pendingDecision =
+      brainV3.act === "confirmation"
+        ? "yes"
+        : brainV3.act === "rejection"
+          ? "no"
+          : "other";
     const pendingIsNew =
-      pendingReply.decision === "other" &&
-      (explicitTrackingRequest(utterance) ||
-        interpreted.conversationControl ||
-        interpreted.correctnessChallenge ||
-        interpreted.provenanceQuestion);
+      pendingDecision === "other" &&
+      (brainV3.workDisposition === "propose" ||
+        brainV3.workDisposition === "commit" ||
+        brainV3.act === "conversation_control" ||
+        brainV3.priorClaim !== "none");
     if (pendingIsNew) {
+      heldProposalTitle = state.pendingProposal?.title ?? null;
+      if (state.pendingProposal) {
+        carried.push(proposalAsItem(state.pendingProposal, today, clock.minutesNow));
+      }
       state.pendingProposal = null;
       state.pendingUpdate = null;
       state.clarifyingUtterance = null;
       state.pendingDayLineChoice = null;
-    } else if ((isShortReply(utterance) && !looksLikeQuestion(utterance)) || pendingReply.decision !== "other") {
+    } else if (pendingDecision !== "other") {
       commitmentTried = true;
       const turn = await deps.commitment(
         {
           tenantId: input.tenantId,
           actorId: input.dayDirectorActorId,
           businessDate: today,
-          utterance,
+          utterance: pendingDecision,
           state,
           conversationId: input.conversationKey,
         },
@@ -1074,7 +1521,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         ? state.focusAccount ?? null
         : null;
   const followUpDay = account ? followUpDayIntent(utterance, today) : null;
-  if (account && followUpDay) {
+  if (
+    account &&
+    followUpDay &&
+    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit")
+  ) {
     try {
       const historyForAccount = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account });
       const pending = proposeAccountFollowUp({ history: historyForAccount, utterance, dueDate: followUpDay.ymd, conversationKey: input.conversationKey });
@@ -1090,7 +1541,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // ── 4. The whole utterance as a briefing ──────────────────────────────────
   if (morningSession === "morning_reconciliation" && deps.markReconciliation) {
     if (detectReconciliationComplete(utterance)) {
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
+      if (weeklySpeech) {
+        mark("fallback", { fallbackReason: "weekly_planning_auto_start" });
+        return finish({ speak: weeklySpeech, kind: "answered" });
+      }
     }
     if (isMorningGreeting(utterance) && !state.pendingBriefing && !state.pendingProposal) {
       const plan = deps.loadWorkdayPlan
@@ -1116,8 +1571,30 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
     }
   }
-  let parsed = parseBriefingDeterministically(utterance, clock);
-  if (explicitTrackingRequest(utterance)) {
+  const unresolvedGroupReference =
+    !state.pendingBriefing &&
+    !(state.surfacedRecoveryAccounts?.length) &&
+    referencesStructuredRecoveryGroup(utterance);
+  if (
+    unresolvedGroupReference &&
+    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit")
+  ) {
+    mark("fallback", { fallbackReason: "unresolved_structured_group_reference" });
+    return finish({
+      speak: "Which people do you mean?",
+      kind: "answered",
+    });
+  }
+
+  const brainAllowsWork =
+    !state.dayLineSuppressed &&
+    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
+  const workExecutionText = brainV3.canonicalWork ?? utterance;
+  let parsed = parseBriefingDeterministically(brainAllowsWork ? workExecutionText : utterance, clock);
+  if (
+    brainAllowsWork &&
+    (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance))
+  ) {
     const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
     const priorOnly = prior.at(-1) === utterance ? prior.slice(0, -1) : prior;
     const assembled = assembleReferencedDayLineWork({
@@ -1125,20 +1602,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       priorOperatorUtterances: priorOnly,
       clock,
       unfinished: looksUnfinished,
+      history: state.history,
+      surfacedAccounts: state.surfacedRecoveryAccounts,
     });
     if (assembled.length) parsed = { ...parsed, items: assembled, source: "deterministic" };
   }
-  const openAct = classifyOpenDialogueAct(utterance);
-  /**
-   * The InterpretedTurn seam. A parser finding task-like words is not action intent: a correction,
-   * a refusal, or talk about what Claire knows can never become a Day Line proposal, however many
-   * schedulable nouns it contains. Extracted items are demoted to context, which is the existing
-   * safe path for "this looked like work but isn't".
-   */
+  /** Brain V3 is the only authority for whether task-shaped language is actually work. */
   const skipBriefing =
-    explicitDayLineRefusal(utterance) ||
-    !interpreted.mayProposeWork ||
-    ((openAct.kind === "confide" || openAct.kind === "question") && parsed.items.length === 0);
+    state.dayLineSuppressed ||
+    brainV3.dayLineDisposition === "decline" ||
+    !brainAllowsWork;
   if (skipBriefing && parsed.items.length) {
     parsed = {
       ...parsed,
@@ -1146,11 +1619,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       items: [],
     };
   }
+  const wantsBatchProposal =
+    brainAllowsWork &&
+    (/\bbatch\s+(?:them|all|those)\b/i.test(utterance) ||
+    (Boolean(state.surfacedRecoveryAccounts?.length) &&
+      /\b(?:do|send|batch)\b[^.!?]{0,40}\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group)\b/i.test(
+        utterance
+      )));
   const explicitCommitNow =
-    explicitTrackingRequest(utterance) &&
-    parsed.items.length &&
-    interpreted.mayProposeWork &&
-    !(interpreted.hasBusinessQuestion && !interpreted.correctnessChallenge && !interpreted.provenanceQuestion);
+    brainV3.workDisposition === "commit" &&
+    !state.dayLineSuppressed &&
+    !wantsBatchProposal &&
+    parsed.items.length > 0 &&
+    parsed.questions.length === 0;
   if (explicitCommitNow) {
     const dates = Array.from(new Set(parsed.items.map(item => item.businessDate)));
     const [existing] = await Promise.all([
@@ -1186,14 +1667,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
     );
     mark("briefing");
-    await completeMorningReconciliation();
+    const weeklySpeech = await completeMorningReconciliation();
     const updateSpeech = (result.receipts ?? [])
       .filter(receipt => receipt.claimedState === "updated")
       .map(receipt => `Updated: ${receipt.statement}.`)
       .join(" ");
     const createdSpeech = result.added?.length ? speakBriefingCommit(result, today) : "";
     return finish({
-      speak: "",
+      speak: weeklySpeech,
       receiptBackedCommit: [createdSpeech, updateSpeech].filter(Boolean).join(" "),
       kind: "briefing_saved",
       actionIds: result.commitmentIds,
@@ -1211,13 +1692,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     parsed.items.some(item => item.kind === "completed") ||
     parsed.items.some(item => item.businessDate !== today) ||
     (parsed.items.length >= 1 && parsed.questions.length >= 1) ||
-    (state.pendingBriefing !== null && state.pendingBriefing !== undefined && parsed.items.length >= 1);
-  const singleFlow = !multiItem && parsed.items.length <= 1 && singleIntentFlow(utterance);
+    (state.pendingBriefing !== null && state.pendingBriefing !== undefined && parsed.items.length >= 1) ||
+    wantsBatchProposal;
+  const singleFlow = !multiItem && parsed.items.length <= 1 && singleIntentFlow(workExecutionText);
 
-  if (!businessQuestion && (multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(utterance) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
+  if (!businessQuestion && (multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(workExecutionText) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
     const vocabulary = await deps.vocabulary(input.tenantId).catch(() => [] as string[]);
     if (deps.extractModel && (input.surface === "voice" || parsed.unparsed.length > 0)) {
-      const model = await deps.extractModel({ tenantId: input.tenantId, utterance, clock, vocabulary, recentTurns: history() });
+      const model = await deps.extractModel({ tenantId: input.tenantId, utterance: workExecutionText, clock, vocabulary, recentTurns: history() });
       if (model && model.items.length >= Math.max(1, parsed.items.length - 1)) {
         parsed = { ...model, questions: model.questions.length ? model.questions : parsed.questions, context: model.context.length ? model.context : parsed.context };
       }
@@ -1322,7 +1804,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
-    if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track")) {
+    if (
+      addable &&
+      brainV3.workDisposition === "commit" &&
+      !state.dayLineSuppressed &&
+      !wantsBatchProposal
+    ) {
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
@@ -1335,9 +1822,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
       state.pendingBriefing = null;
       mark("briefing");
-      await completeMorningReconciliation();
+      const weeklySpeech = await completeMorningReconciliation();
       return finish({
-        speak: answers.join(" ").trim(),
+        speak: [answers.join(" ").trim(), weeklySpeech].filter(Boolean).join(" "),
         receiptBackedCommit: speakBriefingCommit(result, today),
         kind: "briefing_saved",
         actionIds: result.commitmentIds,
@@ -1351,17 +1838,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak, kind: "briefing_proposed" });
   }
 
-  if (!businessQuestion && !singleFlow && parsed.items.length === 1 && !looksLikeWorkRequest(utterance) && parsed.questions.length === 0) {
-    // A single new piece of work goes through the established proposal loop
-    // (campaign-aware new-vs-existing classification, NEEDS_DETAILS handling).
-  }
-
   // ── 5. Established single-intent work flows ───────────────────────────────
   // Thread arithmetic ("add them together") uses the verb "add" but is not work.
   if (isCombineRequest(lower) && parsed.items.length <= 1) {
     parsed = { ...parsed, items: [], questions: parsed.questions.length ? parsed.questions : [utterance] };
   }
-  if (!commitmentTried && !isCombineRequest(lower) && (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))) {
+  if (
+    brainAllowsWork &&
+    !commitmentTried &&
+    !isCombineRequest(lower) &&
+    (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -1373,8 +1860,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
 
-  // ── 6. Questions ──────────────────────────────────────────────────────────
-  const answer = await answerQuestion(utterance);
+  // ── 6. Questions / advice ─────────────────────────────────────────────────
+  // Readers are evidence tools, not interpreters. They run only after Brain V3
+  // says the operator actually asked a question or requested advice.
+  const mayRunReaders =
+    brainV3.act === "question" || brainV3.act === "advice_request";
+  const answer = mayRunReaders ? await answerQuestion(utterance) : null;
   if (answer) {
     /**
      * A pending item is surfaced ONCE. The operator still needs to know a proposal is alive, but
@@ -1392,7 +1883,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: `${answer}${reminder}`, kind: "answered" });
   }
 
-  if (!commitmentTried && !isCombineRequest(lower) && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !looksLikeQuestion(utterance)) {
+  if (
+    brainAllowsWork &&
+    !commitmentTried &&
+    !isCombineRequest(lower) &&
+    !parsed.questions.length &&
+    !singleFlow &&
+    parsed.items.length === 0
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -1415,6 +1913,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brief: input.brief ?? null,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      semanticFrame: {
+        target: brainV3.target,
+        act: brainV3.act,
+        workDisposition: brainV3.workDisposition,
+        dayLineDisposition: brainV3.dayLineDisposition,
+        priorClaim: brainV3.priorClaim,
+        weeklyDisposition: brainV3.weeklyDisposition,
+        identityTopic: brainV3.identityTopic ?? "none",
+        broadBriefingRequest: brainV3.broadBriefingRequest,
+        canonicalWork: brainV3.canonicalWork,
+        referent: brainV3.referent,
+        rationale: brainV3.rationale,
+      },
       conversationId: input.conversationKey,
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
@@ -1586,6 +2097,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brief: input.brief ?? null,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      semanticFrame: {
+        target: brainV3.target,
+        act: brainV3.act,
+        workDisposition: brainV3.workDisposition,
+        dayLineDisposition: brainV3.dayLineDisposition,
+        priorClaim: brainV3.priorClaim,
+        weeklyDisposition: brainV3.weeklyDisposition,
+        identityTopic: brainV3.identityTopic ?? "none",
+        broadBriefingRequest: brainV3.broadBriefingRequest,
+        canonicalWork: brainV3.canonicalWork,
+        referent: brainV3.referent,
+        rationale: brainV3.rationale,
+      },
       retrievedEvidence: evidence.length ? evidence : undefined,
       conversationId: input.conversationKey,
       coveredThisCall: coveredThisCallLines(state.coverage),
@@ -1651,7 +2175,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * deterministic routes only honour a result that has already landed, so they never wait.
    */
   async function semanticChallengeSpeech(wait: boolean, presentation: "deterministic" | "guard_replacement"): Promise<string | null> {
-    if (!priorClaimLaneOpen(interpretTurn(utterance))) return null;
+    if (brainV3.priorClaim === "none") return null;
     if (!semantic) return null;
     const reading = wait ? await semantic.promise : semantic.settled ?? null;
     if (!reading) {

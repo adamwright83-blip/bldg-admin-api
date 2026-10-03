@@ -5,6 +5,15 @@ export default function Gumballpals() {
     retry: false,
     refetchInterval: 60000,
   });
+  const pulse = trpc.system.gumball.operatingPulse.useQuery(undefined, {
+    retry: false,
+    refetchInterval: 60000,
+    enabled: status.isSuccess,
+  });
+  const sales = trpc.system.gumball.latestSales.useQuery(undefined, {
+    retry: false,
+    enabled: status.isSuccess,
+  });
   const last = status.data?.binding?.lastSuccessAt;
   const stale = !last || Date.now() - new Date(last).getTime() > 26 * 3600000;
   return (
@@ -48,7 +57,8 @@ export default function Gumballpals() {
                 Store: {status.data?.binding?.storeLabel || "Not paired yet"}
               </p>
               <p role="status">
-                {status.data?.observability?.operatorStatusLine ??
+                {pulse.data?.summary ??
+                  status.data?.observability?.operatorStatusLine ??
                   (last
                     ? `Last successful import: ${new Date(last).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific`
                     : "GUMBALL · export never captured")}
@@ -98,6 +108,33 @@ export default function Gumballpals() {
           <button onClick={() => void status.refetch()} style={{ padding: 12 }}>
             Refresh status
           </button>
+        </section>
+        <section style={{ background: "#fff", borderRadius: 24, padding: 24, margin: "24px 0" }}>
+          <h2>Latest sales</h2>
+          {sales.isLoading ? <p>Loading sales…</p> : null}
+          {sales.error ? <p role="alert">Sales could not be loaded.</p> : null}
+          {sales.data && sales.data.sales.length === 0 ? (
+            <p>No paid CleanCloud sales are stored for this tenant.</p>
+          ) : null}
+          {sales.data && sales.data.sales.length > 0 ? (
+            <ul>
+              {sales.data.sales.map(sale => (
+                <li key={`${sale.at}-${sale.ingestedAt}-${sale.customerName}-${sale.amountCents}`}>
+                  {sale.at
+                    ? new Date(sale.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })
+                    : "No payment time"}{" "}
+                  Pacific · {sale.customerName} · $
+                  {(sale.amountCents / 100).toFixed(2)} · imported{" "}
+                  {sale.ingestedAt
+                    ? new Date(sale.ingestedAt).toLocaleString("en-US", {
+                        timeZone: "America/Los_Angeles",
+                      })
+                    : "unknown"}{" "}
+                  Pacific
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
         <h2>Install once. Then let it run.</h2>
         <p>

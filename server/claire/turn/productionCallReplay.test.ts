@@ -211,6 +211,7 @@ describe("cardinality reaches the actual business query", () => {
 
 // ── Route scope, pending state, and correctness challenges (turns 12-23, 28) ─────────────────
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
+import { safeClaireBrainV3Fallback } from "./brainV3";
 
 const T13_BOARD = "GUMBALL did not run today. Text Andrew is on the line. Mission 6. Synthetic verification follow-up.";
 
@@ -228,6 +229,49 @@ function stateful(over: Partial<ClaireTurnDeps> = {}) {
     searchMemory: vi.fn(async () => []) as never, memoryBetween: vi.fn(async () => []) as never, encyclopedia: null,
     watchBoard: board as never, doctrineTurn: undefined,
     classifyPriorClaim: (async () => false) as never, rerunBusinessQuery: vi.fn() as never, classifierBudgetMs: 30,
+    brainV3: vi.fn(async (input: any) => {
+      const text = String(input.utterance ?? "").trim();
+      if (/^(?:good morning|what should i do today|what do i need to know)\b/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "question",
+          broadBriefingRequest: true,
+          rationale: "Broad briefing request",
+        };
+      }
+      if (/^(?:um,\s*)?actually don'?t do that\b/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "rejection",
+          workDisposition: "none",
+          rationale: "Operator refuses action",
+        };
+      }
+      if (/^(?:no,\s*)?i meant\b/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "correction",
+          rationale: "Operator corrects prior turn",
+        };
+      }
+      if (/^what were the other four\b/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "correction",
+          rationale: "Query refinement",
+        };
+      }
+      if (/^not now\b/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          target: "weekly_planning",
+          act: "rejection",
+          weeklyDisposition: "cancel",
+          rationale: "Operator declines weekly planning",
+        };
+      }
+      return safeClaireBrainV3Fallback();
+    }) as never,
     ...over, ...extra,
   });
   const say = (utterance: string, extra: Partial<ClaireTurnDeps> = {}) =>
@@ -403,5 +447,25 @@ describe("2026-09-21 shadow trial — shared perception", () => {
 
   it("Yes. is an acknowledgement", () => {
     expect(interpretTurn("Yes.").acknowledgement).toBe(true);
+  });
+});
+
+
+describe("Sunday weekly planning invite decline", () => {
+  it("clears the invite state and ends the proactive call after a decline", async () => {
+    const h = stateful();
+    h.state.sessionKind = "weekly_planning_invite";
+    h.state.weeklyPlanningWeekStart = "2026-10-05";
+
+    const result = await h.say("not now");
+
+    expect(result).toMatchObject({
+      speak: "All right.",
+      kind: "answered",
+      endCall: true,
+    });
+    expect(h.state.sessionKind).toBeUndefined();
+    expect(h.state.weeklyPlanningWeekStart).toBeNull();
+    expect(h.state.pendingWeeklyPlanningCallback).toBeNull();
   });
 });

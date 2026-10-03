@@ -638,6 +638,21 @@ export async function resolveCommercialPipelineMission(input: {
       // Evidence reconciliation must never block the authoritative business
       // transition that already succeeded above.
     });
+
+    // Bridge to Persistent Growth Operator ledger as operational_result if this mission has deterministic lineage to an objective
+    try {
+      const { bridgeCommercialResolution } = await import("../persistentOperator/fieldEventBridge");
+      await bridgeCommercialResolution({
+        tenantId: input.tenantId,
+        actorId: mission.assignedTo ?? input.actorId,
+        missionId: mission.id,
+        resolution: input.action,
+        evidenceReference: idempotencyKey,
+        sourceSystem: "commercial_pipeline",
+      });
+    } catch (err) {
+      console.warn("[PersistentOperator] commercial resolution bridge deferred", err);
+    }
   }
   const detail = await getCommercialPipelineDetail(input);
   if (!detail) throw new Error("Commercial pipeline record not found");

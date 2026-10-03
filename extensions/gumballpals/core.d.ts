@@ -13,8 +13,29 @@ export function initialRange(now?: Date): { from: string; to: string };
 export function validateExportUrl(
   raw: string,
   range: { from: string; to: string }
-): { url: string; storeId: string; from: string; to: string };
-export function parseCsv(text: string): Record<string, string>[];
+): {
+  url: string;
+  storeId: string;
+  type: string;
+  from: string;
+  to: string;
+  reportType: "orders_sales";
+};
+export function validateRevenueExportUrl(
+  raw: string,
+  range: { from: string; to: string }
+): {
+  url: string;
+  storeId: string;
+  type: string;
+  from: string;
+  to: string;
+  reportType: "orders_revenue";
+};
+export function parseCsv(
+  text: string,
+  reportType?: "orders_sales" | "orders_revenue"
+): Record<string, string>[];
 export function assertPairing(
   binding: Record<string, string>,
   observed: Record<string, string>

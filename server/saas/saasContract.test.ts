@@ -106,18 +106,49 @@ describe("DayForge SaaS production contract", () => {
   });
 
 
-  it("quarantines commercial SaaS members from legacy product routes", () => {
+  it("quarantines commercial SaaS members from legacy routes while exposing canonical JOYSTICK", () => {
     const app = source("../../client/src/App.tsx");
     const shell = source("../../client/src/product/ProductShell.tsx");
     const field = source("../../client/src/product/FieldHome.tsx");
+    const atlas = source("../geography/geographicTruthRouter.ts");
 
     expect(app).toContain("isSaasCustomerSafePath");
     expect(app).toContain('user?.role === "user"');
     expect(app).toContain('<Redirect to="/product" />');
+    expect(app).toContain('"/play"');
+    expect(app).toContain('"/growth/lantern-city"');
+    expect(app).toContain('"/goldline-chapter"');
+    expect(app).toContain("TenantOperatorGate");
+    expect(app).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(atlas).toContain("myAtlas: legacyDayforgeTenantOperatorProcedure");
+    expect(atlas).toContain("getGeographicTruth({ tenantId: ctx.tenantId })");
     expect(shell).not.toContain("Legacy operations");
     expect(shell).not.toContain('href="/admin"');
     expect(shell).not.toContain('href="/new-order"');
     expect(field).not.toContain('href="/new-order"');
+  });
+
+  it("evolves the existing SaaS onboarding spine for JOYSTICK acquisition", () => {
+    const schema = source("../../drizzle/schema.ts");
+    const migration = source("../../scripts/migrate.mjs");
+    const store = source("./saasStore.ts");
+    const router = source("./saasRouter.ts");
+    const landing = source("../../client/src/pages/JoystickLanding.tsx");
+
+    expect(schema).toContain('onboardingMode: varchar("onboardingMode"');
+    expect(schema).toContain('draftAnswersJson: json("draftAnswersJson")');
+    expect(schema).toContain('draftPreviewJson: json("draftPreviewJson")');
+    expect(schema).not.toContain("joystickAcquisitionSessions");
+    expect(migration).toContain("JOYSTICK anonymous acquisition nullable identity");
+    expect(store).toContain('onboardingMode: "joystick_generic"');
+    expect(store).toContain("seedSessionFromAcquisition");
+    expect(store).toContain("locations: []");
+    expect(store).toContain("services: []");
+    expect(router).toContain("startJoystickDraft");
+    expect(router).toContain("saveJoystickDraftAnswer");
+    expect(router).toContain("generateJoystickDraftPreview");
+    expect(router).toContain("saveJoystickIdentity");
+    expect(landing).toContain('const START_PATH = "/joystick-start"');
   });
 
   it("authorizes Strategy through tenant membership rather than platform admin", () => {

@@ -419,10 +419,11 @@ describe.skipIf(!runDatabaseGate)("Armory Evolution", () => {
       item => item.id === "foundation:specific-date"
     );
     expect(weapon?.personalEvidence?.uses).toBe(8);
-    // 8 usages x 2 distinct real outcomes, deduped on the repeated report.
-    expect(weapon?.personalEvidence?.followUpsObserved).toBe(8);
-    expect(weapon?.personalEvidence?.winsObserved).toBe(8);
-    expect(weapon?.personalEvidence?.confidence).toBe("strong");
+    // One real follow-up and one real win stay one each even though both are
+    // associated with all eight historical usages.
+    expect(weapon?.personalEvidence?.followUpsObserved).toBe(1);
+    expect(weapon?.personalEvidence?.winsObserved).toBe(1);
+    expect(weapon?.personalEvidence?.confidence).toBe("emerging");
     expect(weapon?.personalEvidence?.summary).toMatch(/observed/i);
     expect(weapon?.personalEvidence?.summary.toLowerCase()).not.toMatch(
       /caused|because/

@@ -3349,6 +3349,71 @@ export const legacyDayforgeSaasMemberships = mysqlTable(
   })
 );
 
+export const persistentOperatorIdentityBindings = mysqlTable(
+  "persistent_operator_identity_bindings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOpenId: varchar("canonicalOpenId", { length: 64 }).notNull(),
+    aliasOpenId: varchar("aliasOpenId", { length: 64 }).notNull(),
+    activeAliasKey: varchar("activeAliasKey", { length: 191 }),
+    surface: varchar("surface", { length: 32 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdByOpenId: varchar("createdByOpenId", { length: 64 }),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeAliasUnique: uniqueIndex(
+      "uq_persistent_operator_identity_active_alias"
+    ).on(table.activeAliasKey),
+    aliasIdx: index("idx_persistent_operator_identity_alias").on(
+      table.tenantId,
+      table.aliasOpenId,
+      table.active
+    ),
+    canonicalIdx: index("idx_persistent_operator_identity_canonical").on(
+      table.tenantId,
+      table.canonicalOpenId,
+      table.active
+    ),
+  })
+);
+
+export const persistentOperatorDiagnosticEvents = mysqlTable(
+  "persistent_operator_diagnostic_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
+    operatorUserId: varchar("operatorUserId", { length: 128 }),
+    subsystem: varchar("subsystem", { length: 64 }).notNull(),
+    eventKind: varchar("eventKind", { length: 64 }).notNull(),
+    reason: varchar("reason", { length: 64 }),
+    sourceIdentityType: varchar("sourceIdentityType", { length: 32 }),
+    targetIdentityType: varchar("targetIdentityType", { length: 32 }),
+    objectiveId: varchar("objectiveId", { length: 191 }),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantTimeIdx: index("idx_persistent_operator_diag_tenant_time").on(
+      table.tenantId,
+      table.occurredAt
+    ),
+    operatorTimeIdx: index("idx_persistent_operator_diag_operator_time").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.occurredAt
+    ),
+    reasonIdx: index("idx_persistent_operator_diag_reason").on(
+      table.tenantId,
+      table.reason,
+      table.occurredAt
+    ),
+  })
+);
+
 export const legacyDayforgeSaasUserCredentials = mysqlTable(
   "dayforge_saas_user_credentials",
   {
@@ -3377,9 +3442,14 @@ export const legacyDayforgeSaasOnboardingSessions = mysqlTable(
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     resumeTokenHash: varchar("resumeTokenHash", { length: 64 }).notNull(),
-    businessName: varchar("businessName", { length: 255 }).notNull(),
-    slug: varchar("slug", { length: 64 }).notNull(),
-    ownerEmail: varchar("ownerEmail", { length: 320 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }),
+    slug: varchar("slug", { length: 64 }),
+    ownerEmail: varchar("ownerEmail", { length: 320 }),
+    onboardingMode: varchar("onboardingMode", { length: 32 })
+      .notNull()
+      .default("legacy_laundry"),
+    draftAnswersJson: json("draftAnswersJson"),
+    draftPreviewJson: json("draftPreviewJson"),
     currentStep: varchar("currentStep", { length: 64 })
       .notNull()
       .default("business"),
@@ -3596,6 +3666,36 @@ export const legacyDayforgeSaasEntitlements = mysqlTable(
       table.tenantId,
       table.entitlementKey,
       table.source
+    ),
+  })
+);
+
+export const tenantLearningGovernance = mysqlTable(
+  "tenant_learning_governance",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    scope: varchar("scope", { length: 96 }).notNull(),
+    version: int("version").notNull(),
+    termsVersion: varchar("termsVersion", { length: 96 }).notNull(),
+    policyVersion: varchar("policyVersion", { length: 96 }).notNull(),
+    permittedAggregationUse: boolean("permittedAggregationUse")
+      .notNull()
+      .default(false),
+    authorizedByUserId: varchar("authorizedByUserId", { length: 128 }).notNull(),
+    effectiveAt: timestamp("effectiveAt").notNull(),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantScopeVersionUnique: uniqueIndex(
+      "uq_tenant_learning_governance_scope_version"
+    ).on(table.tenantId, table.scope, table.version),
+    activeLookupIdx: index("idx_tenant_learning_governance_active").on(
+      table.tenantId,
+      table.scope,
+      table.effectiveAt,
+      table.revokedAt
     ),
   })
 );
@@ -4151,6 +4251,7 @@ export const agentEvents = mysqlTable("agent_events", {
     "building_agent",
     "collections_agent",
     "operator_task_agent",
+    "goal_cycle_agent",
     "system_agent",
   ]).notNull(),
   actorType: mysqlEnum("actorType", [
@@ -4169,9 +4270,13 @@ export const agentEvents = mysqlTable("agent_events", {
   inputJson: json("inputJson"),
   outputJson: json("outputJson"),
   status: mysqlEnum("status", [
+    "proposed",
+    "policy_denied",
+    "write_withheld",
+    "approval_required",
+    "execution_started",
     "success",
     "failed",
-    "approval_required",
     "blocked",
   ]).notNull(),
   errorMessage: text("errorMessage"),
@@ -4184,8 +4289,36 @@ export const agentEvents = mysqlTable("agent_events", {
     .default(false)
     .notNull(),
   approvedByUserId: varchar("approvedByUserId", { length: 128 }),
+  goalRunId: varchar("goalRunId", { length: 36 }),
+  cycleId: varchar("cycleId", { length: 36 }),
+  decisionId: varchar("decisionId", { length: 36 }),
+  obligationId: varchar("obligationId", { length: 191 }),
+  authorityBasis: varchar("authorityBasis", { length: 64 }),
+  approvalBasis: varchar("approvalBasis", { length: 64 }),
+  standingAuthorizationId: varchar("standingAuthorizationId", { length: 36 }),
+  standingAuthorizationVersion: int("standingAuthorizationVersion"),
+  policyVersion: varchar("policyVersion", { length: 96 }),
+  operationStatus: varchar("operationStatus", { length: 32 }),
+  objectiveId: varchar("objectiveId", { length: 36 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+},
+table => ({
+  decisionIdx: index("idx_agent_events_decision").on(
+    table.tenantId,
+    table.decisionId,
+    table.id
+  ),
+  cycleIdx: index("idx_agent_events_cycle").on(
+    table.tenantId,
+    table.cycleId,
+    table.id
+  ),
+  objectiveIdx: index("idx_agent_events_objective").on(
+    table.tenantId,
+    table.objectiveId,
+    table.id
+  ),
+}));
 
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type InsertAgentEvent = typeof agentEvents.$inferInsert;
@@ -5566,6 +5699,8 @@ export const armoryWeaponUsages = mysqlTable(
       "personal_evidence",
       "foundation",
     ]).notNull(),
+    decisionPointId: varchar("decisionPointId", { length: 191 }),
+    encounterReference: varchar("encounterReference", { length: 191 }),
     requestId: varchar("requestId", { length: 36 }).notNull(),
     usedAt: timestamp("usedAt").defaultNow().notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -5613,6 +5748,13 @@ export const armoryWeaponOutcomes = mysqlTable(
       "no_change",
     ]).notNull(),
     outcomeReference: varchar("outcomeReference", { length: 191 }).notNull(),
+    associationStrength: mysqlEnum("associationStrength", [
+      "decision_point",
+      "encounter",
+      "mission_window_legacy",
+    ])
+      .notNull()
+      .default("mission_window_legacy"),
     observedAt: timestamp("observedAt").defaultNow().notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
@@ -7379,6 +7521,563 @@ export const operatorMacroGoals = mysqlTable(
 export type OperatorMacroGoal = typeof operatorMacroGoals.$inferSelect;
 export type InsertOperatorMacroGoal = typeof operatorMacroGoals.$inferInsert;
 
+export const claireProactiveObligations = mysqlTable(
+  "claire_proactive_obligations",
+  {
+    id: varchar("id", { length: 191 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    subjectKey: varchar("subjectKey", { length: 191 }).notNull(),
+    payloadJson: json("payloadJson").notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    dueDate: varchar("dueDate", { length: 10 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }),
+    cycleId: varchar("cycleId", { length: 36 }),
+    decisionId: varchar("decisionId", { length: 36 }),
+    executionType: varchar("executionType", { length: 32 }),
+    commercialFollowUpRef: varchar("commercialFollowUpRef", { length: 191 }),
+    objectiveRef: varchar("objectiveRef", { length: 191 }),
+    agentEventId: int("agentEventId"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    openIdx: index("idx_claire_proactive_open").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.status,
+      table.dueDate
+    ),
+    decisionIdx: index("idx_claire_proactive_decision").on(
+      table.tenantId,
+      table.decisionId
+    ),
+    cycleIdx: index("idx_claire_proactive_cycle").on(
+      table.tenantId,
+      table.cycleId
+    ),
+  })
+);
+
+export type ClaireProactiveObligationRow =
+  typeof claireProactiveObligations.$inferSelect;
+export type InsertClaireProactiveObligationRow =
+  typeof claireProactiveObligations.$inferInsert;
+
+export const macroGoalRuns = mysqlTable(
+  "macro_goal_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    macroGoalId: varchar("macroGoalId", { length: 36 }).notNull(),
+    verticalKey: varchar("verticalKey", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["active", "paused", "completed", "superseded"])
+      .notNull()
+      .default("active"),
+    goalSnapshotJson: json("goalSnapshotJson").notNull(),
+    metricKey: varchar("metricKey", { length: 64 }).notNull(),
+    targetValue: decimal("targetValue", { precision: 15, scale: 2 }).notNull(),
+    unit: varchar("unit", { length: 64 }).notNull(),
+    baselineObservationRef: varchar("baselineObservationRef", { length: 191 }),
+    baselineValue: decimal("baselineValue", { precision: 15, scale: 2 }),
+    baselinePrecision: varchar("baselinePrecision", { length: 32 }).notNull(),
+    baselineCoverage: varchar("baselineCoverage", { length: 32 }).notNull(),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    lastEvaluatedAt: timestamp("lastEvaluatedAt"),
+    nextEvaluationAt: timestamp("nextEvaluationAt"),
+    policyVersion: varchar("policyVersion", { length: 96 }).notNull(),
+    completedAt: timestamp("completedAt"),
+    completionEvidenceRef: varchar("completionEvidenceRef", { length: 191 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantGoalUnique: uniqueIndex("uq_macro_goal_runs_tenant_goal").on(
+      table.tenantId,
+      table.macroGoalId
+    ),
+    operatorStatusIdx: index("idx_macro_goal_runs_operator_status").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.updatedAt
+    ),
+    dueIdx: index("idx_macro_goal_runs_due").on(
+      table.tenantId,
+      table.status,
+      table.nextEvaluationAt
+    ),
+  })
+);
+
+export type MacroGoalRun = typeof macroGoalRuns.$inferSelect;
+export type InsertMacroGoalRun = typeof macroGoalRuns.$inferInsert;
+
+export const goalCycleTenantState = mysqlTable("goal_cycle_tenant_state", {
+  tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+  lastClaimedAt: timestamp("lastClaimedAt", { fsp: 3 }),
+  createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+});
+
+export const goalCycleRequests = mysqlTable(
+  "goal_cycle_requests",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    triggerType: mysqlEnum("triggerType", [
+      "goal_activated",
+      "scheduled_tick",
+      "business_event",
+      "action_result",
+      "human_result",
+      "source_freshness_changed",
+      "week_locked",
+      "manual_replan",
+    ]).notNull(),
+    triggerSourceReference: varchar("triggerSourceReference", { length: 191 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    status: mysqlEnum("status", [
+      "queued",
+      "leased",
+      "running",
+      "retry_scheduled",
+      "completed",
+      "dead_letter",
+      "cancelled",
+    ])
+      .notNull()
+      .default("queued"),
+    availableAt: timestamp("availableAt", { fsp: 3 }).notNull().defaultNow(),
+    deadlineAt: timestamp("deadlineAt", { fsp: 3 }),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    heartbeatAt: timestamp("heartbeatAt", { fsp: 3 }),
+    attemptCount: int("attemptCount").notNull().default(0),
+    maxAttempts: int("maxAttempts").notNull().default(5),
+    lastError: text("lastError"),
+    resultJson: json("resultJson"),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex(
+      "uq_goal_cycle_requests_tenant_idempotency"
+    ).on(table.tenantId, table.idempotencyKey),
+    claimIdx: index("idx_goal_cycle_requests_claim").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+    tenantClaimIdx: index("idx_goal_cycle_requests_tenant_claim").on(
+      table.tenantId,
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+    runIdx: index("idx_goal_cycle_requests_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+  })
+);
+
+export type GoalCycleRequest = typeof goalCycleRequests.$inferSelect;
+export type InsertGoalCycleRequest = typeof goalCycleRequests.$inferInsert;
+
+export const goalCycleDecisions = mysqlTable(
+  "goal_cycle_decisions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    policyVersion: varchar("policyVersion", { length: 96 }).notNull(),
+    weeklyIntentId: varchar("weeklyIntentId", { length: 36 }),
+    weeklyIntentRevision: int("weeklyIntentRevision"),
+    weekStart: varchar("weekStart", { length: 10 }),
+    candidateFingerprint: varchar("candidateFingerprint", { length: 64 }),
+    candidateIdsJson: json("candidateIdsJson").notNull(),
+    candidateReasonCodesJson: json("candidateReasonCodesJson").notNull(),
+    missionDirectorPlanId: varchar("missionDirectorPlanId", { length: 36 }),
+    missionDirectorRevision: int("missionDirectorRevision"),
+    selectionKind: varchar("selectionKind", { length: 32 }).notNull(),
+    selectedRef: varchar("selectedRef", { length: 191 }),
+    selectedExecutionType: varchar("selectedExecutionType", { length: 32 }),
+    selectedReasonCode: varchar("selectedReasonCode", { length: 64 }).notNull(),
+    evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    blockedCandidatesJson: json("blockedCandidatesJson").notNull(),
+    priorComparableDecisionId: varchar("priorComparableDecisionId", { length: 36 }),
+    sourceCoverageJson: json("sourceCoverageJson").notNull(),
+    loadoutJson: json("loadoutJson").notNull(),
+    experimentJson: json("experimentJson"),
+    decisionFingerprint: varchar("decisionFingerprint", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    cycleUnique: uniqueIndex("uq_goal_cycle_decisions_cycle").on(
+      table.tenantId,
+      table.cycleId
+    ),
+    runIdx: index("idx_goal_cycle_decisions_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+    selectedIdx: index("idx_goal_cycle_decisions_selected").on(
+      table.tenantId,
+      table.selectionKind,
+      table.selectedRef,
+      table.createdAt
+    ),
+  })
+);
+
+export type GoalCycleDecision = typeof goalCycleDecisions.$inferSelect;
+export type InsertGoalCycleDecision = typeof goalCycleDecisions.$inferInsert;
+
+export const goalCycleObjectives = mysqlTable(
+  "goal_cycle_objectives",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    selectionKind: varchar("selectionKind", { length: 32 }).notNull(),
+    selectedRef: varchar("selectedRef", { length: 191 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull(),
+    executionType: varchar("executionType", { length: 32 }),
+    authority: varchar("authority", { length: 32 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("presented"),
+    statusReason: text("statusReason"),
+    actionTargetType: varchar("actionTargetType", { length: 64 }),
+    actionTargetId: varchar("actionTargetId", { length: 128 }),
+    actionTargetDisplayName: varchar("actionTargetDisplayName", { length: 255 }),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    windowStart: varchar("windowStart", { length: 32 }),
+    windowEnd: varchar("windowEnd", { length: 32 }),
+    loadoutJson: json("loadoutJson").notNull(),
+    evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    decisionUnique: uniqueIndex("uq_goal_cycle_objectives_decision").on(
+      table.tenantId,
+      table.decisionId
+    ),
+    runIdx: index("idx_goal_cycle_objectives_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+    operatorIdx: index("idx_goal_cycle_objectives_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.businessDate
+    ),
+  })
+);
+
+export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
+export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;
+
+export const goalCycleOutcomes = mysqlTable(
+  "goal_cycle_outcomes",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    objectiveId: varchar("objectiveId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    outcomeKind: varchar("outcomeKind", { length: 64 }).notNull(),
+    impactClass: varchar("impactClass", { length: 32 }).notNull(),
+    epistemicStatus: varchar("epistemicStatus", { length: 32 }).notNull().default("verified"),
+    evidenceClass: varchar("evidenceClass", { length: 32 }).notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 191 }).notNull(),
+    sourceSystem: varchar("sourceSystem", { length: 64 }).notNull(),
+    monetaryValueCents: int("monetaryValueCents"),
+    quantityValue: decimal("quantityValue", { precision: 15, scale: 2 }),
+    unit: varchar("unit", { length: 32 }),
+    explanation: text("explanation"),
+    metadataJson: json("metadataJson"),
+    observedAt: timestamp("observedAt", { fsp: 3 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_goal_cycle_outcomes_idempotency").on(
+      table.tenantId,
+      table.objectiveId,
+      table.outcomeKind,
+      table.evidenceReference
+    ),
+    decisionIdx: index("idx_goal_cycle_outcomes_decision").on(
+      table.tenantId,
+      table.decisionId,
+      table.createdAt
+    ),
+    objectiveIdx: index("idx_goal_cycle_outcomes_objective").on(
+      table.tenantId,
+      table.objectiveId,
+      table.createdAt
+    ),
+    runIdx: index("idx_goal_cycle_outcomes_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+  })
+);
+
+export type GoalCycleOutcome = typeof goalCycleOutcomes.$inferSelect;
+export type InsertGoalCycleOutcome = typeof goalCycleOutcomes.$inferInsert;
+
+export const goalCycleLearnedDeltas = mysqlTable(
+  "goal_cycle_learned_deltas",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    cycleId: varchar("cycleId", { length: 36 }).notNull(),
+    decisionId: varchar("decisionId", { length: 36 }).notNull(),
+    objectiveId: varchar("objectiveId", { length: 36 }).notNull(),
+    outcomeId: varchar("outcomeId", { length: 36 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    learningKind: varchar("learningKind", { length: 64 }).notNull(),
+    targetKey: varchar("targetKey", { length: 191 }).notNull(),
+    deltaType: varchar("deltaType", { length: 32 }).notNull(),
+    beforeStateJson: json("beforeStateJson"),
+    afterStateJson: json("afterStateJson").notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 191 }).notNull(),
+    confidence: varchar("confidence", { length: 32 }).notNull().default("high"),
+    explanation: text("explanation").notNull(),
+    appliedCount: int("appliedCount").notNull().default(1),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_goal_cycle_learned_deltas_idempotency").on(
+      table.tenantId,
+      table.outcomeId,
+      table.learningKind,
+      table.targetKey
+    ),
+    decisionIdx: index("idx_goal_cycle_learned_deltas_decision").on(
+      table.tenantId,
+      table.decisionId,
+      table.createdAt
+    ),
+    objectiveIdx: index("idx_goal_cycle_learned_deltas_objective").on(
+      table.tenantId,
+      table.objectiveId,
+      table.createdAt
+    ),
+    runIdx: index("idx_goal_cycle_learned_deltas_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.createdAt
+    ),
+    operatorIdx: index("idx_goal_cycle_learned_deltas_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.learningKind,
+      table.targetKey
+    ),
+  })
+);
+
+export type GoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferSelect;
+export type InsertGoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferInsert;
+
+export const goalCycleHistory = mysqlTable(
+  "goal_cycle_history",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    fromStatus: varchar("fromStatus", { length: 32 }),
+    toStatus: varchar("toStatus", { length: 32 }),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    attemptNumber: int("attemptNumber"),
+    detailsJson: json("detailsJson"),
+    errorText: text("errorText"),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    requestIdx: index("idx_goal_cycle_history_request").on(
+      table.tenantId,
+      table.requestId,
+      table.id
+    ),
+    runIdx: index("idx_goal_cycle_history_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.id
+    ),
+  })
+);
+
+export const goalCycleDeadLetters = mysqlTable(
+  "goal_cycle_dead_letters",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    goalRunId: varchar("goalRunId", { length: 36 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    reason: varchar("reason", { length: 64 }).notNull(),
+    errorText: text("errorText"),
+    attemptCount: int("attemptCount").notNull(),
+    triggerType: varchar("triggerType", { length: 64 }).notNull(),
+    triggerSourceReference: varchar("triggerSourceReference", { length: 191 }),
+    deadLetteredAt: timestamp("deadLetteredAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    requestUnique: uniqueIndex("uq_goal_cycle_dead_letters_request").on(
+      table.tenantId,
+      table.requestId
+    ),
+    runIdx: index("idx_goal_cycle_dead_letters_run").on(
+      table.tenantId,
+      table.goalRunId,
+      table.deadLetteredAt
+    ),
+  })
+);
+
+export const tenantStandingAuthorizations = mysqlTable(
+  "tenant_standing_authorizations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    channel: varchar("channel", { length: 32 }).notNull(),
+    recipientClass: varchar("recipientClass", { length: 64 }).notNull(),
+    exactAction: varchar("exactAction", { length: 128 }).notNull(),
+    dailyLimit: int("dailyLimit").notNull().default(1),
+    allowedLocalStart: varchar("allowedLocalStart", { length: 5 }),
+    allowedLocalEnd: varchar("allowedLocalEnd", { length: 5 }),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    version: int("version").notNull().default(1),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    authorizedByUserId: varchar("authorizedByUserId", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt", { fsp: 3 }),
+  },
+  table => ({
+    lookupIdx: index("idx_tenant_standing_authorizations_lookup").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.exactAction,
+      table.revokedAt
+    ),
+    versionUnique: uniqueIndex("uq_tenant_standing_authorizations_version").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.exactAction,
+      table.version
+    ),
+  })
+);
+
+export type TenantStandingAuthorization =
+  typeof tenantStandingAuthorizations.$inferSelect;
+
+export const operatorAppointments = mysqlTable(
+  "operator_appointments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    appointmentKind: mysqlEnum("appointmentKind", [
+      "sunday_weekly_planning",
+      "weekly_planning_callback",
+    ]).notNull(),
+    weekStart: varchar("weekStart", { length: 10 }).notNull(),
+    scheduledFor: timestamp("scheduledFor", { fsp: 3 }).notNull(),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    source: mysqlEnum("source", [
+      "standing_weekly_authorization",
+      "explicit_operator_request",
+    ]).notNull(),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    standingAuthorizationId: varchar("standingAuthorizationId", { length: 36 }),
+    unprompted: boolean("unprompted").notNull().default(false),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    status: mysqlEnum("status", [
+      "scheduled",
+      "leased",
+      "running",
+      "retry_scheduled",
+      "completed",
+      "missed",
+      "cancelled",
+      "dead_letter",
+    ])
+      .notNull()
+      .default("scheduled"),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    heartbeatAt: timestamp("heartbeatAt", { fsp: 3 }),
+    attemptCount: int("attemptCount").notNull().default(0),
+    maxAttempts: int("maxAttempts").notNull().default(3),
+    callDispatchStartedAt: timestamp("callDispatchStartedAt", { fsp: 3 }),
+    callSid: varchar("callSid", { length: 64 }),
+    calendarEventId: varchar("calendarEventId", { length: 191 }),
+    calendarStatus: varchar("calendarStatus", { length: 32 }),
+    followupTextSentAt: timestamp("followupTextSentAt", { fsp: 3 }),
+    lastError: text("lastError"),
+    resultJson: json("resultJson"),
+    completedAt: timestamp("completedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex("uq_operator_appointments_tenant_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    callSidUnique: uniqueIndex("uq_operator_appointments_call_sid").on(table.callSid),
+    dueIdx: index("idx_operator_appointments_due").on(
+      table.status,
+      table.scheduledFor,
+      table.leaseExpiresAt
+    ),
+    operatorWeekIdx: index("idx_operator_appointments_operator_week").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.weekStart,
+      table.appointmentKind,
+      table.status
+    ),
+  })
+);
+
+export type OperatorAppointment = typeof operatorAppointments.$inferSelect;
+export type InsertOperatorAppointment = typeof operatorAppointments.$inferInsert;
+
 export const claireConversationSessions = mysqlTable(
   "claire_conversation_sessions",
   {
@@ -8487,6 +9186,8 @@ export const communicationReceipts = mysqlTable(
     durationSeconds: int("durationSeconds"),
     providerErrorCode: varchar("providerErrorCode", { length: 32 }),
     providerErrorMessage: varchar("providerErrorMessage", { length: 512 }),
+    agentEventId: int("agentEventId"),
+    decisionId: varchar("decisionId", { length: 36 }),
     idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
@@ -8508,7 +9209,273 @@ export const communicationReceipts = mysqlTable(
       table.messageSid,
       table.eventType
     ),
+    decisionLookup: index("idx_communication_receipts_decision").on(
+      table.tenantId,
+      table.decisionId,
+      table.createdAt
+    ),
   })
 );
 
 export type CommunicationReceiptRow = typeof communicationReceipts.$inferSelect;
+
+/**
+ * Mitch v1 — Game Production Operating System Tables
+ *
+ * Durable game-production operating system tables attaching to existing
+ * canonical Kingdom / game IDs without becoming a second source of truth.
+ */
+export const mitchGameProductionStates = mysqlTable(
+  "mitch_game_production_states",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    storedRowId: varchar("storedRowId", { length: 64 }),
+    title: varchar("title", { length: 191 }).notNull(),
+    lifecycleState: varchar("lifecycleState", { length: 64 }).notNull().default("concept"),
+    realBusinessBinding: text("realBusinessBinding"),
+    coreMechanic: text("coreMechanic"),
+    companionDependency: varchar("companionDependency", { length: 64 }),
+    requiredAssetsJson: json("requiredAssetsJson"),
+    blockingDependenciesJson: json("blockingDependenciesJson"),
+    currentAvailableBuildId: varchar("currentAvailableBuildId", { length: 128 }),
+    lastVerifiedBuildId: varchar("lastVerifiedBuildId", { length: 128 }),
+    creativeAcceptanceState: varchar("creativeAcceptanceState", { length: 64 }).notNull().default("pending"),
+    creativeAcceptanceNote: text("creativeAcceptanceNote"),
+    creativeAcceptanceDecidedAt: timestamp("creativeAcceptanceDecidedAt"),
+    releaseState: varchar("releaseState", { length: 64 }).notNull().default("unreleased"),
+    releasedAt: timestamp("releasedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    gameUnique: uniqueIndex("uq_mitch_game_production_state").on(
+      table.tenantId,
+      table.gameId
+    ),
+    lifecycleLookup: index("idx_mitch_game_lifecycle").on(
+      table.tenantId,
+      table.lifecycleState
+    ),
+  })
+);
+
+export const mitchMilestones = mysqlTable(
+  "mitch_milestones",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneKey: varchar("milestoneKey", { length: 64 }).notNull(),
+    sequence: int("sequence").notNull().default(0),
+    title: varchar("title", { length: 191 }).notNull(),
+    desiredPlayerVisibleResult: text("desiredPlayerVisibleResult").notNull(),
+    acceptanceCriteriaJson: json("acceptanceCriteriaJson").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("pending"),
+    currentAvailableBuildId: varchar("currentAvailableBuildId", { length: 128 }),
+    lastVerifiedBuildId: varchar("lastVerifiedBuildId", { length: 128 }),
+    blockedReason: text("blockedReason"),
+    isHumanCreativeBlocker: boolean("isHumanCreativeBlocker").notNull().default(false),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    milestoneUnique: uniqueIndex("uq_mitch_milestones").on(
+      table.tenantId,
+      table.gameId,
+      table.milestoneKey
+    ),
+    statusLookup: index("idx_mitch_milestones_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+  })
+);
+
+export const mitchWorkOrders = mysqlTable(
+  "mitch_work_orders",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    milestoneKey: varchar("milestoneKey", { length: 64 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    desiredPlayerVisibleResult: text("desiredPlayerVisibleResult").notNull(),
+    acceptanceCriteriaJson: json("acceptanceCriteriaJson").notNull(),
+    canonConstraintsJson: json("canonConstraintsJson").notNull(),
+    relevantDependenciesJson: json("relevantDependenciesJson").notNull(),
+    realBusinessEvidenceConstraintsJson: json("realBusinessEvidenceConstraintsJson").notNull(),
+    baseBranch: varchar("baseBranch", { length: 191 }).notNull(),
+    baseSha: varchar("baseSha", { length: 64 }).notNull(),
+    requiredArtifact: text("requiredArtifact").notNull(),
+    requiredTestsJson: json("requiredTestsJson").notNull(),
+    requiredEvidenceJson: json("requiredEvidenceJson").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("pending"),
+    claimedBy: varchar("claimedBy", { length: 128 }),
+    claimedAt: timestamp("claimedAt"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    attemptCount: int("attemptCount").notNull().default(0),
+    maxAttempts: int("maxAttempts").notNull().default(3),
+    lastError: text("lastError"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    statusLookup: index("idx_mitch_work_orders_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+    leaseLookup: index("idx_mitch_work_orders_lease").on(
+      table.status,
+      table.leaseExpiresAt
+    ),
+    milestoneLookup: index("idx_mitch_work_orders_milestone").on(
+      table.tenantId,
+      table.milestoneId
+    ),
+  })
+);
+
+export const mitchExecutionRuns = mysqlTable(
+  "mitch_execution_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    workOrderId: varchar("workOrderId", { length: 36 }).notNull(),
+    executorId: varchar("executorId", { length: 128 }).notNull(),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    completedAt: timestamp("completedAt"),
+    status: varchar("status", { length: 64 }).notNull().default("running"),
+    returnedBranch: varchar("returnedBranch", { length: 191 }),
+    returnedCommitSha: varchar("returnedCommitSha", { length: 64 }),
+    exactBuildId: varchar("exactBuildId", { length: 128 }),
+    whatChanged: text("whatChanged"),
+    testsActuallyRunJson: json("testsActuallyRunJson"),
+    testsNotRunJson: json("testsNotRunJson"),
+    previewLaunchInstructions: text("previewLaunchInstructions"),
+    evidenceJson: json("evidenceJson"),
+    knownLimitations: text("knownLimitations"),
+    errorMessage: text("errorMessage"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    workOrderLookup: index("idx_mitch_execution_runs_work_order").on(
+      table.tenantId,
+      table.workOrderId
+    ),
+  })
+);
+
+export const mitchBuilds = mysqlTable(
+  "mitch_builds",
+  {
+    id: varchar("id", { length: 128 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    workOrderId: varchar("workOrderId", { length: 36 }).notNull(),
+    executionRunId: varchar("executionRunId", { length: 36 }).notNull(),
+    commitSha: varchar("commitSha", { length: 64 }).notNull(),
+    branch: varchar("branch", { length: 191 }).notNull(),
+    buildArtifactType: varchar("buildArtifactType", { length: 64 }).notNull(),
+    buildArtifactId: varchar("buildArtifactId", { length: 255 }).notNull(),
+    sourceCompiled: boolean("sourceCompiled").notNull().default(false),
+    unitTestsPassed: boolean("unitTestsPassed").notNull().default(false),
+    isVerified: boolean("isVerified").notNull().default(false),
+    verifiedAt: timestamp("verifiedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    gameLookup: index("idx_mitch_builds_game").on(
+      table.tenantId,
+      table.gameId,
+      table.isVerified
+    ),
+  })
+);
+
+export const mitchQaRuns = mysqlTable(
+  "mitch_qa_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    buildId: varchar("buildId", { length: 128 }).notNull(),
+    testerId: varchar("testerId", { length: 128 }).notNull(),
+    scenario: text("scenario").notNull(),
+    expectedBehavior: text("expectedBehavior").notNull(),
+    observedBehavior: text("observedBehavior").notNull(),
+    gameActuallyExercised: boolean("gameActuallyExercised").notNull().default(false),
+    acceptancePassed: boolean("acceptancePassed").notNull().default(false),
+    status: varchar("status", { length: 64 }).notNull(),
+    evidenceArtifact: text("evidenceArtifact").notNull(),
+    issueId: varchar("issueId", { length: 36 }),
+    previousFailedQaRunId: varchar("previousFailedQaRunId", { length: 36 }),
+    isRetest: boolean("isRetest").notNull().default(false),
+    completedAt: timestamp("completedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    buildLookup: index("idx_mitch_qa_runs_build").on(
+      table.tenantId,
+      table.buildId,
+      table.status
+    ),
+    milestoneLookup: index("idx_mitch_qa_runs_milestone").on(
+      table.tenantId,
+      table.milestoneId
+    ),
+  })
+);
+
+export const mitchIssues = mysqlTable(
+  "mitch_issues",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    milestoneId: varchar("milestoneId", { length: 36 }).notNull(),
+    originatingQaRunId: varchar("originatingQaRunId", { length: 36 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    description: text("description").notNull(),
+    status: varchar("status", { length: 64 }).notNull().default("open"),
+    fixWorkOrderId: varchar("fixWorkOrderId", { length: 36 }),
+    fixBuildId: varchar("fixBuildId", { length: 128 }),
+    closingQaRunId: varchar("closingQaRunId", { length: 36 }),
+    closedAt: timestamp("closedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    statusLookup: index("idx_mitch_issues_status").on(
+      table.tenantId,
+      table.gameId,
+      table.status
+    ),
+  })
+);
+
+export const mitchAuditEvents = mysqlTable(
+  "mitch_audit_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    gameId: varchar("gameId", { length: 64 }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    detailsJson: json("detailsJson").notNull(),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    gameLookup: index("idx_mitch_audit_events_game").on(
+      table.tenantId,
+      table.gameId,
+      table.occurredAt
+    ),
+  })
+);

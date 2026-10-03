@@ -128,10 +128,12 @@ const readSqlStatements = async relativePath => {
 const applyHistoricalCreateTables = async (relativePath, label) => {
   for (const original of await readSqlStatements(relativePath)) {
     if (!/^CREATE\s+TABLE\s+/i.test(original)) continue;
-    const statement = original.replace(
-      /^CREATE\s+TABLE\s+/i,
-      "CREATE TABLE IF NOT EXISTS "
-    );
+    const statement = /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+/i.test(original)
+      ? original
+      : original.replace(
+          /^CREATE\s+TABLE\s+/i,
+          "CREATE TABLE IF NOT EXISTS "
+        );
     await runRequired(statement, label);
   }
 };
@@ -1207,10 +1209,34 @@ await ensureRequiredIndex(
   ["authContinuationId"],
   "ALTER TABLE dayforge_saas_onboarding_sessions ADD KEY idx_dayforge_saas_onboarding_continuation (authContinuationId)"
 );
+
+// JOYSTICK public acquisition reuses the existing SaaS onboarding row before
+// business identity exists. Existing sessions remain legacy_laundry.
+for (const [columnName, definition] of [
+  ["onboardingMode", "varchar(32) NOT NULL DEFAULT 'legacy_laundry' AFTER ownerEmail"],
+  ["draftAnswersJson", "json NULL AFTER onboardingMode"],
+  ["draftPreviewJson", "json NULL AFTER draftAnswersJson"],
+]) {
+  await ensureRequiredColumn(
+    "dayforge_saas_onboarding_sessions",
+    columnName,
+    `ALTER TABLE dayforge_saas_onboarding_sessions ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await runRequired(
+  `ALTER TABLE dayforge_saas_onboarding_sessions
+     MODIFY COLUMN businessName varchar(255) NULL,
+     MODIFY COLUMN slug varchar(64) NULL,
+     MODIFY COLUMN ownerEmail varchar(320) NULL`,
+  "JOYSTICK anonymous acquisition nullable identity"
+);
 await assertRequiredColumns("dayforge_saas_onboarding_sessions", [
   "id",
   "resumeTokenHash",
   "ownerEmail",
+  "onboardingMode",
+  "draftAnswersJson",
+  "draftPreviewJson",
   "status",
   "tenantId",
   "authContinuationId",
@@ -1344,6 +1370,60 @@ await assertRequiredColumns("cleancloud_browser_sync_attempts", [
   "outcome",
   "rowCount",
   "createdAt",
+]);
+await assertRequiredColumns("cleancloud_dashboard_witnesses", [
+  "id",
+  "tenantId",
+  "storeId",
+  "storeLabel",
+  "rangeFrom",
+  "rangeTo",
+  "comparisonFrom",
+  "comparisonTo",
+  "salesCents",
+  "comparisonSalesCents",
+  "revenueCents",
+  "comparisonRevenueCents",
+  "orders",
+  "comparisonOrders",
+  "newCustomers",
+  "observedAt",
+  "screenshotSha256",
+  "extractionVersion",
+  "source",
+]);
+await assertRequiredColumns("cleancloud_dashboard_witness_screenshots", [
+  "witnessId",
+  "tenantId",
+  "sha256",
+  "pngBase64",
+]);
+await assertRequiredColumns("cleancloud_economic_reconciliations", [
+  "id",
+  "tenantId",
+  "storeId",
+  "rangeFrom",
+  "rangeTo",
+  "status",
+  "dashboardWitnessId",
+  "dashboardRevenueCents",
+  "revenueReportCents",
+  "bookCents",
+  "discrepancyCents",
+  "evidenceIdsJson",
+  "evidenceHash",
+]);
+await assertRequiredColumns("cleancloud_verified_economic_events", [
+  "id",
+  "tenantId",
+  "eventType",
+  "periodFrom",
+  "periodTo",
+  "currentRevenueCents",
+  "deltaCents",
+  "evidenceIdsJson",
+  "idempotencyKey",
+  "verifiedAt",
 ]);
 
 const impactSql = await readFile(
@@ -3916,6 +3996,568 @@ await assertRequiredColumns("goldline_rook_contact_sessions", [
   "callAttemptId",
   "status",
 ]);
+// Phase 0 — Persistent Growth Operator core contracts.
+// The production boot path does not replay numbered Drizzle migrations, so
+// make the historical Armory tables exist idempotently before Phase 0 alters
+// them. This keeps fresh databases bootable and is safe on existing databases.
+await applyIdempotentSqlFile(
+  "../drizzle/0053_armory_evolution_sales_intel.sql",
+  "Armory Evolution historical tables"
+);
+// Mirrors drizzle/0101_persistent_growth_phase0.sql.
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "decisionPointId",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN decisionPointId VARCHAR(191) NULL AFTER provenanceKind"
+);
+await ensureRequiredColumn(
+  "armory_weapon_usages",
+  "encounterReference",
+  "ALTER TABLE armory_weapon_usages ADD COLUMN encounterReference VARCHAR(191) NULL AFTER decisionPointId"
+);
+await ensureRequiredColumn(
+  "armory_weapon_outcomes",
+  "associationStrength",
+  "ALTER TABLE armory_weapon_outcomes ADD COLUMN associationStrength ENUM('decision_point','encounter','mission_window_legacy') NOT NULL DEFAULT 'mission_window_legacy' AFTER outcomeReference"
+);
+await assertEnumContainsValues("armory_weapon_outcomes", "associationStrength", [
+  "decision_point",
+  "encounter",
+  "mission_window_legacy",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tenant_learning_governance (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    scope VARCHAR(96) NOT NULL,
+    version INT NOT NULL,
+    termsVersion VARCHAR(96) NOT NULL,
+    policyVersion VARCHAR(96) NOT NULL,
+    permittedAggregationUse BOOLEAN NOT NULL DEFAULT false,
+    authorizedByUserId VARCHAR(128) NOT NULL,
+    effectiveAt TIMESTAMP NOT NULL,
+    revokedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version),
+    KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)
+  )`,
+  "CREATE TABLE tenant_learning_governance"
+);
+await assertRequiredColumns("tenant_learning_governance", [
+  "id",
+  "tenantId",
+  "scope",
+  "version",
+  "termsVersion",
+  "policyVersion",
+  "permittedAggregationUse",
+  "authorizedByUserId",
+  "effectiveAt",
+  "revokedAt",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "uq_tenant_learning_governance_scope_version",
+  ["tenantId", "scope", "version"],
+  `ALTER TABLE tenant_learning_governance
+     ADD UNIQUE KEY uq_tenant_learning_governance_scope_version (tenantId,scope,version)`
+);
+await ensureRequiredIndex(
+  "tenant_learning_governance",
+  "idx_tenant_learning_governance_active",
+  ["tenantId", "scope", "effectiveAt", "revokedAt"],
+  `ALTER TABLE tenant_learning_governance
+     ADD KEY idx_tenant_learning_governance_active (tenantId,scope,effectiveAt,revokedAt)`
+);
+
+// Persistent operator canonical identity + silent-idle observability.
+// Mirrors drizzle/0102_persistent_operator_identity_observability.sql.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS persistent_operator_identity_bindings (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    canonicalOpenId VARCHAR(64) NOT NULL,
+    aliasOpenId VARCHAR(64) NOT NULL,
+    activeAliasKey VARCHAR(191) NULL,
+    surface VARCHAR(32) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT true,
+    createdByOpenId VARCHAR(64) NULL,
+    revokedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_persistent_operator_identity_active_alias (activeAliasKey),
+    KEY idx_persistent_operator_identity_alias (tenantId,aliasOpenId,active),
+    KEY idx_persistent_operator_identity_canonical (tenantId,canonicalOpenId,active)
+  )`,
+  "CREATE TABLE persistent_operator_identity_bindings"
+);
+await ensureRequiredColumn(
+  "persistent_operator_identity_bindings",
+  "activeAliasKey",
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD COLUMN activeAliasKey VARCHAR(191) NULL`
+);
+await assertRequiredColumns("persistent_operator_identity_bindings", [
+  "id",
+  "tenantId",
+  "canonicalOpenId",
+  "aliasOpenId",
+  "activeAliasKey",
+  "surface",
+  "active",
+  "createdByOpenId",
+  "revokedAt",
+  "createdAt",
+  "updatedAt",
+]);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = CONCAT(tenantId, ':', aliasOpenId)
+     WHERE active = true
+       AND (activeAliasKey IS NULL OR activeAliasKey = '')`,
+  "Backfill active persistent operator alias keys"
+);
+await runRequired(
+  `UPDATE persistent_operator_identity_bindings
+     SET activeAliasKey = NULL
+     WHERE active = false
+       AND activeAliasKey IS NOT NULL`,
+  "Clear inactive persistent operator alias keys"
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "uq_persistent_operator_identity_active_alias",
+  ["activeAliasKey"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD UNIQUE KEY uq_persistent_operator_identity_active_alias (activeAliasKey)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "idx_persistent_operator_identity_alias",
+  ["tenantId", "aliasOpenId", "active"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD KEY idx_persistent_operator_identity_alias (tenantId,aliasOpenId,active)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_identity_bindings",
+  "idx_persistent_operator_identity_canonical",
+  ["tenantId", "canonicalOpenId", "active"],
+  `ALTER TABLE persistent_operator_identity_bindings
+     ADD KEY idx_persistent_operator_identity_canonical (tenantId,canonicalOpenId,active)`
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS persistent_operator_diagnostic_events (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    canonicalOperatorId VARCHAR(191) NULL,
+    operatorUserId VARCHAR(128) NULL,
+    subsystem VARCHAR(64) NOT NULL,
+    eventKind VARCHAR(64) NOT NULL,
+    reason VARCHAR(64) NULL,
+    sourceIdentityType VARCHAR(32) NULL,
+    targetIdentityType VARCHAR(32) NULL,
+    objectiveId VARCHAR(191) NULL,
+    occurredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_persistent_operator_diag_tenant_time (tenantId,occurredAt),
+    KEY idx_persistent_operator_diag_operator_time (tenantId,canonicalOperatorId,occurredAt),
+    KEY idx_persistent_operator_diag_reason (tenantId,reason,occurredAt)
+  )`,
+  "CREATE TABLE persistent_operator_diagnostic_events"
+);
+await assertRequiredColumns("persistent_operator_diagnostic_events", [
+  "id",
+  "tenantId",
+  "canonicalOperatorId",
+  "operatorUserId",
+  "subsystem",
+  "eventKind",
+  "reason",
+  "sourceIdentityType",
+  "targetIdentityType",
+  "objectiveId",
+  "occurredAt",
+]);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_tenant_time",
+  ["tenantId", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_tenant_time (tenantId,occurredAt)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_operator_time",
+  ["tenantId", "canonicalOperatorId", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_operator_time (tenantId,canonicalOperatorId,occurredAt)`
+);
+await ensureRequiredIndex(
+  "persistent_operator_diagnostic_events",
+  "idx_persistent_operator_diag_reason",
+  ["tenantId", "reason", "occurredAt"],
+  `ALTER TABLE persistent_operator_diagnostic_events
+     ADD KEY idx_persistent_operator_diag_reason (tenantId,reason,occurredAt)`
+);
+
+// Persistent Growth Operator PR2 — macro goal runs + durable goal cycles.
+// This migration is CREATE TABLE IF NOT EXISTS only and is safe on repeated boots.
+await applyIdempotentSqlFile(
+  "../drizzle/0103_persistent_growth_goal_cycles.sql",
+  "Persistent Growth macro goal run and durable cycle tables"
+);
+for (const [tableName, columns] of [
+  ["macro_goal_runs", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "macroGoalId",
+    "verticalKey", "status", "goalSnapshotJson", "metricKey", "targetValue",
+    "unit", "baselineObservationRef", "baselineValue", "baselinePrecision",
+    "baselineCoverage", "startedAt", "lastEvaluatedAt", "nextEvaluationAt",
+    "policyVersion", "completedAt", "completionEvidenceRef", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_tenant_state", ["tenantId", "lastClaimedAt", "createdAt", "updatedAt"]],
+  ["goal_cycle_requests", [
+    "id", "tenantId", "goalRunId", "triggerType", "triggerSourceReference",
+    "idempotencyKey", "status", "availableAt", "deadlineAt", "leaseOwner",
+    "leaseExpiresAt", "heartbeatAt", "attemptCount", "maxAttempts", "lastError",
+    "resultJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_history", [
+    "id", "tenantId", "goalRunId", "requestId", "eventType", "fromStatus",
+    "toStatus", "leaseOwner", "attemptNumber", "detailsJson", "errorText", "createdAt",
+  ]],
+  ["goal_cycle_dead_letters", [
+    "id", "tenantId", "goalRunId", "requestId", "reason", "errorText",
+    "attemptCount", "triggerType", "triggerSourceReference", "deadLetteredAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+// Persistent Growth Operator PR3 — standing authority + durable Claire appointments.
+await applyIdempotentSqlFile(
+  "../drizzle/0104_persistent_operator_authority_appointments.sql",
+  "Persistent operator authority and Claire appointment tables"
+);
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await runRequired(
+      `ALTER TABLE agent_events
+         MODIFY COLUMN agentType ENUM(
+           'resident_agent','operator_voice_agent','vendor_agent','driver_agent',
+           'gm_agent','building_agent','collections_agent','operator_task_agent',
+           'goal_cycle_agent','system_agent'
+         ) NOT NULL`,
+      "agent_events.agentType persistent operator enum"
+    );
+    await assertEnumContainsValues("agent_events", "agentType", ["goal_cycle_agent"]);
+  } else {
+    console.log("→ agent_events absent in this schema; skipping optional enum extension");
+  }
+}
+for (const [tableName, columns] of [
+  ["tenant_standing_authorizations", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "channel",
+    "recipientClass", "exactAction", "dailyLimit", "allowedLocalStart",
+    "allowedLocalEnd", "timeZone", "version", "sourceReference",
+    "authorizedByUserId", "createdAt", "revokedAt",
+  ]],
+  ["operator_appointments", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "appointmentKind",
+    "weekStart", "scheduledFor", "timeZone", "source", "sourceReference",
+    "standingAuthorizationId", "unprompted", "idempotencyKey", "status",
+    "leaseOwner", "leaseExpiresAt", "heartbeatAt", "attemptCount", "maxAttempts",
+    "callDispatchStartedAt", "callSid", "calendarEventId", "calendarStatus", "followupTextSentAt",
+    "lastError", "resultJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+// Persistent Growth Operator PR4 — obligations, decisions, loadouts, receipts.
+// The SQL file is the one-shot migration authority. Production boot applies
+// its CREATE TABLE statement and then upgrades the shared obligation table
+// idempotently before adding lineage columns.
+await applyHistoricalCreateTables(
+  "../drizzle/0105_persistent_growth_decisions_receipts.sql",
+  "Persistent Growth PR4 decision tables"
+);
+
+await runRequired(
+  `ALTER TABLE claire_proactive_obligations
+     MODIFY COLUMN kind VARCHAR(32) NOT NULL`,
+  "claire_proactive_obligations.kind PR4 widening"
+);
+
+for (const [column, ddl] of [
+  ["canonicalOperatorId", "ALTER TABLE claire_proactive_obligations ADD COLUMN canonicalOperatorId VARCHAR(191) NULL"],
+  ["goalRunId", "ALTER TABLE claire_proactive_obligations ADD COLUMN goalRunId VARCHAR(36) NULL"],
+  ["cycleId", "ALTER TABLE claire_proactive_obligations ADD COLUMN cycleId VARCHAR(36) NULL"],
+  ["decisionId", "ALTER TABLE claire_proactive_obligations ADD COLUMN decisionId VARCHAR(36) NULL"],
+  ["executionType", "ALTER TABLE claire_proactive_obligations ADD COLUMN executionType VARCHAR(32) NULL"],
+  ["commercialFollowUpRef", "ALTER TABLE claire_proactive_obligations ADD COLUMN commercialFollowUpRef VARCHAR(191) NULL"],
+  ["objectiveRef", "ALTER TABLE claire_proactive_obligations ADD COLUMN objectiveRef VARCHAR(191) NULL"],
+  ["agentEventId", "ALTER TABLE claire_proactive_obligations ADD COLUMN agentEventId INT NULL"],
+]) {
+  await ensureRequiredColumn("claire_proactive_obligations", column, ddl);
+}
+await ensureRequiredIndex(
+  "claire_proactive_obligations",
+  "idx_claire_proactive_decision",
+  ["tenantId", "decisionId"],
+  "ALTER TABLE claire_proactive_obligations ADD KEY idx_claire_proactive_decision (tenantId,decisionId)"
+);
+await ensureRequiredIndex(
+  "claire_proactive_obligations",
+  "idx_claire_proactive_cycle",
+  ["tenantId", "cycleId"],
+  "ALTER TABLE claire_proactive_obligations ADD KEY idx_claire_proactive_cycle (tenantId,cycleId)"
+);
+
+await assertRequiredColumns("goal_cycle_decisions", [
+  "id", "tenantId", "goalRunId", "cycleId", "canonicalOperatorId",
+  "operatorUserId", "policyVersion", "weeklyIntentId", "weeklyIntentRevision",
+  "weekStart", "candidateFingerprint", "candidateIdsJson",
+  "candidateReasonCodesJson", "missionDirectorPlanId", "missionDirectorRevision",
+  "selectionKind", "selectedRef", "selectedExecutionType", "selectedReasonCode",
+  "evidenceRefsJson", "blockedCandidatesJson", "priorComparableDecisionId",
+  "sourceCoverageJson", "loadoutJson", "experimentJson", "decisionFingerprint",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "uq_goal_cycle_decisions_cycle",
+  ["tenantId", "cycleId"],
+  "ALTER TABLE goal_cycle_decisions ADD UNIQUE KEY uq_goal_cycle_decisions_cycle (tenantId,cycleId)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_selected",
+  ["tenantId", "selectionKind", "selectedRef", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_selected (tenantId,selectionKind,selectedRef,createdAt)"
+);
+
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await runRequired(
+      `ALTER TABLE agent_events
+         MODIFY COLUMN status ENUM(
+           'proposed','policy_denied','write_withheld','approval_required',
+           'execution_started','success','failed','blocked'
+         ) NOT NULL`,
+      "agent_events.status PR4 lifecycle enum"
+    );
+    await assertEnumContainsValues("agent_events", "status", [
+      "proposed",
+      "policy_denied",
+      "write_withheld",
+      "execution_started",
+    ]);
+    for (const [column, ddl] of [
+      ["goalRunId", "ALTER TABLE agent_events ADD COLUMN goalRunId VARCHAR(36) NULL"],
+      ["cycleId", "ALTER TABLE agent_events ADD COLUMN cycleId VARCHAR(36) NULL"],
+      ["decisionId", "ALTER TABLE agent_events ADD COLUMN decisionId VARCHAR(36) NULL"],
+      ["obligationId", "ALTER TABLE agent_events ADD COLUMN obligationId VARCHAR(191) NULL"],
+      ["authorityBasis", "ALTER TABLE agent_events ADD COLUMN authorityBasis VARCHAR(64) NULL"],
+      ["approvalBasis", "ALTER TABLE agent_events ADD COLUMN approvalBasis VARCHAR(64) NULL"],
+      ["standingAuthorizationId", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationId VARCHAR(36) NULL"],
+      ["standingAuthorizationVersion", "ALTER TABLE agent_events ADD COLUMN standingAuthorizationVersion INT NULL"],
+      ["policyVersion", "ALTER TABLE agent_events ADD COLUMN policyVersion VARCHAR(96) NULL"],
+      ["operationStatus", "ALTER TABLE agent_events ADD COLUMN operationStatus VARCHAR(32) NULL"],
+    ]) {
+      await ensureRequiredColumn("agent_events", column, ddl);
+    }
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_decision",
+      ["tenantId", "decisionId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_decision (tenantId,decisionId,id)"
+    );
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_cycle",
+      ["tenantId", "cycleId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_cycle (tenantId,cycleId,id)"
+    );
+  } else {
+    console.log("→ agent_events absent in this schema; skipping PR4 receipt lineage extension");
+  }
+}
+
+{
+  const [communicationReceiptTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'communication_receipts'`
+  );
+  if (communicationReceiptTables.length > 0) {
+    for (const [column, ddl] of [
+      ["agentEventId", "ALTER TABLE communication_receipts ADD COLUMN agentEventId INT NULL"],
+      ["decisionId", "ALTER TABLE communication_receipts ADD COLUMN decisionId VARCHAR(36) NULL"],
+    ]) {
+      await ensureRequiredColumn("communication_receipts", column, ddl);
+    }
+    await ensureRequiredIndex(
+      "communication_receipts",
+      "idx_communication_receipts_decision",
+      ["tenantId", "decisionId", "createdAt"],
+      "ALTER TABLE communication_receipts ADD KEY idx_communication_receipts_decision (tenantId,decisionId,createdAt)"
+    );
+  } else {
+    console.log("→ communication_receipts absent in this schema; skipping PR4 receipt lineage extension");
+  }
+}
+
+// Persistent Growth Operator PR5 — Slices H + I: objectives, outcomes, and execution lineage.
+await applyHistoricalCreateTables(
+  "../drizzle/0106_persistent_growth_objectives_outcomes.sql",
+  "Persistent Growth PR5 objective and outcome tables"
+);
+
+for (const [tableName, columns] of [
+  ["goal_cycle_objectives", [
+    "id", "tenantId", "goalRunId", "cycleId", "decisionId", "canonicalOperatorId",
+    "operatorUserId", "selectionKind", "selectedRef", "title", "description",
+    "executionType", "authority", "status", "statusReason", "actionTargetType",
+    "actionTargetId", "actionTargetDisplayName", "businessDate", "windowStart",
+    "windowEnd", "loadoutJson", "evidenceRefsJson", "completedAt", "createdAt", "updatedAt",
+  ]],
+  ["goal_cycle_outcomes", [
+    "id", "tenantId", "goalRunId", "cycleId", "decisionId", "objectiveId",
+    "canonicalOperatorId", "operatorUserId", "outcomeKind", "impactClass",
+    "epistemicStatus", "evidenceClass", "evidenceReference", "sourceSystem",
+    "monetaryValueCents", "quantityValue", "unit", "explanation", "metadataJson",
+    "observedAt", "createdAt",
+  ]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "uq_goal_cycle_objectives_decision",
+  ["tenantId", "decisionId"],
+  "ALTER TABLE goal_cycle_objectives ADD UNIQUE KEY uq_goal_cycle_objectives_decision (tenantId,decisionId)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_operator",
+  ["tenantId", "canonicalOperatorId", "status", "businessDate"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_operator (tenantId,canonicalOperatorId,status,businessDate)"
+);
+
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "uq_goal_cycle_outcomes_idempotency",
+  ["tenantId", "objectiveId", "outcomeKind", "evidenceReference"],
+  "ALTER TABLE goal_cycle_outcomes ADD UNIQUE KEY uq_goal_cycle_outcomes_idempotency (tenantId,objectiveId,outcomeKind,evidenceReference)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_decision",
+  ["tenantId", "decisionId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_decision (tenantId,decisionId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_objective",
+  ["tenantId", "objectiveId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_objective (tenantId,objectiveId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_outcomes",
+  "idx_goal_cycle_outcomes_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_outcomes ADD KEY idx_goal_cycle_outcomes_run (tenantId,goalRunId,createdAt)"
+);
+
+{
+  const [agentEventTables] = await conn.execute(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_events'`
+  );
+  if (agentEventTables.length > 0) {
+    await ensureRequiredColumn("agent_events", "objectiveId", "ALTER TABLE agent_events ADD COLUMN objectiveId VARCHAR(36) NULL");
+    await ensureRequiredIndex(
+      "agent_events",
+      "idx_agent_events_objective",
+      ["tenantId", "objectiveId", "id"],
+      "ALTER TABLE agent_events ADD KEY idx_agent_events_objective (tenantId,objectiveId,id)"
+    );
+  }
+}
+
+// Persistent Growth Operator PR6 — Slices J + K + L: learning deltas, proof/read models, and hardening.
+await applyHistoricalCreateTables(
+  "../drizzle/0107_persistent_growth_learning_proof_hardening.sql",
+  "Persistent Growth PR6 learned delta tables"
+);
+
+await assertRequiredColumns("goal_cycle_learned_deltas", [
+  "id", "tenantId", "goalRunId", "cycleId", "decisionId", "objectiveId",
+  "outcomeId", "canonicalOperatorId", "operatorUserId", "learningKind",
+  "targetKey", "deltaType", "beforeStateJson", "afterStateJson",
+  "evidenceReference", "confidence", "explanation", "appliedCount",
+  "createdAt", "updatedAt",
+]);
+
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "uq_goal_cycle_learned_deltas_idempotency",
+  ["tenantId", "outcomeId", "learningKind", "targetKey"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD UNIQUE KEY uq_goal_cycle_learned_deltas_idempotency (tenantId,outcomeId,learningKind,targetKey)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_decision",
+  ["tenantId", "decisionId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_decision (tenantId,decisionId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_objective",
+  ["tenantId", "objectiveId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_objective (tenantId,objectiveId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_run",
+  ["tenantId", "goalRunId", "createdAt"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_run (tenantId,goalRunId,createdAt)"
+);
+await ensureRequiredIndex(
+  "goal_cycle_learned_deltas",
+  "idx_goal_cycle_learned_deltas_operator",
+  ["tenantId", "canonicalOperatorId", "learningKind", "targetKey"],
+  "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_operator (tenantId,canonicalOperatorId,learningKind,targetKey)"
+);
+
+// Mitch v1 — Game Production Operating System tables
+await applyHistoricalCreateTables(
+  "../drizzle/0108_mitch_game_production.sql",
+  "Mitch v1 game production operating system tables"
+);
+
 // END schema-path-normalized
 
 await conn.end();

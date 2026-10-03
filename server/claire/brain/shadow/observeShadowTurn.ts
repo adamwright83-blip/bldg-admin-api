@@ -38,6 +38,7 @@ import { readOnlySelfMemoryDeps } from "../selfMemory/adapter";
 import { readOnlyGoalsDeps } from "../goals/adapter";
 import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
 import type { FactualClaimReceipt } from "../../provenance/claimReceipts";
+import { planBusinessQuestionWithLLM } from "../../businessConversation";
 import { persistShadowFailure, persistShadowObservation } from "../telemetry/shadowRecorder";
 import {
   shadowMemoryStore,
@@ -147,6 +148,19 @@ export function liveExecutiveDeps(
   };
 }
 
+function shadowExecutiveDeps(
+  ctx: ShadowRetrievalContext,
+  retrievalDeps?: LiveRetrievalDeps
+): ExecutiveDeps {
+  return {
+    ...liveExecutiveDeps(ctx, retrievalDeps),
+    // Model-assisted criteria planning remains shadow-only until Brain V2 owns
+    // the business-answer lane. The awaited live fallback path therefore never
+    // blocks on Anthropic before handing the turn back to V1.
+    planBusinessQuery: input => planBusinessQuestionWithLLM(input),
+  };
+}
+
 function enabled(env: NodeJS.ProcessEnv): boolean {
   const flag = env.CLAIRE_BRAIN_V2_SHADOW;
   return flag === "1" || flag?.toLowerCase() === "true";
@@ -224,7 +238,7 @@ export async function observeShadowTurn(
     const shadowKey = shadowMemoryKey(turn);
     const priorMemory = await memoryStore.load(shadowKey);
 
-    const executive = turn.executive ?? (live ? liveExecutiveDeps(live, options.liveDeps) : undefined);
+    const executive = turn.executive ?? (live ? shadowExecutiveDeps(live, options.liveDeps) : undefined);
     const result = await runClaireBrainTurn({
       ...turn,
       executive: executive ?? { retrieve: noRetrieval, ctx: { timeZone: "UTC", today: new Date().toISOString().slice(0, 10), surface: turn.surface } },

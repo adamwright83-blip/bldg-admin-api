@@ -303,7 +303,11 @@ export function normalizeCleanCloudPaidOrderRow(
     collectedAtUtc: parseCleanCloudPacificDate(pick(row, ["Collected"])),
     cleanedAtUtc: parseCleanCloudPacificDate(pick(row, ["Cleaned"])),
     orderStatus: pick(row, ["Status"]).trim() || null,
-    paid: parseCleanCloudBool(pick(row, ["Paid"])),
+    paid:
+      parseCleanCloudBool(pick(row, ["Paid"])) ||
+      Boolean(
+        parseCleanCloudPacificDate(pick(row, ["Payment Date", "Paid Date"]))
+      ),
     paymentType: pick(row, ["Payment Type"]).trim() || null,
     cardPaymentType: pick(row, ["Card Payment Type"]).trim() || null,
     totalCents,
@@ -368,6 +372,14 @@ export async function importCleanCloudPaidOrders(input: {
   let candidateClearentRowCount = 0;
   let unresolvedBuildingCount = 0;
   const errors: CleanCloudPaidOrderImportSummary["errors"] = [];
+  const paidOrdersToBridge: Array<{
+    cleancloudOrderId: string;
+    cleancloudCustomerId?: string | null;
+    customerEmail?: string | null;
+    customerPhone?: string | null;
+    totalCents: number;
+    paidAt: Date;
+  }> = [];
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]!;
@@ -396,6 +408,16 @@ export async function importCleanCloudPaidOrders(input: {
       unresolvedBuildingCount += 1;
 
     const values = normalized.normalized;
+    if (values.paid && (values.totalCents ?? 0) > 0) {
+      paidOrdersToBridge.push({
+        cleancloudOrderId: String(values.cleancloudOrderId),
+        cleancloudCustomerId: values.cleancloudCustomerId != null ? String(values.cleancloudCustomerId) : null,
+        customerEmail: values.customerEmail ?? null,
+        customerPhone: values.customerPhone ?? null,
+        totalCents: values.totalCents ?? 0,
+        paidAt: values.paymentDateUtc || values.paidDateUtc || values.placedAtUtc || new Date(),
+      });
+    }
     const physicalEntityId = values.buildingResolutionStatus === "resolved"
       ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId ?? "default", address: values.address }) : null;
     await db.transaction(async tx => {
@@ -443,6 +465,30 @@ export async function importCleanCloudPaidOrders(input: {
       errorJson: errors.length ? errors : null,
     })
     .where(eq(cleancloudImportBatches.id, importBatchId));
+
+  // Post-import: Bridge paid orders to Persistent Growth Operator ledger
+  if (paidOrdersToBridge.length > 0 && input.tenantId) {
+    try {
+      const { bridgeCleanCloudPaidOrder } = await import("./persistentOperator/fieldEventBridge");
+      for (const order of paidOrdersToBridge) {
+        await bridgeCleanCloudPaidOrder({
+          tenantId: input.tenantId,
+          cleancloudOrderId: String(order.cleancloudOrderId),
+          cleancloudCustomerId: order.cleancloudCustomerId != null ? String(order.cleancloudCustomerId) : undefined,
+          customerEmail: order.customerEmail ?? undefined,
+          customerPhone: order.customerPhone ?? undefined,
+          paid: true,
+          totalCents: order.totalCents,
+          paidDateUtc: order.paidAt,
+          sourceFileName,
+        }).catch(err => {
+          console.warn("[PersistentOperator] cleancloud paid order bridge deferred", err);
+        });
+      }
+    } catch (err) {
+      console.warn("[PersistentOperator] failed to load fieldEventBridge for cleancloud import", err);
+    }
+  }
 
   return {
     source: "cleancloud_paid_orders",

@@ -7,6 +7,10 @@ import {
   runNightShiftForBusinessDate,
 } from "./authoredDayService";
 import {
+  durableTriggerShadowEnabled,
+  enqueueDurableTriggerForOperator,
+} from "../persistentOperator/goalCycleService";
+import {
   resolveAutonomousNightShiftScope,
   type NightShiftAutonomousScope,
 } from "./nightShiftScope";
@@ -33,6 +37,21 @@ export async function triggerNightShiftRun(
     return Promise.resolve();
   }
   const businessDate = nightShiftTargetBusinessDate(now, timeZone);
+  if (durableTriggerShadowEnabled()) {
+    void enqueueDurableTriggerForOperator({
+      tenantId: scope.tenantId,
+      operatorOpenId: scope.operatorId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: `night_shift:${scope.operatorId}:${businessDate}`,
+      idempotencyKey: `night_shift:${scope.operatorId}:${businessDate}`,
+      availableAt: now,
+    }).catch(error => {
+      console.warn(
+        "[NightShift] Durable trigger shadow enqueue failed",
+        error instanceof Error ? error.message : error
+      );
+    });
+  }
   const key = `${scope.tenantId}:${scope.operatorId}:${businessDate}`;
   const existing = activeRuns.get(key);
   if (existing) return existing;

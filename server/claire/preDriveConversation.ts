@@ -41,7 +41,13 @@ import { deriveMomentStance, momentStanceGuidance, type MomentSignals } from "./
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
 import type { ProgressionStore } from "./progression/store";
 import type { PersonalTurnResult } from "./progression/personalReveal";
+import type { RapportBand, PersonalAccessRung } from "./progression/policy";
+import { validateClaireCharacterContract } from "./character/characterContractValidator";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
+import {
+  claireIdentityClaimViolation,
+  formatClaireIdentityAuthority,
+} from "./identityTruth";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
   MISSION_SALES_BRIEF_INSTRUCTION,
@@ -202,6 +208,7 @@ function compactConversationContext(context: ClaireDriveContext): string {
   const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   return JSON.stringify({
     businessDate: context.businessDate,
+    identityTruth: context.identityTruth,
     clock: context.clock,
     macroGoalKnown: context.macroGoalKnown,
     macroGoal: context.macroGoal,
@@ -237,6 +244,24 @@ export async function answerClairePreDriveFollowUp(
     onGeneration?: (diagnostic: ClaireGenerationDiagnostic) => void;
     /** The last turns of this conversation, so follow-ups like "is that…" have a referent. */
     recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
+    /**
+     * Brain V3's authoritative meaning for this turn. The speaking model may
+     * phrase/respond to it, but may not reinterpret the raw utterance into a
+     * different act, referent, workflow, or work item.
+     */
+    semanticFrame?: {
+      target: string;
+      act: string;
+      workDisposition: string;
+      dayLineDisposition: string;
+      priorClaim: string;
+      weeklyDisposition: string;
+      identityTopic?: string;
+      broadBriefingRequest: boolean;
+      canonicalWork: string | null;
+      referent: string | null;
+      rationale: string;
+    };
     /**
      * Claire Intelligence Repair Part 2, Slice C+D: authoritative evidence
      * retrieved for this exact question by a deterministic reader (business
@@ -301,10 +326,20 @@ export async function answerClairePreDriveFollowUp(
     dependencies.recordGeneration ?? recordClaireGeneration;
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
   const progressionOn = isClaireProgressionEnabled(input.tenantId);
-  // Flag OFF reproduces the pre-feature routing exactly; ON adds the fail-closed personal classifier.
-  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn);
-  const requestedTopic = detectRequestedClaireTopic(input.utterance, progressionOn);
+  const referent = input.semanticFrame?.referent;
+  const referentIsPersonal =
+    Boolean(referent) &&
+    (isPersonalQuestionAboutClaire(referent!) || Boolean(detectRequestedClaireTopic(referent!, progressionOn)));
+  const baseMode = detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
+  const conversationalMode = referentIsPersonal ? "personal" : baseMode;
+  const requestedTopic =
+    detectRequestedClaireTopic(input.utterance, progressionOn) ??
+    (referentIsPersonal ? detectRequestedClaireTopic(referent!, progressionOn) : null);
   const inventory = buildClaireVerifiedFactInventory(input.context);
+  const businessOpen =
+    input.context.blockers.length > 0 ||
+    Boolean(input.context.nextFixedCommitment) ||
+    (input.context.runtime?.workItems?.length ?? 0) > 0;
   // Personal questions never reach the general prompt. The server decides what may
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
@@ -317,10 +352,6 @@ export async function answerClairePreDriveFollowUp(
       // Unresolved identity fails closed: no progression state, no disclosure.
       return selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
     }
-    const businessOpen =
-      input.context.blockers.length > 0 ||
-      Boolean(input.context.nextFixedCommitment) ||
-      (input.context.runtime?.workItems?.length ?? 0) > 0;
     return answerPersonalFollowUp(
       {
         tenantId: input.tenantId,
@@ -352,6 +383,8 @@ export async function answerClairePreDriveFollowUp(
           : conversationalMode === "post_action_review"
             ? "post_action_review"
             : "pre_drive",
+    unresolvedBusiness: businessOpen,
+    progressionStore: dependencies.progressionStore,
   });
   let stopReason: string | null = null;
   let modelServed: string | null = null;
@@ -380,9 +413,16 @@ export async function answerClairePreDriveFollowUp(
           : null,
       },
       { label: "fact_inventory", text: inventory.toPromptSection() },
+      { label: "identity_authority", text: formatClaireIdentityAuthority(input.context.identityTruth) },
       { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
       { label: "capability_briefing", text: formatCapabilityBriefing() },
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
+      {
+        label: "brain_v3_semantics",
+        text: input.semanticFrame
+          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Treat this as settled conversational meaning. Do not reinterpret the raw operator words into a different action, referent, workflow, Day Line request, prior-claim challenge, or work item. Your job is to respond intelligently and in character to this meaning.`
+          : null,
+      },
       {
         label: "job_and_clock",
         text: CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
@@ -487,6 +527,13 @@ export async function answerClairePreDriveFollowUp(
     const trimmed = trimToSentenceBoundary(text, FOLLOW_UP_TRIM_CHARS);
     const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
+    const identityViolation = claireIdentityClaimViolation(
+      trimmed,
+      input.context.identityTruth
+    );
+    if (identityViolation) {
+      throw new Error(`Claire identity truth contradiction: ${identityViolation}`);
+    }
 
     // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
     let answer = trimmed;
@@ -588,6 +635,20 @@ export async function answerClairePreDriveFollowUp(
         console.warn("[Claire] general answer leaked assistant ontology; replaced with authored decline");
         answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
         guardReason = "ontology_guard";
+      }
+    }
+
+    if (guardReason === null) {
+      const contract = validateClaireCharacterContract({
+        text: answer,
+        rapportBand: (compiled.rapportBand ?? 0) as RapportBand,
+        personalRung: (compiled.disclosureTier ?? 0) as PersonalAccessRung,
+        mode: compiled.mode,
+        unresolvedBusiness: businessOpen,
+      });
+      if (!contract.ok && contract.sanitizedText) {
+        console.warn("[Claire] general answer violated character contract; sanitized", contract.reason);
+        answer = contract.sanitizedText;
       }
     }
 

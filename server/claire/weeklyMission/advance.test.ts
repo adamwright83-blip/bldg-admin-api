@@ -11,6 +11,7 @@ import {
   createMemoryConversationStateStore,
   setClaireConversationStateStoreForTests,
 } from "../turn/conversationStateStore";
+import { safeClaireBrainV3Fallback } from "../turn/brainV3";
 import { advanceWeeklySession, guardSpeech } from "./advance";
 import { draftFromDossier, loadWeeklyDossier, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision } from "./planningDecision";
@@ -349,7 +350,9 @@ describe("advanceWeeklySession", () => {
         }),
       }
     );
-    expect(result.draft.days.find(day => day.businessDate === "2026-09-16")?.primary?.text).toBe("Walk the plant.");
+    // The invalid model act is rejected, and deterministic fallback no longer
+    // turns the raw operator sentence into durable weekly work.
+    expect(result.draft.days.find(day => day.businessDate === "2026-09-16")?.primary).toBeNull();
     expect(result.speech).not.toMatch(/Dana/);
     expect(result.speech).not.toMatch(/I scheduled/);
     expect(result.writesBusinessTruth).toBe(false);
@@ -514,6 +517,37 @@ describe("weekly mode gate", () => {
       encyclopedia: null,
       classifyPriorClaim: vi.fn(async () => null) as never,
       rerunBusinessQuery: vi.fn() as never,
+      brainV3: vi.fn(async (input: any) => {
+        const text = String(input.utterance ?? "").trim();
+        if (/Thursday,\s*not\s*Tuesday/i.test(text)) {
+          return {
+            ...safeClaireBrainV3Fallback(),
+            target: "weekly_planning",
+            act: "correction",
+            weeklyDisposition: "continue",
+            rationale: "Operator corrects weekly plan day",
+          };
+        }
+        if (/Looks\s*good/i.test(text)) {
+          return {
+            ...safeClaireBrainV3Fallback(),
+            target: "weekly_planning",
+            act: "confirmation",
+            weeklyDisposition: "continue",
+            rationale: "Operator confirms weekly plan draft",
+          };
+        }
+        if (/Lock\s*it/i.test(text)) {
+          return {
+            ...safeClaireBrainV3Fallback(),
+            target: "weekly_planning",
+            act: "action_request",
+            weeklyDisposition: "lock",
+            rationale: "Operator locks weekly plan",
+          };
+        }
+        return safeClaireBrainV3Fallback();
+      }) as never,
     };
   }
 

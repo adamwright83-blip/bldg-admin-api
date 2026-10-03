@@ -222,7 +222,7 @@ export function referentTokens(text: string): { names: Set<string>; numbers: Set
 
 function receiptTokens(receipt: FactualClaimReceipt) {
   const tokens = referentTokens(receipt.answerText);
-  for (const entry of receipt.evidence) {
+  for (const entry of receipt.evidence ?? []) {
     const order = entry.ref?.split(":")[1];
     if (order && /^\d+$/.test(order)) tokens.numbers.add(order);
   }

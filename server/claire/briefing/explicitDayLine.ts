@@ -18,8 +18,33 @@ const DIRECTIVE =
   /\b(?:add|put|place|log|save|track)\b|\b(?:make sure|be sure)\b/i;
 
 export function refersToPriorWork(utterance: string): boolean {
-  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/i.test(
+  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about|batch (?:them|those|all)|(?:the\s+)?dormant (?:accounts|customers)|recovery texts|put them|them all|the whole group|whole group|those people|that group|that work|everyone|everybody)\b/i.test(
     utterance
+  );
+}
+
+const STRUCTURED_RECOVERY_GROUP =
+  /\b(?:them|those|the whole group|whole group|everyone|everybody|those people|that group|that work)\b/i;
+const EXPLICIT_RECOVERY_CONTEXT =
+  /\b(?:dormant\s+(?:accounts|customers)|recovery\s+(?:texts|messages|outreach)|win[- ]?back)\b/i;
+const RECOVERY_GROUP_TRACKING_TARGET =
+  /\b(?:day\s*line|for\s+today|today|this\s+(?:morning|afternoon|evening)|tonight)\b/i;
+const IMPERATIVE_RECOVERY_GROUP_ACTION =
+  /^(?:(?:yes|yeah|yep|okay|ok|sure)[,\s]+)?(?:do|send|batch)\b/i;
+
+/**
+ * A bare pronoun is not enough to turn a business question into recovery work.
+ * The group reference must be anchored by known recovery context, an imperative
+ * recovery action, or an explicit Day Line/today target.
+ */
+export function referencesStructuredRecoveryGroup(utterance: string): boolean {
+  const text = utterance.trim();
+  if (!STRUCTURED_RECOVERY_GROUP.test(text)) return false;
+  if (EXPLICIT_RECOVERY_CONTEXT.test(text)) return true;
+  if (IMPERATIVE_RECOVERY_GROUP_ACTION.test(text)) return true;
+  return (
+    /\b(?:put|add|batch|send|do)\b/i.test(text) &&
+    RECOVERY_GROUP_TRACKING_TARGET.test(text)
   );
 }
 
@@ -108,7 +133,52 @@ export function assembleReferencedDayLineWork(input: {
   priorOperatorUtterances: string[];
   clock: BriefingClock;
   unfinished: (text: string) => boolean;
+  history?: Array<{ speaker: string; text: string }>;
+  surfacedAccounts?: Array<{ id: string; name: string }>;
 }): BriefingItem[] {
+  // Recovery anaphora is resolved only from structured entities Claire
+  // actually surfaced. Conversation prose is not an identity database.
+  const explicitRecovery = EXPLICIT_RECOVERY_CONTEXT.test(input.utterance);
+  const anaphoricGroup = referencesStructuredRecoveryGroup(input.utterance);
+  const structuredRefs = input.surfacedAccounts ?? [];
+
+  if ((explicitRecovery || anaphoricGroup) && (structuredRefs.length > 0 || explicitRecovery)) {
+    if (anaphoricGroup && structuredRefs.length === 0) {
+      // "Them" has no durable referent. Never invent a customer set from a
+      // number or a sentence in history.
+      return [];
+    }
+    const count = structuredRefs.length;
+    const title = count
+      ? `Send ${count} dormant-customer recovery texts`
+      : "Send dormant-customer recovery texts";
+    const names = structuredRefs.map(ref => ref.name);
+    const quote = count
+      ? `Send recovery texts today to ${names.join(", ")}`
+      : "Send dormant-customer recovery texts today";
+    return [
+      {
+        kind: "new_work",
+        title,
+        quote,
+        businessDate: input.clock.today,
+        timing: { kind: "none" },
+        quantity: count || null,
+        people: names,
+        place: null,
+        needs: null,
+        existing: null,
+        references: structuredRefs.map(ref => ({
+          kind: "customer" as const,
+          id: ref.id,
+          name: ref.name,
+          source: "conversation_referent" as const,
+        })),
+        executionType: "challenge",
+      },
+    ];
+  }
+
   const corpus = [...input.priorOperatorUtterances, input.utterance].join(" ");
   const sources = refersToPriorWork(input.utterance) ? [...input.priorOperatorUtterances, input.utterance] : [input.utterance];
   const found: Array<{ quote: string; title: string }> = [];
@@ -130,6 +200,7 @@ export function assembleReferencedDayLineWork(input: {
       found.push({ quote, title });
     }
   }
+
   return found.map(item => ({
     kind: "new_work" as const,
     title: item.title,

@@ -27,12 +27,30 @@ export type ClaireCampaignSummary = {
 export async function getClaireCampaignSummary(input: {
   tenantId: string;
   actorId: string;
+  actorIds?: readonly string[];
 }): Promise<ClaireCampaignSummary | null> {
   try {
-    const mission = await getDay1TenDoorsMissionReadOnly({
-      tenantId: input.tenantId,
-      driverId: input.actorId,
-    });
+    const actorIds = [...new Set(
+      [input.actorId, ...(input.actorIds ?? [])]
+        .map(actorId => actorId.trim())
+        .filter(Boolean)
+    )];
+    const missions = (
+      await Promise.all(
+        actorIds.map(driverId =>
+          getDay1TenDoorsMissionReadOnly({
+            tenantId: input.tenantId,
+            driverId,
+          })
+        )
+      )
+    ).filter((mission): mission is NonNullable<typeof mission> => Boolean(mission));
+    const mission = missions
+      .sort((a, b) =>
+        Number(a.isComplete) - Number(b.isComplete)
+        || b.visitedCount - a.visitedCount
+        || a.missionId.localeCompare(b.missionId)
+      )[0] ?? null;
     const labels = {
       campaignName: CLAIRE_CAMPAIGN_NAME,
       realWorldExtension: CLAIRE_CAMPAIGN_REAL_WORLD_EXTENSION,

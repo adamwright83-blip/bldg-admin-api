@@ -1,7 +1,15 @@
 import { createAgentEvent, listRecentAgentEvents } from "../db";
 import type { AgentContext } from "./permissions";
 
-export type AgentEventStatus = "success" | "failed" | "approval_required" | "blocked";
+export type AgentEventStatus =
+  | "proposed"
+  | "policy_denied"
+  | "write_withheld"
+  | "approval_required"
+  | "execution_started"
+  | "success"
+  | "failed"
+  | "blocked";
 
 export type AgentEventWrite = {
   ctx: AgentContext;
@@ -18,6 +26,7 @@ export type AgentEventWrite = {
   outputTokens?: number;
   estimatedCostCents?: number;
   requiresHumanApproval?: boolean;
+  operationStatus?: string | null;
 };
 
 export async function logAgentEvent(event: AgentEventWrite): Promise<number | null> {
@@ -42,6 +51,16 @@ export async function logAgentEvent(event: AgentEventWrite): Promise<number | nu
     estimatedCostCents: event.estimatedCostCents ?? 0,
     requiresHumanApproval: event.requiresHumanApproval ?? false,
     approvedByUserId: event.ctx.approvedByUserId ?? null,
+    goalRunId: event.ctx.goalRunId ?? null,
+    cycleId: event.ctx.cycleId ?? null,
+    decisionId: event.ctx.decisionId ?? null,
+    obligationId: event.ctx.obligationId ?? null,
+    authorityBasis: event.ctx.authorityBasis ?? null,
+    approvalBasis: event.ctx.approvalBasis ?? null,
+    standingAuthorizationId: event.ctx.standingAuthorizationId ?? null,
+    standingAuthorizationVersion: event.ctx.standingAuthorizationVersion ?? null,
+    policyVersion: event.ctx.policyVersion ?? null,
+    operationStatus: event.operationStatus ?? event.status,
   });
 }
 

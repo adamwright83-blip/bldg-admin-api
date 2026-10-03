@@ -8,10 +8,10 @@ import { missionDirectorPlans, opsTasks } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
-import { getActiveMacroGoal } from "../claire/macroGoalService";
+import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
 import { loadDailyCommand } from "../claire/dailyCommandContract";
 import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
-import { latestWeeklyIntent } from "../claire/weeklyMission/intentStore";
+import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
   explicitOperatorMissionDisplacement,
@@ -29,16 +29,23 @@ function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
+function missionOperatorIds(input: {
+  operatorId: string;
+  operatorIds?: readonly string[];
+}): string[] {
+  return [...new Set([input.operatorId, ...(input.operatorIds ?? [])].map(id => id.trim()).filter(Boolean))];
+}
+
 async function loadRankingContext(input: {
   tenantId: string;
-  operatorId: string;
+  operatorUserIds: readonly string[];
   businessDate: string;
 }): Promise<RankingContext> {
   let macroGoal: RankingContext["macroGoal"] = null;
   try {
-    const goal = await getActiveMacroGoal({
+    const goal = await getActiveMacroGoalForOperators({
       tenantId: input.tenantId,
-      operatorUserId: input.operatorId,
+      operatorUserIds: input.operatorUserIds,
     });
     if (goal) {
       macroGoal = {
@@ -173,6 +180,7 @@ function toRecord(row: typeof missionDirectorPlans.$inferSelect): MissionDirecto
 export async function getLatestPlan(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
 }): Promise<MissionDirectorPlan | null> {
   const db = await getDb();
@@ -183,11 +191,11 @@ export async function getLatestPlan(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
         eq(missionDirectorPlans.businessDate, input.businessDate)
       )
     )
-    .orderBy(desc(missionDirectorPlans.revision))
+    .orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision))
     .limit(1);
   return row ? toRecord(row) : null;
 }
@@ -195,6 +203,7 @@ export async function getLatestPlan(input: {
 export async function listPlanRevisions(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
 }): Promise<MissionDirectorPlan[]> {
   const db = await getDb();
@@ -205,11 +214,11 @@ export async function listPlanRevisions(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
         eq(missionDirectorPlans.businessDate, input.businessDate)
       )
     )
-    .orderBy(desc(missionDirectorPlans.revision));
+    .orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision));
   return rows.map(toRecord);
 }
 
@@ -221,14 +230,21 @@ export async function listPlanRevisions(input: {
 export async function computeMissionPlan(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+  const operatorUserId = input.operatorUserId?.trim() || input.operatorId;
+  const operatorUserIds = [...new Set(
+    [operatorUserId, ...(input.operatorUserIds ?? [])].map(id => id.trim()).filter(Boolean)
+  )];
   const [allCampaigns, fieldToday] = await Promise.all([
     listCampaigns({ tenantId: input.tenantId, includeDisabled: true }),
     getFieldToday({
       tenantId: input.tenantId,
-      userId: input.operatorId,
+      userId: operatorUserId,
       includeAllAssignees: true,
       businessDate: input.businessDate,
       timeZone: input.timeZone,
@@ -236,16 +252,17 @@ export async function computeMissionPlan(input: {
   ]);
   const loaded = await loadDailyCommand({
     tenantId: input.tenantId,
-    actorId: input.operatorId,
+    actorId: operatorUserId,
     dayDirectorActorId: input.operatorId,
-    operatorUserId: input.operatorId,
+    dayDirectorActorIds: input.operatorIds ? [...input.operatorIds] : undefined,
+    operatorUserId,
     businessDate: input.businessDate,
     timeZone: input.timeZone,
   }).catch(() => null);
   const weeklyIntent = loaded
-    ? await latestWeeklyIntent({
+    ? await latestWeeklyIntentForOperators({
         tenantId: input.tenantId,
-        operatorId: input.operatorId,
+        operatorIds: operatorUserIds,
         weekStart: weekStartMonday(input.businessDate),
       })
     : null;
@@ -259,7 +276,7 @@ export async function computeMissionPlan(input: {
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
-    operatorId: input.operatorId,
+    operatorUserIds,
     businessDate: input.businessDate,
   });
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
@@ -322,10 +339,13 @@ const activeRuns = new Map<string, Promise<MissionDirectorPlan>>();
 export async function planForDate(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
-  const key = `${input.tenantId}:${input.operatorId}:${input.businessDate}`;
+  const key = `${input.tenantId}:${missionOperatorIds(input).sort().join(",")}:${input.businessDate}`;
   const active = activeRuns.get(key);
   if (active) return active;
   const run = planForDateInner(input).finally(() => activeRuns.delete(key));
@@ -336,6 +356,9 @@ export async function planForDate(input: {
 async function planForDateInner(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
+  operatorUserId?: string;
+  operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
 }): Promise<MissionDirectorPlan> {
@@ -365,17 +388,30 @@ async function planForDateInner(input: {
   // Execution write, not a read. Operator-confirmed recurrence rules become
   // today's Day Director commitments before the plan is computed. Idempotent
   // per rule and date. computeMissionPlan stays persistence-free and only reads.
-  await projectRecurrenceForDate({
-    tenantId: input.tenantId,
-    actorId: input.operatorId,
-    businessDate: input.businessDate,
-  }).catch(() => ({ projectedIds: [], created: 0 }));
+  await Promise.all(
+    missionOperatorIds(input).map(actorId =>
+      projectRecurrenceForDate({
+        tenantId: input.tenantId,
+        actorId,
+        businessDate: input.businessDate,
+      }).catch(() => ({ projectedIds: [], created: 0 }))
+    )
+  );
   const { outcome, inputFingerprint } = await computeMissionPlan(input);
   const latest = await getLatestPlan(input);
   if (latest && latest.inputFingerprint === inputFingerprint) {
     return latest;
   }
-  const revision = (latest?.revision ?? 0) + 1;
+  // Reads span the authorized alias group, but revisions are unique per
+  // concrete operatorId. Compute the next revision only from the canonical
+  // write key so an alias-owned revision number cannot collide with an
+  // existing canonical revision.
+  const canonicalLatest = await getLatestPlan({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: input.businessDate,
+  });
+  const revision = (canonicalLatest?.revision ?? 0) + 1;
   const row = {
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -397,6 +433,7 @@ async function planForDateInner(input: {
 export async function recordPlanUsage(input: {
   tenantId: string;
   operatorId: string;
+  operatorIds?: readonly string[];
   businessDate: string;
   usageOutcome: "used" | "ignored" | "wrong_mission";
 }): Promise<{ ok: true }> {
@@ -410,7 +447,7 @@ export async function recordPlanUsage(input: {
     .where(
       and(
         eq(missionDirectorPlans.tenantId, input.tenantId),
-        eq(missionDirectorPlans.operatorId, input.operatorId),
+        eq(missionDirectorPlans.operatorId, latest.operatorId),
         eq(missionDirectorPlans.businessDate, input.businessDate),
         eq(missionDirectorPlans.revision, latest.revision)
       )

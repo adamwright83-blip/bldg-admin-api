@@ -223,14 +223,17 @@ export async function getStrategyGrowthMetrics(
       firstOrder.businessDate >= input.period.startYmd &&
       firstOrder.businessDate <= input.period.endYmd;
 
-    const isCustomerUncertain = input.unverifiedCustomers?.has(group.id) ?? false;
+    const isCustomerUncertain =
+      !group.matched || (input.unverifiedCustomers?.has(group.id) ?? false);
 
     if (isFirstInPeriod) {
       if (isCustomerUncertain) {
         uncertainNewCount += 1;
         uncertainReasons.push({
           identityKey: group.id,
-          reason: "Customer purchase history is unverified or incomplete at import boundary",
+          reason: group.matched
+            ? "Customer purchase history is unverified or incomplete at import boundary"
+            : "Paid order has no usable customer identity evidence",
         });
       } else {
         newPayingCount += 1;

@@ -41,6 +41,8 @@ jobs:
       GOLDLINE_PROOF_MODE: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: pnpm/action-setup@v6
         with:
           version: 10.4.1
@@ -51,6 +53,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
+      - name: Enforce Phase 0 architecture guards
+        run: |
+          pnpm check:nomenclature
+          pnpm check:tenant-ratchet
+          pnpm check:vertical-dependencies
+      - name: Prove Persistent Growth Operator Phase 0 contracts
+        run: >-
+          pnpm vitest run
+          server/strategy/verticalTemplates/registry.test.ts
+          server/saas/tenantSourceAdapters.test.ts
+          server/saas/tenantImportService.test.ts
+          server/analytics/canonicalRevenue.test.ts
+          server/analytics/sourceCoverage.test.ts
+          server/executionIntelligence/selectExecutionIntelligence.test.ts
+          server/armory/armoryJ0.test.ts
+          shared/tenantLearningGovernance.test.ts
+          server/persistentOperator/tenantScope.test.ts
+          server/persistentOperator/phase0SchemaContract.test.ts
+          server/persistentOperator/identity.test.ts
+          server/persistentOperator/observability.test.ts
+          server/persistentOperator/identitySchemaContract.test.ts
+          server/campaignRuns/canonicalOwnership.test.ts
+          server/lanternCity/lanternCityRouter.test.ts
+          shared/lanternCityObjectiveMarks.test.ts
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run
@@ -110,6 +136,7 @@ jobs:
           server/claire/slice03AssertionGuardWiring.test.ts
           server/claire/slice01SafetyBaseline.test.ts
           server/claire/operatingTruthGuards.test.ts
+          server/claire/weeklyMission/conversationalIntelligenceRepair.test.ts
           server/claire/claireOperatorPhone.test.ts
           server/claire/businessConversation.test.ts
           shared/claireRelationshipHistory.test.ts
@@ -122,12 +149,67 @@ jobs:
           server/goldlineWorld/futurePressureService.test.ts
           server/field/fieldOpportunityService.test.ts
           server/field/fieldTodayService.test.ts
+      - name: Prove Claire pre-visit sales loadout
+        run: >-
+          pnpm vitest run
+          server/missionSalesBrief/clairePreVisitIntel.test.ts
+          server/missionSalesBrief/preVisitIntelAuthorization.test.ts
+          client/src/game/actions/actionSurface.test.ts
+          client/src/pages/commercialSalesMissionClaireIntel.test.ts
+
       - name: Prove Rook CONTACT authority boundary
         run: >-
           pnpm vitest run
           server/goldlineProgression/rookContactGrant.test.ts
           server/rookContact/rookContactAuthorityRepair.test.ts
           client/src/pages/goldline/wayward/waywardTruth.test.ts
+
+
+  claire-conversation-contracts:
+    name: claire-conversation-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prove Claire semantic routing and structured referents
+        run: >-
+          pnpm vitest run
+          server/claire/weeklyMission/conversationalIntelligenceRepair.test.ts
+
+  linked-debrief-contracts:
+    name: linked-debrief-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prove mission-linked tower debrief
+        run: >-
+          pnpm vitest run
+          shared/missionLinkedDebrief.test.ts
+          server/commercialMissions/missionLinkedDebriefContract.test.ts
+          server/commercialMissions/driverSalesJournalResilience.test.ts
+          server/commercialMissions/parkingLotDebriefContract.test.ts
+          client/src/components/driver/SalesMomentum.test.ts
 
   fast-browser:
     name: ${{ matrix.name }}

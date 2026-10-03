@@ -5,6 +5,7 @@ import {
   sanitizeFatalText,
   type ClientFatalLogRecord,
 } from "@shared/clientFatal";
+import { emitServerLog } from "../_core/posthogLogs";
 
 const reportSchema = z
   .object({
@@ -19,6 +20,11 @@ export function acceptClientFatalReport(
   body: unknown,
   log: (record: ClientFatalLogRecord) => void = record => {
     console.error("[client-fatal]", record);
+    emitServerLog("error", "Client fatal report", {
+      correlation_id: record.correlationId,
+      error_name: record.name,
+      error_message: record.message,
+    });
   }
 ): { status: 204 | 400 } {
   const parsed = reportSchema.safeParse(body);

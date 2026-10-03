@@ -1,0 +1,333 @@
+.living-warroom-page {
+  min-height: 100vh;
+  background-color: #040810;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.warroom-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  background: rgba(6, 11, 20, 0.85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 20;
+}
+
+.warroom-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.warroom-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.warroom-main-viewport {
+  flex: 1;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  overflow: hidden;
+}
+
+@media (max-width: 1050px) {
+  .warroom-main-viewport {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tactical Atlas Interactive Map Area */
+.warroom-canvas-container {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.warroom-bg-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  filter: contrast(1.2) brightness(0.7);
+  pointer-events: none;
+}
+
+.warroom-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+}
+
+.corridor-beam {
+  stroke-dasharray: 6 4;
+  animation: beamFlow 1.8s linear infinite;
+}
+
+@keyframes beamFlow {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+.conquest-shockwave {
+  animation: expandShockwave 2s infinite ease-out;
+  transform-origin: center;
+}
+
+@keyframes expandShockwave {
+  0% { r: 10; opacity: 1; stroke-width: 4; }
+  100% { r: 90; opacity: 0; stroke-width: 1; }
+}
+
+/* Building Pins on Canvas */
+.building-marker-card {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  z-index: 10;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.building-marker-card:hover, .building-marker-card.active {
+  transform: translate(-50%, -105%) scale(1.05);
+  border-color: #f59e0b;
+  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.35);
+}
+
+.building-marker-card.won {
+  border-color: rgba(245, 158, 11, 0.6);
+  background: rgba(26, 20, 10, 0.92);
+}
+
+.building-marker-card.targeted {
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.marker-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: block;
+}
+
+.marker-meta {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+/* Floating HUD Overlay on Canvas */
+.warroom-floating-hud {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  display: flex;
+  gap: 16px;
+  z-index: 12;
+}
+
+.hud-panel {
+  background: rgba(6, 11, 20, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 14px 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.hud-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.hud-val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: ui-monospace, monospace;
+}
+
+.hud-sub {
+  font-size: 0.72rem;
+  color: #4ade80;
+  font-weight: 600;
+}
+
+/* Right Control Rail: Persistent Operator Engine Feed */
+.warroom-control-rail {
+  background: rgba(6, 11, 20, 0.95);
+  backdrop-filter: blur(16px);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 20px;
+  z-index: 15;
+  overflow-y: auto;
+}
+
+.rail-section-header {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Macro Goal Meter Card */
+.macro-goal-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.macro-goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.goal-metric-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.goal-metric-numbers {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #f59e0b;
+  font-family: ui-monospace, monospace;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d97706 0%, #f59e0b 50%, #4ade80 100%);
+  border-radius: 9999px;
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Simulation Trigger Card */
+.simulation-trigger-box {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.04) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-simulate-win {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: none;
+  color: #06090e;
+  font-size: 0.92rem;
+  font-weight: 800;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+  transition: all 0.2s;
+}
+
+.btn-simulate-win:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5);
+}
+
+/* Activity Ticker */
+.activity-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  background: rgba(15, 23, 42, 0.6);
+  border-left: 2px solid #38bdf8;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.78rem;
+}
+
+.activity-item.win {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.activity-item.conquest {
+  border-left-color: #4ade80;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.activity-timestamp {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+
+.activity-text {
+  color: #e2e8f0;
+  margin-top: 2px;
+}

@@ -55,12 +55,16 @@ import { rookContactRouter } from "../rookContact/rookContactRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
+import { lanternCityRouter } from "../lanternCity/lanternCityRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
+import { persistentOperatorRouter } from "../persistentOperator/persistentOperatorRouter";
+import { franchiseRouter } from "../franchise/franchiseRouter";
 
 export const systemRouter = router({
+  franchise: franchiseRouter,
   strategy: strategyRouter,
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
@@ -115,6 +119,8 @@ export const systemRouter = router({
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
   currentDayLine: currentDayLineRouter,
+  persistentOperator: persistentOperatorRouter,
+  lanternCity: lanternCityRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
   missionSalesBrief: missionSalesBriefRouter,

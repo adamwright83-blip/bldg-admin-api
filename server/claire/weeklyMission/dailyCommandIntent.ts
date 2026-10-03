@@ -13,7 +13,7 @@ import {
   type LoadDailyCommandInput,
 } from "../dailyCommandContract";
 import type { WeeklyExecutionType, WeeklyIntentDay } from "../../../shared/weeklyMissionReadiness";
-import { latestWeeklyIntent } from "./intentStore";
+import { latestWeeklyIntent, latestWeeklyIntentForOperators } from "./intentStore";
 
 export type WeeklyIntentReadinessItem = {
   text: string;
@@ -234,7 +234,7 @@ export function playableToday(input: {
  * Does not write WeeklyIntent and does not call a recurrence materializer.
  */
 export async function loadDailyCommandWithWeeklyIntent(
-  input: LoadDailyCommandInput & { weekStart: string },
+  input: LoadDailyCommandInput & { weekStart: string; operatorUserIds?: readonly string[] },
   deps: {
     loadCommand?: typeof loadDailyCommand;
     latestIntent?: typeof latestWeeklyIntent;
@@ -243,10 +243,18 @@ export async function loadDailyCommandWithWeeklyIntent(
 ): Promise<DailyCommandWithIntent> {
   const load = deps.loadCommand ?? loadDailyCommand;
   const command = await load(input);
-  const intent = await (deps.latestIntent ?? latestWeeklyIntent)({
-    tenantId: input.tenantId,
-    operatorId: input.operatorUserId,
-    weekStart: input.weekStart,
-  });
+  const intent = deps.latestIntent
+    ? await deps.latestIntent({
+        tenantId: input.tenantId,
+        operatorId: input.operatorUserId,
+        weekStart: input.weekStart,
+      })
+    : await latestWeeklyIntentForOperators({
+        tenantId: input.tenantId,
+        operatorIds: input.operatorUserIds?.length
+          ? input.operatorUserIds
+          : [input.operatorUserId],
+        weekStart: input.weekStart,
+      });
   return applyWeeklyIntentToCommand(command, intent?.days ?? null, deps.displacement ?? null);
 }

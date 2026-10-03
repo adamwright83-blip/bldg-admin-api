@@ -21,6 +21,10 @@ import {
   loadClaireCommunicationsContext,
   type ClaireCommunicationsContextPort,
 } from "./communicationsContextPort";
+import {
+  loadClaireIdentityTruth,
+  type ClaireIdentityTruth,
+} from "./identityTruth";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -144,6 +148,8 @@ export type ClaireDriveContext = {
    * It does not feed Daily Command, Weekly Mission, or Narrator derivation.
    */
   communications?: ClaireCommunicationsContextPort;
+  /** Authority-0 platform identity plus authority-1 tenant/account identity. */
+  identityTruth?: ClaireIdentityTruth;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -357,6 +363,7 @@ export async function assembleClaireDriveContext(input: {
   } catch {
     // Graceful offline fallback
   }
+  const identityTruth = await loadClaireIdentityTruth(input.tenantId);
   const macroGoal = await getActiveMacroGoal({
     tenantId: input.tenantId,
     operatorUserId: input.actorId,
@@ -456,6 +463,7 @@ export async function assembleClaireDriveContext(input: {
     businessDate: today.businessDate,
     actorId: input.actorId,
     truthLaw: "game_projection_never_creates_business_truth",
+    identityTruth,
     nextFixedCommitment,
     blockers,
     relevantTimeline: driveTimeline.slice(0, 8).map(simplify),

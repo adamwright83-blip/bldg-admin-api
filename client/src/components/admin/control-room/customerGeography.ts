@@ -4,7 +4,11 @@ export type GeographicCustomer = {
   identityKey: string;
   displayName: string;
   phone: string | null;
+  /** street address and unit exactly as the customer gave them (the atlas read model sends both) */
+  address?: string | null;
+  unit?: string | null;
   totalOrders?: number;
+  totalSpendCents?: number;
   firstOrderAt?: string;
   lastOrderAt?: string;
   cadence: {

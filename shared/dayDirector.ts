@@ -1,6 +1,13 @@
 import type { ObjectiveExecutionType } from "./objectiveExecution";
 import type { DayDirectorCommandMetadata, OperatorMissionMetadata } from "./claireWorkdayCommand";
 
+export type DayDirectorReference = {
+  kind: "customer" | "account";
+  id: string;
+  name: string;
+  source: "conversation_referent" | "explicit";
+};
+
 export type DayDirectorCommitment = {
   id: string;
   businessDate: string;
@@ -16,6 +23,8 @@ export type DayDirectorCommitment = {
   scheduleKind?: string | null;
   scheduleLabel?: string | null;
   sourceText?: string | null;
+  /** Structured targets survive beyond the conversational title. */
+  references?: DayDirectorReference[];
   command?: DayDirectorCommandMetadata;
   operatorMission?: OperatorMissionMetadata | null;
   /** Stored type. Absent means the shared classifier may derive. Null is stored unknown. */
@@ -34,6 +43,8 @@ export type DayDirectorProposal = {
   detailState?: "COMPLETE" | "NEEDS_DETAILS";
   missingDetails?: string[];
   detailNote?: string | null;
+  /** Structured targets resolved before persistence; never inferred from the title later. */
+  references?: DayDirectorReference[];
   /** Authoritative business date for this commitment. Voice/briefing must not silently rewrite it to today. */
   targetBusinessDate?: string | null;
   command?: DayDirectorCommandMetadata;

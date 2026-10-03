@@ -134,7 +134,7 @@ export function classifyDoctrineUtterance(utterance: string): "temporary" | "dur
   const text = utterance.trim();
   if (!text) return "not_doctrine";
   const durable = /\b(from now on|going forward|always|never|remember this as a rule)\b/i.test(text);
-  const temporary = /\b(just today|only today|for today|until (?:payroll|this) is (?:finished|done)|skip .* today)\b/i.test(text);
+  const temporary = /\b(just today|only today|for today(?:,|\s+)(?:don't|do not|no|skip|hold)|until (?:payroll|this) is (?:finished|done)|skip .* today)\b/i.test(text);
   if (durable && !temporary) return "durable";
   if (temporary && !durable) return "temporary";
   if (durable && temporary) return "ambiguous";
@@ -448,7 +448,22 @@ export function morningChiefOfStaffBrief(input: {
   const todaySales = input.skipSales ? [] : input.sales;
   const todayRecovery = input.recoveries.filter(item => item.status === "scheduled" || item.status === "draft_prepared");
   if (todayRecovery[0]) {
-    lines.push(`${todayRecovery[0].title} is on the line because ${todayRecovery[0].why}`);
+    const names = todayRecovery
+      .map(item => item.subjectName.trim())
+      .filter((name, index, all) => Boolean(name) && all.indexOf(name) === index);
+    if (names.length) {
+      const naturalNames =
+        names.length === 1
+          ? names[0]
+          : names.length === 2
+            ? `${names[0]} and ${names[1]}`
+            : `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+      lines.push(
+        `${names.length} dormant customer${names.length === 1 ? "" : "s"} ready for recovery: ${naturalNames}.`
+      );
+    } else {
+      lines.push(`${todayRecovery[0].title} is on the line because ${todayRecovery[0].why}`);
+    }
   }
   if (todaySales[0]) {
     lines.push(`Sales that must survive the operations day: ${todaySales[0].title}. ${todaySales[0].why}`);

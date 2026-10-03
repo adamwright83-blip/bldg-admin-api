@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import {
-  commercialVisitOutcomes,
+  commercialMissionFieldStates,
   driverSalesJournals,
   driverSalesPlaybookSources,
   driverSalesScoreEvents,
@@ -223,21 +223,36 @@ export async function saveDriverSalesJournal(input: {
   await ensureMotivationTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // Context is verified against the actor's real visit; a client-supplied ID
-  // cannot attach evidence to an unworked account or another operator's visit.
+  // A mission-linked debrief begins after persisted arrival, before an outcome
+  // exists. The operator's raw account is the evidence from which the visit
+  // result is later proposed and explicitly confirmed. A client-supplied
+  // mission ID therefore cannot attach to an unarrived or unassigned mission.
   let debriefPhysicalEntityId: string | null = null;
   if (input.debriefMissionId != null) {
-    const [visit] = await db.select({ id: commercialVisitOutcomes.id })
-      .from(commercialVisitOutcomes).where(and(
-        eq(commercialVisitOutcomes.tenantId, input.tenantId),
-        eq(commercialVisitOutcomes.missionId, input.debriefMissionId),
-        eq(commercialVisitOutcomes.recordedBy, input.driverId),
-      )).limit(1);
-    if (!visit) throw new Error("The debrief requires your recorded field visit.");
     const { getCommercialMission } = await import("./commercialMissionStore");
+    const mission = await getCommercialMission({
+      tenantId: input.tenantId,
+      missionId: input.debriefMissionId,
+    });
+    if (!mission || mission.assignedTo !== input.driverId) {
+      throw new Error("The debrief is not assigned to this operator.");
+    }
+    const [field] = await db
+      .select({ arrivedAt: commercialMissionFieldStates.arrivedAt })
+      .from(commercialMissionFieldStates)
+      .where(and(
+        eq(commercialMissionFieldStates.tenantId, input.tenantId),
+        eq(commercialMissionFieldStates.missionId, input.debriefMissionId),
+      ))
+      .limit(1);
+    if (!field?.arrivedAt) {
+      throw new Error("The debrief requires a persisted field arrival.");
+    }
     const { findPhysicalEntityIdByAddress } = await import("../goldlineWorld/entityLookup");
-    const mission = await getCommercialMission({ tenantId: input.tenantId, missionId: input.debriefMissionId });
-    debriefPhysicalEntityId = await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address: mission?.account.address });
+    debriefPhysicalEntityId = await findPhysicalEntityIdByAddress({
+      tenantId: input.tenantId,
+      address: mission.account.address,
+    });
   }
   const rawTranscript = input.transcript?.trim() ?? "";
   let audioStorageKey: string | null = null;

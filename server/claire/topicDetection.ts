@@ -50,19 +50,47 @@ const PERSONAL_PATTERNS: RegExp[] = [
   /\byou\b[^?.!]*\b(?:in|back in|around|during|since) (?:19\d\d|20[01]\d)\b/i,
 ];
 
-export function isPersonalQuestionAboutClaire(utterance: string): boolean {
-  return PERSONAL_PATTERNS.some(pattern => pattern.test(utterance));
+export function isPersonalInvitation(utterance: string): boolean {
+  return /\b(?:(?:want|wanna|would you like|would you want|can we|could we|let's|shall we|are you free|free to|up for)\s+(?:to\s+)?(?:for|get|grab|have|go for|meet for)\s+(?:a\s+)?(?:drink|drinks|coffee|dinner|lunch|bite)|(?:get|grab|have)\s+(?:a\s+)?(?:drink|drinks|coffee|dinner|lunch)\s+(?:with me|together)|hang\s*out|go\s+out\s+(?:sometime|together|with me))\b/i.test(utterance);
 }
+
+export function isCasualOrSocialBid(utterance: string): boolean {
+  if (/\b(?:how\s+(?:are\s+you|are\s+things|is\s+it\s+going|was\s+your\s+day)|what(?:'s|\s+is)\s+new|good\s+(?:morning|afternoon|evening))\b/i.test(utterance)) {
+    return true;
+  }
+  if (/\b(?:just\s+(?:calling\s+to\s+(?:say\s+hi|catch\s+up|chat)|calling\s+socially|checking\s+in)|calling\s+socially|no\s+business\s+today|nothing\s+work\s*related|just\s+saying\s+hello)\b/i.test(utterance)) {
+    return true;
+  }
+  if (/\b(?:went\s+to\s+church|saw\s+a\s+(?:friend|movie)|watched\s+a\s+movie|hanging\s+out|spent\s+time\s+with\s+family|had\s+a\s+quiet\s+weekend|relaxed\s+this\s+weekend)\b/i.test(utterance)) {
+    return true;
+  }
+  return false;
+}
+
+export function isPersonalQuestionAboutClaire(utterance: string): boolean {
+  return isPersonalInvitation(utterance) || PERSONAL_PATTERNS.some(pattern => pattern.test(utterance));
+}
+
+export type ConversationalModeContext = {
+  recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
+};
 
 export function detectClaireConversationalMode(
   utterance: string,
   /** Progression ON: fail-closed broad personal classification. OFF: exact legacy routing. */
-  progressionOn = false
+  progressionOn = false,
+  _context?: ConversationalModeContext
 ): "operational" | "casual" | "personal" | "post_action_review" {
-  if (progressionOn ? detectRequestedClaireTopic(utterance, true) || isPersonalQuestionAboutClaire(utterance) : detectRequestedClaireTopic(utterance)) return "personal";
+  const isPersonalDirect = progressionOn
+    ? detectRequestedClaireTopic(utterance, true) || isPersonalQuestionAboutClaire(utterance)
+    : detectRequestedClaireTopic(utterance);
+  if (isPersonalDirect) return "personal";
+
   if (/\b(how (?:did|does) that go|what happened with|after you (?:finish|done)|let me tell you what happened)\b/i.test(utterance)) {
     return "post_action_review";
   }
-  if (/\b(how are you|what's new|good morning|good evening)\b/i.test(utterance)) return "casual";
+
+  if (isCasualOrSocialBid(utterance)) return "casual";
   return "operational";
 }
+

@@ -3,7 +3,11 @@ import {
   formatClaireHistoryPromptLines,
   type ClaireAssembledRelationshipHistory,
 } from "../../../shared/claireRelationshipHistory";
-import { CLAIRE_CHARACTER_DEFINITION, CLAIRE_CHARACTER_VERSION } from "./characterDefinition";
+import {
+  CLAIRE_CHARACTER_DEFINITION,
+  CLAIRE_CHARACTER_VERSION,
+  getClaireModePolicy,
+} from "./characterDefinition";
 import { retrieveEligibleClaireCanon } from "./canonStore";
 import { CLAIRE_CANON } from "./characterDefinition";
 import { rapportPresentationLine } from "../progression/rapportPresentation";
@@ -54,7 +58,11 @@ export function compileClaireCharacterContext(input: {
   assembledHistory?: ClaireAssembledRelationshipHistory;
   explicitlyRequestedTopic?: string;
   /** Hidden, server-owned progression state. Absent means rapport 0 / rung 0 (fail closed). */
-  progression?: { rapportBand: 0 | 1 | 2 | 3; personalRung: 0 | 1 | 2 | 3 };
+  progression?: {
+    rapportBand: 0 | 1 | 2 | 3;
+    personalRung: 0 | 1 | 2 | 3;
+    unresolvedBusiness?: boolean;
+  };
   /**
    * The exact canon fragments the personal-turn controller authorized for THIS turn.
    * When absent, only harmless core canon is eligible: Claire never volunteers gated biography.
@@ -66,7 +74,15 @@ export function compileClaireCharacterContext(input: {
    */
   legacyTierDisclosure?: boolean;
 }): ClaireCompiledContext {
-  const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
+  const rapportBand = input.progression?.rapportBand ?? 0;
+  const personalRung = input.progression?.personalRung ?? 0;
+  const unresolvedBusiness = input.progression?.unresolvedBusiness === true;
+  const legacy = input.legacyTierDisclosure === true;
+
+  const modePolicy = getClaireModePolicy(input.mode, {
+    rapportBand: legacy ? undefined : rapportBand,
+    unresolvedBusiness,
+  });
   const recentEvents = input.recentSharedHistory.slice(-CLAIRE_HISTORY_PROMPT_BUDGET);
   const assembledLines = input.assembledHistory
     ? formatClaireHistoryPromptLines(input.assembledHistory)
@@ -79,9 +95,6 @@ export function compileClaireCharacterContext(input: {
         .map(item => item.relationshipEventId)
         .filter((id): id is number => id != null)
     : recentEvents.map(event => event.id);
-  const rapportBand = input.progression?.rapportBand ?? 0;
-  const personalRung = input.progression?.personalRung ?? 0;
-  const legacy = input.legacyTierDisclosure === true;
   const eligibleCanonFragments = legacy
     ? retrieveEligibleClaireCanon({
         disclosureTier: input.relationshipState.disclosureTier,
@@ -109,6 +122,16 @@ export function compileClaireCharacterContext(input: {
   const lines: string[] = [CLAIRE_PERSONALITY_LOCK];
   if (modePolicy.fieldOverride) lines.push(CLAIRE_FIELD_MODE_OVERRIDE);
   lines.push(`Mode objective: ${modePolicy.objective} ${modePolicy.lengthGuidance}`);
+  if (unresolvedBusiness) {
+    lines.push(
+      "Unresolved business remains on this call (pending items, blockers, or active route commitments). Prioritize operational resolution over conversational drift."
+    );
+  }
+  if (!legacy && input.mode === "casual" && rapportBand === 0) {
+    lines.push(
+      "At low rapport, acknowledge casual or social remarks very briefly and naturally return to your operational role. Do not probe into the operator's personal life or ask unprompted social follow-up questions."
+    );
+  }
   if (sharedHistorySummaries.length) {
     lines.push(
       `Durable shared history with this operator (epistemic class labeled, use only if relevant, never contradict it, never collapse classes into generic memory): ${sharedHistorySummaries.join(" | ")}`
