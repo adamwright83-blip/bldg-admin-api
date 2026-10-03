@@ -73,6 +73,12 @@ import {
   type ClaireBrainV3Interpretation,
   type ClaireBrainV3Target,
 } from "./brainV3";
+import {
+  claireDecisionId,
+  claireDecisionStore,
+  deriveClaireClosedDecisions,
+  type ClaireDecisionStore,
+} from "./decisionRecord";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
 import {
   parseWeeklyPlanningCallbackRequest,
@@ -301,6 +307,8 @@ export type ClaireTurnDeps = {
   classifierBudgetMs?: number;
   /** Claire Brain V3: the sole semantic interpretation of the live turn. */
   brainV3?: typeof interpretClaireBrainV3 | null;
+  /** Durable closed-decision records consumed by the live Brain V3 branch. */
+  decisionStore: ClaireDecisionStore;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -344,6 +352,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
+    decisionStore: claireDecisionStore,
   };
 }
 
@@ -873,6 +882,66 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         }
       : safeClaireBrainV3Fallback(utterance, fallbackContext));
 
+  const hasPendingAction = Boolean(
+    state.pendingBriefing ||
+      state.pendingAccountFollowUp ||
+      state.pendingProposal ||
+      state.pendingUpdate ||
+      state.pendingFieldCapture ||
+      state.pendingEngineeringOffer ||
+      state.pendingDayLineChoice ||
+      state.clarifyingUtterance
+  );
+  const decisionTurnId = `${input.conversationKey}:${claireOrdinal}`;
+  const closedDecisions = deriveClaireClosedDecisions({
+    brain: brainV3,
+    provider: brainResult ? "brain_v3" : "brain_v3_deterministic_fallback",
+    fallbackUsed: !brainResult,
+    thoughtCompleteness,
+    hasPendingAction,
+  });
+  const decisionRows = [
+    closedDecisions.turnType,
+    closedDecisions.turnReadiness,
+    closedDecisions.pendingActionRelationship,
+  ].map(decision => ({
+    decisionId: claireDecisionId(decisionTurnId, decision.decisionType),
+    turnId: decisionTurnId,
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    agent: "claire" as const,
+    decision,
+  }));
+  await deps.decisionStore.writeAndSeal(decisionRows);
+
+  const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
+  const effectiveReadiness = closedDecisions.turnReadiness.effectiveOutput;
+  const effectivePendingRelationship =
+    closedDecisions.pendingActionRelationship.effectiveOutput;
+
+  if (effectiveReadiness === "incomplete") {
+    return {
+      speak: "",
+      kind: "listening",
+      listenOnly: true,
+      assembledUtterance: utterance,
+      thoughtCompleteness: "incomplete",
+    };
+  }
+
+  if (effectiveTurnType === "clarify" || effectiveTurnType === "unknown") {
+    mark("fallback", {
+      fallbackReason:
+        effectiveTurnType === "clarify"
+          ? "closed_decision_abstained_clarify"
+          : "closed_decision_provider_unknown",
+    });
+    return finish({
+      speak: "Say that last part again.",
+      kind: "answered",
+    });
+  }
+
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
     state.pendingBriefing = null;
@@ -1247,11 +1316,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.act === "rejection" ||
     brainV3.dayLineDisposition === "decline"
   ) {
-    if (state.pendingProposal && conversationTarget !== "pending_action") {
+    if (
+      state.pendingProposal &&
+      conversationTarget !== "pending_action" &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingProposal = null;
       state.pendingReminded = false;
     }
-    if (state.pendingBriefing && conversationTarget !== "pending_briefing") {
+    if (
+      state.pendingBriefing &&
+      conversationTarget !== "pending_briefing" &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
