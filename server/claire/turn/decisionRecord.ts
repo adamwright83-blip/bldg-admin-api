@@ -311,6 +311,83 @@ function rowsFromExecute(result: unknown): any[] {
   return [];
 }
 
+export type InMemoryClaireDecisionRecord = ClaireDecisionRecordInput & {
+  branchExecuted: boolean;
+  branchExecutedAt: number | null;
+};
+
+export type InMemoryClaireDecisionStore = ClaireDecisionStore & {
+  records: () => InMemoryClaireDecisionRecord[];
+  find: (
+    tenantId: string,
+    turnId: string,
+    decisionType: ClaireDecisionType
+  ) => InMemoryClaireDecisionRecord | undefined;
+};
+
+export function createInMemoryClaireDecisionStore(): InMemoryClaireDecisionStore {
+  const rows = new Map<string, InMemoryClaireDecisionRecord>();
+  const keyFor = (tenantId: string, turnId: string, decisionType: ClaireDecisionType) =>
+    `${tenantId}\u0000${turnId}\u0000${decisionType}`;
+
+  return {
+    async write(inputs) {
+      for (const input of inputs) {
+        const key = keyFor(input.tenantId, input.turnId, input.decision.decisionType);
+        const existing = rows.get(key);
+        if (existing?.branchExecuted) {
+          throw new Error(
+            `Claire decision already consumed: ${input.turnId}/${input.decision.decisionType}`
+          );
+        }
+        rows.set(key, {
+          ...input,
+          decision: {
+            ...input.decision,
+            allowedOutputs: [...input.decision.allowedOutputs],
+            distribution:
+              input.decision.distribution == null
+                ? null
+                : { ...input.decision.distribution },
+          },
+          branchExecuted: false,
+          branchExecutedAt: null,
+        });
+      }
+    },
+
+    async seal(key) {
+      const now = Date.now();
+      for (const [mapKey, row] of rows) {
+        if (row.tenantId !== key.tenantId || row.turnId !== key.turnId) continue;
+        rows.set(mapKey, {
+          ...row,
+          branchExecuted: true,
+          branchExecutedAt: now,
+        });
+      }
+    },
+
+    records() {
+      return Array.from(rows.values()).map(row => ({
+        ...row,
+        decision: {
+          ...row.decision,
+          allowedOutputs: [...row.decision.allowedOutputs],
+          distribution:
+            row.decision.distribution == null
+              ? null
+              : { ...row.decision.distribution },
+        },
+      }));
+    },
+
+    find(tenantId, turnId, decisionType) {
+      return rows.get(keyFor(tenantId, turnId, decisionType));
+    },
+  };
+}
+
 export const claireDecisionStore: ClaireDecisionStore = {
   async write(rows) {
     if (!rows.length) return;
