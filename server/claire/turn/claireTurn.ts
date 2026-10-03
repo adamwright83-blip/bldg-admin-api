@@ -74,10 +74,12 @@ import {
   type ClaireBrainV3Target,
 } from "./brainV3";
 import {
+  applyClaireDecisionAbstention,
   claireDecisionId,
   claireDecisionStore,
   deriveClaireClosedDecisions,
   selectClaireClosedDecisionBranch,
+  type ClaireClosedDecisionProvider,
   type ClaireDecisionStore,
 } from "./decisionRecord";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
@@ -310,6 +312,8 @@ export type ClaireTurnDeps = {
   brainV3?: typeof interpretClaireBrainV3 | null;
   /** Durable closed-decision records consumed by the live Brain V3 branch. */
   decisionStore: ClaireDecisionStore;
+  /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
+  decisionProvider?: ClaireClosedDecisionProvider;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -354,6 +358,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
     decisionStore: claireDecisionStore,
+    decisionProvider: deriveClaireClosedDecisions,
   };
 }
 
@@ -362,6 +367,8 @@ const HISTORY_LIMIT = 16;
 const CLASSIFIER_TURN_BUDGET_MS = 2000;
 const SEMANTIC_REFERENT_MAX_WORDS = 80;
 const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
+const CLOSED_DECISION_CONFIDENCE_THRESHOLD = 0.3;
+const CLOSED_DECISION_MARGIN_THRESHOLD = 0.1;
 
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
   if (!text.trim()) return;
@@ -894,27 +901,68 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       state.clarifyingUtterance
   );
   const decisionTurnId = `${input.conversationKey}:${claireOrdinal}`;
-  const closedDecisions = deriveClaireClosedDecisions({
-    brain: brainV3,
-    provider: brainResult ? "brain_v3" : "brain_v3_deterministic_fallback",
-    fallbackUsed: !brainResult,
-    thoughtCompleteness,
-    hasPendingAction,
-  });
+  const decisionProvider = deps.decisionProvider ?? deriveClaireClosedDecisions;
+  let providerDecisions;
+  try {
+    providerDecisions = await decisionProvider({
+      brain: brainV3,
+      provider: brainResult ? "brain_v3" : "brain_v3_deterministic_fallback",
+      fallbackUsed: !brainResult,
+      thoughtCompleteness,
+      hasPendingAction,
+      telephonySessionEnded: input.telephonySessionEnded,
+    });
+  } catch {
+    providerDecisions = deriveClaireClosedDecisions({
+      brain: null,
+      provider: "closed_decision_provider",
+      fallbackUsed: false,
+      thoughtCompleteness,
+      hasPendingAction,
+      telephonySessionEnded: input.telephonySessionEnded,
+    });
+  }
+
+  const closedDecisions = {
+    turnType: applyClaireDecisionAbstention({
+      decision: providerDecisions.turnType,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "clarify",
+    }),
+    turnReadiness: applyClaireDecisionAbstention({
+      decision: providerDecisions.turnReadiness,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "incomplete",
+    }),
+    pendingActionRelationship: applyClaireDecisionAbstention({
+      decision: providerDecisions.pendingActionRelationship,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "continues_pending",
+    }),
+  };
+
   const decisionRows = [
     closedDecisions.turnType,
     closedDecisions.turnReadiness,
     closedDecisions.pendingActionRelationship,
   ].map(decision => ({
-    decisionId: claireDecisionId(decisionTurnId, decision.decisionType),
+    decisionId: claireDecisionId(
+      input.tenantId,
+      decisionTurnId,
+      decision.decisionType
+    ),
     turnId: decisionTurnId,
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
     agent: "claire" as const,
     decision,
   }));
-  await deps.decisionStore.writeAndSeal(decisionRows);
+  await deps.decisionStore.write(decisionRows);
 
+  try {
   const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
   const effectivePendingRelationship =
     closedDecisions.pendingActionRelationship.effectiveOutput;
@@ -2557,5 +2605,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     return null;
+  }
+  } finally {
+    await deps.decisionStore.seal({
+      tenantId: input.tenantId,
+      turnId: decisionTurnId,
+    });
   }
 }
