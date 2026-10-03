@@ -9479,3 +9479,56 @@ export const mitchAuditEvents = mysqlTable(
     ),
   })
 );
+
+/**
+ * Claire Brain V3 closed decisions. One immutable-after-consumption row per
+ * turn/question. Later verified outcomes are intentionally stored elsewhere.
+ */
+export const claireDecisionRecords = mysqlTable(
+  "claire_decision_records",
+  {
+    decisionId: varchar("decision_id", { length: 64 }).primaryKey(),
+    turnId: varchar("turn_id", { length: 191 }).notNull(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorUserId: varchar("operator_user_id", { length: 128 }).notNull(),
+    agent: varchar("agent", { length: 32 }).notNull().default("claire"),
+    decisionType: mysqlEnum("decision_type", [
+      "turn_type",
+      "turn_readiness",
+      "pending_action_relationship",
+    ]).notNull(),
+    provider: varchar("provider", { length: 96 }).notNull(),
+    allowedOutputsJson: json("allowed_outputs_json").notNull(),
+    providerSelectedOutput: varchar("provider_selected_output", { length: 96 }),
+    distributionJson: json("distribution_json"),
+    confidence: decimal("confidence", { precision: 10, scale: 8 }),
+    abstained: boolean("abstained").notNull().default(false),
+    abstentionReason: mysqlEnum("abstention_reason", [
+      "margin_below_threshold",
+      "confidence_below_threshold",
+      "provider_unavailable",
+    ]),
+    effectiveOutput: varchar("effective_output", { length: 96 }).notNull(),
+    latencyMs: int("latency_ms"),
+    estimatedCostUsd: decimal("estimated_cost_usd", { precision: 12, scale: 8 }),
+    fallbackUsed: boolean("fallback_used").notNull().default(false),
+    branchExecuted: boolean("branch_executed").notNull().default(false),
+    branchExecutedAt: timestamp("branch_executed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    turnDecisionUnique: uniqueIndex("uq_claire_decision_turn_type").on(
+      table.tenantId,
+      table.turnId,
+      table.decisionType
+    ),
+    tenantCreatedIdx: index("idx_claire_decision_tenant_created").on(
+      table.tenantId,
+      table.createdAt
+    ),
+  })
+);
+
+export type ClaireDecisionRecord = typeof claireDecisionRecords.$inferSelect;
+export type InsertClaireDecisionRecord = typeof claireDecisionRecords.$inferInsert;

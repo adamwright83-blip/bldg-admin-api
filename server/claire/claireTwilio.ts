@@ -951,6 +951,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               context: conversation.context,
               allowFragmentWait: input.allowFragmentWait,
               turnStartedAtMs: input.webhookReceivedAtMs,
+              telephonySessionEnded: Boolean(conversation.relayIntentionalEnd),
               rookContactResidues,
             },
             {

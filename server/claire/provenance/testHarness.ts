@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { defaultBusinessQuery, type BusinessQueryResult } from "../../analytics/businessQuery";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState, type ClaireTurnTraceForTest } from "../turn/claireTurn";
+import { createInMemoryClaireDecisionStore } from "../turn/decisionRecord";
 
 export const NOW = new Date("2026-09-17T18:00:00Z");
 const period = { label: "all time", start: "2020-01-01", end: "2026-09-18" } as never;
@@ -19,6 +20,7 @@ export type Reading = { probe: boolean; receiptId: string | null; ambiguous: boo
 export type Summary = { id: string; claireTurn: number; grounding: string; text: string };
 
 export function harness(current: { result: BusinessQueryResult } = { result: latest([THOMAS]) }, accounts: Array<{ id: number; name: string; accountType: string }> = []) {
+  const decisionStore = createInMemoryClaireDecisionStore();
   const base = (over: Partial<ClaireTurnDeps>): ClaireTurnDeps => ({
     now: () => NOW, timeZone: () => "America/Los_Angeles",
     business: { now: () => NOW, timeZone: () => "America/Los_Angeles", plan: async () => null, runQuery: async () => current.result },
@@ -28,6 +30,7 @@ export function harness(current: { result: BusinessQueryResult } = { result: lat
     accounts: async () => accounts, accountHistory: vi.fn() as never, commitFollowUp: vi.fn() as never, dayWork: vi.fn() as never, unpaid: vi.fn() as never,
     searchMemory: vi.fn(async () => []) as never, memoryBetween: vi.fn(async () => []) as never, encyclopedia: null, watchBoard: undefined, doctrineTurn: undefined,
     classifyPriorClaim: (async () => false) as never, rerunBusinessQuery: async () => current.result, classifierBudgetMs: 50, ...over,
+    decisionStore: over.decisionStore ?? decisionStore,
   });
   const state: ClaireTurnState = {};
   async function say(utterance: string, over: Partial<ClaireTurnDeps> = {}) {

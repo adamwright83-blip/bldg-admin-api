@@ -229,6 +229,34 @@ describe("Relay authoritative voice turn", () => {
     );
   });
 
+  it("passes the provider session-end event into the shared Claire turn", async () => {
+    const token = await save();
+    const ended = await renderConversationRelayConnectAction({
+      token,
+      body: {
+        CallSid: "CA_session_end",
+        SessionStatus: "ended",
+      },
+    });
+    expect(ended).toContain("<Hangup");
+
+    hoisted.runClaireTurn.mockResolvedValue({
+      speak: "Say that last part again.",
+      kind: "answered",
+      assembledUtterance: "ordinary final transcript",
+      thoughtCompleteness: "complete",
+    });
+
+    await runRelayAuthoritativeTurn({
+      conversationId: CONVERSATION_ID,
+      utterance: "ordinary final transcript",
+      token,
+    });
+
+    expect(hoisted.runClaireTurn).toHaveBeenCalledTimes(1);
+    expect(hoisted.runClaireTurn.mock.calls[0]?.[0].telephonySessionEnded).toBe(true);
+  });
+
   it("queues the persisted opening once and does not append it again", async () => {
     await save(conversation({ history: [{ speaker: "claire", text: "Hey Adam. What's up?", at: 1 }] }));
     const first = await queueRelayOpeningOnce(CONVERSATION_ID);

@@ -5,6 +5,7 @@ import { commitBriefing } from "../briefing/briefingCommit";
 import { referencesStructuredRecoveryGroup } from "../briefing/explicitDayLine";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "../turn/claireTurn";
 import { interpretTurn } from "../turn/interpretTurn";
+import { createInMemoryClaireDecisionStore } from "../turn/decisionRecord";
 import {
   createMemoryConversationStateStore,
   setClaireConversationStateStoreForTests,
@@ -196,6 +197,7 @@ describe("Claire conversational-intelligence repair", () => {
 
   function createTestFixture(overrides: { failCommit?: boolean; noRecoveries?: boolean } = {}) {
     const state: ClaireTurnState = { history: [] };
+    const decisionStore = createInMemoryClaireDecisionStore();
     const committedReceipts: any[] = [];
     const committedItems: any[] = [];
 
@@ -280,6 +282,7 @@ describe("Claire conversational-intelligence repair", () => {
       classifierBudgetMs: 30,
       brainV3: testBrainV3 as never,
       ...extra,
+      decisionStore: extra.decisionStore ?? decisionStore,
     });
 
     const say = async (utterance: string, extra: Partial<ClaireTurnDeps> = {}) =>

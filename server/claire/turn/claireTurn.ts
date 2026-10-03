@@ -73,6 +73,16 @@ import {
   type ClaireBrainV3Interpretation,
   type ClaireBrainV3Target,
 } from "./brainV3";
+import {
+  applyClaireDecisionAbstention,
+  claireDecisionId,
+  claireDecisionStore,
+  createInMemoryClaireDecisionStore,
+  deriveClaireClosedDecisions,
+  selectClaireClosedDecisionBranch,
+  type ClaireClosedDecisionProvider,
+  type ClaireDecisionStore,
+} from "./decisionRecord";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
 import {
   parseWeeklyPlanningCallbackRequest,
@@ -209,6 +219,8 @@ export type ClaireTurnInput = {
    * only; nothing in the turn reads it back.
    */
   turnStartedAtMs?: number;
+  /** Provider/session lifecycle evidence that the telephony session itself ended. */
+  telephonySessionEnded?: boolean;
 };
 
 export type ClaireTurnResult = {
@@ -301,6 +313,10 @@ export type ClaireTurnDeps = {
   classifierBudgetMs?: number;
   /** Claire Brain V3: the sole semantic interpretation of the live turn. */
   brainV3?: typeof interpretClaireBrainV3 | null;
+  /** Durable closed-decision records consumed by the live Brain V3 branch. */
+  decisionStore: ClaireDecisionStore;
+  /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
+  decisionProvider?: ClaireClosedDecisionProvider;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -344,6 +360,11 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
+    decisionStore:
+      process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
+        ? createInMemoryClaireDecisionStore()
+        : claireDecisionStore,
+    decisionProvider: deriveClaireClosedDecisions,
   };
 }
 
@@ -352,6 +373,8 @@ const HISTORY_LIMIT = 16;
 const CLASSIFIER_TURN_BUDGET_MS = 2000;
 const SEMANTIC_REFERENT_MAX_WORDS = 80;
 const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
+const CLOSED_DECISION_CONFIDENCE_THRESHOLD = 0.3;
+const CLOSED_DECISION_MARGIN_THRESHOLD = 0.1;
 
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
   if (!text.trim()) return;
@@ -667,6 +690,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let knownAccounts: CoverageAccountRef[] = [];
   let uncertainChallenge: ClaimResolution | null = null;
   let deferredPriorClaimSpeech: string | null = null;
+  let branchResultProduced = false;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
   // Initialized fail-closed so early exits cannot accidentally open a truth/mutation lane.
@@ -740,7 +764,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       answerPath: trace.path ?? null,
       ...(narratorContextSupplied ? { narratorContextSupplied: true as const } : {}),
     };
-    return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+    const finalResult = personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+    branchResultProduced = true;
+    return finalResult;
   };
   const morningSession =
     state.sessionKind ?? input.context?.workday?.session ?? null;
@@ -872,6 +898,110 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           rationale: "Explicit weekly control while Brain V3 unavailable.",
         }
       : safeClaireBrainV3Fallback(utterance, fallbackContext));
+
+  const hasPendingAction = Boolean(
+    state.pendingBriefing ||
+      state.pendingAccountFollowUp ||
+      state.pendingProposal ||
+      state.pendingUpdate ||
+      state.pendingFieldCapture ||
+      state.pendingEngineeringOffer ||
+      state.pendingDayLineChoice ||
+      state.clarifyingUtterance
+  );
+  const decisionTurnId = `${input.conversationKey}:${claireOrdinal}`;
+  const decisionProvider = deps.decisionProvider ?? deriveClaireClosedDecisions;
+  let providerDecisions;
+  try {
+    providerDecisions = await decisionProvider({
+      brain: brainV3,
+      provider: brainResult ? "brain_v3" : "brain_v3_deterministic_fallback",
+      fallbackUsed: !brainResult,
+      thoughtCompleteness,
+      hasPendingAction,
+      hasPendingBriefing: Boolean(state.pendingBriefing),
+      telephonySessionEnded: input.telephonySessionEnded,
+    });
+  } catch {
+    providerDecisions = deriveClaireClosedDecisions({
+      brain: null,
+      provider: "closed_decision_provider",
+      fallbackUsed: false,
+      thoughtCompleteness,
+      hasPendingAction,
+      hasPendingBriefing: Boolean(state.pendingBriefing),
+      telephonySessionEnded: input.telephonySessionEnded,
+    });
+  }
+
+  const closedDecisions = {
+    turnType: applyClaireDecisionAbstention({
+      decision: providerDecisions.turnType,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "clarify",
+    }),
+    turnReadiness: applyClaireDecisionAbstention({
+      decision: providerDecisions.turnReadiness,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "incomplete",
+    }),
+    pendingActionRelationship: applyClaireDecisionAbstention({
+      decision: providerDecisions.pendingActionRelationship,
+      confidenceThreshold: CLOSED_DECISION_CONFIDENCE_THRESHOLD,
+      marginThreshold: CLOSED_DECISION_MARGIN_THRESHOLD,
+      fallback: "continues_pending",
+    }),
+  };
+
+  const decisionRows = [
+    closedDecisions.turnType,
+    closedDecisions.turnReadiness,
+    closedDecisions.pendingActionRelationship,
+  ].map(decision => ({
+    decisionId: claireDecisionId(
+      input.tenantId,
+      decisionTurnId,
+      decision.decisionType
+    ),
+    turnId: decisionTurnId,
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    agent: "claire" as const,
+    decision,
+  }));
+  await deps.decisionStore.write(decisionRows);
+
+  try {
+  const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
+  const effectivePendingRelationship =
+    closedDecisions.pendingActionRelationship.effectiveOutput;
+  const closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
+
+  if (closedDecisionBranch === "incomplete") {
+    branchResultProduced = true;
+    return {
+      speak: "",
+      kind: "listening",
+      listenOnly: true,
+      assembledUtterance: utterance,
+      thoughtCompleteness: "incomplete",
+    };
+  }
+
+  if (closedDecisionBranch === "clarify") {
+    mark("fallback", {
+      fallbackReason:
+        effectiveTurnType === "clarify"
+          ? "closed_decision_abstained_clarify"
+          : "closed_decision_provider_unknown",
+    });
+    return finish({
+      speak: "Say that last part again.",
+      kind: "answered",
+    });
+  }
 
   if (brainV3.dayLineDisposition === "decline") {
     state.dayLineSuppressed = true;
@@ -1247,11 +1377,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.act === "rejection" ||
     brainV3.dayLineDisposition === "decline"
   ) {
-    if (state.pendingProposal && conversationTarget !== "pending_action") {
+    if (
+      state.pendingProposal &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingProposal = null;
       state.pendingReminded = false;
     }
-    if (state.pendingBriefing && conversationTarget !== "pending_briefing") {
+    if (
+      state.pendingBriefing &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -1442,7 +1578,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const additionalWork =
       ownsPendingBriefing &&
       (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
-    if (newMatter && !additionalWork && conversationTarget !== "pending_briefing") {
+    if (
+      newMatter &&
+      !additionalWork &&
+      conversationTarget !== "pending_briefing" &&
+      effectivePendingRelationship !== "continues_pending"
+    ) {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
@@ -2474,5 +2615,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     return null;
+  }
+  } finally {
+    if (branchResultProduced) {
+      await deps.decisionStore.seal({
+        tenantId: input.tenantId,
+        turnId: decisionTurnId,
+      });
+    }
   }
 }
