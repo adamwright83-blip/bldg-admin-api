@@ -82,6 +82,7 @@ export type ClaireClosedDecisionProviderInput = {
   fallbackUsed: boolean;
   thoughtCompleteness: "complete" | "incomplete" | "forced_flush";
   hasPendingAction: boolean;
+  hasPendingBriefing?: boolean;
   telephonySessionEnded?: boolean;
 };
 
@@ -196,7 +197,15 @@ export function deriveClaireClosedDecisions(
         turnType = "interruption";
         break;
       case "unclear":
-        turnType = "unknown";
+        // The existing deterministic Brain V3 fallback historically routes
+        // unclassified conversational/personal turns onward. Treating that
+        // substitute provider's "unclear" as a confident provider-level
+        // unknown would newly swallow those paths into clarify. A real Brain
+        // V3 provider selecting unclear remains an explicit unknown.
+        turnType =
+          input.provider === "brain_v3_deterministic_fallback"
+            ? "conversation"
+            : "unknown";
         break;
       default:
         turnType = "conversation";
@@ -214,15 +223,24 @@ export function deriveClaireClosedDecisions(
   let relationship: ClairePendingActionRelationship = "unrelated";
   if (input.hasPendingAction) {
     if (
-      input.brain.target === "pending_action" ||
       input.brain.target === "pending_briefing" ||
-      input.brain.target === "pending_account_follow_up" ||
-      input.brain.act === "correction"
+      input.brain.target === "pending_account_follow_up"
     ) {
+      relationship = "continues_pending";
+    } else if (input.brain.target === "pending_action") {
+      relationship =
+        input.brain.act === "correction"
+          ? "replaces_pending"
+          : "continues_pending";
+    } else if (input.brain.act === "correction" && input.hasPendingBriefing) {
+      // A correction about something else must not erase an unrelated held
+      // briefing. This rule is deliberately narrower than "all corrections
+      // preserve all pending work".
       relationship = "continues_pending";
     } else if (
       input.brain.act === "action_request" ||
-      input.brain.act === "work_commitment"
+      input.brain.act === "work_commitment" ||
+      input.brain.act === "correction"
     ) {
       relationship = "replaces_pending";
     }
