@@ -266,14 +266,14 @@ describe("Claire PR1 live closed-decision branch", () => {
         canonicalWork: "Call Dana Tuesday",
       }),
     });
+    f.commitment.mockImplementation(
+      async () => ({ kind: "proposed", speak: "Should I add Call Dana Tuesday?" }) as never
+    );
 
-    const result = await f.say("Hey Claire, remind me to call Dana Tuesday.");
+    const result = await f.say("Hey Claire, add a task to call Dana Tuesday.");
 
-    expect(
-      f.commitment.mock.calls.length > 0 ||
-        f.commit.mock.calls.length > 0 ||
-        result.kind === "briefing_proposed"
-    ).toBe(true);
+    expect(f.commitment).toHaveBeenCalled();
+    expect(result.kind).toBe("commitment");
     expect(f.followUp).not.toHaveBeenCalled();
 
     const row = f.decisionStore.find(
