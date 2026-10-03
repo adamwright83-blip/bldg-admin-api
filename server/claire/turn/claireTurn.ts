@@ -919,6 +919,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       fallbackUsed: !brainResult,
       thoughtCompleteness,
       hasPendingAction,
+      hasPendingBriefing: Boolean(state.pendingBriefing),
       telephonySessionEnded: input.telephonySessionEnded,
     });
   } catch {
@@ -928,6 +929,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       fallbackUsed: false,
       thoughtCompleteness,
       hasPendingAction,
+      hasPendingBriefing: Boolean(state.pendingBriefing),
       telephonySessionEnded: input.telephonySessionEnded,
     });
   }
@@ -1377,7 +1379,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   ) {
     if (
       state.pendingProposal &&
-      conversationTarget !== "pending_action" &&
       effectivePendingRelationship !== "continues_pending"
     ) {
       state.pendingProposal = null;
@@ -1385,7 +1386,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     if (
       state.pendingBriefing &&
-      conversationTarget !== "pending_briefing" &&
       effectivePendingRelationship !== "continues_pending"
     ) {
       state.pendingBriefing = null;
