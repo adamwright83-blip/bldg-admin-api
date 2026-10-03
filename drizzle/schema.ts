@@ -9518,6 +9518,7 @@ export const claireDecisionRecords = mysqlTable(
   },
   table => ({
     turnDecisionUnique: uniqueIndex("uq_claire_decision_turn_type").on(
+      table.tenantId,
       table.turnId,
       table.decisionType
     ),
