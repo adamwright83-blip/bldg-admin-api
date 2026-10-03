@@ -4585,7 +4585,7 @@ await runRequired(
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (decision_id),
-    UNIQUE KEY uq_claire_decision_turn_type (turn_id, decision_type),
+    UNIQUE KEY uq_claire_decision_turn_type (tenant_id, turn_id, decision_type),
     KEY idx_claire_decision_tenant_created (tenant_id, created_at)
   )`,
   "CREATE TABLE claire_decision_records"
