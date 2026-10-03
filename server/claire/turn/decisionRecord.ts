@@ -233,6 +233,21 @@ export function deriveClaireClosedDecisions(input: DeriveInput): ClaireClosedDec
   };
 }
 
+export type ClaireClosedDecisionBranch = "clarify" | "incomplete" | "continue";
+
+export function selectClaireClosedDecisionBranch(
+  decisions: ClaireClosedDecisionSet
+): ClaireClosedDecisionBranch {
+  if (decisions.turnReadiness.effectiveOutput === "incomplete") return "incomplete";
+  if (
+    decisions.turnType.effectiveOutput === "clarify" ||
+    decisions.turnType.effectiveOutput === "unknown"
+  ) {
+    return "clarify";
+  }
+  return "continue";
+}
+
 export function applyClaireDecisionAbstention<T extends string>(input: {
   decision: ClaireDecisionCandidate<T>;
   confidenceThreshold: number;
