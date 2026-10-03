@@ -77,6 +77,7 @@ import {
   applyClaireDecisionAbstention,
   claireDecisionId,
   claireDecisionStore,
+  createInMemoryClaireDecisionStore,
   deriveClaireClosedDecisions,
   selectClaireClosedDecisionBranch,
   type ClaireClosedDecisionProvider,
@@ -359,7 +360,10 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
-    decisionStore: claireDecisionStore,
+    decisionStore:
+      process.env.NODE_ENV === "test"
+        ? createInMemoryClaireDecisionStore()
+        : claireDecisionStore,
     decisionProvider: deriveClaireClosedDecisions,
   };
 }
