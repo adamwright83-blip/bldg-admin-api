@@ -4606,7 +4606,7 @@ await applyHistoricalCreateTables(
   "President Stage 1 assessment and candidate tables"
 );
 await applyHistoricalCreateTables(
-  "../drizzle/0111_president_intelligence.sql",
+  "../drizzle/0113_president_intelligence.sql",
   "President immutable company intelligence tables"
 );
 
