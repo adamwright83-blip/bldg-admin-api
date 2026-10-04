@@ -11,6 +11,7 @@ import {
 } from "@shared/twilioPlatform";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
+import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
 
 /**
  * One communications receipt log. Twilio retries collapse onto the same row.
@@ -348,7 +349,47 @@ export function createDrizzleCommunicationReceiptStore(): CommunicationReceiptSt
           "communication receipts require a database"
         );
       }
-      return persistCommunicationReceipt(db as unknown as CommunicationReceiptQuery, receipt);
+      return db.transaction(async tx => {
+        const recorded = await persistCommunicationReceipt(
+          tx as unknown as CommunicationReceiptQuery,
+          receipt
+        );
+        if (
+          recorded.receipt.eventType === "MESSAGE_SENT" ||
+          recorded.receipt.eventType === "MESSAGE_DELIVERED"
+        ) {
+          const providerMessageId =
+            recorded.receipt.messageSid?.trim() ||
+            recorded.receipt.providerEventId?.trim() ||
+            "";
+          if (!providerMessageId) {
+            throw new TwilioCommunicationReceiptError(
+              "missing_identity",
+              "MESSAGE_SENT authority requires a provider message identity"
+            );
+          }
+          await admitAuthorityClaimWith(tx, {
+            tenantId: recorded.receipt.tenantId,
+            claimType: "message_sent",
+            subjectType: "message",
+            subjectId: providerMessageId,
+            sourceType: "twilio_message",
+            sourceRef: providerMessageId,
+            actorType: "system",
+            actorId: recorded.receipt.operatorUserId,
+            evidenceClass: "authoritative_external",
+            verificationClass: "VERIFIED",
+            admissionPolicy: "twilio_message_sent_v1",
+            occurredAt:
+              recorded.receipt.completedAt ?? recorded.receipt.createdAt,
+            metadata: {
+              communicationReceiptId: recorded.receipt.id,
+              eventType: recorded.receipt.eventType,
+            },
+          });
+        }
+        return recorded;
+      });
     },
   };
 }
