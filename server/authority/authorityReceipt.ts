@@ -53,6 +53,9 @@ export type AdmitAuthorityClaimInput = {
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 export type AuthorityTransaction =
   Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type AuthorityReader = {
+  select: AuthorityTransaction["select"];
+};
 
 function required(value: string, label: string, max: number): string {
   const normalized = value.trim();
@@ -221,7 +224,7 @@ export async function admitAuthorityClaimWith(
 }
 
 export async function getAuthorityReceiptByIdWith(
-  tx: AuthorityTransaction,
+  tx: AuthorityReader,
   input: { tenantId: string; receiptId: string }
 ): Promise<AuthorityReceipt | null> {
   const [row] = await tx
@@ -238,7 +241,7 @@ export async function getAuthorityReceiptByIdWith(
 }
 
 export async function findAuthorityReceiptForSubjectWith(
-  tx: AuthorityTransaction,
+  tx: AuthorityReader,
   input: {
     tenantId: string;
     claimType: AuthorityClaimType;
