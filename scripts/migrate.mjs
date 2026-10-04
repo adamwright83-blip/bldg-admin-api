@@ -4683,8 +4683,8 @@ await runRequired(
      actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
      occurredAt, admittedAt, metadataJson, idempotencyKey)
    SELECT
-     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(COALESCE(tenantId,'default'), ':payment:', id, ':', stripePaymentIntentId), 256), 1, 40)),
-     COALESCE(tenantId,'default'),
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':payment:', id, ':', stripePaymentIntentId), 256), 1, 40)),
+     tenantId,
      'payment_verified', 'order', CAST(id AS CHAR),
      'stripe_payment_intent', stripePaymentIntentId,
      'system', NULL, 'authoritative_external', 'VERIFIED',
@@ -4693,7 +4693,8 @@ await runRequired(
      JSON_OBJECT('backfilled', TRUE),
      CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'order', CHAR(0), CAST(id AS CHAR), CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
    FROM orders
-   WHERE paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
+   WHERE tenantId IS NOT NULL AND TRIM(tenantId) <> ''
+     AND paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
   "backfill native Stripe payment authority receipts"
 );
 
@@ -4747,11 +4748,11 @@ await runRequired(
 await runRequired(
   `UPDATE commercial_mission_events e
    JOIN authority_receipts a
-     ON a.tenantId = e.tenantId
+     ON BINARY a.tenantId = BINARY e.tenantId
     AND a.claimType = 'account_won'
     AND a.subjectType = 'commercial_mission'
-    AND a.subjectId = CAST(e.missionId AS CHAR)
-    AND a.sourceRef = e.idempotencyKey
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
    SET e.metadataJson = JSON_SET(
      COALESCE(e.metadataJson, JSON_OBJECT()),
      '$.authorityReceiptId', a.id,
@@ -4790,9 +4791,9 @@ await runRequired(
 await runRequired(
   `UPDATE goldline_world_events g
    JOIN authority_receipts a
-     ON a.tenantId = g.tenantId
+     ON BINARY a.tenantId = BINARY g.tenantId
     AND a.claimType = 'account_won'
-    AND a.sourceRef = g.sourceEvidenceReference
+    AND BINARY a.sourceRef = BINARY g.sourceEvidenceReference
    SET g.metadataJson = JSON_SET(
          COALESCE(g.metadataJson, JSON_OBJECT()),
          '$.authorityReceiptId', a.id
