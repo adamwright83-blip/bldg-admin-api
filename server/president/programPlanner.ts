@@ -48,7 +48,7 @@ export async function planPresidentProgram(input: {
       };
   policy: PresidentAuthorityPolicy;
   provider: PresidentJudgmentProvider;
-  repositorySha: string;
+  repositorySha: string | null;
   context?: Record<string, unknown>;
   capabilities: PresidentAgentCapability[];
   maxUsd: number;
