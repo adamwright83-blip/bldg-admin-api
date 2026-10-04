@@ -68,6 +68,94 @@ export async function listOperatorRepresentativeDirectives(input: {
   return rows.map(mapRow);
 }
 
+
+export async function listActiveOperatorRepresentativeDirectives(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+}): Promise<OperatorRepresentativeDirectiveRecord[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const rows = await db
+    .select()
+    .from(operatorRepresentativeDirectives)
+    .where(
+      and(
+        eq(operatorRepresentativeDirectives.tenantId, input.tenantId),
+        eq(operatorRepresentativeDirectives.canonicalOperatorId, input.canonicalOperatorId),
+        eq(operatorRepresentativeDirectives.status, "active")
+      )
+    )
+    .orderBy(desc(operatorRepresentativeDirectives.createdAt));
+  return rows.map(mapRow);
+}
+
+export async function listRecentRevokedOperatorRepresentativeDirectives(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  limit?: number;
+}): Promise<OperatorRepresentativeDirectiveRecord[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const limit = Math.max(1, Math.min(input.limit ?? 100, 250));
+  const rows = await db
+    .select()
+    .from(operatorRepresentativeDirectives)
+    .where(
+      and(
+        eq(operatorRepresentativeDirectives.tenantId, input.tenantId),
+        eq(operatorRepresentativeDirectives.canonicalOperatorId, input.canonicalOperatorId),
+        eq(operatorRepresentativeDirectives.status, "revoked")
+      )
+    )
+    .orderBy(desc(operatorRepresentativeDirectives.createdAt))
+    .limit(limit);
+  return rows.map(mapRow);
+}
+
+export async function loadOperatorRepresentativeDirectiveSnapshot(
+  input: {
+    tenantId: string;
+    canonicalOperatorId: string;
+    recentHistoryLimit?: number;
+  },
+  deps: {
+    listActive?: typeof listActiveOperatorRepresentativeDirectives;
+    listRecentRevoked?: typeof listRecentRevokedOperatorRepresentativeDirectives;
+  } = {}
+): Promise<{
+  active: OperatorRepresentativeDirectiveRecord[];
+  recentHistory: OperatorRepresentativeDirectiveRecord[];
+  directives: OperatorRepresentativeDirectiveRecord[];
+}> {
+  const listActive = deps.listActive ?? listActiveOperatorRepresentativeDirectives;
+  const listRecentRevoked =
+    deps.listRecentRevoked ?? listRecentRevokedOperatorRepresentativeDirectives;
+
+  const [active, recentHistory] = await Promise.all([
+    listActive({
+      tenantId: input.tenantId,
+      canonicalOperatorId: input.canonicalOperatorId,
+    }),
+    listRecentRevoked({
+      tenantId: input.tenantId,
+      canonicalOperatorId: input.canonicalOperatorId,
+      limit: input.recentHistoryLimit ?? 100,
+    }),
+  ]);
+
+  // Active directives are authoritative current state and must never be
+  // displaced by a bounded history window. Prefer the active copy if a row
+  // appears in both reads because of a concurrent revoke between queries.
+  const activeIds = new Set(active.map(item => item.id));
+  const dedupedRecentHistory = recentHistory.filter(item => !activeIds.has(item.id));
+
+  return {
+    active,
+    recentHistory: dedupedRecentHistory,
+    directives: [...active, ...dedupedRecentHistory],
+  };
+}
+
 export async function setOperatorRepresentativeDirective(input: {
   tenantId: string;
   canonicalOperatorId: string;
