@@ -81,6 +81,12 @@ export type OperatorObservedPattern = {
     | "intervention_start_sequence"
     | "action_completion_rate"
     | "explicit_deferral_dismissal";
+  /**
+   * Stable semantic scope for UI identity/directive targeting.
+   * It must describe what population/domain the pattern summarizes and must
+   * never be derived from mutable evidence IDs, counts, timestamps, or metrics.
+   */
+  scopeKey?: string;
   observationCount: number;
   distinctDecisionPointCount: number;
   distinctCorrelationCount: number;
@@ -809,6 +815,7 @@ export async function buildOperatorContextPacket(
 
       observedPatterns.push({
         kind: "intervention_start_sequence",
+        scopeKey: "all_qualifying_interventions",
         observationCount: qualifyingDecisionPoints.length,
         distinctDecisionPointCount: qualifyingDecisionPoints.length,
         distinctCorrelationCount: new Set(
@@ -841,6 +848,7 @@ export async function buildOperatorContextPacket(
 
       observedPatterns.push({
         kind: "explicit_deferral_dismissal",
+        scopeKey: "all_explicit_deferrals_dismissals",
         observationCount: deferredOrDismissed.length,
         distinctDecisionPointCount: deferredOrDismissed.length,
         distinctCorrelationCount: new Set(
