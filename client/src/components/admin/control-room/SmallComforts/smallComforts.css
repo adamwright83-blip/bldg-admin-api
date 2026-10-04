@@ -84,7 +84,6 @@
   .act{width:54px;height:46px;font-size:18px;flex-direction:row;gap:4px;width:92px;padding:0 6px;justify-content:flex-start}
   .act span{font-size:12px}
   #btn-bell{position:absolute;right:calc(8px + env(safe-area-inset-right));bottom:8px;height:52px;padding:0 12px;font-size:14px;width:150px;order:0}
-  #btn-out{position:absolute;right:calc(8px + env(safe-area-inset-right));bottom:68px;height:46px;padding:0 12px;font-size:14px;width:150px;order:0}
   .bellic{font-size:22px}
   #guestline{top:8px;font-size:12px;padding:5px 10px;max-width:calc(100vw - 220px);border-radius:12px}
   #hint,body[data-phase=closed] #hint{bottom:auto;top:calc(48px + env(safe-area-inset-top));padding:6px 14px;font-size:14px}
@@ -171,3 +170,11 @@
 .sc-root #shelfbar .pill:disabled{opacity:.45}
 .sc-root[data-phase=outside] #hint{bottom:calc(86px + env(safe-area-inset-bottom))}
 .sc-root[data-phase=outside] #btn-exit{left:auto;right:66px;transform:none;top:calc(14px + env(safe-area-inset-top))}
+
+/* short screens (phones in landscape): shelf bar moves to the top so it never covers objects near the bottom edge */
+@media (max-height:520px){
+  .sc-root #btn-out{position:absolute;right:calc(8px + env(safe-area-inset-right));bottom:68px;height:46px;padding:0 12px;font-size:14px;width:150px;order:0}
+  .sc-root #shelfbar{top:calc(6px + env(safe-area-inset-top));bottom:auto;padding:4px 6px 4px 12px;font-size:13px;gap:8px}
+  .sc-root #shelfbar .pill{padding:5px 10px;font-size:13px}
+  .sc-root[data-phase=outside] #hint{bottom:auto;top:calc(54px + env(safe-area-inset-top))}
+}
