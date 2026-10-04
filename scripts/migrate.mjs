@@ -4691,10 +4691,116 @@ await runRequired(
      'legacy_stripe_payment_backfill_v1',
      paidAt, COALESCE(paidAt, createdAt, CURRENT_TIMESTAMP(3)),
      JSON_OBJECT('backfilled', TRUE),
-     CONCAT('authority:payment_verified:', SHA2(CONCAT('order', CHAR(0), id, CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
+     CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'order', CHAR(0), CAST(id AS CHAR), CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
    FROM orders
    WHERE paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
   "backfill native Stripe payment authority receipts"
+);
+
+
+// Backfill CleanCloud-authoritative paid orders. Sales/Revenue report twins for
+// the same imported observation collapse by the authority idempotency key.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':cleancloud-payment:', cleancloudOrderId, ':', importBatchId), 256), 1, 40)),
+     tenantId,
+     'payment_verified', 'cleancloud_order', cleancloudOrderId,
+     'cleancloud_paid_order',
+     CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId),
+     'system', NULL, 'authoritative_external', 'VERIFIED',
+     'legacy_cleancloud_payment_backfill_v1',
+     COALESCE(paymentDateUtc, paidDateUtc, placedAtUtc, createdAt),
+     createdAt,
+     JSON_OBJECT('backfilled', TRUE, 'sourceReportType', sourceReportType),
+     CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'cleancloud_order', CHAR(0), cleancloudOrderId, CHAR(0), 'cleancloud_paid_order', CHAR(0), CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId)), 256))
+   FROM cleancloud_paid_orders
+   WHERE paid = 1 AND COALESCE(totalCents, 0) > 0`,
+  "backfill CleanCloud payment authority receipts"
+);
+
+// Existing operator/driver-resolved commercial wins become explicit ATTESTED
+// receipts. System/game transitions are intentionally not promoted.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':account-won:', missionId, ':', idempotencyKey), 256), 1, 40)),
+     tenantId,
+     'account_won', 'commercial_mission', CAST(missionId AS CHAR),
+     'commercial_mission_transition', idempotencyKey,
+     actorType, actorId, 'operator_attested', 'ATTESTED',
+     'legacy_commercial_win_backfill_v1',
+     createdAt, createdAt,
+     JSON_OBJECT('backfilled', TRUE, 'commercialMissionEventId', id),
+     CONCAT('authority:account_won:', SHA2(CONCAT('account_won', CHAR(0), 'commercial_mission', CHAR(0), CAST(missionId AS CHAR), CHAR(0), 'commercial_mission_transition', CHAR(0), idempotencyKey), 256))
+   FROM commercial_mission_events
+   WHERE toStatus = 'won' AND actorType IN ('operator','driver')`,
+  "backfill commercial account-win authority receipts"
+);
+
+await runRequired(
+  `UPDATE commercial_mission_events e
+   JOIN authority_receipts a
+     ON a.tenantId = e.tenantId
+    AND a.claimType = 'account_won'
+    AND a.subjectType = 'commercial_mission'
+    AND a.subjectId = CAST(e.missionId AS CHAR)
+    AND a.sourceRef = e.idempotencyKey
+   SET e.metadataJson = JSON_SET(
+     COALESCE(e.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId', a.id,
+     '$.authorityClaimType', a.claimType,
+     '$.authoritySourceRef', a.sourceRef
+   )
+   WHERE e.toStatus = 'won'`,
+  "attach authority receipt ids to historical commercial win events"
+);
+
+// Provider communication rows are authoritative evidence that Twilio accepted
+// or delivered a message. MESSAGE_FAILED rows never receive message_sent authority.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':message-sent:', messageSid), 256), 1, 40)),
+     tenantId,
+     'message_sent', 'message', messageSid,
+     'twilio_message', messageSid,
+     'system', operatorUserId, 'authoritative_external', 'VERIFIED',
+     'legacy_twilio_message_backfill_v1',
+     COALESCE(completedAt, createdAt), createdAt,
+     JSON_OBJECT('backfilled', TRUE, 'communicationReceiptId', id, 'eventType', eventType),
+     CONCAT('authority:message_sent:', SHA2(CONCAT('message_sent', CHAR(0), 'message', CHAR(0), messageSid, CHAR(0), 'twilio_message', CHAR(0), messageSid), 256))
+   FROM communication_receipts
+   WHERE eventType IN ('MESSAGE_SENT','MESSAGE_DELIVERED')
+     AND messageSid IS NOT NULL AND TRIM(messageSid) <> ''`,
+  "backfill Twilio message-sent authority receipts"
+);
+
+// Preserve historical Goldline wins only when their evidence reference resolves
+// to an admitted account_won receipt.
+await runRequired(
+  `UPDATE goldline_world_events g
+   JOIN authority_receipts a
+     ON a.tenantId = g.tenantId
+    AND a.claimType = 'account_won'
+    AND a.sourceRef = g.sourceEvidenceReference
+   SET g.metadataJson = JSON_SET(
+         COALESCE(g.metadataJson, JSON_OBJECT()),
+         '$.authorityReceiptId', a.id
+       ),
+       g.verificationClass = a.verificationClass
+   WHERE g.eventType = 'account_won'
+     AND g.classification = 'outcome'`,
+  "attach authority receipts to historical Goldline account wins"
 );
 
 await conn.end();
