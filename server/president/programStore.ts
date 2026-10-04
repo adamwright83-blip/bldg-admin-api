@@ -10,6 +10,7 @@ import {
   presidentProgramSchema,
   presidentProgramStepSchema,
   presidentExecutiveSeatSchema,
+  presidentAgentCapabilitySchema,
   type PresidentAuthorityPolicy,
   type PresidentExecutionHandback,
   type PresidentFounderDecision,
@@ -18,6 +19,7 @@ import {
   type PresidentProgram,
   type PresidentProgramStep,
   type PresidentExecutiveSeat,
+  type PresidentAgentCapability,
 } from "../../shared/presidentOperatingSystem";
 
 const decode = <T>(value: unknown): T =>
@@ -104,6 +106,27 @@ function decisionFromRow(r: RowDataPacket): PresidentFounderDecision {
     answer: r.answer,
     askedAt: iso(r.askedAt),
     answeredAt: isoNullable(r.answeredAt),
+  });
+}
+
+function capabilityFromRow(r: RowDataPacket): PresidentAgentCapability {
+  return presidentAgentCapabilitySchema.parse({
+    capabilityKey: r.capabilityKey,
+    kind: r.kind,
+    actorId: r.actorId,
+    targetCapability: r.targetCapability,
+    seatRoleKey: r.seatRoleKey,
+    programId: r.programId,
+    skillNames: decode(r.skillNamesJson),
+    authorityClasses: decode(r.authorityClassesJson),
+    consequentialDomains: decode(r.consequentialDomainsJson),
+    maxUsdPerRun: Number(r.maxUsdPerRun),
+    evidenceIds: decode(r.evidenceIdsJson),
+    justification: r.justification,
+    status: r.status,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+    revokedAt: isoNullable(r.revokedAt),
   });
 }
 
@@ -696,6 +719,59 @@ export class MysqlPresidentProgramStore
       answer,
       answeredAt: answeredAt.toISOString(),
     });
+  }
+
+  async putAgentCapability(
+    input: PresidentAgentCapability
+  ): Promise<PresidentAgentCapability> {
+    const capability = presidentAgentCapabilitySchema.parse(input);
+    await this.pool.execute(
+      `INSERT INTO president_agent_capabilities
+       (capabilityKey,kind,actorId,targetCapability,seatRoleKey,programId,skillNamesJson,authorityClassesJson,consequentialDomainsJson,maxUsdPerRun,evidenceIdsJson,justification,status,createdAt,updatedAt,revokedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+       kind=VALUES(kind),actorId=VALUES(actorId),targetCapability=VALUES(targetCapability),
+       seatRoleKey=VALUES(seatRoleKey),programId=VALUES(programId),skillNamesJson=VALUES(skillNamesJson),
+       authorityClassesJson=VALUES(authorityClassesJson),consequentialDomainsJson=VALUES(consequentialDomainsJson),
+       maxUsdPerRun=VALUES(maxUsdPerRun),evidenceIdsJson=VALUES(evidenceIdsJson),
+       justification=VALUES(justification),status=VALUES(status),updatedAt=VALUES(updatedAt),revokedAt=VALUES(revokedAt)`,
+      [
+        capability.capabilityKey,
+        capability.kind,
+        capability.actorId,
+        capability.targetCapability,
+        capability.seatRoleKey,
+        capability.programId,
+        JSON.stringify(capability.skillNames),
+        JSON.stringify(capability.authorityClasses),
+        JSON.stringify(capability.consequentialDomains),
+        capability.maxUsdPerRun,
+        JSON.stringify(capability.evidenceIds),
+        capability.justification,
+        capability.status,
+        new Date(capability.createdAt),
+        new Date(capability.updatedAt),
+        capability.revokedAt ? new Date(capability.revokedAt) : null,
+      ]
+    );
+    return (await this.getAgentCapability(capability.capabilityKey))!;
+  }
+
+  async getAgentCapability(
+    capabilityKey: string
+  ): Promise<PresidentAgentCapability | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT * FROM president_agent_capabilities WHERE capabilityKey=? LIMIT 1",
+      [capabilityKey]
+    );
+    return rows[0] ? capabilityFromRow(rows[0]) : null;
+  }
+
+  async listAgentCapabilities(): Promise<PresidentAgentCapability[]> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      "SELECT * FROM president_agent_capabilities ORDER BY capabilityKey"
+    );
+    return rows.map(capabilityFromRow);
   }
 
   async putExecutiveSeat(input: PresidentExecutiveSeat): Promise<PresidentExecutiveSeat> {
