@@ -1,0 +1,19 @@
+Small Comforts - signal mirror cold playtest build
+Code: feat/small-comforts-proprietor-spike @ 64a9b7672e39e7bc3c283b3445825ef2fe2d7a02
+
+This is a static site. No install, no build.
+
+Run it (needs Python 3, any computer):
+  cd small-comforts-playtest
+  python3 -m http.server 8080
+
+Tester links
+  Desktop:      http://localhost:8080/?playtest=mirror-cold
+  Phone (same wifi): http://<your-computer-ip>:8080/?playtest=mirror-cold
+  Second session only (one rocking cue after 20 s): ...?playtest=mirror-hinted
+
+Observer copy (you, not the tester): add &observer=1  -> "Export session" and "New session" buttons bottom-left.
+Desktop shortcut: Shift+E exports the session JSON.
+
+Do NOT open it with a file:// double-click; the 3D models will not load. Use the server above.
+Read PLAYTEST.md (evidence branch) before handing it to anyone.

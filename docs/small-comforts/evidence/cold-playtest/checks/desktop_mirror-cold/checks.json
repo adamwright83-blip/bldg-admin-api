@@ -1,0 +1,162 @@
+{
+ "MODE": "desktop",
+ "PT": "mirror-cold",
+ "base": "http://127.0.0.1:5201/",
+ "viewport": {
+  "width": 960,
+  "height": 600
+ },
+ "touch": false,
+ "checks": [
+  {
+   "name": "reaches placing by tapping only",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "no text appears by itself during placement",
+   "ok": true,
+   "info": "texts=0"
+  },
+  {
+   "name": "no cue before the delay (8 s idle)",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "cold: still no cue after 25 s idle",
+   "ok": true,
+   "info": "cues=0"
+  },
+  {
+   "name": "40 s assist not yet fired at ~25 s",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "slide moved the button into the beam",
+   "ok": true,
+   "info": "{\"phase\":\"playing\",\"outcome\":\"miss\",\"tilt\":14,\"x\":1}"
+  },
+  {
+   "name": "a lift produced a glance",
+   "ok": true,
+   "info": "{\"phase\":\"playing\",\"outcome\":\"glance\",\"tilt\":30.8,\"x\":1}"
+  },
+  {
+   "name": "light caught and mirror installed",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "meta has build sha",
+   "ok": true,
+   "info": "64a9b7672e39e7bc3c283b3445825ef2fe2d7a02"
+  },
+  {
+   "name": "meta has viewport + input",
+   "ok": true,
+   "info": "{\"v\":{\"w\":960,\"h\":600,\"dpr\":1,\"portrait\":false},\"p\":[\"mouse\"],\"touch\":false}"
+  },
+  {
+   "name": "pointer type matches device (mouse)",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "raw timeline has the core events",
+   "ok": true,
+   "info": "session_start,canvas_down,tap,walk_start,text_shown,pickup,placing_start,outcome,press,release,catch,installed"
+  },
+  {
+   "name": "outcome sequence includes miss, glance, aligned",
+   "ok": true,
+   "info": "[\"miss\",\"glance\",\"aligned\",\"glance\",\"aligned\"]"
+  },
+  {
+   "name": "drag attempts counted",
+   "ok": true,
+   "info": "n=4"
+  },
+  {
+   "name": "installed-mirror touch recorded",
+   "ok": true,
+   "info": "n=1"
+  },
+  {
+   "name": "other interaction after install recorded",
+   "ok": true,
+   "info": "[{\"t\":1098.589,\"what\":\"furnish:cell\"}]"
+  },
+  {
+   "name": "hinted flag matches mode",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "assist flag false in this run",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "no page errors",
+   "ok": true,
+   "info": ""
+  }
+ ],
+ "derived_wall_clock_meaningless_in_stepped_run": {
+  "tFirstIntentionalMove": 20.52,
+  "tButtonPickup": 69.711,
+  "tButtonHome": 139.662,
+  "tFirstPressOnButton": 740.099,
+  "dragAttempts": 4,
+  "outcomeSequence": [
+   {
+    "t": 139.662,
+    "outcome": "miss"
+   },
+   {
+    "t": 794.891,
+    "outcome": "glance"
+   },
+   {
+    "t": 827.767,
+    "outcome": "aligned"
+   },
+   {
+    "t": 834.713,
+    "outcome": "glance"
+   },
+   {
+    "t": 899.086,
+    "outcome": "aligned"
+   }
+  ],
+  "secondsInPlacement": 826.03,
+  "installed": true,
+  "leftBeforeInstall": false,
+  "installedMirrorTouchesAfter": 1,
+  "otherInteractionsAfterInstall": [
+   {
+    "t": 1098.589,
+    "what": "furnish:cell"
+   }
+  ],
+  "otherPickupsBeforeButton": [],
+  "assistFired": false,
+  "hintCueShown": false,
+  "textShownDuringPlacement": [],
+  "textShownBeforePlacement": [
+   {
+    "t": 55.798,
+    "channel": "toast",
+    "text": "A coat button the size of a dinner plate. It throws the light back."
+   },
+   {
+    "t": 69.719,
+    "channel": "toast",
+    "text": "Heavy. You balance it over your head. Home is the green ring."
+   }
+  ]
+ }
+}
