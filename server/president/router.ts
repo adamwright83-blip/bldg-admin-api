@@ -183,20 +183,23 @@ export const presidentRouter = router({
       const { pool, programs, service } = operatingServices();
       const program = await programs.getProgram(input.programId);
       if (!program) throw new TRPCError({ code: "NOT_FOUND", message: "President program not found" });
-      const candidate = await service.selectedCandidate(program.id);
+      const selectedWork = await service.selectedWork(program.id);
       const policy = await programs.getAuthorityPolicy(program.authorityPolicyVersion);
       if (!policy) throw new Error("President authority policy disappeared");
-      const [rows] = await pool.execute<RowDataPacket[]>(
-        "SELECT inspectedRepositorySha FROM president_assessments WHERE id=? LIMIT 1",
-        [program.assessmentId]
-      );
-      if (!rows[0]) throw new Error("President assessment disappeared");
+      const [rows] = program.assessmentId
+        ? await pool.execute<RowDataPacket[]>(
+            "SELECT inspectedRepositorySha FROM president_assessments WHERE id=? LIMIT 1",
+            [program.assessmentId]
+          )
+        : await pool.execute<RowDataPacket[]>(
+            "SELECT inspectedRepositorySha FROM president_assessments ORDER BY completedAt DESC LIMIT 1"
+          );
       const plan = await planPresidentProgram({
         program,
-        candidate,
+        selectedWork,
         policy,
         provider: new AppPresidentJudgmentProvider(),
-        repositorySha: rows[0].inspectedRepositorySha,
+        repositorySha: rows[0]?.inspectedRepositorySha ?? null,
         context: {
           founderDecisions: await programs.decisionsForProgram(program.id),
         },
@@ -212,6 +215,23 @@ export const presidentRouter = router({
       });
       return { ...plan, applied };
     }),
+
+  answerObjectiveSelection: founderProcedure
+    .input(
+      z
+        .object({
+          decisionId: z.string().uuid(),
+          answer: z.enum(["Authorize this program", "Not now", "Stop objective"]),
+          maxProgramUsd: z.number().min(0).max(10000),
+        })
+        .strict()
+    )
+    .mutation(({ input, ctx }) =>
+      operatingServices().service.answerObjectiveSelectionDecision({
+        ...input,
+        founderId: ctx.user.openId,
+      })
+    ),
 
   answerPlanQuestion: founderProcedure
     .input(
