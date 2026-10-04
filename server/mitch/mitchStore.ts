@@ -108,7 +108,20 @@ export class MitchProductionStore implements IMitchProductionStore {
   private memoryIssues = new Map<string, MitchIssue>();
   private memoryAuditEvents: MitchAuditEvent[] = [];
 
-  constructor(private readonly forceMemoryMode: boolean = false) {}
+  constructor(
+    private readonly forceMemoryMode: boolean = false,
+    private readonly requireDurablePersistence: boolean = false
+  ) {
+    if (forceMemoryMode && requireDurablePersistence) {
+      throw new Error("MitchProductionStore cannot require durable persistence in forced memory mode.");
+    }
+  }
+
+  private handlePersistenceFailure(error: unknown): void {
+    if (this.requireDurablePersistence) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
 
   private stateKey(tenantId: string, gameId: string) {
     return `${tenantId}::${gameId}`;
@@ -160,7 +173,9 @@ export class MitchProductionStore implements IMitchProductionStore {
           }
         }
       } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory
+      
       }
     }
     return this.memoryStates.get(this.stateKey(tenantId, gameId)) ?? null;
@@ -220,7 +235,9 @@ export class MitchProductionStore implements IMitchProductionStore {
           }
         }
       } catch (err) {
+        this.handlePersistenceFailure(err);
         // Continue to memory
+      
       }
     }
 
@@ -264,7 +281,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             }));
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     return Array.from(this.memoryMilestones.values())
@@ -320,7 +339,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             });
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     this.memoryMilestones.set(this.milestoneKey(milestone.tenantId, milestone.gameId, milestone.milestoneKey), updated);
@@ -370,7 +391,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             updatedAt: new Date(fullOrder.updatedAt),
           });
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     this.memoryWorkOrders.set(fullOrder.id, fullOrder);
@@ -423,7 +446,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     const order = this.memoryWorkOrders.get(workOrderId);
@@ -477,7 +502,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             }));
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     return Array.from(this.memoryWorkOrders.values()).filter(
@@ -551,8 +578,10 @@ export class MitchProductionStore implements IMitchProductionStore {
           }
           return null;
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall through to the isolated in-memory implementation.
+      
       }
     }
 
@@ -614,8 +643,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             new Date(renewed.leaseExpiresAt).getTime() > now.getTime()
           );
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall through to memory.
+      
       }
     }
 
@@ -665,8 +696,10 @@ export class MitchProductionStore implements IMitchProductionStore {
               )
             );
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory fallback in sync even if the DB is temporarily unavailable.
+      
       }
     }
     this.memoryWorkOrders.set(completedOrder.id, completedOrder);
@@ -746,8 +779,10 @@ export class MitchProductionStore implements IMitchProductionStore {
               )
             );
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall through to memory mirror.
+      
       }
     }
 
@@ -789,8 +824,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             createdAt: new Date(fullRun.createdAt),
           });
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Preserve isolated-test fallback.
+      
       }
     }
 
@@ -831,8 +868,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     const run = this.memoryExecutionRuns.get(runId);
@@ -876,8 +915,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             });
           }
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror available.
+      
       }
     }
 
@@ -914,8 +955,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     const build = this.memoryBuilds.get(buildId);
@@ -949,8 +992,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             createdAt: row.createdAt.toISOString(),
           }));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     return Array.from(this.memoryBuilds.values()).filter(
@@ -978,8 +1023,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             .set({ isVerified: true, verifiedAt: now })
             .where(and(eq(mitchBuilds.tenantId, tenantId), eq(mitchBuilds.id, buildId)));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror.
+      
       }
     }
 
@@ -1021,8 +1068,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             createdAt: new Date(fullQaRun.createdAt),
           });
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror.
+      
       }
     }
 
@@ -1063,8 +1112,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     const run = this.memoryQaRuns.get(qaRunId);
@@ -1102,8 +1153,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             createdAt: row.createdAt.toISOString(),
           }));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     return Array.from(this.memoryQaRuns.values()).filter(
@@ -1142,8 +1195,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             updatedAt: now,
           });
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror.
+      
       }
     }
 
@@ -1180,8 +1235,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     const issue = this.memoryIssues.get(issueId);
@@ -1210,8 +1267,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             })
             .where(and(eq(mitchIssues.tenantId, updated.tenantId), eq(mitchIssues.id, updated.id)));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror.
+      
       }
     }
 
@@ -1248,8 +1307,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             updatedAt: row.updatedAt.toISOString(),
           }));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     return Array.from(this.memoryIssues.values()).filter(
@@ -1279,8 +1340,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             occurredAt: new Date(fullEvent.occurredAt),
           });
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Keep memory mirror.
+      
       }
     }
 
@@ -1308,8 +1371,10 @@ export class MitchProductionStore implements IMitchProductionStore {
             occurredAt: row.occurredAt.toISOString(),
           }));
         }
-      } catch {
+      } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory.
+      
       }
     }
     return this.memoryAuditEvents.filter(event => event.tenantId === tenantId && event.gameId === gameId);
