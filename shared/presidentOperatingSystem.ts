@@ -355,14 +355,12 @@ export const presidentAgentCapabilitySchema = z
   .superRefine((capability, ctx) => {
     if (
       capability.authorityClasses.some(authority =>
-        ["FOUNDER_APPROVAL", "HUMAN_PHYSICAL", "HUMAN_REMOTE", "FORBIDDEN"].includes(
-          authority
-        )
+        ["HUMAN_PHYSICAL", "HUMAN_REMOTE", "FORBIDDEN"].includes(authority)
       )
     )
       ctx.addIssue({
         code: "custom",
-        message: "Delegated capabilities cannot inherit founder/human/forbidden authority",
+        message: "Delegated capabilities cannot perform human-only or forbidden work",
       });
     if (capability.kind === "EXECUTIVE_SEAT" && !capability.seatRoleKey)
       ctx.addIssue({
