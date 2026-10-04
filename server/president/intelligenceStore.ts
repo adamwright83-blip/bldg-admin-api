@@ -19,6 +19,10 @@ export function evidenceHash(statement: string) {
   return createHash("sha256").update(statement).digest("hex");
 }
 
+function normalizeIsoMillis(value: string | null): string | null {
+  return value === null ? null : new Date(value).toISOString();
+}
+
 /** Company-only, append-only revisions. No customer/tenant table access. */
 export class MysqlPresidentIntelligenceStore {
   constructor(
@@ -26,7 +30,13 @@ export class MysqlPresidentIntelligenceStore {
     readonly origin: "REAL" | "TEST_FIXTURE" = "REAL"
   ) {}
   async putEvidence(input: CompanyEvidence) {
-    const e = companyEvidenceSchema.parse(input);
+    const parsed = companyEvidenceSchema.parse(input);
+    const e: CompanyEvidence = {
+      ...parsed,
+      capturedAt: normalizeIsoMillis(parsed.capturedAt)!,
+      sourceAt: normalizeIsoMillis(parsed.sourceAt),
+      expiresAt: normalizeIsoMillis(parsed.expiresAt),
+    };
     if (e.origin !== this.origin || e.sha256 !== evidenceHash(e.statement))
       throw new Error("Evidence origin/hash mismatch");
     await this.pool.execute(
