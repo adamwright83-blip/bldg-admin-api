@@ -109,8 +109,7 @@ export class MitchQaService {
     if (
       build.gameId !== input.gameId ||
       !identityMilestone ||
-      !buildOrder ||
-      buildOrder.milestoneId !== input.milestoneId
+      (buildOrder && buildOrder.milestoneId !== input.milestoneId)
     ) {
       throw new Error("QA game/milestone/build identity mismatch");
     }
@@ -125,7 +124,7 @@ export class MitchQaService {
     }
 
     // Technical verification is part of VERIFIED, not a prose attestation.
-    if (input.status === "passed") {
+    if (input.status === "passed" && buildOrder) {
       if (buildOrder.requiredArtifact && !build.sourceCompiled) {
         throw new InvalidQaPassAttestationError(
           "QA pass rejected: required implementation artifact was not durably recorded as compiled"
