@@ -31,14 +31,14 @@ afterEach(async () => {
   for (const server of servers.splice(0))
     await new Promise<void>(resolve => server.close(() => resolve()));
 });
-async function fixture(provider = true) {
+async function fixture(provider = true, reviewerId = "chatgpt_design_review") {
   const store = new MitchProductionStore(true),
     service = new MitchProductionService(store),
     dispatcher = new MitchGameDispatcher(store);
   const comments: string[] = [];
   const wakes: any[] = [];
   const wakeProvider = {
-    hasTarget: (actorId: string) => ["executor", "chatgpt_design_review"].includes(actorId),
+    hasTarget: (actorId: string) => ["executor", reviewerId].includes(actorId),
     wake: async (input: any) => { wakes.push(input); },
   };
   const bus = {
@@ -70,7 +70,7 @@ async function fixture(provider = true) {
     reasoning: new MitchProductionReasoningService(store),
     bus: bus as unknown as GitHubProducerBus,
     wakeProvider,
-    reviewerId: "chatgpt_design_review",
+    reviewerId,
     eventDriven: true,
   });
   const inbox = new MemoryMitchEventInbox();
@@ -122,7 +122,7 @@ async function fixture(provider = true) {
       gameId: "game.small_comforts",
       milestoneId: workOrder.milestoneId,
       workOrderId: workOrder.id,
-      actorId: "chatgpt_design_review",
+      actorId: reviewerId,
       branch: "proof",
       commitSha: commit,
       buildId: commit,
@@ -146,6 +146,7 @@ async function fixture(provider = true) {
     comments,
     wakes,
     wakeProvider,
+    reviewerId,
     implementation,
     review,
   };
@@ -158,12 +159,12 @@ async function ingress(f: Awaited<ReturnType<typeof fixture>>) {
     webhookSecret: "secret",
     githubActorRules: [
       { login: "worker", appSlug: "claude", actorIds: ["executor"] },
-      { login: "worker", appSlug: "chatgpt-codex-connector", actorIds: ["chatgpt_design_review"] },
+      { login: "worker", appSlug: "chatgpt-codex-connector", actorIds: [f.reviewerId] },
       { login: "adam", actorIds: ["adam"] },
     ],
     callbackActorTokens: {
       executor: "exec-callback",
-      chatgpt_design_review: "review-callback",
+      [f.reviewerId]: "review-callback",
     },
   });
   const server = http.createServer(app);
@@ -178,7 +179,7 @@ async function ingress(f: Awaited<ReturnType<typeof fixture>>) {
     appSlug: string | null =
       event.actorId === "executor"
         ? "claude"
-        : event.actorId === "chatgpt_design_review"
+        : event.actorId === f.reviewerId
           ? "chatgpt-codex-connector"
           : null
   ) => {
@@ -497,6 +498,14 @@ describe("Mitch event-driven producer", () => {
       f.events.receive({ ...event, eventId: randomUUID() }, "delivery")
     ).rejects.toThrow("different event");
   });
+  it("persists the authenticated reviewer identity instead of rewriting provenance", async () => {
+    const f = await fixture(true, "alternate_reviewer");
+    await f.events.receive(f.implementation());
+    await f.events.receive(f.review("no_blocking_issue"));
+    const qaRuns = await f.store.listQaRuns("test", "game.small_comforts");
+    expect(qaRuns.at(-1)?.testerId).toBe("alternate_reviewer");
+  });
+
   it("supports a structured QA handback for the assigned exact build", async () => {
     const f = await fixture();
     await f.events.receive(f.implementation());
