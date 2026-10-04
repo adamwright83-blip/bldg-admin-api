@@ -4605,6 +4605,10 @@ await applyHistoricalCreateTables(
   "../drizzle/0109_president_stage1.sql",
   "President Stage 1 assessment and candidate tables"
 );
+await applyHistoricalCreateTables(
+  "../drizzle/0113_president_intelligence.sql",
+  "President immutable company intelligence tables"
+);
 
 await conn.end();
 console.log("\nMigration complete.");

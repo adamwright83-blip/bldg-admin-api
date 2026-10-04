@@ -4,9 +4,12 @@ on:
     paths:
       - "server/president/**"
       - "shared/presidentContracts.ts"
+      - "shared/presidentIntelligence.ts"
+      - ".agents/skills/president/**"
       - "scripts/president-stage1-witness.ts"
       - ".github/workflows/president-stage1.yml"
       - "drizzle/0109_president_stage1.sql"
+      - "drizzle/0113_president_intelligence.sql"
   workflow_dispatch:
 permissions:
   contents: read
