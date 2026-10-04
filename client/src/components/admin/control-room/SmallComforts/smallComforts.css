@@ -72,7 +72,7 @@
 .sc-root .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px}
 .sc-root .endcard .fine{color:var(--ink);text-shadow:none;opacity:.7}
 .sc-root.portrait .logo{font-size:min(20vw,92px)}
-.sc-root /* short screens (phones in landscape): tools down the left edge,.sc-root buttons down the right,.sc-root hints at the top */
+/* short screens (phones in landscape): tools down the left edge, buttons down the right, hints at the top */
 @media (max-height:520px){
   #dock{position:fixed;inset:0;padding:0;display:none;align-items:stretch;justify-content:space-between;flex-wrap:nowrap}
   body[data-phase=furnish] #dock{display:block}
