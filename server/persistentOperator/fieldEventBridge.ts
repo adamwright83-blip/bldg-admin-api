@@ -8,6 +8,8 @@ import {
   goalCycleOutcomes,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { admitCompletedCommercialVisit } from "../authority/actionCompletionAdmission";
+import { findAuthorityReceiptForSubject } from "../authority/authorityReceipt";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,
@@ -155,19 +157,33 @@ export async function bridgeDriverAction(
     matchedObjective = candidates[0];
   }
 
+  const effectiveOutcomeKind = input.outcomeKind ?? "visit_completed";
+  const actionAuthority =
+    effectiveOutcomeKind === "visit_completed"
+      ? await admitCompletedCommercialVisit({
+          tenantId: input.tenantId,
+          missionId: input.missionId!,
+          evidenceReference: input.evidenceReference,
+        })
+      : null;
+
   // Action verification: verifies work was done, never awards money
   const verification = await verifyObjectiveExecution({
     tenantId: input.tenantId,
     objectiveId: matchedObjective.id,
     evidenceReference: input.evidenceReference,
     sourceSystem: input.sourceSystem ?? "dayforge_field",
-    outcomeKind: input.outcomeKind ?? "visit_completed",
+    outcomeKind: effectiveOutcomeKind,
     explanation:
       input.explanation ??
       `Driver action verified completed by real field event (${input.evidenceReference})`,
     transitionObjectiveTo: "action_executed",
     observedAt: input.observedAt,
-    metadata: input.metadata,
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...(input.missionId != null ? { missionId: input.missionId } : {}),
+      ...(actionAuthority ? { authorityReceiptId: actionAuthority.id } : {}),
+    },
   });
 
   // Query any automatically produced learned delta for this outcome
@@ -255,6 +271,21 @@ export async function bridgeCommercialResolution(
   const outcomeKind = isWon ? "account_won" : "account_lost";
   const epistemicStatus: EpistemicStatus = isWon ? "verified" : "rejected";
 
+  const winAuthority = isWon
+    ? await findAuthorityReceiptForSubject({
+        tenantId: input.tenantId,
+        claimType: "account_won",
+        subjectType: "commercial_mission",
+        subjectId: String(input.missionId),
+      })
+    : null;
+  if (isWon && !winAuthority) {
+    return {
+      bridged: false,
+      reason: `Commercial mission ${input.missionId} has no account_won Authority Receipt`,
+    };
+  }
+
   const recorded = await recordGoalCycleOutcome({
     tenantId: input.tenantId,
     objectiveId: targetObjective.id,
@@ -272,6 +303,7 @@ export async function bridgeCommercialResolution(
     metadata: {
       missionId: input.missionId,
       resolution: input.resolution,
+      ...(winAuthority ? { authorityReceiptId: winAuthority.id } : {}),
       ...input.metadata,
     },
   });
@@ -475,6 +507,20 @@ export async function bridgeCleanCloudPaidOrder(
         ? new Date(input.paidDateUtc)
         : new Date();
 
+  const paymentAuthority = await findAuthorityReceiptForSubject({
+    tenantId: input.tenantId,
+    claimType: "payment_verified",
+    subjectType: "cleancloud_order",
+    subjectId: input.cleancloudOrderId.trim(),
+  });
+  if (!paymentAuthority) {
+    return {
+      bridged: false,
+      reason: "order_not_paid_or_zero",
+      message: `CleanCloud order #${input.cleancloudOrderId} has no payment_verified Authority Receipt`,
+    };
+  }
+
   const bound = await bindEconomicOutcome({
     tenantId: input.tenantId,
     objectiveId: matchedObjective.id,
@@ -490,6 +536,7 @@ export async function bridgeCleanCloudPaidOrder(
       `Authoritative CleanCloud paid order #${input.cleancloudOrderId} ($${(input.totalCents / 100).toFixed(2)}) deterministically attributed.`,
     metadata: {
       cleancloudOrderId: input.cleancloudOrderId,
+      authorityReceiptId: paymentAuthority.id,
       cleancloudCustomerId: input.cleancloudCustomerId ?? null,
       sourceFileName: input.sourceFileName ?? null,
       ...input.metadata,
