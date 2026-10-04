@@ -53,7 +53,8 @@
     "check:vertical-dependencies": "node scripts/check-vertical-dependencies.mjs",
     "start:mitch-producer": "NODE_ENV=production node dist/mitch-producer-worker.js",
     "dev:mitch-producer": "NODE_ENV=development tsx watch server/mitch/producerWorkerMain.ts",
-    "president:stage1:witness": "tsx scripts/president-stage1-witness.ts"
+    "president:stage1:witness": "tsx scripts/president-stage1-witness.ts",
+    "president:schema:migrate": "node scripts/president-migrate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
