@@ -67,6 +67,7 @@ import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../persistentOperator/autonomousWorkerService";
+import { registerPresidentAgentRoutes } from "../president/httpRoutes";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -337,6 +338,7 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerPresidentAgentRoutes(app);
   registerLegacyDayforgeRetentionRoute(app);
   registerLegacyDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
