@@ -206,7 +206,12 @@ export class MitchEventService {
         );
         if (lastConsumed > lastRequest)
           throw new Error("Review already consumed for this build");
-        await coordinator.acceptReview(milestone, build.id, event.review);
+        await coordinator.acceptReview(
+          milestone,
+          build.id,
+          event.review,
+          event.actorId
+        );
         await store.recordAuditEvent({
           tenantId: event.tenantId,
           gameId: event.gameId,
