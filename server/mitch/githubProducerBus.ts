@@ -12,6 +12,7 @@ export type GitHubIssueComment = {
   body: string;
   created_at: string;
   user?: { login?: string | null } | null;
+  performed_via_github_app?: { id?: number | null; slug?: string | null } | null;
 };
 
 export type GitHubProducerBusConfig = {
