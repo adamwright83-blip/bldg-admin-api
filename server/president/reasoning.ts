@@ -203,6 +203,60 @@ export function validateJudgment(
   return result;
 }
 
+async function materializeAcceptedRecommendation(input: {
+  store: MysqlPresidentIntelligenceStore;
+  strategyRecordId: string;
+  requestKey: string;
+  recommendation: ExecutiveRecommendation;
+}) {
+  const thesis = [];
+  for (const item of input.recommendation.thesisUpdates) {
+    const key =
+      "thesis:" +
+      item.topic.toLowerCase() +
+      ":" +
+      createHash("sha256").update(item.claim).digest("hex").slice(0, 16);
+    thesis.push(
+      await input.store.appendCurrent({
+        kind: "THESIS",
+        key,
+        evidenceIds: item.evidenceIds,
+        idempotencyKey: input.requestKey + ":" + key,
+        payload: { ...item, strategyRecordId: input.strategyRecordId },
+      })
+    );
+  }
+
+  const objectives = [];
+  for (const [objectiveIndex, objective] of input.recommendation.objectives.entries()) {
+    const key =
+      "objective:" +
+      createHash("sha256")
+        .update(
+          canonicalJson({
+            admission: objective.admission,
+            outcome: objective.outcome,
+          })
+        )
+        .digest("hex")
+        .slice(0, 20);
+    objectives.push(
+      await input.store.appendCurrent({
+        kind: "OBJECTIVE",
+        key,
+        evidenceIds: objective.evidenceIds,
+        idempotencyKey: input.requestKey + ":" + key,
+        payload: {
+          ...objective,
+          strategyRecordId: input.strategyRecordId,
+          priorityRank: objectiveIndex + 1,
+        },
+      })
+    );
+  }
+  return { thesis, objectives };
+}
+
 export async function reasonAboutCompany(input: {
   question: string;
   evidence: CompanyEvidence[];
@@ -263,13 +317,21 @@ export async function reasonAboutCompany(input: {
         throw new Error(
           "Reasoning retry evidence differs from immutable request"
         );
+      const recommendation = validateJudgment(
+        prior.payload.recommendation,
+        input.evidence,
+        input.admittedCandidateIds
+      );
+      const materialized = await materializeAcceptedRecommendation({
+        store: input.store,
+        strategyRecordId: prior.id,
+        requestKey: input.requestKey,
+        recommendation,
+      });
       return {
         record: prior,
-        recommendation: validateJudgment(
-          prior.payload.recommendation,
-          input.evidence,
-          input.admittedCandidateIds
-        ),
+        recommendation,
+        ...materialized,
         reused: true,
       };
     }
@@ -340,47 +402,12 @@ export async function reasonAboutCompany(input: {
       },
     });
 
-    const thesis = [];
-    for (const item of recommendation.thesisUpdates) {
-      const key =
-        "thesis:" +
-        item.topic.toLowerCase() +
-        ":" +
-        createHash("sha256").update(item.claim).digest("hex").slice(0, 16);
-      thesis.push(
-        await input.store.appendCurrent({
-          kind: "THESIS",
-          key,
-          evidenceIds: item.evidenceIds,
-          idempotencyKey: input.requestKey + ":" + key,
-          payload: { ...item, strategyRecordId: record.id },
-        })
-      );
-    }
-
-    const objectives = [];
-    for (const [objectiveIndex, objective] of recommendation.objectives.entries()) {
-      const key =
-        "objective:" +
-        createHash("sha256")
-          .update(canonicalJson({ admission: objective.admission, outcome: objective.outcome }))
-          .digest("hex")
-          .slice(0, 20);
-      objectives.push(
-        await input.store.appendCurrent({
-          kind: "OBJECTIVE",
-          key,
-          evidenceIds: objective.evidenceIds,
-          idempotencyKey: input.requestKey + ":" + key,
-          payload: {
-            ...objective,
-            strategyRecordId: record.id,
-            priorityRank: objectiveIndex + 1,
-          },
-        })
-      );
-    }
-
-    return { record, recommendation, thesis, objectives, reused: false };
+    const materialized = await materializeAcceptedRecommendation({
+      store: input.store,
+      strategyRecordId: record.id,
+      requestKey: input.requestKey,
+      recommendation,
+    });
+    return { record, recommendation, ...materialized, reused: false };
   });
 }
