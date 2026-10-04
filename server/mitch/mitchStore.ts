@@ -123,6 +123,12 @@ export class MitchProductionStore implements IMitchProductionStore {
     }
   }
 
+  private assertDurableDb(db: unknown): void {
+    if (this.requireDurablePersistence && !db) {
+      throw new Error("Mitch native producer requires durable MySQL persistence, but getDb() returned null.");
+    }
+  }
+
   private stateKey(tenantId: string, gameId: string) {
     return `${tenantId}::${gameId}`;
   }
@@ -136,6 +142,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -191,6 +198,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const row = {
             id: state.id,
@@ -250,6 +258,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const rows = await db
             .select()
@@ -303,6 +312,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const row = {
             id: milestone.id,
@@ -361,6 +371,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchWorkOrders).values({
             id: fullOrder.id,
@@ -404,6 +415,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -460,6 +472,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const conditions = [
             eq(mitchWorkOrders.tenantId, tenantId),
@@ -537,6 +550,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchWorkOrders)
@@ -619,6 +633,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchWorkOrders)
@@ -681,6 +696,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchWorkOrders)
@@ -763,6 +779,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchWorkOrders)
@@ -802,6 +819,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchExecutionRuns).values({
             id: fullRun.id,
@@ -839,6 +857,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -885,6 +904,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [existing] = await db
             .select({ id: mitchBuilds.id })
@@ -930,6 +950,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -969,6 +990,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const rows = await db
             .select()
@@ -1017,6 +1039,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchBuilds)
@@ -1046,6 +1069,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchQaRuns).values({
             id: fullQaRun.id,
@@ -1083,6 +1107,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -1126,6 +1151,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const rows = await db
             .select()
@@ -1177,6 +1203,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchIssues).values({
             id: fullIssue.id,
@@ -1210,6 +1237,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -1252,6 +1280,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db
             .update(mitchIssues)
@@ -1282,6 +1311,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const conditions = [eq(mitchIssues.tenantId, tenantId), eq(mitchIssues.gameId, gameId)];
           if (status) conditions.push(eq(mitchIssues.status, status));
@@ -1329,6 +1359,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchAuditEvents).values({
             id: fullEvent.id,
@@ -1355,6 +1386,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const rows = await db
             .select()
