@@ -17,6 +17,7 @@ import {
   type PresidentAgentCapability,
 } from "../../shared/presidentOperatingSystem";
 import { executiveSkillCatalog } from "./skillRouter";
+import { canonicalJson } from "./canonicalJson";
 import type { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
 import { MysqlPresidentProgramStore } from "./programStore";
 
@@ -687,33 +688,34 @@ export class PresidentProgramService {
       input.capability.capabilityKey
     );
     if (existing?.status === "ACTIVE") {
-      const same =
-        JSON.stringify({
-          ...existing,
-          createdAt: undefined,
-          updatedAt: undefined,
-          revokedAt: undefined,
-          status: undefined,
-        }) ===
-        JSON.stringify({
-          ...input.capability,
-          createdAt: undefined,
-          updatedAt: undefined,
-          revokedAt: undefined,
-          status: undefined,
-        });
-      if (!same)
+      const persistedShape = {
+        capabilityKey: existing.capabilityKey,
+        kind: existing.kind,
+        actorId: existing.actorId,
+        targetCapability: existing.targetCapability,
+        seatRoleKey: existing.seatRoleKey,
+        programId: existing.programId,
+        skillNames: existing.skillNames,
+        authorityClasses: existing.authorityClasses,
+        consequentialDomains: existing.consequentialDomains,
+        maxUsdPerRun: existing.maxUsdPerRun,
+        evidenceIds: existing.evidenceIds,
+        justification: existing.justification,
+      };
+      if (canonicalJson(persistedShape) !== canonicalJson(input.capability))
         throw new Error("Active President capability cannot be silently redefined");
-      return { capability: existing, reused: true };
     }
 
-    const capability = await this.programs.putAgentCapability({
-      ...input.capability,
-      status: "ACTIVE",
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      revokedAt: null,
-    });
+    const capability =
+      existing?.status === "ACTIVE"
+        ? existing
+        : await this.programs.putAgentCapability({
+            ...input.capability,
+            status: "ACTIVE",
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+            revokedAt: null,
+          });
     const record = await this.intelligence.appendCurrent({
       kind: "CAPABILITY",
       key: capability.capabilityKey,
@@ -721,7 +723,7 @@ export class PresidentProgramService {
       idempotencyKey: input.idempotencyKey,
       payload: {
         capability,
-        action: existing ? "REACTIVATED" : "RECRUITED",
+        action: "REGISTERED",
         requestedBy: input.requestedBy,
       },
     });
@@ -746,7 +748,7 @@ export class PresidentProgramService {
           updatedAt: now,
         });
     }
-    return { capability, record, reused: false };
+    return { capability, record, reused: existing?.status === "ACTIVE" };
   }
 
   async evaluateAgentCapability(input: {
@@ -808,14 +810,16 @@ export class PresidentProgramService {
     const evidence = await this.intelligence.evidence(input.evidenceIds);
     if (evidence.length !== new Set(input.evidenceIds).size)
       throw new Error("Capability revocation requires durable evidence");
-    if (capability.status === "REVOKED") return capability;
     const now = new Date().toISOString();
-    const revoked = await this.programs.putAgentCapability({
-      ...capability,
-      status: "REVOKED",
-      updatedAt: now,
-      revokedAt: now,
-    });
+    const revoked =
+      capability.status === "REVOKED"
+        ? capability
+        : await this.programs.putAgentCapability({
+            ...capability,
+            status: "REVOKED",
+            updatedAt: now,
+            revokedAt: now,
+          });
     await this.intelligence.appendCurrent({
       kind: "CAPABILITY",
       key: capability.capabilityKey,
