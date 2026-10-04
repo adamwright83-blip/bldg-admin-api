@@ -3020,7 +3020,7 @@ export const appRouter = router({
           amountCents: z.number().int().min(50), // Stripe minimum $0.50
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const stripe = getStripe();
         const order = await getOrderById(input.orderId);
         if (!order) {
@@ -3151,7 +3151,7 @@ export const appRouter = router({
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
           const stripeMetadata = {
             orderId: String(input.orderId),
-            tenantId: order.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             customerName: `${order.firstName} ${order.lastName}`.trim(),
             source: "admin_chargeCard",
           };
