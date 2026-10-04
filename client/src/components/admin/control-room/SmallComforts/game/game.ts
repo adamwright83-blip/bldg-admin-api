@@ -11,6 +11,8 @@ import { Forage } from "./forage";
 import { FixtureWorks } from "./fixtures";
 import { Playtest } from "./playtest";
 import { modeFromSearch } from "../logic/playtest";
+
+declare const __SC_DEFAULT_PLAYTEST__: string | undefined;
 import type { FixtureId } from "../logic/foraging";
 import { rbox, toon, easeOutBack, clamp01 } from "./style";
 import {
@@ -127,7 +129,9 @@ export class Game {
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), toon("#f2cc6b")); knob.position.y = 0.46;
     this.bell.add(base, dome, knob); this.bell.position.set(4.6, -0.2, 3.2); this.world.scene.add(this.bell);
     this.buildCutDots();
-    const ptMode = modeFromSearch(location.search);
+    // a standalone playtest build (where no query string reaches the page) can bake its entry in at build time
+    const builtIn = typeof __SC_DEFAULT_PLAYTEST__ === "string" ? modeFromSearch(`?playtest=${__SC_DEFAULT_PLAYTEST__}`) : null;
+    const ptMode = modeFromSearch(location.search) ?? builtIn;
     if (ptMode) this.pt = new Playtest(this, ptMode);
     this.load();
     this.anatomy = new AnatomyWorks();
