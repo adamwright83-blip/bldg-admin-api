@@ -4,9 +4,13 @@ import { PAL, ball, cyl, rbox, toon, inked } from "./style";
 
 export type Mode =
   | "idle" | "walk" | "watch-train" | "keyhole" | "sit" | "read" | "squint" | "wrap" | "shiver" | "lie" | "sleep"
-  | "nap" | "sigh" | "stretch" | "flick" | "click" | "cover-eyes" | "tiptoe" | "bump";
+  | "nap" | "sigh" | "stretch" | "flick" | "click" | "cover-eyes" | "tiptoe" | "bump"
+  // the proprietor's own verbs
+  | "carry" | "push" | "inspect" | "tinker" | "signal" | "warm";
 
-const FUR: Record<GuestId, string> = { conductor: "#9fb0c6", baker: "#e1bd92", reader: "#b08a62" };
+export type MouseKind = GuestId | "proprietor";
+
+const FUR: Record<MouseKind, string> = { conductor: "#9fb0c6", baker: "#e1bd92", reader: "#b08a62", proprietor: "#8d7b66" };
 
 export class Mouse {
   root = new THREE.Group();
@@ -26,7 +30,7 @@ export class Mouse {
   baseY = 0;
   lying = false;
 
-  constructor(public guest: GuestId) {
+  constructor(public guest: MouseKind) {
     const fur = FUR[guest];
     const torso = ball(0.27, fur); torso.scale.set(1, 1.15, 0.9); torso.position.y = 0.34;
     const belly = ball(0.2, "#f7e8d6", false); belly.scale.set(1, 1.1, 0.5); belly.position.set(0, 0.32, 0.16);
@@ -88,6 +92,26 @@ export class Mouse {
       const tailS = rbox(0.1, 0.34, 0.06, "#d1473c", 0.03); tailS.position.set(0.12, 0.42, 0.22); tailS.rotation.z = 0.15;
       this.body.add(scarf, tailS); this.props.scarf = scarf;
       const apron = rbox(0.38, 0.32, 0.06, "#f7e8d6", 0.04); apron.position.set(0, 0.28, 0.22); this.body.add(apron);
+    } else if (g === "proprietor") {
+      // a grubby little architect: pencil behind the ear, one spectacle lens, tape measure, enormous scissors, satchel
+      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.016, 6, 18), toon(PAL.brass)); lens.position.set(0.09, 0.075, 0.222); inked(lens, 0.02);
+      const glass = new THREE.Mesh(new THREE.CircleGeometry(0.078, 16), new THREE.MeshBasicMaterial({ color: "#cfe9ee", transparent: true, opacity: 0.55 })); glass.position.set(0.09, 0.075, 0.226);
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.32, 4), toon(PAL.brass)); chain.rotation.z = Math.PI / 2 - 0.2; chain.position.set(-0.04, 0.12, 0.18);
+      this.head.add(lens, glass, chain); this.props.lens = lens;
+      const pencil = cyl(0.016, 0.016, 0.26, "#e8b94c", 6, false); pencil.rotation.z = 0.5; pencil.rotation.x = 0.2; pencil.position.set(-0.2, 0.2, 0.02); this.head.add(pencil);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.05, 6), toon("#3b2a1a")); tip.position.set(-0.28, 0.12, 0.06); tip.rotation.z = 0.5 + Math.PI; this.head.add(tip);
+      const vest = rbox(0.5, 0.3, 0.42, "#5b4a3a", 0.12); vest.position.set(0, 0.3, 0); this.body.add(vest);
+      const tape = new THREE.Mesh(new THREE.TorusGeometry(0.255, 0.028, 6, 24), toon("#e8c34a")); tape.rotation.set(Math.PI / 2 - 0.5, 0, 0.45); tape.position.set(0, 0.36, 0.02); inked(tape, 0.02); this.body.add(tape);
+      const satchel = rbox(0.24, 0.2, 0.12, "#7a4e2d", 0.05); satchel.position.set(-0.3, 0.18, 0.02); satchel.rotation.z = 0.15; this.body.add(satchel);
+      const flap = rbox(0.24, 0.07, 0.13, "#5f3a20", 0.03, false); flap.position.set(-0.3, 0.27, 0.025); flap.rotation.z = 0.15; this.body.add(flap);
+      const strap = rbox(0.05, 0.62, 0.05, "#5f3a20", 0.02, false); strap.position.set(-0.1, 0.38, 0.22); strap.rotation.z = -0.55; this.body.add(strap);
+      const scissors = new THREE.Group();
+      for (const s2 of [-1, 1]) {
+        const blade = rbox(0.045, 0.62, 0.012, "#c9d2d8", 0.008, false); blade.position.set(s2 * 0.02, 0.2, 0); blade.rotation.z = s2 * 0.09;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.018, 6, 14), toon("#c8323c")); ring.position.set(s2 * 0.075, -0.17, 0); inked(ring, 0.02);
+        scissors.add(blade, ring);
+      }
+      scissors.position.set(0.02, 0.5, -0.27); scissors.rotation.set(0.15, 0, 0.55); this.body.add(scissors); this.props.scissors = scissors;
     } else {
       const frames = new THREE.Group();
       for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.012, 6, 16), toon(PAL.ink)); r.position.set(s * 0.09, 0.07, 0.215); frames.add(r); }
@@ -152,6 +176,34 @@ export class Mouse {
       case "flick": { const k = Math.min(1, lt / 0.5); this.armR.rotation.set(-1.6 * k, 0, 0.1); if (um) um.rotation.set(-1.4 + Math.sin(lt * 14) * 0.25 * (lt < 0.8 ? 1 : 0), 0, 0); break; }
       case "click": { const k = Math.min(1, lt * 3); this.armR.rotation.set(-1.7 * k, 0, 0.1 + 0.2 * k); b.rotation.x = 0.1 * k; break; }
       case "cover-eyes": { this.armL.rotation.set(-2.2, 0, 0.6); this.armR.rotation.set(-2.2, 0, -0.6); this.eyes.forEach(e => e.scale.set(1, 0.1, 1)); h.rotation.x = 0.1; break; }
+      case "carry": {
+        const s = Math.sin(this.walkPhase);
+        b.position.y += Math.abs(s) * 0.05; b.rotation.z = s * 0.05; b.rotation.x = -0.12; h.rotation.x = -0.2;
+        this.legL.position.z += s * 0.09; this.legR.position.z -= s * 0.09;
+        this.armL.rotation.set(-2.9, 0, -0.25); this.armR.rotation.set(-2.9, 0, 0.25); break;
+      }
+      case "push": {
+        const s = Math.sin(this.walkPhase);
+        b.position.y += Math.abs(s) * 0.04; b.rotation.x = 0.4; h.rotation.x = -0.25;
+        this.legL.position.z += s * 0.1; this.legR.position.z -= s * 0.1;
+        this.armL.rotation.set(-1.55, 0, -0.1); this.armR.rotation.set(-1.55, 0, 0.1); break;
+      }
+      case "inspect": {
+        b.position.y += Math.sin(t * 3) * 0.01; h.rotation.x = 0.25; h.rotation.y = Math.sin(lt * 2.2) * 0.3;
+        this.armR.rotation.set(-1.9, 0, 0.5); this.armL.rotation.set(-0.5, 0, -0.3); break;
+      }
+      case "tinker": {
+        b.rotation.x = 0.28; h.rotation.x = 0.35; h.rotation.y = Math.sin(lt * 5) * 0.08;
+        this.armR.rotation.set(-1.3 + Math.sin(lt * 15) * 0.55, 0, 0.1); this.armL.rotation.set(-1.2, 0, -0.15); break;
+      }
+      case "signal": {
+        b.rotation.x = -0.05; h.rotation.x = -0.2; h.rotation.y = Math.sin(lt * 1.2) * 0.25;
+        this.armR.rotation.set(-2.3 + Math.sin(lt * 5) * 0.35, 0, 0.3); break;
+      }
+      case "warm": {
+        b.position.y += -0.08; b.rotation.x = 0.15; h.rotation.x = 0.25;
+        this.armL.rotation.set(-1.25, 0, 0.35); this.armR.rotation.set(-1.25, 0, -0.35); this.legL.position.set(-0.13, 0.12, 0.28); this.legR.position.set(0.13, 0.12, 0.28); break;
+      }
       case "bump": { const k = Math.min(1, lt * 2.2); b.scale.set(1 + 0.2 * (1 - k), 1 - 0.2 * (1 - k), 1); b.rotation.x = -0.25 * (1 - k); this.armL.rotation.set(0, 0, -1.2); this.armR.rotation.set(0, 0, 1.2); break; }
     }
     if (um) um.visible = !this.lying || m === "flick";

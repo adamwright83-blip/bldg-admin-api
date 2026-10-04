@@ -1,5 +1,6 @@
 import type { Layout } from "./grid";
 import { GUEST_ORDER, type GuestId } from "./guests";
+import { FIXTURES, ROUTINE_IDS, resolveRoutine, type FixtureId, type RoutineId } from "./foraging";
 
 export type AnatomyProject = "lining_stairs" | "strap_hammock" | "pocket_loft";
 export type KeepsakeKind = "ticket" | "bun" | "bookmark";
@@ -21,6 +22,10 @@ export interface EpisodeState {
   keepsakes: KeepsakeState[];
   projects: AnatomyProject[];
   arrivals: number;
+  /** things the proprietor hauled home and turned into furniture */
+  fixtures: FixtureId[];
+  /** what each resident does differently because of a fixture */
+  routines: Partial<Record<GuestId, RoutineId>>;
 }
 
 export const emptyEpisode = (): EpisodeState => ({
@@ -28,6 +33,8 @@ export const emptyEpisode = (): EpisodeState => ({
   keepsakes: [],
   projects: [],
   arrivals: 0,
+  fixtures: [],
+  routines: {},
 });
 
 const KEEPSAKES: Record<GuestId, Omit<KeepsakeState, "guest">> = {
@@ -55,12 +62,40 @@ export function normalizeEpisode(input: Partial<EpisodeState> | null | undefined
   const projects = Array.isArray(input?.projects)
     ? input!.projects.filter((p): p is AnatomyProject => ["lining_stairs", "strap_hammock", "pocket_loft"].includes(p))
     : [];
+  const fixtures = Array.isArray(input?.fixtures)
+    ? input!.fixtures.filter((f): f is FixtureId => typeof f === "string" && f in FIXTURES)
+    : [];
+  const routines: EpisodeState["routines"] = {};
+  const rawRoutines = (input?.routines ?? {}) as Record<string, unknown>;
+  for (const guest of GUEST_ORDER) {
+    const r = rawRoutines[guest];
+    if (typeof r === "string" && (ROUTINE_IDS as readonly string[]).includes(r)) routines[guest] = r as RoutineId;
+  }
   return {
     residents,
     keepsakes,
     projects: [...new Set(projects)],
     arrivals: Math.max(Number(input?.arrivals ?? residents.length) || 0, residents.length),
+    fixtures: [...new Set(fixtures)],
+    routines,
   };
+}
+
+/**
+ * Install a fixture and let every resident decide what to make of it.
+ * A resident keeps their strongest existing routine: a real use is never overwritten by "ignores it".
+ */
+export function installFixture(state: EpisodeState, fixture: FixtureId): { state: EpisodeState; reactions: { guest: GuestId; routine: RoutineId; line: string }[] } {
+  if (state.fixtures.includes(fixture)) return { state, reactions: [] };
+  const routines = { ...state.routines };
+  const reactions: { guest: GuestId; routine: RoutineId; line: string }[] = [];
+  for (const resident of state.residents) {
+    const change = resolveRoutine(resident.guest, fixture);
+    reactions.push({ guest: resident.guest, ...change });
+    const current = routines[resident.guest];
+    if (change.routine !== "ignores_it" || !current) routines[resident.guest] = change.routine;
+  }
+  return { state: { ...state, fixtures: [...state.fixtures, fixture], routines }, reactions };
 }
 
 export function nextArrival(state: EpisodeState): GuestId | null {
