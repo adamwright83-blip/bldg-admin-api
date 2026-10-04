@@ -20,7 +20,13 @@ function loadPrototype(url: string): Promise<THREE.Group> {
 
 function cloneMaterial(material: THREE.Material): THREE.Material {
   const cloned = material.clone();
-  // Textures are immutable for this slice and can stay shared across clones.
+  // World.dispose() releases every texture it owns. Clone texture objects as
+  // well as materials so leaving/re-entering Small Comforts never disposes
+  // the cached GLTF prototype's texture handles.
+  const record = cloned as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(record)) {
+    if (value instanceof THREE.Texture) record[key] = value.clone();
+  }
   return cloned;
 }
 
