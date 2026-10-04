@@ -359,7 +359,7 @@ export async function reasonAboutCompany(input: {
     }
 
     const objectives = [];
-    for (const objective of recommendation.objectives) {
+    for (const [objectiveIndex, objective] of recommendation.objectives.entries()) {
       const key =
         "objective:" +
         createHash("sha256")
@@ -372,7 +372,11 @@ export async function reasonAboutCompany(input: {
           key,
           evidenceIds: objective.evidenceIds,
           idempotencyKey: input.requestKey + ":" + key,
-          payload: { ...objective, strategyRecordId: record.id },
+          payload: {
+            ...objective,
+            strategyRecordId: record.id,
+            priorityRank: objectiveIndex + 1,
+          },
         })
       );
     }
