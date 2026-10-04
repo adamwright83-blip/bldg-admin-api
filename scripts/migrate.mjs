@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Mitch event inbox is required: never boot an event worker without durable dedupe.
+const mitchEventDdl = await readFile(new URL("../drizzle/0111_mitch_producer_events.sql", import.meta.url), "utf8");
+for (const statement of mitchEventDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Mitch producer event inbox");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -4552,6 +4558,52 @@ await ensureRequiredIndex(
   "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_operator (tenantId,canonicalOperatorId,learningKind,targetKey)"
 );
 
+// Operator Representative V1 — explicit operator directives only.
+// This is not an inferred-belief store; every row is an authenticated user command.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS operator_representative_directives (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    canonicalOperatorId varchar(191) NOT NULL,
+    targetItemId varchar(191) NOT NULL,
+    targetKey varchar(191) NULL,
+    directiveKind enum('correction','suppress','ask_instead') NOT NULL,
+    operatorDeclaredValueJson json NULL,
+    status enum('active','revoked') NOT NULL DEFAULT 'active',
+    createdByOpenId varchar(191) NOT NULL,
+    createdAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updatedAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    revokedAt timestamp(3) NULL,
+    PRIMARY KEY (id),
+    KEY idx_operator_rep_directive_operator_target (tenantId,canonicalOperatorId,targetItemId,status),
+    KEY idx_operator_rep_directive_operator_created (tenantId,canonicalOperatorId,createdAt)
+  )`,
+  "Operator Representative explicit directives"
+);
+await assertRequiredColumns("operator_representative_directives", [
+  "id", "tenantId", "canonicalOperatorId", "targetItemId", "targetKey",
+  "directiveKind", "operatorDeclaredValueJson", "status", "createdByOpenId",
+  "createdAt", "updatedAt", "revokedAt",
+]);
+await assertEnumContainsValues("operator_representative_directives", "directiveKind", [
+  "correction", "suppress", "ask_instead",
+]);
+await assertEnumContainsValues("operator_representative_directives", "status", [
+  "active", "revoked",
+]);
+await ensureRequiredIndex(
+  "operator_representative_directives",
+  "idx_operator_rep_directive_operator_target",
+  ["tenantId", "canonicalOperatorId", "targetItemId", "status"],
+  "ALTER TABLE operator_representative_directives ADD KEY idx_operator_rep_directive_operator_target (tenantId,canonicalOperatorId,targetItemId,status)"
+);
+await ensureRequiredIndex(
+  "operator_representative_directives",
+  "idx_operator_rep_directive_operator_created",
+  ["tenantId", "canonicalOperatorId", "createdAt"],
+  "ALTER TABLE operator_representative_directives ADD KEY idx_operator_rep_directive_operator_created (tenantId,canonicalOperatorId,createdAt)"
+);
+
 // Mitch v1 — Game Production Operating System tables
 await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",
@@ -4600,15 +4652,6 @@ await assertRequiredColumns("claire_decision_records", [
   "effective_output",
   "branch_executed",
 ]);
-
-await applyHistoricalCreateTables(
-  "../drizzle/0109_president_stage1.sql",
-  "President Stage 1 assessment and candidate tables"
-);
-await applyHistoricalCreateTables(
-  "../drizzle/0113_president_intelligence.sql",
-  "President immutable company intelligence tables"
-);
 
 await conn.end();
 console.log("\nMigration complete.");
