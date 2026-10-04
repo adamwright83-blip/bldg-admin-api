@@ -49,10 +49,28 @@ export async function inspectPresidentEvidence(input: {
 export function assertEvidenceIntegrity(
   snapshot: PresidentEvidenceSnapshot
 ): void {
-  for (const [path, digest] of Object.entries(snapshot.sourceDigests)) {
+  const available = [...snapshot.availableSources].sort();
+  const contentPaths = Object.keys(snapshot.sourceContents).sort();
+  const digestPaths = Object.keys(snapshot.sourceDigests).sort();
+
+  if (
+    new Set(available).size !== available.length ||
+    JSON.stringify(available) !== JSON.stringify(contentPaths) ||
+    JSON.stringify(available) !== JSON.stringify(digestPaths)
+  )
+    throw new Error(
+      "Every consumed evidence source must be exactly bound to the fingerprint"
+    );
+
+  const unavailable = new Set(snapshot.unavailableSources);
+  if (available.some(path => unavailable.has(path)))
+    throw new Error("Evidence source cannot be both available and unavailable");
+
+  for (const path of available) {
+    const digest = snapshot.sourceDigests[path];
     if (
       createHash("sha256")
-        .update(snapshot.sourceContents[path] ?? "")
+        .update(snapshot.sourceContents[path])
         .digest("hex") !== digest
     )
       throw new Error("Consumed evidence differs from fingerprinted evidence");
