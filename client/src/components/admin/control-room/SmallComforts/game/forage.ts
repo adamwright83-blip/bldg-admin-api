@@ -8,8 +8,10 @@ import {
   type FixtureId, type Haul, type ShelfObjectId,
 } from "../logic/foraging";
 import { installFixture } from "../logic/episode";
+import { MirrorPlay } from "./mirrorplay";
+import { MIRROR } from "../logic/mirror";
 
-type Stage = "off" | "exiting" | "idle" | "walking" | "inspecting" | "entering" | "tinkering" | "reacting" | "returning";
+type Stage = "off" | "exiting" | "idle" | "walking" | "inspecting" | "entering" | "tinkering" | "placing" | "fixing" | "reacting" | "returning";
 type Intent = { kind: "point" } | { kind: "object"; id: ShelfObjectId } | { kind: "home" } | { kind: "tin" };
 
 const WALK = 3.0;
@@ -41,6 +43,7 @@ export class Forage {
   private marker: THREE.Mesh;
   private markerOn = false;
   private lastTinToast = -99;
+  mirror: MirrorPlay;
 
   constructor(private g: Game) {
     g.world.scene.add(this.shelf.group);
@@ -48,10 +51,12 @@ export class Forage {
     this.mouse.root.visible = false;
     this.marker = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 20), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.9, depthWrite: false }));
     this.marker.rotation.x = -Math.PI / 2; this.marker.visible = false; g.world.scene.add(this.marker);
+    this.mirror = new MirrorPlay(g);
   }
 
   get active() { return this.stage !== "off"; }
-  get busy() { return this.stage === "exiting" || this.stage === "entering" || this.stage === "tinkering" || this.stage === "reacting" || this.stage === "returning"; }
+  get placing() { return this.stage === "placing" || this.stage === "fixing"; }
+  get busy() { return this.stage === "exiting" || this.stage === "entering" || this.stage === "tinkering" || this.stage === "fixing" || this.stage === "reacting" || this.stage === "returning"; }
   get carrying() { return this.haul.carrying; }
 
   // ------------------------------------------------------------------ entering and leaving the shelf
@@ -86,6 +91,7 @@ export class Forage {
   // ------------------------------------------------------------------ input
   /** returns true if the tap was used */
   onTap(e: PointerEvent): boolean {
+    if (this.stage === "placing") { this.mirror.down(e); return true; }
     if (!this.active || this.busy) return true;
     const g = this.g;
     g.raycaster.setFromCamera(g.ndcOf(e), g.world.camera);
@@ -113,6 +119,9 @@ export class Forage {
     this.walkTo(p.x, p.z, true);
     return true;
   }
+
+  onMove(e: PointerEvent) { if (this.stage === "placing") this.mirror.move(e); }
+  onUp() { if (this.stage === "placing") this.mirror.up(); }
 
   private walkTo(x: number, z: number, showMarker: boolean) {
     this.target.set(x, DESK_Y, z);
@@ -255,6 +264,10 @@ export class Forage {
           const k = easeInOut(this.stageT / walkEnd);
           this.pos.lerpVectors(this.from, this.to, k);
           this.mouse.setMode("carry", g.time); this.mouse.walkPhase += dt * 9;
+        } else if (id === "brass_button" && g.world.windowCut && this.carried) {
+          // not a timer: set the button down and let the player find the light
+          this.pos.copy(this.to);
+          this.startPlacing();
         } else {
           this.pos.copy(this.to);
           this.mouse.setMode("tinker", g.time);
@@ -269,6 +282,41 @@ export class Forage {
         const face = FIXTURES[SHELF_OBJECTS[id].fixture].home;
         const fy = Math.atan2(face.x - this.pos.x, face.z - this.pos.z);
         if (this.stageT >= walkEnd) this.yaw = fy;
+        break;
+      }
+      case "placing": {
+        const m = this.mirror;
+        m.update(dt, g.time);
+        // step aside, into the front corner, so the button and the light are all you see
+        const k = easeInOut(clamp01(this.stageT / 0.9));
+        this.pos.lerpVectors(this.from, this.to, k);
+        const moving = k < 1;
+        this.mouse.setMode(moving ? "walk" : "inspect", g.time);
+        if (moving) this.mouse.walkPhase += dt * 9;
+        const c = m.pose;
+        this.yaw = Math.atan2(c.x - this.pos.x, MIRROR.z - this.pos.z);
+        if (m.heldLongEnough) {
+          this.stage = "fixing"; this.stageT = 0;
+          this.from.copy(this.pos); this.to.set(Math.max(-2.3, (m.result?.x ?? c.x) - 0.95), 0, -0.7);
+          g.refreshForageUi();
+        }
+        break;
+      }
+      case "fixing": {
+        // the aha has landed; only now does the proprietor wedge it in place
+        this.mirror.update(dt, g.time);
+        const walk = 0.6;
+        if (this.stageT < walk) {
+          this.pos.lerpVectors(this.from, this.to, easeInOut(this.stageT / walk));
+          this.mouse.setMode("walk", g.time); this.mouse.walkPhase += dt * 9;
+        } else {
+          this.pos.copy(this.to);
+          this.mouse.setMode("tinker", g.time);
+          if (Math.floor(this.stageT * 4) !== Math.floor((this.stageT - dt) * 4) && this.stageT < walk + 0.8) g.sound.pick();
+        }
+        const rc = this.mirror.result ?? this.mirror.pose;
+        this.yaw = Math.atan2(rc.x - this.pos.x, MIRROR.z - this.pos.z);
+        if (this.stageT > walk + 1.0) this.completeFixture("signal_mirror", this.mirror.result ?? undefined);
         break;
       }
       case "reacting": {
@@ -367,17 +415,36 @@ export class Forage {
     g.sound.thump();
   }
 
-  private completeFixture(id: FixtureId) {
+  private startPlacing() {
+    const g = this.g;
+    const prop = this.carried!;
+    // the button leaves the proprietor's hands and lies on the lining
+    this.mouse.root.remove(prop.group);
+    prop.spin.rotation.set(0, 0, 0);
+    prop.group.rotation.set(0, 0, 0);
+    this.carried = null;
+    this.stage = "placing"; this.stageT = 0;
+    this.from.copy(this.pos); this.to.set(-2.1, 0, 0.7);
+    this.mirror.start(prop.group);
+    g.residents.makeRoom(g.time);
+    g.sound.thump();
+    g.refreshForageUi();
+  }
+
+  private completeFixture(id: FixtureId, placement?: { x: number; tiltDeg: number }) {
     const g = this.g;
     const loadId = this.haul.carrying!;
-    const result = installFixture(g.episode, id);
+    const result = installFixture(g.episode, id, placement ? { x: placement.x, tilt: placement.tiltDeg } : undefined);
     g.episode = result.state;
+    if (placement) { this.mirror.stop(); this.mirror.release(); }
     this.detachCarried();
     this.shelf.props.get(loadId)!.group.visible = false;
     this.haul = { carrying: null };
-    g.fixtureWorks.sync(g.episode.fixtures, g.time);
-    g.fx.poof(new THREE.Vector3(FIXTURES[id].home.x, 0.8, FIXTURES[id].home.z));
-    g.sound.place(); setTimeout(() => g.sound.chime(), 350);
+    g.fixtureWorks.sync(g.episode.fixtures, g.time, true, g.episode.placements);
+    if (!placement) {
+      g.fx.poof(new THREE.Vector3(FIXTURES[id].home.x, 0.8, FIXTURES[id].home.z));
+      g.sound.place(); setTimeout(() => g.sound.chime(), 350);
+    }
     g.residents.sync(g.episode, g.layout, g.time, true);
     g.save();
     const line = result.reactions.map(r => r.line).join(" ");
@@ -407,6 +474,7 @@ export class Forage {
   }
 
   dispose() {
+    this.mirror.dispose();
     this.g.world.scene.remove(this.shelf.group, this.mouse.root, this.marker);
   }
 }

@@ -26,6 +26,8 @@ export interface EpisodeState {
   fixtures: FixtureId[];
   /** what each resident does differently because of a fixture */
   routines: Partial<Record<GuestId, RoutineId>>;
+  /** how the player physically set a fixture (only fixtures with a playable placement have one) */
+  placements: Partial<Record<FixtureId, { x: number; tilt: number }>>;
 }
 
 export const emptyEpisode = (): EpisodeState => ({
@@ -35,6 +37,7 @@ export const emptyEpisode = (): EpisodeState => ({
   arrivals: 0,
   fixtures: [],
   routines: {},
+  placements: {},
 });
 
 const KEEPSAKES: Record<GuestId, Omit<KeepsakeState, "guest">> = {
@@ -71,6 +74,14 @@ export function normalizeEpisode(input: Partial<EpisodeState> | null | undefined
     const r = rawRoutines[guest];
     if (typeof r === "string" && (ROUTINE_IDS as readonly string[]).includes(r)) routines[guest] = r as RoutineId;
   }
+  const placements: EpisodeState["placements"] = {};
+  const rawPlacements = (input?.placements ?? {}) as Record<string, { x?: unknown; tilt?: unknown } | undefined>;
+  for (const f of fixtures) {
+    const pl = rawPlacements[f];
+    if (pl && Number.isFinite(Number(pl.x)) && Number.isFinite(Number(pl.tilt))) {
+      placements[f] = { x: Math.max(-2.5, Math.min(2.5, Number(pl.x))), tilt: Math.max(0, Math.min(90, Number(pl.tilt))) };
+    }
+  }
   return {
     residents,
     keepsakes,
@@ -78,6 +89,7 @@ export function normalizeEpisode(input: Partial<EpisodeState> | null | undefined
     arrivals: Math.max(Number(input?.arrivals ?? residents.length) || 0, residents.length),
     fixtures: [...new Set(fixtures)],
     routines,
+    placements,
   };
 }
 
@@ -85,7 +97,7 @@ export function normalizeEpisode(input: Partial<EpisodeState> | null | undefined
  * Install a fixture and let every resident decide what to make of it.
  * A resident keeps their strongest existing routine: a real use is never overwritten by "ignores it".
  */
-export function installFixture(state: EpisodeState, fixture: FixtureId): { state: EpisodeState; reactions: { guest: GuestId; routine: RoutineId; line: string }[] } {
+export function installFixture(state: EpisodeState, fixture: FixtureId, placement?: { x: number; tilt: number }): { state: EpisodeState; reactions: { guest: GuestId; routine: RoutineId; line: string }[] } {
   if (state.fixtures.includes(fixture)) return { state, reactions: [] };
   const routines = { ...state.routines };
   const reactions: { guest: GuestId; routine: RoutineId; line: string }[] = [];
@@ -95,7 +107,7 @@ export function installFixture(state: EpisodeState, fixture: FixtureId): { state
     const current = routines[resident.guest];
     if (change.routine !== "ignores_it" || !current) routines[resident.guest] = change.routine;
   }
-  return { state: { ...state, fixtures: [...state.fixtures, fixture], routines }, reactions };
+  return { state: { ...state, fixtures: [...state.fixtures, fixture], routines, placements: placement ? { ...state.placements, [fixture]: placement } : state.placements }, reactions };
 }
 
 export function nextArrival(state: EpisodeState): GuestId | null {

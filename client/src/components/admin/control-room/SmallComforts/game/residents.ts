@@ -66,8 +66,11 @@ function routinePose(guest: GuestId, episode: EpisodeState) {
   const fixture = ROUTINE_FIXTURE[routine];
   if (!episode.fixtures.includes(fixture)) return null;
   const fx = FIXTURES[fixture];
-  const yaw = routine === "perches_by_window" ? Math.PI : Math.atan2(fx.home.x - fx.stand.x, fx.home.z - fx.stand.z);
-  return { p: new THREE.Vector3(fx.stand.x, fx.stand.y, fx.stand.z), yaw, mode: ROUTINE_MODE[routine] };
+  const placed = fixture === "signal_mirror" ? episode.placements?.signal_mirror : undefined;
+  const home = placed ? { x: placed.x, z: -1.55 } : fx.home;
+  const stand = placed ? { x: placed.x - 0.85, z: -0.95, y: 0 } : fx.stand;
+  const yaw = routine === "perches_by_window" ? Math.PI : Math.atan2(home.x - stand.x, home.z - stand.z);
+  return { p: new THREE.Vector3(stand.x, stand.y, stand.z), yaw, mode: ROUTINE_MODE[routine] };
 }
 
 function authoredPose(guest: GuestId, episode: EpisodeState, layout: Layout) {
@@ -168,6 +171,20 @@ export class ResidentLife {
         (cycle === 1 ? "idle" : "read");
       live.mouse.setMode(mode, t);
       live.mouse.update(t + live.phaseOffset);
+    }
+  }
+
+  /** while the proprietor works the light, anyone standing in the beam's way steps to the window's far side */
+  makeRoom(now: number) {
+    let slot = 0;
+    for (const live of this.live.values()) {
+      const p = live.mouse.root.position;
+      if (p.y > 0.4 || p.x < -0.6 || p.x > 2.6 || p.z > 0.3) continue; // on a shelf, or nowhere near the lining
+      const to = new THREE.Vector3(2.35, 0, -1.0 + slot * 0.7); slot++;
+      const dist = Math.hypot(to.x - p.x, to.z - p.z);
+      if (dist < 0.05) continue;
+      live.mouse.lying = false; live.mouse.baseY = 0;
+      live.move = { from: p.clone(), to, t0: now, dur: Math.max(0.6, dist / 1.9), yaw: Math.PI, mode: "idle" };
     }
   }
 

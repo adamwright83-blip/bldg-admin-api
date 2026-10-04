@@ -436,6 +436,7 @@ export class Game {
     else { this.selected = null; this.updateSelection(); }
   }
   onCanvasMove(e: PointerEvent) {
+    if (this.phase === "outside") { this.forage.onMove(e); return; }
     if (this.phase !== "furnish") return;
     if (this.cutting) { this.cutMove(this.ndcOf(e)); return; }
     this.hoverCell = this.cellAt(e);
@@ -445,6 +446,7 @@ export class Game {
     this.updateHover();
   }
   onCanvasUp(e: PointerEvent) {
+    if (this.phase === "outside") { this.forage.onUp(); return; }
     if (this.phase !== "furnish") return;
     if (this.cutting) { this.cutting = false; return; }
     const c = this.cellAt(e);
@@ -578,6 +580,10 @@ export class Game {
       this.nightIdx = 1;
       this.syncEpisodeVisuals();
     }
+    // the playable mirror needs a window: the seed has already cut one (?window=0 keeps the lining shut to test the fallback)
+    if (q.get("window") !== "0" && !this.layout.windowCut) {
+      this.commit(l => { l.windowCut = true; l.windowCol = 3; });
+    }
   }
 
   stepOutside() {
@@ -604,6 +610,7 @@ export class Game {
     const drop = $("btn-drop") as HTMLButtonElement;
     drop.toggleAttribute("hidden", !f.carrying);
     drop.disabled = !free;
+    this.ui.setAttribute("data-sub", f.placing ? "placing" : "");
     $("forage-line").textContent = f.carrying
       ? `Carrying: ${f.carrying.replace("_", " ")}`
       : "Hands free";
@@ -842,7 +849,7 @@ export class Game {
 
   syncEpisodeVisuals() {
     this.anatomy?.sync(this.episode.projects, this.time);
-    this.fixtureWorks.sync(this.episode.fixtures, this.time, false);
+    this.fixtureWorks.sync(this.episode.fixtures, this.time, false, this.episode.placements);
     this.residents?.sync(this.episode, this.layout, this.time);
     this.syncKeepsakes();
   }

@@ -178,3 +178,6 @@
   .sc-root #shelfbar .pill{padding:5px 10px;font-size:13px}
   .sc-root[data-phase=outside] #hint{bottom:auto;top:calc(54px + env(safe-area-inset-top))}
 }
+
+/* placing the mirror: the room is the interface, no bar, no buttons */
+.sc-root[data-sub=placing] #shelfbar{display:none}

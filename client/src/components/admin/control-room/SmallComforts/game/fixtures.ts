@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { FIXTURES, type FixtureId } from "../logic/foraging";
+import { MIRROR, mirrorCenter, mirrorNormal } from "../logic/mirror";
+import type { EpisodeState } from "../logic/episode";
 import { cyl } from "./style";
 import { buildShelfProp } from "./shelf";
 
@@ -12,13 +14,15 @@ export class FixtureWorks {
   private glint: THREE.Mesh | null = null;
   private light: THREE.PointLight | null = null;
 
-  sync(fixtures: readonly FixtureId[], now: number, animate = true) {
+  sync(fixtures: readonly FixtureId[], now: number, animate = true, placements: EpisodeState["placements"] = {}) {
     for (const f of fixtures) {
       if (this.built.has(f)) continue;
-      const g = this.build(f);
+      const placed = f === "signal_mirror" ? placements.signal_mirror : undefined;
+      const g = this.build(f, placed);
       g.name = `Fixture_${f}`;
       const at = FIXTURES[f].home;
-      g.position.set(at.x, 0, at.z);
+      // a hand-placed mirror is already in the room when the proprietor lets go: no pop-in
+      if (placed) { g.position.set(0, 0, 0); animate = false; } else g.position.set(at.x, 0, at.z);
       if (animate) g.scale.setScalar(0.001);
       this.group.add(g);
       this.built.set(f, g);
@@ -29,9 +33,25 @@ export class FixtureWorks {
 
   has(f: FixtureId) { return this.built.has(f); }
 
-  private build(f: FixtureId): THREE.Group {
+  private build(f: FixtureId, placed?: { x: number; tilt: number }): THREE.Group {
     const g = new THREE.Group();
-    if (f === "signal_mirror") {
+    if (f === "signal_mirror" && placed) {
+      // exactly the pose the player found: lying on the lining, front edge lifted, glinting at the train
+      const prop = buildShelfProp("brass_button");
+      const pose = { x: placed.x, tiltDeg: placed.tilt };
+      const s = MIRROR.radius / 0.7;
+      const n = mirrorNormal(pose.tiltDeg), c = mirrorCenter(pose), face = 0.17 * s;
+      prop.group.scale.setScalar(s);
+      prop.group.position.set(c.x - n.x * face, c.y - n.y * face, c.z - n.z * face);
+      prop.group.rotation.set(-(pose.tiltDeg * Math.PI) / 180, 0, 0);
+      g.add(prop.group);
+      // a brass prop under the lifted edge, so it reads as wedged and not floating
+      const prop2 = cyl(0.12, 0.16, Math.max(0.1, c.y - 0.1), "#8a6a2b", 10);
+      prop2.position.set(c.x, Math.max(0.1, c.y - 0.1) / 2, c.z + MIRROR.radius * Math.cos((pose.tiltDeg * Math.PI) / 180) * 0.7);
+      g.add(prop2);
+      const glint = new THREE.Mesh(new THREE.CircleGeometry(0.4, 20), new THREE.MeshBasicMaterial({ color: "#fff7c2", transparent: true, opacity: 0.0, depthWrite: false }));
+      glint.position.set(c.x, c.y + 0.1, c.z + 0.3); g.add(glint); this.glint = glint;
+    } else if (f === "signal_mirror") {
       const prop = buildShelfProp("brass_button");
       // stand the button on its edge, tipped back against the lining, face to the window
       prop.group.rotation.set(Math.PI / 2 - 0.25, 0, 0);

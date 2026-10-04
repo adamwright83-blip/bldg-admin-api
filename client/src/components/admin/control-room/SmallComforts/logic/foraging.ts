@@ -76,7 +76,7 @@ export const FIXTURES: Record<FixtureId, FixtureDef> = {
     affordance: "signal",
     home: { x: 2.05, z: -1.75 },
     stand: { x: 1.25, z: -1.05, y: 0 },
-    built: "You wedge the button upright against the lining. It catches every train.",
+    built: "You wedge the button fast, exactly where it caught the light. It catches every train.",
   },
   spool_stool: {
     id: "spool_stool",
