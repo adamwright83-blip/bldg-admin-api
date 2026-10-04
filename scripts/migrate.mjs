@@ -4558,6 +4558,52 @@ await ensureRequiredIndex(
   "ALTER TABLE goal_cycle_learned_deltas ADD KEY idx_goal_cycle_learned_deltas_operator (tenantId,canonicalOperatorId,learningKind,targetKey)"
 );
 
+// Operator Representative V1 — explicit operator directives only.
+// This is not an inferred-belief store; every row is an authenticated user command.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS operator_representative_directives (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    canonicalOperatorId varchar(191) NOT NULL,
+    targetItemId varchar(191) NOT NULL,
+    targetKey varchar(191) NULL,
+    directiveKind enum('correction','suppress','ask_instead') NOT NULL,
+    operatorDeclaredValueJson json NULL,
+    status enum('active','revoked') NOT NULL DEFAULT 'active',
+    createdByOpenId varchar(191) NOT NULL,
+    createdAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updatedAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    revokedAt timestamp(3) NULL,
+    PRIMARY KEY (id),
+    KEY idx_operator_rep_directive_operator_target (tenantId,canonicalOperatorId,targetItemId,status),
+    KEY idx_operator_rep_directive_operator_created (tenantId,canonicalOperatorId,createdAt)
+  )`,
+  "Operator Representative explicit directives"
+);
+await assertRequiredColumns("operator_representative_directives", [
+  "id", "tenantId", "canonicalOperatorId", "targetItemId", "targetKey",
+  "directiveKind", "operatorDeclaredValueJson", "status", "createdByOpenId",
+  "createdAt", "updatedAt", "revokedAt",
+]);
+await assertEnumContainsValues("operator_representative_directives", "directiveKind", [
+  "correction", "suppress", "ask_instead",
+]);
+await assertEnumContainsValues("operator_representative_directives", "status", [
+  "active", "revoked",
+]);
+await ensureRequiredIndex(
+  "operator_representative_directives",
+  "idx_operator_rep_directive_operator_target",
+  ["tenantId", "canonicalOperatorId", "targetItemId", "status"],
+  "ALTER TABLE operator_representative_directives ADD KEY idx_operator_rep_directive_operator_target (tenantId,canonicalOperatorId,targetItemId,status)"
+);
+await ensureRequiredIndex(
+  "operator_representative_directives",
+  "idx_operator_rep_directive_operator_created",
+  ["tenantId", "canonicalOperatorId", "createdAt"],
+  "ALTER TABLE operator_representative_directives ADD KEY idx_operator_rep_directive_operator_created (tenantId,canonicalOperatorId,createdAt)"
+);
+
 // Mitch v1 — Game Production Operating System tables
 await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",

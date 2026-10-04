@@ -58,6 +58,7 @@ const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
+const OperatorRepresentative = lazy(() => import("./operator/OperatorRepresentative"));
 const ClaireCallAnalysis = lazy(() => import("./goldline/ClaireCallAnalysis"));
 const ClaireRoutingAudit = lazy(() => import("./goldline/ClaireRoutingAudit"));
 const CapabilityGapPage = lazy(() => import("./goldline/CapabilityGapPage"));
@@ -191,6 +192,7 @@ export default function AdminHostApp() {
   const isLevel4 = path === "/level4";
   const isPnl = path === "/pnl";
   const isOperatorReflection = path === "/operator-reflection";
+  const isOperatorRepresentative = path === "/operator";
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
   const isWorldHome = isHome || isLanternCity;
@@ -269,6 +271,7 @@ export default function AdminHostApp() {
       !isLive &&
       !isLevel4 &&
       !isOperatorReflection &&
+      !isOperatorRepresentative &&
       !isControlRoomSection &&
       activeTab === null
     )
@@ -279,6 +282,7 @@ export default function AdminHostApp() {
     isLive,
     isLevel4,
     isOperatorReflection,
+    isOperatorRepresentative,
     isControlRoomSection,
     activeTab,
     path,
@@ -348,6 +352,14 @@ export default function AdminHostApp() {
         </Link>
         <TruePnlCockpitPage />
       </div>
+    );
+  }
+
+  if (isOperatorRepresentative) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#090c0d] text-white grid place-items-center">Reading your Operator Context…</div>}>
+        <OperatorRepresentative />
+      </Suspense>
     );
   }
 

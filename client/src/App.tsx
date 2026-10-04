@@ -70,6 +70,9 @@ const LegacyDayforgeDemoControlPage = lazy(
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
 const JoystickWorld = lazy(() => import("./product/JoystickWorld"));
+const OperatorRepresentativePage = lazy(
+  () => import("./pages/operator/OperatorRepresentative")
+);
 // Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
 // imports this module, so normal Goldline never downloads three.js; it is not
 // a corridor, not linked, and carries no business state.
@@ -252,6 +255,18 @@ function TenantOperatorGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function OperatorRepresentativeRoute() {
+  return (
+    <TenantOperatorGate>
+      <Suspense
+        fallback={<div style={{ minHeight: "100vh", background: "#090c0d" }} />}
+      >
+        <OperatorRepresentativePage />
+      </Suspense>
+    </TenantOperatorGate>
+  );
+}
+
 function JoystickWorldRoute() {
   const { user } = useAuth();
   if (user?.role === "admin") return <AdminHostApp />;
@@ -317,6 +332,7 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
 const SAAS_CUSTOMER_SAFE_PATHS = [
   "/product",
   "/play",
+  "/operator",
   "/growth/lantern-city",
   "/goldline-chapter",
   "/dayforge-settings",
@@ -402,6 +418,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/churn-radar",
   "/commercial-pipeline",
   "/operator-reflection",
+  "/operator",
   "/dayforge-demo",
   "/julydemo",
   "/boreslay-rally",
@@ -526,6 +543,7 @@ function AdminHostRouter() {
       <Route path="/claire/calls/:sessionId" component={AdminHostApp} />
       <Route path="/goldline/capability-gaps/:gapId" component={AdminHostApp} />
       <Route path="/claire" component={AdminHostApp} />
+      <Route path="/operator" component={AdminHostApp} />
       <Route path="/goldline-campaigns">
         <AdminAuthGate>
           <Suspense fallback={<PublicLandingFallback />}>
@@ -764,6 +782,9 @@ function Router() {
       </Route>
       <Route path="/growth/lantern-city">
         <JoystickWorldRoute />
+      </Route>
+      <Route path="/operator">
+        <OperatorRepresentativeRoute />
       </Route>
       <Route path="/goldline-chapter">
         <JoystickChapterRoute />

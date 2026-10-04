@@ -21,6 +21,7 @@ import {
   goldlineEventReceipts,
   goldlineTerritoryDefinitions,
   goldlineWorldEvents,
+  legacyDayforgeSaasMemberships,
   orders,
   physicalEntities,
   physicalEntityAliases,
@@ -126,6 +127,27 @@ async function seed() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await wipeProofTenant(db);
+
+  // The browser proof logs in as admin-owner after seeding. Operator
+  // Representative intentionally fails closed without an authoritative tenant
+  // membership, so establish only that proof identity authority here. No
+  // Operator facts/preferences are fabricated.
+  await db
+    .insert(legacyDayforgeSaasMemberships)
+    .values({
+      tenantId: TENANT,
+      userOpenId: process.env.OWNER_OPEN_ID || "admin-owner",
+      role: "owner",
+      active: true,
+      updatedAt: new Date(),
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        role: "owner",
+        active: true,
+        updatedAt: new Date(),
+      },
+    });
 
   const louise = "22222222-2222-4222-8222-222222222222";
   const meridian = "33333333-3333-4333-8333-333333333333";

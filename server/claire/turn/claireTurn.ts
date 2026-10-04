@@ -130,6 +130,14 @@ import {
   claireIdentityEvidenceSources,
   renderClaireIdentityAnswer,
 } from "../identityTruth";
+import {
+  defaultEmitClaireOperatorContextShadowTelemetry,
+  isClaireOperatorContextShadowEnabled,
+  loadClaireOperatorAdaptationContext,
+  runClaireOperatorContextShadow,
+  type ClaireOperatorAdaptationContext,
+  type ClaireOperatorContextShadowTelemetryEvent,
+} from "../operatorAdaptationContext";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -313,6 +321,15 @@ export type ClaireTurnDeps = {
   classifierBudgetMs?: number;
   /** Claire Brain V3: the sole semantic interpretation of the live turn. */
   brainV3?: typeof interpretClaireBrainV3 | null;
+  /** Stage 3A: bounded, shadow-only Operator Context read. */
+  operatorContextShadowEnabled?: (tenantId: string) => boolean;
+  loadOperatorAdaptationContext?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+  }) => Promise<ClaireOperatorAdaptationContext | null>;
+  onOperatorContextShadowTelemetry?: (
+    event: ClaireOperatorContextShadowTelemetryEvent
+  ) => void;
   /** Durable closed-decision records consumed by the live Brain V3 branch. */
   decisionStore: ClaireDecisionStore;
   /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
@@ -360,6 +377,9 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     classifyPriorClaim: classifyPriorClaimAct,
     rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
     brainV3: ENV.anthropicApiKey?.trim() ? interpretClaireBrainV3 : null,
+    operatorContextShadowEnabled: isClaireOperatorContextShadowEnabled,
+    loadOperatorAdaptationContext: loadClaireOperatorAdaptationContext,
+    onOperatorContextShadowTelemetry: defaultEmitClaireOperatorContextShadowTelemetry,
     decisionStore:
       process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
         ? createInMemoryClaireDecisionStore()
@@ -574,6 +594,25 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const timeZone = deps.timeZone();
   const clock = briefingClock(now, timeZone);
   const today = businessToday(now, timeZone);
+
+  // Stage 3A shadow read is awaited inside this turn, after the authoritative
+  // turn clock has been captured and before any semantic/prompt path runs.
+  // Its return value is deliberately discarded.
+  const operatorContextShadowEnabled =
+    (deps.operatorContextShadowEnabled ?? isClaireOperatorContextShadowEnabled)(
+      input.tenantId
+    );
+  if (operatorContextShadowEnabled) {
+    await runClaireOperatorContextShadow({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      deps: {
+        loadOperatorAdaptationContext: deps.loadOperatorAdaptationContext,
+        onTelemetry: deps.onOperatorContextShadowTelemetry,
+      },
+    });
+  }
+
   const { state } = input;
   if (!state.sessionKind && input.context?.workday?.session) {
     state.sessionKind = input.context.workday.session;

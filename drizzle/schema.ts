@@ -7908,6 +7908,55 @@ export const goalCycleLearnedDeltas = mysqlTable(
 export type GoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferSelect;
 export type InsertGoalCycleLearnedDelta = typeof goalCycleLearnedDeltas.$inferInsert;
 
+/**
+ * Explicit operator instructions for the Operator Representative.
+ *
+ * This is intentionally NOT a durable inferred-belief store. Rows exist only
+ * because an authenticated operator explicitly corrected, suppressed, or
+ * requested confirmation for a representative item.
+ */
+export const operatorRepresentativeDirectives = mysqlTable(
+  "operator_representative_directives",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    targetItemId: varchar("targetItemId", { length: 191 }).notNull(),
+    targetKey: varchar("targetKey", { length: 191 }),
+    directiveKind: mysqlEnum("directiveKind", [
+      "correction",
+      "suppress",
+      "ask_instead",
+    ]).notNull(),
+    operatorDeclaredValueJson: json("operatorDeclaredValueJson"),
+    status: mysqlEnum("status", ["active", "revoked"])
+      .notNull()
+      .default("active"),
+    createdByOpenId: varchar("createdByOpenId", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+    revokedAt: timestamp("revokedAt", { fsp: 3 }),
+  },
+  table => ({
+    operatorTargetIdx: index("idx_operator_rep_directive_operator_target").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.targetItemId,
+      table.status
+    ),
+    operatorCreatedIdx: index("idx_operator_rep_directive_operator_created").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.createdAt
+    ),
+  })
+);
+
+export type OperatorRepresentativeDirective =
+  typeof operatorRepresentativeDirectives.$inferSelect;
+export type InsertOperatorRepresentativeDirective =
+  typeof operatorRepresentativeDirectives.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {
