@@ -14,7 +14,9 @@ describe("three-fact authority slice", () => {
       admission.indexOf(".update(orders)")
     );
     expect(commercial).toContain("findAuthorityReceiptForSubjectWith");
-    expect(commercial).toContain("hasNativePaymentAuthority(order) && paymentAuthority");
+    expect(commercial).toContain("hasNativePaymentAuthority(order)");
+    expect(commercial).toContain('paymentAuthority?.sourceType === "stripe_payment_intent"');
+    expect(commercial).toContain("paymentAuthority.sourceRef === paymentIntentId");
   });
 
   it("creates account-win authority in the same mission transaction and makes Goldline require it", () => {
@@ -26,6 +28,7 @@ describe("three-fact authority slice", () => {
     expect(worldStore).toContain("Goldline account_won requires an authority receipt");
     expect(worldStore).toContain('receipt.subjectType !== "commercial_mission"');
     expect(worldStore).toContain("receipt.subjectId !== commercialMissionId");
+    expect(worldStore).toContain("/^\\d+$/");
     expect(worldStore).toContain("receipt.sourceRef !== input.sourceEvidenceReference");
     expect(worldStore).toContain('eq(physicalEntityBindings.bindingType, "commercial_account")');
     expect(worldStore).toContain('eq(physicalEntityBindings.reviewState, "accepted")');
