@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { CanonicalOperatorIdentity } from "../persistentOperator/identity";
 import type { OperatorContextPacket } from "../persistentOperator/operatorContext";
 import { buildOperatorRepresentativeSnapshot } from "./readModel";
-import type { OperatorRepresentativeDirectiveRecord } from "./directives";
+import {
+  loadOperatorRepresentativeDirectiveSnapshot,
+  type OperatorRepresentativeDirectiveRecord,
+} from "./directives";
 
 const identity: CanonicalOperatorIdentity = {
   tenantId: "tenant-a",
@@ -44,6 +47,7 @@ function packet(): OperatorContextPacket {
     observedPatterns: [
       {
         kind: "action_completion_rate",
+        scopeKey: "all_qualifying_actions",
         observationCount: 4,
         distinctDecisionPointCount: 4,
         distinctCorrelationCount: 4,
@@ -256,6 +260,142 @@ describe("Operator Representative grounded read model", () => {
       activeDirectiveId: "suppress-1",
     });
     expect(suppressed.details.get(target.id)).toBeDefined();
+  });
+
+  it("keeps observed-pattern IDs stable across evidence churn so directives still apply", () => {
+    const firstPacket = packet();
+    const firstSnapshot = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: firstPacket,
+      directives: [],
+    });
+    const originalItem = firstSnapshot.home.learning[0];
+
+    const changedPacket = packet();
+    changedPacket.observedPatterns[0] = {
+      ...changedPacket.observedPatterns[0],
+      observationCount: 5,
+      distinctDecisionPointCount: 5,
+      distinctCorrelationCount: 5,
+      summary: "5 completed actions observed across 5 qualifying decision points.",
+      metrics: { completedCount: 5 },
+      evidenceRefs: ["ref-ledger-new", "ref-ledger"],
+    };
+    changedPacket.evidenceRefs.push({
+      id: "ref-ledger-new",
+      sourceSystem: "behavioral_ledger",
+      sourceRecordId: "101",
+      tenantId: "tenant-a",
+      operatorUserId: "1",
+      canonicalOperatorId: identity.canonicalOperatorId,
+      timestamp: "2026-10-04T18:00:00.000Z",
+      verificationClass: "VERIFIED",
+    });
+
+    const rebuilt = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: changedPacket,
+      directives: [
+        directive({
+          id: "stable-pattern-suppress",
+          targetItemId: originalItem.id,
+          targetKey: originalItem.targetKey ?? null,
+          directiveKind: "suppress",
+        }),
+      ],
+    });
+
+    const changedItem = rebuilt.home.learning[0];
+    expect(changedItem.id).toBe(originalItem.id);
+    expect(changedItem).toMatchObject({
+      adaptationState: "suppressed",
+      activeDirectiveId: "stable-pattern-suppress",
+      canAffectAdaptation: false,
+    });
+  });
+
+  it("uses semantic pattern scope to avoid collisions for the same pattern kind", () => {
+    const scopedPacket = packet();
+    const original = scopedPacket.observedPatterns[0];
+    scopedPacket.observedPatterns = [
+      { ...original, scopeKey: "sales_actions", evidenceRefs: ["ref-ledger"] },
+      { ...original, scopeKey: "delivery_actions", evidenceRefs: ["ref-ledger"] },
+    ];
+
+    const snapshot = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: scopedPacket,
+      directives: [],
+    });
+
+    expect(snapshot.home.learning).toHaveLength(2);
+    expect(snapshot.home.learning[0].id).not.toBe(snapshot.home.learning[1].id);
+  });
+
+  it("keeps an older active directive outside the 100-row revoked history window", async () => {
+    const base = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [],
+    });
+    const target = base.home.learning[0];
+
+    const olderActive = directive({
+      id: "older-active-suppress",
+      targetItemId: target.id,
+      targetKey: target.targetKey ?? null,
+      directiveKind: "suppress",
+      status: "active",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    const newerRevoked = Array.from({ length: 101 }, (_, index) =>
+      directive({
+        id: `revoked-${index}`,
+        targetItemId: `unrelated-${index}`,
+        targetKey: `unrelated-${index}`,
+        directiveKind: "ask_instead",
+        status: "revoked",
+        createdAt: new Date(Date.UTC(2026, 8, 1, 0, 0, index)),
+        updatedAt: new Date(Date.UTC(2026, 8, 1, 0, 0, index)),
+        revokedAt: new Date(Date.UTC(2026, 8, 1, 0, 0, index)),
+      })
+    ).reverse();
+
+    let requestedHistoryLimit: number | undefined;
+    const directiveSnapshot = await loadOperatorRepresentativeDirectiveSnapshot(
+      {
+        tenantId: identity.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId,
+        recentHistoryLimit: 100,
+      },
+      {
+        listActive: async () => [olderActive],
+        listRecentRevoked: async input => {
+          requestedHistoryLimit = input.limit;
+          return newerRevoked.slice(0, input.limit ?? 100);
+        },
+      }
+    );
+
+    expect(requestedHistoryLimit).toBe(100);
+    expect(directiveSnapshot.active).toEqual([olderActive]);
+    expect(directiveSnapshot.recentHistory).toHaveLength(100);
+    expect(directiveSnapshot.directives[0]).toEqual(olderActive);
+    expect(directiveSnapshot.directives).toHaveLength(101);
+
+    const rebuilt = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: directiveSnapshot.directives,
+    });
+    const controlledItem = rebuilt.home.learning.find(item => item.id === target.id);
+    expect(controlledItem).toMatchObject({
+      adaptationState: "suppressed",
+      activeDirectiveId: "older-active-suppress",
+      canAffectAdaptation: false,
+    });
   });
 
   it("rejects packet/identity tenant mismatches", () => {
