@@ -339,6 +339,44 @@ export async function reasonAboutCompany(input: {
         cabinetExecuted: false,
       },
     });
-    return { record, recommendation, reused: false };
+
+    const thesis = [];
+    for (const item of recommendation.thesisUpdates) {
+      const key =
+        "thesis:" +
+        item.topic.toLowerCase() +
+        ":" +
+        createHash("sha256").update(item.claim).digest("hex").slice(0, 16);
+      thesis.push(
+        await input.store.appendCurrent({
+          kind: "THESIS",
+          key,
+          evidenceIds: item.evidenceIds,
+          idempotencyKey: input.requestKey + ":" + key,
+          payload: { ...item, strategyRecordId: record.id },
+        })
+      );
+    }
+
+    const objectives = [];
+    for (const objective of recommendation.objectives) {
+      const key =
+        "objective:" +
+        createHash("sha256")
+          .update(canonicalJson({ admission: objective.admission, outcome: objective.outcome }))
+          .digest("hex")
+          .slice(0, 20);
+      objectives.push(
+        await input.store.appendCurrent({
+          kind: "OBJECTIVE",
+          key,
+          evidenceIds: objective.evidenceIds,
+          idempotencyKey: input.requestKey + ":" + key,
+          payload: { ...objective, strategyRecordId: record.id },
+        })
+      );
+    }
+
+    return { record, recommendation, thesis, objectives, reused: false };
   });
 }
