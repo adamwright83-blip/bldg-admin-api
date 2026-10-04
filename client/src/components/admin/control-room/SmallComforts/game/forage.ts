@@ -10,6 +10,7 @@ import {
 import { installFixture } from "../logic/episode";
 import { MirrorPlay } from "./mirrorplay";
 import { MIRROR } from "../logic/mirror";
+import { HINT_DELAY_SECONDS } from "../logic/playtest";
 
 type Stage = "off" | "exiting" | "idle" | "walking" | "inspecting" | "entering" | "tinkering" | "placing" | "fixing" | "reacting" | "returning";
 type Intent = { kind: "point" } | { kind: "object"; id: ShelfObjectId } | { kind: "home" } | { kind: "tin" };
@@ -106,15 +107,16 @@ export class Forage {
       let o: THREE.Object3D | null = hits[0].object;
       while (o && !props.includes(o as THREE.Group)) o = o.parent;
       const prop = [...this.shelf.props.values()].find(p => p.group === o);
-      if (prop) { this.goToObject(prop.id); return true; }
+      if (prop) { g.pt?.rec("tap", { target: `object:${prop.id}` }); this.goToObject(prop.id); return true; }
     }
     // the tin can: seen, not reachable
     const tinHit = g.raycaster.intersectObject(this.shelf.tin, true)[0];
-    if (tinHit) { this.goToTin(); return true; }
+    if (tinHit) { g.pt?.rec("tap", { target: "tin" }); this.goToTin(); return true; }
 
     const p = new THREE.Vector3();
     if (!g.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -DESK_Y), p)) return true;
-    if (lipHit || Math.hypot(p.x - LIP.x, p.z - LIP.z) < 0.9) { this.goHome(); return true; }
+    if (lipHit || Math.hypot(p.x - LIP.x, p.z - LIP.z) < 0.9) { g.pt?.rec("tap", { target: "lip" }); this.goHome(); return true; }
+    g.pt?.rec("tap", { target: "point" });
     this.intent = { kind: "point" };
     this.walkTo(p.x, p.z, true);
     return true;
@@ -124,6 +126,7 @@ export class Forage {
   onUp() { if (this.stage === "placing") this.mirror.up(); }
 
   private walkTo(x: number, z: number, showMarker: boolean) {
+    this.g.pt?.rec("walk_start", { intent: this.intent.kind, carrying: this.haul.carrying });
     this.target.set(x, DESK_Y, z);
     this.stage = "walking";
     if (showMarker) { this.marker.visible = true; this.markerOn = true; this.marker.position.set(x, DESK_Y + 0.03, z); }
@@ -164,6 +167,7 @@ export class Forage {
     const id = r.dropped!;
     const prop = this.shelf.props.get(id)!;
     this.haul = r.haul;
+    this.g.pt?.rec("put_down", { id });
     this.detachCarried();
     // set it down where you stand, a little ahead
     const ahead = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(1.1);
@@ -384,6 +388,7 @@ export class Forage {
       return;
     }
     this.haul = r.haul;
+    g.pt?.rec("pickup", { id });
     const style = SHELF_OBJECTS[id].haul === "roll" ? "rolling" : "overhead";
     this.attachCarried(id, style);
     this.stage = "idle";
@@ -425,7 +430,9 @@ export class Forage {
     this.carried = null;
     this.stage = "placing"; this.stageT = 0;
     this.from.copy(this.pos); this.to.set(-2.1, 0, 0.7);
+    this.mirror.hintAfter = g.pt?.hinted ? HINT_DELAY_SECONDS : null;
     this.mirror.start(prop.group);
+    g.pt?.rec("placing_start");
     g.residents.makeRoom(g.time);
     g.sound.thump();
     g.refreshForageUi();
@@ -434,6 +441,7 @@ export class Forage {
   private completeFixture(id: FixtureId, placement?: { x: number; tiltDeg: number }) {
     const g = this.g;
     const loadId = this.haul.carrying!;
+    g.pt?.rec("installed", { fixture: id, placement: placement ?? null });
     const result = installFixture(g.episode, id, placement ? { x: placement.x, tilt: placement.tiltDeg } : undefined);
     g.episode = result.state;
     if (placement) { this.mirror.stop(); this.mirror.release(); }

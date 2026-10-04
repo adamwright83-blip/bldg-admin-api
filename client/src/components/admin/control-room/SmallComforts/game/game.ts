@@ -9,6 +9,8 @@ import { AnatomyWorks } from "./anatomy";
 import { ResidentLife } from "./residents";
 import { Forage } from "./forage";
 import { FixtureWorks } from "./fixtures";
+import { Playtest } from "./playtest";
+import { modeFromSearch } from "../logic/playtest";
 import type { FixtureId } from "../logic/foraging";
 import { rbox, toon, easeOutBack, clamp01 } from "./style";
 import {
@@ -71,6 +73,9 @@ export class Game {
   residents!: ResidentLife;
   forage!: Forage;
   fixtureWorks = new FixtureWorks();
+  /** only exists for ?playtest=mirror-cold|mirror-hinted */
+  pt: Playtest | null = null;
+  private ptStep: "wait_closed" | "wait_furnish" | "wait_idle" | "done" = "wait_closed";
   keepsakeGroup = new THREE.Group();
   private storyTimer = 0;
   meshes = new Map<number, THREE.Group>();
@@ -122,6 +127,8 @@ export class Game {
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), toon("#f2cc6b")); knob.position.y = 0.46;
     this.bell.add(base, dome, knob); this.bell.position.set(4.6, -0.2, 3.2); this.world.scene.add(this.bell);
     this.buildCutDots();
+    const ptMode = modeFromSearch(location.search);
+    if (ptMode) this.pt = new Playtest(this, ptMode);
     this.load();
     this.anatomy = new AnatomyWorks();
     this.world.caseGroup.add(this.anatomy.group);
@@ -150,13 +157,15 @@ export class Game {
     for (const f of this.cleanups) f();
     this.cleanups = [];
     this.sound.dispose();
+    this.pt?.dispose();
     this.forage.dispose();
     this.world.dispose();
   }
 
   // ------------------------------------------------------------------ persistence
   load() {
-    const saved = store.get<SaveData | null>("sc.save", null);
+    // a playtest never reads or writes the tester's own save
+    const saved = this.pt ? null : store.get<SaveData | null>("sc.save", null);
     if (saved && saved.layout && Array.isArray(saved.layout.items)) {
       this.layout = saved.layout;
       this.notes = saved.notes || [];
@@ -173,6 +182,7 @@ export class Game {
     this.sound.muted = store.get("sc.muted", false);
   }
   save() {
+    if (this.pt) return;
     store.set("sc.save", {
       layout: this.layout,
       nightIdx: this.episode.residents.length,
@@ -207,8 +217,8 @@ export class Game {
     $("nightlabel").textContent = p === "end" || p === "title" ? "" : `Lost Property Hotel · ${this.episode.residents.length} home`;
     if (p === "furnish" || p === "outside") this.refreshForageUi();
   }
-  hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); }
-  toast(t: string) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), Math.max(1600, t.length * 55)); }
+  hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); this.pt?.text("hint", t); }
+  toast(t: string) { this.pt?.text("toast", t); const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), Math.max(1600, t.length * 55)); }
 
   begin() {
     if (this.phase !== "title") return;
@@ -419,6 +429,7 @@ export class Game {
   }
 
   onCanvasDown(e: PointerEvent) {
+    this.pt?.canvasDown(e);
     if (this.phase === "title") return;
     if (this.phase === "descent") { this.skipIntro(); return; }
     if (this.phase === "closed") {
@@ -573,8 +584,8 @@ export class Game {
   /** `?spike=1` drops you straight into the proprietor loop with the Conductor already living here */
   private seedSpike() {
     const q = new URLSearchParams(location.search);
-    if (q.get("spike") !== "1") return;
-    (window as unknown as { __smallComforts?: Game }).__smallComforts = this;
+    if (q.get("spike") !== "1" && !this.pt) return;
+    if (q.get("spike") === "1") (window as unknown as { __smallComforts?: Game }).__smallComforts = this;
     if (!this.episode.residents.length) {
       this.episode = completeStay(this.episode, "conductor", "spike_seed");
       this.nightIdx = 1;
@@ -798,6 +809,7 @@ export class Game {
   }
 
   showStory(text: string, ms = 4200) {
+    this.pt?.text("story", text);
     const el = $("story");
     el.textContent = text;
     el.classList.add("show");
@@ -937,6 +949,7 @@ export class Game {
   }
 
   saveSnapshotQuiet() {
+    if (this.pt) return;
     try {
       this.world.renderer.render(this.world.scene, this.world.camera);
       const src = this.world.renderer.domElement;
@@ -998,9 +1011,24 @@ export class Game {
     this.ui.classList.toggle("portrait", w < h);
   }
 
+  /** cold-playtest entry: walk the normal flow to "proprietor on the shelf, hands free" without a tester having to */
+  private ptAdvance() {
+    if (!this.pt || this.ptStep === "done") return;
+    if (this.ptStep === "wait_closed") {
+      if (this.phase === "title") this.begin();
+      else if (this.phase === "descent") this.skipIntro();
+      else if (this.phase === "closed") { this.openCase(); this.ptStep = "wait_furnish"; }
+    } else if (this.ptStep === "wait_furnish") {
+      if (this.phase === "furnish") { this.stepOutside(); this.ptStep = "wait_idle"; }
+    } else if (this.forage.stage === "idle") {
+      this.pt.begin(); this.ptStep = "done";
+    }
+  }
+
   frame() {
     const dt = Math.min(MAXDT, this.clock.getDelta());
     this.time += dt;
+    this.ptAdvance();
     const t = this.time;
     if (this.phase === "descent") {
       this.descentT += dt;

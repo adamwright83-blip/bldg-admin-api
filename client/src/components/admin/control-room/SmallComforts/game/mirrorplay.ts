@@ -47,6 +47,12 @@ export class MirrorPlay {
   stuckFor = 0;
   assisted = false;
   outcome: MirrorOutcome = "miss";
+  /** hinted playtest only: seconds in placement, with no press yet, before the one rocking cue */
+  hintAfter: number | null = null;
+  private cueT = -1;
+  private cueDone = false;
+  private everPressed = false;
+  private assistLogged = false;
 
   constructor(private g: Game) {
     const sheetTex = canvasTex(8, 128, c => {
@@ -94,6 +100,8 @@ export class MirrorPlay {
     this.button = button;
     this.g.world.scene.add(button);
     button.visible = true; button.scale.setScalar(MIRROR.radius / 0.7);
+    this.cueT = -1; this.cueDone = false; this.everPressed = false; this.assistLogged = false; this.lastOutcome = "miss";
+    this.g.pt?.rec("outcome", { outcome: "miss" });
     this.phase = "playing"; this.t = 0; this.stuckFor = 0; this.assisted = false; this.alignedFor = 0; this.result = null; this.dragging = false;
     this.pose = { x: -1.1, tiltDeg: 14 }; this.target = { ...this.pose }; this.prev = { ...this.pose }; this.speed = 0;
     this.group.visible = true;
@@ -118,7 +126,8 @@ export class MirrorPlay {
   down(e: PointerEvent) {
     if (this.phase !== "playing") return;
     const p = this.floorPoint(e); if (!p) return;
-    this.dragging = true;
+    this.dragging = true; this.everPressed = true;
+    this.g.pt?.rec("press", { pointerType: e.pointerType });
     this.drag0 = { px: p.x, pz: p.z, pose: { ...this.target } };
     (e.target as HTMLElement | null)?.setPointerCapture?.(e.pointerId);
     this.g.sound.pick();
@@ -129,7 +138,7 @@ export class MirrorPlay {
     const dTilt = tiltFromPointerZ(p.z) - tiltFromPointerZ(this.drag0.pz);
     this.target = clampPose({ x: this.drag0.pose.x + (p.x - this.drag0.px), tiltDeg: this.drag0.pose.tiltDeg + dTilt });
   }
-  up() { this.dragging = false; }
+  up() { if (this.dragging) this.g.pt?.rec("release"); this.dragging = false; }
 
   // ------------------------------------------------------------------ frame
   update(dt: number, time: number) {
@@ -138,6 +147,9 @@ export class MirrorPlay {
     const ease = 1 - Math.exp(-dt * 16);
     if (this.phase === "playing") {
       this.stuckFor += dt;
+      if (this.hintAfter !== null && !this.cueDone && !this.everPressed && this.stuckFor > this.hintAfter) {
+        this.cueDone = true; this.cueT = 0; this.g.pt?.rec("hint_cue");
+      }
       // a little magnet: close to right, the button settles the last few degrees by itself
       const win = alignedTiltRange(this.target.x);
       if (win && !this.dragging) {
@@ -147,6 +159,7 @@ export class MirrorPlay {
       // nobody gets stuck: after a long time the room nudges the button toward the light
       if (this.stuckFor > 40 && !this.dragging) {
         this.assisted = true;
+        if (!this.assistLogged) { this.assistLogged = true; this.g.pt?.rec("assist_fired"); }
         const w = alignedTiltRange(clamp(this.target.x, 0.6, 1.4));
         if (w) {
           this.target.x += (clamp(this.target.x, 0.6, 1.4) - this.target.x) * Math.min(1, dt * 1.2);
@@ -154,6 +167,7 @@ export class MirrorPlay {
         }
       }
     }
+    if (this.cueT >= 0) { this.cueT += dt; if (this.cueT > 1.6) this.cueT = -1; }
     this.pose.x += (this.target.x - this.pose.x) * ease;
     this.pose.tiltDeg += (this.target.tiltDeg - this.pose.tiltDeg) * ease;
     this.applyButton();
@@ -168,6 +182,7 @@ export class MirrorPlay {
     if (this.phase === "playing") {
       this.alignedFor = trace.outcome === "aligned" && this.speed < 24 ? this.alignedFor + dt : 0;
       if (trace.outcome !== this.lastOutcome) {
+        this.g.pt?.rec("outcome", { outcome: trace.outcome });
         if (trace.outcome === "glance") this.g.sound.lampClick();
         if (trace.outcome === "aligned") this.g.sound.chime();
         this.lastOutcome = trace.outcome;
@@ -175,6 +190,7 @@ export class MirrorPlay {
       if (this.alignedFor > 0.3) {
         this.phase = "caught"; this.caughtAt = this.t; this.dragging = false;
         this.target = { ...this.pose }; // the button stays exactly where it caught the light
+        this.g.pt?.rec("catch");
         this.result = { x: this.pose.x, tiltDeg: this.pose.tiltDeg };
         this.g.sound.latch(); this.g.sound.trainRumble();
         const c = mirrorCenter(this.pose);
@@ -188,7 +204,10 @@ export class MirrorPlay {
 
   private applyButton() {
     const b = this.button; if (!b) return;
-    const p = clampPose(this.pose);
+    const p0 = clampPose(this.pose);
+    // the hinted cue only rocks the button where it lies: it says "this moves", never where to put it
+    const rock = this.cueT < 0 ? 0 : 7 * Math.sin((this.cueT / 0.8) * Math.PI * 2) * (1 - this.cueT / 1.6);
+    const p = { x: p0.x, tiltDeg: p0.tiltDeg + rock };
     const n = mirrorNormal(p.tiltDeg);
     const c = mirrorCenter(p);
     const face = 0.17 * (MIRROR.radius / 0.7);
