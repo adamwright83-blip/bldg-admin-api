@@ -1,5 +1,8 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
-import { admitNativeStripePayment } from "./authority/paymentAdmission";
+import {
+  admitNativeStripePayment,
+  prepareNativeStripePaymentTenant,
+} from "./authority/paymentAdmission";
 import {
   writeDriverExpenseToSheet,
   writeDryCleaningCostToSheet,
@@ -3027,6 +3030,11 @@ export const appRouter = router({
           throw new Error("Order not found");
         }
 
+        const paymentTenantId = await prepareNativeStripePaymentTenant({
+          tenantId: ctx.tenantId,
+          orderId: input.orderId,
+        });
+
         let customerId = order.stripeCustomerId;
         let paymentMethodId = order.stripePaymentMethodId;
 
@@ -3151,7 +3159,7 @@ export const appRouter = router({
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
           const stripeMetadata = {
             orderId: String(input.orderId),
-            tenantId: ctx.tenantId,
+            tenantId: paymentTenantId,
             customerName: `${order.firstName} ${order.lastName}`.trim(),
             source: "admin_chargeCard",
           };
@@ -3190,7 +3198,7 @@ export const appRouter = router({
 
           const paidAt = new Date(paymentIntent.created * 1000);
           await admitNativeStripePayment({
-            tenantId: ctx.tenantId,
+            tenantId: paymentTenantId,
             orderId: input.orderId,
             paymentIntentId: paymentIntent.id,
             paidAt,
@@ -3207,7 +3215,7 @@ export const appRouter = router({
           });
 
           await attributeOrderFromCampaign({
-            tenantId: ctx.tenantId,
+            tenantId: paymentTenantId,
             orderId: input.orderId,
             requestId: crypto.randomUUID(),
             actorId: "payment-success",
