@@ -53,6 +53,7 @@ export default function LanternCityIslands({
   const [hover, setHover] = useState<{ keys: string[]; x: number; y: number; tower?: string } | null>(null);
   const [tower, setTower] = useState<string | null>(null);
   const [inSuitcase, setInSuitcase] = useState(false);
+  const [operationsHubTip, setOperationsHubTip] = useState<{ x: number; y: number } | null>(null);
   const [suitcaseTip, setSuitcaseTip] = useState<{ x: number; y: number } | null>(null);
 
   const isPlatformAdmin = user?.role === "admin";
@@ -91,6 +92,8 @@ export default function LanternCityIslands({
         onIsland: setIsland,
         onHover: setHover,
         onTower: setTower,
+        onOperationsHub: () => window.location.assign("/operations/floor"),
+        onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => setInSuitcase(true),
         onSuitcaseHover: setSuitcaseTip,
       });
@@ -164,6 +167,12 @@ export default function LanternCityIslands({
         </div>
       ) : null}
 
+      {operationsHubTip ? (
+        <div className={styles.tip} style={{ left: Math.min(operationsHubTip.x + 16, window.innerWidth - 300), top: Math.max(operationsHubTip.y - 60, 8) }}>
+          <b>Laundry Farm · Operations Hub</b>
+          <span className={styles.tipHint}>Click to enter Operations Command</span>
+        </div>
+      ) : null}
       {suitcaseTip ? (
         <div className={styles.tip} style={{ left: Math.min(suitcaseTip.x + 16, window.innerWidth - 280), top: Math.max(suitcaseTip.y - 60, 8) }}>
           <b>Lost property</b>
