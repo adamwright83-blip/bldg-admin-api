@@ -72,6 +72,9 @@ describe("three-fact authority slice", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `authority_receipts`");
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
     expect(migrate).toContain(
+      "normalize legacy Stripe order tenants before authority backfill"
+    );
+    expect(migrate).toContain(
       "WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'"
     );
     expect(migrate).toContain("legacy_cleancloud_payment_backfill_v1");
