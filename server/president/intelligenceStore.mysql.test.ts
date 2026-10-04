@@ -68,6 +68,23 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
       ).rejects.toThrow("identity conflict");
       expect((await s.evidence([e.id]))[0]).toEqual(e);
     });
+    it("normalizes sub-millisecond timestamps before immutable retry comparison", async () => {
+      const s = new MysqlPresidentIntelligenceStore(pool, "TEST_FIXTURE");
+      const raw: CompanyEvidence = {
+        ...evidence("fixture-submillisecond"),
+        capturedAt: "2026-10-04T17:00:00.123456Z",
+        sourceAt: "2026-10-04T16:59:59.987654Z",
+        expiresAt: "2026-10-05T17:00:00.111999Z",
+      };
+      const normalized = {
+        ...raw,
+        capturedAt: "2026-10-04T17:00:00.123Z",
+        sourceAt: "2026-10-04T16:59:59.987Z",
+        expiresAt: "2026-10-05T17:00:00.111Z",
+      };
+      expect(await s.putEvidence(raw)).toEqual(normalized);
+      expect(await s.putEvidence(raw)).toEqual(normalized);
+    });
     it("prevents truncation of long evidence IDs", async () => {
       const s = new MysqlPresidentIntelligenceStore(pool, "TEST_FIXTURE");
       await expect(s.putEvidence(evidence("x".repeat(65)))).rejects.toThrow();
