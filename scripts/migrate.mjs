@@ -4665,8 +4665,13 @@ await assertRequiredColumns("authority_receipts", [
   "sourceRef", "actorType", "actorId", "evidenceClass", "verificationClass",
   "admissionPolicy", "occurredAt", "admittedAt", "metadataJson", "idempotencyKey",
 ]);
+await runRequired(
+  `ALTER TABLE authority_receipts
+   MODIFY COLUMN claimType enum('payment_verified','account_won','message_sent','action_completed') NOT NULL`,
+  "extend authority receipts with action_completed"
+);
 await assertEnumContainsValues("authority_receipts", "claimType", [
-  "payment_verified", "account_won", "message_sent",
+  "payment_verified", "account_won", "message_sent", "action_completed",
 ]);
 await assertEnumContainsValues("authority_receipts", "evidenceClass", [
   "authoritative_external", "operator_attested",
