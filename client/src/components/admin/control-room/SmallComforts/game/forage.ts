@@ -431,6 +431,7 @@ export class Forage {
     this.stage = "placing"; this.stageT = 0;
     this.from.copy(this.pos); this.to.set(-2.1, 0, 0.7);
     this.mirror.hintAfter = g.pt?.hinted ? HINT_DELAY_SECONDS : null;
+    this.mirror.assistEnabled = !g.pt; // both playtest modes are unassisted; the normal game keeps its anti-soft-lock
     g.pt?.rec("placing_start");
     this.mirror.start(prop.group);
     g.residents.makeRoom(g.time);

@@ -26,7 +26,8 @@ export interface PtMeta {
   touchCapable: boolean;
   /** pointer types actually seen in the session, in order of first appearance */
   pointerTypes: string[];
-  assistSeconds: number;
+  /** the base game's auto-assist is disabled in every playtest mode, so this is always null */
+  assistSeconds: null;
   hintDelaySeconds: number | null;
 }
 

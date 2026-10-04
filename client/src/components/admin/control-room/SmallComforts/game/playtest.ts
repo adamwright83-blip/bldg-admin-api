@@ -3,7 +3,6 @@ import { HINT_DELAY_SECONDS, deriveMetrics, newSessionId, type PlaytestMode, typ
 
 declare const __SC_BUILD_SHA__: string | undefined;
 const BUILD_SHA = typeof __SC_BUILD_SHA__ === "string" ? __SC_BUILD_SHA__ : "unknown";
-const ASSIST_SECONDS = 40;
 const KEY = "sc.playtest.sessions";
 
 /**
@@ -32,7 +31,7 @@ export class Playtest {
       userAgent: navigator.userAgent,
       touchCapable: "ontouchstart" in window || navigator.maxTouchPoints > 0,
       pointerTypes: [],
-      assistSeconds: ASSIST_SECONDS,
+      assistSeconds: null,
       hintDelaySeconds: mode === "mirror-hinted" ? HINT_DELAY_SECONDS : null,
     };
   }

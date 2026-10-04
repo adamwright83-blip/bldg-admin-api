@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Game } from "./game";
+import { freshSoftLock, stepSoftLock, type SoftLockState } from "../logic/softlock";
 import { canvasTex } from "./style";
 import {
   BEAM_DIR, BEAM_ORIGIN_Y, BEAM_ORIGIN_Z, BEAM_X0, BEAM_X1, MIRROR, alignedTiltRange, beamFloorPoint, clamp, clampPose, mirrorCenter,
@@ -46,13 +47,14 @@ export class MirrorPlay {
   /** seconds spent without a catch; after a long time the room helps (so nobody is ever stuck) */
   stuckFor = 0;
   assisted = false;
+  /** the base game's anti-soft-lock nudge. Off in both playtest modes so a cold session is genuinely unassisted. */
+  assistEnabled = true;
+  private soft: SoftLockState = freshSoftLock();
   outcome: MirrorOutcome = "miss";
   /** hinted playtest only: seconds in placement, with no press yet, before the one rocking cue */
   hintAfter: number | null = null;
   private cueT = -1;
-  private cueDone = false;
   private everPressed = false;
-  private assistLogged = false;
 
   constructor(private g: Game) {
     const sheetTex = canvasTex(8, 128, c => {
@@ -100,7 +102,7 @@ export class MirrorPlay {
     this.button = button;
     this.g.world.scene.add(button);
     button.visible = true; button.scale.setScalar(MIRROR.radius / 0.7);
-    this.cueT = -1; this.cueDone = false; this.everPressed = false; this.assistLogged = false; this.lastOutcome = "miss";
+    this.cueT = -1; this.soft = freshSoftLock(); this.everPressed = false; this.lastOutcome = "miss";
     this.g.pt?.rec("outcome", { outcome: "miss" });
     this.phase = "playing"; this.t = 0; this.stuckFor = 0; this.assisted = false; this.alignedFor = 0; this.result = null; this.dragging = false;
     this.pose = { x: -1.1, tiltDeg: 14 }; this.target = { ...this.pose }; this.prev = { ...this.pose }; this.speed = 0;
@@ -146,10 +148,9 @@ export class MirrorPlay {
     this.t += dt;
     const ease = 1 - Math.exp(-dt * 16);
     if (this.phase === "playing") {
-      this.stuckFor += dt;
-      if (this.hintAfter !== null && !this.cueDone && !this.everPressed && this.stuckFor > this.hintAfter) {
-        this.cueDone = true; this.cueT = 0; this.g.pt?.rec("hint_cue");
-      }
+      const sl = stepSoftLock(this.soft, dt, { assistEnabled: this.assistEnabled, hintAfter: this.hintAfter }, { dragging: this.dragging, everPressed: this.everPressed });
+      this.soft = sl.state; this.stuckFor = sl.state.stuckFor;
+      if (sl.cue) { this.cueT = 0; this.g.pt?.rec("hint_cue"); }
       // a little magnet: close to right, the button settles the last few degrees by itself
       const win = alignedTiltRange(this.target.x);
       if (win && !this.dragging) {
@@ -157,9 +158,9 @@ export class MirrorPlay {
         if (Math.abs(off) < 6 && this.lastOutcome !== "miss") this.target.tiltDeg += off * Math.min(1, dt * 3);
       }
       // nobody gets stuck: after a long time the room nudges the button toward the light
-      if (this.stuckFor > 40 && !this.dragging) {
+      if (sl.assistActive) {
         this.assisted = true;
-        if (!this.assistLogged) { this.assistLogged = true; this.g.pt?.rec("assist_fired"); }
+        if (sl.assistFiredNow) this.g.pt?.rec("assist_fired");
         const w = alignedTiltRange(clamp(this.target.x, 0.6, 1.4));
         if (w) {
           this.target.x += (clamp(this.target.x, 0.6, 1.4) - this.target.x) * Math.min(1, dt * 1.2);
