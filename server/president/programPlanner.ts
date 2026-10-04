@@ -5,6 +5,7 @@ import {
   type PresidentAuthorityPolicy,
   type PresidentProgram,
   type PresidentProgramPlanDraft,
+  type PresidentAgentCapability,
 } from "../../shared/presidentOperatingSystem";
 import type { PresidentJudgmentProvider } from "./reasoning";
 
@@ -42,6 +43,7 @@ export async function planPresidentProgram(input: {
   provider: PresidentJudgmentProvider;
   repositorySha: string;
   context?: Record<string, unknown>;
+  capabilities: PresidentAgentCapability[];
   maxUsd: number;
   signal?: AbortSignal;
 }): Promise<{
@@ -61,7 +63,12 @@ export async function planPresidentProgram(input: {
       program: input.program,
       selectedCandidate: input.candidate,
       repositorySha: input.repositorySha,
-      companyContext: input.context ?? {},
+      companyContext: {
+        ...(input.context ?? {}),
+        availableCapabilities: input.capabilities.filter(
+          capability => capability.status === "ACTIVE"
+        ),
+      },
     },
     maxUsd: input.maxUsd,
     signal: input.signal,
@@ -92,6 +99,43 @@ export async function planPresidentProgram(input: {
     )
   )
     throw new Error("President plan contains a non-executable forbidden step");
+
+  const capabilities = new Map(
+    input.capabilities
+      .filter(capability => capability.status === "ACTIVE")
+      .map(capability => [capability.capabilityKey, capability])
+  );
+  for (const step of parsed.steps) {
+    if (["HUMAN_PHYSICAL", "HUMAN_REMOTE"].includes(step.authorityClass))
+      continue;
+    const executor = capabilities.get(step.executorCapability);
+    const reviewer = capabilities.get(step.reviewerCapability);
+    if (!executor)
+      throw new Error(
+        `President plan names unavailable executor capability "${step.executorCapability}"`
+      );
+    if (!reviewer)
+      throw new Error(
+        `President plan names unavailable reviewer capability "${step.reviewerCapability}"`
+      );
+    if (executor.actorId === reviewer.actorId)
+      throw new Error("President plan cannot assign executor and reviewer to the same actor");
+    if (
+      !executor.authorityClasses.includes(step.authorityClass) ||
+      !executor.consequentialDomains.includes(step.consequentialDomain) ||
+      step.maxUsd > executor.maxUsdPerRun
+    )
+      throw new Error(
+        `President executor capability "${step.executorCapability}" is outside its durable authority scope`
+      );
+    if (
+      !reviewer.authorityClasses.includes("AUTO_READ_ONLY") ||
+      !reviewer.consequentialDomains.includes("NONE")
+    )
+      throw new Error(
+        `President reviewer capability "${step.reviewerCapability}" lacks read-only independent-review scope`
+      );
+  }
 
   return {
     plan: parsed,
