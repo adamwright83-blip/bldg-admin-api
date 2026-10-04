@@ -2,6 +2,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   commercialAccounts,
+  commercialMissionEvents,
   commercialMissions,
   cleancloudPaidOrders,
   goalCycleObjectives,
@@ -91,7 +92,9 @@ export type BridgeCleanCloudOrderResult =
         | "order_not_paid_or_zero"
         | "unrelated_order"
         | "ambiguous_lineage"
-        | "objective_not_found";
+        | "objective_not_found"
+        | "payment_authority_missing"
+        | "payment_evidence_mismatch";
       candidateObjectiveIds?: string[];
       message: string;
     };
@@ -158,6 +161,9 @@ export async function bridgeDriverAction(
   }
 
   const effectiveOutcomeKind = input.outcomeKind ?? "visit_completed";
+  if (effectiveOutcomeKind === "visit_completed" && input.missionId == null) {
+    throw new Error("visit_completed requires a commercial mission identity");
+  }
   const actionAuthority =
     effectiveOutcomeKind === "visit_completed"
       ? await admitCompletedCommercialVisit({
@@ -285,6 +291,38 @@ export async function bridgeCommercialResolution(
       reason: `Commercial mission ${input.missionId} has no account_won Authority Receipt`,
     };
   }
+  if (isWon) {
+    const match = /^commercial_mission_events:(\\d+)$/.exec(input.evidenceReference.trim());
+    if (!match) {
+      return { bridged: false, reason: "Account win evidence is not a persisted mission event" };
+    }
+    const [event] = await db
+      .select({
+        missionId: commercialMissionEvents.missionId,
+        eventName: commercialMissionEvents.eventName,
+        metadataJson: commercialMissionEvents.metadataJson,
+      })
+      .from(commercialMissionEvents)
+      .where(
+        and(
+          eq(commercialMissionEvents.tenantId, input.tenantId),
+          eq(commercialMissionEvents.id, Number(match[1]))
+        )
+      )
+      .limit(1);
+    const eventMetadata =
+      event?.metadataJson && typeof event.metadataJson === "object"
+        ? (event.metadataJson as Record<string, unknown>)
+        : {};
+    if (
+      !event ||
+      event.missionId !== input.missionId ||
+      event.eventName !== "account_won" ||
+      eventMetadata.authorityReceiptId !== winAuthority!.id
+    ) {
+      return { bridged: false, reason: "Account win event is not bound to its Authority Receipt" };
+    }
+  }
 
   const recorded = await recordGoalCycleOutcome({
     tenantId: input.tenantId,
@@ -303,8 +341,8 @@ export async function bridgeCommercialResolution(
     metadata: {
       missionId: input.missionId,
       resolution: input.resolution,
-      ...(winAuthority ? { authorityReceiptId: winAuthority.id } : {}),
       ...input.metadata,
+      ...(winAuthority ? { authorityReceiptId: winAuthority.id } : {}),
     },
   });
   const outcome = recorded.outcome;
@@ -447,6 +485,35 @@ export async function bridgeCleanCloudPaidOrder(
   if (!input.tenantId?.trim()) throw new Error("tenantId is required");
   if (!input.cleancloudOrderId?.trim()) throw new Error("cleancloudOrderId is required");
 
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const sourceRows = await db
+    .select({
+      paid: cleancloudPaidOrders.paid,
+      totalCents: cleancloudPaidOrders.totalCents,
+      cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+      paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+      paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+      placedAtUtc: cleancloudPaidOrders.placedAtUtc,
+    })
+    .from(cleancloudPaidOrders)
+    .where(
+      and(
+        eq(cleancloudPaidOrders.tenantId, input.tenantId),
+        eq(cleancloudPaidOrders.cleancloudOrderId, input.cleancloudOrderId.trim())
+      )
+    );
+  const authoritativeSource = sourceRows.find(
+    row => row.paid === true && (row.totalCents ?? 0) > 0 && row.totalCents === input.totalCents
+  );
+  if (!authoritativeSource) {
+    return {
+      bridged: false,
+      reason: "payment_evidence_mismatch",
+      message: `CleanCloud order #${input.cleancloudOrderId} caller values do not match persisted paid-order evidence`,
+    };
+  }
+
   // Rule 2: Unpaid orders or 0 total can never be economic outcomes
   if (!input.paid || input.totalCents <= 0) {
     return {
@@ -516,7 +583,7 @@ export async function bridgeCleanCloudPaidOrder(
   if (!paymentAuthority) {
     return {
       bridged: false,
-      reason: "order_not_paid_or_zero",
+      reason: "payment_authority_missing",
       message: `CleanCloud order #${input.cleancloudOrderId} has no payment_verified Authority Receipt`,
     };
   }
@@ -536,10 +603,10 @@ export async function bridgeCleanCloudPaidOrder(
       `Authoritative CleanCloud paid order #${input.cleancloudOrderId} ($${(input.totalCents / 100).toFixed(2)}) deterministically attributed.`,
     metadata: {
       cleancloudOrderId: input.cleancloudOrderId,
-      authorityReceiptId: paymentAuthority.id,
       cleancloudCustomerId: input.cleancloudCustomerId ?? null,
       sourceFileName: input.sourceFileName ?? null,
       ...input.metadata,
+      authorityReceiptId: paymentAuthority.id,
     },
   });
 
