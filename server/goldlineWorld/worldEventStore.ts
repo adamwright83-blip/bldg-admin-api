@@ -9,7 +9,7 @@ import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
-import { getAuthorityReceiptByIdWith } from "../authority/authorityReceipt";
+import { getAuthorityReceiptById } from "../authority/authorityReceipt";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {
@@ -76,7 +76,7 @@ export async function appendGoldlineWorldEvent(
         : "";
     if (!receiptId)
       throw new Error("Goldline account_won requires an authority receipt");
-    const receipt = await getAuthorityReceiptByIdWith(db, {
+    const receipt = await getAuthorityReceiptById({
       tenantId: input.tenantId,
       receiptId,
     });
