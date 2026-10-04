@@ -19,12 +19,19 @@ export const sendCustomerReminderTool: AgentTool<Record<string, any>> = {
     const idempotencyKey =
       typeof input.idempotencyKey === "string" && input.idempotencyKey.trim()
         ? input.idempotencyKey.trim()
-        : ctx.decisionId?.trim() || undefined;
-    const provider = await sendSMSWithReceipt(
-      recipient,
-      message,
-      idempotencyKey ? { idempotencyKey } : undefined
-    );
+        : ctx.decisionId?.trim()
+          ? `decision:${ctx.tenantId}:${ctx.decisionId.trim()}`
+          : ctx.agentEventId != null
+            ? `agent-event:${ctx.tenantId}:${ctx.agentEventId}`
+            : null;
+    if (!idempotencyKey) {
+      throw new Error(
+        "Customer reminder requires a durable idempotency key before provider send"
+      );
+    }
+    const provider = await sendSMSWithReceipt(recipient, message, {
+      idempotencyKey,
+    });
 
     if (!provider.accepted || !provider.providerMessageId) {
       return {
