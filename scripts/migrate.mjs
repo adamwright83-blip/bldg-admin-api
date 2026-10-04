@@ -4653,5 +4653,49 @@ await assertRequiredColumns("claire_decision_records", [
   "branch_executed",
 ]);
 
+
+// Authority Receipt slice — one common admission receipt for the first three
+// cross-system facts. Existing domain tables remain canonical for their domains.
+await applyHistoricalCreateTables(
+  "../drizzle/0113_authority_receipts.sql",
+  "Authority receipts for payments, account wins, and provider message sends"
+);
+await assertRequiredColumns("authority_receipts", [
+  "id", "tenantId", "claimType", "subjectType", "subjectId", "sourceType",
+  "sourceRef", "actorType", "actorId", "evidenceClass", "verificationClass",
+  "admissionPolicy", "occurredAt", "admittedAt", "metadataJson", "idempotencyKey",
+]);
+await assertEnumContainsValues("authority_receipts", "claimType", [
+  "payment_verified", "account_won", "message_sent",
+]);
+await assertEnumContainsValues("authority_receipts", "evidenceClass", [
+  "authoritative_external", "operator_attested",
+]);
+await assertEnumContainsValues("authority_receipts", "verificationClass", [
+  "VERIFIED", "ATTESTED",
+]);
+
+// Backfill native Stripe-authoritative paid rows so the new gate does not
+// erase legitimate historical revenue when commercial attribution re-reads it.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(COALESCE(tenantId,'default'), ':payment:', id, ':', stripePaymentIntentId), 256), 1, 40)),
+     COALESCE(tenantId,'default'),
+     'payment_verified', 'order', CAST(id AS CHAR),
+     'stripe_payment_intent', stripePaymentIntentId,
+     'system', NULL, 'authoritative_external', 'VERIFIED',
+     'legacy_stripe_payment_backfill_v1',
+     paidAt, COALESCE(paidAt, createdAt, CURRENT_TIMESTAMP(3)),
+     JSON_OBJECT('backfilled', TRUE),
+     CONCAT('authority:payment_verified:', SHA2(CONCAT('order', CHAR(0), id, CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
+   FROM orders
+   WHERE paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
+  "backfill native Stripe payment authority receipts"
+);
+
 await conn.end();
 console.log("\nMigration complete.");
