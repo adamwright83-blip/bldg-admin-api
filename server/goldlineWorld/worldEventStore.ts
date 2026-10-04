@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, like, notInArray } from "drizzle-orm"
 import {
   goldlineEventReceipts,
   goldlineWorldEvents,
+  physicalEntityBindings,
 } from "../../drizzle/schema";
 import type { GoldlineWorldEvent } from "../../shared/goldlineWorld";
 import { classificationIsTruthful } from "../../shared/goldlineWorld";
@@ -10,7 +11,6 @@ import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
 import { getAuthorityReceiptById } from "../authority/authorityReceipt";
-import { findPhysicalEntityIdByBinding } from "./entityLookup";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {
@@ -112,12 +112,20 @@ export async function appendGoldlineWorldEvent(
         throw new Error(
           "Goldline account_won authority receipt lacks its commercial account binding"
         );
-      const boundPhysicalEntityId = await findPhysicalEntityIdByBinding({
-        tenantId: input.tenantId,
-        bindingType: "commercial_account",
-        bindingKey: accountId,
-      });
-      if (!boundPhysicalEntityId || boundPhysicalEntityId !== input.physicalEntityId)
+      const bindingRows = await db
+        .select({ physicalEntityId: physicalEntityBindings.physicalEntityId })
+        .from(physicalEntityBindings)
+        .where(
+          and(
+            eq(physicalEntityBindings.tenantId, input.tenantId),
+            eq(physicalEntityBindings.bindingType, "commercial_account"),
+            eq(physicalEntityBindings.bindingKey, accountId),
+            eq(physicalEntityBindings.reviewState, "accepted")
+          )
+        )
+        .limit(2);
+      const boundIds = new Set(bindingRows.map(row => row.physicalEntityId));
+      if (boundIds.size !== 1 || !boundIds.has(input.physicalEntityId))
         throw new Error(
           "Goldline account_won physical entity does not match the admitted commercial account"
         );
