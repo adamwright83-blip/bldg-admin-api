@@ -18,8 +18,11 @@ describe("three-fact authority slice", () => {
     ).toBeLessThan(route.indexOf("stripe.paymentIntents.create({"));
     expect(route).toContain("tenantId: paymentTenantId");
     expect(admission).toContain('claimType: "payment_verified"');
-    expect(admission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
-      admission.indexOf(".update(orders)")
+    const nativeAdmission = admission.slice(
+      admission.indexOf("export async function admitNativeStripePayment")
+    );
+    expect(nativeAdmission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
+      nativeAdmission.indexOf("paid: true")
     );
     expect(commercial).toContain("findAuthorityReceiptForSubjectWith");
     expect(commercial).toContain("hasNativePaymentAuthority(order)");
