@@ -89,6 +89,27 @@ export class PresidentProgramService {
     return candidateFromRow(rows[0]);
   }
 
+  async selectedWork(programId: string) {
+    const program = await this.programs.getProgram(programId);
+    if (!program) throw new Error("President program not found");
+    if (program.assessmentId && program.candidateId)
+      return {
+        kind: "STAGE1_CANDIDATE" as const,
+        candidate: await this.selectedCandidate(programId),
+      };
+    if (program.objectiveRecordId) {
+      const objective = await this.intelligence.byId(program.objectiveRecordId);
+      if (!objective || objective.kind !== "OBJECTIVE")
+        throw new Error("President program objective record disappeared");
+      return {
+        kind: "STRATEGIC_OBJECTIVE" as const,
+        objectiveRecordId: objective.id,
+        objective: objective.payload,
+      };
+    }
+    throw new Error("President program has no durable selected work identity");
+  }
+
   async selectCandidate(input: {
     assessmentId: string;
     candidateId: string;
@@ -156,6 +177,177 @@ export class PresidentProgramService {
       },
     });
     return { program, candidate, reused: false };
+  }
+
+  async createProgramFromObjective(input: {
+    objectiveRecordId: string;
+    actorId: string;
+    maxProgramUsd: number;
+  }) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy) throw new Error("President authority policy is not configured");
+    const founder = input.actorId === policy.founderId;
+    if (
+      !founder &&
+      (input.actorId !== "seat.president" ||
+        !policy.autonomousProgramSelectionAllowed)
+    )
+      throw new Error(
+        "President lacks standing authority to select strategic programs"
+      );
+    if (
+      !Number.isFinite(input.maxProgramUsd) ||
+      input.maxProgramUsd < 0 ||
+      input.maxProgramUsd > 10000
+    )
+      throw new Error("Invalid President program budget");
+    if (!founder && input.maxProgramUsd > policy.maxAutonomousUsdPerDay)
+      throw new Error("Autonomous President program exceeds standing budget");
+
+    const proposed = await this.intelligence.byId(input.objectiveRecordId);
+    if (!proposed || proposed.kind !== "OBJECTIVE")
+      throw new Error("President strategic objective not found");
+    if (!["PROPOSED", "ACTIVE"].includes(String(proposed.payload.status)))
+      throw new Error("President objective is not eligible for selection");
+
+    const activated = await this.intelligence.appendCurrent({
+      kind: "OBJECTIVE",
+      key: proposed.key,
+      evidenceIds: proposed.evidenceIds,
+      idempotencyKey: `objective:${input.objectiveRecordId}:activate`,
+      payload: {
+        ...proposed.payload,
+        status: "ACTIVE",
+      },
+    });
+    const existing = await this.programs.findProgramByObjective(activated.id);
+    if (existing)
+      return { program: existing, objective: activated, reused: true };
+
+    const now = new Date().toISOString();
+    const outcome = String(activated.payload.outcome ?? "").trim();
+    if (!outcome) throw new Error("President objective has no outcome");
+    const program = await this.programs.createProgram({
+      id: randomUUID(),
+      assessmentId: null,
+      candidateId: null,
+      objectiveRecordId: activated.id,
+      title: outcome.slice(0, 255),
+      outcome: outcome.slice(0, 4000),
+      state: "SELECTED",
+      selectedBy: input.actorId,
+      selectedAt: now,
+      authorityPolicyVersion: policy.policyVersion,
+      maxProgramUsd: input.maxProgramUsd,
+      spentUsd: 0,
+      currentStepId: null,
+      verifiedArtifactId: null,
+      blockReason: null,
+      stopReason: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const decision = await this.intelligence.appendCurrent({
+      kind: "DECISION",
+      key: `program-selection:${activated.id}`,
+      evidenceIds: activated.evidenceIds,
+      idempotencyKey: `program-selection:${activated.id}`,
+      payload: {
+        decision: "SELECT_PROGRAM",
+        programId: program.id,
+        objectiveRecordId: activated.id,
+        actorId: input.actorId,
+        maxProgramUsd: input.maxProgramUsd,
+        reason: String(activated.payload.reason ?? outcome),
+      },
+    });
+    await this.programs.recordEvent({
+      programId: program.id,
+      eventType: "STRATEGIC_OBJECTIVE_SELECTED",
+      actorId: input.actorId,
+      details: {
+        objectiveRecordId: activated.id,
+        decisionRecordId: decision.id,
+      },
+    });
+    return { program, objective: activated, decision, reused: false };
+  }
+
+  async requestObjectiveSelectionDecision(input: {
+    objectiveRecordId: string;
+  }) {
+    const objective = await this.intelligence.byId(input.objectiveRecordId);
+    if (!objective || objective.kind !== "OBJECTIVE")
+      throw new Error("President strategic objective not found");
+    if (objective.payload.status !== "PROPOSED")
+      throw new Error("Only a proposed objective may request founder selection");
+    const questionKey = `objective:${objective.id}:selection`;
+    const existing = await this.programs.findOpenDecision(questionKey);
+    if (existing) return existing;
+    return this.programs.createFounderDecision({
+      id: randomUUID(),
+      programId: null,
+      stepId: null,
+      questionKey,
+      question: `Authorize President to run this program: ${String(
+        objective.payload.outcome
+      )}?`,
+      options: ["Authorize this program", "Not now", "Stop objective"],
+      recommendedOption: "Authorize this program",
+      reason: String(objective.payload.reason ?? "Source-backed strategic objective"),
+      status: "OPEN",
+      answer: null,
+      askedAt: new Date().toISOString(),
+      answeredAt: null,
+    });
+  }
+
+  async answerObjectiveSelectionDecision(input: {
+    decisionId: string;
+    answer: "Authorize this program" | "Not now" | "Stop objective";
+    founderId: string;
+    maxProgramUsd: number;
+  }) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy || policy.founderId !== input.founderId)
+      throw new Error("Only the configured founder may select a President objective");
+    const decision = await this.programs.answerFounderDecision(
+      input.decisionId,
+      input.answer
+    );
+    const match = decision.questionKey.match(/^objective:([0-9a-f-]+):selection$/i);
+    if (!match) throw new Error("Founder decision is not an objective selection");
+    const objective = await this.intelligence.byId(match[1]);
+    if (!objective || objective.kind !== "OBJECTIVE")
+      throw new Error("President objective disappeared");
+
+    if (input.answer === "Authorize this program")
+      return {
+        decision,
+        selection: await this.createProgramFromObjective({
+          objectiveRecordId: objective.id,
+          actorId: input.founderId,
+          maxProgramUsd: input.maxProgramUsd,
+        }),
+      };
+
+    const status = input.answer === "Stop objective" ? "STOPPED" : "BLOCKED";
+    const revised = await this.intelligence.appendCurrent({
+      kind: "OBJECTIVE",
+      key: objective.key,
+      evidenceIds: objective.evidenceIds,
+      idempotencyKey: `objective:${objective.id}:${status.toLowerCase()}`,
+      payload: {
+        ...objective.payload,
+        status,
+        reason:
+          String(objective.payload.reason ?? "") +
+          (status === "STOPPED"
+            ? " Founder stopped this objective."
+            : " Founder deferred this objective."),
+      },
+    });
+    return { decision, objective: revised };
   }
 
   async applyPlan(input: {
