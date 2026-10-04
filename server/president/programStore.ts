@@ -460,11 +460,12 @@ export class MysqlPresidentProgramStore
     const h = presidentExecutionHandbackSchema.parse(input);
     await this.pool.execute(
       `INSERT INTO president_execution_handbacks
-       (id,stepId,executorId,exactArtifactId,branch,commitSha,summary,changedFilesJson,testsActuallyRunJson,testsNotRunJson,evidenceJson,knownLimitationsJson,costUsd,reversible,rollbackInstructions,completedAt,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       (id,eventId,stepId,executorId,exactArtifactId,branch,commitSha,summary,changedFilesJson,testsActuallyRunJson,testsNotRunJson,evidenceJson,knownLimitationsJson,costUsd,reversible,rollbackInstructions,completedAt,createdAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE id=id`,
       [
         randomUUID(),
+        h.eventId,
         h.stepId,
         h.executorId,
         h.exactArtifactId,
@@ -494,6 +495,7 @@ export class MysqlPresidentProgramStore
     const r = rows[0];
     if (!r) return null;
     return presidentExecutionHandbackSchema.parse({
+      eventId: r.eventId,
       stepId: r.stepId,
       executorId: r.executorId,
       exactArtifactId: r.exactArtifactId,
@@ -539,11 +541,12 @@ export class MysqlPresidentProgramStore
 
     await this.pool.execute(
       `INSERT INTO president_independent_reviews
-       (id,stepId,reviewerId,exactArtifactId,verdict,acceptanceResultsJson,observedRisksJson,requiredRevision,evidenceJson,reviewedAt,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)
+       (id,eventId,stepId,reviewerId,exactArtifactId,verdict,acceptanceResultsJson,observedRisksJson,requiredRevision,evidenceJson,reviewedAt,createdAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE id=id`,
       [
         randomUUID(),
+        review.eventId,
         review.stepId,
         review.reviewerId,
         review.exactArtifactId,
@@ -567,6 +570,7 @@ export class MysqlPresidentProgramStore
     const r = rows[0];
     if (!r) return null;
     return presidentIndependentReviewSchema.parse({
+      eventId: r.eventId,
       stepId: r.stepId,
       reviewerId: r.reviewerId,
       exactArtifactId: r.exactArtifactId,
@@ -820,8 +824,13 @@ export class MysqlPresidentProgramStore
     input: PresidentExecutionHandback
   ): Promise<PresidentProgramStep> {
     const handback = presidentExecutionHandbackSchema.parse(input);
+    const [eventRows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT eventId FROM president_execution_handbacks WHERE eventId=? LIMIT 1",
+      [handback.eventId]
+    );
     const step = await this.getStep(handback.stepId);
     if (!step) throw new Error("President execution callback step not found");
+    if (eventRows[0]) return step;
     if (!["CLAIMED", "RUNNING"].includes(step.state))
       throw new Error("President execution callback arrived for a non-running step");
     if (!step.executorId || step.executorId !== handback.executorId)
