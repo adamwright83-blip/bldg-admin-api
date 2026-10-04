@@ -12,6 +12,7 @@ import { MitchProductionReasoningService } from "./mitchReasoningService";
 import { MitchProductionService } from "./mitchService";
 import { MitchQaService } from "./mitchQaService";
 import type { IMitchProductionStore } from "./mitchStore";
+import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
 import {
   SMALL_COMFORTS_GAME_ID,
   SMALL_COMFORTS_PROPRIETOR_MILESTONE,
@@ -40,6 +41,7 @@ export class MitchProducerCoordinator {
       reasoning: MitchProductionReasoningService;
       qa: MitchQaService;
       bus: GitHubProducerBus;
+      wakeProvider?: IMitchAgentWakeProvider;
       eventDriven?: boolean;
       reviewerId?: string;
       initialBaseBranch?: string;
@@ -136,8 +138,13 @@ export class MitchProducerCoordinator {
     };
   }
 
-  async acceptReview(milestone: MitchMilestone, buildId: string, review: MitchProducerDesignReview): Promise<MitchProducerCoordinatorResult> {
-    return this.routeDesignReview(milestone, buildId, review);
+  async acceptReview(
+    milestone: MitchMilestone,
+    buildId: string,
+    review: MitchProducerDesignReview,
+    reviewerId: string
+  ): Promise<MitchProducerCoordinatorResult> {
+    return this.routeDesignReview(milestone, buildId, review, reviewerId);
   }
 
   /** Drain bounded immediate transitions until waiting on an external actor. */
@@ -152,9 +159,14 @@ export class MitchProducerCoordinator {
   private async routeDesignReview(
     milestone: MitchMilestone,
     buildId: string,
-    suppliedReview?: MitchProducerDesignReview
+    suppliedReview?: MitchProducerDesignReview,
+    suppliedReviewerId?: string
   ): Promise<MitchProducerCoordinatorResult> {
     const build = await this.deps.store.getBuild(this.deps.tenantId, buildId);
+    const reviewerId = suppliedReview
+      ? suppliedReviewerId
+      : (this.deps.reviewerId ?? "chatgpt_design_review");
+    if (!reviewerId) throw new Error("Authenticated reviewer identity is required");
     if (!build) return { action: "idle", reason: `Build ${buildId} is not durable in Mitch store.` };
 
     const reopenCount = (await this.deps.store.listAuditEvents(this.deps.tenantId, milestone.gameId))
@@ -169,7 +181,6 @@ export class MitchProducerCoordinator {
         const run = await this.deps.store.getExecutionRun(this.deps.tenantId, build.executionRunId);
         const order = await this.deps.store.getWorkOrder(this.deps.tenantId, build.workOrderId);
         if (!order) throw new Error("Review build has no work order");
-        const reviewerId = this.deps.reviewerId ?? "chatgpt_design_review";
         const body = [
           "## MITCH → CHATGPT",
           "<!-- " + requestMarker + " -->",
@@ -208,7 +219,21 @@ export class MitchProducerCoordinator {
         await this.deps.store.recordAuditEvent({ tenantId: this.deps.tenantId, gameId: order.gameId,
           eventType: "mitch_review_requested", actorId: reviewerId,
           details: { workOrderId: order.id, milestoneId: milestone.id, buildId: build.id, branch: build.branch, commitSha: build.commitSha } });
-        await this.deps.bus.postComment(body);
+        const comment = await this.deps.bus.postComment(body);
+        if (!this.deps.wakeProvider || !this.deps.wakeProvider.hasTarget(reviewerId)) {
+          throw new Error(`No immediate outbound wake target configured for reviewer "${reviewerId}"`);
+        }
+        await this.deps.wakeProvider.wake({
+          wakeId: `review:${milestone.id}:${build.id}:${reopenCount}`,
+          actorId: reviewerId,
+          kind: "design_review_request",
+          tenantId: this.deps.tenantId,
+          gameId: order.gameId,
+          milestoneId: milestone.id,
+          workOrderId: order.id,
+          buildId: build.id,
+          issueCommentUrl: comment.html_url ?? null,
+        });
         return { action: "design_review_requested", buildId };
       }
       return { action: "design_review_waiting", buildId };
@@ -226,7 +251,7 @@ export class MitchProducerCoordinator {
         gameId: SMALL_COMFORTS_GAME_ID,
         milestoneId: milestone.id,
         buildId,
-        testerId: "chatgpt_design_review",
+        testerId: reviewerId,
         scenario: "Independent producer-bus review of the proprietor fun proof",
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
@@ -253,7 +278,7 @@ export class MitchProducerCoordinator {
         gameId: SMALL_COMFORTS_GAME_ID,
         milestoneId: milestone.id,
         buildId,
-        testerId: "chatgpt_gameplay_qa",
+        testerId: reviewerId,
         scenario: "Independent producer-bus gameplay QA of the proprietor fun proof",
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
