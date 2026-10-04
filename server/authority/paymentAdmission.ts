@@ -3,6 +3,41 @@ import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { admitAuthorityClaimWith, type AuthorityReceipt } from "./authorityReceipt";
 
+export async function prepareNativeStripePaymentTenant(input: {
+  tenantId: string;
+  orderId: number;
+}): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const tenantId = input.tenantId.trim();
+  if (!tenantId) throw new Error("Stripe payment admission requires tenantId");
+
+  return db.transaction(async tx => {
+    const [order] = await tx
+      .select({ id: orders.id, tenantId: orders.tenantId })
+      .from(orders)
+      .where(eq(orders.id, input.orderId))
+      .for("update")
+      .limit(1);
+    if (!order) throw new Error("Tenant order not found for payment admission");
+
+    const normalizedOrderTenantId = order.tenantId?.trim() || "default";
+    if (normalizedOrderTenantId !== tenantId) {
+      throw new Error("Tenant order not found for payment admission");
+    }
+
+    if (order.tenantId !== normalizedOrderTenantId) {
+      await tx
+        .update(orders)
+        .set({ tenantId: normalizedOrderTenantId })
+        .where(eq(orders.id, input.orderId));
+    }
+
+    return normalizedOrderTenantId;
+  });
+}
+
 export async function admitNativeStripePayment(input: {
   tenantId: string;
   orderId: number;
