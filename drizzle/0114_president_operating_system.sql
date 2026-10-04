@@ -149,6 +149,28 @@ CREATE TABLE IF NOT EXISTS president_founder_decisions (
   KEY idx_president_founder_open (status,askedAt)
 );
 
+CREATE TABLE IF NOT EXISTS president_agent_capabilities (
+  capabilityKey varchar(191) PRIMARY KEY,
+  kind varchar(32) NOT NULL,
+  actorId varchar(191) NOT NULL,
+  targetCapability varchar(191) NOT NULL,
+  seatRoleKey varchar(128) NULL,
+  programId char(36) NULL,
+  skillNamesJson json NOT NULL,
+  authorityClassesJson json NOT NULL,
+  consequentialDomainsJson json NOT NULL,
+  maxUsdPerRun double NOT NULL DEFAULT 0,
+  evidenceIdsJson json NOT NULL,
+  justification text NOT NULL,
+  status varchar(24) NOT NULL,
+  createdAt datetime(3) NOT NULL,
+  updatedAt datetime(3) NOT NULL,
+  revokedAt datetime(3) NULL,
+  KEY idx_president_capability_actor (actorId,status),
+  KEY idx_president_capability_program (programId,status),
+  KEY idx_president_capability_seat (seatRoleKey,status)
+);
+
 CREATE TABLE IF NOT EXISTS president_executive_seats (
   id char(36) PRIMARY KEY,
   roleKey varchar(128) NOT NULL,
