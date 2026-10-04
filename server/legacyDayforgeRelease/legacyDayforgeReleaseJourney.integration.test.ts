@@ -58,6 +58,7 @@ import {
   scheduleCommercialFollowUp,
 } from "../commercialPipeline/commercialPipelineService";
 import { getDb } from "../db";
+import { admitNativeStripePayment } from "../authority/paymentAdmission";
 import {
   beginDriverRekindle,
   listDriverGameWorld,
@@ -845,10 +846,20 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       status: "delivered",
       subtotal: "240.00",
       total: "240.00",
-      paid: true,
-      paidAt: new Date(),
+      paid: false,
     });
     const orderId = Number(orderInsert[0].insertId);
+    await admitNativeStripePayment({
+      tenantId,
+      orderId,
+      paymentIntentId: `pi_release_${suffix}`,
+      paidAt: new Date(),
+      orderPatch: {
+        status: "delivered",
+        total: "240.00",
+      },
+      actorId: "release-operator",
+    });
     const attributions = await Promise.all([
       attributeCommercialOrder({
         tenantId,
