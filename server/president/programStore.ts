@@ -920,6 +920,16 @@ export class MysqlPresidentProgramStore
            updatedAt=NOW(3)
        WHERE state IN ('CLAIMED','RUNNING') AND leaseExpiresAt IS NOT NULL AND leaseExpiresAt<NOW(3)`
     );
+    await this.pool.execute(
+      `UPDATE president_programs p
+       JOIN president_program_steps s ON s.programId=p.id
+       SET p.state='BLOCKED_CAPABILITY',
+           p.currentStepId=s.id,
+           p.blockReason='Execution lease expired after bounded retry policy',
+           p.updatedAt=NOW(3)
+       WHERE s.state='DEAD_LETTER'
+         AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')`
+    );
     return Number(result.affectedRows ?? 0);
   }
 
