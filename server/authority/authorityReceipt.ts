@@ -7,6 +7,7 @@ export const AUTHORITY_CLAIM_TYPES = [
   "payment_verified",
   "account_won",
   "message_sent",
+  "action_completed",
 ] as const;
 
 export type AuthorityClaimType = (typeof AUTHORITY_CLAIM_TYPES)[number];
@@ -106,6 +107,18 @@ export function assertAuthorityClaimPolicy(
     )
       throw new Error(
         "message_sent requires VERIFIED Twilio provider evidence"
+      );
+  }
+
+  if (input.claimType === "action_completed") {
+    const attested =
+      input.evidenceClass === "operator_attested" &&
+      input.verificationClass === "ATTESTED" &&
+      input.sourceType === "commercial_mission_event" &&
+      ["operator", "driver", "human", "voice"].includes(input.actorType);
+    if (!attested)
+      throw new Error(
+        "action_completed requires an explicit human-attested commercial mission event"
       );
   }
 
