@@ -191,6 +191,9 @@ export const presidentRouter = router({
         policy,
         provider: new AppPresidentJudgmentProvider(),
         repositorySha: rows[0].inspectedRepositorySha,
+        context: {
+          founderDecisions: await programs.decisionsForProgram(program.id),
+        },
         maxUsd: input.maxReasoningUsd,
       });
       const applied = await service.applyPlan({
@@ -202,6 +205,22 @@ export const presidentRouter = router({
       });
       return { ...plan, applied };
     }),
+
+  answerPlanQuestion: founderProcedure
+    .input(
+      z
+        .object({
+          decisionId: z.string().uuid(),
+          answer: z.string().min(1).max(512),
+        })
+        .strict()
+    )
+    .mutation(({ input, ctx }) =>
+      operatingServices().service.answerPlanQuestion({
+        ...input,
+        founderId: ctx.user.openId,
+      })
+    ),
 
   approvePreflight: founderProcedure
     .input(
