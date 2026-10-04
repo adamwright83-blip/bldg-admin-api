@@ -184,9 +184,12 @@ export class PresidentProgramService {
       throw new Error("Cannot replace a President plan after execution has begun");
 
     const result = derivePreflightResult(plan);
+    const hasPlanQuestions = plan.founderQuestions.length > 0;
     const requiredFounderDecisions = [
       ...plan.founderQuestions.map(question => question.key),
-      ...(result === "FOUNDER_REQUIRED" ? [`program:${program.id}:preflight`] : []),
+      ...(!hasPlanQuestions && result === "FOUNDER_REQUIRED"
+        ? [`program:${program.id}:preflight`]
+        : []),
     ];
     await this.programs.putPreflight({
       programId: program.id,
@@ -240,7 +243,7 @@ export class PresidentProgramService {
         reviewerId: null,
         baseRef: draft.baseRef,
         baseSha: draft.baseSha,
-        state: "PENDING",
+        state: hasPlanQuestions ? "BLOCKED" : "PENDING",
         attemptCount: 0,
         maxAttempts: 3,
         leaseOwner: null,
@@ -265,11 +268,15 @@ export class PresidentProgramService {
       result === "FOUNDER_REQUIRED" ? 2 : 3
     );
     for (const question of planQuestions) {
+      const questionKey = `program:${program.id}:plan:${question.key}`;
+      const priorQuestion = await this.programs.findDecisionByKey(questionKey);
+      if (priorQuestion?.status === "ANSWERED")
+        throw new Error("President planner repeated an already answered founder question");
       await this.programs.createFounderDecision({
         id: randomUUID(),
         programId: program.id,
         stepId: null,
-        questionKey: `program:${program.id}:plan:${question.key}`,
+        questionKey,
         question: question.question,
         options: question.options,
         recommendedOption: question.recommendedOption,
@@ -281,7 +288,7 @@ export class PresidentProgramService {
       });
     }
 
-    if (result === "FOUNDER_REQUIRED") {
+    if (result === "FOUNDER_REQUIRED" && !hasPlanQuestions) {
       await this.programs.createFounderDecision({
         id: randomUUID(),
         programId: program.id,
@@ -301,19 +308,21 @@ export class PresidentProgramService {
     }
 
     const state =
-      result === "CLEAR"
-        ? "READY"
-        : result === "FOUNDER_REQUIRED"
-          ? "BLOCKED_FOUNDER"
+      hasPlanQuestions || result === "FOUNDER_REQUIRED"
+        ? "BLOCKED_FOUNDER"
+        : result === "CLEAR"
+          ? "READY"
           : "BLOCKED_CAPABILITY";
     const updated = await this.programs.updateProgram(program.id, {
       state,
       blockReason:
-        state === "BLOCKED_FOUNDER"
-          ? "Founder decision required by preflight"
-          : state === "BLOCKED_CAPABILITY"
-            ? "Preflight contains unresolved unknowns"
-            : null,
+        hasPlanQuestions
+          ? "Founder answer required before President replans"
+          : state === "BLOCKED_FOUNDER"
+            ? "Founder decision required by preflight"
+            : state === "BLOCKED_CAPABILITY"
+              ? "Preflight contains unresolved unknowns"
+              : null,
       currentStepId: steps[0]?.id ?? null,
     });
     await this.programs.recordEvent({
@@ -329,6 +338,43 @@ export class PresidentProgramService {
       },
     });
     return { program: updated, result, steps };
+  }
+
+  async answerPlanQuestion(input: {
+    decisionId: string;
+    answer: string;
+    founderId: string;
+  }) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy || policy.founderId !== input.founderId)
+      throw new Error("Only the configured founder may answer President plan questions");
+    const decision = await this.programs.answerFounderDecision(
+      input.decisionId,
+      input.answer
+    );
+    if (!decision.programId || !decision.questionKey.includes(":plan:"))
+      throw new Error("Founder decision is not a President plan question");
+    const program = await this.programs.getProgram(decision.programId);
+    if (!program) throw new Error("President program not found");
+    await this.programs.recordEvent({
+      programId: program.id,
+      eventType: "PLAN_QUESTION_ANSWERED",
+      actorId: input.founderId,
+      details: {
+        decisionId: decision.id,
+        questionKey: decision.questionKey,
+        answer: input.answer,
+      },
+    });
+    const remaining = (await this.programs.decisionsForProgram(program.id)).filter(
+      item => item.status === "OPEN" && item.questionKey.includes(":plan:")
+    );
+    return this.programs.updateProgram(program.id, {
+      state: remaining.length ? "BLOCKED_FOUNDER" : "SELECTED",
+      blockReason: remaining.length
+        ? "Additional founder plan questions remain open"
+        : "Founder questions answered; President must replan before execution",
+    });
   }
 
   async approvePreflight(input: {
