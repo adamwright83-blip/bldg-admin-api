@@ -194,6 +194,7 @@ export const presidentRouter = router({
         context: {
           founderDecisions: await programs.decisionsForProgram(program.id),
         },
+        capabilities: await programs.listAgentCapabilities(),
         maxUsd: input.maxReasoningUsd,
       });
       const applied = await service.applyPlan({
