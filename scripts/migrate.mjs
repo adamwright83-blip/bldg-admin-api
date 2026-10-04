@@ -4677,33 +4677,28 @@ await assertEnumContainsValues("authority_receipts", "verificationClass", [
 
 // Backfill native Stripe-authoritative paid rows so the new gate does not
 // erase legitimate historical revenue when commercial attribution re-reads it.
+// Legacy single-tenant orders may predate tenant stamping; normalize the source
+// row first so every downstream reader and the Authority Receipt share a tenant.
+await runRequired(
+  `UPDATE orders
+   SET tenantId = CASE
+     WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'
+     ELSE tenantId
+   END
+   WHERE paid = 1
+     AND stripePaymentIntentId IS NOT NULL
+     AND TRIM(stripePaymentIntentId) <> ''
+     AND (tenantId IS NULL OR TRIM(tenantId) = '')`,
+  "normalize legacy Stripe order tenants before authority backfill"
+);
 await runRequired(
   `INSERT IGNORE INTO authority_receipts
     (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
      actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
      occurredAt, admittedAt, metadataJson, idempotencyKey)
    SELECT
-     CONCAT(
-       'auth-',
-       SUBSTRING(
-         SHA2(
-           CONCAT(
-             CASE
-               WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'
-               ELSE TRIM(tenantId)
-             END,
-             ':payment:', id, ':', stripePaymentIntentId
-           ),
-           256
-         ),
-         1,
-         40
-       )
-     ),
-     CASE
-       WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'
-       ELSE TRIM(tenantId)
-     END,
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':payment:', id, ':', stripePaymentIntentId), 256), 1, 40)),
+     tenantId,
      'payment_verified', 'order', CAST(id AS CHAR),
      'stripe_payment_intent', stripePaymentIntentId,
      'system', NULL, 'authoritative_external', 'VERIFIED',
@@ -4712,7 +4707,8 @@ await runRequired(
      JSON_OBJECT('backfilled', TRUE),
      CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'order', CHAR(0), CAST(id AS CHAR), CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
    FROM orders
-   WHERE paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
+   WHERE tenantId IS NOT NULL AND TRIM(tenantId) <> ''
+     AND paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
   "backfill native Stripe payment authority receipts"
 );
 
