@@ -118,7 +118,10 @@ export class MysqlPresidentIntelligenceStore {
       JSON.stringify(input.payload).length > 64000
     )
       throw new Error("Invalid bounded intelligence record");
-    const strategyLink = { strategyRecordId: z.string().uuid().optional() };
+    const strategyLink = {
+      strategyRecordId: z.string().uuid().optional(),
+      priorityRank: z.number().int().positive().optional(),
+    };
     if (input.kind === "THESIS")
       thesisItemSchema.extend(strategyLink).parse(input.payload);
     if (input.kind === "OBJECTIVE")
@@ -205,6 +208,14 @@ export class MysqlPresidentIntelligenceStore {
       origin: r.origin,
     };
   }
+  async byId(id: string): Promise<IntelligenceRecord | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT * FROM president_intelligence_records WHERE origin=? AND id=? LIMIT 1",
+      [this.origin, id]
+    );
+    return rows[0] ? this.record(rows[0]) : null;
+  }
+
   async current(
     kind: IntelligenceRecordKind,
     key: string
