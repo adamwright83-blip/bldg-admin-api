@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS president_founder_decisions (
   programId char(36) NULL,
   stepId char(36) NULL,
   questionKey varchar(191) NOT NULL,
+  decisionRound int NOT NULL,
   question text NOT NULL,
   optionsJson json NOT NULL,
   recommendedOption varchar(512) NULL,
@@ -143,7 +144,8 @@ CREATE TABLE IF NOT EXISTS president_founder_decisions (
   answer text NULL,
   askedAt datetime(3) NOT NULL,
   answeredAt datetime(3) NULL,
-  UNIQUE KEY uq_president_founder_question (questionKey,status),
+  UNIQUE KEY uq_president_founder_question_round (questionKey,decisionRound),
+  KEY idx_president_founder_question_status (questionKey,status),
   KEY idx_president_founder_open (status,askedAt)
 );
 
