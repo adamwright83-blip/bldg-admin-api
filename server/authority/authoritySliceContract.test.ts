@@ -24,7 +24,11 @@ describe("three-fact authority slice", () => {
     expect(missions).toContain('claimType: "account_won"');
     expect(missions).toContain("authorityReceiptId: winAuthority.id");
     expect(worldStore).toContain("Goldline account_won requires an authority receipt");
+    expect(worldStore).toContain('receipt.subjectType !== "commercial_mission"');
+    expect(worldStore).toContain("receipt.subjectId !== commercialMissionId");
     expect(worldStore).toContain("receipt.sourceRef !== input.sourceEvidenceReference");
+    expect(worldStore).toContain('eq(physicalEntityBindings.bindingType, "commercial_account")');
+    expect(worldStore).toContain('eq(physicalEntityBindings.reviewState, "accepted")');
     expect(worldContract).toContain('input.eventType === "account_won"');
     expect(worldContract).toContain("input.metadata?.authorityReceiptId");
   });
@@ -37,6 +41,7 @@ describe("three-fact authority slice", () => {
     expect(communications).toContain('claimType: "message_sent"');
     expect(communications).toContain("db.transaction(async tx");
     expect(customer).toContain("sendSMSWithReceipt");
+    expect(customer).toContain("Customer reminder requires a durable idempotency key");
     expect(customer).toContain("recordCommunicationReceipt");
     expect(customer).toContain("authorityReceiptId: authority.id");
     expect(customer).toContain("sent: false");
@@ -54,6 +59,8 @@ describe("three-fact authority slice", () => {
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
     expect(migrate).toContain("legacy_cleancloud_payment_backfill_v1");
     expect(migrate).toContain("legacy_commercial_win_backfill_v1");
+    expect(migrate).toContain("'$.commercialMissionId'");
+    expect(migrate).toContain("physical_entity_bindings b");
     expect(migrate).toContain("legacy_twilio_message_backfill_v1");
   });
 });
