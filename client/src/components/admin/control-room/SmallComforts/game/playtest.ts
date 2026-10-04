@@ -48,6 +48,7 @@ export class Playtest {
     const ui = this.g.ui;
     const click = (e: Event) => {
       const el = (e.target as HTMLElement | null)?.closest("button,[id]") as HTMLElement | null;
+      if (el?.id === "app") return; // a press on the canvas is already recorded as canvas_down
       this.rec("ui_click", { id: el?.id || el?.textContent?.trim().slice(0, 24) || "?" });
     };
     ui.addEventListener("click", click, true);

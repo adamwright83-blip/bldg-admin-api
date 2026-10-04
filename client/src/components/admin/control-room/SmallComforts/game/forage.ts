@@ -431,8 +431,8 @@ export class Forage {
     this.stage = "placing"; this.stageT = 0;
     this.from.copy(this.pos); this.to.set(-2.1, 0, 0.7);
     this.mirror.hintAfter = g.pt?.hinted ? HINT_DELAY_SECONDS : null;
-    this.mirror.start(prop.group);
     g.pt?.rec("placing_start");
+    this.mirror.start(prop.group);
     g.residents.makeRoom(g.time);
     g.sound.thump();
     g.refreshForageUi();
