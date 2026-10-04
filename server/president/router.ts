@@ -133,7 +133,8 @@ export const presidentRouter = router({
           policyVersion: z.string().min(1).max(64),
           internalMergeAllowed: z.boolean().default(false),
           internalDeployAllowed: z.boolean().default(false),
-          maxAutonomousUsdPerDay: z.number().min(0).max(10000),
+          maxAutonomousUsdPerDay: z.number().min(0).max(1000),
+          autonomousProgramSelectionAllowed: z.boolean().default(false),
           allowedRepositories: z.array(z.string().min(1)).max(20),
           allowedEnvironments: z.array(z.string().min(1)).max(20),
           prohibitedDomains: z
