@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Cell, COLS, ROWS, Item, footprint, Rot } from "../logic/grid";
 import { PAL, rbox, cyl, ball, toon, canvasTex, inked } from "./style";
+import { loadItemArt } from "./assets";
 
 export const cellPos = (c: Cell, y = 0) => new THREE.Vector3(c.x - (COLS - 1) / 2, y, c.z - (ROWS - 1) / 2);
 
@@ -75,15 +76,42 @@ function rug(): THREE.Group {
   return g;
 }
 
+function hydrateImportedItem(root: THREE.Group, fallback: THREE.Group, kind: "bed" | "lamp") {
+  void loadItemArt(kind).then(art => {
+    // Keep the authored Three.js geometry as a functional fallback, but once
+    // the Blender asset is ready hide only its meshes. For lamps this leaves
+    // the existing PointLight alive, so night behavior remains unchanged.
+    fallback.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) mesh.visible = false;
+    });
+    art.name = `Imported_${kind}`;
+    art.position.set(0, 0, 0);
+    art.rotation.set(0, 0, 0);
+    art.scale.set(1, 1, 1);
+    root.add(art);
+    root.userData.scImportedArt = true;
+  }).catch(error => {
+    console.warn(`Small Comforts: keeping ${kind} fallback art`, error);
+  });
+}
+
 export function makeItem(kind: Item["kind"]): THREE.Group {
-  switch (kind) {
-    case "bed": return bed();
-    case "blanket": return blanket();
-    case "armchair": return armchair();
-    case "lamp": return lamp();
-    case "table": return table();
-    case "rug": return rug();
-  }
+  const fallback = (() => {
+    switch (kind) {
+      case "bed": return bed();
+      case "blanket": return blanket();
+      case "armchair": return armchair();
+      case "lamp": return lamp();
+      case "table": return table();
+      case "rug": return rug();
+    }
+  })();
+
+  const root = new THREE.Group();
+  root.add(fallback);
+  if (kind === "bed" || kind === "lamp") hydrateImportedItem(root, fallback, kind);
+  return root;
 }
 
 /** position+rotate an item's group from its model */
