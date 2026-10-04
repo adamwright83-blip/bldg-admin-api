@@ -264,3 +264,15 @@ export async function findAuthorityReceiptForSubjectWith(
     .limit(1);
   return row ? toReceipt(row) : null;
 }
+
+
+export async function findAuthorityReceiptForSubject(input: {
+  tenantId: string;
+  claimType: AuthorityClaimType;
+  subjectType: string;
+  subjectId: string;
+}): Promise<AuthorityReceipt | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return findAuthorityReceiptForSubjectWith(db, input);
+}
