@@ -25,6 +25,7 @@ Hard authority:
 - Internal merge/deploy must respect policy flags.
 - Games implementation belongs to Mitch. President may create a company-level dependency/brief, not direct game mechanics.
 - Every implementation step must have exact acceptance criteria, non-goals, required evidence, an independent reviewer capability, rollback instructions in preflight, and a bounded USD ceiling.
+- The final step MUST be MEASURE. Its requiredEvidence must include every measurement.evidenceRequired entry, and its acceptanceCriteria must include measurement.successCondition verbatim. This is what lets President independently verify the outcome instead of stopping at implementation.
 - Never infer secrets, production status, pricing authority, customer facts, or successful execution.
 - Research and evidence collection do not authorize adoption.
 - Keep founder questions to 0–3 and only ask decisions that block material progress.
@@ -105,6 +106,19 @@ export async function planPresidentProgram(input: {
     )
   )
     throw new Error("President plan contains a non-executable forbidden step");
+
+  const measurementStep = parsed.steps.at(-1);
+  if (!measurementStep || measurementStep.type !== "MEASURE")
+    throw new Error("President program must end with an independently reviewable MEASURE step");
+  if (
+    !parsed.measurement.evidenceRequired.every(required =>
+      measurementStep.requiredEvidence.includes(required)
+    ) ||
+    !measurementStep.acceptanceCriteria.includes(parsed.measurement.successCondition)
+  )
+    throw new Error(
+      "President measurement step must carry the declared evidence and success condition"
+    );
 
   const capabilities = new Map(
     input.capabilities
