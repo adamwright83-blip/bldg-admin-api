@@ -4731,17 +4731,24 @@ await runRequired(
      actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
      occurredAt, admittedAt, metadataJson, idempotencyKey)
    SELECT
-     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':account-won:', missionId, ':', idempotencyKey), 256), 1, 40)),
-     tenantId,
-     'account_won', 'commercial_mission', CAST(missionId AS CHAR),
-     'commercial_mission_transition', idempotencyKey,
-     actorType, actorId, 'operator_attested', 'ATTESTED',
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(e.tenantId, ':account-won:', e.missionId, ':', e.idempotencyKey), 256), 1, 40)),
+     e.tenantId,
+     'account_won', 'commercial_mission', CAST(e.missionId AS CHAR),
+     'commercial_mission_transition', e.idempotencyKey,
+     e.actorType, e.actorId, 'operator_attested', 'ATTESTED',
      'legacy_commercial_win_backfill_v1',
-     createdAt, createdAt,
-     JSON_OBJECT('backfilled', TRUE, 'commercialMissionEventId', id),
-     CONCAT('authority:account_won:', SHA2(CONCAT('account_won', CHAR(0), 'commercial_mission', CHAR(0), CAST(missionId AS CHAR), CHAR(0), 'commercial_mission_transition', CHAR(0), idempotencyKey), 256))
-   FROM commercial_mission_events
-   WHERE toStatus = 'won' AND actorType IN ('operator','driver')`,
+     e.createdAt, e.createdAt,
+     JSON_OBJECT(
+       'backfilled', TRUE,
+       'commercialMissionEventId', e.id,
+       'accountId', JSON_UNQUOTE(JSON_EXTRACT(m.accountSnapshotJson, '$.accountId'))
+     ),
+     CONCAT('authority:account_won:', SHA2(CONCAT('account_won', CHAR(0), 'commercial_mission', CHAR(0), CAST(e.missionId AS CHAR), CHAR(0), 'commercial_mission_transition', CHAR(0), e.idempotencyKey), 256))
+   FROM commercial_mission_events e
+   JOIN commercial_missions m
+     ON BINARY m.tenantId = BINARY e.tenantId
+    AND m.id = e.missionId
+   WHERE e.toStatus = 'won' AND e.actorType IN ('operator','driver')`,
   "backfill commercial account-win authority receipts"
 );
 
@@ -4757,7 +4764,9 @@ await runRequired(
      COALESCE(e.metadataJson, JSON_OBJECT()),
      '$.authorityReceiptId', a.id,
      '$.authorityClaimType', a.claimType,
-     '$.authoritySourceRef', a.sourceRef
+     '$.authoritySourceRef', a.sourceRef,
+     '$.commercialMissionId', e.missionId,
+     '$.commercialAccountId', JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
    )
    WHERE e.toStatus = 'won'`,
   "attach authority receipt ids to historical commercial win events"
@@ -4793,14 +4802,23 @@ await runRequired(
    JOIN authority_receipts a
      ON BINARY a.tenantId = BINARY g.tenantId
     AND a.claimType = 'account_won'
+    AND a.subjectType = 'commercial_mission'
     AND BINARY a.sourceRef = BINARY g.sourceEvidenceReference
+   LEFT JOIN physical_entity_bindings b
+     ON BINARY b.tenantId = BINARY g.tenantId
+    AND b.bindingType = 'commercial_account'
+    AND b.reviewState = 'accepted'
+    AND BINARY b.bindingKey = BINARY JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
    SET g.metadataJson = JSON_SET(
          COALESCE(g.metadataJson, JSON_OBJECT()),
-         '$.authorityReceiptId', a.id
+         '$.authorityReceiptId', a.id,
+         '$.commercialMissionId', a.subjectId,
+         '$.commercialAccountId', JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
        ),
        g.verificationClass = a.verificationClass
    WHERE g.eventType = 'account_won'
-     AND g.classification = 'outcome'`,
+     AND g.classification = 'outcome'
+     AND (g.physicalEntityId IS NULL OR BINARY b.physicalEntityId = BINARY g.physicalEntityId)`,
   "attach authority receipts to historical Goldline account wins"
 );
 
