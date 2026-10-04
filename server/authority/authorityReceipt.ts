@@ -53,9 +53,6 @@ export type AdmitAuthorityClaimInput = {
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 export type AuthorityTransaction =
   Parameters<Parameters<Db["transaction"]>[0]>[0];
-export type AuthorityReader = {
-  select: AuthorityTransaction["select"];
-};
 
 function required(value: string, label: string, max: number): string {
   const normalized = value.trim();
@@ -224,7 +221,7 @@ export async function admitAuthorityClaimWith(
 }
 
 export async function getAuthorityReceiptByIdWith(
-  tx: AuthorityReader,
+  tx: AuthorityTransaction,
   input: { tenantId: string; receiptId: string }
 ): Promise<AuthorityReceipt | null> {
   const [row] = await tx
@@ -241,7 +238,7 @@ export async function getAuthorityReceiptByIdWith(
 }
 
 export async function findAuthorityReceiptForSubjectWith(
-  tx: AuthorityReader,
+  tx: AuthorityTransaction,
   input: {
     tenantId: string;
     claimType: AuthorityClaimType;
@@ -274,5 +271,20 @@ export async function findAuthorityReceiptForSubject(input: {
 }): Promise<AuthorityReceipt | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return findAuthorityReceiptForSubjectWith(db, input);
+  return findAuthorityReceiptForSubjectWith(
+    db as unknown as AuthorityTransaction,
+    input
+  );
+}
+
+export async function getAuthorityReceiptById(input: {
+  tenantId: string;
+  receiptId: string;
+}): Promise<AuthorityReceipt | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return getAuthorityReceiptByIdWith(
+    db as unknown as AuthorityTransaction,
+    input
+  );
 }
