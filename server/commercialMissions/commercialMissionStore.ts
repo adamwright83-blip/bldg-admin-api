@@ -16,6 +16,7 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
+import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
 import {
   formatMissionCode,
   type CommercialMission,
@@ -898,6 +899,35 @@ export async function transitionCommercialMissionWith(
         throw new Error(`Commercial mission version conflict: expected ${input.expectedVersion}, found ${current.version}`);
       }
       const eventName = eventNameForCommercialMissionTransition(current.status, input.toStatus);
+      const winAuthority =
+        input.toStatus === "won"
+          ? await admitAuthorityClaimWith(tx, {
+              tenantId: input.tenantId,
+              claimType: "account_won",
+              subjectType: "commercial_mission",
+              subjectId: String(input.missionId),
+              sourceType: "commercial_mission_transition",
+              sourceRef: input.idempotencyKey,
+              actorType: input.actor.type,
+              actorId: input.actor.id,
+              evidenceClass: "operator_attested",
+              verificationClass: "ATTESTED",
+              admissionPolicy: "commercial_mission_win_v1",
+              occurredAt: new Date(),
+              metadata: {
+                accountId: current.account.accountId,
+                opportunityId: current.opportunity.opportunityId,
+              },
+            })
+          : null;
+      const transitionMetadata = winAuthority
+        ? {
+            ...(input.metadata ?? {}),
+            authorityReceiptId: winAuthority.id,
+            authorityClaimType: winAuthority.claimType,
+            authoritySourceRef: winAuthority.sourceRef,
+          }
+        : input.metadata;
       await tx.insert(commercialMissionEvents).values({
         tenantId: input.tenantId,
         missionId: input.missionId,
@@ -907,7 +937,7 @@ export async function transitionCommercialMissionWith(
         actorType: input.actor.type,
         actorId: input.actor.id,
         idempotencyKey: input.idempotencyKey,
-        metadataJson: input.metadata,
+        metadataJson: transitionMetadata,
       });
       const terminal = input.toStatus === "won" || input.toStatus === "lost";
       const update = await tx
@@ -941,12 +971,12 @@ export async function transitionCommercialMissionWith(
         toStatus: input.toStatus,
         actor: input.actor,
         correlationId: input.idempotencyKey,
-        metadata: input.metadata,
+        metadata: transitionMetadata,
       });
 
       const transitioned = await readCommercialMissionWith(tx, input);
       if (!transitioned) throw new Error("Commercial mission transition did not return a row");
-      const productEventName = productEventForMissionLifecycle({ eventName, metadata: input.metadata });
+      const productEventName = productEventForMissionLifecycle({ eventName, metadata: transitionMetadata });
       const projectionCorrelationId = missionProjectionCorrelationId(input.missionId, input.idempotencyKey);
       await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
@@ -968,7 +998,7 @@ export async function transitionCommercialMissionWith(
               properties: productPropertiesForMissionLifecycle({
                 productEventName,
                 mission: transitioned,
-                metadata: input.metadata,
+                metadata: transitionMetadata,
               }),
             }
           : undefined,
