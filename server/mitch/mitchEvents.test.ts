@@ -503,7 +503,7 @@ describe("Mitch event-driven producer", () => {
     await f.events.receive(f.implementation());
     await f.events.receive(f.review("no_blocking_issue"));
     const qaRuns = await f.store.listQaRuns("test", "game.small_comforts");
-    expect(qaRuns.at(-1)?.testerId).toBe("alternate_reviewer");
+    expect(qaRuns[qaRuns.length - 1]?.testerId).toBe("alternate_reviewer");
   });
 
   it("supports a structured QA handback for the assigned exact build", async () => {
