@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS president_program_steps (
 
 CREATE TABLE IF NOT EXISTS president_execution_handbacks (
   id char(36) PRIMARY KEY,
+  eventId char(36) NOT NULL,
   stepId char(36) NOT NULL,
   executorId varchar(191) NOT NULL,
   exactArtifactId varchar(512) NOT NULL,
@@ -108,11 +109,13 @@ CREATE TABLE IF NOT EXISTS president_execution_handbacks (
   rollbackInstructions text NOT NULL,
   completedAt datetime(3) NOT NULL,
   createdAt datetime(3) NOT NULL,
+  UNIQUE KEY uq_president_handback_event (eventId),
   UNIQUE KEY uq_president_handback_step_artifact (stepId,exactArtifactId)
 );
 
 CREATE TABLE IF NOT EXISTS president_independent_reviews (
   id char(36) PRIMARY KEY,
+  eventId char(36) NOT NULL,
   stepId char(36) NOT NULL,
   reviewerId varchar(191) NOT NULL,
   exactArtifactId varchar(512) NOT NULL,
@@ -123,6 +126,7 @@ CREATE TABLE IF NOT EXISTS president_independent_reviews (
   evidenceJson json NOT NULL,
   reviewedAt datetime(3) NOT NULL,
   createdAt datetime(3) NOT NULL,
+  UNIQUE KEY uq_president_review_event (eventId),
   UNIQUE KEY uq_president_review_step_artifact_reviewer (stepId,exactArtifactId,reviewerId)
 );
 
