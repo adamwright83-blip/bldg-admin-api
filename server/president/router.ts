@@ -204,8 +204,8 @@ export const presidentRouter = router({
     .input(
       z
         .object({
-          programId: z.string().uuid(),
-          answer: z.enum(["Approve bounded execution", "Revise plan", "Stop program"]),
+          decisionId: z.string().uuid(),
+          answer: z.enum(["Approve bounded program", "Revise plan", "Stop program"]),
         })
         .strict()
     )
