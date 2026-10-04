@@ -3,6 +3,8 @@ import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { admitAuthorityClaimWith, type AuthorityReceipt } from "./authorityReceipt";
 
+const LEGACY_SINGLE_TENANT_ID = "default";
+
 export async function prepareNativeStripePaymentTenant(input: {
   tenantId: string;
   orderId: number;
@@ -22,19 +24,23 @@ export async function prepareNativeStripePaymentTenant(input: {
       .limit(1);
     if (!order) throw new Error("Tenant order not found for payment admission");
 
-    const normalizedOrderTenantId = order.tenantId?.trim() || "default";
-    if (normalizedOrderTenantId !== tenantId) {
+    const persistedOrderTenantId = order.tenantId?.trim();
+    if (!persistedOrderTenantId) {
+      if (tenantId !== LEGACY_SINGLE_TENANT_ID) {
+        throw new Error("Tenant order not found for payment admission");
+      }
+      await tx
+        .update(orders)
+        .set({ tenantId: LEGACY_SINGLE_TENANT_ID })
+        .where(eq(orders.id, input.orderId));
+      return LEGACY_SINGLE_TENANT_ID;
+    }
+
+    if (persistedOrderTenantId !== tenantId) {
       throw new Error("Tenant order not found for payment admission");
     }
 
-    if (order.tenantId !== normalizedOrderTenantId) {
-      await tx
-        .update(orders)
-        .set({ tenantId: normalizedOrderTenantId })
-        .where(eq(orders.id, input.orderId));
-    }
-
-    return normalizedOrderTenantId;
+    return persistedOrderTenantId;
   });
 }
 
