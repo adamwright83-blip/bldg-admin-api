@@ -283,6 +283,7 @@ export async function reasonAboutCompany(input: {
       context,
       maxUsd: input.maxUsd,
       signal: input.signal,
+      outputSchema: z.toJSONSchema(executiveRecommendationSchema),
     });
     const clean = answer.text
       .trim()
