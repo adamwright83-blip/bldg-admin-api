@@ -746,6 +746,144 @@ export class MysqlPresidentProgramStore
     }));
   }
 
+  async nextPendingStep(): Promise<PresidentProgramStep | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT s.* FROM president_program_steps s
+       JOIN president_programs p ON p.id=s.programId
+       WHERE s.state='PENDING'
+         AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')
+         AND (s.nextAttemptAt IS NULL OR s.nextAttemptAt<=NOW(3))
+         AND NOT EXISTS (
+           SELECT 1 FROM president_program_steps earlier
+           WHERE earlier.programId=s.programId
+             AND earlier.sequence<s.sequence
+             AND earlier.state NOT IN ('VERIFIED','CANCELED')
+         )
+       ORDER BY p.updatedAt,s.sequence,s.createdAt,s.id
+       LIMIT 1`
+    );
+    return rows[0] ? stepFromRow(rows[0]) : null;
+  }
+
+  async claimSpecificStep(input: {
+    stepId: string;
+    executorId: string;
+    leaseMs: number;
+  }): Promise<PresidentProgramStep | null> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT s.* FROM president_program_steps s
+         JOIN president_programs p ON p.id=s.programId
+         WHERE s.id=? AND s.state='PENDING'
+           AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')
+           AND (s.nextAttemptAt IS NULL OR s.nextAttemptAt<=NOW(3))
+           AND NOT EXISTS (
+             SELECT 1 FROM president_program_steps earlier
+             WHERE earlier.programId=s.programId
+               AND earlier.sequence<s.sequence
+               AND earlier.state NOT IN ('VERIFIED','CANCELED')
+           )
+         FOR UPDATE`,
+        [input.stepId]
+      );
+      if (!rows[0]) {
+        await connection.commit();
+        return null;
+      }
+      const leaseExpiresAt = new Date(Date.now() + input.leaseMs);
+      await connection.execute(
+        `UPDATE president_program_steps
+         SET state='RUNNING',executorId=?,leaseOwner=?,leaseExpiresAt=?,
+             attemptCount=attemptCount+1,error=NULL,updatedAt=NOW(3)
+         WHERE id=? AND state='PENDING'`,
+        [input.executorId, input.executorId, leaseExpiresAt, input.stepId]
+      );
+      await connection.execute(
+        `UPDATE president_programs
+         SET state='RUNNING',currentStepId=?,blockReason=NULL,updatedAt=NOW(3)
+         WHERE id=?`,
+        [input.stepId, rows[0].programId]
+      );
+      await connection.commit();
+      return this.getStep(input.stepId);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async submitExternalHandback(
+    input: PresidentExecutionHandback
+  ): Promise<PresidentProgramStep> {
+    const handback = presidentExecutionHandbackSchema.parse(input);
+    const step = await this.getStep(handback.stepId);
+    if (!step) throw new Error("President execution callback step not found");
+    if (!["CLAIMED", "RUNNING"].includes(step.state))
+      throw new Error("President execution callback arrived for a non-running step");
+    if (!step.executorId || step.executorId !== handback.executorId)
+      throw new Error("President execution callback actor is not the assigned executor");
+    if (
+      !step.leaseExpiresAt ||
+      new Date(step.leaseExpiresAt).getTime() <= Date.now()
+    )
+      throw new Error("President execution callback arrived after the execution lease expired");
+    await this.recordHandback(handback);
+    const updated = await this.updateStep(step.id, {
+      state: "REVIEW_PENDING",
+      spentUsd: handback.costUsd ?? 0,
+      exactArtifactId: handback.exactArtifactId,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      nextAttemptAt: null,
+      error: null,
+    });
+    const program = await this.getProgram(step.programId);
+    if (!program) throw new Error("President program disappeared");
+    await this.updateProgram(program.id, {
+      state: "AWAITING_REVIEW",
+      currentStepId: step.id,
+      spentUsd: program.spentUsd + (handback.costUsd ?? 0),
+    });
+    await this.recordEvent({
+      programId: step.programId,
+      stepId: step.id,
+      eventType: "EXECUTION_HANDBACK",
+      actorId: handback.executorId,
+      details: { exactArtifactId: handback.exactArtifactId },
+    });
+    return updated;
+  }
+
+  async assignReviewer(stepId: string, reviewerId: string): Promise<PresidentProgramStep> {
+    const step = await this.getStep(stepId);
+    if (!step) throw new Error("President review step not found");
+    if (step.state !== "REVIEW_PENDING")
+      throw new Error("President step is not awaiting independent review");
+    if (step.executorId === reviewerId)
+      throw new Error("President cannot assign the executor as its own independent reviewer");
+    return this.updateStep(step.id, { reviewerId });
+  }
+
+  async decisionsForProgram(programId: string): Promise<PresidentFounderDecision[]> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT * FROM president_founder_decisions WHERE programId=? ORDER BY askedAt,id",
+      [programId]
+    );
+    return rows.map(decisionFromRow);
+  }
+
+  async findDecisionByKey(questionKey: string): Promise<PresidentFounderDecision | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT * FROM president_founder_decisions WHERE questionKey=? ORDER BY askedAt DESC LIMIT 1",
+      [questionKey]
+    );
+    return rows[0] ? decisionFromRow(rows[0]) : null;
+  }
+
   // DurableExecutionStore implementation.
   async deadLetterExpiredSteps(): Promise<number> {
     const [result] = await this.pool.execute<any>(
@@ -768,10 +906,18 @@ export class MysqlPresidentProgramStore
     try {
       await connection.beginTransaction();
       const [rows] = await connection.execute<RowDataPacket[]>(
-        `SELECT * FROM president_program_steps
-         WHERE state='PENDING'
-           AND (nextAttemptAt IS NULL OR nextAttemptAt<=NOW(3))
-         ORDER BY sequence,createdAt,id
+        `SELECT s.* FROM president_program_steps s
+         JOIN president_programs p ON p.id=s.programId
+         WHERE s.state='PENDING'
+           AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')
+           AND (s.nextAttemptAt IS NULL OR s.nextAttemptAt<=NOW(3))
+           AND NOT EXISTS (
+             SELECT 1 FROM president_program_steps earlier
+             WHERE earlier.programId=s.programId
+               AND earlier.sequence<s.sequence
+               AND earlier.state NOT IN ('VERIFIED','CANCELED')
+           )
+         ORDER BY p.updatedAt,s.sequence,s.createdAt,s.id
          LIMIT 1 FOR UPDATE SKIP LOCKED`
       );
       const r = rows[0];
@@ -835,9 +981,12 @@ export class MysqlPresidentProgramStore
     result: unknown
   ): Promise<boolean> {
     const handback = presidentExecutionHandbackSchema.parse(result);
-    if (handback.stepId !== step.id || handback.executorId !== step.leaseOwner)
-      throw new Error("President handback does not match leased executor");
+    if (handback.stepId !== step.id)
+      throw new Error("President handback step identity mismatch");
     const current = await this.getStep(step.id);
+    const assignedExecutor = current?.executorId ?? step.executorId ?? step.leaseOwner;
+    if (handback.executorId !== assignedExecutor)
+      throw new Error("President handback does not match assigned executor");
     if (
       !current ||
       current.state !== "RUNNING" ||
