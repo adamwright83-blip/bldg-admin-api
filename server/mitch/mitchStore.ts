@@ -485,6 +485,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     );
   }
 
+
   async claimWorkOrder(input: {
     tenantId: string;
     workOrderId: string;
@@ -495,28 +496,76 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!existing) return null;
 
     const now = new Date();
-    // Eligible if pending, OR if claimed but lease has expired
     const isPending = existing.status === "pending";
     const isExpired =
       (existing.status === "claimed" || existing.status === "executing") &&
       existing.leaseExpiresAt !== null &&
       new Date(existing.leaseExpiresAt).getTime() < now.getTime();
+    if (!isPending && !isExpired) return null;
+    if (existing.attemptCount >= existing.maxAttempts) return null;
 
-    if (!isPending && !isExpired) {
-      return null;
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs);
+    const nextAttempt = existing.attemptCount + 1;
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "claimed",
+              claimedBy: input.claimedBy,
+              claimedAt: now,
+              leaseExpiresAt,
+              attemptCount: nextAttempt,
+              lastError: null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId),
+                or(
+                  eq(mitchWorkOrders.status, "pending"),
+                  and(
+                    or(
+                      eq(mitchWorkOrders.status, "claimed"),
+                      eq(mitchWorkOrders.status, "executing")
+                    ),
+                    lte(mitchWorkOrders.leaseExpiresAt, now)
+                  )
+                )
+              )
+            );
+
+          const claimed = await this.getWorkOrder(input.tenantId, input.workOrderId);
+          if (
+            claimed &&
+            claimed.claimedBy === input.claimedBy &&
+            claimed.status === "claimed" &&
+            claimed.attemptCount === nextAttempt
+          ) {
+            this.memoryWorkOrders.set(claimed.id, claimed);
+            return claimed;
+          }
+          return null;
+        }
+      } catch {
+        // Fall through to the isolated in-memory implementation.
+      }
     }
 
-    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs).toISOString();
     const claimedOrder: MitchWorkOrder = {
       ...existing,
       status: "claimed",
       claimedBy: input.claimedBy,
       claimedAt: now.toISOString(),
-      leaseExpiresAt,
-      attemptCount: existing.attemptCount + 1,
+      leaseExpiresAt: leaseExpiresAt.toISOString(),
+      attemptCount: nextAttempt,
+      lastError: null,
       updatedAt: now.toISOString(),
     };
-
     this.memoryWorkOrders.set(claimedOrder.id, claimedOrder);
     return claimedOrder;
   }
@@ -529,20 +578,50 @@ export class MitchProductionStore implements IMitchProductionStore {
   }): Promise<boolean> {
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) return false;
-    // Worker must match active claim
     if (existing.claimedBy !== input.claimedBy) return false;
     if (existing.status !== "claimed" && existing.status !== "executing") return false;
 
     const now = new Date();
-    // Cannot renew if already expired and potentially reclaimed
     if (existing.leaseExpiresAt && new Date(existing.leaseExpiresAt).getTime() < now.getTime()) {
       return false;
     }
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs);
 
-    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs).toISOString();
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({ leaseExpiresAt, updatedAt: now })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId),
+                eq(mitchWorkOrders.claimedBy, input.claimedBy),
+                or(
+                  eq(mitchWorkOrders.status, "claimed"),
+                  eq(mitchWorkOrders.status, "executing")
+                ),
+                gt(mitchWorkOrders.leaseExpiresAt, now)
+              )
+            );
+          const renewed = await this.getWorkOrder(input.tenantId, input.workOrderId);
+          return Boolean(
+            renewed &&
+            renewed.claimedBy === input.claimedBy &&
+            renewed.leaseExpiresAt &&
+            new Date(renewed.leaseExpiresAt).getTime() > now.getTime()
+          );
+        }
+      } catch {
+        // Fall through to memory.
+      }
+    }
+
     const updated: MitchWorkOrder = {
       ...existing,
-      leaseExpiresAt,
+      leaseExpiresAt: leaseExpiresAt.toISOString(),
       updatedAt: now.toISOString(),
     };
     this.memoryWorkOrders.set(updated.id, updated);
@@ -556,20 +635,42 @@ export class MitchProductionStore implements IMitchProductionStore {
     executionRunId: string;
   }): Promise<{ workOrder: MitchWorkOrder; build: MitchBuild }> {
     assertValidBuildIdentity(input.handback.exactBuildId);
-
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) throw new Error(`Work order not found: ${input.workOrderId}`);
 
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
     const completedOrder: MitchWorkOrder = {
       ...existing,
       status: "implementation_returned",
       completedAt: now,
       updatedAt: now,
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "implementation_returned",
+              completedAt: nowDate,
+              updatedAt: nowDate,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId)
+              )
+            );
+        }
+      } catch {
+        // Keep memory fallback in sync even if the DB is temporarily unavailable.
+      }
+    }
     this.memoryWorkOrders.set(completedOrder.id, completedOrder);
 
-    // Record the exact build
     const build: MitchBuild = {
       id: input.handback.exactBuildId,
       tenantId: input.tenantId,
@@ -578,35 +679,31 @@ export class MitchProductionStore implements IMitchProductionStore {
       executionRunId: input.executionRunId,
       commitSha: input.handback.commitSha,
       branch: input.handback.branch,
-      buildArtifactType: "git_commit",
+      buildArtifactType: input.handback.exactBuildId.startsWith("http") ? "preview_url" : "git_commit",
       buildArtifactId: input.handback.exactBuildId,
       sourceCompiled: true,
       unitTestsPassed: input.handback.testsActuallyRun.length > 0,
-      isVerified: false, // Implementation does NOT equal verification!
+      isVerified: false,
       verifiedAt: null,
       createdAt: now,
     };
     await this.recordBuild(build);
 
-    // Update milestone available build (NOT verified build!)
     const milestone = await this.getMilestone(input.tenantId, existing.gameId, existing.milestoneKey);
     if (milestone) {
       await this.saveMilestone({
         ...milestone,
         status: "implemented",
         currentAvailableBuildId: build.id,
-        // Invariant: lastVerifiedBuildId stays untouched!
       });
     }
 
-    // Update game production state available build (NOT verified build!)
     const gameState = await this.getProductionState(input.tenantId, existing.gameId);
     if (gameState) {
       await this.saveProductionState({
         ...gameState,
         lifecycleState: "exact_build_available",
         currentAvailableBuildId: build.id,
-        // Invariant: lastVerifiedBuildId stays untouched!
       });
     }
 
@@ -621,13 +718,39 @@ export class MitchProductionStore implements IMitchProductionStore {
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) throw new Error(`Work order not found: ${input.workOrderId}`);
 
-    const now = new Date().toISOString();
+    const nowDate = new Date();
     const failedOrder: MitchWorkOrder = {
       ...existing,
       status: "failed",
       lastError: input.error,
-      updatedAt: now,
+      leaseExpiresAt: null,
+      updatedAt: nowDate.toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "failed",
+              lastError: input.error,
+              leaseExpiresAt: null,
+              updatedAt: nowDate,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId)
+              )
+            );
+        }
+      } catch {
+        // Fall through to memory mirror.
+      }
+    }
+
     this.memoryWorkOrders.set(failedOrder.id, failedOrder);
     return failedOrder;
   }
