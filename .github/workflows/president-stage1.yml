@@ -1,15 +1,19 @@
-name: President Stage 1 database witness
+name: President operating-system database witness
 on:
   pull_request:
     paths:
       - "server/president/**"
       - "shared/presidentContracts.ts"
       - "shared/presidentIntelligence.ts"
+      - "shared/presidentOperatingSystem.ts"
       - ".agents/skills/president/**"
+      - "docs/JOYSTICK-SAAS-LAUNCH-OPS.md"
       - "scripts/president-stage1-witness.ts"
       - ".github/workflows/president-stage1.yml"
       - "drizzle/0109_president_stage1.sql"
       - "drizzle/0113_president_intelligence.sql"
+      - "drizzle/0114_president_operating_system.sql"
+      - "scripts/president-migrate.mjs"
   workflow_dispatch:
 permissions:
   contents: read
