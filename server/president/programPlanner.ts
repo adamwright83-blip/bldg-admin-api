@@ -65,6 +65,7 @@ export async function planPresidentProgram(input: {
     },
     maxUsd: input.maxUsd,
     signal: input.signal,
+    outputSchema: z.toJSONSchema(presidentProgramPlanDraftSchema),
   });
   const parsed = presidentProgramPlanDraftSchema.parse(
     JSON.parse(
