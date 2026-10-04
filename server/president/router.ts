@@ -19,6 +19,7 @@ import { AnthropicWebSearchPresidentProvider } from "./webResearchProvider";
 import { reasonAboutCompany } from "./reasoning";
 import { researchCompanyQuestion, researchPlanSchema } from "./research";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
+import { PRESIDENT_CONSEQUENTIAL_DOMAINS } from "../../shared/presidentOperatingSystem";
 
 function database() {
   try {
@@ -130,7 +131,9 @@ export const presidentRouter = router({
           maxAutonomousUsdPerDay: z.number().min(0).max(10000),
           allowedRepositories: z.array(z.string().min(1)).max(20),
           allowedEnvironments: z.array(z.string().min(1)).max(20),
-          prohibitedDomains: z.array(z.string().min(1)).max(50),
+          prohibitedDomains: z
+            .array(z.enum(PRESIDENT_CONSEQUENTIAL_DOMAINS))
+            .max(50),
         })
         .strict()
     )
