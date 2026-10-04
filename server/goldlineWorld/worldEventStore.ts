@@ -79,7 +79,7 @@ export async function appendGoldlineWorldEvent(
     const commercialMissionId =
       typeof missionValue === "number" && Number.isInteger(missionValue) && missionValue > 0
         ? String(missionValue)
-        : typeof missionValue === "string" && /^\\d+$/.test(missionValue.trim())
+        : typeof missionValue === "string" && /^\d+$/.test(missionValue.trim())
           ? String(Number(missionValue.trim()))
           : "";
     if (!receiptId)
