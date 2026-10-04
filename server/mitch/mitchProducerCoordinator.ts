@@ -173,6 +173,8 @@ export class MitchProducerCoordinator {
       .filter(a => a.eventType === "mitch_review_reopened" && a.details.buildId === buildId).length;
     const requestMarker = designReviewRequestMarker(milestone.id, buildId) + (reopenCount ? ":reopen:" + reopenCount : "");
     const responseMarker = designReviewResponseMarker(milestone.id, buildId);
+    const fixIssue = (await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID))
+      .find(issue => issue.status === "fix_submitted" && issue.fixBuildId === buildId);
     const response = suppliedReview ? { review: suppliedReview, comment: { html_url: suppliedReview.evidenceArtifact } } :
       this.deps.eventDriven ? null : await this.deps.bus.readDesignReview({ marker: responseMarker });
 
@@ -226,7 +228,7 @@ export class MitchProducerCoordinator {
         await this.deps.wakeProvider.wake({
           wakeId: `review:${milestone.id}:${build.id}:${reopenCount}`,
           actorId: reviewerId,
-          kind: "design_review_request",
+          kind: fixIssue ? "retest_request" : "design_review_request",
           tenantId: this.deps.tenantId,
           gameId: order.gameId,
           milestoneId: milestone.id,
@@ -240,8 +242,6 @@ export class MitchProducerCoordinator {
     }
 
     const review = response.review;
-    const fixIssue = (await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID))
-      .find(issue => issue.status === "fix_submitted" && issue.fixBuildId === buildId);
     const retest = fixIssue ? { issueId: fixIssue.id, previousFailedQaRunId: fixIssue.originatingQaRunId } : {};
 
     if (review.verdict === "fix_needed") {
