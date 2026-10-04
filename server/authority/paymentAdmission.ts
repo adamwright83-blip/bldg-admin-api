@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { admitAuthorityClaimWith, type AuthorityReceipt } from "./authorityReceipt";
@@ -27,7 +27,7 @@ export async function admitNativeStripePayment(input: {
       .where(
         and(
           eq(orders.id, input.orderId),
-          eq(orders.tenantId, tenantId)
+          sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`
         )
       )
       .for("update")
@@ -61,7 +61,7 @@ export async function admitNativeStripePayment(input: {
       .where(
         and(
           eq(orders.id, input.orderId),
-          eq(orders.tenantId, tenantId)
+          sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`
         )
       );
 
