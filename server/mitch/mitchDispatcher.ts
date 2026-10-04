@@ -70,6 +70,8 @@ export class StaleWorkerOverwrittenViolationError extends Error {
 export interface IMitchExecutionProvider {
   readonly id: string;
   readonly name: string;
+  /** External coding agents can legitimately take longer than the default five-minute lease. */
+  readonly leaseMs?: number;
   isAvailable(): Promise<boolean>;
   executeWorkOrder(order: MitchWorkOrder): Promise<MitchExecutionHandback>;
 }
@@ -258,6 +260,7 @@ export class MitchGameDispatcher {
       tenantId: input.tenantId,
       workOrderId: input.workOrderId,
       executorId: provider.id,
+      leaseMs: provider.leaseMs,
     });
 
     if (!claimed) {

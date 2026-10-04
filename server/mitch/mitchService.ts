@@ -83,6 +83,7 @@ export class AutonomousCustomerReleaseForbiddenError extends Error {
 export const CANONICAL_SYSTEM_MAP_GAMES: Readonly<Record<string, { title: string }>> = Object.freeze({
   "kingdom.boreslay": { title: "Boreslay" },
   "kingdom.brass_republic": { title: "Brass Republic" },
+  "game.small_comforts": { title: "Small Comforts" },
 });
 
 export class MitchProductionService {

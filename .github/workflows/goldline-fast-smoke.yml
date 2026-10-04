@@ -77,6 +77,15 @@ jobs:
           server/campaignRuns/canonicalOwnership.test.ts
           server/lanternCity/lanternCityRouter.test.ts
           shared/lanternCityObjectiveMarks.test.ts
+      - name: Prove Mitch native producer contracts
+        run: >-
+          pnpm vitest run
+          server/mitch/mitchModel.test.ts
+          server/mitch/mitchDispatcher.test.ts
+          server/mitch/mitchQaAndReasoning.test.ts
+          server/mitch/githubProducerBus.test.ts
+          server/mitch/mitchNativeProducer.test.ts
+
       - name: Prove exact property Google Places targeting
         run: >-
           pnpm vitest run
@@ -96,6 +105,13 @@ jobs:
           "
           node scripts/migrate.mjs
           node scripts/migrate.mjs
+      - name: Prove Mitch producer durability against clean MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/mitch/mitchStore.mysql.integration.test.ts
+
       - name: Prove campaign and behavioral truth invariants
         run: >-
           pnpm vitest run

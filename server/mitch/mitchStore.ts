@@ -6,7 +6,7 @@
  * when database is available, with full in-memory fallback for isolated testing
  * and environments without live MySQL.
  */
-import { and, asc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   mitchAuditEvents,
@@ -108,7 +108,26 @@ export class MitchProductionStore implements IMitchProductionStore {
   private memoryIssues = new Map<string, MitchIssue>();
   private memoryAuditEvents: MitchAuditEvent[] = [];
 
-  constructor(private readonly forceMemoryMode: boolean = false) {}
+  constructor(
+    private readonly forceMemoryMode: boolean = false,
+    private readonly requireDurablePersistence: boolean = false
+  ) {
+    if (forceMemoryMode && requireDurablePersistence) {
+      throw new Error("MitchProductionStore cannot require durable persistence in forced memory mode.");
+    }
+  }
+
+  private handlePersistenceFailure(error: unknown): void {
+    if (this.requireDurablePersistence) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  private assertDurableDb(db: unknown): void {
+    if (this.requireDurablePersistence && !db) {
+      throw new Error("Mitch native producer requires durable MySQL persistence, but getDb() returned null.");
+    }
+  }
 
   private stateKey(tenantId: string, gameId: string) {
     return `${tenantId}::${gameId}`;
@@ -123,6 +142,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -160,7 +180,9 @@ export class MitchProductionStore implements IMitchProductionStore {
           }
         }
       } catch (err) {
+        this.handlePersistenceFailure(err);
         // Fall back to memory
+      
       }
     }
     return this.memoryStates.get(this.stateKey(tenantId, gameId)) ?? null;
@@ -176,6 +198,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const row = {
             id: state.id,
@@ -220,7 +243,9 @@ export class MitchProductionStore implements IMitchProductionStore {
           }
         }
       } catch (err) {
+        this.handlePersistenceFailure(err);
         // Continue to memory
+      
       }
     }
 
@@ -233,6 +258,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const rows = await db
             .select()
@@ -264,7 +290,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             }));
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     return Array.from(this.memoryMilestones.values())
@@ -284,6 +312,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const row = {
             id: milestone.id,
@@ -320,7 +349,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             });
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     this.memoryMilestones.set(this.milestoneKey(milestone.tenantId, milestone.gameId, milestone.milestoneKey), updated);
@@ -340,6 +371,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           await db.insert(mitchWorkOrders).values({
             id: fullOrder.id,
@@ -370,7 +402,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             updatedAt: new Date(fullOrder.updatedAt),
           });
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     this.memoryWorkOrders.set(fullOrder.id, fullOrder);
@@ -381,6 +415,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const [row] = await db
             .select()
@@ -423,7 +458,9 @@ export class MitchProductionStore implements IMitchProductionStore {
             };
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     const order = this.memoryWorkOrders.get(workOrderId);
@@ -435,6 +472,7 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!this.forceMemoryMode) {
       try {
         const db = await getDb();
+        this.assertDurableDb(db);
         if (db) {
           const conditions = [
             eq(mitchWorkOrders.tenantId, tenantId),
@@ -477,13 +515,16 @@ export class MitchProductionStore implements IMitchProductionStore {
             }));
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+      }
     }
 
     return Array.from(this.memoryWorkOrders.values()).filter(
       o => o.tenantId === tenantId && o.gameId === gameId && (!status || o.status === status)
     );
   }
+
 
   async claimWorkOrder(input: {
     tenantId: string;
@@ -495,28 +536,79 @@ export class MitchProductionStore implements IMitchProductionStore {
     if (!existing) return null;
 
     const now = new Date();
-    // Eligible if pending, OR if claimed but lease has expired
     const isPending = existing.status === "pending";
     const isExpired =
       (existing.status === "claimed" || existing.status === "executing") &&
       existing.leaseExpiresAt !== null &&
       new Date(existing.leaseExpiresAt).getTime() < now.getTime();
+    if (!isPending && !isExpired) return null;
+    if (existing.attemptCount >= existing.maxAttempts) return null;
 
-    if (!isPending && !isExpired) {
-      return null;
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs);
+    const nextAttempt = existing.attemptCount + 1;
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "claimed",
+              claimedBy: input.claimedBy,
+              claimedAt: now,
+              leaseExpiresAt,
+              attemptCount: nextAttempt,
+              lastError: null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId),
+                or(
+                  eq(mitchWorkOrders.status, "pending"),
+                  and(
+                    or(
+                      eq(mitchWorkOrders.status, "claimed"),
+                      eq(mitchWorkOrders.status, "executing")
+                    ),
+                    lte(mitchWorkOrders.leaseExpiresAt, now)
+                  )
+                )
+              )
+            );
+
+          const claimed = await this.getWorkOrder(input.tenantId, input.workOrderId);
+          if (
+            claimed &&
+            claimed.claimedBy === input.claimedBy &&
+            claimed.status === "claimed" &&
+            claimed.attemptCount === nextAttempt
+          ) {
+            this.memoryWorkOrders.set(claimed.id, claimed);
+            return claimed;
+          }
+          return null;
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall through to the isolated in-memory implementation.
+      
+      }
     }
 
-    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs).toISOString();
     const claimedOrder: MitchWorkOrder = {
       ...existing,
       status: "claimed",
       claimedBy: input.claimedBy,
       claimedAt: now.toISOString(),
-      leaseExpiresAt,
-      attemptCount: existing.attemptCount + 1,
+      leaseExpiresAt: leaseExpiresAt.toISOString(),
+      attemptCount: nextAttempt,
+      lastError: null,
       updatedAt: now.toISOString(),
     };
-
     this.memoryWorkOrders.set(claimedOrder.id, claimedOrder);
     return claimedOrder;
   }
@@ -529,20 +621,53 @@ export class MitchProductionStore implements IMitchProductionStore {
   }): Promise<boolean> {
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) return false;
-    // Worker must match active claim
     if (existing.claimedBy !== input.claimedBy) return false;
     if (existing.status !== "claimed" && existing.status !== "executing") return false;
 
     const now = new Date();
-    // Cannot renew if already expired and potentially reclaimed
     if (existing.leaseExpiresAt && new Date(existing.leaseExpiresAt).getTime() < now.getTime()) {
       return false;
     }
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs);
 
-    const leaseExpiresAt = new Date(now.getTime() + input.leaseMs).toISOString();
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({ leaseExpiresAt, updatedAt: now })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId),
+                eq(mitchWorkOrders.claimedBy, input.claimedBy),
+                or(
+                  eq(mitchWorkOrders.status, "claimed"),
+                  eq(mitchWorkOrders.status, "executing")
+                ),
+                gt(mitchWorkOrders.leaseExpiresAt, now)
+              )
+            );
+          const renewed = await this.getWorkOrder(input.tenantId, input.workOrderId);
+          return Boolean(
+            renewed &&
+            renewed.claimedBy === input.claimedBy &&
+            renewed.leaseExpiresAt &&
+            new Date(renewed.leaseExpiresAt).getTime() > now.getTime()
+          );
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall through to memory.
+      
+      }
+    }
+
     const updated: MitchWorkOrder = {
       ...existing,
-      leaseExpiresAt,
+      leaseExpiresAt: leaseExpiresAt.toISOString(),
       updatedAt: now.toISOString(),
     };
     this.memoryWorkOrders.set(updated.id, updated);
@@ -556,20 +681,45 @@ export class MitchProductionStore implements IMitchProductionStore {
     executionRunId: string;
   }): Promise<{ workOrder: MitchWorkOrder; build: MitchBuild }> {
     assertValidBuildIdentity(input.handback.exactBuildId);
-
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) throw new Error(`Work order not found: ${input.workOrderId}`);
 
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
     const completedOrder: MitchWorkOrder = {
       ...existing,
       status: "implementation_returned",
       completedAt: now,
       updatedAt: now,
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "implementation_returned",
+              completedAt: nowDate,
+              updatedAt: nowDate,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId)
+              )
+            );
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory fallback in sync even if the DB is temporarily unavailable.
+      
+      }
+    }
     this.memoryWorkOrders.set(completedOrder.id, completedOrder);
 
-    // Record the exact build
     const build: MitchBuild = {
       id: input.handback.exactBuildId,
       tenantId: input.tenantId,
@@ -578,35 +728,31 @@ export class MitchProductionStore implements IMitchProductionStore {
       executionRunId: input.executionRunId,
       commitSha: input.handback.commitSha,
       branch: input.handback.branch,
-      buildArtifactType: "git_commit",
+      buildArtifactType: input.handback.exactBuildId.startsWith("http") ? "preview_url" : "git_commit",
       buildArtifactId: input.handback.exactBuildId,
       sourceCompiled: true,
       unitTestsPassed: input.handback.testsActuallyRun.length > 0,
-      isVerified: false, // Implementation does NOT equal verification!
+      isVerified: false,
       verifiedAt: null,
       createdAt: now,
     };
     await this.recordBuild(build);
 
-    // Update milestone available build (NOT verified build!)
     const milestone = await this.getMilestone(input.tenantId, existing.gameId, existing.milestoneKey);
     if (milestone) {
       await this.saveMilestone({
         ...milestone,
         status: "implemented",
         currentAvailableBuildId: build.id,
-        // Invariant: lastVerifiedBuildId stays untouched!
       });
     }
 
-    // Update game production state available build (NOT verified build!)
     const gameState = await this.getProductionState(input.tenantId, existing.gameId);
     if (gameState) {
       await this.saveProductionState({
         ...gameState,
         lifecycleState: "exact_build_available",
         currentAvailableBuildId: build.id,
-        // Invariant: lastVerifiedBuildId stays untouched!
       });
     }
 
@@ -621,16 +767,46 @@ export class MitchProductionStore implements IMitchProductionStore {
     const existing = await this.getWorkOrder(input.tenantId, input.workOrderId);
     if (!existing) throw new Error(`Work order not found: ${input.workOrderId}`);
 
-    const now = new Date().toISOString();
+    const nowDate = new Date();
     const failedOrder: MitchWorkOrder = {
       ...existing,
       status: "failed",
       lastError: input.error,
-      updatedAt: now,
+      leaseExpiresAt: null,
+      updatedAt: nowDate.toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchWorkOrders)
+            .set({
+              status: "failed",
+              lastError: input.error,
+              leaseExpiresAt: null,
+              updatedAt: nowDate,
+            })
+            .where(
+              and(
+                eq(mitchWorkOrders.tenantId, input.tenantId),
+                eq(mitchWorkOrders.id, input.workOrderId)
+              )
+            );
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall through to memory mirror.
+      
+      }
+    }
+
     this.memoryWorkOrders.set(failedOrder.id, failedOrder);
     return failedOrder;
   }
+
 
   // --- Execution Runs ---
   async recordExecutionRun(run: Omit<MitchExecutionRun, "id" | "createdAt">): Promise<MitchExecutionRun> {
@@ -639,32 +815,213 @@ export class MitchProductionStore implements IMitchProductionStore {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db.insert(mitchExecutionRuns).values({
+            id: fullRun.id,
+            tenantId: fullRun.tenantId,
+            workOrderId: fullRun.workOrderId,
+            executorId: fullRun.executorId,
+            startedAt: new Date(fullRun.startedAt),
+            completedAt: fullRun.completedAt ? new Date(fullRun.completedAt) : null,
+            status: fullRun.status,
+            returnedBranch: fullRun.returnedBranch,
+            returnedCommitSha: fullRun.returnedCommitSha,
+            exactBuildId: fullRun.exactBuildId,
+            whatChanged: fullRun.whatChanged,
+            testsActuallyRunJson: fullRun.testsActuallyRun,
+            testsNotRunJson: fullRun.testsNotRun,
+            previewLaunchInstructions: fullRun.previewLaunchInstructions,
+            evidenceJson: fullRun.evidence,
+            knownLimitations: fullRun.knownLimitations,
+            errorMessage: fullRun.errorMessage,
+            createdAt: new Date(fullRun.createdAt),
+          });
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Preserve isolated-test fallback.
+      
+      }
+    }
+
     this.memoryExecutionRuns.set(fullRun.id, fullRun);
     return fullRun;
   }
 
   async getExecutionRun(tenantId: string, runId: string): Promise<MitchExecutionRun | null> {
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const [row] = await db
+            .select()
+            .from(mitchExecutionRuns)
+            .where(and(eq(mitchExecutionRuns.tenantId, tenantId), eq(mitchExecutionRuns.id, runId)))
+            .limit(1);
+          if (row) {
+            return {
+              id: row.id,
+              tenantId: row.tenantId,
+              workOrderId: row.workOrderId,
+              executorId: row.executorId,
+              startedAt: row.startedAt.toISOString(),
+              completedAt: row.completedAt?.toISOString() ?? null,
+              status: row.status as MitchExecutionRun["status"],
+              returnedBranch: row.returnedBranch,
+              returnedCommitSha: row.returnedCommitSha,
+              exactBuildId: row.exactBuildId,
+              whatChanged: row.whatChanged,
+              testsActuallyRun: (row.testsActuallyRunJson as string[]) ?? [],
+              testsNotRun: (row.testsNotRunJson as string[]) ?? [],
+              previewLaunchInstructions: row.previewLaunchInstructions,
+              evidence: (row.evidenceJson as Record<string, unknown>) ?? {},
+              knownLimitations: row.knownLimitations,
+              errorMessage: row.errorMessage,
+              createdAt: row.createdAt.toISOString(),
+            };
+          }
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
     const run = this.memoryExecutionRuns.get(runId);
-    if (run && run.tenantId === tenantId) return run;
-    return null;
+    return run && run.tenantId === tenantId ? run : null;
   }
 
   // --- Builds ---
   async recordBuild(build: MitchBuild): Promise<MitchBuild> {
     assertValidBuildIdentity(build.id);
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const [existing] = await db
+            .select({ id: mitchBuilds.id })
+            .from(mitchBuilds)
+            .where(and(eq(mitchBuilds.tenantId, build.tenantId), eq(mitchBuilds.id, build.id)))
+            .limit(1);
+          const row = {
+            tenantId: build.tenantId,
+            gameId: build.gameId,
+            workOrderId: build.workOrderId,
+            executionRunId: build.executionRunId,
+            commitSha: build.commitSha,
+            branch: build.branch,
+            buildArtifactType: build.buildArtifactType,
+            buildArtifactId: build.buildArtifactId,
+            sourceCompiled: build.sourceCompiled,
+            unitTestsPassed: build.unitTestsPassed,
+            isVerified: build.isVerified,
+            verifiedAt: build.verifiedAt ? new Date(build.verifiedAt) : null,
+          };
+          if (existing) {
+            await db.update(mitchBuilds).set(row).where(eq(mitchBuilds.id, build.id));
+          } else {
+            await db.insert(mitchBuilds).values({
+              id: build.id,
+              ...row,
+              createdAt: new Date(build.createdAt),
+            });
+          }
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror available.
+      
+      }
+    }
+
     this.memoryBuilds.set(build.id, build);
     return build;
   }
 
   async getBuild(tenantId: string, buildId: string): Promise<MitchBuild | null> {
-    const b = this.memoryBuilds.get(buildId);
-    if (b && b.tenantId === tenantId) return b;
-    return null;
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const [row] = await db
+            .select()
+            .from(mitchBuilds)
+            .where(and(eq(mitchBuilds.tenantId, tenantId), eq(mitchBuilds.id, buildId)))
+            .limit(1);
+          if (row) {
+            return {
+              id: row.id,
+              tenantId: row.tenantId,
+              gameId: row.gameId,
+              workOrderId: row.workOrderId,
+              executionRunId: row.executionRunId,
+              commitSha: row.commitSha,
+              branch: row.branch,
+              buildArtifactType: row.buildArtifactType as MitchBuild["buildArtifactType"],
+              buildArtifactId: row.buildArtifactId,
+              sourceCompiled: Boolean(row.sourceCompiled),
+              unitTestsPassed: Boolean(row.unitTestsPassed),
+              isVerified: Boolean(row.isVerified),
+              verifiedAt: row.verifiedAt?.toISOString() ?? null,
+              createdAt: row.createdAt.toISOString(),
+            };
+          }
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
+    const build = this.memoryBuilds.get(buildId);
+    return build && build.tenantId === tenantId ? build : null;
   }
 
   async listBuilds(tenantId: string, gameId: string): Promise<MitchBuild[]> {
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const rows = await db
+            .select()
+            .from(mitchBuilds)
+            .where(and(eq(mitchBuilds.tenantId, tenantId), eq(mitchBuilds.gameId, gameId)))
+            .orderBy(asc(mitchBuilds.createdAt));
+          return rows.map(row => ({
+            id: row.id,
+            tenantId: row.tenantId,
+            gameId: row.gameId,
+            workOrderId: row.workOrderId,
+            executionRunId: row.executionRunId,
+            commitSha: row.commitSha,
+            branch: row.branch,
+            buildArtifactType: row.buildArtifactType as MitchBuild["buildArtifactType"],
+            buildArtifactId: row.buildArtifactId,
+            sourceCompiled: Boolean(row.sourceCompiled),
+            unitTestsPassed: Boolean(row.unitTestsPassed),
+            isVerified: Boolean(row.isVerified),
+            verifiedAt: row.verifiedAt?.toISOString() ?? null,
+            createdAt: row.createdAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
     return Array.from(this.memoryBuilds.values()).filter(
-      b => b.tenantId === tenantId && b.gameId === gameId
+      build => build.tenantId === tenantId && build.gameId === gameId
     );
   }
 
@@ -672,11 +1029,30 @@ export class MitchProductionStore implements IMitchProductionStore {
     const build = await this.getBuild(tenantId, buildId);
     if (!build) throw new Error(`Build not found: ${buildId}`);
 
+    const now = new Date();
     const updated: MitchBuild = {
       ...build,
       isVerified: true,
-      verifiedAt: new Date().toISOString(),
+      verifiedAt: now.toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchBuilds)
+            .set({ isVerified: true, verifiedAt: now })
+            .where(and(eq(mitchBuilds.tenantId, tenantId), eq(mitchBuilds.id, buildId)));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror.
+      
+      }
+    }
+
     this.memoryBuilds.set(updated.id, updated);
     return updated;
   }
@@ -689,53 +1065,286 @@ export class MitchProductionStore implements IMitchProductionStore {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db.insert(mitchQaRuns).values({
+            id: fullQaRun.id,
+            tenantId: fullQaRun.tenantId,
+            gameId: fullQaRun.gameId,
+            milestoneId: fullQaRun.milestoneId,
+            buildId: fullQaRun.buildId,
+            testerId: fullQaRun.testerId,
+            scenario: fullQaRun.scenario,
+            expectedBehavior: fullQaRun.expectedBehavior,
+            observedBehavior: fullQaRun.observedBehavior,
+            gameActuallyExercised: fullQaRun.gameActuallyExercised,
+            acceptancePassed: fullQaRun.acceptancePassed,
+            status: fullQaRun.status,
+            evidenceArtifact: fullQaRun.evidenceArtifact,
+            issueId: fullQaRun.issueId,
+            previousFailedQaRunId: fullQaRun.previousFailedQaRunId,
+            isRetest: fullQaRun.isRetest,
+            completedAt: new Date(fullQaRun.completedAt),
+            createdAt: new Date(fullQaRun.createdAt),
+          });
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror.
+      
+      }
+    }
+
     this.memoryQaRuns.set(fullQaRun.id, fullQaRun);
     return fullQaRun;
   }
 
   async getQaRun(tenantId: string, qaRunId: string): Promise<MitchQaRun | null> {
-    const r = this.memoryQaRuns.get(qaRunId);
-    if (r && r.tenantId === tenantId) return r;
-    return null;
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const [row] = await db
+            .select()
+            .from(mitchQaRuns)
+            .where(and(eq(mitchQaRuns.tenantId, tenantId), eq(mitchQaRuns.id, qaRunId)))
+            .limit(1);
+          if (row) {
+            return {
+              id: row.id,
+              tenantId: row.tenantId,
+              gameId: row.gameId,
+              milestoneId: row.milestoneId,
+              buildId: row.buildId,
+              testerId: row.testerId,
+              scenario: row.scenario,
+              expectedBehavior: row.expectedBehavior,
+              observedBehavior: row.observedBehavior,
+              gameActuallyExercised: Boolean(row.gameActuallyExercised),
+              acceptancePassed: Boolean(row.acceptancePassed),
+              status: row.status as MitchQaRun["status"],
+              evidenceArtifact: row.evidenceArtifact,
+              issueId: row.issueId,
+              previousFailedQaRunId: row.previousFailedQaRunId,
+              isRetest: Boolean(row.isRetest),
+              completedAt: row.completedAt.toISOString(),
+              createdAt: row.createdAt.toISOString(),
+            };
+          }
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
+    const run = this.memoryQaRuns.get(qaRunId);
+    return run && run.tenantId === tenantId ? run : null;
   }
 
   async listQaRuns(tenantId: string, gameId: string): Promise<MitchQaRun[]> {
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const rows = await db
+            .select()
+            .from(mitchQaRuns)
+            .where(and(eq(mitchQaRuns.tenantId, tenantId), eq(mitchQaRuns.gameId, gameId)))
+            .orderBy(asc(mitchQaRuns.createdAt));
+          return rows.map(row => ({
+            id: row.id,
+            tenantId: row.tenantId,
+            gameId: row.gameId,
+            milestoneId: row.milestoneId,
+            buildId: row.buildId,
+            testerId: row.testerId,
+            scenario: row.scenario,
+            expectedBehavior: row.expectedBehavior,
+            observedBehavior: row.observedBehavior,
+            gameActuallyExercised: Boolean(row.gameActuallyExercised),
+            acceptancePassed: Boolean(row.acceptancePassed),
+            status: row.status as MitchQaRun["status"],
+            evidenceArtifact: row.evidenceArtifact,
+            issueId: row.issueId,
+            previousFailedQaRunId: row.previousFailedQaRunId,
+            isRetest: Boolean(row.isRetest),
+            completedAt: row.completedAt.toISOString(),
+            createdAt: row.createdAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
     return Array.from(this.memoryQaRuns.values()).filter(
-      r => r.tenantId === tenantId && r.gameId === gameId
+      run => run.tenantId === tenantId && run.gameId === gameId
     );
   }
 
   // --- Issues ---
   async createIssue(issue: Omit<MitchIssue, "id" | "createdAt" | "updatedAt">): Promise<MitchIssue> {
-    const now = new Date().toISOString();
+    const now = new Date();
     const fullIssue: MitchIssue = {
       ...issue,
       id: randomUUID(),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db.insert(mitchIssues).values({
+            id: fullIssue.id,
+            tenantId: fullIssue.tenantId,
+            gameId: fullIssue.gameId,
+            milestoneId: fullIssue.milestoneId,
+            originatingQaRunId: fullIssue.originatingQaRunId,
+            title: fullIssue.title,
+            description: fullIssue.description,
+            status: fullIssue.status,
+            fixWorkOrderId: fullIssue.fixWorkOrderId,
+            fixBuildId: fullIssue.fixBuildId,
+            closingQaRunId: fullIssue.closingQaRunId,
+            closedAt: fullIssue.closedAt ? new Date(fullIssue.closedAt) : null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror.
+      
+      }
+    }
+
     this.memoryIssues.set(fullIssue.id, fullIssue);
     return fullIssue;
   }
 
   async getIssue(tenantId: string, issueId: string): Promise<MitchIssue | null> {
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const [row] = await db
+            .select()
+            .from(mitchIssues)
+            .where(and(eq(mitchIssues.tenantId, tenantId), eq(mitchIssues.id, issueId)))
+            .limit(1);
+          if (row) {
+            return {
+              id: row.id,
+              tenantId: row.tenantId,
+              gameId: row.gameId,
+              milestoneId: row.milestoneId,
+              originatingQaRunId: row.originatingQaRunId,
+              title: row.title,
+              description: row.description,
+              status: row.status as MitchIssue["status"],
+              fixWorkOrderId: row.fixWorkOrderId,
+              fixBuildId: row.fixBuildId,
+              closingQaRunId: row.closingQaRunId,
+              closedAt: row.closedAt?.toISOString() ?? null,
+              createdAt: row.createdAt.toISOString(),
+              updatedAt: row.updatedAt.toISOString(),
+            };
+          }
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
     const issue = this.memoryIssues.get(issueId);
-    if (issue && issue.tenantId === tenantId) return issue;
-    return null;
+    return issue && issue.tenantId === tenantId ? issue : null;
   }
 
   async updateIssue(issue: MitchIssue): Promise<MitchIssue> {
-    const updated: MitchIssue = {
-      ...issue,
-      updatedAt: new Date().toISOString(),
-    };
+    const now = new Date();
+    const updated: MitchIssue = { ...issue, updatedAt: now.toISOString() };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db
+            .update(mitchIssues)
+            .set({
+              title: updated.title,
+              description: updated.description,
+              status: updated.status,
+              fixWorkOrderId: updated.fixWorkOrderId,
+              fixBuildId: updated.fixBuildId,
+              closingQaRunId: updated.closingQaRunId,
+              closedAt: updated.closedAt ? new Date(updated.closedAt) : null,
+              updatedAt: now,
+            })
+            .where(and(eq(mitchIssues.tenantId, updated.tenantId), eq(mitchIssues.id, updated.id)));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror.
+      
+      }
+    }
+
     this.memoryIssues.set(updated.id, updated);
     return updated;
   }
 
   async listIssues(tenantId: string, gameId: string, status?: string): Promise<MitchIssue[]> {
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const conditions = [eq(mitchIssues.tenantId, tenantId), eq(mitchIssues.gameId, gameId)];
+          if (status) conditions.push(eq(mitchIssues.status, status));
+          const rows = await db
+            .select()
+            .from(mitchIssues)
+            .where(and(...conditions))
+            .orderBy(asc(mitchIssues.createdAt));
+          return rows.map(row => ({
+            id: row.id,
+            tenantId: row.tenantId,
+            gameId: row.gameId,
+            milestoneId: row.milestoneId,
+            originatingQaRunId: row.originatingQaRunId,
+            title: row.title,
+            description: row.description,
+            status: row.status as MitchIssue["status"],
+            fixWorkOrderId: row.fixWorkOrderId,
+            fixBuildId: row.fixBuildId,
+            closingQaRunId: row.closingQaRunId,
+            closedAt: row.closedAt?.toISOString() ?? null,
+            createdAt: row.createdAt.toISOString(),
+            updatedAt: row.updatedAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
     return Array.from(this.memoryIssues.values()).filter(
-      i => i.tenantId === tenantId && i.gameId === gameId && (!status || i.status === status)
+      issue => issue.tenantId === tenantId && issue.gameId === gameId && (!status || issue.status === status)
     );
   }
 
@@ -746,11 +1355,61 @@ export class MitchProductionStore implements IMitchProductionStore {
       id: randomUUID(),
       occurredAt: new Date().toISOString(),
     };
+
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          await db.insert(mitchAuditEvents).values({
+            id: fullEvent.id,
+            tenantId: fullEvent.tenantId,
+            gameId: fullEvent.gameId,
+            eventType: fullEvent.eventType,
+            actorId: fullEvent.actorId,
+            detailsJson: fullEvent.details,
+            occurredAt: new Date(fullEvent.occurredAt),
+          });
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Keep memory mirror.
+      
+      }
+    }
+
     this.memoryAuditEvents.push(fullEvent);
     return fullEvent;
   }
 
   async listAuditEvents(tenantId: string, gameId: string): Promise<MitchAuditEvent[]> {
-    return this.memoryAuditEvents.filter(e => e.tenantId === tenantId && e.gameId === gameId);
+    if (!this.forceMemoryMode) {
+      try {
+        const db = await getDb();
+        this.assertDurableDb(db);
+        if (db) {
+          const rows = await db
+            .select()
+            .from(mitchAuditEvents)
+            .where(and(eq(mitchAuditEvents.tenantId, tenantId), eq(mitchAuditEvents.gameId, gameId)))
+            .orderBy(asc(mitchAuditEvents.occurredAt));
+          return rows.map(row => ({
+            id: row.id,
+            tenantId: row.tenantId,
+            gameId: row.gameId,
+            eventType: row.eventType,
+            actorId: row.actorId,
+            details: (row.detailsJson as Record<string, unknown>) ?? {},
+            occurredAt: row.occurredAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        this.handlePersistenceFailure(err);
+        // Fall back to memory.
+      
+      }
+    }
+    return this.memoryAuditEvents.filter(event => event.tenantId === tenantId && event.gameId === gameId);
   }
+
 }
