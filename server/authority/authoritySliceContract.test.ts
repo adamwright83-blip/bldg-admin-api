@@ -78,6 +78,9 @@ describe("three-fact authority slice", () => {
     expect(migrate).toContain("legacy_commercial_win_backfill_v1");
     expect(migrate).toContain("e.eventName = 'account_won'");
     expect(migrate).toContain(
+      "remove stale Goldline authority markers from non-win evidence"
+    );
+    expect(migrate).toContain(
       "remove non-win commercial account authority receipts"
     );
     expect(migrate).toContain("'$.commercialMissionId'");
