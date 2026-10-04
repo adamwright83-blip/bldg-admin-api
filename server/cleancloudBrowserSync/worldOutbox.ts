@@ -105,10 +105,14 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
   if (head.revision === 0 && (!snapshot.paid || !snapshot.paymentAt)) return;
   const revision = head.revision + 1;
   const id = `${snapshot.economicKey}:${revision}`;
+  const authorityTenantId = row.tenantId?.trim();
+  if (snapshot.paid && snapshot.paymentAt && !authorityTenantId) {
+    throw new Error("CleanCloud payment authority requires explicit tenantId");
+  }
   const paymentAuthority =
     snapshot.paid && snapshot.paymentAt
       ? await admitAuthorityClaimWith(tx, {
-          tenantId: row.tenantId ?? "default",
+          tenantId: authorityTenantId!,
           claimType: "payment_verified",
           subjectType: "cleancloud_order",
           subjectId: String(row.cleancloudOrderId),
