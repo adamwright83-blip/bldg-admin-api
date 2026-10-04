@@ -36,29 +36,31 @@ async function fixture(provider = true) {
     service = new MitchProductionService(store),
     dispatcher = new MitchGameDispatcher(store);
   const comments: string[] = [];
+  const wakes: any[] = [];
+  const wakeProvider = {
+    hasTarget: (actorId: string) => ["executor", "chatgpt_design_review"].includes(actorId),
+    wake: async (input: any) => { wakes.push(input); },
+  };
   const bus = {
     hasMarker: async (marker: string) => comments.some(c => c.includes(marker)),
     postComment: async (body: string) => {
       comments.push(body);
       return { html_url: "https://example.test/review" };
     },
+    listComments: async () => [],
     readDesignReview: async () => {
       throw new Error("Normal path must not poll review comments");
     },
   };
   if (provider)
-    dispatcher.registerExecutionProvider({
-      id: "executor",
-      name: "executor",
-      leaseMs: 3600000,
-      isAvailable: async () => true,
-      dispatchWorkOrder: async order => {
-        comments.push("dispatch:" + order.id);
-      },
-      executeWorkOrder: async () => {
-        throw new Error("Normal path must not wait/poll for handback");
-      },
-    });
+    dispatcher.registerExecutionProvider(
+      new GitHubProducerExecutionProvider(bus as unknown as GitHubProducerBus, {
+        id: "executor",
+        name: "executor",
+        leaseMs: 3600000,
+        wakeProvider,
+      })
+    );
   const coordinator = new MitchProducerCoordinator({
     tenantId: "test",
     store,
@@ -67,6 +69,8 @@ async function fixture(provider = true) {
     qa: new MitchQaService(store),
     reasoning: new MitchProductionReasoningService(store),
     bus: bus as unknown as GitHubProducerBus,
+    wakeProvider,
+    reviewerId: "chatgpt_design_review",
     eventDriven: true,
   });
   const inbox = new MemoryMitchEventInbox();
@@ -98,7 +102,12 @@ async function fixture(provider = true) {
         whatChanged: "Physical angle controls reflect light",
         testsActuallyRun: ["vitest: passed"],
         previewLaunchInstructions: "Open proof",
-        evidence: { captures: ["capture"] },
+        evidence: {
+          captures: ["capture"],
+          sourceCompiled: true,
+          unitTestsPassed: true,
+          buildCommitSha: commit,
+        },
       },
     });
   const review = (
@@ -135,6 +144,8 @@ async function fixture(provider = true) {
     inbox,
     order,
     comments,
+    wakes,
+    wakeProvider,
     implementation,
     review,
   };
@@ -145,8 +156,15 @@ async function ingress(f: Awaited<ReturnType<typeof fixture>>) {
     repoFullName: "owner/repo",
     issueNumber: 370,
     webhookSecret: "secret",
-    callbackToken: "callback",
-    actors: { worker: ["executor", "chatgpt_design_review"], adam: ["adam"] },
+    githubActorRules: [
+      { login: "worker", appSlug: "claude", actorIds: ["executor"] },
+      { login: "worker", appSlug: "chatgpt-codex-connector", actorIds: ["chatgpt_design_review"] },
+      { login: "adam", actorIds: ["adam"] },
+    ],
+    callbackActorTokens: {
+      executor: "exec-callback",
+      chatgpt_design_review: "review-callback",
+    },
   });
   const server = http.createServer(app);
   servers.push(server);
@@ -156,7 +174,13 @@ async function ingress(f: Awaited<ReturnType<typeof fixture>>) {
     event: MitchEvent,
     delivery = randomUUID(),
     bodyOverride?: string,
-    author = "worker"
+    author = "worker",
+    appSlug: string | null =
+      event.actorId === "executor"
+        ? "claude"
+        : event.actorId === "chatgpt_design_review"
+          ? "chatgpt-codex-connector"
+          : null
   ) => {
     const body = JSON.stringify({
       action: "created",
@@ -165,6 +189,9 @@ async function ingress(f: Awaited<ReturnType<typeof fixture>>) {
       comment: {
         id: 12,
         user: { login: author },
+        performed_via_github_app: appSlug
+          ? { id: appSlug === "claude" ? 1236702 : 1144995, slug: appSlug }
+          : null,
         body:
           bodyOverride ??
           "## CODEX → MITCH\n<!-- mitch-event:v1 -->\n```json\n" +
@@ -215,6 +242,8 @@ describe("Mitch event-driven producer", () => {
         c.includes("Your final action is to return a structured handback")
       )
     ).toBe(true);
+    expect(f.wakes.some(w => w.actorId === "executor" && w.kind === "implementation_request")).toBe(true);
+    expect(f.wakes.some(w => w.actorId === "chatgpt_design_review" && w.kind === "design_review_request")).toBe(true);
   });
   it("rejects malformed prose, wrong authors, invalid signatures and unauthorized callbacks", async () => {
     const f = await fixture(),
@@ -249,12 +278,34 @@ describe("Mitch event-driven producer", () => {
           body: JSON.stringify(f.implementation()),
         })
       ).status
-    ).toBe(401);
+    ).toBe(403);
     expect(
       await f.store.listBuilds("test", "game.small_comforts")
     ).toHaveLength(0);
     expect(() => parseMitchComment("## CLAUDE → MITCH\nFinished")).toThrow();
   });
+  it("binds GitHub authority to the actual integration and callback token to one actor", async () => {
+    const f = await fixture(),
+      { webhook, url } = await ingress(f);
+
+    expect(
+      (await webhook(f.implementation(), randomUUID(), undefined, "worker", "chatgpt-codex-connector")).status
+    ).toBe(403);
+
+    expect(
+      (
+        await fetch(url + "/callbacks/mitch", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer exec-callback",
+          },
+          body: JSON.stringify(f.review("fix_needed")),
+        })
+      ).status
+    ).toBe(403);
+  });
+
   it("rejects wrong work order, tenant, milestone, mismatched SHA and stale review builds", async () => {
     for (const patch of [
       { workOrderId: randomUUID() },
@@ -304,6 +355,28 @@ describe("Mitch event-driven producer", () => {
     expect(state?.creativeAcceptanceState).toBe("pending");
     expect(state?.releaseState).toBe("unreleased");
   });
+  it("cannot verify a build when required compile or test evidence is missing", async () => {
+    const compiled = await fixture();
+    const compiledEvent = compiled.implementation();
+    if (compiledEvent.type !== "implementation_handback") throw new Error();
+    compiledEvent.handback.evidence.sourceCompiled = false;
+    await compiled.events.receive(compiledEvent);
+    await expect(compiled.events.receive(compiled.review("no_blocking_issue"))).rejects.toThrow("compiled");
+    expect(
+      (await compiled.store.getProductionState("test", "game.small_comforts"))?.lastVerifiedBuildId
+    ).toBeNull();
+
+    const tested = await fixture();
+    const testedEvent = tested.implementation();
+    if (testedEvent.type !== "implementation_handback") throw new Error();
+    testedEvent.handback.evidence.unitTestsPassed = false;
+    await tested.events.receive(testedEvent);
+    await expect(tested.events.receive(tested.review("no_blocking_issue"))).rejects.toThrow("tests");
+    expect(
+      (await tested.store.getProductionState("test", "game.small_comforts"))?.lastVerifiedBuildId
+    ).toBeNull();
+  });
+
   it("creative uncertainty becomes a durable human blocker and prevents further dispatch", async () => {
     const f = await fixture();
     await f.events.receive(f.implementation());
@@ -381,7 +454,7 @@ describe("Mitch event-driven producer", () => {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            authorization: "Bearer callback",
+            authorization: "Bearer exec-callback",
           },
           body: JSON.stringify(f.implementation()),
         })
@@ -448,8 +521,16 @@ describe("Mitch event-driven producer", () => {
         throw new Error("Dispatch must not wait for polling");
       },
     };
+    const wakes: any[] = [];
     const provider = new GitHubProducerExecutionProvider(
-      bus as unknown as GitHubProducerBus
+      bus as unknown as GitHubProducerBus,
+      {
+        id: "executor",
+        wakeProvider: {
+          hasTarget: actorId => actorId === "executor",
+          wake: async input => { wakes.push(input); },
+        },
+      }
     );
     await provider.dispatchWorkOrder(f.order);
     expect(comments).toHaveLength(1);
@@ -459,6 +540,12 @@ describe("Mitch event-driven producer", () => {
     expect(comments[0]).toContain('"type": "implementation_handback"');
     expect(comments[0]).toContain(f.order.milestoneId);
     expect(comments[0]).toContain(f.order.id);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]).toMatchObject({
+      actorId: "executor",
+      kind: "implementation_request",
+      workOrderId: f.order.id,
+    });
   });
   it("matches GitHub's official signature test vector", () => {
     expect(
