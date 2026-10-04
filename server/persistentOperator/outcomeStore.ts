@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { goalCycleOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { getAuthorityReceiptById } from "../authority/authorityReceipt";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import {
   assertBusinessTruthEvidence,
@@ -261,6 +262,71 @@ export async function getGoalCycleOutcomesByDecision(input: {
  * 3. Financial review fails closed for commercial revenue truth.
  * 4. Idempotency on (tenantId, objectiveId, outcomeKind, evidenceReference).
  */
+async function assertConsequentialOutcomeAuthority(
+  input: RecordOutcomeInput
+): Promise<void> {
+  const requirements: Record<
+    string,
+    { claimType: "action_completed" | "account_won" | "payment_verified"; subjectType: string; subjectIdKey: string }
+  > = {
+    visit_completed: {
+      claimType: "action_completed",
+      subjectType: "commercial_mission",
+      subjectIdKey: "missionId",
+    },
+    account_won: {
+      claimType: "account_won",
+      subjectType: "commercial_mission",
+      subjectIdKey: "missionId",
+    },
+    cleancloud_order_paid: {
+      claimType: "payment_verified",
+      subjectType: "cleancloud_order",
+      subjectIdKey: "cleancloudOrderId",
+    },
+  };
+  const requirement = requirements[input.outcomeKind];
+  if (!requirement) return;
+
+  const metadata = input.metadata ?? {};
+  const receiptId =
+    typeof metadata.authorityReceiptId === "string"
+      ? metadata.authorityReceiptId.trim()
+      : "";
+  const subjectIdValue = metadata[requirement.subjectIdKey];
+  const subjectId =
+    typeof subjectIdValue === "number" || typeof subjectIdValue === "string"
+      ? String(subjectIdValue).trim()
+      : "";
+  if (!receiptId || !subjectId) {
+    throw new Error(
+      `Outcome '${input.outcomeKind}' requires a matching Authority Receipt`
+    );
+  }
+  const receipt = await getAuthorityReceiptById({
+    tenantId: input.tenantId,
+    receiptId,
+  });
+  if (
+    !receipt ||
+    receipt.claimType !== requirement.claimType ||
+    receipt.subjectType !== requirement.subjectType ||
+    receipt.subjectId !== subjectId
+  ) {
+    throw new Error(
+      `Outcome '${input.outcomeKind}' Authority Receipt does not match its subject`
+    );
+  }
+  if (
+    input.outcomeKind === "visit_completed" &&
+    receipt.sourceRef !== input.evidenceReference
+  ) {
+    throw new Error(
+      "visit_completed Authority Receipt must match the persisted completion event"
+    );
+  }
+}
+
 export async function recordGoalCycleOutcome(
   input: RecordOutcomeInput
 ): Promise<{ outcome: GoalCycleOutcomeRecord; created: boolean }> {
@@ -271,6 +337,8 @@ export async function recordGoalCycleOutcome(
     throw new Error("evidenceReference is required");
   }
   if (!input.sourceSystem.trim()) throw new Error("sourceSystem is required");
+
+  await assertConsequentialOutcomeAuthority(input);
 
   // Check financial review rule: commercial revenue fails closed on financial review
   if (input.financialReview) {
