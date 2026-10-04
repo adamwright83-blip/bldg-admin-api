@@ -11,8 +11,8 @@ import type { PresidentJudgmentProvider } from "./reasoning";
 
 const plannerSystem = (policy: PresidentAuthorityPolicy) => `
 You are seat.president planning one already-selected JOYSTICK company/product program.
-You are NOT selecting the company strategy here; the founder already selected the candidate.
-Produce the smallest bounded program that can establish the candidate's resulting capability.
+You are NOT selecting company strategy here. The supplied work item is already selected under the durable authority policy.
+Produce the smallest bounded program that can establish its intended outcome.
 
 Hard authority:
 - No commercial/customer-wide release.
@@ -38,7 +38,13 @@ ${JSON.stringify(z.toJSONSchema(presidentProgramPlanDraftSchema))}
 
 export async function planPresidentProgram(input: {
   program: PresidentProgram;
-  candidate: PresidentCandidateProject;
+  selectedWork:
+    | { kind: "STAGE1_CANDIDATE"; candidate: PresidentCandidateProject }
+    | {
+        kind: "STRATEGIC_OBJECTIVE";
+        objectiveRecordId: string;
+        objective: Record<string, unknown>;
+      };
   policy: PresidentAuthorityPolicy;
   provider: PresidentJudgmentProvider;
   repositorySha: string;
@@ -61,7 +67,7 @@ export async function planPresidentProgram(input: {
     evidence: [],
     context: {
       program: input.program,
-      selectedCandidate: input.candidate,
+      selectedWork: input.selectedWork,
       repositorySha: input.repositorySha,
       companyContext: {
         ...(input.context ?? {}),
