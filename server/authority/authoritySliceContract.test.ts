@@ -9,9 +9,23 @@ describe("three-fact authority slice", () => {
     const admission = source("server/authority/paymentAdmission.ts");
     const commercial = source("server/commercialPipeline/commercialPipelineService.ts");
     expect(route).toContain("admitNativeStripePayment");
+    expect(admission).toContain("prepareNativeStripePaymentTenant");
+    expect(route).toContain(
+      "const paymentTenantId = await prepareNativeStripePaymentTenant"
+    );
+    expect(
+      route.indexOf("const paymentTenantId = await prepareNativeStripePaymentTenant")
+    ).toBeLessThan(route.indexOf("stripe.paymentIntents.create({"));
+    expect(route).toContain("tenantId: paymentTenantId");
+    expect(route).toContain(
+      "idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}`"
+    );
     expect(admission).toContain('claimType: "payment_verified"');
-    expect(admission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
-      admission.indexOf(".update(orders)")
+    const nativeAdmission = admission.slice(
+      admission.indexOf("export async function admitNativeStripePayment")
+    );
+    expect(nativeAdmission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
+      nativeAdmission.indexOf("paid: true")
     );
     expect(commercial).toContain("findAuthorityReceiptForSubjectWith");
     expect(commercial).toContain("hasNativePaymentAuthority(order)");
@@ -60,8 +74,21 @@ describe("three-fact authority slice", () => {
     const migrate = source("scripts/migrate.mjs");
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `authority_receipts`");
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
+    expect(migrate).toContain(
+      "normalize legacy Stripe order tenants before authority backfill"
+    );
+    expect(migrate).toContain(
+      "WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'"
+    );
     expect(migrate).toContain("legacy_cleancloud_payment_backfill_v1");
     expect(migrate).toContain("legacy_commercial_win_backfill_v1");
+    expect(migrate).toContain("e.eventName = 'account_won'");
+    expect(migrate).toContain(
+      "remove stale Goldline authority markers from non-win evidence"
+    );
+    expect(migrate).toContain(
+      "remove non-win commercial account authority receipts"
+    );
     expect(migrate).toContain("'$.commercialMissionId'");
     expect(migrate).toContain("physical_entity_bindings b");
     expect(migrate).toContain("legacy_twilio_message_backfill_v1");

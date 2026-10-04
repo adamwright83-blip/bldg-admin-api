@@ -4677,6 +4677,20 @@ await assertEnumContainsValues("authority_receipts", "verificationClass", [
 
 // Backfill native Stripe-authoritative paid rows so the new gate does not
 // erase legitimate historical revenue when commercial attribution re-reads it.
+// Legacy single-tenant orders may predate tenant stamping; normalize the source
+// row first so every downstream reader and the Authority Receipt share a tenant.
+await runRequired(
+  `UPDATE orders
+   SET tenantId = CASE
+     WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'
+     ELSE tenantId
+   END
+   WHERE paid = 1
+     AND stripePaymentIntentId IS NOT NULL
+     AND TRIM(stripePaymentIntentId) <> ''
+     AND (tenantId IS NULL OR TRIM(tenantId) = '')`,
+  "normalize legacy Stripe order tenants before authority backfill"
+);
 await runRequired(
   `INSERT IGNORE INTO authority_receipts
     (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
@@ -4723,6 +4737,63 @@ await runRequired(
   "backfill CleanCloud payment authority receipts"
 );
 
+// Repair any receipts created by the first 0113 run from post-win bookkeeping
+// events. Only the actual account_won transition may serve as win evidence.
+await runRequired(
+  `UPDATE commercial_mission_events e
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY e.tenantId
+    AND a.claimType = 'account_won'
+    AND a.admissionPolicy = 'legacy_commercial_win_backfill_v1'
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
+   SET e.metadataJson = JSON_REMOVE(
+     COALESCE(e.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId',
+     '$.authorityClaimType',
+     '$.authoritySourceRef',
+     '$.commercialMissionId',
+     '$.commercialAccountId'
+   )
+   WHERE COALESCE(e.eventName, '') <> 'account_won'
+     AND JSON_UNQUOTE(JSON_EXTRACT(e.metadataJson, '$.authorityReceiptId')) = a.id`,
+  "remove stale authority metadata from non-win commercial events"
+);
+await runRequired(
+  `UPDATE goldline_world_events g
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY g.tenantId
+    AND a.claimType = 'account_won'
+    AND a.admissionPolicy = 'legacy_commercial_win_backfill_v1'
+    AND BINARY a.sourceRef = BINARY g.sourceEvidenceReference
+   JOIN commercial_mission_events e
+     ON BINARY e.tenantId = BINARY a.tenantId
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
+   SET g.metadataJson = JSON_REMOVE(
+     COALESCE(g.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId',
+     '$.commercialMissionId',
+     '$.commercialAccountId'
+   )
+   WHERE g.eventType = 'account_won'
+     AND COALESCE(e.eventName, '') <> 'account_won'
+     AND JSON_UNQUOTE(JSON_EXTRACT(g.metadataJson, '$.authorityReceiptId')) = a.id`,
+  "remove stale Goldline authority markers from non-win evidence"
+);
+await runRequired(
+  `DELETE a
+   FROM authority_receipts a
+   JOIN commercial_mission_events e
+     ON BINARY e.tenantId = BINARY a.tenantId
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
+   WHERE a.claimType = 'account_won'
+     AND a.admissionPolicy = 'legacy_commercial_win_backfill_v1'
+     AND COALESCE(e.eventName, '') <> 'account_won'`,
+  "remove non-win commercial account authority receipts"
+);
+
 // Existing operator/driver-resolved commercial wins become explicit ATTESTED
 // receipts. System/game transitions are intentionally not promoted.
 await runRequired(
@@ -4748,7 +4819,9 @@ await runRequired(
    JOIN commercial_missions m
      ON BINARY m.tenantId = BINARY e.tenantId
     AND m.id = e.missionId
-   WHERE e.toStatus = 'won' AND e.actorType IN ('operator','driver')`,
+   WHERE e.eventName = 'account_won'
+     AND e.toStatus = 'won'
+     AND e.actorType IN ('operator','driver')`,
   "backfill commercial account-win authority receipts"
 );
 
@@ -4768,7 +4841,8 @@ await runRequired(
      '$.commercialMissionId', e.missionId,
      '$.commercialAccountId', JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
    )
-   WHERE e.toStatus = 'won'`,
+   WHERE e.eventName = 'account_won'
+     AND e.toStatus = 'won'`,
   "attach authority receipt ids to historical commercial win events"
 );
 
