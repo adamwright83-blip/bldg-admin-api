@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
-    "build": "node scripts/package-gumballpals.mjs && vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/procurement/workerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/procurement-worker.js && esbuild server/mitch/producerWorkerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/mitch-producer-worker.js",
+    "build": "node scripts/package-gumballpals.mjs && vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/procurement/workerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/procurement-worker.js && esbuild server/mitch/producerWorkerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/mitch-producer-worker.js && esbuild server/president/workerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/president-worker.js",
     "start": "node scripts/migrate.mjs && NODE_ENV=production node dist/index.js",
     "start:worker": "NODE_ENV=production node dist/procurement-worker.js",
     "dev:worker": "NODE_ENV=development tsx watch server/procurement/workerMain.ts",
@@ -53,6 +53,8 @@
     "check:vertical-dependencies": "node scripts/check-vertical-dependencies.mjs",
     "start:mitch-producer": "NODE_ENV=production node dist/mitch-producer-worker.js",
     "dev:mitch-producer": "NODE_ENV=development tsx watch server/mitch/producerWorkerMain.ts",
+    "start:president-worker": "NODE_ENV=production node dist/president-worker.js",
+    "dev:president-worker": "NODE_ENV=development tsx watch server/president/workerMain.ts",
     "president:stage1:witness": "tsx scripts/president-stage1-witness.ts",
     "president:schema:migrate": "node scripts/president-migrate.mjs"
   },
