@@ -1,0 +1,569 @@
+{
+  "file": "sc_suitcase_v3.glb",
+  "bytes": 1451860,
+  "triangles_total": 19150,
+  "nodes": {
+    "Base_Hardware": {
+      "parent": "Suitcase_Base",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 1496,
+      "verts": 1136,
+      "bbox_min": [
+        -3.12,
+        0.14,
+        -2.56
+      ],
+      "bbox_max": [
+        3.12,
+        1.0133,
+        2.74
+      ]
+    },
+    "Brass_Corners": {
+      "parent": "Suitcase_Base",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 2000,
+      "verts": 1805,
+      "bbox_min": [
+        -3.5306,
+        -0.3833,
+        -2.5067
+      ],
+      "bbox_max": [
+        3.5301,
+        0.9167,
+        2.5067
+      ]
+    },
+    "Brass_Latch": {
+      "parent": "Suitcase_Base",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 1592,
+      "verts": 1298,
+      "bbox_min": [
+        -2.35,
+        0.3167,
+        2.46
+      ],
+      "bbox_max": [
+        2.35,
+        0.8833,
+        2.6
+      ]
+    },
+    "Elastic_Straps": {
+      "parent": "Suitcase_Base",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 968,
+      "verts": 800,
+      "bbox_min": [
+        -1.6533,
+        0.04,
+        -1.9933
+      ],
+      "bbox_max": [
+        1.6533,
+        0.9,
+        -1.91
+      ]
+    },
+    "Fabric_Lining": {
+      "parent": "Suitcase_Base",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 34,
+      "verts": 60,
+      "bbox_min": [
+        -3.0667,
+        -0.06,
+        -2.0667
+      ],
+      "bbox_max": [
+        3.0667,
+        0.9333,
+        2.0667
+      ]
+    },
+    "Suitcase_Base": {
+      "parent": "Suitcase",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 1572,
+      "verts": 2436,
+      "bbox_min": [
+        -3.4793,
+        -0.4,
+        -2.4793
+      ],
+      "bbox_max": [
+        3.4793,
+        0.9467,
+        2.4793
+      ]
+    },
+    "Lid_Hardware": {
+      "parent": "Suitcase_Lid",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 1240,
+      "verts": 1076,
+      "bbox_min": [
+        -3.5067,
+        0.0167,
+        -0.5467
+      ],
+      "bbox_max": [
+        3.5067,
+        0.5833,
+        5.48
+      ]
+    },
+    "Lid_Lining": {
+      "parent": "Suitcase_Lid",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 34,
+      "verts": 56,
+      "bbox_min": [
+        -3.0667,
+        -0.0,
+        0.4
+      ],
+      "bbox_max": [
+        3.0667,
+        0.5267,
+        4.5333
+      ]
+    },
+    "Lid_Pocket": {
+      "parent": "Suitcase_Lid",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 8850,
+      "verts": 6011,
+      "bbox_min": [
+        -2.1533,
+        0.3307,
+        1.4637
+      ],
+      "bbox_max": [
+        2.1533,
+        0.462,
+        3.6533
+      ]
+    },
+    "Suitcase_Lid": {
+      "parent": "Suitcase",
+      "translation": [
+        0,
+        0.9333333373069763,
+        -2.4666666984558105
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "tris": 1364,
+      "verts": 2260,
+      "bbox_min": [
+        -3.4687,
+        -0.0,
+        -0.002
+      ],
+      "bbox_max": [
+        3.4687,
+        0.8,
+        4.946
+      ]
+    },
+    "Suitcase": {
+      "parent": null,
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "floor": {
+    "plane_y": 0.0,
+    "slab_x": [
+      -3.053333282470703,
+      3.053333282470703
+    ],
+    "slab_z": [
+      -2.053333282470703,
+      2.053333282470703
+    ],
+    "inner_wall_abs_x": 3.0,
+    "inner_wall_abs_z": 2.0
+  },
+  "hinge_pivot_game_gltf": [
+    0,
+    0.9333333373069763,
+    -2.4666666984558105
+  ],
+  "hinge_pin": {
+    "centre": [
+      0.0,
+      0.9333,
+      -2.48
+    ],
+    "offset_from_pivot_cells": 0.0133
+  },
+  "open_angle_deg_threejs_rotation_x": -107.0,
+  "textures": [
+    {
+      "name": "suitcase_v3_normal",
+      "mime": "image/jpeg"
+    },
+    {
+      "name": "suitcase_v3_basecolor",
+      "mime": "image/jpeg"
+    },
+    {
+      "name": "suitcase_v3_orm",
+      "mime": "image/jpeg"
+    }
+  ],
+  "lid_rotation_proof": [
+    {
+      "requested_deg": 0.0,
+      "max_intrusion_depth_cells": 0.0,
+      "lid_vertices_inside_base_volume": 0,
+      "lid_closest_vertex_to_axis": 0.069,
+      "pivot_world": [
+        0.0,
+        2.4667,
+        0.9333
+      ],
+      "pivot_drift": 0.0,
+      "hinge_edge_distance_to_axis_min": 0.069,
+      "hinge_edge_distance_to_axis_max": 0.1193,
+      "rigid_rotation_max_error": 0.0,
+      "measured_rotation_deg": 0.0,
+      "lid_min_z": 0.9333,
+      "base_rim_top_z": 1.0133,
+      "lid_x_range": [
+        -3.469,
+        3.469
+      ]
+    },
+    {
+      "requested_deg": 45.0,
+      "max_intrusion_depth_cells": 0.0,
+      "lid_vertices_inside_base_volume": 0,
+      "lid_closest_vertex_to_axis": 0.069,
+      "pivot_world": [
+        0.0,
+        2.4667,
+        0.9333
+      ],
+      "pivot_drift": 0.0,
+      "hinge_edge_distance_to_axis_min": 0.069,
+      "hinge_edge_distance_to_axis_max": 0.1193,
+      "rigid_rotation_max_error": 0.0,
+      "measured_rotation_deg": 45.0,
+      "lid_min_z": 1.0024,
+      "base_rim_top_z": 1.0133,
+      "lid_x_range": [
+        -3.469,
+        3.469
+      ]
+    },
+    {
+      "requested_deg": 107.0,
+      "max_intrusion_depth_cells": 0.0,
+      "lid_vertices_inside_base_volume": 0,
+      "lid_closest_vertex_to_axis": 0.069,
+      "pivot_world": [
+        0.0,
+        2.4667,
+        0.9333
+      ],
+      "pivot_drift": 0.0,
+      "hinge_edge_distance_to_axis_min": 0.069,
+      "hinge_edge_distance_to_axis_max": 0.1193,
+      "rigid_rotation_max_error": 0.0,
+      "measured_rotation_deg": 107.0,
+      "lid_min_z": 0.7416,
+      "base_rim_top_z": 1.0133,
+      "lid_x_range": [
+        -3.469,
+        3.469
+      ]
+    }
+  ],
+  "threejs_usage": "scene.getObjectByName('Suitcase_Lid').rotation.x = THREE.MathUtils.degToRad(-angleDeg)  // 0 closed .. -107 fully open",
+  "checks": [
+    {
+      "check": "all expected node names present",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "check": "file size < 4 MB (target < 3 MB)",
+      "ok": true,
+      "detail": "1.45 MB"
+    },
+    {
+      "check": "single material, 3 embedded textures",
+      "ok": true,
+      "detail": "1 material(s), 3 image(s)"
+    },
+    {
+      "check": "no collision / proxy geometry in the file",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "root origin (0,0,0), unit scale, no rotation",
+      "ok": true,
+      "detail": "[0, 0, 0]"
+    },
+    {
+      "check": "lid node translation = real hinge line (back-top edge of base)",
+      "ok": true,
+      "detail": "[0, 0.9333333373069763, -2.4666666984558105] expected [0.0, 0.9333, -2.4667]"
+    },
+    {
+      "check": "lid node rotation is identity when closed",
+      "ok": true,
+      "detail": "[0, 0, 0, 1]"
+    },
+    {
+      "check": "Lid_Lining is a child of Suitcase_Lid with identity local transform",
+      "ok": true,
+      "detail": "Suitcase_Lid"
+    },
+    {
+      "check": "Lid_Pocket is a child of Suitcase_Lid with identity local transform",
+      "ok": true,
+      "detail": "Suitcase_Lid"
+    },
+    {
+      "check": "Lid_Hardware is a child of Suitcase_Lid with identity local transform",
+      "ok": true,
+      "detail": "Suitcase_Lid"
+    },
+    {
+      "check": "base parts are children of the base/root, not the lid",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "playable floor plane at y = 0",
+      "ok": true,
+      "detail": "0.0000"
+    },
+    {
+      "check": "floor slab centred on origin",
+      "ok": true,
+      "detail": "x -3.053..3.053  z -2.053..2.053"
+    },
+    {
+      "check": "inner wall faces on the 6 x 4 grid edges (x = +-3.0, z = +-2.0)",
+      "ok": true,
+      "detail": "inner |x| 3.000, inner |z| 2.000"
+    },
+    {
+      "check": "floor slab no more than 0.07 cells beyond the grid",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "hinge pin sits on the pivot line (within 0.03 cell)",
+      "ok": true,
+      "detail": "{'centre': [0.0, 0.9333, -2.48], 'offset_from_pivot_cells': 0.0133}"
+    },
+    {
+      "check": "tri count (reported)",
+      "ok": true,
+      "detail": "19150 (v2 was 68228)"
+    },
+    {
+      "check": "pivot never moves while the lid rotates",
+      "ok": true,
+      "detail": "[0.0, 0.0, 0.0]"
+    },
+    {
+      "check": "lid rotates rigidly about the hinge axis (max radial error < 1e-4)",
+      "ok": true,
+      "detail": "[0.0, 0.0, 0.0]"
+    },
+    {
+      "check": "measured rotation matches requested (0 / 45 / 107 deg)",
+      "ok": true,
+      "detail": "[0.0, 45.0, 107.0]"
+    },
+    {
+      "check": "lid back edge stays on the hinge axis at every angle (radius <= 0.12 cell)",
+      "ok": true,
+      "detail": "[0.1193, 0.1193, 0.1193]"
+    },
+    {
+      "check": "closed: lid underside sits exactly on the base top plane (= hinge height)",
+      "ok": true,
+      "detail": "lid min z 0.9333 vs hinge/base-top z 0.9333 (rim welt rises to 1.0133 into the lid recess)"
+    },
+    {
+      "check": "lid never penetrates the base volume at 0 / 45 / 107 deg",
+      "ok": true,
+      "detail": "[0, 0, 0]"
+    },
+    {
+      "check": "lid shell has geometry on the hinge axis (closest vertex <= 0.1 cell) at every angle",
+      "ok": true,
+      "detail": "[0.069, 0.069, 0.069]"
+    }
+  ],
+  "passed": true
+}
