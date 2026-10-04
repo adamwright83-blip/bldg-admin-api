@@ -39,6 +39,10 @@ export type IslandEvents = {
   onHover?: (h: { keys: string[]; x: number; y: number; tower?: string } | null) => void;
   /** one of our towers was clicked: open its floors */
   onTower?: (id: string) => void;
+  /** game-world Laundry Farm hub: after the camera arrives, enter Operations Command */
+  onOperationsHub?: () => void;
+  /** the pointer is over the Operations Hub (page px), or left it */
+  onOperationsHubHover?: (h: { x: number; y: number } | null) => void;
   /** the lost-property suitcase was clicked up close: the camera has arrived, open the game */
   onSuitcase?: () => void;
   /** the pointer is over the suitcase (page px), or left it */
@@ -348,6 +352,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const nearLake = (x: number, z: number) => lakes.some(p => pointInRing(x, z, p) || p.some(([a, b]) => Math.hypot(a - x, b - z) < 60));
     islands = layoutIslands(M, { field: F, height: H, road, roadNamed, park: (x, z) => bigParks.some(p => pointInRing(x, z, p)), lake: nearLake });
     addLandmarks();
+    try { addOperationsHub(); } catch (e) { console.warn("[islands] Laundry Farm operations hub skipped", e); }
     try { addSuitcase(); } catch (e) { console.warn("[islands] suitcase landmark skipped", e); }   // never let the easter egg take the city down
     buildCoastTexture();
     paintGround(segs, bigParks);
@@ -374,6 +379,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     { name: "Round tower", lat: 34.1032, lon: -118.3267, kind: "round" },
   ];
   const extraMeshes: THREE.BufferGeometry[] = [];
+  /** Viral entry point: a game-world Laundry Farm Operations Hub in Silver Lake. It is not a literal processing-facility address. */
+  let operationsHub: { x: number; z: number; h: number } | null = null;
   /** Small Comforts: the lost-property suitcase on Hollywood. Zoom to the island, click it, you're inside. */
   let suitcase: { x: number; z: number; h: number } | null = null;
   const ourTowers: { id: string; planId: number; x: number; z: number; h: number }[] = [];
@@ -419,6 +426,82 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       }
     }
   }
+  function addOperationsHub() {
+    // This is deliberately a game-world hub, not a claim about where Laundry Farm physically processes orders.
+    // Silver Lake gives the viral zoom-in a dense, central-looking LA setting close to the visual heart of the board.
+    const isl =
+      islands.find(i => i.name === "Silver Lake") ??
+      islands.find(i => i.name === "East Hollywood") ??
+      islands.find(i => i.name === "Los Feliz") ??
+      islands.find(i => i.plans.length);
+    if (!isl) return;
+
+    const target = lonLatToBoard(M, 34.0915, -118.2810);
+    let { x, z } = ontoLand(F, target.x, target.z, 100);
+    if (ownerAt(F, x, z) !== isl.index) {
+      ({ x, z } = ontoLand(F, isl.label[0], isl.label[1], 100));
+    }
+    if (ownerAt(F, x, z) !== isl.index) {
+      x = isl.label[0];
+      z = isl.label[1];
+    }
+
+    // Give the hub visual breathing room so the landmark reads at island scale.
+    isl.plans = isl.plans.filter(p => Math.hypot(p.x - x / S, p.z - z / S) > 74);
+    isl.trees = isl.trees.filter(t => Math.hypot(t.x - x / S, t.z - z / S) > 54);
+
+    const mx = x / S, mz = z / S, y = H(x, z) / S;
+    const forest = "#214d3c", forestDark = "#17382d", cream = "#f2eadb";
+    const orange = "#f2581b", gold = "#ffc84d", glass = "#83b8c9";
+    const box = (w: number, h: number, d: number, px: number, py: number, pz: number) =>
+      new THREE.BoxGeometry(w, h, d).translate(mx + px, y + py, mz + pz);
+
+    const parts: { g: THREE.BufferGeometry; col: string; k: number }[] = [
+      // Low industrial/operations building with a bold roof band.
+      { g: box(64, 15, 42, 0, 7.5, 0), col: cream, k: K.WALL },
+      { g: box(68, 2.4, 46, 0, 16.2, 0), col: forest, k: K.ROOF },
+      { g: box(66, 3.2, 5.5, 0, 12.3, 20.3), col: forestDark, k: K.TRIM },
+      { g: box(58, 0.8, 14, 0, 0.4, 26), col: "#d8cdb8", k: K.TRIM },
+      // Orange loading/dispatch stripe: the same operational accent as the floor view.
+      { g: box(50, 1.3, 1.4, 0, 4.2, 21.5), col: orange, k: K.TRIM },
+    ];
+
+    // Three round machine-window motifs on the facade make "laundry" readable without text.
+    for (const dx of [-18, 0, 18]) {
+      const ring = new THREE.CylinderGeometry(5.2, 5.2, 1.2, 24)
+        .rotateX(Math.PI / 2)
+        .translate(mx + dx, y + 8.2, mz + 21.5);
+      const drum = new THREE.CylinderGeometry(3.7, 3.7, 1.35, 24)
+        .rotateX(Math.PI / 2)
+        .translate(mx + dx, y + 8.2, mz + 22.0);
+      parts.push({ g: ring, col: forestDark, k: K.TRIM });
+      parts.push({ g: drum, col: glass, k: K.CURTAIN });
+    }
+
+    // A gold map pin makes the hub visible from the full-board camera.
+    parts.push({
+      g: new THREE.ConeGeometry(7, 16, 14).rotateX(Math.PI).translate(mx, y + 36, mz),
+      col: gold,
+      k: K.TRIM,
+    });
+    parts.push({
+      g: new THREE.SphereGeometry(5.4, 14, 10).translate(mx, y + 49, mz),
+      col: gold,
+      k: K.BEACON,
+    });
+
+    extraMeshes.push(kitGeo(parts, 900400));
+    operationsHub = { x, z, h: 56 * S };
+
+    const halo = new THREE.Mesh(
+      new THREE.PlaneGeometry(760, 760).rotateX(-Math.PI / 2),
+      haloMat,
+    );
+    halo.position.set(x, H(x, z) + 3, z);
+    halo.layers.set(INK_SKIP);
+    scene.add(halo);
+  }
+
   function addSuitcase() {
     const isl = islands.find(i => i.name === "Hollywood") ?? islands.find(i => i.plans.length);
     if (!isl) return;
@@ -1547,6 +1630,21 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     if (v.z >= 1) return null;
     return Math.hypot(r.left + ((v.x + 1) / 2) * r.width - cx, r.top + ((1 - v.y) / 2) * r.height - cy) < radius ? suitcase : null;
   }
+  /** the Laundry Farm Operations Hub under the pointer. */
+  function operationsHubAt(cx: number, cy: number, radius = 76) {
+    if (!operationsHub) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector3(
+      operationsHub.x,
+      H(operationsHub.x, operationsHub.z) + operationsHub.h * 0.5,
+      operationsHub.z,
+    ).project(camera);
+    if (v.z >= 1) return null;
+    return Math.hypot(
+      r.left + ((v.x + 1) / 2) * r.width - cx,
+      r.top + ((1 - v.y) / 2) * r.height - cy,
+    ) < radius ? operationsHub : null;
+  }
   /** zoom two is available only after Hollywood was chosen as zoom one. */
   let activeIslandName: string | null = null;
   let entering = false;
@@ -1563,6 +1661,17 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     if (!down || down.pointerId !== e.pointerId || !ready) return;
     const tapSlop = down.pointerType === "touch" ? 22 : down.pointerType === "pen" ? 12 : 6;
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > tapSlop) return;
+    const hubRadius = down.pointerType === "touch" ? 120 : down.pointerType === "pen" ? 96 : 76;
+    const hub = operationsHubAt(e.clientX, e.clientY, hubRadius);
+    if (hub && !entering) {
+      entering = true;
+      events.onOperationsHubHover?.(null);
+      flyTo(hub.x, hub.z, 520, () => {
+        entering = false;
+        events.onOperationsHub?.();
+      });
+      return;
+    }
     const tw = towerAt(e.clientX, e.clientY);
     if (tw) { events.onTower?.(tw.id); return; }
     const suitcaseRadius = down.pointerType === "touch" ? 108 : down.pointerType === "pen" ? 84 : 64;
@@ -1603,12 +1712,14 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     }
     const keys = best ? placed.filter(q => q.plan && q.plan === best!.plan).map(q => q.key) : [];
     const tw = towerAt(e.clientX, e.clientY);
+    const hub = !entering ? operationsHubAt(e.clientX, e.clientY) : null;
     const sc = !entering && activeIslandName === "Hollywood" ? suitcaseAt(e.clientX, e.clientY) : null;
+    events.onOperationsHubHover?.(hub ? { x: e.clientX, y: e.clientY } : null);
     events.onSuitcaseHover?.(sc ? { x: e.clientX, y: e.clientY } : null);
     const sig = keys.join("|") + (tw ? tw.id : "");
     if (sig !== hoverSig || keys.length || tw) events.onHover?.(keys.length || tw ? { keys, x: e.clientX, y: e.clientY, tower: tw?.id } : null);
     hoverSig = sig;
-    renderer.domElement.style.cursor = keys.length || tw || sc ? "pointer" : "";
+    renderer.domElement.style.cursor = keys.length || tw || hub || sc ? "pointer" : "";
   };
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
