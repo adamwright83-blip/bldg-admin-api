@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Mitch event inbox is required: never boot an event worker without durable dedupe.
+const mitchEventDdl = await readFile(new URL("../drizzle/0111_mitch_producer_events.sql", import.meta.url), "utf8");
+for (const statement of mitchEventDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Mitch producer event inbox");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,

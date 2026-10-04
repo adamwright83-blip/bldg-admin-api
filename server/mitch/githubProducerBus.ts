@@ -12,6 +12,7 @@ export type GitHubIssueComment = {
   body: string;
   created_at: string;
   user?: { login?: string | null } | null;
+  performed_via_github_app?: { id?: number | null; slug?: string | null } | null;
 };
 
 export type GitHubProducerBusConfig = {
@@ -71,6 +72,15 @@ export class GitHubProducerBus {
       throw new Error(`GitHub producer bus request failed ${response.status}: ${body.slice(0, 500)}`);
     }
     return response;
+  }
+
+  async verifyImplementationIdentity(branch: string, commitSha: string): Promise<void> {
+    const [owner, repo] = this.config.repoFullName.split("/");
+    const response = await this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/ref/heads/${branch.split("/").map(encodeURIComponent).join("/")}`);
+    const ref = await response.json() as { object?: { type?: string; sha?: string } };
+    if (ref.object?.type !== "commit" || ref.object.sha?.toLowerCase() !== commitSha.toLowerCase()) {
+      throw new Error("Handback branch does not resolve to the exact returned commit SHA");
+    }
   }
 
   async listComments(): Promise<GitHubIssueComment[]> {

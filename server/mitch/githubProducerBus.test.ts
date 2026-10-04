@@ -57,6 +57,18 @@ describe("GitHubProducerBus", () => {
     vi.unstubAllGlobals();
   });
 
+  it("checks the real GitHub branch ref against the exact returned SHA", async () => {
+    const sha = "a".repeat(40);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ object: { type: "commit", sha } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const bus = new GitHubProducerBus({ token: "test", repoFullName: "owner/repo", issueNumber: 370 });
+      await bus.verifyImplementationIdentity("codex/proof", sha);
+      expect(fetchMock.mock.calls[0][0]).toContain("/git/ref/heads/codex/proof");
+      await expect(bus.verifyImplementationIdentity("codex/proof", "b".repeat(40))).rejects.toThrow("exact returned commit");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it("fails closed without producer-bus credentials", () => {
     expect(
       () =>

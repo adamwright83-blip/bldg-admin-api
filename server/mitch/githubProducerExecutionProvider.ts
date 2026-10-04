@@ -1,8 +1,10 @@
+import { eventContract } from "../../shared/mitchEvents";
 
 import type { MitchExecutionHandback, MitchWorkOrder } from "../../shared/mitchContracts";
 import { workOrderDispatchMarker, handbackMarker } from "../../shared/mitchProducerBus";
 import type { IMitchExecutionProvider } from "./mitchDispatcher";
 import { GitHubProducerBus } from "./githubProducerBus";
+import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
 
 export type GitHubProducerExecutionProviderOptions = {
   id?: string;
@@ -10,6 +12,7 @@ export type GitHubProducerExecutionProviderOptions = {
   pollMs?: number;
   timeoutMs?: number;
   leaseMs?: number;
+  wakeProvider?: IMitchAgentWakeProvider;
 };
 
 export class GitHubProducerExecutionProvider implements IMitchExecutionProvider {
@@ -18,6 +21,7 @@ export class GitHubProducerExecutionProvider implements IMitchExecutionProvider 
   readonly leaseMs: number;
   private readonly pollMs: number;
   private readonly timeoutMs: number;
+  private readonly wakeProvider?: IMitchAgentWakeProvider;
 
   constructor(
     private readonly bus: GitHubProducerBus,
@@ -28,6 +32,7 @@ export class GitHubProducerExecutionProvider implements IMitchExecutionProvider 
     this.pollMs = options.pollMs ?? 15_000;
     this.timeoutMs = options.timeoutMs ?? 45 * 60 * 1000;
     this.leaseMs = options.leaseMs ?? Math.max(this.timeoutMs + 10 * 60 * 1000, 60 * 60 * 1000);
+    this.wakeProvider = options.wakeProvider;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -39,8 +44,9 @@ export class GitHubProducerExecutionProvider implements IMitchExecutionProvider 
     }
   }
 
-  async executeWorkOrder(order: MitchWorkOrder): Promise<MitchExecutionHandback> {
+  async dispatchWorkOrder(order: MitchWorkOrder): Promise<void> {
     const marker = workOrderDispatchMarker(order.id);
+    let issueCommentUrl: string | null = null;
     if (!(await this.bus.hasMarker(marker))) {
       const handback = handbackMarker(order.id);
       const body = [
@@ -75,32 +81,36 @@ export class GitHubProducerExecutionProvider implements IMitchExecutionProvider 
         "- Do not invent creative acceptance.",
         "- Keep IMPLEMENTED ≠ VERIFIED ≠ CREATIVE-ACCEPTED ≠ RELEASED.",
         "",
-        "### Handback format",
-        "Return a comment beginning with ## CLAUDE → MITCH and marker:",
-        "<!-- " + handback + " -->",
-        "followed by one fenced JSON object matching:",
-        "",
-        "~~~json",
-        JSON.stringify(
-          {
-            branch: "your-branch",
-            commitSha: "real git sha",
-            exactBuildId: "real git sha or immutable preview URL",
-            whatChanged: "player-visible summary",
-            testsActuallyRun: ["test command"],
-            testsNotRun: [],
-            previewLaunchInstructions: "exact preview URL or exact local launch instructions",
-            evidence: { captures: ["artifact-or-url"] },
-            knownLimitations: "known limitations"
-          },
-          null,
-          2
-        ),
-        "~~~"
+        "### Event-driven handback (mandatory)",
+        eventContract(order, this.id, "implementation_handback", { handback: {
+          branch: "your-branch", commitSha: "FULL_40_CHARACTER_SHA", exactBuildId: "FULL_40_CHARACTER_SHA",
+          whatChanged: "player-visible summary", testsActuallyRun: ["command and result"], testsNotRun: [],
+          previewLaunchInstructions: "exact launch instructions", evidence: { captures: [], sourceCompiled: false, unitTestsPassed: false, buildCommitSha: "FULL_40_CHARACTER_SHA" }, knownLimitations: ""
+        } }),
       ].join("\n");
-      await this.bus.postComment(body);
+      const comment = await this.bus.postComment(body);
+      issueCommentUrl = comment.html_url ?? null;
     }
 
+    if (!this.wakeProvider || !this.wakeProvider.hasTarget(this.id)) {
+      throw new Error(`No immediate outbound wake target configured for executor "${this.id}"`);
+    }
+    await this.wakeProvider.wake({
+      wakeId: `implementation:${order.id}`,
+      actorId: this.id,
+      kind: "implementation_request",
+      tenantId: order.tenantId,
+      gameId: order.gameId,
+      milestoneId: order.milestoneId,
+      workOrderId: order.id,
+      buildId: null,
+      issueCommentUrl,
+    });
+  }
+
+  /** Legacy recovery interface; normal runtime uses dispatchWorkOrder plus event ingress. */
+  async executeWorkOrder(order: MitchWorkOrder): Promise<MitchExecutionHandback> {
+    await this.dispatchWorkOrder(order);
     const result = await this.bus.waitForHandback({
       workOrderId: order.id,
       after: order.claimedAt,

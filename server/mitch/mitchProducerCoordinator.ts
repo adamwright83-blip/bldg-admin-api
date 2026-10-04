@@ -1,3 +1,5 @@
+import { eventContract } from "../../shared/mitchEvents";
+import type { MitchProducerDesignReview } from "../../shared/mitchProducerBus";
 
 import {
   designReviewRequestMarker,
@@ -10,6 +12,7 @@ import { MitchProductionReasoningService } from "./mitchReasoningService";
 import { MitchProductionService } from "./mitchService";
 import { MitchQaService } from "./mitchQaService";
 import type { IMitchProductionStore } from "./mitchStore";
+import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
 import {
   SMALL_COMFORTS_GAME_ID,
   SMALL_COMFORTS_PROPRIETOR_MILESTONE,
@@ -17,6 +20,7 @@ import {
 } from "./smallComfortsProduction";
 
 export type MitchProducerCoordinatorResult =
+  | { action: "dispatch_sent"; workOrderId: string }
   | { action: "dispatched"; workOrderId: string; buildId: string }
   | { action: "design_review_requested"; buildId: string }
   | { action: "design_review_fix_needed"; buildId: string; issueId: string }
@@ -37,6 +41,9 @@ export class MitchProducerCoordinator {
       reasoning: MitchProductionReasoningService;
       qa: MitchQaService;
       bus: GitHubProducerBus;
+      wakeProvider?: IMitchAgentWakeProvider;
+      eventDriven?: boolean;
+      reviewerId?: string;
       initialBaseBranch?: string;
       initialBaseSha?: string;
     }
@@ -58,7 +65,13 @@ export class MitchProducerCoordinator {
       .filter(order => order.status === "pending")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
 
+    const beforeDispatch = await this.deps.reasoning.inspectProductionState(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    if (beforeDispatch.blockers.isHumanCreativeBlocker) return { action: "idle", reason: "HUMAN CREATIVE DECISION REQUIRED" };
     if (pending) {
+      if (this.deps.eventDriven) {
+        const order = await this.deps.dispatcher.startAutonomous({ tenantId: this.deps.tenantId, workOrderId: pending.id });
+        return { action: "dispatch_sent", workOrderId: order.id };
+      }
       const result = await this.deps.dispatcher.dispatchAutonomous({
         tenantId: this.deps.tenantId,
         workOrderId: pending.id,
@@ -114,7 +127,7 @@ export class MitchProducerCoordinator {
     const failed = orders
       .filter(order => order.status === "failed" && order.attemptCount < order.maxAttempts)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-    if (failed) {
+    if (failed && orders.filter(order => order.milestoneId === failed.milestoneId && order.status === "failed").length < failed.maxAttempts) {
       const retry = await this.retryFailedOrder(failed);
       return { action: "fix_order_created", workOrderId: retry.id, issueId: "execution_retry" };
     }
@@ -125,20 +138,51 @@ export class MitchProducerCoordinator {
     };
   }
 
+  async acceptReview(
+    milestone: MitchMilestone,
+    buildId: string,
+    review: MitchProducerDesignReview,
+    reviewerId: string
+  ): Promise<MitchProducerCoordinatorResult> {
+    return this.routeDesignReview(milestone, buildId, review, reviewerId);
+  }
+
+  /** Drain bounded immediate transitions until waiting on an external actor. */
+  async advance(): Promise<void> {
+    for (let step = 0; step < 8; step++) {
+      const result = await this.runOnce();
+      if (!["dispatched", "fix_order_created", "design_review_fix_needed", "fix_submitted"].includes(result.action)) return;
+    }
+    throw new Error("Producer exceeded bounded immediate transition limit");
+  }
+
   private async routeDesignReview(
     milestone: MitchMilestone,
-    buildId: string
+    buildId: string,
+    suppliedReview?: MitchProducerDesignReview,
+    suppliedReviewerId?: string
   ): Promise<MitchProducerCoordinatorResult> {
     const build = await this.deps.store.getBuild(this.deps.tenantId, buildId);
+    const reviewerId = suppliedReview
+      ? suppliedReviewerId
+      : (this.deps.reviewerId ?? "chatgpt_design_review");
+    if (!reviewerId) throw new Error("Authenticated reviewer identity is required");
     if (!build) return { action: "idle", reason: `Build ${buildId} is not durable in Mitch store.` };
 
-    const requestMarker = designReviewRequestMarker(milestone.id, buildId);
+    const reopenCount = (await this.deps.store.listAuditEvents(this.deps.tenantId, milestone.gameId))
+      .filter(a => a.eventType === "mitch_review_reopened" && a.details.buildId === buildId).length;
+    const requestMarker = designReviewRequestMarker(milestone.id, buildId) + (reopenCount ? ":reopen:" + reopenCount : "");
     const responseMarker = designReviewResponseMarker(milestone.id, buildId);
-    const response = await this.deps.bus.readDesignReview({ marker: responseMarker });
+    const fixIssue = (await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID))
+      .find(issue => issue.status === "fix_submitted" && issue.fixBuildId === buildId);
+    const response = suppliedReview ? { review: suppliedReview, comment: { html_url: suppliedReview.evidenceArtifact } } :
+      this.deps.eventDriven ? null : await this.deps.bus.readDesignReview({ marker: responseMarker });
 
     if (!response) {
       if (!(await this.deps.bus.hasMarker(requestMarker))) {
         const run = await this.deps.store.getExecutionRun(this.deps.tenantId, build.executionRunId);
+        const order = await this.deps.store.getWorkOrder(this.deps.tenantId, build.workOrderId);
+        if (!order) throw new Error("Review build has no work order");
         const body = [
           "## MITCH → CHATGPT",
           "<!-- " + requestMarker + " -->",
@@ -168,38 +212,48 @@ export class MitchProducerCoordinator {
           "If nothing blocking is visible but you did not personally exercise the build, use human_play_required.",
           "Only use no_blocking_issue with gameActuallyExercised=true when the exact build was actually exercised.",
           "",
-          "Return a comment beginning with ## CHATGPT → MITCH, followed by:",
-          "<!-- " + responseMarker + " -->",
-          "and one fenced JSON object:",
-          "~~~json",
-          JSON.stringify(
-            {
-              verdict: "fix_needed | no_blocking_issue | human_play_required",
-              observedBehavior: "what you observed",
-              evidenceArtifact: "comment/capture/preview/code reference",
-              recommendedNextProof: "one bounded next proof",
-              gameActuallyExercised: false,
-              acceptancePassed: false,
-            },
-            null,
-            2
-          ),
-          "~~~",
+          eventContract(order, reviewerId, "design_review_handback", {
+            buildId: build.id, branch: build.branch, commitSha: build.commitSha,
+            review: { verdict: "fix_needed", observedBehavior: "observed result", evidenceArtifact: "capture/code/preview reference",
+              recommendedNextProof: "one bounded next proof", gameActuallyExercised: false, acceptancePassed: false }
+          }),
         ].join("\n");
-        await this.deps.bus.postComment(body);
+        await this.deps.store.recordAuditEvent({ tenantId: this.deps.tenantId, gameId: order.gameId,
+          eventType: "mitch_review_requested", actorId: reviewerId,
+          details: { workOrderId: order.id, milestoneId: milestone.id, buildId: build.id, branch: build.branch, commitSha: build.commitSha } });
+        const comment = await this.deps.bus.postComment(body);
+        if (this.deps.eventDriven) {
+          if (!this.deps.wakeProvider || !this.deps.wakeProvider.hasTarget(reviewerId)) {
+            throw new Error(`No immediate outbound wake target configured for reviewer "${reviewerId}"`);
+          }
+          await this.deps.wakeProvider.wake({
+            wakeId: `review:${milestone.id}:${build.id}:${reopenCount}`,
+            actorId: reviewerId,
+            kind: fixIssue ? "retest_request" : "design_review_request",
+            tenantId: this.deps.tenantId,
+            gameId: order.gameId,
+            milestoneId: milestone.id,
+            workOrderId: order.id,
+            buildId: build.id,
+            issueCommentUrl: comment.html_url ?? null,
+          });
+        }
         return { action: "design_review_requested", buildId };
       }
       return { action: "design_review_waiting", buildId };
     }
 
     const review = response.review;
+    const retest = fixIssue ? { issueId: fixIssue.id, previousFailedQaRunId: fixIssue.originatingQaRunId } : {};
+
     if (review.verdict === "fix_needed") {
       const qa = await this.deps.qa.recordGameplayQaRun({
+        ...retest,
         tenantId: this.deps.tenantId,
         gameId: SMALL_COMFORTS_GAME_ID,
         milestoneId: milestone.id,
         buildId,
-        testerId: "chatgpt_design_review",
+        testerId: reviewerId,
         scenario: "Independent producer-bus review of the proprietor fun proof",
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
@@ -221,11 +275,12 @@ export class MitchProducerCoordinator {
       review.acceptancePassed
     ) {
       await this.deps.qa.recordGameplayQaRun({
+        ...retest,
         tenantId: this.deps.tenantId,
         gameId: SMALL_COMFORTS_GAME_ID,
         milestoneId: milestone.id,
         buildId,
-        testerId: "chatgpt_gameplay_qa",
+        testerId: reviewerId,
         scenario: "Independent producer-bus gameplay QA of the proprietor fun proof",
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
@@ -241,6 +296,7 @@ export class MitchProducerCoordinator {
       return { action: "creative_acceptance_requested", buildId };
     }
 
+    await this.deps.store.saveMilestone({ ...milestone, isHumanCreativeBlocker: true, status: "blocked", blockedReason: "HUMAN CREATIVE DECISION REQUIRED" });
     await this.requestAdamDecision(
       buildId,
       "The implementation/design review found no automatic blocking decision it can truthfully close. Please play the exact build and decide whether controlling the proprietor is actually fun."
@@ -249,7 +305,12 @@ export class MitchProducerCoordinator {
   }
 
   private async requestAdamDecision(buildId: string, reason: string): Promise<void> {
-    const marker = "mitch-human-decision:" + buildId;
+    const build = await this.deps.store.getBuild(this.deps.tenantId, buildId);
+    const order = build && await this.deps.store.getWorkOrder(this.deps.tenantId, build.workOrderId);
+    if (!build || !order) throw new Error("Human decision requires an exact build/work order");
+    const reopenCount = (await this.deps.store.listAuditEvents(this.deps.tenantId, order.gameId))
+      .filter(a => a.eventType === "mitch_review_reopened" && a.details.buildId === buildId).length;
+    const marker = "mitch-human-decision:" + buildId + (reopenCount ? ":reopen:" + reopenCount : "");
     if (await this.deps.bus.hasMarker(marker)) return;
     await this.deps.bus.postComment(
       [
@@ -259,6 +320,8 @@ export class MitchProducerCoordinator {
         "**Exact build:** " + buildId,
         "",
         reason,
+        eventContract(order, "adam", "human_decision", { buildId: build.id, branch: build.branch, commitSha: build.commitSha,
+          decision: build.isVerified ? "accept" : "resolve_blocker", note: "Your decision and reason" }),
         "",
         "Mitch is intentionally stopped here. IMPLEMENTED/VERIFIED is not creative acceptance.",
       ].join("\n")

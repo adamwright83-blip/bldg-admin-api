@@ -104,7 +104,11 @@ describe("Mitch v1 — PR3: Exact Builds, Gameplay QA, Issue/Retest & Production
       testsActuallyRun: ["test.ts"],
       testsNotRun: [],
       previewLaunchInstructions: "Launch /goldline-chapter",
-      evidence: {},
+      evidence: {
+        sourceCompiled: true,
+        unitTestsPassed: true,
+        buildCommitSha: buildId,
+      },
       knownLimitations: "",
     };
 

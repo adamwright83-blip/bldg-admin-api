@@ -2,6 +2,20 @@
 import "dotenv/config";
 
 import http from "node:http";
+import mysql from "mysql2/promise";
+import { MysqlMitchEventInbox } from "./mitchEventInbox";
+import { MitchEventService } from "./mitchEventService";
+import {
+  createMitchEventIngress,
+  isGithubActorAuthorized,
+  type MitchGithubActorRule,
+} from "./mitchEventIngress";
+import {
+  HttpMitchAgentWakeProvider,
+  type MitchAgentWakeTarget,
+} from "./mitchAgentWake";
+import { parseMitchComment, MITCH_EVENT_MARKER } from "../../shared/mitchEvents";
+import { SMALL_COMFORTS_GAME_ID } from "./smallComfortsProduction";
 import { GitHubProducerBus } from "./githubProducerBus";
 import { GitHubProducerExecutionProvider } from "./githubProducerExecutionProvider";
 import { MitchGameDispatcher } from "./mitchDispatcher";
@@ -25,14 +39,27 @@ function numberEnv(name: string, fallback: number): number {
   return value;
 }
 
+function jsonEnv<T>(name: string): T {
+  try {
+    return JSON.parse(required(name)) as T;
+  } catch (error) {
+    throw new Error(name + " must contain valid JSON: " + String(error));
+  }
+}
+
 const tenantId = required("MITCH_TENANT_ID");
 const token = required("MITCH_GITHUB_TOKEN");
 const repoFullName = process.env.MITCH_GITHUB_REPO?.trim() || "adamwright83-blip/bldg-admin-api";
 const issueNumber = numberEnv("MITCH_GITHUB_ISSUE_NUMBER", 370);
-const pollMs = numberEnv("MITCH_PRODUCER_POLL_MS", 30_000);
+const recoveryMs = numberEnv("MITCH_PRODUCER_RECOVERY_MS", 60 * 60 * 1000);
 const handbackPollMs = numberEnv("MITCH_HANDBACK_POLL_MS", 15_000);
 const handbackTimeoutMs = numberEnv("MITCH_HANDBACK_TIMEOUT_MS", 45 * 60 * 1000);
 const port = numberEnv("PORT", 8082);
+const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "chatgpt_design_review";
+const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RULES");
+const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
+const wakeTargets = jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS");
+const wakeProvider = new HttpMitchAgentWakeProvider(wakeTargets);
 
 const store = new MitchProductionStore(false, true);
 const service = new MitchProductionService(store);
@@ -43,17 +70,22 @@ const bus = new GitHubProducerBus({ token, repoFullName, issueNumber });
 const provider = new GitHubProducerExecutionProvider(bus, {
   pollMs: handbackPollMs,
   timeoutMs: handbackTimeoutMs,
+  wakeProvider,
 });
-dispatcher.registerExecutionProvider(provider);
+// GitHub access alone does not prove a coding executor is running.
+if (process.env.MITCH_EXECUTOR_ENABLED === "true") dispatcher.registerExecutionProvider(provider);
 
 const coordinator = new MitchProducerCoordinator({
   tenantId,
+  eventDriven: true,
   store,
   service,
   dispatcher,
   reasoning,
   qa,
   bus,
+  wakeProvider,
+  reviewerId,
   initialBaseBranch: process.env.MITCH_SMALL_COMFORTS_BASE_BRANCH?.trim() || undefined,
   initialBaseSha: process.env.MITCH_SMALL_COMFORTS_BASE_SHA?.trim() || undefined,
 });
@@ -70,7 +102,25 @@ async function tick(): Promise<void> {
   inFlight = true;
   lastRunAt = new Date().toISOString();
   try {
-    lastResult = await coordinator.runOnce();
+    // Recovery only: recover structured comments whose webhook never reached the inbox.
+    for (const comment of await bus.listComments()) {
+      if (!comment.body.includes(MITCH_EVENT_MARKER)) continue;
+      let event;
+      try { event = parseMitchComment(comment.body); } catch { continue; }
+      if (
+        event.tenantId !== tenantId ||
+        event.gameId !== SMALL_COMFORTS_GAME_ID ||
+        !isGithubActorAuthorized(githubActorRules, {
+          login: comment.user?.login ?? "",
+          app: comment.performed_via_github_app ?? null,
+          actorId: event.actorId,
+        })
+      ) continue;
+      await events.receive(event);
+    }
+    await events.drain();
+    await coordinator.advance();
+    lastResult = { action: "idle", reason: "Waiting for structured handback events" };
     lastSuccessAt = new Date().toISOString();
     lastError = null;
     console.log("[MitchProducer]", JSON.stringify(lastResult));
@@ -82,36 +132,32 @@ async function tick(): Promise<void> {
   }
 }
 
-const server = http.createServer((request, response) => {
-  if (request.url !== "/healthz") {
-    response.writeHead(404).end();
-    return;
-  }
-  const ok = !lastError || Boolean(lastSuccessAt);
-  response.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
-  response.end(
-    JSON.stringify({
-      ok,
-      producer: {
-        tenantId,
-        repoFullName,
-        issueNumber,
-        inFlight,
-        lastRunAt,
-        lastSuccessAt,
-        lastError,
-        lastResult,
-      },
-    })
-  );
+const pool = mysql.createPool(required("DATABASE_URL"));
+const events = new MitchEventService({ tenantId, gameId: SMALL_COMFORTS_GAME_ID, humanActorId: "adam",
+  inbox: new MysqlMitchEventInbox(pool), store, dispatcher, coordinator, service,
+  verifyImplementation: (branch, commitSha) => bus.verifyImplementationIdentity(branch, commitSha) });
+const app = createMitchEventIngress({
+  events,
+  repoFullName,
+  issueNumber,
+  githubActorRules,
+  callbackActorTokens,
+  webhookSecret: required("MITCH_GITHUB_WEBHOOK_SECRET"),
 });
+app.get("/healthz", (_request, response) => {
+  response.status(lastError ? 503 : 200).json({ ok: !lastError, producer: {
+    tenantId, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
+    mode: "event_driven", recoveryMs,
+  } });
+});
+const server = http.createServer(app);
 
 server.listen(port, () => {
   console.log("[MitchProducer] health listening on", port);
 });
 
 void tick();
-const timer = setInterval(() => void tick(), pollMs);
+const timer = setInterval(() => void tick(), recoveryMs);
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
@@ -121,6 +167,7 @@ async function shutdown(signal: string): Promise<void> {
   clearInterval(timer);
   console.log("[MitchProducer] received", signal, "draining");
   await new Promise<void>(resolve => server.close(() => resolve()));
+  await pool.end();
 }
 
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
