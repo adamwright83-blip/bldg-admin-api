@@ -14,6 +14,8 @@ export const SMALL_COMFORTS_MARKUP = /* html */ `
 <div id="nightlabel"></div>
 <button id="btn-mute" class="round" aria-label="Sound">🔊</button>
 <div id="guestline"></div>
+<div id="hotelstatus"></div>
+<div id="story"></div>
 <div id="hint"></div>
 <div id="toast"></div>
 
@@ -27,12 +29,17 @@ export const SMALL_COMFORTS_MARKUP = /* html */ `
     <button data-kind="rug"><span class="ic">🟥</span><span class="lb">Rug</span><span class="badge">1</span></button>
     <button data-kind="scissors"><span class="ic">✂️</span><span class="lb">Scissors</span></button>
   </div>
+  <div id="anatomy" aria-label="Suitcase tricks">
+    <button data-project="lining_stairs"><span class="ic">🪜</span><span><b>Fold lining</b><small>Make steps</small></span></button>
+    <button data-project="strap_hammock"><span class="ic">🧷</span><span><b>Tension straps</b><small>Make a hammock</small></span></button>
+    <button data-project="pocket_loft"><span class="ic">🧳</span><span><b>Open pocket</b><small>Make a loft</small></span></button>
+  </div>
   <div id="actions">
     <button id="btn-undo" class="act" disabled>↶<span>Undo</span></button>
     <button id="btn-rotate" class="act">⟳<span>Rotate</span></button>
     <button id="btn-pick" class="act" disabled>✋<span>Pick up</span></button>
   </div>
-  <button id="btn-bell" aria-label="Ring the bell"><span class="bellic">🔔</span><span>Ring the bell</span></button>
+  <button id="btn-bell" aria-label="Open the hotel to the next arrival"><span class="bellic">🔔</span><span>Open the hotel</span></button>
 </div>
 
 <div id="card" class="overlay center">

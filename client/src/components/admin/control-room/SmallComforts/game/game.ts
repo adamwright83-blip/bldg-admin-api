@@ -5,12 +5,27 @@ import { Fx } from "./fx";
 import { Mouse, Mode } from "./mice";
 import { makeItem, place, itemCenter, cellPos, bedHeadCell } from "./items";
 import { setImportedLampEmissive } from "./assets";
+import { AnatomyWorks } from "./anatomy";
+import { ResidentLife } from "./residents";
 import { rbox, toon, easeOutBack, clamp01 } from "./style";
 import {
   Layout, Item, ItemKind, Rot, Cell, emptyLayout, canPlace, prune, itemAt, footprint, onBed, LIMITS, COLS, ROWS, DOOR, ITEM_LABEL, inBounds,
 } from "../logic/grid";
 import { planGuest, GUEST_ORDER, GUEST_NAME, Plan, GuestId } from "../logic/guests";
 import { track, store } from "../config";
+import {
+  arrivalGate,
+  completeProject,
+  completeStay,
+  emptyEpisode,
+  episodeLine,
+  nextArrival,
+  normalizeEpisode,
+  projectStatus,
+  roomCapacity,
+  type AnatomyProject,
+  type EpisodeState,
+} from "../logic/episode";
 
 type Phase = "title" | "descent" | "closed" | "opening" | "furnish" | "night" | "morning" | "end";
 type Tool = ItemKind | "scissors" | null;
@@ -24,7 +39,7 @@ const SPEED = 2.6;
 /** frame-time cap; ?dt=0.4 lets slow test machines run the game in real time */
 const MAXDT = Number(new URLSearchParams(location.search).get("dt")) || 0.05;
 
-interface SaveData { layout: Layout; nightIdx: number; notes: { guest: GuestId; text: string; happy: boolean }[] }
+interface SaveData { layout: Layout; nightIdx: number; notes: { guest: GuestId; text: string; happy: boolean }[]; episode?: EpisodeState }
 
 /** the game's own DOM root: every id lookup is scoped here so nothing leaks into the host app */
 let UI: HTMLElement = document.body;
@@ -48,6 +63,11 @@ export class Game {
   nextId = 1;
   nightIdx = 0;
   notes: SaveData["notes"] = [];
+  episode: EpisodeState = emptyEpisode();
+  anatomy!: AnatomyWorks;
+  residents!: ResidentLife;
+  keepsakeGroup = new THREE.Group();
+  private storyTimer = 0;
   meshes = new Map<number, THREE.Group>();
   popT = new Map<number, number>();
   lampOn = new Map<number, boolean>();
@@ -98,6 +118,11 @@ export class Game {
     this.bell.add(base, dome, knob); this.bell.position.set(4.6, -0.2, 3.2); this.world.scene.add(this.bell);
     this.buildCutDots();
     this.load();
+    this.anatomy = new AnatomyWorks();
+    this.world.caseGroup.add(this.anatomy.group);
+    this.residents = new ResidentLife(this.world.room);
+    this.world.room.add(this.keepsakeGroup);
+    this.syncEpisodeVisuals();
     this.wireUi();
     this.resize();
     this.on(window, "resize", () => this.resize());
@@ -122,14 +147,30 @@ export class Game {
 
   // ------------------------------------------------------------------ persistence
   load() {
-    const s = store.get<SaveData | null>("sc.save", null);
-    if (s && s.layout && Array.isArray(s.layout.items) && s.nightIdx < GUEST_ORDER.length) {
-      this.layout = s.layout; this.nightIdx = s.nightIdx; this.notes = s.notes || [];
+    const saved = store.get<SaveData | null>("sc.save", null);
+    if (saved && saved.layout && Array.isArray(saved.layout.items)) {
+      this.layout = saved.layout;
+      this.notes = saved.notes || [];
+      const migratedEpisode = saved.episode ?? {
+        residents: this.notes.map((note, index) => ({ guest: note.guest, branch: "legacy_stay", arrivedOrder: index + 1 })),
+        keepsakes: [],
+        projects: [],
+        arrivals: this.notes.length,
+      };
+      this.episode = normalizeEpisode(migratedEpisode);
+      this.nightIdx = this.episode.residents.length;
       this.nextId = Math.max(0, ...this.layout.items.map(i => i.id)) + 1;
     }
     this.sound.muted = store.get("sc.muted", false);
   }
-  save() { store.set("sc.save", { layout: this.layout, nightIdx: this.nightIdx, notes: this.notes } satisfies SaveData); }
+  save() {
+    store.set("sc.save", {
+      layout: this.layout,
+      nightIdx: this.episode.residents.length,
+      notes: this.notes,
+      episode: this.episode,
+    } satisfies SaveData);
+  }
 
   // ------------------------------------------------------------------ phases
   setPhase(p: Phase) {
@@ -141,14 +182,20 @@ export class Game {
     if (p === "furnish") {
       (this.world.gridPlane.material as THREE.MeshBasicMaterial).opacity = 0.35;
       this.refreshTray();
-      const g = GUEST_ORDER[this.nightIdx];
-      $("guestline").innerHTML = `<b>Tonight: ${GUEST_NAME[g]}.</b> ${GUEST_TAG[g]}`;
-      $("guestline").classList.add("show");
+      const guest = nextArrival(this.episode);
+      if (guest) {
+        $("guestline").innerHTML = `<b>Next train: ${GUEST_NAME[guest]}.</b> ${GUEST_TAG[guest]}`;
+        $("guestline").classList.add("show");
+      } else {
+        $("guestline").innerHTML = "<b>The little hotel is awake.</b> Everyone on this line has found a place here.";
+        $("guestline").classList.add("show");
+      }
+      $("hotelstatus").textContent = `${episodeLine(this.episode)} Room for ${roomCapacity(this.episode)}.`;
     } else {
       (this.world.gridPlane.material as THREE.MeshBasicMaterial).opacity = 0;
       if (p !== "closed") $("guestline").classList.remove("show");
     }
-    $("nightlabel").textContent = p === "end" || p === "title" ? "" : `Night ${Math.min(this.nightIdx + 1, 3)} of 3`;
+    $("nightlabel").textContent = p === "end" || p === "title" ? "" : `Lost Property Hotel · ${this.episode.residents.length} home`;
   }
   hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); }
   toast(t: string) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), 1600); }
@@ -263,6 +310,7 @@ export class Game {
     // the window follows the layout (so undo works)
     if (this.layout.windowCut && !this.world.windowCut) this.world.cutWindow();
     if (!this.layout.windowCut && this.world.windowCut) this.world.restoreWindow();
+    this.residents?.sync(this.episode, this.layout, this.time);
     this.updateSelection();
   }
   applyLamp(id: number) {
@@ -330,7 +378,8 @@ export class Game {
     this.showCutGuide(false);
     this.armed = null; this.refreshTray();
     this.sound.rip(); setTimeout(() => this.sound.thump(), 700);
-    this.toast("A window! The trains will be able to see you. ");
+    this.toast("The lining opens to the railway. The loose flap could become steps.");
+    this.refreshProjects();
     track("window_cut");
   }
 
@@ -436,6 +485,8 @@ export class Game {
     });
     $("btn-undo").toggleAttribute("disabled", this.history.length === 0);
     this.showCutGuide(this.armed === "scissors");
+    this.refreshProjects();
+    this.refreshBell();
   }
   armTool(k: Tool) {
     if (this.phase !== "furnish") return;
@@ -477,6 +528,9 @@ export class Game {
     $("btn-undo").addEventListener("click", () => this.undo());
     $("btn-rotate").addEventListener("click", () => this.rotateSelected());
     $("btn-pick").addEventListener("click", () => this.pickUpSelected());
+    this.ui.querySelectorAll<HTMLButtonElement>("#anatomy button").forEach(button => {
+      button.addEventListener("click", () => this.buildProject(button.dataset.project as AnatomyProject));
+    });
     $("btn-bell").addEventListener("click", () => this.ring());
     $("btn-mute").addEventListener("click", () => {
       this.sound.setMuted(!this.sound.muted); store.set("sc.muted", this.sound.muted);
@@ -502,10 +556,16 @@ export class Game {
   // ------------------------------------------------------------------ the night
   ring() {
     if (this.phase !== "furnish") return;
+    const gate = arrivalGate(this.episode);
+    const guest = nextArrival(this.episode);
+    if (!gate.canRing || !guest) {
+      this.sound.nope();
+      this.toast(gate.reason);
+      return;
+    }
     this.armed = null; this.selected = null; this.updateSelection(); this.refreshTray(); this.clearHover();
     this.sound.bell(); this.bellT = this.time;
-    track("bell_rung", { night: this.nightIdx + 1 });
-    const guest = GUEST_ORDER[this.nightIdx];
+    track("bell_rung", { arrival: this.episode.arrivals + 1, guest });
     this.plan(guest);
     this.setPhase("night");
     $("hint").classList.remove("show");
@@ -626,7 +686,7 @@ export class Game {
         this.nightTarget = 0; this.sound.chime();
         this.setMode(r.lying ? "lie" : "idle");
       }
-      if (r.wakeT > 4.4 && r.stage === "wake") { r.stage = "card"; this.showNote(); }
+      if (r.wakeT > 4.4 && r.stage === "wake") { r.stage = "card"; this.settleCurrentGuest(); }
     }
   }
 
@@ -668,6 +728,117 @@ export class Game {
     if (it) { this.lampOn.set(it.id, false); this.applyLamp(it.id); }
     this.sound.lampClick();
     this.nightTarget = 1;
+  }
+
+  showStory(text: string, ms = 4200) {
+    const el = $("story");
+    el.textContent = text;
+    el.classList.add("show");
+    window.clearTimeout(this.storyTimer);
+    this.storyTimer = window.setTimeout(() => el.classList.remove("show"), ms);
+  }
+
+  refreshProjects() {
+    this.ui.querySelectorAll<HTMLButtonElement>("#anatomy button").forEach(button => {
+      const project = button.dataset.project as AnatomyProject;
+      const status = projectStatus(project, this.episode, this.layout);
+      button.disabled = !status.available;
+      button.classList.toggle("is-complete", status.complete);
+      button.title = status.reason;
+      button.setAttribute("aria-label", status.complete ? `${status.reason}` : `${button.textContent?.trim() ?? project}. ${status.reason}`);
+    });
+  }
+
+  refreshBell() {
+    const button = $("btn-bell") as HTMLButtonElement;
+    const gate = arrivalGate(this.episode);
+    button.disabled = !gate.canRing;
+    const label = button.querySelector("span:last-child");
+    if (label) label.textContent = gate.canRing ? "Open the hotel" : this.episode.residents.length >= GUEST_ORDER.length ? "Hotel is home" : "Make room first";
+    button.title = gate.reason;
+  }
+
+  buildProject(project: AnatomyProject) {
+    if (this.phase !== "furnish") return;
+    const status = projectStatus(project, this.episode, this.layout);
+    if (!status.available) {
+      this.sound.nope();
+      this.toast(status.reason);
+      return;
+    }
+    this.episode = completeProject(this.episode, project);
+    this.anatomy.sync(this.episode.projects, this.time);
+    this.residents.sync(this.episode, this.layout, this.time);
+    this.save();
+    this.sound.thump();
+    const line =
+      project === "lining_stairs" ? "You fold the loose lining into four soft steps. The lid pocket is reachable now." :
+      project === "strap_hammock" ? "The old luggage straps take the weight. There is room for another traveler." :
+      "The satin pocket becomes a tiny loft. It feels like a room that was hiding there all along.";
+    this.showStory(line);
+    this.refreshTray();
+    track("anatomy_built", { project });
+  }
+
+  syncEpisodeVisuals() {
+    this.anatomy?.sync(this.episode.projects, this.time);
+    this.residents?.sync(this.episode, this.layout, this.time);
+    this.syncKeepsakes();
+  }
+
+  syncKeepsakes() {
+    while (this.keepsakeGroup.children.length) this.keepsakeGroup.remove(this.keepsakeGroup.children[0]);
+    for (const memory of this.episode.keepsakes) {
+      if (memory.kind === "ticket") {
+        const ticket = rbox(0.38, 0.025, 0.18, "#d9c48f", 0.015, false);
+        ticket.position.set(2.05, 0.055, -1.28);
+        ticket.rotation.y = -0.25;
+        this.keepsakeGroup.add(ticket);
+      } else if (memory.kind === "bun") {
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), toon("#b97738"));
+        bun.scale.set(1.15, 0.65, 0.9);
+        bun.position.set(0.55, 0.12, 0.55);
+        bun.castShadow = true;
+        this.keepsakeGroup.add(bun);
+      } else {
+        const mark = rbox(0.12, 0.018, 0.42, "#8E2F3F", 0.012, false);
+        mark.position.set(-1.95, 0.05, -0.95);
+        mark.rotation.y = 0.15;
+        this.keepsakeGroup.add(mark);
+      }
+    }
+  }
+
+  settleCurrentGuest() {
+    const r = this.run;
+    const mouse = this.mouse;
+    if (!r || !mouse) return;
+    const plan = r.plan;
+
+    this.episode = completeStay(this.episode, plan.guest, plan.branch);
+    const record = this.episode.residents.find(resident => resident.guest === plan.guest)!;
+    this.notes.push({ guest: plan.guest, text: plan.note, happy: plan.happy });
+    this.residents.adopt(record, mouse, this.episode, this.layout, this.time);
+    this.mouse = null;
+    this.run = null;
+    this.nightIdx = this.episode.residents.length;
+    this.lampOn.forEach((_v, id) => { this.lampOn.set(id, true); this.applyLamp(id); });
+    this.nightTarget = 0.18;
+    this.syncEpisodeVisuals();
+    this.save();
+    this.setPhase("furnish");
+
+    const memory = this.episode.keepsakes.find(k => k.guest === plan.guest);
+    const gate = arrivalGate(this.episode);
+    const next = nextArrival(this.episode);
+    const coda = next
+      ? gate.canRing
+        ? ` ${GUEST_NAME[next]} is somewhere down the line.`
+        : ` ${gate.reason}`
+      : " No one leaves in a puff of smoke. This is their home now.";
+    this.showStory(`${GUEST_NAME[plan.guest]} settles in. ${memory?.text ?? ""}${coda}`, 6200);
+    track("guest_became_resident", { guest: plan.guest, branch: plan.branch, residents: this.episode.residents.length });
+    this.saveSnapshotQuiet();
   }
 
   showNote() {
@@ -746,7 +917,7 @@ export class Game {
 
   playAgain() {
     $("end").classList.remove("show");
-    this.layout = emptyLayout(); this.history = []; this.notes = []; this.nightIdx = 0; this.nextId = 1; this.selected = null;
+    this.layout = emptyLayout(); this.history = []; this.notes = []; this.episode = emptyEpisode(); this.nightIdx = 0; this.nextId = 1; this.selected = null;
     this.sync(); this.save();
     this.setPhase("furnish");
     track("play_again");
@@ -779,6 +950,7 @@ export class Game {
     if (Math.abs(n - this.world.night) > 0.0005) { this.world.setNight(n); this.sound.setRain(1 - n * 0.6); }
     // lamps: a warm pool grows with the dark
     this.world.update(dt, t);
+    this.anatomy.update(t);
     this.fx.update(dt);
     if (this.phase === "night" || this.phase === "morning") this.tickRun(dt);
     // stop-motion: characters only move on 12 fps frames
@@ -793,6 +965,7 @@ export class Game {
         this.mouse.baseY = 0;
         this.mouse.update(f12 / 12);
       }
+      this.residents.update(f12 / 12);
     }
     // item pop-ins, full rate
     for (const [id, g] of this.meshes) {
