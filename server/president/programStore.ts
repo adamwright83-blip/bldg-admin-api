@@ -71,6 +71,8 @@ function stepFromRow(r: RowDataPacket): PresidentProgramStep {
     consequentialDomain: r.consequentialDomain,
     maxUsd: Number(r.maxUsd),
     spentUsd: Number(r.spentUsd),
+    executorCapability: r.executorCapability,
+    reviewerCapability: r.reviewerCapability,
     executorId: r.executorId,
     reviewerId: r.reviewerId,
     baseRef: r.baseRef,
@@ -349,8 +351,8 @@ export class MysqlPresidentProgramStore
     const step = presidentProgramStepSchema.parse(input);
     await this.pool.execute(
       `INSERT INTO president_program_steps
-       (id,programId,sequence,type,title,outcome,acceptanceCriteriaJson,nonGoalsJson,requiredEvidenceJson,authorityClass,consequentialDomain,maxUsd,spentUsd,executorId,reviewerId,baseRef,baseSha,state,attemptCount,maxAttempts,leaseOwner,leaseExpiresAt,nextAttemptAt,exactArtifactId,error,createdAt,updatedAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       (id,programId,sequence,type,title,outcome,acceptanceCriteriaJson,nonGoalsJson,requiredEvidenceJson,authorityClass,consequentialDomain,maxUsd,spentUsd,executorCapability,reviewerCapability,executorId,reviewerId,baseRef,baseSha,state,attemptCount,maxAttempts,leaseOwner,leaseExpiresAt,nextAttemptAt,exactArtifactId,error,createdAt,updatedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         step.id,
         step.programId,
@@ -365,6 +367,8 @@ export class MysqlPresidentProgramStore
         step.consequentialDomain,
         step.maxUsd,
         step.spentUsd,
+        step.executorCapability,
+        step.reviewerCapability,
         step.executorId,
         step.reviewerId,
         step.baseRef,
@@ -416,7 +420,7 @@ export class MysqlPresidentProgramStore
     });
     await this.pool.execute(
       `UPDATE president_program_steps SET
-       type=?,title=?,outcome=?,acceptanceCriteriaJson=?,nonGoalsJson=?,requiredEvidenceJson=?,authorityClass=?,consequentialDomain=?,maxUsd=?,spentUsd=?,executorId=?,reviewerId=?,baseRef=?,baseSha=?,state=?,attemptCount=?,maxAttempts=?,leaseOwner=?,leaseExpiresAt=?,nextAttemptAt=?,exactArtifactId=?,error=?,updatedAt=?
+       type=?,title=?,outcome=?,acceptanceCriteriaJson=?,nonGoalsJson=?,requiredEvidenceJson=?,authorityClass=?,consequentialDomain=?,maxUsd=?,spentUsd=?,executorCapability=?,reviewerCapability=?,executorId=?,reviewerId=?,baseRef=?,baseSha=?,state=?,attemptCount=?,maxAttempts=?,leaseOwner=?,leaseExpiresAt=?,nextAttemptAt=?,exactArtifactId=?,error=?,updatedAt=?
        WHERE id=?`,
       [
         step.type,
@@ -429,6 +433,8 @@ export class MysqlPresidentProgramStore
         step.consequentialDomain,
         step.maxUsd,
         step.spentUsd,
+        step.executorCapability,
+        step.reviewerCapability,
         step.executorId,
         step.reviewerId,
         step.baseRef,
