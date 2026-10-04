@@ -14,6 +14,7 @@ import {
   type PresidentProgramPlanDraft,
   type PresidentProgramStep,
   type PresidentExecutiveSeat,
+  type PresidentAgentCapability,
 } from "../../shared/presidentOperatingSystem";
 import { executiveSkillCatalog } from "./skillRouter";
 import type { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
@@ -633,6 +634,208 @@ export class PresidentProgramService {
       questions,
       tomorrow,
     });
+  }
+
+  async registerAgentCapability(input: {
+    capability: Omit<
+      PresidentAgentCapability,
+      "status" | "createdAt" | "updatedAt" | "revokedAt"
+    >;
+    requestedBy: string;
+    idempotencyKey: string;
+  }) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy) throw new Error("President authority policy is not configured");
+    const isFounder = input.requestedBy === policy.founderId;
+    if (!isFounder) {
+      if (
+        input.requestedBy !== "seat.president" ||
+        input.capability.kind !== "TEMPORARY_SPECIALIST" ||
+        !input.capability.programId
+      )
+        throw new Error("Only founder may create enduring President capabilities");
+      const program = await this.programs.getProgram(input.capability.programId);
+      if (
+        !program ||
+        ["SELECTED", "PREFLIGHT", "BLOCKED_FOUNDER", "STOPPED", "COMPLETED"].includes(
+          program.state
+        )
+      )
+        throw new Error("Temporary specialist requires an already-authorized active program");
+      if (input.capability.maxUsdPerRun > policy.maxAutonomousUsdPerDay)
+        throw new Error("Temporary specialist exceeds autonomous policy budget");
+    }
+
+    const evidence = await this.intelligence.evidence(input.capability.evidenceIds);
+    if (evidence.length !== new Set(input.capability.evidenceIds).size)
+      throw new Error("Capability recruitment requires durable supporting evidence");
+
+    if (input.capability.kind === "EXECUTIVE_SEAT") {
+      const seat = input.capability.seatRoleKey
+        ? await this.programs.getExecutiveSeat(input.capability.seatRoleKey)
+        : null;
+      if (!seat || !["AUTHORIZED", "ACTIVE"].includes(seat.state))
+        throw new Error("Executive capability requires a founder-authorized executive seat");
+    }
+
+    for (const skill of input.capability.skillNames)
+      if (!executiveSkillCatalog.some(item => item.name === skill))
+        throw new Error(`Unknown President capability skill: ${skill}`);
+
+    const now = new Date().toISOString();
+    const existing = await this.programs.getAgentCapability(
+      input.capability.capabilityKey
+    );
+    if (existing?.status === "ACTIVE") {
+      const same =
+        JSON.stringify({
+          ...existing,
+          createdAt: undefined,
+          updatedAt: undefined,
+          revokedAt: undefined,
+          status: undefined,
+        }) ===
+        JSON.stringify({
+          ...input.capability,
+          createdAt: undefined,
+          updatedAt: undefined,
+          revokedAt: undefined,
+          status: undefined,
+        });
+      if (!same)
+        throw new Error("Active President capability cannot be silently redefined");
+      return { capability: existing, reused: true };
+    }
+
+    const capability = await this.programs.putAgentCapability({
+      ...input.capability,
+      status: "ACTIVE",
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      revokedAt: null,
+    });
+    const record = await this.intelligence.appendCurrent({
+      kind: "CAPABILITY",
+      key: capability.capabilityKey,
+      evidenceIds: capability.evidenceIds,
+      idempotencyKey: input.idempotencyKey,
+      payload: {
+        capability,
+        action: existing ? "REACTIVATED" : "RECRUITED",
+        requestedBy: input.requestedBy,
+      },
+    });
+    if (capability.programId)
+      await this.programs.recordEvent({
+        programId: capability.programId,
+        eventType: "SPECIALIST_CAPABILITY_RECRUITED",
+        actorId: input.requestedBy,
+        details: {
+          capabilityKey: capability.capabilityKey,
+          actorId: capability.actorId,
+          intelligenceRecordId: record.id,
+        },
+      });
+    if (capability.kind === "EXECUTIVE_SEAT" && capability.seatRoleKey) {
+      const seat = await this.programs.getExecutiveSeat(capability.seatRoleKey);
+      if (seat && seat.state === "AUTHORIZED")
+        await this.programs.putExecutiveSeat({
+          ...seat,
+          state: "ACTIVE",
+          provider: capability.targetCapability,
+          updatedAt: now,
+        });
+    }
+    return { capability, record, reused: false };
+  }
+
+  async evaluateAgentCapability(input: {
+    capabilityKey: string;
+    evidenceIds: string[];
+    verdict: "PASS" | "WATCH" | "REVOKE";
+    assessment: string;
+    actorId: string;
+    idempotencyKey: string;
+  }) {
+    const capability = await this.programs.getAgentCapability(input.capabilityKey);
+    if (!capability) throw new Error("President capability not found");
+    const evidence = await this.intelligence.evidence(input.evidenceIds);
+    if (evidence.length !== new Set(input.evidenceIds).size)
+      throw new Error("Capability evaluation requires durable evidence");
+    const evaluation = await this.intelligence.appendCurrent({
+      kind: "EVALUATION",
+      key: `capability:${input.capabilityKey}`,
+      evidenceIds: input.evidenceIds,
+      idempotencyKey: input.idempotencyKey,
+      payload: {
+        capabilityKey: input.capabilityKey,
+        verdict: input.verdict,
+        assessment: input.assessment,
+        actorId: input.actorId,
+      },
+    });
+    if (input.verdict === "REVOKE")
+      return {
+        evaluation,
+        capability: await this.revokeAgentCapability({
+          capabilityKey: input.capabilityKey,
+          evidenceIds: input.evidenceIds,
+          reason: input.assessment,
+          actorId: input.actorId,
+          idempotencyKey: input.idempotencyKey + ":revoke",
+        }),
+      };
+    return { evaluation, capability };
+  }
+
+  async revokeAgentCapability(input: {
+    capabilityKey: string;
+    evidenceIds: string[];
+    reason: string;
+    actorId: string;
+    idempotencyKey: string;
+  }) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy) throw new Error("President authority policy is not configured");
+    const capability = await this.programs.getAgentCapability(input.capabilityKey);
+    if (!capability) throw new Error("President capability not found");
+    const isFounder = input.actorId === policy.founderId;
+    const canPresidentRevokeTemporary =
+      input.actorId === "seat.president" &&
+      capability.kind === "TEMPORARY_SPECIALIST";
+    if (!isFounder && !canPresidentRevokeTemporary)
+      throw new Error("Capability revocation exceeds actor authority");
+    const evidence = await this.intelligence.evidence(input.evidenceIds);
+    if (evidence.length !== new Set(input.evidenceIds).size)
+      throw new Error("Capability revocation requires durable evidence");
+    if (capability.status === "REVOKED") return capability;
+    const now = new Date().toISOString();
+    const revoked = await this.programs.putAgentCapability({
+      ...capability,
+      status: "REVOKED",
+      updatedAt: now,
+      revokedAt: now,
+    });
+    await this.intelligence.appendCurrent({
+      kind: "CAPABILITY",
+      key: capability.capabilityKey,
+      evidenceIds: input.evidenceIds,
+      idempotencyKey: input.idempotencyKey,
+      payload: {
+        capability: revoked,
+        action: "REVOKED",
+        reason: input.reason,
+        actorId: input.actorId,
+      },
+    });
+    if (capability.programId)
+      await this.programs.recordEvent({
+        programId: capability.programId,
+        eventType: "SPECIALIST_CAPABILITY_REVOKED",
+        actorId: input.actorId,
+        details: { capabilityKey: capability.capabilityKey, reason: input.reason },
+      });
+    return revoked;
   }
 
   async proposeExecutiveSeat(input: {
