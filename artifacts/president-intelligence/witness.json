@@ -1,0 +1,239 @@
+{
+  "inspectedMainSha": "fe958884762ce3c24d38fa46ab410745445a4680",
+  "snapshot": "evidence-d17c436a5074b111b3791d3b9c89b1d6a08ce1cbd0e796793b34cff59545a132",
+  "database": "127.0.0.1:3411/president_intelligence_witness_v2",
+  "productionTouched": false,
+  "provider": "claude-cli:tool-free",
+  "recordId": "716d11a6-48af-4c4f-bf02-ee0e0a56052d",
+  "durableThesisIds": [
+    "4a0a0878-d85b-4948-a8ce-f084e1e69e69",
+    "bb15da1d-d6d5-4b91-834b-5fff4ee69ed9",
+    "abcd6192-bf05-411c-86f7-bc62bece33fc",
+    "ae59e2f4-2745-4789-8071-ef30d23d3e01"
+  ],
+  "durableObjectiveIds": [
+    "9bc80e4e-6925-46ff-93a4-a7398bd590b5"
+  ],
+  "recommendation": {
+    "summary": "The inspected launch-operations document records an audited unmet production MySQL recovery gate: scheduled backups are not configured and no restore drill has been proven. The document explicitly designates these two items as blocking public paid launch. Because data loss is irreversible and all other launch gates depend on a recoverable database, the recovery gate deserves attention first. Billing, isolation, and log-clearance production status are UNKNOWN from the supplied evidence and must not be treated as unmet or met.",
+    "evidenceIds": [
+      "main-launch-fe958884762ce3c24d38fa46ab410745445a4680",
+      "unavailable-51716367a81656e9f2c2ffd0094076cb",
+      "unavailable-c441a369a767b20f0cca34b0df9f7f8c",
+      "unavailable-ccbd9d2f296e6a329fa0ef3af53e5e96",
+      "unavailable-8ebfe9dbcd3f71ea8b280f1a40838b92"
+    ],
+    "facts": [
+      {
+        "statement": "Current audited production posture before public launch:",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- MySQL service is single-node.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- Scheduled volume backups are not configured.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- Point-in-time recovery (PITR) is not enabled.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- The current custom MySQL start command includes `--disable-log-bin`.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- No restore drill has been proven.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "Public paid launch is blocked until at least a scheduled backup and a restore drill on a copy have been completed.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "Never prove recovery by restoring over production.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "PITR is not a substitute for the restore drill.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "It is intentionally inert until production configuration is supplied.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "The public paid product is launch-ready only when all of these operations gates are also true:",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- daily production backup configured",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "- restore drill on a copy proven",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "PITR is strongly recommended before scale; enabling it requires a deliberate human-controlled Railway conversion because of the existing custom MySQL command.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "Railway's MySQL PITR flow requires binary logging and Railway's PITR-capable MySQL image. The current service has a custom start command and explicitly disables binary logging, so do **not** attempt a blind automatic conversion.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "After recovery, Stripe and retention gates are satisfied:",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      },
+      {
+        "statement": "This is the production activation handoff after the code-side SaaS commercialization gates are green.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      }
+    ],
+    "inferences": [
+      "The document's section 4 header ('After recovery, Stripe and retention gates are satisfied') implies the customer launch canary depends on the recovery gate being closed first, making recovery logically prior to the canary even if the document does not establish a strict dependency ordering for all gates.",
+      "A single-node MySQL instance with no backup and no proven restore procedure means any production data-loss event before recovery is satisfied would be unrecoverable; this asymmetry justifies treating the recovery gate as higher-urgency than the retention gate, whose misconfiguration is correctable.",
+      "The disabled binary logging (`--disable-log-bin`) in the custom start command means PITR cannot be enabled without a deliberate, human-controlled redeploy; the restore drill via volume backup is the only currently achievable recovery proof path.",
+      "The retention workflow being 'intentionally inert' means it poses no immediate harm in its current state, making it lower-urgency than the recovery gap which exposes all existing production data to permanent loss.",
+      "Billing, isolation, and log-clearance status cannot be inferred from the launch-operations document alone, and no production telemetry is available, so those gates must remain UNKNOWN."
+    ],
+    "unknowns": [
+      "Whether daily backups have since been enabled in Railway production (railway_production source unavailable).",
+      "Whether a restore drill has been conducted and recorded since the document was authored (railway_production source unavailable).",
+      "Current live billing configuration status — whether Stripe secrets are or are not set in production (stripe_live and railway_production sources unavailable).",
+      "Whether the retention workflow has been configured and run (production_runtime source unavailable).",
+      "Whether production logs are currently clean or contain schema errors, raw transcript bodies, or cross-tenant identifiers (production_runtime and posthog_live_product_data unavailable).",
+      "Whether tenant isolation has been verified by a customer launch canary (production_runtime unavailable).",
+      "Whether the unavailable sources (posthog_live_product_data, production_runtime, railway_production, stripe_live) would confirm or contradict the audited posture stated in the document."
+    ],
+    "preferredOption": "Close the production MySQL recovery gate: configure a daily Railway volume backup, wait for a completed backup, then conduct and record a restore drill into an isolated copy — satisfying the document-explicit blocker on public paid launch (candidate president-candidate-ca0a31bf42d3bb006a4a50c3).",
+    "bestAlternative": "Activate and verify retention (candidate president-candidate-90b71f2014bf1a0d01bb34f3): configure the saas-retention workflow secrets, run a dry dispatch, and execute one bounded live batch to satisfy that launch gate.",
+    "opportunityCost": "Choosing retention activation before recovery means every hour JOYSTICK operates without proven backup and restore capability is an hour in which a production failure could produce permanent, total data loss with no recovery path. Retention misconfiguration, by contrast, is correctable after the fact. Deferring retention adds no irreversible risk in the short window needed to close the recovery gate; deferring recovery compounds irreversible risk each day.",
+    "falsification": "The recovery-first priority would be falsified if authoritative evidence showed that daily backups are already configured and a restore drill has already been recorded — at which point the recovery gate would be closed and the next unmet gate would become the priority. It would also be challenged if the retention workflow were actively running with unbounded policy enforcement, creating live privacy or legal exposure that outweighed the data-loss risk.",
+    "nextAction": "Adam reviews and authorizes the recovery gate work: enable a daily Railway volume backup on the production MySQL service, wait for a confirmed completed backup, and execute a restore drill into an isolated sibling volume per the procedure in the inspected document — recording drill date, source backup timestamp, restored service/volume identity, and verification result before removing temporary infrastructure.",
+    "founderDecision": "Adam must authorize and execute (or delegate) the production MySQL recovery gate: (1) enable daily volume backups in Railway without replacing the production volume, (2) wait for a backup to complete and confirm it is visible, and (3) conduct a restore drill into an isolated copy verifying the required schema tables, then record and preserve the drill evidence. No agent has authority to execute production infrastructure changes.",
+    "skills": [
+      "operational-risk",
+      "product-launch",
+      "capital-allocation",
+      "pre-mortem-red-team"
+    ],
+    "thesisUpdates": [
+      {
+        "topic": "RISK",
+        "claim": "The inspected document records an audited single-node MySQL production database with no scheduled backups and no proven restore drill, representing a documented irreversible data-loss exposure that the document designates as blocking public paid launch.",
+        "kind": "INFERENCE",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ],
+        "confidence": 0.95,
+        "reviewedAt": "2026-10-04T17:54:30Z",
+        "falsification": "Falsified if authoritative production evidence shows daily backups are already active and a restore drill has been recorded since the document's audit.",
+        "status": "CURRENT"
+      },
+      {
+        "topic": "CONSTRAINT",
+        "claim": "Binary logging is explicitly disabled via the custom MySQL start command, which prevents PITR enablement without a controlled redeploy; volume backup and restore drill are the only currently achievable recovery proof path before public launch.",
+        "kind": "INFERENCE",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ],
+        "confidence": 0.93,
+        "reviewedAt": "2026-10-04T17:54:30Z",
+        "falsification": "Falsified if Railway production inspection shows binary logging is active or the custom start command has been updated to remove --disable-log-bin.",
+        "status": "CURRENT"
+      },
+      {
+        "topic": "PRODUCT",
+        "claim": "Code-side SaaS commercialization gates are described as green in the document; the remaining blockers to public paid launch are operational, not code-side — recovery, billing configuration, retention activation, customer canary, and log inspection.",
+        "kind": "INFERENCE",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ],
+        "confidence": 0.85,
+        "reviewedAt": "2026-10-04T17:54:30Z",
+        "falsification": "Falsified if CI gates are not currently green or if a new code-side issue is identified that independently blocks launch.",
+        "status": "CURRENT"
+      },
+      {
+        "topic": "RISK",
+        "claim": "Whether billing secrets, isolation, and log-clearance gates are currently met or unmet in production is UNKNOWN; no production telemetry is available to this analysis.",
+        "kind": "UNKNOWN",
+        "evidenceIds": [
+          "unavailable-ccbd9d2f296e6a329fa0ef3af53e5e96",
+          "unavailable-8ebfe9dbcd3f71ea8b280f1a40838b92",
+          "unavailable-c441a369a767b20f0cca34b0df9f7f8c",
+          "unavailable-51716367a81656e9f2c2ffd0094076cb"
+        ],
+        "confidence": 0,
+        "reviewedAt": "2026-10-04T17:54:30Z",
+        "falsification": "Resolved when production_runtime, railway_production, and stripe_live sources become available and are inspected.",
+        "status": "CURRENT"
+      }
+    ],
+    "objectives": [
+      {
+        "admission": {
+          "type": "GAP_RESOLUTION",
+          "candidateId": "president-candidate-ca0a31bf42d3bb006a4a50c3"
+        },
+        "outcome": "Production MySQL recovery gate closed: a daily Railway volume backup is active with at least one confirmed completed backup visible, and a restore drill on an isolated copy has been completed and recorded with drill date, source backup timestamp, restored service/volume identity, and verification of required schema tables.",
+        "indicator": "Recorded drill evidence artifact containing: drill date, source backup timestamp, restored volume/service identity, and confirmed presence of dayforge_saas_tenants, dayforge_saas_memberships, commercial_missions, and claire_conversation_sessions in the restored copy.",
+        "baseline": null,
+        "target": null,
+        "source": "main-launch-fe958884762ce3c24d38fa46ab410745445a4680",
+        "horizon": "Before public paid launch",
+        "owner": "Adam",
+        "status": "PROPOSED",
+        "dependencies": [],
+        "reason": "The inspected document explicitly states 'Public paid launch is blocked until at least a scheduled backup and a restore drill on a copy have been completed' and records both as not yet satisfied in the audited production posture. Data loss from a single-node database with no backup is irreversible; all other launch gates including the customer canary are sequenced after recovery in the document.",
+        "evidenceIds": [
+          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+        ]
+      }
+    ]
+  },
+  "providerRunId": "47dc7f41-a9db-465d-bf3d-6764730c2f2f",
+  "costUsd": 0.1543865,
+  "reused": true,
+  "sameRecordId": true,
+  "executedProjects": 0,
+  "cabinetExecuted": false
+}

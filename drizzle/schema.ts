@@ -3,6 +3,8 @@ import {
   bigint,
   boolean,
   customType,
+  datetime,
+  double,
   decimal,
   index,
   int,
@@ -9532,6 +9534,21 @@ export const claireDecisionRecords = mysqlTable(
 
 export type ClaireDecisionRecord = typeof claireDecisionRecords.$inferSelect;
 export type InsertClaireDecisionRecord = typeof claireDecisionRecords.$inferInsert;
+
+/** Company evidence is immutable; external instructions never become authority. */
+export const presidentEvidence = mysqlTable("president_evidence", {
+  id: varchar("id", {length:64}).primaryKey(), origin: varchar("origin",{length:16}).notNull(),
+  source: varchar("source",{length:512}).notNull(), capturedAt: datetime("capturedAt",{fsp:3}).notNull(),
+  sourceAt: datetime("sourceAt",{fsp:3}), sha256: varchar("sha256",{length:64}).notNull(),
+  kind: varchar("kind",{length:24}).notNull(),confidence:double("confidence").notNull(),
+  availability:varchar("availability",{length:16}).notNull(),expiresAt:datetime("expiresAt",{fsp:3}),statement:text("statement").notNull(),
+},t=>({originLookup:index("idx_president_evidence_origin").on(t.origin,t.capturedAt)}));
+export const presidentIntelligenceRecords=mysqlTable("president_intelligence_records",{
+  id:varchar("id",{length:64}).primaryKey(),origin:varchar("origin",{length:16}).notNull(),kind:varchar("kind",{length:32}).notNull(),
+  recordKey:varchar("recordKey",{length:191}).notNull(),version:int("version").notNull(),createdAt:datetime("createdAt",{fsp:3}).notNull(),
+  evidenceIds:json("evidenceIds").notNull(),payload:json("payload").notNull(),supersedesId:varchar("supersedesId",{length:64}),
+  idempotencyKey:varchar("idempotencyKey",{length:191}).notNull(),requestHash:varchar("requestHash",{length:64}).notNull(),
+},t=>({revision:uniqueIndex("uq_president_record_revision").on(t.origin,t.kind,t.recordKey,t.version),retry:uniqueIndex("uq_president_record_retry").on(t.origin,t.idempotencyKey),kindLookup:index("idx_president_record_kind").on(t.origin,t.kind,t.createdAt)}));
 
 /** Out-of-game JOYSTICK company assessment; never tenant/customer runtime state. */
 export const presidentAssessments = mysqlTable(

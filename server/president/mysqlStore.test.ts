@@ -1,6 +1,7 @@
 import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { MysqlPresidentAssessmentStore } from "./mysqlStore";
 import { MemoryPresidentAssessmentStore } from "./store";
@@ -18,10 +19,12 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
       const admin = await mysql.createConnection(
         "mysql://root:root@127.0.0.1:3411/"
       );
-      await admin.query("CREATE DATABASE president_stage1_store_test");
+      const databaseName =
+        "president_stage1_test_" + randomUUID().replaceAll("-", "");
+      await admin.query(`CREATE DATABASE ${databaseName}`);
       await admin.end();
       pool = mysql.createPool({
-        uri: "mysql://root:root@127.0.0.1:3411/president_stage1_store_test",
+        uri: "mysql://root:root@127.0.0.1:3411/" + databaseName,
         timezone: "Z",
         connectionLimit: 8,
       });
