@@ -157,13 +157,14 @@ export class MysqlPresidentProgramStore
     const policy = presidentAuthorityPolicySchema.parse(input);
     await this.pool.execute(
       `INSERT INTO president_authority_policies
-       (policyVersion,founderId,internalMergeAllowed,internalDeployAllowed,maxAutonomousUsdPerDay,allowedRepositoriesJson,allowedEnvironmentsJson,prohibitedDomainsJson,updatedAt)
-       VALUES (?,?,?,?,?,?,?,?,?)
+       (policyVersion,founderId,internalMergeAllowed,internalDeployAllowed,maxAutonomousUsdPerDay,autonomousProgramSelectionAllowed,allowedRepositoriesJson,allowedEnvironmentsJson,prohibitedDomainsJson,updatedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE
          founderId=VALUES(founderId),
          internalMergeAllowed=VALUES(internalMergeAllowed),
          internalDeployAllowed=VALUES(internalDeployAllowed),
          maxAutonomousUsdPerDay=VALUES(maxAutonomousUsdPerDay),
+         autonomousProgramSelectionAllowed=VALUES(autonomousProgramSelectionAllowed),
          allowedRepositoriesJson=VALUES(allowedRepositoriesJson),
          allowedEnvironmentsJson=VALUES(allowedEnvironmentsJson),
          prohibitedDomainsJson=VALUES(prohibitedDomainsJson),
@@ -174,6 +175,7 @@ export class MysqlPresidentProgramStore
         policy.internalMergeAllowed,
         policy.internalDeployAllowed,
         policy.maxAutonomousUsdPerDay,
+        policy.autonomousProgramSelectionAllowed,
         JSON.stringify(policy.allowedRepositories),
         JSON.stringify(policy.allowedEnvironments),
         JSON.stringify(policy.prohibitedDomains),
@@ -198,6 +200,7 @@ export class MysqlPresidentProgramStore
       internalMergeAllowed: Boolean(r.internalMergeAllowed),
       internalDeployAllowed: Boolean(r.internalDeployAllowed),
       maxAutonomousUsdPerDay: Number(r.maxAutonomousUsdPerDay),
+      autonomousProgramSelectionAllowed: Boolean(r.autonomousProgramSelectionAllowed),
       allowedRepositories: decode(r.allowedRepositoriesJson),
       allowedEnvironments: decode(r.allowedEnvironmentsJson),
       prohibitedDomains: decode(r.prohibitedDomainsJson),
@@ -235,8 +238,12 @@ export class MysqlPresidentProgramStore
       );
     } catch (error) {
       if ((error as { code?: string }).code !== "ER_DUP_ENTRY") throw error;
-      if (!program.assessmentId || !program.candidateId) throw error;
-      const prior = await this.findProgramByCandidate(program.assessmentId, program.candidateId);
+      const prior =
+        program.objectiveRecordId
+          ? await this.findProgramByObjective(program.objectiveRecordId)
+          : program.assessmentId && program.candidateId
+            ? await this.findProgramByCandidate(program.assessmentId, program.candidateId)
+            : null;
       if (!prior) throw error;
       return prior;
     }
@@ -258,6 +265,16 @@ export class MysqlPresidentProgramStore
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_programs WHERE assessmentId=? AND candidateId=? LIMIT 1",
       [assessmentId, candidateId]
+    );
+    return rows[0] ? programFromRow(rows[0]) : null;
+  }
+
+  async findProgramByObjective(
+    objectiveRecordId: string
+  ): Promise<PresidentProgram | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT * FROM president_programs WHERE objectiveRecordId=? LIMIT 1",
+      [objectiveRecordId]
     );
     return rows[0] ? programFromRow(rows[0]) : null;
   }
