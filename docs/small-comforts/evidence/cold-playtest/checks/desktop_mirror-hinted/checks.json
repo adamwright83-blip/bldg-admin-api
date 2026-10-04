@@ -29,7 +29,22 @@
    "info": "cues=1"
   },
   {
-   "name": "40 s assist not yet fired at ~25 s",
+   "name": "no assist fired by ~50 s idle (past the base game's 40 s)",
+   "ok": true,
+   "info": ""
+  },
+  {
+   "name": "button did not move by itself in 25 s of idle after that",
+   "ok": true,
+   "info": "{\"poseA\":{\"phase\":\"playing\",\"outcome\":\"miss\",\"tilt\":14,\"x\":-1.1},\"poseB\":{\"phase\":\"playing\",\"outcome\":\"miss\",\"tilt\":14,\"x\":-1.1}}"
+  },
+  {
+   "name": "hinted: still exactly one cue at ~50 s",
+   "ok": true,
+   "info": "cues=1"
+  },
+  {
+   "name": "meta says assist is disabled",
    "ok": true,
    "info": ""
   },
@@ -51,7 +66,7 @@
   {
    "name": "meta has build sha",
    "ok": true,
-   "info": "64a9b7672e39e7bc3c283b3445825ef2fe2d7a02"
+   "info": "00c7b8c12dc77b132bd5fb9c527036cfe62a0253"
   },
   {
    "name": "meta has viewport + input",
@@ -86,7 +101,7 @@
   {
    "name": "other interaction after install recorded",
    "ok": true,
-   "info": "[{\"t\":1098.533,\"what\":\"furnish:cell\"}]"
+   "info": "[{\"t\":1491.049,\"what\":\"furnish:cell\"}]"
   },
   {
    "name": "hinted flag matches mode",
@@ -94,7 +109,7 @@
    "info": ""
   },
   {
-   "name": "assist flag false in this run",
+   "name": "derived assistFired is false",
    "ok": true,
    "info": ""
   },
@@ -105,40 +120,40 @@
   }
  ],
  "derived_wall_clock_meaningless_in_stepped_run": {
-  "tFirstIntentionalMove": 21.531,
-  "tButtonPickup": 71.595,
-  "tButtonHome": 140.105,
-  "tFirstPressOnButton": 738.245,
+  "tFirstIntentionalMove": 21.274,
+  "tButtonPickup": 69.993,
+  "tButtonHome": 138.597,
+  "tFirstPressOnButton": 1138.484,
   "dragAttempts": 4,
   "outcomeSequence": [
    {
-    "t": 140.106,
+    "t": 138.598,
     "outcome": "miss"
    },
    {
-    "t": 793.798,
+    "t": 1193.052,
     "outcome": "glance"
    },
    {
-    "t": 825.769,
+    "t": 1224.393,
     "outcome": "aligned"
    },
    {
-    "t": 832.478,
+    "t": 1231.006,
     "outcome": "glance"
    },
    {
-    "t": 896.869,
+    "t": 1292.701,
     "outcome": "aligned"
    }
   ],
-  "secondsInPlacement": 824.97,
+  "secondsInPlacement": 1215.184,
   "installed": true,
   "leftBeforeInstall": false,
   "installedMirrorTouchesAfter": 1,
   "otherInteractionsAfterInstall": [
    {
-    "t": 1098.533,
+    "t": 1491.049,
     "what": "furnish:cell"
    }
   ],
@@ -148,12 +163,12 @@
   "textShownDuringPlacement": [],
   "textShownBeforePlacement": [
    {
-    "t": 57.147,
+    "t": 55.877,
     "channel": "toast",
     "text": "A coat button the size of a dinner plate. It throws the light back."
    },
    {
-    "t": 71.596,
+    "t": 69.994,
     "channel": "toast",
     "text": "Heavy. You balance it over your head. Home is the green ring."
    }

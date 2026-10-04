@@ -1,9 +1,9 @@
 {
  "meta": {
   "mode": "mirror-cold",
-  "buildSha": "64a9b7672e39e7bc3c283b3445825ef2fe2d7a02",
-  "sessionId": "pt-muu6f8m6-r89yi",
-  "startedAtIso": "2026-10-04T18:50:54.174Z",
+  "buildSha": "00c7b8c12dc77b132bd5fb9c527036cfe62a0253",
+  "sessionId": "pt-muu905gh-zgprd",
+  "startedAtIso": "2026-10-04T20:03:09.089Z",
   "viewport": {
    "w": 390,
    "h": 844,
@@ -15,217 +15,217 @@
   "pointerTypes": [
    "touch"
   ],
-  "assistSeconds": 40,
+  "assistSeconds": null,
   "hintDelaySeconds": null
  },
  "events": [
   {
    "t": 0,
-   "gt": 2.8,
+   "gt": 3.2,
    "type": "session_start"
   },
   {
-   "t": 23120,
-   "gt": 5.2,
+   "t": 25826,
+   "gt": 5.6,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 23120,
-   "gt": 5.2,
+   "t": 25826,
+   "gt": 5.6,
    "type": "tap",
    "target": "point"
   },
   {
-   "t": 23121,
-   "gt": 5.2,
+   "t": 25826,
+   "gt": 5.6,
    "type": "walk_start",
    "intent": "point",
    "carrying": null
   },
   {
-   "t": 37821,
-   "gt": 6.7,
+   "t": 40661,
+   "gt": 7.1,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 37823,
-   "gt": 6.7,
+   "t": 40664,
+   "gt": 7.1,
    "type": "tap",
    "target": "object:brass_button"
   },
   {
-   "t": 37823,
-   "gt": 6.7,
+   "t": 40664,
+   "gt": 7.1,
    "type": "walk_start",
    "intent": "object",
    "carrying": null
   },
   {
-   "t": 47123,
-   "gt": 7.95,
+   "t": 49521,
+   "gt": 8.35,
    "type": "text_shown",
    "channel": "toast",
    "text": "A coat button the size of a dinner plate. It throws the light back."
   },
   {
-   "t": 55315,
-   "gt": 9.117,
+   "t": 57198,
+   "gt": 9.517,
    "type": "pickup",
    "id": "brass_button"
   },
   {
-   "t": 55316,
-   "gt": 9.117,
+   "t": 57198,
+   "gt": 9.517,
    "type": "text_shown",
    "channel": "toast",
    "text": "Heavy. You balance it over your head. Home is the green ring."
   },
   {
-   "t": 59435,
-   "gt": 9.2,
+   "t": 61411,
+   "gt": 9.6,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 59435,
-   "gt": 9.2,
+   "t": 61412,
+   "gt": 9.6,
    "type": "tap",
    "target": "lip"
   },
   {
-   "t": 59436,
-   "gt": 9.2,
+   "t": 61412,
+   "gt": 9.6,
    "type": "walk_start",
    "intent": "home",
    "carrying": "brass_button"
   },
   {
-   "t": 99521,
-   "gt": 13.7,
+   "t": 103468,
+   "gt": 14.1,
    "type": "placing_start"
   },
   {
-   "t": 99523,
-   "gt": 13.7,
+   "t": 103468,
+   "gt": 14.1,
    "type": "outcome",
    "outcome": "miss"
   },
   {
-   "t": 449189,
-   "gt": 42.7,
+   "t": 704918,
+   "gt": 64.1,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 449189,
-   "gt": 42.7,
+   "t": 704919,
+   "gt": 64.1,
    "type": "press",
    "pointerType": "touch"
   },
   {
-   "t": 463428,
-   "gt": 43.867,
+   "t": 719128,
+   "gt": 65.267,
    "type": "release"
   },
   {
-   "t": 477173,
-   "gt": 45.033,
+   "t": 733381,
+   "gt": 66.433,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 477174,
-   "gt": 45.033,
+   "t": 733382,
+   "gt": 66.433,
    "type": "press",
    "pointerType": "touch"
   },
   {
-   "t": 482035,
-   "gt": 45.533,
+   "t": 738285,
+   "gt": 66.933,
    "type": "outcome",
    "outcome": "glance"
   },
   {
-   "t": 485044,
-   "gt": 45.7,
+   "t": 741282,
+   "gt": 67.1,
    "type": "release"
   },
   {
-   "t": 498450,
-   "gt": 46.867,
+   "t": 755581,
+   "gt": 68.267,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 498450,
-   "gt": 46.867,
+   "t": 755582,
+   "gt": 68.267,
    "type": "press",
    "pointerType": "touch"
   },
   {
-   "t": 500835,
-   "gt": 47.117,
+   "t": 757500,
+   "gt": 68.517,
    "type": "outcome",
    "outcome": "aligned"
   },
   {
-   "t": 505165,
-   "gt": 47.45,
+   "t": 761266,
+   "gt": 68.85,
    "type": "outcome",
    "outcome": "glance"
   },
   {
-   "t": 511336,
-   "gt": 47.867,
+   "t": 767077,
+   "gt": 69.267,
    "type": "release"
   },
   {
-   "t": 525033,
-   "gt": 49.033,
+   "t": 780801,
+   "gt": 70.433,
    "type": "canvas_down",
    "phase": "outside",
    "hit": "shelf",
    "pointerType": "touch"
   },
   {
-   "t": 525033,
-   "gt": 49.033,
+   "t": 780802,
+   "gt": 70.433,
    "type": "press",
    "pointerType": "touch"
   },
   {
-   "t": 543435,
-   "gt": 50.617,
+   "t": 798915,
+   "gt": 72.017,
    "type": "outcome",
    "outcome": "aligned"
   },
   {
-   "t": 544537,
-   "gt": 50.617,
+   "t": 799909,
+   "gt": 72.017,
    "type": "release"
   },
   {
-   "t": 544634,
-   "gt": 50.867,
+   "t": 799926,
+   "gt": 72.267,
    "type": "catch"
   },
   {
-   "t": 584514,
-   "gt": 54.033,
+   "t": 837772,
+   "gt": 75.433,
    "type": "installed",
    "fixture": "signal_mirror",
    "placement": {
@@ -234,69 +234,69 @@
    }
   },
   {
-   "t": 584520,
-   "gt": 54.033,
+   "t": 837774,
+   "gt": 75.433,
    "type": "text_shown",
    "channel": "story",
    "text": "You wedge the button fast, exactly where it caught the light. It catches every train. The Conductor polishes the button, then flashes it at every train that passes. They have started to flash back."
   },
   {
-   "t": 658794,
-   "gt": 60.117,
+   "t": 910726,
+   "gt": 81.517,
    "type": "canvas_down",
    "phase": "furnish",
    "hit": "installed_mirror",
    "pointerType": "touch"
   },
   {
-   "t": 664229,
-   "gt": 60.617,
+   "t": 916162,
+   "gt": 82.017,
    "type": "ui_click",
    "id": "🪜Fold liningMake steps"
   },
   {
-   "t": 664241,
-   "gt": 60.617,
+   "t": 916174,
+   "gt": 82.017,
    "type": "text_shown",
    "channel": "story",
    "text": "You fold the loose lining into four soft steps. The lid pocket is reachable now."
   }
  ],
  "derived": {
-  "tFirstIntentionalMove": 23.121,
-  "tButtonPickup": 55.315,
-  "tButtonHome": 99.521,
-  "tFirstPressOnButton": 449.189,
+  "tFirstIntentionalMove": 25.826,
+  "tButtonPickup": 57.198,
+  "tButtonHome": 103.468,
+  "tFirstPressOnButton": 704.919,
   "dragAttempts": 4,
   "outcomeSequence": [
    {
-    "t": 99.523,
+    "t": 103.468,
     "outcome": "miss"
    },
    {
-    "t": 482.035,
+    "t": 738.285,
     "outcome": "glance"
    },
    {
-    "t": 500.835,
+    "t": 757.5,
     "outcome": "aligned"
    },
    {
-    "t": 505.165,
+    "t": 761.266,
     "outcome": "glance"
    },
    {
-    "t": 543.435,
+    "t": 798.915,
     "outcome": "aligned"
    }
   ],
-  "secondsInPlacement": 484.993,
+  "secondsInPlacement": 734.304,
   "installed": true,
   "leftBeforeInstall": false,
   "installedMirrorTouchesAfter": 1,
   "otherInteractionsAfterInstall": [
    {
-    "t": 664.229,
+    "t": 916.162,
     "what": "ui:🪜Fold liningMake steps"
    }
   ],
@@ -306,12 +306,12 @@
   "textShownDuringPlacement": [],
   "textShownBeforePlacement": [
    {
-    "t": 47.123,
+    "t": 49.521,
     "channel": "toast",
     "text": "A coat button the size of a dinner plate. It throws the light back."
    },
    {
-    "t": 55.316,
+    "t": 57.198,
     "channel": "toast",
     "text": "Heavy. You balance it over your head. Home is the green ring."
    }

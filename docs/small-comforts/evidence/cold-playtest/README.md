@@ -1,7 +1,7 @@
 # Signal mirror: cold-playtest candidate
 
-Code: `feat/small-comforts-proprietor-spike` @ `64a9b7672e39e7bc3c283b3445825ef2fe2d7a02`
-(gameplay head stays `cfb881b9e5b46bafcc45639533bda9d4161512ce`; the commits after it only add the test-only entry and recorder, plus two recorder fixes).
+Code: `feat/small-comforts-proprietor-spike` @ `00c7b8c12dc77b132bd5fb9c527036cfe62a0253`
+(gameplay head stays `cfb881b9e5b46bafcc45639533bda9d4161512ce`; the commits after it only add the test-only entry and recorder, two recorder fixes, and the playtest-only removal of the 40 s assist described below).
 
 **This is a recorder and a test entry. It is not evidence that the mechanic is fun, repeatable, or worth building on.**
 
@@ -29,38 +29,41 @@ One session may kill a probe if the kill criterion clearly fires. One successful
 | `?playtest=mirror-hinted` | Identical, except: if the tester has not pressed on the button within **20 s** of the button being set down, the button **rocks gently in place once** (about 7 degrees, 1.6 s). It shows that the button moves; it does not show where to put it. Fires at most once. Logged as `hint_cue`. |
 | `&observer=1` (observer only) | Shows **Export session** and **New session** buttons bottom-left. Shift+E also exports. The tester's link must not include it. |
 
-Not changed in either mode: the base game's own walking hint and pickup/inspect toasts still appear (they are recorded as `text_shown` so you can see exactly what text the tester saw), and the 40 s soft-lock assist is still active (recorded as `assist_fired`).
+Not changed in either mode: the base game's own walking hint and pickup/inspect toasts still appear (they are recorded as `text_shown` so you can see exactly what text the tester saw), and the near-aligned settling (a small magnet that finishes the last few degrees once the button is already close) is part of the shipped interaction and stays.
+
+**Both playtest modes are unassisted.** The normal game's 40 s anti-soft-lock assist (the room nudging the button toward the light) is disabled whenever `?playtest=` is present. Normal game: assist at 40 s, unchanged. `mirror-cold`: no assist, no cue, ever. `mirror-hinted`: one rocking cue at 20 s and nothing else, no later assist. `assist_fired` is still recorded as a regression catch; in a valid cold or hinted session it must be absent/false. A tester who gets stuck stays stuck: that is the data.
 
 **The hinted mode must not be used as evidence that the normal game succeeds.** Cold tests discoverability plus desire; hinted helps separate a UX failure from a core-verb failure.
 
 ## What is recorded
 Local only. No analytics SDK, no network. Output is a JSON file (Export session) and a copy in the tester browser's localStorage (`sc.playtest.sessions`, last 12).
 
-**`meta`**: mode, exact build SHA, session id, start time, viewport (w, h, dpr, portrait), user agent, touch-capable, pointer types actually seen, assist threshold (40 s), hint delay (20 s or null).
+**`meta`**: mode, exact build SHA, session id, start time, viewport (w, h, dpr, portrait), user agent, touch-capable, pointer types actually seen, `assistSeconds` (always `null`: the assist is disabled in playtest modes), hint delay (20 s or null).
 
 **`events` (the raw timeline, no interpretation)**, each with wall ms since session start `t` and game seconds `gt`:
 `session_start`, `tap` (what was tapped), `walk_start`, `pickup`, `put_down`, `placing_start`, `press`, `release`, `outcome` (miss / glance / aligned, on change), `catch`, `installed`, `assist_fired`, `hint_cue`, `text_shown` (every toast/hint/story line with channel), `canvas_down` (phase + what was under it, including `installed_mirror`), `ui_click` (button id), `visibility`, `left`.
 
-**`derived` (separate; computed from `events` by a pure function, never fed back)**: first intentional proprietor move; button pickup; button home; first press on the button; number of distinct drag attempts; miss/glance/aligned sequence with times; seconds in placement; installed or not; left before install; touches on the installed mirror afterward; other interactions after install; other objects picked up before the button; whether the 40 s assist fired; whether the hint cue was shown; all on-screen text shown during placement (empty = none) and before it.
+**`derived` (separate; computed from `events` by a pure function, never fed back)**: first intentional proprietor move; button pickup; button home; first press on the button; number of distinct drag attempts; miss/glance/aligned sequence with times; seconds in placement; installed or not; left before install; touches on the installed mirror afterward; other interactions after install; other objects picked up before the button; whether the base-game assist fired (a regression catch: must be false in playtest modes); whether the hint cue was shown; all on-screen text shown during placement (empty = none) and before it.
 
 ## What was actually run
 Scripted browser sessions (headless Chromium, software GL, game clock stepped by hand at 1/12 s) against the **built static preview**, one per input type, each exercising the full path: walk, pick up, haul, press-drag attempts (miss, glance, too steep, glance, aligned), install, touch the installed mirror, tap elsewhere, read the recorder.
 
 | Run | Input | Viewport | Result |
 |---|---|---|---|
-| desktop / cold | mouse | 960x600 | 19/19 checks passed |
-| desktop / hinted | mouse | 960x600 | 19/19 (cue fired once after 20 s idle; none before) |
-| landscape / cold | touch (CDP touch events) | 844x390 | 19/19 |
-| portrait / cold | touch (CDP touch events) | 390x844 | 19/19 |
+| desktop / cold | mouse | 960x600 | 22/22 checks passed |
+| desktop / hinted | mouse | 960x600 | 22/22 (one cue at 20 s idle, none before; no assist, no movement by ~50 s) |
+| landscape / cold | touch (CDP touch events) | 844x390 | 22/22 |
+| portrait / cold | touch (CDP touch events) | 390x844 | 22/22 |
 
-Checks include: reaches placement by tapping only; no text appears by itself during placement; no cue before the delay; one cue after it in hinted mode and none in cold; assist not fired; pointer type recorded as touch/mouse correctly; build SHA in meta; every core event present; outcome sequence has miss, glance and aligned; drag attempts counted; installed-mirror touch and later interactions recorded; no page errors. Per-run `checks.json`, `session.json` and stills are in `checks/`.
+Checks include: reaches placement by tapping only; no text appears by itself during placement; no cue before the delay; one cue after it in hinted mode and none in cold; no assist fired and the button did not move by itself after ~50 s idle (past the base game's 40 s); meta says the assist is disabled; hinted: still exactly one cue at ~50 s, cold: none; pointer type recorded as touch/mouse correctly; build SHA in meta; every core event present; outcome sequence has miss, glance and aligned; drag attempts counted; installed-mirror touch and later interactions recorded; no page errors. Per-run `checks.json`, `session.json` and stills are in `checks/`.
 
 **Read these numbers with care:** in these stepped runs the wall-clock times in `session.json` are meaningless (rendering is slow, the clock is faked). The game-clock `gt` field is the reliable one for them. They prove the recorder and entries work, not how a person behaves.
 
 ## Not tested
 - Any human play. No cold tester has touched this.
 - A real phone, real touch latency, real audio (sound is wired to unlock on first touch; nobody has heard it).
-- The 40 s assist and the near-aligned magnet in a browser session.
+- The near-aligned magnet in a browser session beyond what the scripted drags happen to exercise.
+- The normal game's 40 s assist in a browser session: it is proven by unit test (`logic/softlock.test.ts`) and unchanged, not re-run in the browser.
 - `localStorage` export on a real device; the Export button's file download on iOS Safari in particular.
 - Real-time (unstepped) play of the whole path in the built preview.
 - A hosted URL (below).
@@ -75,3 +78,9 @@ Checks include: reaches placement by tapping only; no text appears by itself dur
 ## Known rough edges (not fixed, no new gameplay)
 - Portrait: the "Lost Property Hotel" pill overlaps the "‹ Lantern City" button in the top bar (existing layout, visible in `checks/portrait_mirror-cold/01_placing_start.png`).
 - In the standalone preview the "‹ Lantern City" button goes nowhere; a tester pressing it is recorded as `ui_click` but nothing happens.
+
+## Unit tests for the assist correction (`logic/softlock.test.ts`)
+- Normal game: assist first becomes active just after 40 s, fires once, never while the player is dragging, no cue.
+- `mirror-cold`: 30 simulated minutes idle, zero assist steps, zero cues.
+- `mirror-hinted`: 30 simulated minutes idle, exactly one cue just after 20 s, zero assist steps.
+- `mirror-hinted`: no cue at all once the tester has pressed the button.

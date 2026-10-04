@@ -1,5 +1,5 @@
 Small Comforts - signal mirror cold playtest build
-Code: feat/small-comforts-proprietor-spike @ 64a9b7672e39e7bc3c283b3445825ef2fe2d7a02
+Code: feat/small-comforts-proprietor-spike @ 00c7b8c12dc77b132bd5fb9c527036cfe62a0253
 
 This is a static site. No install, no build.
 

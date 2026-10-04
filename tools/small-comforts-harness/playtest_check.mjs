@@ -64,9 +64,15 @@ check("no cue before the delay (8 s idle)", cueBefore === 0 && (await ev(() => w
 await advance(12 * 16); // now ~25 s idle in placement
 const cues = await ev(() => window.__playtest.events.filter(e => e.type === "hint_cue").length);
 if (PT === "mirror-hinted") check("hinted: one cue after 20 s idle", cues === 1, `cues=${cues}`); else check("cold: still no cue after 25 s idle", cues === 0, `cues=${cues}`);
+const poseA = await mir();
+await advance(12 * 25); // ~50 s idle in placement: well past the base game's 40 s assist
+const poseB = await mir();
 const assistIdle = await ev(() => window.__playtest.events.some(e => e.type === "assist_fired"));
-check("40 s assist not yet fired at ~25 s", !assistIdle);
-await advance(12 * 4);
+check("no assist fired by ~50 s idle (past the base game's 40 s)", !assistIdle);
+check("button did not move by itself in 25 s of idle after that", poseA.x === poseB.x && poseA.tilt === poseB.tilt, JSON.stringify({ poseA, poseB }));
+const cuesAfter = await ev(() => window.__playtest.events.filter(e => e.type === "hint_cue").length);
+check(PT === "mirror-hinted" ? "hinted: still exactly one cue at ~50 s" : "cold: still no cue at ~50 s", cuesAfter === (PT === "mirror-hinted" ? 1 : 0), `cues=${cuesAfter}`);
+check("meta says assist is disabled", (await ev(() => window.__playtest.meta.assistSeconds)) === null);
 
 // 3. the player's hands: slide, wrong lifts, then settle on the light
 let m = await mir();
@@ -114,7 +120,7 @@ check("drag attempts counted", d.dragAttempts >= 4, `n=${d.dragAttempts}`);
 check("installed-mirror touch recorded", d.installedMirrorTouchesAfter >= 1, `n=${d.installedMirrorTouchesAfter}`);
 check("other interaction after install recorded", d.otherInteractionsAfterInstall.length >= 1, JSON.stringify(d.otherInteractionsAfterInstall));
 check("hinted flag matches mode", d.hintCueShown === (PT === "mirror-hinted"));
-check("assist flag false in this run", d.assistFired === false);
+check("derived assistFired is false", d.assistFired === false);
 check("no page errors", logs.length === 0, logs.join(" | "));
 fs.writeFileSync(`${OUT}/checks.json`, JSON.stringify({ MODE, PT, base: BASE, viewport: cfg.viewport, touch, checks, derived_wall_clock_meaningless_in_stepped_run: d }, null, 1));
 console.log(`${MODE}/${PT}: ${checks.filter(c => c.ok).length}/${checks.length} passed`);
