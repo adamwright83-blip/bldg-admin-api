@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS president_program_steps (
   consequentialDomain varchar(40) NOT NULL,
   maxUsd double NOT NULL DEFAULT 0,
   spentUsd double NOT NULL DEFAULT 0,
+  executorCapability varchar(191) NOT NULL,
+  reviewerCapability varchar(191) NOT NULL,
   executorId varchar(191) NULL,
   reviewerId varchar(191) NULL,
   baseRef varchar(512) NULL,
