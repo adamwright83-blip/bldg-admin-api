@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}html,body{margin:0;background:#0b0b0e}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:"Inter","Segoe UI",Arial,sans-serif;color:#f3ead7}
+#c{position:absolute;left:0;top:0;width:1920px;height:740px}
+#city{position:absolute;left:0;top:740px;width:1920px;height:340px;border-top:2px solid rgba(255,211,106,.65);box-shadow:0 -10px 40px rgba(0,0,0,.6)}
+.cityhd{left:34px;top:764px}
+.cityhd b{font:900 30px/1 Georgia,serif;letter-spacing:2px;color:#ffd36a;text-shadow:0 2px 12px rgba(0,0,0,.9)}.cityhd i{display:block;font:700 11px/1 Arial;letter-spacing:2.4px;color:#f0dfb4;font-style:normal;margin-top:6px;text-shadow:0 1px 8px #000}
+.done{right:34px;bottom:26px;width:430px;background:linear-gradient(180deg,rgba(22,20,26,.92),rgba(12,11,15,.92));border:1px solid rgba(255,211,106,.65);border-radius:16px;padding:18px 22px}
+.done b{display:block;font:900 24px/1.1 Arial;letter-spacing:1px;color:#ffe8b0}.done h3{margin:6px 0 10px;font:800 20px/1 Arial;color:#fff}.done p{margin:6px 0 0;font:600 15px/1.2 Arial;color:#dfe8d8}.done p:before{content:'✓';display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#2fbf57;color:#fff;font-size:13px;margin-right:10px}
+.louise{left:760px;bottom:150px;background:rgba(18,16,20,.88);border:1px solid rgba(255,211,106,.6);border-radius:10px;padding:10px 14px}.louise b{font:800 16px/1 Arial;color:#fff}.louise span{display:block;font:600 12px/1.4 Arial;color:#cdbf9d;margin-top:3px}
+.hud{position:absolute;pointer-events:none}
+.brand{left:34px;top:26px;display:flex;align-items:center;gap:14px}
+.brand b{font:900 40px/1 "Cinzel","Trajan Pro",Georgia,serif;letter-spacing:3px;color:#ffd36a;text-shadow:0 2px 14px rgba(255,190,70,.55)}
+.brand i{display:block;font:600 11px/1 Arial;letter-spacing:2.6px;color:#e9d9b0;font-style:normal;margin-top:6px}
+.lantern{width:38px;height:46px;border-radius:50% 50% 38% 38%/42% 42% 58% 58%;background:radial-gradient(circle at 50% 40%,#fff3c4,#ffb938 55%,#a8620d);box-shadow:0 0 22px 6px rgba(255,185,60,.55)}
+.chip{left:50%;top:22px;transform:translateX(-50%);display:flex;gap:0;background:rgba(18,16,20,.78);border:1px solid rgba(255,211,106,.45);border-radius:14px;backdrop-filter:blur(6px)}
+.chip div{padding:14px 22px;font:800 18px/1 Arial;letter-spacing:1.2px}
+.chip div+div{border-left:1px solid rgba(255,211,106,.25);font-weight:600;color:#d8cdb4}
+.stats{right:34px;top:20px;display:flex;gap:12px}
+.stat{background:rgba(18,16,20,.78);border:1px solid rgba(255,211,106,.35);border-radius:14px;padding:12px 20px;text-align:left}
+.stat b{display:block;font:800 26px/1 Arial;color:#ffe8b0}.stat span{font:700 10px/1 Arial;letter-spacing:1.8px;color:#bfae86}
+.panel{right:30px;top:112px;width:430px;background:linear-gradient(180deg,rgba(22,20,26,.92),rgba(12,11,15,.92));border:1px solid rgba(255,211,106,.5);border-radius:18px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,211,106,.08) inset}
+.panel .hd{display:flex;gap:18px;align-items:flex-start}
+.bag{width:104px;height:128px;border-radius:44% 44% 40% 40%/30% 30% 70% 70%;background:radial-gradient(circle at 38% 30%,#fff,#e6e1d4 60%,#b8b1a0);position:relative;box-shadow:inset -10px -14px 22px rgba(0,0,0,.22),0 8px 20px rgba(0,0,0,.45)}
+.bag:before{content:"";position:absolute;left:36px;top:-14px;width:34px;height:24px;background:#e9e4d6;border-radius:12px 12px 4px 4px}
+.bag:after{content:"";position:absolute;left:30px;top:6px;width:46px;height:12px;border-radius:8px;background:#6fcf6f;box-shadow:0 0 8px rgba(111,207,111,.7)}
+.tag{position:absolute;left:30px;top:56px;width:44px;height:58px;background:#7ed17e;border-radius:4px;transform:rotate(-8deg);font:800 8px/1.2 Arial;color:#143d14;padding:6px 3px;text-align:center}
+.pill{display:inline-block;font:800 11px/1 Arial;letter-spacing:1.4px;padding:8px 12px;border-radius:999px;background:#25222b;border:1px solid rgba(255,255,255,.18);margin-right:8px;color:#e9dfc7}
+.title{font:900 34px/1.05 Arial;letter-spacing:.5px;margin:14px 0 4px;color:#fff}
+.sub{font:600 14px/1.3 Arial;color:#cdbf9d;letter-spacing:.4px}
+.row{display:flex;justify-content:space-between;font:600 15px/1 Arial;padding:9px 0;color:#e9e1cf}.row span{color:#bfae86}
+.steps{display:flex;justify-content:space-between;margin:18px 0 6px;position:relative}
+.steps:before{content:"";position:absolute;left:24px;right:24px;top:13px;height:3px;background:#3b3744}
+.steps .s{position:relative;width:20%;text-align:center;font:700 12px/1.25 Arial;color:#8f89a0}.steps .s i{display:block;margin:0 auto 8px;width:28px;height:28px;border-radius:50%;background:#2c2934;border:3px solid #3b3744;position:relative;z-index:1}
+.steps .done{color:#d7f5d4}.steps .done i{background:#3fbf5b;border-color:#6be586;box-shadow:0 0 10px rgba(80,220,110,.55)}
+.steps .cur{color:#b9e6ff}.steps .cur i{background:#1d9bff;border-color:#bfe6ff;box-shadow:0 0 18px 4px rgba(60,170,255,.85)}
+.state{display:flex;align-items:center;gap:16px;margin-top:14px;background:rgba(40,36,48,.75);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:14px 16px}
+.state b{font:900 22px/1 Arial;color:#ffe8b0;letter-spacing:.6px}.state span{display:block;font:600 14px/1.2 Arial;color:#cdbf9d;margin-top:6px}
+.btn{margin-top:14px;text-align:center;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:13px;font:700 15px/1 Arial;color:#efe7d3}
+.pulse{left:50%;bottom:22px;transform:translateX(-50%);padding:14px 26px;border-radius:14px;background:rgba(18,16,20,.82);border:1px solid rgba(255,211,106,.5);font:800 16px/1 Arial;letter-spacing:2px;color:#ffe8b0}
+</style></head><body><div id="stage"><div id="c"></div>
+<div class="hud brand"><div class="lantern"></div><div><b>JOYSTICK</b><i>REAL WORK. A BRIGHTER WORLD.</i></div></div>
+<div class="hud chip"><div>THE SUNSET LAUNDRY&nbsp;&nbsp;⌄</div><div>SAT, OCT 3, 2026</div><div>9:14 AM</div></div>
+<div class="hud stats"><div class="stat"><b>102</b><span>LANTERNS</span></div><div class="stat"><b>4</b><span>ISLANDS</span></div><div class="stat"><b>7</b><span>MISSIONS</span></div></div>
+<div class="hud panel" id="panel"><div class="hd"><div class="bag"><div class="tag">THE<br>LOUISE<br>2 BAGS</div></div><div><span class="pill">RESIDENTIAL</span><span class="pill">WASH &amp; FOLD</span><div class="title" id="pt">THE LOUISE</div><div class="sub" id="ps">2 bags · 28 lb</div></div></div>
+<div style="margin-top:14px"><div class="row"><span>Pickup</span>Sat 9:03 AM</div><div class="row"><span>Return due</span>Sat 5:30 PM</div><div class="row"><span>Notes</span>Delicate items</div></div>
+<div class="steps"><div class="s done"><i></i>Picked<br>up</div><div class="s done"><i></i>Received</div><div class="s cur"><i></i>In<br>cleaning</div><div class="s"><i></i>Ready</div><div class="s"><i></i>Returned</div></div>
+<div class="state"><div style="width:46px;height:46px;border-radius:50%;border:5px solid #cfd6df;background:radial-gradient(#9fe6ff,#3a7fa0)"></div><div><b>IN CLEANING</b><span>Return due 5:30 PM</span></div></div>
+<div class="btn">View items (14)</div></div>
+<div id="city"></div><div class="hud cityhd"><b>LANTERN CITY</b><i>LUXURY TOWERS. REAL POWER.</i></div><div class="hud louise"><b>THE LOUISE</b><span>Los Feliz · lantern lit</span></div><div class="hud done"><b>RETURN COMPLETE</b><h3>THE LOUISE</h3><p>Order returned 5:21 PM</p><p>Customer notified</p></div>
+</div><script type="module" src="./out.js"></script></body></html>
