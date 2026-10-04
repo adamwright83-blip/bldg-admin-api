@@ -3187,6 +3187,8 @@ export const appRouter = router({
               transfer_data: { destination: vendorAccountId! },
               application_fee_amount: platformFeeCents,
               ...(useOnBehalfOf ? { on_behalf_of: vendorAccountId! } : {}),
+            }, {
+              idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}`,
             });
             console.log(
               `[ChargeCard] Destination charge for vendor ${vendorAccountId}`
