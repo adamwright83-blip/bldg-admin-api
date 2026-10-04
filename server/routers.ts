@@ -1,4 +1,5 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
+import { admitNativeStripePayment } from "./authority/paymentAdmission";
 import {
   writeDriverExpenseToSheet,
   writeDryCleaningCostToSheet,
@@ -3188,18 +3189,21 @@ export const appRouter = router({
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
-          await updateOrderIntake(input.orderId, {
-            paid: true,
+          await admitNativeStripePayment({
+            tenantId: order.tenantId ?? "default",
+            orderId: input.orderId,
+            paymentIntentId: paymentIntent.id,
             paidAt,
-            stripePaymentIntentId: paymentIntent.id,
-            total: centsToDollars(input.amountCents),
-            status: "processing",
-            isFirstPaidOrder: !hasPaidBefore,
-            platformFeeCents,
-            vendorPayoutCents,
-            stripeConnectedAccountIdSnapshot: vendorAccountId,
-            vendorNameSnapshot: vendor.name,
-            routingPrioritySnapshot: paymentRoute.priority,
+            orderPatch: {
+              total: centsToDollars(input.amountCents),
+              status: "processing",
+              isFirstPaidOrder: !hasPaidBefore,
+              platformFeeCents,
+              vendorPayoutCents,
+              stripeConnectedAccountIdSnapshot: vendorAccountId,
+              vendorNameSnapshot: vendor.name,
+              routingPrioritySnapshot: paymentRoute.priority,
+            },
           });
 
           await attributeOrderFromCampaign({
