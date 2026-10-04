@@ -926,6 +926,8 @@ export async function transitionCommercialMissionWith(
             authorityReceiptId: winAuthority.id,
             authorityClaimType: winAuthority.claimType,
             authoritySourceRef: winAuthority.sourceRef,
+            commercialMissionId: input.missionId,
+            commercialAccountId: current.account.accountId,
           }
         : input.metadata;
       await tx.insert(commercialMissionEvents).values({
