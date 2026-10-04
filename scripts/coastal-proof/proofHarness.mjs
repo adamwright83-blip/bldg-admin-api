@@ -197,7 +197,7 @@ async function main() {
       // a short keyboard leg: the chase's first portcullis drops across the stair foot at ~24 m,
       // and the touch leg below needs open route ahead of it
       await page.keyboard.down("w");
-      await page.waitForTimeout(1600);
+      await page.waitForTimeout(2200);
       await page.keyboard.up("w");
       const s = await page.evaluate(() => ({ ...window.__coastalProof.state(), audio: window.__coastalProof.audio() }));
       // real touch: left thumb pushes the floating stick forward, right thumb drags to look

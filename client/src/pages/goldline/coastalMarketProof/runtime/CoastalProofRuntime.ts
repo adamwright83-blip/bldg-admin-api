@@ -1,7 +1,8 @@
 import * as THREE from "three";
-import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { GLTFLoader, type GLTF, type GLTFParser } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
+import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { Autopilot } from "./autopilot";
 import { ArmReach, Locomotion, deriveBriskWalk, deriveBriskWalkIK, measureGroundSpeed } from "./character";
 import { PlayerController, WALK_SPEED } from "./controller";
@@ -20,6 +21,7 @@ import { PerfMeter } from "./perf";
 import { Phase2World, type RookMeta } from "./phase2World";
 import { PostFX } from "./postfx";
 import { patchGarments, patchHeroRim, patchSkin, type HeroLight } from "./garments";
+import { VrmHero } from "./vrmHero";
 
 /**
  * The Coastal Market proof: one imperative three.js loop, owned by one React
@@ -86,8 +88,23 @@ export async function createCoastalProof(
   if (post) disposers.push(() => post.dispose());
 
   // ---------- assets
+  // Textures packed inside a GLB are decoded from blob: URLs. three.js fetches those URLs (an
+  // ImageBitmapLoader) on most browsers, and a strict Content-Security-Policy connect-src (the
+  // claude.ai artifact host has one) blocks the fetch: every embedded texture silently fails and a
+  // model renders white. An <img> may load blob: under img-src, so decode through TextureLoader.
+  const imgTextures = (parser: GLTFParser) => {
+    parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+    return { name: "coastal_img_textures" };
+  };
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
+  loader.register(imgTextures);
+  // Trailblazer's VRoid body is a VRM: the same GLB container, read with pixiv's VRM plugin
+  const vrmLoader = new GLTFLoader();
+  vrmLoader.register(imgTextures);
+  vrmLoader.register(parser => new VRMLoaderPlugin(parser));
+  // ?hero=legacy shows the previous Blender-built Trailblazer instead
+  const legacyHero = new URLSearchParams(window.location.search).get("hero") === "legacy";
   const progress = new Map<string, number>();
   const report = () => {
     let sum = 0;
@@ -126,7 +143,7 @@ export async function createCoastalProof(
     }
     return out.buffer;
   };
-  const loadGltf = async (file: string): Promise<GLTF> => {
+  const loadGltf = async (file: string, using: GLTFLoader = loader): Promise<GLTF> => {
     progress.set(file, 0);
     let bytes = await fetchBytes(assetBase + file, file).catch(() => null);
     // a host may answer a missing file with an HTML page; only a real GLB starts with "glTF"
@@ -143,7 +160,7 @@ export async function createCoastalProof(
     progress.set(file, 1);
     report();
     if (!bytes) throw new Error(`${file} not found`);
-    return loader.parseAsync(bytes, assetBase);
+    return using.parseAsync(bytes, assetBase);
   };
   const fetchJson = async <T,>(file: string): Promise<T> => {
     const r = await fetch(assetBase + file);
@@ -170,7 +187,7 @@ export async function createCoastalProof(
       );
     });
   const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
-  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf, rigsGltf, rookMeta] = await Promise.all([
+  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf, rigsGltf, rookMeta, vrmGltf] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
     loadGltf("trailblazer.glb"),
@@ -183,6 +200,7 @@ export async function createCoastalProof(
     loadGltf("rook-runtime.glb"),
     loadGltf("rigs.glb"),
     fetchJson<RookMeta>("rook-runtime.json"),
+    legacyHero ? Promise.resolve(null) : loadGltf("trailblazer-vrm.glb", vrmLoader),
   ]);
   // Phase 2 climbs from the waterfront toward the high market. Reversing the
   // authored samples preserves the Phase 1 geography while making this a chase.
@@ -316,12 +334,68 @@ export async function createCoastalProof(
       mat.side = THREE.DoubleSide;
       mat.envMapIntensity = 0.35; // cloth and leather, not lacquer: keep the grey sky out of them
       patchGarments(mat, heroLight);
+    } else if (mat.name === "TB_Brows" || mat.name === "TB_Lashes") {
+      // MakeHuman's hair cards: cut out, both faces, no shadow of their own
+      mat.alphaTest = mat.name === "TB_Lashes" ? 0.3 : 0.4;
+      mat.transparent = false;
+      mat.depthWrite = true; // glTF BLEND arrives with depth writes off; cut-out cards must write depth
+      mat.side = THREE.DoubleSide;
+      mat.roughness = 0.6;
+      mat.color.set(mat.name === "TB_Brows" ? "#3a2820" : "#241814");
+      // they lie a millimetre off the skin: a small depth pull keeps them from flickering into it
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits = -2;
+      m.castShadow = false;
+    } else if (mat.name === "TB_Eyes") {
+      // a wet eye: a sharp, small reflection of the sky
+      mat.roughness = 0.06;
+      mat.envMapIntensity = 0.9;
+      m.castShadow = false;
     } else if (mat.name.startsWith("MI_Superhero")) {
-      mat.color.set("#ecccb4"); // warm the pack's light skin toward the v2 sheet
+      // MakeHuman's photographic skin keeps its own tone; the mannequin's flat one is warmed toward the v2 sheet
+      mat.color.set(mat.name.includes("_MH_") ? "#eec4a6" : "#ecccb4");
       patchSkin(mat, heroLight);
     }
     patchDynamicSunVis(mat, heroSunVis);
   });
+  // Trailblazer as drawn: the VRoid character, posed from the (now invisible) rig every frame
+  let vrmHero: VrmHero | null = null;
+  const vrm = (vrmGltf?.userData.vrm as VRM | undefined) ?? null;
+  if (vrm) {
+    VRMUtils.removeUnnecessaryVertices(vrm.scene);
+    // VRoid exports 16 skinned meshes, each with its own copy of the 107-bone skeleton: three.js would
+    // recompute every copy each frame (the bulk of her cost). One shared skeleton is computed once.
+    VRMUtils.combineSkeletons(vrm.scene);
+    let source: THREE.SkinnedMesh | null = null;
+    hero.traverse(o => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      if (!source || m.name === "TB_Body") source = m;
+      m.visible = false;
+    });
+    if (!source) throw new Error("no rig mesh to drive Trailblazer's VRM");
+    vrmHero = new VrmHero(vrm, source, hero);
+    vrm.scene.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      // only her body, hair and outfit cast shadow; the face's small parts (eyes, brows, lashes) need not
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      m.castShadow = mats.some(mt => /Body|Hair_00|CLOTH|Shoes|Tops|Onepiece/.test(mt.name));
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      // the ponytail leaves her nape bare, where VRoid paints the scalp a light hair-base brown that
+      // reads as a hole in her hair from behind: darken it to her hair
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        const toon = mat as THREE.Material & { color?: THREE.Color; shadeColorFactor?: THREE.Color };
+        if (mat.name.includes("HairBack")) {
+          toon.color?.multiplyScalar(0.32);
+          toon.shadeColorFactor?.multiplyScalar(0.32);
+        }
+      }
+    });
+    disposers.push(() => VRMUtils.deepDispose(vrm.scene));
+  }
   const secondary = new SecondaryMotion(hero);
   const armReach = new ArmReach(hero);
   // one ray per frame toward the sun decides whether she stands in a building's shadow
@@ -334,6 +408,7 @@ export async function createCoastalProof(
   };
   const body = new THREE.Group();
   body.add(hero);
+  if (vrm) scene.add(vrm.scene);
   const heroRoot = new THREE.Group();
   heroRoot.add(body);
   scene.add(heroRoot);
@@ -402,8 +477,13 @@ export async function createCoastalProof(
   caption.className = "cmp-caption";
   const stamp = document.createElement("div");
   stamp.className = "cmp-stamp";
-  container.append(caption, stamp);
-  disposers.push(() => caption.remove(), () => stamp.remove());
+  // the proof's last frame: Rook is away down the line with the satchel
+  const endCard = document.createElement("div");
+  endCard.className = "cmp-endcard";
+  endCard.innerHTML = `<span class="cmp-endcard-title">THE ROOK HUNT</span><span class="cmp-endcard-sub">To be continued</span>`;
+  container.append(caption, stamp, endCard);
+  disposers.push(() => caption.remove(), () => stamp.remove(), () => endCard.remove());
+  let endCardShown = false;
   const lineButton = container.querySelector(".cmp-hook");
   input.enabled = false;
   // the run ends in front of the cage door
@@ -445,12 +525,15 @@ export async function createCoastalProof(
   const camQ = new THREE.Quaternion();
   const shotRay = new THREE.Ray();
   const gripTmp = new THREE.Vector3();
+  const gripTmp2 = new THREE.Vector3();
   const swingQ = new THREE.Quaternion();
   const swingDir = new THREE.Vector3();
   const downV = new THREE.Vector3(0, -1, 0);
   const camM = new THREE.Matrix4();
   let lastCaption = "";
   let rookCaughtReported = false;
+  let endCardSeconds = 0;
+  const END_CARD_HOLD = 3.5;   // the title card stays up this long before the game moves on
   const frame = (t: number) => {
     const workStart = performance.now();
     renderer.info.reset();
@@ -471,13 +554,14 @@ export async function createCoastalProof(
     }
     npcs.update(dt, camera.position);
     phase2.update(dt, controller, input.lineHeld, !!autopilot);
-    if (
-      !rookCaughtReported &&
-      phase2.state.reveal &&
-      phase2.state.revealTime >= 12.4
-    ) {
-      rookCaughtReported = true;
-      callbacks.onRookCaught?.();
+    // report the catch only once the ending has played: the host leaves this scene on success,
+    // so reporting earlier (the old 12.4 s) cut the escape and the end card off mid-play
+    if (!rookCaughtReported && phase2.state.endCard) {
+      endCardSeconds += dt;
+      if (endCardSeconds >= END_CARD_HOLD) {
+        rookCaughtReported = true;
+        callbacks.onRookCaught?.();
+      }
     }
     for (const e of phase2.events) audio.cue(e);
     if (phase2.state.caption !== lastCaption) {
@@ -495,6 +579,11 @@ export async function createCoastalProof(
       }
     }
     caption.classList.toggle("is-visible", !!phase2.state.caption);
+    if (phase2.state.endCard && !endCardShown) {
+      endCardShown = true;
+      endCard.classList.add("is-visible");
+      audio.cue("endcard");
+    }
     stamp.textContent = phase2.state.stamp;
     stamp.classList.toggle("is-visible", !!phase2.state.stamp);
     lineButton?.classList.toggle("is-ready", phase2.state.lineReady);
@@ -554,6 +643,13 @@ export async function createCoastalProof(
     updateHeroSun(dt);
     audio.update(camera, controller.position.y, life.waterfallTop, Math.max(0, Math.min(1, (9 - controller.position.y) / 7)));
     heroRoot.updateMatrixWorld(true);
+    if (vrmHero) {
+      vrmHero.update(dt);
+      if (controller.hanging) {
+        // the VRoid body's arms are shorter than the rig's: lift her so her own knuckles close on the bar
+        vrmHero.shift(gripTmp.copy(phase2.handTarget).sub(vrmHero.gripPoint(gripTmp2)));
+      }
+    }
     measureSlip(dt);
     if (post) post.render(scene, camera, t / 1000);
     else renderer.render(scene, camera);
@@ -590,7 +686,7 @@ export async function createCoastalProof(
       reachedEnd,
       autowalkSeconds: autopilot?.elapsedSeconds ?? null,
       // the run is over when she has reached the cage door and the reveal has played
-      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 && phase2.state.revealTime > 13 : null,
+      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 && phase2.state.revealTime > 21 : null,
       walkGroundSpeed: groundSpeed,
       // median planted-foot speed (m/s) over the last ~4 s of walking; 0 = no skating
       footSlip: slipSamples.length ? [...slipSamples].sort((a, b) => a - b)[Math.floor(slipSamples.length / 2)] : null,
@@ -601,7 +697,7 @@ export async function createCoastalProof(
       grounded: controller.grounded,
       phase2: { ...phase2.state },
       grip: phase2.handTarget.toArray().map(v => +v.toFixed(3)),
-      knuckles: armReach.gripPoint(new THREE.Vector3()).toArray().map(v => +v.toFixed(3)),
+      knuckles: (vrmHero ? vrmHero.gripPoint(new THREE.Vector3()) : armReach.gripPoint(new THREE.Vector3())).toArray().map(v => +v.toFixed(3)),
       hangRoot: heroRoot.position.toArray().map(v => +v.toFixed(3)),
     }),
     perf: () => perf.snapshot(),

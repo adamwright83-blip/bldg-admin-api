@@ -344,57 +344,65 @@ def paint_regions(co, concept, w, fallback):
 
 
 def bake_projection(obj):
-    """The projection as per-vertex colour (concept where it sees, the concept's feather green
-    elsewhere), exactly the blend project_concept.py's material computes, evaluated at each vertex.
-    No UV atlas: a baked atlas on this surface is thousands of islands and their seams show."""
+    """The approved material, carried as data glTF can hold: the concept image as the texture, the
+    projection (`proj_uv`) as the UV set, and the projection weight as a vertex attribute `_PROJW`.
+    The runtime blends concept and feather green per pixel exactly as project_concept.py's node
+    tree does, so Rook in the game is the approved Rook, not a re-painting of him."""
     me = obj.data
     mat = me.materials[0]
     img = next(nd.image for nd in mat.node_tree.nodes if nd.type == "TEX_IMAGE" and nd.image and nd.image.size[0] > 0)
-    W, H = img.size
-    rgba = np.array(img.pixels[:], dtype=np.float32).reshape(H, W, 4)
     calm = next(nd for nd in mat.node_tree.nodes if nd.type == "RGB").outputs[0].default_value
-    fallback = np.array(calm[:3], dtype=np.float32)
     n = len(me.vertices)
     uv = np.empty(n * 2, dtype=np.float32)
     me.attributes["proj_uv"].data.foreach_get("vector", uv)
     uv = uv.reshape(n, 2)
     w = np.empty(n, dtype=np.float32)
     me.attributes["proj_w"].data.foreach_get("value", w)
-    # bilinear sample of the concept (image rows are bottom-up in Blender)
-    x = np.clip(uv[:, 0] * (W - 1), 0, W - 1)
-    y = np.clip(uv[:, 1] * (H - 1), 0, H - 1)
-    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
-    x1, y1 = np.minimum(x0 + 1, W - 1), np.minimum(y0 + 1, H - 1)
-    fx, fy = (x - x0)[:, None], (y - y0)[:, None]
-    c = (rgba[y0, x0, :3] * (1 - fx) * (1 - fy) + rgba[y0, x1, :3] * fx * (1 - fy)
-         + rgba[y1, x0, :3] * (1 - fx) * fy + rgba[y1, x1, :3] * fx * fy)
+    # The shell is loose fragments, so the per-vertex visibility flips fragment by fragment and the
+    # feather-green fallback sprinkles over the painted face. Average the weight over each small
+    # neighbourhood (the painted/unpainted boundary is a region, not a fragment) and firm it up.
+    from mathutils.kdtree import KDTree
     co = np.empty(n * 3, dtype=np.float32)
     me.vertices.foreach_get("co", co)
     co = co.reshape(n, 3)
-    col = paint_regions(co, c, w, fallback)
-    # Image.pixels of an 8-bit PNG are display (sRGB) values; colour attributes are linear
-    col = np.where(col <= 0.04045, col / 12.92, ((col + 0.055) / 1.055) ** 2.4)
-    ca = me.color_attributes.new("Color", "FLOAT_COLOR", "POINT")
-    ca.data.foreach_set("color", np.concatenate([col, np.ones((n, 1), np.float32)], 1).ravel())
-    me.color_attributes.active_color = ca
+    kd = KDTree(n)
+    for i, p_ in enumerate(co):
+        kd.insert(p_, i)
+    kd.balance()
+    ws = np.empty(n, dtype=np.float32)
+    for i in range(n):
+        nb = [j for (_, j, _) in kd.find_range(co[i], 0.022)]
+        ws[i] = float(w[nb].mean()) if nb else w[i]
+    t = np.clip((ws - 0.18) / (0.5 - 0.18), 0, 1)
+    w = (t * t * (3 - 2 * t)).astype(np.float32)
+    for uvl in list(me.uv_layers):
+        me.uv_layers.remove(uvl)
+    layer = me.uv_layers.new(name="UVMap")
+    loop_v = np.empty(len(me.loops), dtype=np.int32)
+    me.loops.foreach_get("vertex_index", loop_v)
+    layer.data.foreach_set("uv", uv[loop_v].ravel())
+    pw = me.attributes.new("_PROJW", "FLOAT", "POINT")
+    pw.data.foreach_set("value", w)
     for name in ("proj_uv", "proj_w"):
         if name in me.attributes:
             me.attributes.remove(me.attributes[name])
-    for uvl in list(me.uv_layers):
-        me.uv_layers.remove(uvl)
+    for ca in list(me.color_attributes):
+        me.color_attributes.remove(ca)
     m = bpy.data.materials.new("rook_runtime")
     m.use_nodes = True
     bsdf = m.node_tree.nodes["Principled BSDF"]
     bsdf.inputs["Roughness"].default_value = 0.8
     if "Specular IOR Level" in bsdf.inputs:
         bsdf.inputs["Specular IOR Level"].default_value = 0.25
-    attr = m.node_tree.nodes.new("ShaderNodeVertexColor")
-    attr.layer_name = "Color"
-    m.node_tree.links.new(attr.outputs["Color"], bsdf.inputs["Base Color"])
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    tex.extension = "EXTEND"
+    m.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     m.use_backface_culling = False
     me.materials.clear()
     me.materials.append(m)
-    print(f"[rook] projection -> vertex colour on {n} vertices ({(w > 0.5).mean():.2f} from the concept)")
+    globals()["FALLBACK_SRGB"] = [round(float(c), 4) for c in calm[:3]]
+    print(f"[rook] approved projection carried as UV + _PROJW on {n} vertices ({(w > 0.5).mean():.2f} from the concept)")
 
 
 def evaluated_coords(obj):
@@ -482,7 +490,7 @@ def main():
     bpy.ops.export_scene.gltf(
         filepath=out, export_format="GLB", use_selection=True, export_yup=True,
         export_animations=False, export_skins=False, export_morph=True, export_morph_normal=False,
-        export_materials="EXPORT", export_vertex_color="ACTIVE", export_image_format="WEBP", export_image_quality=86,
+        export_materials="EXPORT", export_attributes=True, export_image_format="WEBP", export_image_quality=90,
         export_meshopt_compression_enable=True, export_cameras=False, export_lights=False,
         export_apply=False,
     )
@@ -493,6 +501,8 @@ def main():
         "height": round(low.dimensions.z, 4),
         "keys": [k for k, _ in KEYS],
         "wingTip": tips,
+        # the projection's fallback (the concept's feather green, display sRGB) for unseen surfaces
+        "fallback": globals().get("FALLBACK_SRGB"),
     }
     with open(os.path.join(OUT_DIR, "rook-runtime.json"), "w") as f:
         json.dump(meta, f, indent=1)
