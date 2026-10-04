@@ -72,7 +72,7 @@ const pool = mysql.createPool({
 try {
   for (const migration of [
     "0109_president_stage1.sql",
-    "0111_president_intelligence.sql",
+    "0113_president_intelligence.sql",
   ]) {
     const sql = await readFile(resolve(root, "drizzle", migration), "utf8");
     for (const statement of sql
