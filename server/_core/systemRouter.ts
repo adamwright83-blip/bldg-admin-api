@@ -61,6 +61,7 @@ import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffbo
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
 import { persistentOperatorRouter } from "../persistentOperator/persistentOperatorRouter";
+import { operatorRepresentativeRouter } from "../operatorRepresentative/router";
 import { franchiseRouter } from "../franchise/franchiseRouter";
 
 export const systemRouter = router({
@@ -120,6 +121,7 @@ export const systemRouter = router({
   missionDirector: missionDirectorRouter,
   currentDayLine: currentDayLineRouter,
   persistentOperator: persistentOperatorRouter,
+  operatorRepresentative: operatorRepresentativeRouter,
   lanternCity: lanternCityRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,

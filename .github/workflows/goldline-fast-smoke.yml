@@ -74,6 +74,9 @@ jobs:
           server/persistentOperator/identity.test.ts
           server/persistentOperator/observability.test.ts
           server/persistentOperator/identitySchemaContract.test.ts
+          server/operatorRepresentative/readModel.test.ts
+          server/operatorRepresentative/talk.test.ts
+          server/claire/operatorAdaptationContext.test.ts
           server/campaignRuns/canonicalOwnership.test.ts
           server/lanternCity/lanternCityRouter.test.ts
           shared/lanternCityObjectiveMarks.test.ts
@@ -243,6 +246,7 @@ jobs:
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/worldSmoke.spec.ts
               e2e/goldline-smoke/lanternCityMount.spec.ts
+              e2e/goldline-smoke/operatorRepresentative.spec.ts
           - name: fast-smoke-territories
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
@@ -304,6 +308,14 @@ jobs:
           exit 1
       - name: Run deterministic micro gate
         run: ${{ matrix.command }}
+      - name: Upload Operator Representative visual QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-representative-v1-qa-${{ matrix.name }}-${{ github.sha }}
+          path: artifacts/operator-representative-v1-qa
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Stop proof server
         if: always()
         run: |

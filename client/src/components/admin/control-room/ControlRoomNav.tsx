@@ -31,6 +31,7 @@ const HOME_WEST: WestItem[] = [
   { label: "Overview", path: "/", icon: Users },
   { label: "Today", path: "/home/today", icon: CalendarDays },
   { label: "Claire", path: "/claire", icon: Radio },
+  { label: "Operator", path: "/operator", icon: Sparkles },
   { label: "Exceptions", path: "/home/exceptions", icon: Bell },
   { label: "Signals", path: "/home/signals", icon: Radio },
   { label: "Notes", path: "/home/notes", icon: FileText },
