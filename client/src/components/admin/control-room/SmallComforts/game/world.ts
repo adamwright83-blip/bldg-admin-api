@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { PAL, rbox, cyl, ball, toon, makeCloud, canvasTex, easeInOut, easeOutBack, clamp01, inked } from "./style";
 import { COLS, ROWS } from "../logic/grid";
+import { SMALL_COMFORTS_ART } from "../logic/artAssets";
+import { loadSuitcaseArt } from "./assets";
 
 const WH = 1.9; // suitcase wall height
 export const WIN = { x0: 0, x1: 2, y0: 0.62, y1: 1.52, z: -2.0 };
@@ -16,6 +18,11 @@ export class World {
   room = new THREE.Group(); // furniture lives here
   caseGroup = new THREE.Group();
   lidPivot = new THREE.Group();
+  private importedCase: THREE.Group | null = null;
+  private importedLid: THREE.Object3D | null = null;
+  private importedLatch: THREE.Object3D | null = null;
+  private legacyCaseVisuals: THREE.Object3D[] = [];
+  private disposed = false;
   frontWall!: THREE.Mesh;
   latch = new THREE.Group();
   latchHit!: THREE.Mesh;
@@ -70,6 +77,7 @@ export class World {
     this.buildDesk();
     this.buildStation();
     this.buildCase();
+    void this.hydrateSuitcaseArt();
     this.buildIntroClouds();
     this.train = new Train();
     this.train.group.position.set(0, 0.25, -9.2);
@@ -259,10 +267,71 @@ export class World {
     // wall plane for scissors picking
     this.wallPlane = new THREE.Mesh(new THREE.PlaneGeometry(7, 3), new THREE.MeshBasicMaterial({ visible: false }));
     this.wallPlane.position.set(0, 1, WIN.z); g.add(this.wallPlane);
+
+    // Everything except these interaction overlays is visual fallback art.
+    // Once the Blender suitcase loads, the proxy/interaction surfaces stay
+    // authoritative while these primitives disappear.
+    const keep = new Set<THREE.Object3D>([
+      this.gridPlane,
+      this.hoverCells,
+      this.cutGuide,
+      this.holeView,
+      this.holeFrame,
+      this.wallPlane,
+    ]);
+    this.legacyCaseVisuals = g.children.filter(child => !keep.has(child));
+  }
+
+  private async hydrateSuitcaseArt() {
+    try {
+      const art = await loadSuitcaseArt();
+      if (this.disposed) return;
+
+      for (const name of SMALL_COMFORTS_ART.suitcase.expectedNodes) {
+        if (!art.getObjectByName(name)) throw new Error(`missing runtime node ${name}`);
+      }
+
+      this.importedCase = art;
+      this.importedLid = art.getObjectByName(SMALL_COMFORTS_ART.suitcase.lidNode) ?? null;
+      this.importedLatch = art.getObjectByName(SMALL_COMFORTS_ART.suitcase.latchNode) ?? null;
+      art.name = "ImportedSuitcaseV3";
+      this.caseGroup.add(art);
+
+      // Preserve invisible gameplay proxies and the cut-window overlay, but
+      // remove the old primitive suitcase from rendering.
+      for (const object of this.legacyCaseVisuals) object.visible = false;
+
+      // The old latch hit volume lived under the fallback front wall. Reparent
+      // it and align it with the authored v3 brass hardware.
+      this.caseGroup.updateMatrixWorld(true);
+      this.caseGroup.attach(this.latchHit);
+      this.latchHit.position.set(0, 0.62, 2.55);
+      this.latchHit.scale.set(1.25, 0.8, 0.8);
+
+      // The current scissors mechanic remains proxy-driven. When the lining
+      // is cut, its view is composited a hair in front of the Blender lining
+      // until destructive mesh cutting is authored as a later art feature.
+      this.holeView.position.z = -1.965;
+      this.holeView.renderOrder = 20;
+      this.holeFrame.position.z = 0.08;
+      this.holeFrame.renderOrder = 21;
+      this.cutPiece.visible = false;
+
+      this.applyLid(this.lidT);
+    } catch (error) {
+      console.warn("Small Comforts: keeping suitcase fallback art", error);
+    }
   }
 
   private applyLid(t: number) {
-    // 0 closed -> pops up on its hinge, then flips back off the desk and shrinks away (the lid is not part of the game)
+    if (this.importedLid) {
+      const angle = SMALL_COMFORTS_ART.suitcase.openAngleDeg * clamp01(t);
+      this.importedLid.rotation.x = THREE.MathUtils.degToRad(-angle);
+      this.importedLid.updateMatrixWorld(true);
+      return;
+    }
+
+    // Primitive fallback used only if the GLB cannot load.
     const p = this.lidPivot;
     const k = Math.max(0, t - 0.3);
     p.rotation.x = Math.min(t, 0.3) / 0.3 * 0.95 + k * 1.7;
@@ -276,9 +345,9 @@ export class World {
 
   openLid(now: number) { this.lidAnim = { from: 0, to: 1, t0: now, dur: 1.5 }; }
   closeLid(now: number) { this.lidAnim = { from: 1, to: 0, t0: now, dur: 0.9 }; }
-  cutWindow() { if (this.windowCut) return; this.windowCut = true; this.cutAnim = 0; this.holeView.visible = true; this.holeFrame.visible = true; }
+  cutWindow() { if (this.windowCut) return; this.windowCut = true; this.cutAnim = 0; if (!this.importedCase) this.cutPiece.visible = true; this.holeView.visible = true; this.holeFrame.visible = true; }
   spawnTrain() { this.train.spawn(); this.holeTrainT = 0; }
-  restoreWindow() { this.windowCut = false; this.holeView.visible = false; this.holeFrame.visible = false; this.cutAnim = -1; this.cutPiece.visible = true; this.cutPiece.position.set(1, (WIN.y0 + WIN.y1) / 2, -2.1); this.cutPiece.rotation.set(0, 0, 0); this.cutPiece.scale.set(1, 1, 1); }
+  restoreWindow() { this.windowCut = false; this.holeView.visible = false; this.holeFrame.visible = false; this.cutAnim = -1; this.cutPiece.visible = !this.importedCase; this.cutPiece.position.set(1, (WIN.y0 + WIN.y1) / 2, -2.1); this.cutPiece.rotation.set(0, 0, 0); this.cutPiece.scale.set(1, 1, 1); }
 
   // ------------------------------------------------------------------ the descent through the clouds
   private buildIntroClouds() {
@@ -373,8 +442,10 @@ export class World {
     this.rain.visible = true;
     this.train.update(dt);
     if (this.windowCut) this.drawHole(dt);
-    // pulse the latch while the case is closed
-    if (this.lidT < 0.01) { const s = 1 + Math.sin(now * 5) * 0.08; this.latch.scale.setScalar(s); } else this.latch.scale.setScalar(1);
+    // Pulse whichever latch art is currently visible.
+    const latchVisual = this.importedLatch ?? this.latch;
+    if (this.lidT < 0.01) { const s = 1 + Math.sin(now * 5) * 0.035; latchVisual.scale.setScalar(s); }
+    else latchVisual.scale.setScalar(1);
     // the sky shows through the lamp/brass etc — nothing else per-frame
   }
 
@@ -410,6 +481,7 @@ export class World {
 
   render() { this.renderer.render(this.scene, this.camera); }
   dispose() {
+    this.disposed = true;
     this.scene.traverse(o => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();

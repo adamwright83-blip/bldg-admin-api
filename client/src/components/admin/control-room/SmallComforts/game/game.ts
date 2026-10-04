@@ -4,6 +4,7 @@ import { Sound } from "./audio";
 import { Fx } from "./fx";
 import { Mouse, Mode } from "./mice";
 import { makeItem, place, itemCenter, cellPos, bedHeadCell } from "./items";
+import { setImportedLampEmissive } from "./assets";
 import { rbox, toon, easeOutBack, clamp01 } from "./style";
 import {
   Layout, Item, ItemKind, Rot, Cell, emptyLayout, canPlace, prune, itemAt, footprint, onBed, LIMITS, COLS, ROWS, DOOR, ITEM_LABEL, inBounds,
@@ -267,6 +268,8 @@ export class Game {
   applyLamp(id: number) {
     const g = this.meshes.get(id); if (!g) return;
     const on = this.lampOn.get(id) !== false;
+    g.userData.scLampOn = on;
+    setImportedLampEmissive(g, on);
     g.traverse(o => {
       if (o.userData.lampLight) (o as THREE.PointLight).intensity = on ? 5 : 0;
       if (o.userData.shade) {
