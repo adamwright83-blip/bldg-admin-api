@@ -514,6 +514,22 @@ export class MysqlPresidentProgramStore
     });
   }
 
+  async hasExecutionEvent(eventId: string): Promise<boolean> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT eventId FROM president_execution_handbacks WHERE eventId=? LIMIT 1",
+      [eventId]
+    );
+    return Boolean(rows[0]);
+  }
+
+  async hasReviewEvent(eventId: string): Promise<boolean> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT eventId FROM president_independent_reviews WHERE eventId=? LIMIT 1",
+      [eventId]
+    );
+    return Boolean(rows[0]);
+  }
+
   async recordReview(
     input: PresidentIndependentReview
   ): Promise<PresidentIndependentReview> {
