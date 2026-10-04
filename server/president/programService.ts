@@ -360,8 +360,8 @@ export class PresidentProgramService {
         blockReason: "Founder requested a revised program plan",
       });
     }
-    const otherOpen = (await this.programs.openFounderDecisions(3)).filter(
-      item => item.programId === program.id && item.id !== decision.id
+    const otherOpen = (await this.programs.decisionsForProgram(program.id)).filter(
+      item => item.status === "OPEN" && item.id !== decision.id
     );
     if (otherOpen.length)
       return this.programs.updateProgram(program.id, {
