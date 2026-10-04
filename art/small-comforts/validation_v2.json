@@ -1,0 +1,163 @@
+{
+  "results": {
+    "suitcase": {
+      "bbox_min": [
+        -3.53,
+        -0.4,
+        -4.632
+      ],
+      "bbox_max": [
+        3.53,
+        6.165,
+        2.74
+      ],
+      "size_cells": [
+        7.06,
+        6.565,
+        7.372
+      ],
+      "materials": 1,
+      "images": 3,
+      "node_transform_identity": true,
+      "bytes": 9401028,
+      "floor_x_range": [
+        -3.053,
+        3.053
+      ],
+      "floor_z_range": [
+        -2.053,
+        2.053
+      ]
+    },
+    "bed": {
+      "bbox_min": [
+        -0.43,
+        -0.0,
+        -0.95
+      ],
+      "bbox_max": [
+        0.43,
+        0.627,
+        0.925
+      ],
+      "size_cells": [
+        0.86,
+        0.627,
+        1.875
+      ],
+      "materials": 1,
+      "images": 3,
+      "node_transform_identity": true,
+      "bytes": 932624
+    },
+    "lamp": {
+      "bbox_min": [
+        -0.373,
+        0.0,
+        -0.373
+      ],
+      "bbox_max": [
+        0.373,
+        1.18,
+        0.373
+      ],
+      "size_cells": [
+        0.747,
+        1.18,
+        0.747
+      ],
+      "materials": 1,
+      "images": 4,
+      "node_transform_identity": true,
+      "bytes": 799016
+    }
+  },
+  "checks": [
+    {
+      "check": "suitcase: single baked PBR material, textures embedded",
+      "ok": true,
+      "detail": "1 material(s), 3 image(s)"
+    },
+    {
+      "check": "suitcase: node transform is identity (scale/orientation baked in)",
+      "ok": true,
+      "detail": "None"
+    },
+    {
+      "check": "suitcase: lining floor sits at y = 0 and spans the 6 x 4 grid (>= +-3.0 x +-2.0)",
+      "ok": true,
+      "detail": "x -3.053..3.053  z -2.053..2.053"
+    },
+    {
+      "check": "suitcase: floor slab only a hair over the grid (<= +-3.15 x +-2.15)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "suitcase: grid centred on origin",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "suitcase: interior walls rise from the floor (y > 0 above grid)",
+      "ok": true,
+      "detail": "top y 6.17"
+    },
+    {
+      "check": "bed: single baked PBR material, textures embedded",
+      "ok": true,
+      "detail": "1 material(s), 3 image(s)"
+    },
+    {
+      "check": "bed: node transform is identity (scale/orientation baked in)",
+      "ok": true,
+      "detail": "None"
+    },
+    {
+      "check": "bed: footprint fits 1 x 2 cells",
+      "ok": true,
+      "detail": "0.860 x 1.875"
+    },
+    {
+      "check": "bed: footprint centred on origin",
+      "ok": true,
+      "detail": "centre 0.000,-0.012"
+    },
+    {
+      "check": "bed: rests on the floor (min y ~ 0)",
+      "ok": true,
+      "detail": "min y -0.000"
+    },
+    {
+      "check": "bed: pillow at the -Z (back) end like items.ts",
+      "ok": true,
+      "detail": "pillow authored at +Y in Blender = -Z in glTF"
+    },
+    {
+      "check": "lamp: single baked PBR material, textures embedded",
+      "ok": true,
+      "detail": "1 material(s), 4 image(s)"
+    },
+    {
+      "check": "lamp: node transform is identity (scale/orientation baked in)",
+      "ok": true,
+      "detail": "None"
+    },
+    {
+      "check": "lamp: footprint fits one cell",
+      "ok": true,
+      "detail": "0.747 x 0.747"
+    },
+    {
+      "check": "lamp: centred on origin, on the floor",
+      "ok": true,
+      "detail": "centre 0.000,-0.000 min y 0.000"
+    },
+    {
+      "check": "lamp: height plausible vs game lamp (0.9-1.4 cells)",
+      "ok": true,
+      "detail": "1.180"
+    }
+  ],
+  "passed": true
+}

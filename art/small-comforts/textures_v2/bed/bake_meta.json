@@ -1,0 +1,25 @@
+{
+  "asset": "bed",
+  "glb": "glb_v2/sc_bed_v2.glb",
+  "tris": 924,
+  "atlas": 1024,
+  "textures": {
+    "basecolor": "textures_v2/bed/bed_basecolor.png",
+    "roughness": "textures_v2/bed/bed_roughness.png",
+    "metallic": "textures_v2/bed/bed_metallic.png",
+    "normal": "textures_v2/bed/bed_normal.png",
+    "orm": "textures_v2/bed/bed_orm.png"
+  },
+  "map_means": {
+    "base_mean": 0.6554734110832214,
+    "rough_mean": 0.7494913935661316,
+    "metal_mean": 0.0,
+    "normal_mean": 0.6675686836242676
+  },
+  "origin_blender": [
+    -0.22499999403953552,
+    0.0,
+    0.06
+  ],
+  "bytes": 932624
+}

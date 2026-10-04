@@ -1,0 +1,26 @@
+{
+  "asset": "lamp",
+  "glb": "glb_v2/sc_lamp_v2.glb",
+  "tris": 11424,
+  "atlas": 1024,
+  "textures": {
+    "basecolor": "textures_v2/lamp/lamp_basecolor.png",
+    "roughness": "textures_v2/lamp/lamp_roughness.png",
+    "metallic": "textures_v2/lamp/lamp_metallic.png",
+    "normal": "textures_v2/lamp/lamp_normal.png",
+    "orm": "textures_v2/lamp/lamp_orm.png",
+    "emissive": "textures_v2/lamp/lamp_emissive.png"
+  },
+  "map_means": {
+    "base_mean": 0.6578456163406372,
+    "rough_mean": 0.3075486123561859,
+    "metal_mean": 0.07589535415172577,
+    "normal_mean": 0.6679207682609558
+  },
+  "origin_blender": [
+    0.375,
+    0.07500000298023224,
+    0.06
+  ],
+  "bytes": 799016
+}

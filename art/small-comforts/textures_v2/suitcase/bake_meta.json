@@ -1,0 +1,25 @@
+{
+  "asset": "suitcase",
+  "glb": "glb_v2/sc_suitcase_v2.glb",
+  "tris": 68228,
+  "atlas": 2048,
+  "textures": {
+    "basecolor": "textures_v2/suitcase/suitcase_basecolor.png",
+    "roughness": "textures_v2/suitcase/suitcase_roughness.png",
+    "metallic": "textures_v2/suitcase/suitcase_metallic.png",
+    "normal": "textures_v2/suitcase/suitcase_normal.png",
+    "orm": "textures_v2/suitcase/suitcase_orm.png"
+  },
+  "map_means": {
+    "base_mean": 0.3965136706829071,
+    "rough_mean": 0.7160959243774414,
+    "metal_mean": 0.06415385007858276,
+    "normal_mean": 0.6647096872329712
+  },
+  "origin_blender": [
+    0.0,
+    0.0,
+    0.06
+  ],
+  "bytes": 9401028
+}
