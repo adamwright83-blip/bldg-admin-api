@@ -6,7 +6,7 @@
  * when database is available, with full in-memory fallback for isolated testing
  * and environments without live MySQL.
  */
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   mitchAuditEvents,
