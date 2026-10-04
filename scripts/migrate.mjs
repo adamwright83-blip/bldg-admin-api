@@ -4764,6 +4764,28 @@ await runRequired(
   "remove stale authority metadata from non-win commercial events"
 );
 await runRequired(
+  `UPDATE goldline_world_events g
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY g.tenantId
+    AND a.claimType = 'account_won'
+    AND a.admissionPolicy = 'legacy_commercial_win_backfill_v1'
+    AND BINARY a.sourceRef = BINARY g.sourceEvidenceReference
+   JOIN commercial_mission_events e
+     ON BINARY e.tenantId = BINARY a.tenantId
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
+   SET g.metadataJson = JSON_REMOVE(
+     COALESCE(g.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId',
+     '$.commercialMissionId',
+     '$.commercialAccountId'
+   )
+   WHERE g.eventType = 'account_won'
+     AND COALESCE(e.eventName, '') <> 'account_won'
+     AND JSON_UNQUOTE(JSON_EXTRACT(g.metadataJson, '$.authorityReceiptId')) = a.id`,
+  "remove stale Goldline authority markers from non-win evidence"
+);
+await runRequired(
   `DELETE a
    FROM authority_receipts a
    JOIN commercial_mission_events e
