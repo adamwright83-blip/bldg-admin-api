@@ -178,6 +178,77 @@ export const presidentPreflightSchema = z
   .strict();
 export type PresidentPreflight = z.infer<typeof presidentPreflightSchema>;
 
+export const presidentProgramPlanDraftSchema = z
+  .object({
+    summary: z.string().min(1).max(4000),
+    preflight: z
+      .object({
+        reversible: z.boolean(),
+        rollbackPlan: z.string().min(1),
+        estimatedUsd: z.number().min(0).max(10000),
+        licenses: z.array(z.string()).default([]),
+        secretRequirements: z.array(z.string()).default([]),
+        customerImpact: z.boolean(),
+        productionMutation: z.boolean(),
+        billingMutation: z.boolean(),
+        credentialMutation: z.boolean(),
+        dnsMutation: z.boolean(),
+        legalCommitment: z.boolean(),
+        commercialRelease: z.boolean(),
+        externalSpend: z.boolean(),
+        unknowns: z.array(z.string()).default([]),
+      })
+      .strict(),
+    steps: z
+      .array(
+        z
+          .object({
+            type: z.enum(PRESIDENT_STEP_TYPES),
+            title: z.string().min(1).max(255),
+            outcome: z.string().min(1).max(4000),
+            acceptanceCriteria: z.array(z.string().min(1)).min(1).max(30),
+            nonGoals: z.array(z.string().min(1)).max(30).default([]),
+            requiredEvidence: z.array(z.string().min(1)).max(30).default([]),
+            authorityClass: z.enum(PRESIDENT_AUTHORITY_CLASSES),
+            consequentialDomain: z.enum(PRESIDENT_CONSEQUENTIAL_DOMAINS),
+            maxUsd: z.number().min(0).max(1000),
+            executorCapability: z.string().min(1),
+            reviewerCapability: z.string().min(1),
+            baseRef: z.string().nullable().default(null),
+            baseSha: z.string().regex(/^[0-9a-f]{7,40}$/i).nullable().default(null),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(20),
+    measurement: z
+      .object({
+        question: z.string().min(1),
+        evidenceRequired: z.array(z.string().min(1)).min(1),
+        successCondition: z.string().min(1),
+        stopCondition: z.string().min(1),
+      })
+      .strict(),
+    founderQuestions: z
+      .array(
+        z
+          .object({
+            key: z.string().min(1).max(191),
+            question: z.string().min(1).max(4000),
+            options: z.array(z.string().min(1)).min(1).max(8),
+            recommendedOption: z.string().nullable(),
+            reason: z.string().min(1),
+          })
+          .strict()
+      )
+      .max(3)
+      .default([]),
+  })
+  .strict();
+export type PresidentProgramPlanDraft = z.infer<
+  typeof presidentProgramPlanDraftSchema
+>;
+
 export const presidentExecutionHandbackSchema = z
   .object({
     stepId: z.string().uuid(),
