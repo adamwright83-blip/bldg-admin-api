@@ -5,7 +5,15 @@ import http from "node:http";
 import mysql from "mysql2/promise";
 import { MysqlMitchEventInbox } from "./mitchEventInbox";
 import { MitchEventService } from "./mitchEventService";
-import { createMitchEventIngress } from "./mitchEventIngress";
+import {
+  createMitchEventIngress,
+  isGithubActorAuthorized,
+  type MitchGithubActorRule,
+} from "./mitchEventIngress";
+import {
+  HttpMitchAgentWakeProvider,
+  type MitchAgentWakeTarget,
+} from "./mitchAgentWake";
 import { parseMitchComment, MITCH_EVENT_MARKER } from "../../shared/mitchEvents";
 import { SMALL_COMFORTS_GAME_ID } from "./smallComfortsProduction";
 import { GitHubProducerBus } from "./githubProducerBus";
@@ -31,6 +39,14 @@ function numberEnv(name: string, fallback: number): number {
   return value;
 }
 
+function jsonEnv<T>(name: string): T {
+  try {
+    return JSON.parse(required(name)) as T;
+  } catch (error) {
+    throw new Error(name + " must contain valid JSON: " + String(error));
+  }
+}
+
 const tenantId = required("MITCH_TENANT_ID");
 const token = required("MITCH_GITHUB_TOKEN");
 const repoFullName = process.env.MITCH_GITHUB_REPO?.trim() || "adamwright83-blip/bldg-admin-api";
@@ -39,6 +55,11 @@ const recoveryMs = numberEnv("MITCH_PRODUCER_RECOVERY_MS", 60 * 60 * 1000);
 const handbackPollMs = numberEnv("MITCH_HANDBACK_POLL_MS", 15_000);
 const handbackTimeoutMs = numberEnv("MITCH_HANDBACK_TIMEOUT_MS", 45 * 60 * 1000);
 const port = numberEnv("PORT", 8082);
+const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "chatgpt_design_review";
+const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RULES");
+const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
+const wakeTargets = jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS");
+const wakeProvider = new HttpMitchAgentWakeProvider(wakeTargets);
 
 const store = new MitchProductionStore(false, true);
 const service = new MitchProductionService(store);
@@ -49,6 +70,7 @@ const bus = new GitHubProducerBus({ token, repoFullName, issueNumber });
 const provider = new GitHubProducerExecutionProvider(bus, {
   pollMs: handbackPollMs,
   timeoutMs: handbackTimeoutMs,
+  wakeProvider,
 });
 // GitHub access alone does not prove a coding executor is running.
 if (process.env.MITCH_EXECUTOR_ENABLED === "true") dispatcher.registerExecutionProvider(provider);
@@ -62,6 +84,8 @@ const coordinator = new MitchProducerCoordinator({
   reasoning,
   qa,
   bus,
+  wakeProvider,
+  reviewerId,
   initialBaseBranch: process.env.MITCH_SMALL_COMFORTS_BASE_BRANCH?.trim() || undefined,
   initialBaseSha: process.env.MITCH_SMALL_COMFORTS_BASE_SHA?.trim() || undefined,
 });
@@ -83,8 +107,15 @@ async function tick(): Promise<void> {
       if (!comment.body.includes(MITCH_EVENT_MARKER)) continue;
       let event;
       try { event = parseMitchComment(comment.body); } catch { continue; }
-      if (event.tenantId !== tenantId || event.gameId !== SMALL_COMFORTS_GAME_ID ||
-          !actors[comment.user?.login ?? ""]?.includes(event.actorId)) continue;
+      if (
+        event.tenantId !== tenantId ||
+        event.gameId !== SMALL_COMFORTS_GAME_ID ||
+        !isGithubActorAuthorized(githubActorRules, {
+          login: comment.user?.login ?? "",
+          app: comment.performed_via_github_app ?? null,
+          actorId: event.actorId,
+        })
+      ) continue;
       await events.receive(event);
     }
     await events.drain();
@@ -105,10 +136,14 @@ const pool = mysql.createPool(required("DATABASE_URL"));
 const events = new MitchEventService({ tenantId, gameId: SMALL_COMFORTS_GAME_ID, humanActorId: "adam",
   inbox: new MysqlMitchEventInbox(pool), store, dispatcher, coordinator, service,
   verifyImplementation: (branch, commitSha) => bus.verifyImplementationIdentity(branch, commitSha) });
-const actors = JSON.parse(required("MITCH_GITHUB_ACTOR_MAP")) as Record<string, string[]>;
-if (!Object.values(actors).every(ids => Array.isArray(ids) && ids.every(id => typeof id === "string"))) throw new Error("Invalid MITCH_GITHUB_ACTOR_MAP");
-const app = createMitchEventIngress({ events, repoFullName, issueNumber, actors,
-  webhookSecret: required("MITCH_GITHUB_WEBHOOK_SECRET"), callbackToken: required("MITCH_CALLBACK_TOKEN") });
+const app = createMitchEventIngress({
+  events,
+  repoFullName,
+  issueNumber,
+  githubActorRules,
+  callbackActorTokens,
+  webhookSecret: required("MITCH_GITHUB_WEBHOOK_SECRET"),
+});
 app.get("/healthz", (_request, response) => {
   response.status(lastError ? 503 : 200).json({ ok: !lastError, producer: {
     tenantId, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
