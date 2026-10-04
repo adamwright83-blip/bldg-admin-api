@@ -9581,3 +9581,62 @@ export const claireDecisionRecords = mysqlTable(
 
 export type ClaireDecisionRecord = typeof claireDecisionRecords.$inferSelect;
 export type InsertClaireDecisionRecord = typeof claireDecisionRecords.$inferInsert;
+
+
+/**
+ * Platform authority receipts for the first three cross-system facts.
+ * Domain records remain in their existing tables; this row only records the
+ * authority/evidence that allowed a payment, account win, or provider send to
+ * become canonical.
+ */
+export const authorityReceipts = mysqlTable(
+  "authority_receipts",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    claimType: mysqlEnum("claimType", [
+      "payment_verified",
+      "account_won",
+      "message_sent",
+    ]).notNull(),
+    subjectType: varchar("subjectType", { length: 64 }).notNull(),
+    subjectId: varchar("subjectId", { length: 191 }).notNull(),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    sourceRef: varchar("sourceRef", { length: 191 }).notNull(),
+    actorType: varchar("actorType", { length: 32 }).notNull(),
+    actorId: varchar("actorId", { length: 191 }),
+    evidenceClass: mysqlEnum("evidenceClass", [
+      "authoritative_external",
+      "operator_attested",
+    ]).notNull(),
+    verificationClass: mysqlEnum("verificationClass", [
+      "VERIFIED",
+      "ATTESTED",
+    ]).notNull(),
+    admissionPolicy: varchar("admissionPolicy", { length: 96 }).notNull(),
+    occurredAt: timestamp("occurredAt"),
+    admittedAt: timestamp("admittedAt").notNull().defaultNow(),
+    metadataJson: json("metadataJson"),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_authority_receipts_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    subjectLookup: index("idx_authority_receipts_subject").on(
+      table.tenantId,
+      table.claimType,
+      table.subjectType,
+      table.subjectId,
+      table.admittedAt
+    ),
+    sourceLookup: index("idx_authority_receipts_source").on(
+      table.tenantId,
+      table.sourceType,
+      table.sourceRef
+    ),
+  })
+);
+
+export type AuthorityReceiptRow = typeof authorityReceipts.$inferSelect;
