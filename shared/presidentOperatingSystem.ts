@@ -326,6 +326,59 @@ export type PresidentFounderDecision = z.infer<
   typeof presidentFounderDecisionSchema
 >;
 
+export const presidentAgentCapabilitySchema = z
+  .object({
+    capabilityKey: z.string().min(1).max(191),
+    kind: z.enum(["BUILTIN", "TEMPORARY_SPECIALIST", "EXECUTIVE_SEAT"]),
+    actorId: z.string().min(1).max(191),
+    targetCapability: z.string().min(1).max(191),
+    seatRoleKey: z.string().min(1).max(128).nullable(),
+    programId: z.string().uuid().nullable(),
+    skillNames: z.array(z.string().min(1)).max(20),
+    authorityClasses: z
+      .array(z.enum(PRESIDENT_AUTHORITY_CLASSES))
+      .min(1)
+      .max(7),
+    consequentialDomains: z
+      .array(z.enum(PRESIDENT_CONSEQUENTIAL_DOMAINS))
+      .min(1)
+      .max(9),
+    maxUsdPerRun: z.number().min(0).max(1000),
+    evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+    justification: z.string().min(1).max(4000),
+    status: z.enum(["ACTIVE", "REVOKED"]),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+    revokedAt: z.string().datetime().nullable(),
+  })
+  .strict()
+  .superRefine((capability, ctx) => {
+    if (
+      capability.authorityClasses.some(authority =>
+        ["FOUNDER_APPROVAL", "HUMAN_PHYSICAL", "HUMAN_REMOTE", "FORBIDDEN"].includes(
+          authority
+        )
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Delegated capabilities cannot inherit founder/human/forbidden authority",
+      });
+    if (capability.kind === "EXECUTIVE_SEAT" && !capability.seatRoleKey)
+      ctx.addIssue({
+        code: "custom",
+        message: "Executive capability requires a durable executive seat",
+      });
+    if (capability.kind === "TEMPORARY_SPECIALIST" && !capability.programId)
+      ctx.addIssue({
+        code: "custom",
+        message: "Temporary specialist must be scoped to one President program",
+      });
+  });
+export type PresidentAgentCapability = z.infer<
+  typeof presidentAgentCapabilitySchema
+>;
+
 export const presidentNightlyBriefSchema = z
   .object({
     generatedAt: z.string().datetime(),
