@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { assessPresidentStage1 } from "./assessment";
-import { inspectPresidentEvidence } from "./evidence";
+import { assertEvidenceIntegrity, inspectPresidentEvidence } from "./evidence";
 import {
   FilePresidentAssessmentStore,
   MemoryPresidentAssessmentStore,
@@ -71,6 +71,20 @@ describe("seat.president Stage 1", () => {
       "dispatches",
     ])
       expect(assessment).not.toHaveProperty(key);
+  });
+
+  it("rejects source contents that are not bound into the immutable snapshot", async () => {
+    const evidence = await snapshot();
+    expect(() => assertEvidenceIntegrity(evidence)).not.toThrow();
+    expect(() =>
+      assertEvidenceIntegrity({
+        ...evidence,
+        sourceContents: {
+          ...evidence.sourceContents,
+          "unbound-source.md": "This text was consumed but never fingerprinted.",
+        },
+      })
+    ).toThrow("exactly bound");
   });
 
   it("reuses identical SHA and evidence durably across retries", async () => {
