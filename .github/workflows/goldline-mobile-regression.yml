@@ -143,6 +143,7 @@ jobs:
               client/src/game/state/worldMemory.test.ts
               client/src/game/session/checkpointStorage.test.ts
               client/src/components/admin/control-room/SmallComforts/logic/logic.test.ts
+              client/src/components/admin/control-room/SmallComforts/logic/episode.test.ts
               client/src/components/admin/control-room/SmallComforts/logic/artAssets.test.ts
               shared/goldlineProgression.test.ts
           - name: mobile-android-journal
