@@ -74,6 +74,7 @@ export interface IMitchExecutionProvider {
   readonly leaseMs?: number;
   isAvailable(): Promise<boolean>;
   executeWorkOrder(order: MitchWorkOrder): Promise<MitchExecutionHandback>;
+  dispatchWorkOrder?(order: MitchWorkOrder): Promise<void>;
 }
 
 export class MitchGameDispatcher {
@@ -171,6 +172,8 @@ export class MitchGameDispatcher {
       throw new Error(`Work order not found: ${input.workOrderId}`);
     }
 
+    if (!["claimed", "executing"].includes(existing.status)) throw new Error("Work order is not executing");
+
     // Verify claimant identity
     if (existing.claimedBy !== input.executorId) {
       throw new StaleWorkerOverwrittenViolationError(
@@ -193,6 +196,12 @@ export class MitchGameDispatcher {
     // Validate handback schema
     mitchExecutionHandbackSchema.parse(input.handback);
     assertValidBuildIdentity(input.handback.exactBuildId);
+
+    const priorBuild = await this.store.getBuild(input.tenantId, input.handback.exactBuildId);
+    if (priorBuild) throw new Error("Build identity already belongs to a recorded implementation");
+    if (/^[a-f0-9]{7,40}$/i.test(input.handback.exactBuildId) && input.handback.exactBuildId.toLowerCase() !== input.handback.commitSha.toLowerCase()) {
+      throw new Error("Commit build identity does not match handback SHA");
+    }
 
     // Record execution run
     const executionRun = await this.store.recordExecutionRun({
@@ -237,6 +246,20 @@ export class MitchGameDispatcher {
     });
 
     return { workOrder, build, executionRun };
+  }
+
+  /** Event-driven dispatch returns after delivery, leaving the durable lease active. */
+  async startAutonomous(input: { tenantId: string; workOrderId: string }): Promise<MitchWorkOrder> {
+    const provider = await this.findAvailableExecutionProvider();
+    if (!provider?.dispatchWorkOrder) throw new MissingExecutionProviderError();
+    const claimed = await this.claimWorkOrder({ ...input, executorId: provider.id, leaseMs: provider.leaseMs });
+    if (!claimed) throw new Error("Work order is already claimed");
+    try { await provider.dispatchWorkOrder(claimed); }
+    catch (error) {
+      await this.store.failWorkOrder({ ...input, error: String(error) });
+      throw error;
+    }
+    return claimed;
   }
 
   /**

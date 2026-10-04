@@ -73,6 +73,15 @@ export class GitHubProducerBus {
     return response;
   }
 
+  async verifyImplementationIdentity(branch: string, commitSha: string): Promise<void> {
+    const [owner, repo] = this.config.repoFullName.split("/");
+    const response = await this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/ref/heads/${branch.split("/").map(encodeURIComponent).join("/")}`);
+    const ref = await response.json() as { object?: { type?: string; sha?: string } };
+    if (ref.object?.type !== "commit" || ref.object.sha?.toLowerCase() !== commitSha.toLowerCase()) {
+      throw new Error("Handback branch does not resolve to the exact returned commit SHA");
+    }
+  }
+
   async listComments(): Promise<GitHubIssueComment[]> {
     const [owner, repo] = this.config.repoFullName.split("/");
     const out: GitHubIssueComment[] = [];

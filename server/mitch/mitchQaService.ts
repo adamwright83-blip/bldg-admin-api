@@ -103,6 +103,22 @@ export class MitchQaService {
       throw new Error(`Build "${input.buildId}" not found in store.`);
     }
 
+    const milestonesForIdentity = await this.store.listMilestones(input.tenantId, input.gameId);
+    const identityMilestone = milestonesForIdentity.find(m => m.id === input.milestoneId);
+    const buildOrder = await this.store.getWorkOrder(input.tenantId, build.workOrderId);
+    if (build.gameId !== input.gameId || !identityMilestone || (buildOrder && buildOrder.milestoneId !== input.milestoneId)) {
+      throw new Error("QA game/milestone/build identity mismatch");
+    }
+    if (input.issueId) {
+      const issue = await this.store.getIssue(input.tenantId, input.issueId);
+      const previous = issue && await this.store.getQaRun(input.tenantId, issue.originatingQaRunId);
+      if (!issue || !previous || issue.gameId !== input.gameId || issue.milestoneId !== input.milestoneId ||
+          issue.status !== "fix_submitted" || issue.fixBuildId !== input.buildId || previous.buildId === input.buildId ||
+          (input.previousFailedQaRunId && input.previousFailedQaRunId !== issue.originatingQaRunId)) {
+        throw new IssueRetestRequirementError(input.issueId);
+      }
+    }
+
     // Integrity check: A pass requires game exercised and acceptance passed
     if (input.status === "passed" && (!input.gameActuallyExercised || !input.acceptancePassed)) {
       throw new InvalidQaPassAttestationError(
