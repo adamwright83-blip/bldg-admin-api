@@ -9598,6 +9598,7 @@ export const authorityReceipts = mysqlTable(
       "payment_verified",
       "account_won",
       "message_sent",
+      "action_completed",
     ]).notNull(),
     subjectType: varchar("subjectType", { length: 64 }).notNull(),
     subjectId: varchar("subjectId", { length: 191 }).notNull(),
