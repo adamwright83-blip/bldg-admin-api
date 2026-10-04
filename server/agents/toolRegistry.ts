@@ -174,14 +174,14 @@ const toolPolicyOverrides: Readonly<Record<string, ToolPolicyMetadata>> = {
     idempotencyContract: "provider/tool idempotency required",
   },
   requestVendorConfirmationTool: {
-    riskClass: "EXTERNAL_COMMUNICATION",
-    expectedObservation: "vendor communication receipt",
-    idempotencyContract: "provider/tool idempotency required",
+    riskClass: "INTERNAL_REVERSIBLE",
+    expectedObservation: "prepared vendor confirmation request; no provider send",
+    idempotencyContract: "draft/request may be regenerated without external effect",
   },
   requestVendorBookingConfirmationTool: {
-    riskClass: "EXTERNAL_COMMUNICATION",
-    expectedObservation: "vendor communication receipt",
-    idempotencyContract: "provider/tool idempotency required",
+    riskClass: "INTERNAL_REVERSIBLE",
+    expectedObservation: "prepared vendor booking confirmation request; no provider send",
+    idempotencyContract: "draft/request may be regenerated without external effect",
   },
 };
 
