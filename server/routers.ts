@@ -625,7 +625,7 @@ export const appRouter = router({
           stripeSetupIntentId: z.string(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const stripe = getStripe();
         const [setupIntent, paymentMethod] = await Promise.all([
           stripe.setupIntents.retrieve(input.stripeSetupIntentId),
@@ -3190,7 +3190,7 @@ export const appRouter = router({
 
           const paidAt = new Date(paymentIntent.created * 1000);
           await admitNativeStripePayment({
-            tenantId: order.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             orderId: input.orderId,
             paymentIntentId: paymentIntent.id,
             paidAt,
@@ -3207,7 +3207,7 @@ export const appRouter = router({
           });
 
           await attributeOrderFromCampaign({
-            tenantId: order.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             orderId: input.orderId,
             requestId: crypto.randomUUID(),
             actorId: "payment-success",
