@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS president_authority_policies (
   internalMergeAllowed boolean NOT NULL DEFAULT false,
   internalDeployAllowed boolean NOT NULL DEFAULT false,
   maxAutonomousUsdPerDay double NOT NULL DEFAULT 0,
+  autonomousProgramSelectionAllowed boolean NOT NULL DEFAULT false,
   allowedRepositoriesJson json NOT NULL,
   allowedEnvironmentsJson json NOT NULL,
   prohibitedDomainsJson json NOT NULL,
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS president_programs (
   createdAt datetime(3) NOT NULL,
   updatedAt datetime(3) NOT NULL,
   UNIQUE KEY uq_president_program_candidate (assessmentId,candidateId),
+  UNIQUE KEY uq_president_program_objective (objectiveRecordId),
   KEY idx_president_program_state (state,updatedAt)
 );
 
