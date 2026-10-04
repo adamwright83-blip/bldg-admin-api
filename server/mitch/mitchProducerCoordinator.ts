@@ -222,20 +222,22 @@ export class MitchProducerCoordinator {
           eventType: "mitch_review_requested", actorId: reviewerId,
           details: { workOrderId: order.id, milestoneId: milestone.id, buildId: build.id, branch: build.branch, commitSha: build.commitSha } });
         const comment = await this.deps.bus.postComment(body);
-        if (!this.deps.wakeProvider || !this.deps.wakeProvider.hasTarget(reviewerId)) {
-          throw new Error(`No immediate outbound wake target configured for reviewer "${reviewerId}"`);
+        if (this.deps.eventDriven) {
+          if (!this.deps.wakeProvider || !this.deps.wakeProvider.hasTarget(reviewerId)) {
+            throw new Error(`No immediate outbound wake target configured for reviewer "${reviewerId}"`);
+          }
+          await this.deps.wakeProvider.wake({
+            wakeId: `review:${milestone.id}:${build.id}:${reopenCount}`,
+            actorId: reviewerId,
+            kind: fixIssue ? "retest_request" : "design_review_request",
+            tenantId: this.deps.tenantId,
+            gameId: order.gameId,
+            milestoneId: milestone.id,
+            workOrderId: order.id,
+            buildId: build.id,
+            issueCommentUrl: comment.html_url ?? null,
+          });
         }
-        await this.deps.wakeProvider.wake({
-          wakeId: `review:${milestone.id}:${build.id}:${reopenCount}`,
-          actorId: reviewerId,
-          kind: fixIssue ? "retest_request" : "design_review_request",
-          tenantId: this.deps.tenantId,
-          gameId: order.gameId,
-          milestoneId: milestone.id,
-          workOrderId: order.id,
-          buildId: build.id,
-          issueCommentUrl: comment.html_url ?? null,
-        });
         return { action: "design_review_requested", buildId };
       }
       return { action: "design_review_waiting", buildId };
