@@ -136,6 +136,8 @@ export const presidentProgramStepSchema = z
     consequentialDomain: z.enum(PRESIDENT_CONSEQUENTIAL_DOMAINS),
     maxUsd: z.number().min(0).max(1000),
     spentUsd: z.number().min(0).max(1000).default(0),
+    executorCapability: z.string().min(1),
+    reviewerCapability: z.string().min(1),
     executorId: z.string().nullable(),
     reviewerId: z.string().nullable(),
     baseRef: z.string().nullable(),
