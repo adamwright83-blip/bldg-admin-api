@@ -2,7 +2,7 @@ import type { AgentTool } from "../toolRegistry";
 
 export const requestVendorConfirmationTool: AgentTool<Record<string, any>> = {
   name: "requestVendorConfirmationTool",
-  description: "Ask a vendor to confirm a marketplace booking before any customer charge.",
+  description: "Prepare a vendor-confirmation request. This tool does not send it.",
   requiresHumanApproval: true,
   async execute(input, ctx) {
     return {
@@ -13,7 +13,9 @@ export const requestVendorConfirmationTool: AgentTool<Record<string, any>> = {
         vendorId: input.vendorId ?? null,
         residentId: input.residentId ?? null,
         requestedWindow: input.requestedWindow ?? null,
-        status: "confirmation_requested",
+        status: "prepared_awaiting_transport",
+        messageSent: false,
+        authorityReceiptId: null,
         customerCharged: false,
         marketplaceRule: "charge_after_vendor_confirms",
         approvedByUserId: ctx.approvedByUserId,
