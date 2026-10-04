@@ -149,22 +149,43 @@ export class PresidentAgentRuntimeCoordinator {
 
     assertPresidentStepAuthority(step, policy, approved);
 
-    const target = this.wake.target(step.executorCapability);
-    if (!target) {
+    const capability = await this.programs.getAgentCapability(
+      step.executorCapability
+    );
+    if (
+      !capability ||
+      capability.status !== "ACTIVE" ||
+      (capability.programId && capability.programId !== program.id) ||
+      !capability.authorityClasses.includes(step.authorityClass) ||
+      !capability.consequentialDomains.includes(step.consequentialDomain) ||
+      step.maxUsd > capability.maxUsdPerRun
+    ) {
       await this.programs.updateProgram(program.id, {
         state: "BLOCKED_CAPABILITY",
         currentStepId: step.id,
-        blockReason: `No President executor is configured for capability "${step.executorCapability}"`,
+        blockReason: `No active governed President executor is authorized for capability "${step.executorCapability}"`,
       });
       return {
         action: "WAITING",
-        reason: `Missing executor capability ${step.executorCapability}`,
+        reason: `Missing or insufficient executor capability ${step.executorCapability}`,
+      };
+    }
+    const target = this.wake.target(capability.targetCapability);
+    if (!target || target.actorId !== capability.actorId) {
+      await this.programs.updateProgram(program.id, {
+        state: "BLOCKED_CAPABILITY",
+        currentStepId: step.id,
+        blockReason: `Governed capability "${step.executorCapability}" has no matching configured transport`,
+      });
+      return {
+        action: "WAITING",
+        reason: `Capability transport unavailable ${step.executorCapability}`,
       };
     }
 
     const claimed = await this.programs.claimSpecificStep({
       stepId: step.id,
-      executorId: target.actorId,
+      executorId: capability.actorId,
       leaseMs: target.leaseMs ?? 60 * 60 * 1000,
     });
     if (!claimed) return { action: "WAITING", reason: "Step was claimed elsewhere" };
@@ -183,10 +204,13 @@ export class PresidentAgentRuntimeCoordinator {
         programId: program.id,
         stepId: step.id,
         eventType: "EXECUTOR_WOKEN",
-        actorId: target.actorId,
-        details: { capability: step.executorCapability },
+        actorId: capability.actorId,
+        details: {
+          capability: step.executorCapability,
+          targetCapability: capability.targetCapability,
+        },
       });
-      return { action: "DISPATCHED", stepId: step.id, actorId: target.actorId };
+      return { action: "DISPATCHED", stepId: step.id, actorId: capability.actorId };
     } catch (error) {
       await this.programs.updateStep(step.id, {
         state: "PENDING",
@@ -221,18 +245,32 @@ export class PresidentAgentRuntimeCoordinator {
     if (!program) throw new Error("President program disappeared");
     const handback = await this.programs.getHandback(step.id);
     if (!handback) throw new Error("President review requires exact execution handback");
-    const target = this.wake.target(step.reviewerCapability);
-    if (!target) {
+    const reviewerCapability = await this.programs.getAgentCapability(
+      step.reviewerCapability
+    );
+    if (!reviewerCapability || reviewerCapability.status !== "ACTIVE") {
       await this.programs.updateProgram(program.id, {
         state: "BLOCKED_CAPABILITY",
         currentStepId: step.id,
-        blockReason: `No independent reviewer configured for capability "${step.reviewerCapability}"`,
+        blockReason: `No active governed independent reviewer exists for capability "${step.reviewerCapability}"`,
       });
       return { action: "WAITING_REVIEWER" as const };
     }
-    if (target.actorId === handback.executorId)
+    const target = this.wake.target(reviewerCapability.targetCapability);
+    if (!target || target.actorId !== reviewerCapability.actorId) {
+      await this.programs.updateProgram(program.id, {
+        state: "BLOCKED_CAPABILITY",
+        currentStepId: step.id,
+        blockReason: `Reviewer capability "${step.reviewerCapability}" has no matching configured transport`,
+      });
+      return { action: "WAITING_REVIEWER" as const };
+    }
+    if (reviewerCapability.actorId === handback.executorId)
       throw new Error("President executor and independent reviewer resolve to the same actor");
-    const assigned = await this.programs.assignReviewer(step.id, target.actorId);
+    const assigned = await this.programs.assignReviewer(
+      step.id,
+      reviewerCapability.actorId
+    );
     await this.wake.wake(target, {
       kind: "PRESIDENT_REVIEW",
       programId: program.id,
@@ -247,13 +285,17 @@ export class PresidentAgentRuntimeCoordinator {
       programId: program.id,
       stepId: step.id,
       eventType: "INDEPENDENT_REVIEWER_WOKEN",
-      actorId: target.actorId,
+      actorId: reviewerCapability.actorId,
       details: {
         capability: step.reviewerCapability,
+        targetCapability: reviewerCapability.targetCapability,
         exactArtifactId: handback.exactArtifactId,
       },
     });
-    return { action: "REVIEW_DISPATCHED" as const, reviewerId: target.actorId };
+    return {
+      action: "REVIEW_DISPATCHED" as const,
+      reviewerId: reviewerCapability.actorId,
+    };
   }
 
   async receiveReview(input: PresidentIndependentReview) {
