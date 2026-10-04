@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
-    "build": "node scripts/package-gumballpals.mjs && vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/procurement/workerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/procurement-worker.js",
+    "build": "node scripts/package-gumballpals.mjs && vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/procurement/workerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/procurement-worker.js && esbuild server/mitch/producerWorkerMain.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/mitch-producer-worker.js",
     "start": "node scripts/migrate.mjs && NODE_ENV=production node dist/index.js",
     "start:worker": "NODE_ENV=production node dist/procurement-worker.js",
     "dev:worker": "NODE_ENV=development tsx watch server/procurement/workerMain.ts",
@@ -50,7 +50,9 @@
     "verify:goldline:growth-loop": "tsx scripts/verify-goldline-growth-loop.ts",
     "check:nomenclature": "node scripts/check-nomenclature.mjs",
     "check:tenant-ratchet": "node scripts/check-default-tenant-ratchet.mjs",
-    "check:vertical-dependencies": "node scripts/check-vertical-dependencies.mjs"
+    "check:vertical-dependencies": "node scripts/check-vertical-dependencies.mjs",
+    "start:mitch-producer": "NODE_ENV=production node dist/mitch-producer-worker.js",
+    "dev:mitch-producer": "NODE_ENV=development tsx watch server/mitch/producerWorkerMain.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
