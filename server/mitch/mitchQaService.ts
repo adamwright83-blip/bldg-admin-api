@@ -106,7 +106,12 @@ export class MitchQaService {
     const milestonesForIdentity = await this.store.listMilestones(input.tenantId, input.gameId);
     const identityMilestone = milestonesForIdentity.find(m => m.id === input.milestoneId);
     const buildOrder = await this.store.getWorkOrder(input.tenantId, build.workOrderId);
-    if (build.gameId !== input.gameId || !identityMilestone || (buildOrder && buildOrder.milestoneId !== input.milestoneId)) {
+    if (
+      build.gameId !== input.gameId ||
+      !identityMilestone ||
+      !buildOrder ||
+      buildOrder.milestoneId !== input.milestoneId
+    ) {
       throw new Error("QA game/milestone/build identity mismatch");
     }
     if (input.issueId) {
@@ -116,6 +121,20 @@ export class MitchQaService {
           issue.status !== "fix_submitted" || issue.fixBuildId !== input.buildId || previous.buildId === input.buildId ||
           (input.previousFailedQaRunId && input.previousFailedQaRunId !== issue.originatingQaRunId)) {
         throw new IssueRetestRequirementError(input.issueId);
+      }
+    }
+
+    // Technical verification is part of VERIFIED, not a prose attestation.
+    if (input.status === "passed") {
+      if (buildOrder.requiredArtifact && !build.sourceCompiled) {
+        throw new InvalidQaPassAttestationError(
+          "QA pass rejected: required implementation artifact was not durably recorded as compiled"
+        );
+      }
+      if (buildOrder.requiredTests.length > 0 && !build.unitTestsPassed) {
+        throw new InvalidQaPassAttestationError(
+          "QA pass rejected: required tests were not durably recorded as passed"
+        );
       }
     }
 
