@@ -253,6 +253,7 @@ export type PresidentProgramPlanDraft = z.infer<
 
 export const presidentExecutionHandbackSchema = z
   .object({
+    eventId: z.string().uuid(),
     stepId: z.string().uuid(),
     executorId: z.string().min(1),
     exactArtifactId: z.string().min(1),
@@ -276,6 +277,7 @@ export type PresidentExecutionHandback = z.infer<
 
 export const presidentIndependentReviewSchema = z
   .object({
+    eventId: z.string().uuid(),
     stepId: z.string().uuid(),
     reviewerId: z.string().min(1),
     exactArtifactId: z.string().min(1),
