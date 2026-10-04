@@ -58,6 +58,13 @@ jobs:
           pnpm check:nomenclature
           pnpm check:tenant-ratchet
           pnpm check:vertical-dependencies
+      - name: Prove three-fact authority receipt contracts
+        run: >-
+          pnpm vitest run
+          server/authority/authorityReceipt.test.ts
+          server/authority/authoritySliceContract.test.ts
+          shared/goldlineWorld.authority.test.ts
+
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-
           pnpm vitest run
