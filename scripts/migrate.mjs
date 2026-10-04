@@ -4653,5 +4653,174 @@ await assertRequiredColumns("claire_decision_records", [
   "branch_executed",
 ]);
 
+
+// Authority Receipt slice — one common admission receipt for the first three
+// cross-system facts. Existing domain tables remain canonical for their domains.
+await applyHistoricalCreateTables(
+  "../drizzle/0113_authority_receipts.sql",
+  "Authority receipts for payments, account wins, and provider message sends"
+);
+await assertRequiredColumns("authority_receipts", [
+  "id", "tenantId", "claimType", "subjectType", "subjectId", "sourceType",
+  "sourceRef", "actorType", "actorId", "evidenceClass", "verificationClass",
+  "admissionPolicy", "occurredAt", "admittedAt", "metadataJson", "idempotencyKey",
+]);
+await assertEnumContainsValues("authority_receipts", "claimType", [
+  "payment_verified", "account_won", "message_sent",
+]);
+await assertEnumContainsValues("authority_receipts", "evidenceClass", [
+  "authoritative_external", "operator_attested",
+]);
+await assertEnumContainsValues("authority_receipts", "verificationClass", [
+  "VERIFIED", "ATTESTED",
+]);
+
+// Backfill native Stripe-authoritative paid rows so the new gate does not
+// erase legitimate historical revenue when commercial attribution re-reads it.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':payment:', id, ':', stripePaymentIntentId), 256), 1, 40)),
+     tenantId,
+     'payment_verified', 'order', CAST(id AS CHAR),
+     'stripe_payment_intent', stripePaymentIntentId,
+     'system', NULL, 'authoritative_external', 'VERIFIED',
+     'legacy_stripe_payment_backfill_v1',
+     paidAt, COALESCE(paidAt, createdAt, CURRENT_TIMESTAMP(3)),
+     JSON_OBJECT('backfilled', TRUE),
+     CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'order', CHAR(0), CAST(id AS CHAR), CHAR(0), 'stripe_payment_intent', CHAR(0), stripePaymentIntentId), 256))
+   FROM orders
+   WHERE tenantId IS NOT NULL AND TRIM(tenantId) <> ''
+     AND paid = 1 AND stripePaymentIntentId IS NOT NULL AND TRIM(stripePaymentIntentId) <> ''`,
+  "backfill native Stripe payment authority receipts"
+);
+
+
+// Backfill CleanCloud-authoritative paid orders. Sales/Revenue report twins for
+// the same imported observation collapse by the authority idempotency key.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':cleancloud-payment:', cleancloudOrderId, ':', importBatchId), 256), 1, 40)),
+     tenantId,
+     'payment_verified', 'cleancloud_order', cleancloudOrderId,
+     'cleancloud_paid_order',
+     CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId),
+     'system', NULL, 'authoritative_external', 'VERIFIED',
+     'legacy_cleancloud_payment_backfill_v1',
+     COALESCE(paymentDateUtc, paidDateUtc, placedAtUtc, createdAt),
+     createdAt,
+     JSON_OBJECT('backfilled', TRUE, 'sourceReportType', sourceReportType),
+     CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'cleancloud_order', CHAR(0), cleancloudOrderId, CHAR(0), 'cleancloud_paid_order', CHAR(0), CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId)), 256))
+   FROM cleancloud_paid_orders
+   WHERE paid = 1 AND COALESCE(totalCents, 0) > 0`,
+  "backfill CleanCloud payment authority receipts"
+);
+
+// Existing operator/driver-resolved commercial wins become explicit ATTESTED
+// receipts. System/game transitions are intentionally not promoted.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(e.tenantId, ':account-won:', e.missionId, ':', e.idempotencyKey), 256), 1, 40)),
+     e.tenantId,
+     'account_won', 'commercial_mission', CAST(e.missionId AS CHAR),
+     'commercial_mission_transition', e.idempotencyKey,
+     e.actorType, e.actorId, 'operator_attested', 'ATTESTED',
+     'legacy_commercial_win_backfill_v1',
+     e.createdAt, e.createdAt,
+     JSON_OBJECT(
+       'backfilled', TRUE,
+       'commercialMissionEventId', e.id,
+       'accountId', JSON_UNQUOTE(JSON_EXTRACT(m.accountSnapshotJson, '$.accountId'))
+     ),
+     CONCAT('authority:account_won:', SHA2(CONCAT('account_won', CHAR(0), 'commercial_mission', CHAR(0), CAST(e.missionId AS CHAR), CHAR(0), 'commercial_mission_transition', CHAR(0), e.idempotencyKey), 256))
+   FROM commercial_mission_events e
+   JOIN commercial_missions m
+     ON BINARY m.tenantId = BINARY e.tenantId
+    AND m.id = e.missionId
+   WHERE e.toStatus = 'won' AND e.actorType IN ('operator','driver')`,
+  "backfill commercial account-win authority receipts"
+);
+
+await runRequired(
+  `UPDATE commercial_mission_events e
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY e.tenantId
+    AND a.claimType = 'account_won'
+    AND a.subjectType = 'commercial_mission'
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND BINARY a.sourceRef = BINARY e.idempotencyKey
+   SET e.metadataJson = JSON_SET(
+     COALESCE(e.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId', a.id,
+     '$.authorityClaimType', a.claimType,
+     '$.authoritySourceRef', a.sourceRef,
+     '$.commercialMissionId', e.missionId,
+     '$.commercialAccountId', JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
+   )
+   WHERE e.toStatus = 'won'`,
+  "attach authority receipt ids to historical commercial win events"
+);
+
+// Provider communication rows are authoritative evidence that Twilio accepted
+// or delivered a message. MESSAGE_FAILED rows never receive message_sent authority.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':message-sent:', messageSid), 256), 1, 40)),
+     tenantId,
+     'message_sent', 'message', messageSid,
+     'twilio_message', messageSid,
+     'system', operatorUserId, 'authoritative_external', 'VERIFIED',
+     'legacy_twilio_message_backfill_v1',
+     COALESCE(completedAt, createdAt), createdAt,
+     JSON_OBJECT('backfilled', TRUE, 'communicationReceiptId', id, 'eventType', eventType),
+     CONCAT('authority:message_sent:', SHA2(CONCAT('message_sent', CHAR(0), 'message', CHAR(0), messageSid, CHAR(0), 'twilio_message', CHAR(0), messageSid), 256))
+   FROM communication_receipts
+   WHERE eventType IN ('MESSAGE_SENT','MESSAGE_DELIVERED')
+     AND messageSid IS NOT NULL AND TRIM(messageSid) <> ''`,
+  "backfill Twilio message-sent authority receipts"
+);
+
+// Preserve historical Goldline wins only when their evidence reference resolves
+// to an admitted account_won receipt.
+await runRequired(
+  `UPDATE goldline_world_events g
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY g.tenantId
+    AND a.claimType = 'account_won'
+    AND a.subjectType = 'commercial_mission'
+    AND BINARY a.sourceRef = BINARY g.sourceEvidenceReference
+   LEFT JOIN physical_entity_bindings b
+     ON BINARY b.tenantId = BINARY g.tenantId
+    AND b.bindingType = 'commercial_account'
+    AND b.reviewState = 'accepted'
+    AND BINARY b.bindingKey = BINARY JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
+   SET g.metadataJson = JSON_SET(
+         COALESCE(g.metadataJson, JSON_OBJECT()),
+         '$.authorityReceiptId', a.id,
+         '$.commercialMissionId', a.subjectId,
+         '$.commercialAccountId', JSON_UNQUOTE(JSON_EXTRACT(a.metadataJson, '$.accountId'))
+       ),
+       g.verificationClass = a.verificationClass
+   WHERE g.eventType = 'account_won'
+     AND g.classification = 'outcome'
+     AND (g.physicalEntityId IS NULL OR BINARY b.physicalEntityId = BINARY g.physicalEntityId)`,
+  "attach authority receipts to historical Goldline account wins"
+);
+
 await conn.end();
 console.log("\nMigration complete.");

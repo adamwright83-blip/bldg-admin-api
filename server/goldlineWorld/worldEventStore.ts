@@ -3,12 +3,14 @@ import { and, asc, desc, eq, gte, inArray, like, notInArray } from "drizzle-orm"
 import {
   goldlineEventReceipts,
   goldlineWorldEvents,
+  physicalEntityBindings,
 } from "../../drizzle/schema";
 import type { GoldlineWorldEvent } from "../../shared/goldlineWorld";
 import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
+import { getAuthorityReceiptById } from "../authority/authorityReceipt";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {
@@ -67,6 +69,69 @@ export async function appendGoldlineWorldEvent(
     throw new Error("Generated game fiction cannot be persisted as business evidence, action, or outcome");
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+
+  if (input.eventType === "account_won") {
+    const receiptId =
+      typeof input.metadata?.authorityReceiptId === "string"
+        ? input.metadata.authorityReceiptId.trim()
+        : "";
+    const missionValue = input.metadata?.commercialMissionId;
+    const commercialMissionId =
+      typeof missionValue === "number" && Number.isInteger(missionValue) && missionValue > 0
+        ? String(missionValue)
+        : typeof missionValue === "string" && /^\d+$/.test(missionValue.trim())
+          ? String(Number(missionValue.trim()))
+          : "";
+    if (!receiptId)
+      throw new Error("Goldline account_won requires an authority receipt");
+    if (!commercialMissionId)
+      throw new Error("Goldline account_won requires a commercial mission binding");
+    const receipt = await getAuthorityReceiptById({
+      tenantId: input.tenantId,
+      receiptId,
+    });
+    if (
+      !receipt ||
+      receipt.claimType !== "account_won" ||
+      receipt.subjectType !== "commercial_mission" ||
+      receipt.subjectId !== commercialMissionId ||
+      receipt.sourceRef !== input.sourceEvidenceReference ||
+      receipt.verificationClass !== input.verificationClass
+    )
+      throw new Error(
+        "Goldline account_won authority receipt does not match the event evidence or mission"
+      );
+
+    if (input.physicalEntityId) {
+      const accountId =
+        typeof receipt.metadata?.accountId === "number" ||
+        typeof receipt.metadata?.accountId === "string"
+          ? String(receipt.metadata.accountId).trim()
+          : "";
+      if (!accountId)
+        throw new Error(
+          "Goldline account_won authority receipt lacks its commercial account binding"
+        );
+      const bindingRows = await db
+        .select({ physicalEntityId: physicalEntityBindings.physicalEntityId })
+        .from(physicalEntityBindings)
+        .where(
+          and(
+            eq(physicalEntityBindings.tenantId, input.tenantId),
+            eq(physicalEntityBindings.bindingType, "commercial_account"),
+            eq(physicalEntityBindings.bindingKey, accountId),
+            eq(physicalEntityBindings.reviewState, "accepted")
+          )
+        )
+        .limit(2);
+      const boundIds = new Set(bindingRows.map(row => row.physicalEntityId));
+      if (boundIds.size !== 1 || !boundIds.has(input.physicalEntityId))
+        throw new Error(
+          "Goldline account_won physical entity does not match the admitted commercial account"
+        );
+    }
+  }
+
   const id = input.id ?? randomUUID();
   const idempotencyKey = fitGoldlineWorldEventIdempotencyKey(input.idempotencyKey);
   try {

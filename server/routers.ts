@@ -1,4 +1,5 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
+import { admitNativeStripePayment } from "./authority/paymentAdmission";
 import {
   writeDriverExpenseToSheet,
   writeDryCleaningCostToSheet,
@@ -624,7 +625,7 @@ export const appRouter = router({
           stripeSetupIntentId: z.string(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const stripe = getStripe();
         const [setupIntent, paymentMethod] = await Promise.all([
           stripe.setupIntents.retrieve(input.stripeSetupIntentId),
@@ -3019,7 +3020,7 @@ export const appRouter = router({
           amountCents: z.number().int().min(50), // Stripe minimum $0.50
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const stripe = getStripe();
         const order = await getOrderById(input.orderId);
         if (!order) {
@@ -3150,7 +3151,7 @@ export const appRouter = router({
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
           const stripeMetadata = {
             orderId: String(input.orderId),
-            tenantId: order.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             customerName: `${order.firstName} ${order.lastName}`.trim(),
             source: "admin_chargeCard",
           };
@@ -3188,22 +3189,25 @@ export const appRouter = router({
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
-          await updateOrderIntake(input.orderId, {
-            paid: true,
+          await admitNativeStripePayment({
+            tenantId: ctx.tenantId,
+            orderId: input.orderId,
+            paymentIntentId: paymentIntent.id,
             paidAt,
-            stripePaymentIntentId: paymentIntent.id,
-            total: centsToDollars(input.amountCents),
-            status: "processing",
-            isFirstPaidOrder: !hasPaidBefore,
-            platformFeeCents,
-            vendorPayoutCents,
-            stripeConnectedAccountIdSnapshot: vendorAccountId,
-            vendorNameSnapshot: vendor.name,
-            routingPrioritySnapshot: paymentRoute.priority,
+            orderPatch: {
+              total: centsToDollars(input.amountCents),
+              status: "processing",
+              isFirstPaidOrder: !hasPaidBefore,
+              platformFeeCents,
+              vendorPayoutCents,
+              stripeConnectedAccountIdSnapshot: vendorAccountId,
+              vendorNameSnapshot: vendor.name,
+              routingPrioritySnapshot: paymentRoute.priority,
+            },
           });
 
           await attributeOrderFromCampaign({
-            tenantId: order.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             orderId: input.orderId,
             requestId: crypto.randomUUID(),
             actorId: "payment-success",

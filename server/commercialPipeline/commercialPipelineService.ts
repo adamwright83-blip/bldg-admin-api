@@ -35,6 +35,8 @@ import {
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
+import { findAuthorityReceiptForSubjectWith } from "../authority/authorityReceipt";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -1087,7 +1089,21 @@ export async function attributeCommercialOrder(input: {
       const order = sourceOrders[0];
       if (!order) throw new Error("Tenant order not found");
       const firstOrder = pipeline.firstOrderId === null;
-      const paidCents = order.paid ? cents(order.total) : 0;
+      const paymentAuthority = order.paid
+        ? await findAuthorityReceiptForSubjectWith(tx, {
+            tenantId: input.tenantId,
+            claimType: "payment_verified",
+            subjectType: "order",
+            subjectId: String(order.id),
+          })
+        : null;
+      const paymentIntentId = order.stripePaymentIntentId?.trim() ?? "";
+      const paidCents =
+        hasNativePaymentAuthority(order) &&
+        paymentAuthority?.sourceType === "stripe_payment_intent" &&
+        paymentAuthority.sourceRef === paymentIntentId
+          ? cents(order.total)
+          : 0;
       await tx.insert(commercialOrderAttributions).values({
         tenantId: input.tenantId,
         commercialCustomerId: pipeline.commercialCustomerId,

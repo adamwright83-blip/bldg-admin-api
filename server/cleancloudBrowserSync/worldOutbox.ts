@@ -5,6 +5,7 @@ import type { InsertCleancloudPaidOrder } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { customerIdentityHash } from "../customerAssets/customerIdentity";
 import { appendGoldlineWorldEvent, type AppendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
+import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
 
 export const economicHeads = mysqlTable("goldline_cleancloud_economic_heads", {
   economicKey: varchar("economicKey", { length: 64 }).primaryKey(),
@@ -104,6 +105,31 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
   if (head.revision === 0 && (!snapshot.paid || !snapshot.paymentAt)) return;
   const revision = head.revision + 1;
   const id = `${snapshot.economicKey}:${revision}`;
+  const authorityTenantId = row.tenantId?.trim();
+  if (snapshot.paid && snapshot.paymentAt && !authorityTenantId) {
+    throw new Error("CleanCloud payment authority requires explicit tenantId");
+  }
+  const paymentAuthority =
+    snapshot.paid && snapshot.paymentAt
+      ? await admitAuthorityClaimWith(tx, {
+          tenantId: authorityTenantId!,
+          claimType: "payment_verified",
+          subjectType: "cleancloud_order",
+          subjectId: String(row.cleancloudOrderId),
+          sourceType: "cleancloud_paid_order",
+          sourceRef: `cleancloud-import:${row.importBatchId}:${row.cleancloudOrderId}`,
+          actorType: "system",
+          actorId: null,
+          evidenceClass: "authoritative_external",
+          verificationClass: "VERIFIED",
+          admissionPolicy: "cleancloud_paid_order_v1",
+          occurredAt: snapshot.paymentAt,
+          metadata: {
+            importBatchId: row.importBatchId,
+            sourceReportType: row.sourceReportType,
+          },
+        })
+      : null;
   const payload: AppendGoldlineWorldEvent = {
     tenantId: row.tenantId ?? "default", physicalEntityId,
     eventType: revision === 1 ? "order_paid" : "order_payment_corrected",
@@ -116,7 +142,8 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
     provenanceClass: "existing_business_record", verificationClass: "VERIFIED", confidence: "high",
     idempotencyKey: `gumball:${id}`, correlationId: `cleancloud-import:${row.importBatchId}`,
     metadata: { ...snapshot, revision, supersedesRevision: revision > 1 ? revision - 1 : null,
-      sourceReportType: row.sourceReportType, projectionMode: "replace" },
+      sourceReportType: row.sourceReportType, projectionMode: "replace",
+      authorityReceiptId: paymentAuthority?.id ?? null },
   };
   // Resolve before entering the import transaction at the caller where possible;
   // an unresolved binding is explicitly null, never a guessed physical ID.

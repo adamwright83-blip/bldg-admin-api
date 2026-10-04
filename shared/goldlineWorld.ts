@@ -129,9 +129,21 @@ export function eventClassificationForType(
 export function classificationIsTruthful(input: {
   eventType: string;
   classification: GoldlineEventClassification;
+  verificationClass?: "VERIFIED" | "ATTESTED" | "CLAIMED";
+  metadata?: Record<string, unknown>;
 }): boolean {
   const required = eventClassificationForType(input.eventType);
-  return required === null || required === input.classification;
+  if (required !== null && required !== input.classification) return false;
+  if (input.eventType === "account_won") {
+    const authorityReceiptId = input.metadata?.authorityReceiptId;
+    return (
+      (input.verificationClass === "VERIFIED" ||
+        input.verificationClass === "ATTESTED") &&
+      typeof authorityReceiptId === "string" &&
+      authorityReceiptId.trim().length > 0
+    );
+  }
+  return true;
 }
 
 export function markForWorldEvent(
