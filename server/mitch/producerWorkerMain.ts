@@ -34,7 +34,7 @@ const handbackPollMs = numberEnv("MITCH_HANDBACK_POLL_MS", 15_000);
 const handbackTimeoutMs = numberEnv("MITCH_HANDBACK_TIMEOUT_MS", 45 * 60 * 1000);
 const port = numberEnv("PORT", 8082);
 
-const store = new MitchProductionStore(false);
+const store = new MitchProductionStore(false, true);
 const service = new MitchProductionService(store);
 const dispatcher = new MitchGameDispatcher(store);
 const reasoning = new MitchProductionReasoningService(store);
