@@ -81,6 +81,7 @@ const COASTAL_MARKET_PROOF_PATH = "/goldline/coastal-market-proof";
 const LivingWarRoom = lazy(() => import("./pages/warroom/LivingWarRoom"));
 const ClaireInCabCockpit = lazy(() => import("./pages/driver/ClaireInCabCockpit"));
 const FranchiseFactoryPage = lazy(() => import("./pages/franchise/FranchiseFactoryPage"));
+const LaundryOperationsFloor = lazy(() => import("./pages/laundry-operations/LaundryOperationsFloor"));
 
 function LivingWarRoomRoute() {
   return (
@@ -348,6 +349,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/demo",
   "/live",
   "/operations",
+  "/operations/floor",
   "/growth",
   "/growth/lantern-city",
   "/growth/guardians",
@@ -603,6 +605,13 @@ function AdminHostRouter() {
       <Route path="/home" component={AdminHostApp} />
       <Route path="/demo" component={AdminHostApp} />
       <Route path="/live" component={AdminHostApp} />
+      <Route path="/operations/floor">
+        <AdminAuthGate>
+          <Suspense fallback={<div style={{ minHeight: "100vh", background: "#1a140e" }} />}>
+            <LaundryOperationsFloor />
+          </Suspense>
+        </AdminAuthGate>
+      </Route>
       <Route path="/operations" component={AdminHostApp} />
       <Route path="/growth" component={AdminHostApp} />
       <Route path="/growth/lantern-city" component={AdminHostApp} />
