@@ -46,3 +46,54 @@ body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #15181d
 .toast2 { position: absolute; left: 50%; top: 190px; transform: translateX(-50%); padding: 18px 30px; border-radius: 14px; background: rgba(255,255,255,0.98); box-shadow: 0 0 0 3px #16a34a, 0 14px 40px rgba(0,0,0,0.35); display: flex; align-items: center; gap: 16px; opacity: 0; white-space: nowrap; }
 .toast2 b { font-size: 30px; font-weight: 800; letter-spacing: 0.5px; color: #12873f; }
 .toast2 small { display: block; font-size: 18px; color: #3d434d; font-weight: 600; margin-top: 2px; }
+
+
+/* In-app shell only. The capture harness does not render these elements. */
+.laundry-floor-page {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #1a140e;
+}
+.laundry-floor-exit {
+  position: fixed;
+  z-index: 1000;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255,255,255,0.34);
+  border-radius: 999px;
+  background: rgba(24,18,12,0.58);
+  color: rgba(255,255,255,0.92);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 6px 22px rgba(0,0,0,0.22);
+  font: 700 13px/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.laundry-floor-exit:hover {
+  background: rgba(24,18,12,0.78);
+  border-color: rgba(255,255,255,0.62);
+}
+.laundry-floor-exit:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.laundry-floor-failure {
+  position: fixed;
+  z-index: 1001;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 520px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.96);
+  color: #1b1f26;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  font: 600 16px/1.45 "Inter", system-ui, sans-serif;
+}
