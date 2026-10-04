@@ -4601,5 +4601,10 @@ await assertRequiredColumns("claire_decision_records", [
   "branch_executed",
 ]);
 
+await applyHistoricalCreateTables(
+  "../drizzle/0109_president_stage1.sql",
+  "President Stage 1 assessment and candidate tables"
+);
+
 await conn.end();
 console.log("\nMigration complete.");
