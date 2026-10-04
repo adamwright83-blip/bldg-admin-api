@@ -10,6 +10,7 @@ import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
 import { getAuthorityReceiptById } from "../authority/authorityReceipt";
+import { findPhysicalEntityIdByBinding } from "./entityLookup";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {
@@ -74,8 +75,17 @@ export async function appendGoldlineWorldEvent(
       typeof input.metadata?.authorityReceiptId === "string"
         ? input.metadata.authorityReceiptId.trim()
         : "";
+    const missionValue = input.metadata?.commercialMissionId;
+    const commercialMissionId =
+      typeof missionValue === "number" && Number.isInteger(missionValue) && missionValue > 0
+        ? String(missionValue)
+        : typeof missionValue === "string" && /^\\d+$/.test(missionValue.trim())
+          ? String(Number(missionValue.trim()))
+          : "";
     if (!receiptId)
       throw new Error("Goldline account_won requires an authority receipt");
+    if (!commercialMissionId)
+      throw new Error("Goldline account_won requires a commercial mission binding");
     const receipt = await getAuthorityReceiptById({
       tenantId: input.tenantId,
       receiptId,
@@ -83,12 +93,35 @@ export async function appendGoldlineWorldEvent(
     if (
       !receipt ||
       receipt.claimType !== "account_won" ||
+      receipt.subjectType !== "commercial_mission" ||
+      receipt.subjectId !== commercialMissionId ||
       receipt.sourceRef !== input.sourceEvidenceReference ||
       receipt.verificationClass !== input.verificationClass
     )
       throw new Error(
-        "Goldline account_won authority receipt does not match the event evidence"
+        "Goldline account_won authority receipt does not match the event evidence or mission"
       );
+
+    if (input.physicalEntityId) {
+      const accountId =
+        typeof receipt.metadata?.accountId === "number" ||
+        typeof receipt.metadata?.accountId === "string"
+          ? String(receipt.metadata.accountId).trim()
+          : "";
+      if (!accountId)
+        throw new Error(
+          "Goldline account_won authority receipt lacks its commercial account binding"
+        );
+      const boundPhysicalEntityId = await findPhysicalEntityIdByBinding({
+        tenantId: input.tenantId,
+        bindingType: "commercial_account",
+        bindingKey: accountId,
+      });
+      if (!boundPhysicalEntityId || boundPhysicalEntityId !== input.physicalEntityId)
+        throw new Error(
+          "Goldline account_won physical entity does not match the admitted commercial account"
+        );
+    }
   }
 
   const id = input.id ?? randomUUID();
