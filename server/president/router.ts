@@ -19,7 +19,10 @@ import { AnthropicWebSearchPresidentProvider } from "./webResearchProvider";
 import { reasonAboutCompany } from "./reasoning";
 import { researchCompanyQuestion, researchPlanSchema } from "./research";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
-import { PRESIDENT_CONSEQUENTIAL_DOMAINS } from "../../shared/presidentOperatingSystem";
+import {
+  PRESIDENT_AUTHORITY_CLASSES,
+  PRESIDENT_CONSEQUENTIAL_DOMAINS,
+} from "../../shared/presidentOperatingSystem";
 
 function database() {
   try {
@@ -89,6 +92,7 @@ export const presidentRouter = router({
       progress: await intelligence.list("PROGRESS", 20),
       programs: await programs.listPrograms(50),
       executiveSeats: await programs.listExecutiveSeats(),
+      agentCapabilities: await programs.listAgentCapabilities(),
       skills: executiveSkillCatalog,
       ...presidentRuntimeStatus(),
     };
@@ -101,6 +105,7 @@ export const presidentRouter = router({
       programs: await programs.listPrograms(50),
       founderDecisions: await programs.openFounderDecisions(3),
       executiveSeats: await programs.listExecutiveSeats(),
+      agentCapabilities: await programs.listAgentCapabilities(),
       nightlyBrief: await service.nightlyBrief(),
     };
   }),
@@ -298,6 +303,78 @@ export const presidentRouter = router({
         provider: new AnthropicWebSearchPresidentProvider(),
         store: operatingServices().intelligence,
         requestKey: input.requestKey,
+      })
+    ),
+
+  registerAgentCapability: founderProcedure
+    .input(
+      z
+        .object({
+          capabilityKey: z.string().min(1).max(191),
+          kind: z.enum(["BUILTIN", "TEMPORARY_SPECIALIST", "EXECUTIVE_SEAT"]),
+          actorId: z.string().min(1).max(191),
+          targetCapability: z.string().min(1).max(191),
+          seatRoleKey: z.string().min(1).max(128).nullable(),
+          programId: z.string().uuid().nullable(),
+          skillNames: z.array(z.string().min(1)).max(20),
+          authorityClasses: z
+            .array(z.enum(PRESIDENT_AUTHORITY_CLASSES))
+            .min(1)
+            .max(7),
+          consequentialDomains: z
+            .array(z.enum(PRESIDENT_CONSEQUENTIAL_DOMAINS))
+            .min(1)
+            .max(9),
+          maxUsdPerRun: z.number().min(0).max(1000),
+          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+          justification: z.string().min(1).max(4000),
+          idempotencyKey: z.string().min(1).max(191),
+        })
+        .strict()
+    )
+    .mutation(({ input, ctx }) => {
+      const { idempotencyKey, ...capability } = input;
+      return operatingServices().service.registerAgentCapability({
+        capability,
+        requestedBy: ctx.user.openId,
+        idempotencyKey,
+      });
+    }),
+
+  evaluateAgentCapability: founderProcedure
+    .input(
+      z
+        .object({
+          capabilityKey: z.string().min(1).max(191),
+          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+          verdict: z.enum(["PASS", "WATCH", "REVOKE"]),
+          assessment: z.string().min(1).max(8000),
+          idempotencyKey: z.string().min(1).max(191),
+        })
+        .strict()
+    )
+    .mutation(({ input, ctx }) =>
+      operatingServices().service.evaluateAgentCapability({
+        ...input,
+        actorId: ctx.user.openId,
+      })
+    ),
+
+  revokeAgentCapability: founderProcedure
+    .input(
+      z
+        .object({
+          capabilityKey: z.string().min(1).max(191),
+          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+          reason: z.string().min(1).max(8000),
+          idempotencyKey: z.string().min(1).max(191),
+        })
+        .strict()
+    )
+    .mutation(({ input, ctx }) =>
+      operatingServices().service.revokeAgentCapability({
+        ...input,
+        actorId: ctx.user.openId,
       })
     ),
 
