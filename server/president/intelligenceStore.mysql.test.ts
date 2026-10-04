@@ -27,7 +27,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
       const sql = await readFile(
         resolve(
           import.meta.dirname,
-          "../../drizzle/0111_president_intelligence.sql"
+          "../../drizzle/0113_president_intelligence.sql"
         ),
         "utf8"
       );
