@@ -76,6 +76,7 @@ export const presidentAuthorityPolicySchema = z
     internalMergeAllowed: z.boolean().default(false),
     internalDeployAllowed: z.boolean().default(false),
     maxAutonomousUsdPerDay: z.number().min(0).max(1000).default(0),
+    autonomousProgramSelectionAllowed: z.boolean().default(false),
     allowedRepositories: z.array(z.string().min(1)).default([]),
     allowedEnvironments: z.array(z.string().min(1)).default([]),
     prohibitedDomains: z
