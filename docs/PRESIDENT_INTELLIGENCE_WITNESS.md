@@ -4,7 +4,7 @@ This is a stacked implementation slice, not a claim that the complete President 
 
 ## Implemented boundary
 
-Two company-only tables retain immutable evidence and versioned intelligence records. Migration `0111_president_intelligence.sql` was applied only to the disposable local MySQL witness database on `127.0.0.1:3411`. Founder-only read APIs fail closed without the configured founder identity. They never expose fixture-origin records as company evidence. No execution or arbitrary-tool endpoint is registered.
+Two company-only tables retain immutable evidence and versioned intelligence records. Migration `0113_president_intelligence.sql` was applied only to the disposable local MySQL witness database on `127.0.0.1:3411`. Founder-only read APIs fail closed without the configured founder identity. They never expose fixture-origin records as company evidence. No execution or arbitrary-tool endpoint is registered.
 
 Thirty progressively loaded executive skill contracts provide domain workflows and falsification/escalation rules. Routing activates at most six reviewed skills. The tool-free, authenticated local Claude provider produces an actual strategic judgment. The model has no repository, filesystem, MCP, hook, secret or execution tools. Research is a separate WebSearch-only capability with bounded source count, time and cost, and independently fetched, hashed snapshots. Downloaded content is evidence, never instructions. There is no automatic capability installation.
 
