@@ -9,6 +9,7 @@ import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
+import { getAuthorityReceiptByIdWith } from "../authority/authorityReceipt";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {
@@ -67,6 +68,29 @@ export async function appendGoldlineWorldEvent(
     throw new Error("Generated game fiction cannot be persisted as business evidence, action, or outcome");
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+
+  if (input.eventType === "account_won") {
+    const receiptId =
+      typeof input.metadata?.authorityReceiptId === "string"
+        ? input.metadata.authorityReceiptId.trim()
+        : "";
+    if (!receiptId)
+      throw new Error("Goldline account_won requires an authority receipt");
+    const receipt = await getAuthorityReceiptByIdWith(db, {
+      tenantId: input.tenantId,
+      receiptId,
+    });
+    if (
+      !receipt ||
+      receipt.claimType !== "account_won" ||
+      receipt.sourceRef !== input.sourceEvidenceReference ||
+      receipt.verificationClass !== input.verificationClass
+    )
+      throw new Error(
+        "Goldline account_won authority receipt does not match the event evidence"
+      );
+  }
+
   const id = input.id ?? randomUUID();
   const idempotencyKey = fitGoldlineWorldEventIdempotencyKey(input.idempotencyKey);
   try {
