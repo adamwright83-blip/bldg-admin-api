@@ -744,18 +744,36 @@ export class PresidentProgramService {
   }) {
     const program = await this.programs.getProgram(input.programId);
     if (!program) throw new Error("President program not found");
-    if (program.state !== "VERIFIED_INTERNAL")
-      throw new Error("Only independently verified internal work may enter measurement");
+    if (
+      !["VERIFIED_INTERNAL", "MEASURING", "LEARNING", "COMPLETED"].includes(
+        program.state
+      )
+    )
+      throw new Error(
+        "Only independently verified President work may enter measurement"
+      );
     const evidence = await this.intelligence.evidence(input.evidenceIds);
     if (evidence.length !== new Set(input.evidenceIds).size)
       throw new Error("Measured President outcome requires real durable evidence");
 
-    await this.programs.updateProgram(program.id, { state: "MEASURING" });
+    const progressKey = `program:${program.id}:outcome`;
+    const lessonKey = `program:${program.id}:lesson`;
+    if (program.state === "COMPLETED") {
+      const progress = await this.intelligence.current("PROGRESS", progressKey);
+      const lesson = await this.intelligence.current("LESSON", lessonKey);
+      if (!progress || !lesson)
+        throw new Error("Completed President program is missing durable learning records");
+      return { program, progress, lesson, reused: true };
+    }
+
+    if (program.state === "VERIFIED_INTERNAL")
+      await this.programs.updateProgram(program.id, { state: "MEASURING" });
+    const evidenceKey = [...new Set(input.evidenceIds)].sort().join(",");
     const progress = await this.intelligence.appendCurrent({
       kind: "PROGRESS",
-      key: `program:${program.id}:outcome`,
+      key: progressKey,
       evidenceIds: input.evidenceIds,
-      idempotencyKey: `program:${program.id}:progress:${input.evidenceIds.join(",")}`,
+      idempotencyKey: `program:${program.id}:progress:${evidenceKey}`,
       payload: {
         programId: program.id,
         observedOutcome: input.observedOutcome,
@@ -763,12 +781,14 @@ export class PresidentProgramService {
         verifiedArtifactId: program.verifiedArtifactId,
       },
     });
-    await this.programs.updateProgram(program.id, { state: "LEARNING" });
+    const afterProgress = await this.programs.getProgram(program.id);
+    if (afterProgress?.state === "MEASURING")
+      await this.programs.updateProgram(program.id, { state: "LEARNING" });
     const lesson = await this.intelligence.appendCurrent({
       kind: "LESSON",
-      key: `program:${program.id}:lesson`,
+      key: lessonKey,
       evidenceIds: input.evidenceIds,
-      idempotencyKey: `program:${program.id}:lesson:${input.evidenceIds.join(",")}`,
+      idempotencyKey: `program:${program.id}:lesson:${evidenceKey}`,
       payload: {
         programId: program.id,
         lesson: input.lesson,
@@ -787,7 +807,7 @@ export class PresidentProgramService {
       currentStepId: null,
       blockReason: null,
     });
-    return { program: completed, progress, lesson };
+    return { program: completed, progress, lesson, reused: false };
   }
 
   async nightlyBrief(): Promise<PresidentNightlyBrief> {
