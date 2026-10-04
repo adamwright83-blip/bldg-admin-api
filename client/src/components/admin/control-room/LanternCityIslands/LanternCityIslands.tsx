@@ -181,7 +181,7 @@ export default function LanternCityIslands({
       ) : null}
 
       {usingSample ? <div className={styles.sample}>Sample customers · dev build, no database</div> : null}
-      {showUtilityDock ? (
+      {showUtilityDock && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
           <button type="button" onClick={() => onNavigate?.("/customers")}>Customers <b className={styles.count}>{customers.length}</b></button>

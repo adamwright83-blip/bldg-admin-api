@@ -419,6 +419,9 @@
       battlefield, so the 1v1 band steps aside with the title.
 */
 .is-world-home:has(.cr-reality-window) .gl-command-dock { display: none; }
+/* Small Comforts owns the full game view. The outer Lantern City business
+   command dock must not sit on top of the suitcase close-up. */
+.gl-game-shell:has([data-small-comforts]) .gl-command-dock { display: none !important; }
 .is-world-intel .lc-rivalry-hud { display: none; }
 
 /*
