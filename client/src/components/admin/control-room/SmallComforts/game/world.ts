@@ -385,9 +385,11 @@ export class World {
     if (this.outK > 0) {
       // out on the shelf: higher, wider, drifting after the proprietor so the suitcase stays in frame
       const k = easeInOut(clamp01(this.outK));
-      const outTarget = new THREE.Vector3(this.outFocus.x * 0.55, 0.2, this.outFocus.y * 0.5 + 0.6);
+      // portrait cannot fit the whole shelf, so the camera tracks the proprietor closely there
+      const follow = asp < 1 ? 0.95 : 0.55;
+      const outTarget = new THREE.Vector3(this.outFocus.x * follow, 0.2, this.outFocus.y * 0.5 + 0.6);
       const outDir = new THREE.Vector3(0, 0.66, 0.75).normalize();
-      const outPos = outTarget.clone().addScaledVector(outDir, dist * 1.62);
+      const outPos = outTarget.clone().addScaledVector(outDir, dist * (asp < 1 ? 1.25 : 1.62));
       finalTarget = finalTarget.lerp(outTarget, k);
       finalPos = finalPos.lerp(outPos, k);
     }

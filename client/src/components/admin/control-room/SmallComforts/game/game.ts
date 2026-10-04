@@ -208,7 +208,7 @@ export class Game {
     if (p === "furnish" || p === "outside") this.refreshForageUi();
   }
   hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); }
-  toast(t: string) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), 1600); }
+  toast(t: string) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), Math.max(1600, t.length * 55)); }
 
   begin() {
     if (this.phase !== "title") return;
