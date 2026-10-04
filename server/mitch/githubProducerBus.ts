@@ -31,7 +31,7 @@ export class GitHubProducerBusConfigurationError extends Error {
 function parseJsonFence<T>(body: string, marker: string, parse: (value: unknown) => T): T | null {
   if (!body.includes(`<!-- ${marker} -->`)) return null;
   const afterMarker = body.slice(body.indexOf(`<!-- ${marker} -->`) + marker.length + 9);
-  const match = afterMarker.match(/\`\`\`(?:json|mitch-handback|mitch-review)?\s*([\s\S]*?)\s*\`\`\`/i);
+  const match = afterMarker.match(/(?:```|~~~)(?:json|mitch-handback|mitch-review)?\s*([\s\S]*?)\s*(?:```|~~~)/i);
   if (!match) return null;
   try {
     return parse(JSON.parse(match[1]));
