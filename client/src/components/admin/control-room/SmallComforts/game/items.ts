@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Cell, COLS, ROWS, Item, footprint, Rot } from "../logic/grid";
 import { PAL, rbox, cyl, ball, toon, canvasTex, inked } from "./style";
-import { loadItemArt } from "./assets";
+import { loadItemArt, setImportedLampEmissive } from "./assets";
 
 export const cellPos = (c: Cell, y = 0) => new THREE.Vector3(c.x - (COLS - 1) / 2, y, c.z - (ROWS - 1) / 2);
 
@@ -90,6 +90,7 @@ function hydrateImportedItem(root: THREE.Group, fallback: THREE.Group, kind: "be
     art.rotation.set(0, 0, 0);
     art.scale.set(1, 1, 1);
     root.add(art);
+    if (kind === "lamp") setImportedLampEmissive(art, root.userData.scLampOn !== false);
     root.userData.scImportedArt = true;
   }).catch(error => {
     console.warn(`Small Comforts: keeping ${kind} fallback art`, error);
