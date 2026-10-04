@@ -525,6 +525,7 @@ describe("Mitch event-driven producer", () => {
       hasMarker: async () => false,
       postComment: async (body: string) => {
         comments.push(body);
+        return { html_url: "https://example.test/work-order" };
       },
       waitForHandback: async () => {
         throw new Error("Dispatch must not wait for polling");
