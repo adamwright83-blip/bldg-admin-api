@@ -603,16 +603,32 @@ export class MysqlPresidentProgramStore
     input: PresidentFounderDecision
   ): Promise<PresidentFounderDecision> {
     const d = presidentFounderDecisionSchema.parse(input);
+    const connection = await this.pool.getConnection();
     try {
-      await this.pool.execute(
+      await connection.beginTransaction();
+      const [openRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT * FROM president_founder_decisions WHERE questionKey=? AND status='OPEN' ORDER BY decisionRound DESC LIMIT 1 FOR UPDATE",
+        [d.questionKey]
+      );
+      if (d.status === "OPEN" && openRows[0]) {
+        await connection.commit();
+        return decisionFromRow(openRows[0]);
+      }
+      const [roundRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT decisionRound FROM president_founder_decisions WHERE questionKey=? ORDER BY decisionRound DESC LIMIT 1 FOR UPDATE",
+        [d.questionKey]
+      );
+      const decisionRound = Number(roundRows[0]?.decisionRound ?? 0) + 1;
+      await connection.execute(
         `INSERT INTO president_founder_decisions
-         (id,programId,stepId,questionKey,question,optionsJson,recommendedOption,reason,status,answer,askedAt,answeredAt)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id,programId,stepId,questionKey,decisionRound,question,optionsJson,recommendedOption,reason,status,answer,askedAt,answeredAt)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           d.id,
           d.programId,
           d.stepId,
           d.questionKey,
+          decisionRound,
           d.question,
           JSON.stringify(d.options),
           d.recommendedOption,
@@ -623,13 +639,18 @@ export class MysqlPresidentProgramStore
           d.answeredAt ? new Date(d.answeredAt) : null,
         ]
       );
+      await connection.commit();
+      return d;
     } catch (error) {
-      if ((error as { code?: string }).code !== "ER_DUP_ENTRY") throw error;
-      const existing = await this.findOpenDecision(d.questionKey);
-      if (!existing) throw error;
-      return existing;
+      await connection.rollback();
+      if ((error as { code?: string }).code === "ER_DUP_ENTRY") {
+        const existing = await this.findOpenDecision(d.questionKey);
+        if (existing) return existing;
+      }
+      throw error;
+    } finally {
+      connection.release();
     }
-    return d;
   }
 
   async findOpenDecision(questionKey: string): Promise<PresidentFounderDecision | null> {
