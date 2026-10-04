@@ -1097,8 +1097,11 @@ export async function attributeCommercialOrder(input: {
             subjectId: String(order.id),
           })
         : null;
+      const paymentIntentId = order.stripePaymentIntentId?.trim() ?? "";
       const paidCents =
-        hasNativePaymentAuthority(order) && paymentAuthority
+        hasNativePaymentAuthority(order) &&
+        paymentAuthority?.sourceType === "stripe_payment_intent" &&
+        paymentAuthority.sourceRef === paymentIntentId
           ? cents(order.total)
           : 0;
       await tx.insert(commercialOrderAttributions).values({
