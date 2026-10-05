@@ -149,7 +149,7 @@ export function MoneyControlRoom() {
           <img src={`${ASSET_ROOT}/status/info.svg`} alt="" />
           <span>Revenue this month</span>
           <strong>
-            {dashboard.data
+            {dashboard.data?.revenueMonth != null
               ? new Intl.NumberFormat("en-US", {
                   style: "currency",
                   currency: "USD",

@@ -116,6 +116,11 @@ import {
   sameNormalizedPhone,
 } from "./phone";
 
+import {
+  readCanonicalRevenue,
+  type CanonicalRevenueCoverage,
+} from "./analytics/canonicalRevenue";
+
 export type { AdminCustomerAggregateDbRow };
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -713,62 +718,91 @@ export async function listPaidOrdersForBuildingRevenue(
     );
 }
 
+export type AdminDashboardRevenuePeriod = {
+  window: { from: string; to: string; timeZone: string };
+  status: "ok" | "unavailable";
+  precision: "exact" | "recorded_only" | "unavailable";
+  recordedCents: number | null;
+  statedExactCents: number | null;
+  paidOrderCount: number | null;
+  stripeCents: number | null;
+  cleanCloudCents: number | null;
+  coverage: CanonicalRevenueCoverage;
+};
+
 export type AdminDashboardSummary = {
-  /** Paid orders counted when `paidAt` falls in the window; rows with null `paidAt` use `updatedAt` (legacy). */
+  /** Canonical payment event time: native paidAt or the selected CleanCloud report payment date. */
   revenueTimestampBasis: "paidAt";
   dashboardTimeZone: string;
-  revenueToday: number;
-  revenueWeek: number;
-  revenueMonth: number;
-  paidOrderCountMonth: number;
+  revenueToday: number | null;
+  revenueWeek: number | null;
+  revenueMonth: number | null;
+  paidOrderCountMonth: number | null;
   avgOrderValueMonth: number | null;
+  /** Recorded values remain visible with qualification; unavailable revenue is null, never zero. */
+  revenuePeriods: {
+    today: AdminDashboardRevenuePeriod;
+    week: AdminDashboardRevenuePeriod;
+    month: AdminDashboardRevenuePeriod;
+  } | null;
   distinctBuildingsWithSlug: number;
   distinctCustomerPhones: number;
   totalOrders: number;
 };
 
-/**
- * Revenue attributed to when payment was recorded: `paidAt` in [start, end), or legacy rows with null `paidAt` use `updatedAt`.
- */
-async function paidRevenueAndCountInPaidAtWindow(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  start: Date,
-  end: Date
-): Promise<{ revenue: number; count: number }> {
-  const [row] = await db
-    .select({
-      revenue: sql<string>`COALESCE(SUM(CAST(${orders.total} AS DECIMAL(14,4))), 0)`,
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.paid, true),
-        or(
-          and(
-            isNotNull(orders.paidAt),
-            gte(orders.paidAt, start),
-            lt(orders.paidAt, end)
-          ),
-          and(
-            isNull(orders.paidAt),
-            gte(orders.updatedAt, start),
-            lt(orders.updatedAt, end)
-          )
-        )
-      )
-    );
-
+/** Attach Home's existing [start, end) calendar window to the owning revenue reader. */
+export async function readAdminDashboardRevenuePeriod(input: {
+  tenantId: string;
+  start: Date;
+  end: Date;
+  timeZone: string;
+  now: Date;
+}): Promise<AdminDashboardRevenuePeriod> {
+  const from = zonedYmd(input.start, input.timeZone);
+  const to = zonedYmd(new Date(input.end.getTime() - 1), input.timeZone);
+  const revenue = await readCanonicalRevenue({
+    tenantId: input.tenantId,
+    from,
+    to,
+    timeZone: input.timeZone,
+    now: input.now,
+  });
+  const window = { from, to, timeZone: input.timeZone };
+  if (revenue.status === "unavailable") {
+    return {
+      window,
+      status: "unavailable",
+      precision: "unavailable",
+      recordedCents: null,
+      statedExactCents: null,
+      paidOrderCount: null,
+      stripeCents: null,
+      cleanCloudCents: null,
+      coverage: revenue.coverage,
+    };
+  }
+  // Processor labels are breakdowns of already-included canonical events, not extra revenue.
+  const sourceCents = (source: "laundry_butler" | "cleancloud") =>
+    revenue.includedEvents
+      .filter(event => event.source === source)
+      .reduce((sum, event) => sum + event.cents, 0);
   return {
-    revenue: Number(row?.revenue ?? 0),
-    count: Number(row?.count ?? 0),
+    window,
+    status: "ok",
+    precision: revenue.precision,
+    recordedCents: revenue.recordedCents,
+    statedExactCents: revenue.statedExactCents,
+    paidOrderCount: revenue.exactIncludedOrderCount,
+    stripeCents: sourceCents("laundry_butler"),
+    cleanCloudCents: sourceCents("cleancloud"),
+    coverage: revenue.coverage,
   };
 }
 
-/**
- * Home dashboard metrics. Paid orders only; windows use payment time (`paidAt`) aligned with "Collected today".
- */
-export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary | null> {
+/** Home keeps its today/week/month calendar periods and uses canonical combined payment revenue. */
+export async function getAdminDashboardSummary(input: {
+  tenantId: string;
+}): Promise<AdminDashboardSummary | null> {
   const db = await getDb();
   if (!db) return null;
 
@@ -776,8 +810,7 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
   const now = new Date();
   const todayYmd = zonedYmd(now, tz);
   const todayStart = zonedDayStartUtc(todayYmd, tz);
-  const tomorrowYmd = zonedNextDayYmd(todayYmd, tz);
-  const todayEnd = zonedDayStartUtc(tomorrowYmd, tz);
+  const todayEnd = zonedDayStartUtc(zonedNextDayYmd(todayYmd, tz), tz);
   const { start: weekStart, end: weekEnd } = zonedWeekRangeUtcContaining(
     now,
     tz
@@ -786,16 +819,22 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
     now,
     tz
   );
+  const readPeriod = (start: Date, end: Date) =>
+    readAdminDashboardRevenuePeriod({
+      tenantId: input.tenantId,
+      start,
+      end,
+      timeZone: tz,
+      now,
+    });
 
   const [todayAgg, weekAgg, monthAgg, buildingsRow, phonesRow, totalRow] =
     await Promise.all([
-      paidRevenueAndCountInPaidAtWindow(db, todayStart, todayEnd),
-      paidRevenueAndCountInPaidAtWindow(db, weekStart, weekEnd),
-      paidRevenueAndCountInPaidAtWindow(db, monthStart, monthEnd),
+      readPeriod(todayStart, todayEnd),
+      readPeriod(weekStart, weekEnd),
+      readPeriod(monthStart, monthEnd),
       db
-        .select({
-          n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})`,
-        })
+        .select({ n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})` })
         .from(orders)
         .where(
           and(
@@ -804,25 +843,28 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
           )
         ),
       db
-        .select({
-          n: sql<number>`COUNT(DISTINCT ${orders.phone})`,
-        })
+        .select({ n: sql<number>`COUNT(DISTINCT ${orders.phone})` })
         .from(orders),
       db.select({ n: sql<number>`COUNT(*)` }).from(orders),
     ]);
-
-  const paidOrderCountMonth = monthAgg.count;
+  const dollars = (cents: number | null) =>
+    cents === null ? null : cents / 100;
+  const paidOrderCountMonth = monthAgg.paidOrderCount;
   const avgOrderValueMonth =
-    paidOrderCountMonth > 0 ? monthAgg.revenue / paidOrderCountMonth : null;
-
+    monthAgg.recordedCents !== null &&
+    paidOrderCountMonth !== null &&
+    paidOrderCountMonth > 0
+      ? monthAgg.recordedCents / 100 / paidOrderCountMonth
+      : null;
   return {
     revenueTimestampBasis: "paidAt",
     dashboardTimeZone: tz,
-    revenueToday: todayAgg.revenue,
-    revenueWeek: weekAgg.revenue,
-    revenueMonth: monthAgg.revenue,
+    revenueToday: dollars(todayAgg.recordedCents),
+    revenueWeek: dollars(weekAgg.recordedCents),
+    revenueMonth: dollars(monthAgg.recordedCents),
     paidOrderCountMonth,
     avgOrderValueMonth,
+    revenuePeriods: { today: todayAgg, week: weekAgg, month: monthAgg },
     distinctBuildingsWithSlug: Number(buildingsRow[0]?.n ?? 0),
     distinctCustomerPhones: Number(phonesRow[0]?.n ?? 0),
     totalOrders: Number(totalRow[0]?.n ?? 0),

@@ -114,7 +114,7 @@ export default function JoystickHome({
   const lanternCount =
     atlas.data?.customers?.filter(isLiveLanternCustomer).length ?? null;
   const weekShare =
-    summary?.revenueMonth && summary.revenueMonth > 0
+    summary?.revenueMonth != null && summary.revenueMonth > 0 && summary.revenueWeek != null
       ? Math.round((summary.revenueWeek / summary.revenueMonth) * 100)
       : null;
   const firstInsight =

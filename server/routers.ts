@@ -1014,18 +1014,19 @@ export const appRouter = router({
       .input(z.object({ q: z.string().min(2).max(100) }))
       .query(async ({ input }) => searchOrdersForReceipt(input.q)),
 
-    /** Home command center — Stripe/order revenue plus labeled Clearent payment truth. */
-    dashboardSummary: protectedProcedure.query(async () => {
-      const row = await getAdminDashboardSummary();
+    /** Home command center — canonical combined revenue plus separately labeled processor totals. */
+    dashboardSummary: protectedProcedure.query(async ({ ctx }) => {
+      const row = await getAdminDashboardSummary({ tenantId: ctx.tenantId });
       const clearent = await getClearentCollectedTodayCents();
       const fallback = {
         revenueTimestampBasis: "paidAt" as const,
         dashboardTimeZone: getDashboardTimeZone(),
-        revenueToday: 0,
-        revenueWeek: 0,
-        revenueMonth: 0,
-        paidOrderCountMonth: 0,
+        revenueToday: null,
+        revenueWeek: null,
+        revenueMonth: null,
+        paidOrderCountMonth: null,
         avgOrderValueMonth: null,
+        revenuePeriods: null,
         distinctBuildingsWithSlug: 0,
         distinctCustomerPhones: 0,
         totalOrders: 0,
@@ -1035,8 +1036,14 @@ export const appRouter = router({
         ...base,
         paymentProcessorTotals: {
           stripe: {
-            collectedToday: base.revenueToday,
-            collectedMonth: base.revenueMonth,
+            collectedToday:
+              base.revenuePeriods?.today.stripeCents == null
+                ? null
+                : base.revenuePeriods.today.stripeCents / 100,
+            collectedMonth:
+              base.revenuePeriods?.month.stripeCents == null
+                ? null
+                : base.revenuePeriods.month.stripeCents / 100,
           },
           clearentXplorPay: {
             collectedTodayCents: clearent?.collectedCents ?? 0,
@@ -1047,7 +1054,15 @@ export const appRouter = router({
           },
           cleanCloud: {
             label: "Legacy CleanCloud",
-            includedInPaymentTruth: false,
+            includedInPaymentTruth: true,
+            collectedToday:
+              base.revenuePeriods?.today.cleanCloudCents == null
+                ? null
+                : base.revenuePeriods.today.cleanCloudCents / 100,
+            collectedMonth:
+              base.revenuePeriods?.month.cleanCloudCents == null
+                ? null
+                : base.revenuePeriods.month.cleanCloudCents / 100,
           },
         },
       };
