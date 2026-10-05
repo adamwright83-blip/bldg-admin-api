@@ -2,6 +2,11 @@ import "dotenv/config";
 import http from "node:http";
 import { AppPresidentJudgmentProvider } from "./appProvider";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
+import { presidentPool } from "./database";
+import { MysqlPresidentProgramStore } from "./programStore";
+import { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
+import { PresidentProgramService } from "./programService";
+import { getPresidentCycleRuntime } from "./cycle/runtime";
 
 function numberEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -13,12 +18,16 @@ function numberEnv(name: string, fallback: number): number {
 }
 
 const status = presidentRuntimeStatus();
-if (status.executionState !== "CONFIGURED")
-  throw new Error(
-    "President worker requires configured agent targets, callback URL, and callback tokens"
-  );
-
-const runtime = getPresidentRuntime();
+const legacyRuntime =
+  status.executionState === "CONFIGURED" ? getPresidentRuntime() : null;
+const pool = presidentPool();
+const programs = legacyRuntime?.programs ?? new MysqlPresidentProgramStore(pool);
+const intelligence =
+  legacyRuntime?.intelligence ?? new MysqlPresidentIntelligenceStore(pool);
+const service =
+  legacyRuntime?.service ??
+  new PresidentProgramService(pool, programs, intelligence);
+const cycleRuntime = getPresidentCycleRuntime();
 const pollMs = numberEnv("PRESIDENT_WORKER_POLL_MS", 15_000);
 const port = numberEnv("PORT", 8083);
 let inFlight = false;
@@ -26,15 +35,28 @@ let stopped = false;
 let lastRunAt: string | null = null;
 let lastSuccessAt: string | null = null;
 let lastError: string | null = null;
+let lastCycleError: string | null = null;
 
 async function tick() {
   if (stopped || inFlight) return;
   inFlight = true;
   lastRunAt = new Date().toISOString();
   try {
-    await runtime.coordinator.recover();
-    await runtime.service.finalizeVerifiedMeasurements();
-    await runtime.service.advanceObjectives(new AppPresidentJudgmentProvider());
+    if (legacyRuntime) await legacyRuntime.coordinator.recover();
+    await service.finalizeVerifiedMeasurements();
+    await service.advanceObjectives(new AppPresidentJudgmentProvider());
+
+    try {
+      const cycle = await cycleRuntime.store.latestCycle();
+      if (cycle && ["ADAM_APPROVED", "EXECUTING"].includes(cycle.state))
+        await cycleRuntime.runner.runOne(cycle.id);
+      lastCycleError = null;
+    } catch (cycleError) {
+      lastCycleError =
+        cycleError instanceof Error ? cycleError.message : String(cycleError);
+      console.error("[PresidentWorker] cycle tick failed", cycleError);
+    }
+
     lastSuccessAt = new Date().toISOString();
     lastError = null;
   } catch (error) {
@@ -56,7 +78,13 @@ const server = http.createServer((request, response) => {
     JSON.stringify({
       ok,
       runtime: presidentRuntimeStatus(),
-      worker: { inFlight, lastRunAt, lastSuccessAt, lastError },
+      worker: {
+        inFlight,
+        lastRunAt,
+        lastSuccessAt,
+        lastError,
+        lastCycleError,
+      },
     })
   );
 });
