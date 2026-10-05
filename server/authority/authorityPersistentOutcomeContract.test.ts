@@ -22,6 +22,8 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(store).toContain('claimType: "account_won"');
     expect(store).toContain('cleancloud_order_paid: {');
     expect(store).toContain('claimType: "payment_verified"');
+    expect(store).toContain("cleancloud_order_paid amount does not match persisted paid-order evidence");
+    expect(store).toContain("row.totalCents === input.monetaryValueCents");
   });
 
   it("binds win and paid-order bridges to existing authority rather than caller claims", () => {
@@ -31,5 +33,15 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(bridge).toContain("payment_evidence_mismatch");
     expect(bridge).toContain("payment_authority_missing");
     expect(bridge).toContain("authorityReceiptId: paymentAuthority.id");
+  });
+
+  it("repairs historical consequential outcomes and removes learning when authority cannot be proven", () => {
+    const migrate = source("scripts/migrate.mjs");
+    expect(migrate).toContain("legacy_commercial_visit_completion_backfill_v1");
+    expect(migrate).toContain("attach action authority to historical Persistent Operator visit outcomes");
+    expect(migrate).toContain("attach win authority to historical Persistent Operator outcomes");
+    expect(migrate).toContain("attach payment authority to historical Persistent Operator revenue outcomes");
+    expect(migrate).toContain("remove learning derived from unreceipted consequential outcomes");
+    expect(migrate).toContain("downgrade unreceipted consequential Persistent Operator outcomes");
   });
 });
