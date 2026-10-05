@@ -30,13 +30,14 @@ export type GeographicCustomer = {
 export type CanonicalLanternTerritory = { id: string; name: string };
 
 /**
- * Lantern City is a current-business surface. A historical/dormant customer
- * can remain in the atlas and customer history without lighting the city.
+ * Every known customer with a canonical location exists in Lantern City.
+ * Cadence changes presentation/urgency; it must never erase a real customer
+ * or make a territory falsely appear empty.
  */
 export function isLiveLanternCustomer(
   customer: Pick<GeographicCustomer, "location" | "cadence">
 ): boolean {
-  return Boolean(customer.location) && customer.cadence.state === "active";
+  return Boolean(customer.location);
 }
 
 /**
