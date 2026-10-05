@@ -1,7 +1,7 @@
 /**
  * Today's day-line reader.
  *
- * Ordering authority is system.mission_director (planForDate). This reader
+ * Ordering authority is the latest persisted system.mission_director plan. This reader
  * projects that ranking and stamps execution type beside it. Execution type
  * is not passed back into the ranker and does not change item order.
  * A no_plan outcome may carry a diagnostic ranking. That ranking is not
@@ -11,7 +11,7 @@
 import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { getDashboardTimeZone } from "../../dashboardZoned";
-import { planForDate } from "../../missionDirector/missionDirectorService";
+import { getLatestPlan } from "../../missionDirector/missionDirectorService";
 import {
   listGoalCycleObjectives,
   projectToRankedDayWork,
@@ -25,7 +25,7 @@ import {
   type RankedDayWork,
 } from "../../../shared/currentDayLine";
 
-type PlanReader = typeof planForDate;
+type PlanReader = typeof getLatestPlan;
 type CampaignReader = typeof listCampaigns;
 type DayStateReader = typeof getDayDirectorState;
 type ObjectiveReader = typeof listGoalCycleObjectives;
@@ -83,7 +83,7 @@ function unavailableLine(businessDate: string): CurrentDayLine {
 }
 
 let defaultDayLineDeps: {
-  planForDate?: PlanReader;
+  getLatestPlan?: PlanReader;
   listCampaigns?: CampaignReader;
   getDayDirectorState?: DayStateReader;
   listObjectives?: ObjectiveReader;
@@ -109,7 +109,7 @@ export async function readCurrentDayLine(
     now?: Date;
   },
   deps: {
-    planForDate?: PlanReader;
+    getLatestPlan?: PlanReader;
     listCampaigns?: CampaignReader;
     getDayDirectorState?: DayStateReader;
     listObjectives?: ObjectiveReader;
@@ -137,7 +137,7 @@ export async function readCurrentDayLine(
   }
 
   const activeDeps = { ...defaultDayLineDeps, ...deps };
-  const readPlan = activeDeps.planForDate ?? planForDate;
+  const readPlan = activeDeps.getLatestPlan ?? getLatestPlan;
   const readCampaigns = activeDeps.listCampaigns ?? listCampaigns;
   const readState = activeDeps.getDayDirectorState ?? getDayDirectorState;
   const readObjectives = activeDeps.listObjectives ?? listGoalCycleObjectives;
@@ -148,10 +148,7 @@ export async function readCurrentDayLine(
         tenantId,
         operatorId,
         ...(input.operatorIds?.length ? { operatorIds: input.operatorIds } : {}),
-        ...(input.operatorUserId ? { operatorUserId: input.operatorUserId } : {}),
-        ...(input.operatorUserIds?.length ? { operatorUserIds: input.operatorUserIds } : {}),
         businessDate,
-        timeZone,
       }),
       readCampaigns({ tenantId, includeDisabled: true }),
       readObjectives({
@@ -204,7 +201,7 @@ export async function readCurrentDayLine(
     }
 
     // 2. Mission Plan Campaign Ranking
-    if (plan.outcome.status !== "no_plan") {
+    if (plan && plan.outcome.status !== "no_plan") {
       for (const evidence of rankingOf(plan.outcome)) {
         const id = evidence.campaignId.trim();
         if (!id || seen.has(id)) continue;
@@ -247,7 +244,9 @@ export async function readCurrentDayLine(
 
     return projectCurrentDayLine({
       businessDate,
-      rankingStatus: rankingStatusFor(plan.outcome, rankedWorks.length),
+      rankingStatus: plan
+        ? rankingStatusFor(plan.outcome, rankedWorks.length)
+        : "unavailable",
       rankedWorks,
       designated: operatorDesignation(state),
     });
