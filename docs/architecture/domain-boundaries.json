@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "purpose": "Current-path ownership and no-new-cross-boundary-import ratchet. This file describes current repository paths, not a future folder tree.",
+  "currentPathOwners": [
+    {
+      "domain": "platform",
+      "paths": [
+        "server/_core",
+        "server/durableExecution",
+        "server/db"
+      ]
+    },
+    {
+      "domain": "laundry",
+      "paths": [
+        "server/routers.ts",
+        "server/residentIntake",
+        "server/opsTasks",
+        "server/cleancloudBrowserSync"
+      ]
+    },
+    {
+      "domain": "money",
+      "paths": [
+        "server/money",
+        "server/authority/paymentAdmission.ts",
+        "server/analytics/canonicalRevenue.ts",
+        "server/analytics/paidOrderLedger.ts"
+      ]
+    },
+    {
+      "domain": "geography",
+      "paths": [
+        "server/geography",
+        "shared/buildings.ts",
+        "shared/propertyTowers.ts",
+        "shared/canonicalGeography.ts"
+      ]
+    },
+    {
+      "domain": "commercial",
+      "paths": [
+        "server/commercialMissions",
+        "server/commercialPipeline",
+        "server/commercialProposals",
+        "server/commercialCampaigns",
+        "server/field"
+      ]
+    },
+    {
+      "domain": "planning",
+      "paths": [
+        "server/missionDirector",
+        "server/dayDirector",
+        "server/weeklyGrowthCandidates",
+        "server/goldline/dayline",
+        "server/claire/weeklyMission"
+      ]
+    },
+    {
+      "domain": "operator",
+      "paths": [
+        "server/persistentOperator",
+        "server/operatorRepresentative"
+      ]
+    },
+    {
+      "domain": "actions",
+      "paths": [
+        "server/agents",
+        "server/claire/brain/actions",
+        "server/claire/brain/executive"
+      ]
+    },
+    {
+      "domain": "claire",
+      "paths": [
+        "server/claire"
+      ]
+    },
+    {
+      "domain": "game",
+      "paths": [
+        "server/goldlineWorld",
+        "server/goldlineKingdoms",
+        "server/goldlineProgression",
+        "server/lanternCity",
+        "server/narratorOs",
+        "server/companions",
+        "server/towerWars"
+      ]
+    },
+    {
+      "domain": "saas",
+      "paths": [
+        "server/saas",
+        "server/joystick/tenantIdentity.ts"
+      ]
+    },
+    {
+      "domain": "held",
+      "paths": [
+        "server/procurement",
+        "server/marketplacePayments"
+      ]
+    },
+    {
+      "domain": "company",
+      "paths": [
+        "server/president",
+        "server/mitch"
+      ]
+    }
+  ],
+  "forbiddenImports": [
+    {
+      "id": "commercial-does-not-push-operator-or-game",
+      "from": [
+        "server/commercialMissions",
+        "server/commercialPipeline",
+        "server/commercialProposals",
+        "server/commercialCampaigns",
+        "server/field"
+      ],
+      "to": [
+        "server/persistentOperator",
+        "server/goldlineWorld",
+        "server/narratorOs"
+      ],
+      "reason": "Commercial producers may not add new inline downstream Operator/Game mutations."
+    },
+    {
+      "id": "money-does-not-push-operator-or-game",
+      "from": [
+        "server/money",
+        "server/authority/paymentAdmission.ts",
+        "server/analytics/canonicalRevenue.ts"
+      ],
+      "to": [
+        "server/persistentOperator",
+        "server/goldlineWorld",
+        "server/narratorOs"
+      ],
+      "reason": "Money admits/reads economic truth; downstream systems consume it."
+    },
+    {
+      "id": "geography-does-not-push-operator-or-game",
+      "from": [
+        "server/geography"
+      ],
+      "to": [
+        "server/persistentOperator",
+        "server/goldlineWorld",
+        "server/narratorOs"
+      ],
+      "reason": "Geography owns geographic truth and does not mutate downstream projections."
+    },
+    {
+      "id": "claire-no-new-raw-db-coupling",
+      "from": [
+        "server/claire"
+      ],
+      "to": [
+        "server/db.ts",
+        "drizzle/schema"
+      ],
+      "reason": "Claire must move toward domain read ports; no new direct database/schema dependencies."
+    },
+    {
+      "id": "game-does-not-import-business-implementation",
+      "from": [
+        "server/goldlineWorld",
+        "server/goldlineKingdoms",
+        "server/lanternCity",
+        "server/narratorOs"
+      ],
+      "to": [
+        "server/commercialMissions",
+        "server/commercialPipeline",
+        "server/money"
+      ],
+      "reason": "Game consumes admitted facts/read models; it must not grow new direct business-domain implementation dependencies."
+    }
+  ]
+}

@@ -24,3 +24,7 @@ jobs:
         run: node scripts/check-default-tenant-ratchet.mjs
       - name: Enforce vertical dependency direction
         run: node scripts/check-vertical-dependencies.mjs
+      - name: Prevent new cross-domain dependency violations
+        env:
+          DOMAIN_BOUNDARY_RATCHET_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/check-domain-boundaries.mjs
