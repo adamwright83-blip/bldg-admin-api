@@ -60,14 +60,13 @@ export function isAdminCommandCenterPath(path: string): boolean {
 
 export type LanternScene = "islands" | "map" | "v6" | "atlas" | null;
 /**
- * Which Lantern City a path shows. The island board is the one Lantern City: the returning-user
- * home and /growth/lantern-city both mount it. The street map (V7) and the older scenes survive
- * only behind explicit QA parameters (?scene=map, or ?scene=v7; ?scene=v6; ?scene=atlas, and
- * ?scene=v5 its old name). Anywhere else no world is mounted, so no 3D scene runs hidden behind
- * another page.
+ * Which full Lantern City scene a route mounts. Home owns a bounded live preview
+ * inside the HQ cockpit; the full playable world only mounts at
+ * /growth/lantern-city. QA variants remain explicit query-parameter choices.
+ * Utility pages never run a hidden 3D world.
  */
 export function lanternSceneFor(path: string, search: string): LanternScene {
-  if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
+  if (path !== "/growth/lantern-city") return null;
   const scene = new URLSearchParams(search).get("scene");
   if (scene === "map" || scene === "v7") return "map";
   if (scene === "v6") return "v6";
