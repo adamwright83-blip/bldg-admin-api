@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Thornhollow build">
+<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ece9df"/><stop offset="1" stop-color="#fbfbf7"/></linearGradient>
+  <radialGradient id="r" cx="72%" cy="26%" r="70%"><stop offset="0" stop-color="#fff9df" stop-opacity=".92"/><stop offset=".48" stop-color="#f6c765" stop-opacity=".22"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="640" height="360" rx="36" fill="url(#g)"/>
+<rect width="640" height="360" rx="36" fill="url(#r)"/>
+<g fill="none" stroke="#b47a18" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity=".92"><path d="M96 222c28-84 74-126 138-126 40 0 74 22 94 58 24-40 62-60 112-60 44 0 80 26 102 72"/><path d="M118 222h402"/><path d="M188 222v-64h76v64M364 222v-88h82v88"/></g>
+<rect x="28" y="250" width="584" height="82" rx="22" fill="#fffdf8" fill-opacity=".9"/>
+<text x="52" y="286" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700" fill="#17191d">Thornhollow build</text>
+<text x="52" y="314" font-family="Inter,Arial,sans-serif" font-size="15" fill="#676b73">Placeholder · Mitch</text>
+</svg>
