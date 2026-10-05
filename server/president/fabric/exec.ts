@@ -24,7 +24,17 @@ export async function runPresidentCommand(input: {
       cwd: input.cwd,
       timeout: input.timeoutMs ?? 120_000,
       maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, CI: "true", ...input.env },
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        USER: process.env.USER,
+        LOGNAME: process.env.LOGNAME,
+        TMPDIR: process.env.TMPDIR,
+        LANG: process.env.LANG,
+        CI: "true",
+        NODE_ENV: "test",
+        ...input.env,
+      },
     });
     return {
       command: input.command,
