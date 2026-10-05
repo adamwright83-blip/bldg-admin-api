@@ -86,6 +86,36 @@ describe("authority receipt policy", () => {
     ).not.toThrow();
   });
 
+  it("allows human-attested persisted visit completion but not system claims", () => {
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "action_completed",
+        subjectType: "commercial_mission",
+        subjectId: "77",
+        sourceType: "commercial_mission_event",
+        sourceRef: "commercial_mission_events:901",
+        evidenceClass: "operator_attested",
+        verificationClass: "ATTESTED",
+        actorType: "driver",
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "action_completed",
+        subjectType: "commercial_mission",
+        subjectId: "77",
+        sourceType: "commercial_mission_event",
+        sourceRef: "commercial_mission_events:901",
+        evidenceClass: "operator_attested",
+        verificationClass: "ATTESTED",
+        actorType: "system",
+      })
+    ).toThrow(/human-attested/);
+  });
+
   it("keeps idempotency on the semantic claim and source identity", () => {
     const first = authorityReceiptIdempotencyKey({
       claimType: "payment_verified",

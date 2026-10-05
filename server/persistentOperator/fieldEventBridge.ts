@@ -2,12 +2,15 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   commercialAccounts,
+  commercialMissionEvents,
   commercialMissions,
   cleancloudPaidOrders,
   goalCycleObjectives,
   goalCycleOutcomes,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { admitCompletedCommercialVisit } from "../authority/actionCompletionAdmission";
+import { findAuthorityReceiptForSubject } from "../authority/authorityReceipt";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,
@@ -89,7 +92,9 @@ export type BridgeCleanCloudOrderResult =
         | "order_not_paid_or_zero"
         | "unrelated_order"
         | "ambiguous_lineage"
-        | "objective_not_found";
+        | "objective_not_found"
+        | "payment_authority_missing"
+        | "payment_evidence_mismatch";
       candidateObjectiveIds?: string[];
       message: string;
     };
@@ -155,19 +160,36 @@ export async function bridgeDriverAction(
     matchedObjective = candidates[0];
   }
 
+  const effectiveOutcomeKind = input.outcomeKind ?? "visit_completed";
+  if (effectiveOutcomeKind === "visit_completed" && input.missionId == null) {
+    throw new Error("visit_completed requires a commercial mission identity");
+  }
+  const actionAuthority =
+    effectiveOutcomeKind === "visit_completed"
+      ? await admitCompletedCommercialVisit({
+          tenantId: input.tenantId,
+          missionId: input.missionId!,
+          evidenceReference: input.evidenceReference,
+        })
+      : null;
+
   // Action verification: verifies work was done, never awards money
   const verification = await verifyObjectiveExecution({
     tenantId: input.tenantId,
     objectiveId: matchedObjective.id,
     evidenceReference: input.evidenceReference,
     sourceSystem: input.sourceSystem ?? "dayforge_field",
-    outcomeKind: input.outcomeKind ?? "visit_completed",
+    outcomeKind: effectiveOutcomeKind,
     explanation:
       input.explanation ??
       `Driver action verified completed by real field event (${input.evidenceReference})`,
     transitionObjectiveTo: "action_executed",
     observedAt: input.observedAt,
-    metadata: input.metadata,
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...(input.missionId != null ? { missionId: input.missionId } : {}),
+      ...(actionAuthority ? { authorityReceiptId: actionAuthority.id } : {}),
+    },
   });
 
   // Query any automatically produced learned delta for this outcome
@@ -255,6 +277,53 @@ export async function bridgeCommercialResolution(
   const outcomeKind = isWon ? "account_won" : "account_lost";
   const epistemicStatus: EpistemicStatus = isWon ? "verified" : "rejected";
 
+  const winAuthority = isWon
+    ? await findAuthorityReceiptForSubject({
+        tenantId: input.tenantId,
+        claimType: "account_won",
+        subjectType: "commercial_mission",
+        subjectId: String(input.missionId),
+      })
+    : null;
+  if (isWon && !winAuthority) {
+    return {
+      bridged: false,
+      reason: `Commercial mission ${input.missionId} has no account_won Authority Receipt`,
+    };
+  }
+  if (isWon) {
+    const match = /^commercial_mission_events:(\d+)$/.exec(input.evidenceReference.trim());
+    if (!match) {
+      return { bridged: false, reason: "Account win evidence is not a persisted mission event" };
+    }
+    const [event] = await db
+      .select({
+        missionId: commercialMissionEvents.missionId,
+        eventName: commercialMissionEvents.eventName,
+        metadataJson: commercialMissionEvents.metadataJson,
+      })
+      .from(commercialMissionEvents)
+      .where(
+        and(
+          eq(commercialMissionEvents.tenantId, input.tenantId),
+          eq(commercialMissionEvents.id, Number(match[1]))
+        )
+      )
+      .limit(1);
+    const eventMetadata =
+      event?.metadataJson && typeof event.metadataJson === "object"
+        ? (event.metadataJson as Record<string, unknown>)
+        : {};
+    if (
+      !event ||
+      event.missionId !== input.missionId ||
+      event.eventName !== "account_won" ||
+      eventMetadata.authorityReceiptId !== winAuthority!.id
+    ) {
+      return { bridged: false, reason: "Account win event is not bound to its Authority Receipt" };
+    }
+  }
+
   const recorded = await recordGoalCycleOutcome({
     tenantId: input.tenantId,
     objectiveId: targetObjective.id,
@@ -273,6 +342,7 @@ export async function bridgeCommercialResolution(
       missionId: input.missionId,
       resolution: input.resolution,
       ...input.metadata,
+      ...(winAuthority ? { authorityReceiptId: winAuthority.id } : {}),
     },
   });
   const outcome = recorded.outcome;
@@ -415,6 +485,35 @@ export async function bridgeCleanCloudPaidOrder(
   if (!input.tenantId?.trim()) throw new Error("tenantId is required");
   if (!input.cleancloudOrderId?.trim()) throw new Error("cleancloudOrderId is required");
 
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const sourceRows = await db
+    .select({
+      paid: cleancloudPaidOrders.paid,
+      totalCents: cleancloudPaidOrders.totalCents,
+      cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+      paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+      paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+      placedAtUtc: cleancloudPaidOrders.placedAtUtc,
+    })
+    .from(cleancloudPaidOrders)
+    .where(
+      and(
+        eq(cleancloudPaidOrders.tenantId, input.tenantId),
+        eq(cleancloudPaidOrders.cleancloudOrderId, input.cleancloudOrderId.trim())
+      )
+    );
+  const authoritativeSource = sourceRows.find(
+    row => row.paid === true && (row.totalCents ?? 0) > 0 && row.totalCents === input.totalCents
+  );
+  if (!authoritativeSource) {
+    return {
+      bridged: false,
+      reason: "payment_evidence_mismatch",
+      message: `CleanCloud order #${input.cleancloudOrderId} caller values do not match persisted paid-order evidence`,
+    };
+  }
+
   // Rule 2: Unpaid orders or 0 total can never be economic outcomes
   if (!input.paid || input.totalCents <= 0) {
     return {
@@ -475,6 +574,20 @@ export async function bridgeCleanCloudPaidOrder(
         ? new Date(input.paidDateUtc)
         : new Date();
 
+  const paymentAuthority = await findAuthorityReceiptForSubject({
+    tenantId: input.tenantId,
+    claimType: "payment_verified",
+    subjectType: "cleancloud_order",
+    subjectId: input.cleancloudOrderId.trim(),
+  });
+  if (!paymentAuthority) {
+    return {
+      bridged: false,
+      reason: "payment_authority_missing",
+      message: `CleanCloud order #${input.cleancloudOrderId} has no payment_verified Authority Receipt`,
+    };
+  }
+
   const bound = await bindEconomicOutcome({
     tenantId: input.tenantId,
     objectiveId: matchedObjective.id,
@@ -493,6 +606,7 @@ export async function bridgeCleanCloudPaidOrder(
       cleancloudCustomerId: input.cleancloudCustomerId ?? null,
       sourceFileName: input.sourceFileName ?? null,
       ...input.metadata,
+      authorityReceiptId: paymentAuthority.id,
     },
   });
 
