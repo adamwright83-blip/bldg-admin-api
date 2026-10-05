@@ -27,15 +27,15 @@ type Props = {
 };
 
 const presidentImages = [
-  "/assets/joystick-home/president-feature-growth.webp",
-  "/assets/joystick-home/president-feature-system.webp",
-  "/assets/joystick-home/president-feature-company.webp",
+  "/assets/joystick-home/president-feature-growth.jpg",
+  "/assets/joystick-home/president-feature-system.jpg",
+  "/assets/joystick-home/president-feature-company.jpg",
 ];
 
 const mitchImages = [
-  "/assets/joystick-home/mitch-emberline.webp",
-  "/assets/joystick-home/mitch-northreach.webp",
-  "/assets/joystick-home/mitch-thornhollow.webp",
+  "/assets/joystick-home/mitch-emberline.jpg",
+  "/assets/joystick-home/mitch-northreach.jpg",
+  "/assets/joystick-home/mitch-thornhollow.jpg",
 ];
 
 function money(value: number | null | undefined) {
@@ -135,7 +135,7 @@ export default function JoystickHome({
         <Link href="/" className="jh-brand" aria-label="JOYSTICK Home">
           <img
             className="jh-brand-logo"
-            src="/assets/joystick-home/joystick-logo.webp"
+            src="/assets/joystick-home/joystick-logo.jpg"
             alt="JOYSTICK"
           />
         </Link>
