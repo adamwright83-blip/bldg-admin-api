@@ -99,6 +99,14 @@ You do not have a shell tool. The wrapper owns commands, tests, git, network pub
 The wrapper will independently run mandatory validation after you finish editing.
 If the mission cannot be completed safely, make no speculative broad changes and explain the blocker in your final response.`;
 
+  if (process.env.ANTHROPIC_API_KEY?.trim())
+    return runAnthropicWorkspaceAgent({
+      cwd: input.cwd,
+      mission: input.mission,
+      system,
+      repairContext: input.repairContext,
+    });
+
   const prompt = JSON.stringify({
     missionId: input.mission.id,
     cycleId: input.mission.cycleId,
@@ -198,7 +206,11 @@ If the mission cannot be completed safely, make no speculative broad changes and
 }
 
 export class PresidentEngineeringExecutor {
-  readonly actorId = "president-executor:claude-cli";
+  get actorId() {
+    return process.env.ANTHROPIC_API_KEY?.trim()
+      ? "president-executor:anthropic-api"
+      : "president-executor:claude-cli";
+  }
 
   async available(): Promise<boolean> {
     const root = repoRoot();
@@ -214,13 +226,15 @@ export class PresidentEngineeringExecutor {
       cwd: root,
       timeoutMs: 10_000,
     });
+    if (git.exitCode !== 0 || gh.exitCode !== 0) return false;
+    if (process.env.ANTHROPIC_API_KEY?.trim()) return true;
     const claude = await runPresidentCommand({
       command: process.env.PRESIDENT_CLAUDE_BINARY?.trim() || "claude",
       args: ["--version"],
       cwd: root,
       timeoutMs: 10_000,
     });
-    return git.exitCode === 0 && gh.exitCode === 0 && claude.exitCode === 0;
+    return claude.exitCode === 0;
   }
 
   async execute(mission: PresidentCycleMission): Promise<PresidentEngineeringExecutionResult> {
