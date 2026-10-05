@@ -1,8 +1,10 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import type { PresidentCycleMission } from "../../../shared/presidentCycle";
+import { ENV } from "../../_core/env";
 import { commandLabel, runPresidentCommand, type PresidentCommandResult } from "./exec";
 import type { PresidentEngineeringExecutionResult } from "./engineering";
 
@@ -69,10 +71,17 @@ async function invokeIndependentReviewer(input: {
   diff: string;
 }): Promise<PresidentIndependentReviewResult> {
   const binary = process.env.PRESIDENT_CLAUDE_BINARY?.trim() || "claude";
-  const model = process.env.PRESIDENT_REVIEW_MODEL?.trim() ||
-    process.env.PRESIDENT_CLAUDE_MODEL?.trim() ||
-    "sonnet";
-  const reviewerId = "president-reviewer:claude-cli";
+  const useApi = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  const model = useApi
+    ? process.env.PRESIDENT_REVIEW_MODEL?.trim() ||
+      process.env.PRESIDENT_MODEL?.trim() ||
+      ENV.anthropicModel
+    : process.env.PRESIDENT_REVIEW_MODEL?.trim() ||
+      process.env.PRESIDENT_CLAUDE_MODEL?.trim() ||
+      "sonnet";
+  const reviewerId = useApi
+    ? "president-reviewer:anthropic-api"
+    : "president-reviewer:claude-cli";
   if (reviewerId === input.execution.executorId)
     throw new Error("President reviewer must be different from executor");
 
@@ -114,86 +123,150 @@ PASS requires every exact criterion to appear once and pass.`;
     diff: input.diff.slice(0, 180_000),
   });
 
-  const stdout = await new Promise<string>((resolve, reject) => {
-    const child = spawn(
-      binary,
-      [
-        "--print",
-        "--output-format",
-        "json",
-        "--model",
-        model,
-        "--max-budget-usd",
-        process.env.PRESIDENT_REVIEW_MAX_USD?.trim() || "3",
-        "--tools",
-        "Read,Glob,Grep",
-        "--allowedTools",
-        "Read,Glob,Grep",
-        "--strict-mcp-config",
-        "--mcp-config",
-        '{"mcpServers":{}}',
-        "--setting-sources",
-        "user",
-        "--settings",
-        '{"disableAllHooks":true}',
-        "--disable-slash-commands",
-        "--no-session-persistence",
-        "--system-prompt",
-        system,
-      ],
-      {
-        cwd: input.cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          USER: process.env.USER,
-          LOGNAME: process.env.LOGNAME,
-          TMPDIR: process.env.TMPDIR,
+  let raw: unknown;
+  if (useApi) {
+    const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+    const response: any = await client.messages.create({
+      model,
+      max_tokens: 8192,
+      temperature: 0,
+      system,
+      messages: [{ role: "user", content: prompt }],
+      tools: [
+        {
+          name: "submit_review",
+          description: "Submit the independent President mission review.",
+          input_schema: {
+            type: "object",
+            properties: {
+              verdict: {
+                type: "string",
+                enum: ["PASS", "FAIL", "BLOCKED"],
+              },
+              acceptanceResults: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    criterion: { type: "string" },
+                    passed: { type: "boolean" },
+                    evidence: { type: "string" },
+                  },
+                  required: ["criterion", "passed", "evidence"],
+                  additionalProperties: false,
+                },
+              },
+              observedRisks: {
+                type: "array",
+                items: { type: "string" },
+              },
+              requiredRevision: {
+                anyOf: [{ type: "string" }, { type: "null" }],
+              },
+            },
+            required: [
+              "verdict",
+              "acceptanceResults",
+              "observedRisks",
+              "requiredRevision",
+            ],
+            additionalProperties: false,
+          },
         },
-      }
+      ],
+      tool_choice: { type: "tool", name: "submit_review" },
+    } as any);
+    const toolBlock = (response.content ?? []).find(
+      (block: any) =>
+        block.type === "tool_use" && block.name === "submit_review"
     );
-    let output = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error("President independent review timed out"));
-    }, 20 * 60 * 1000);
-    child.stdout.on("data", chunk => {
-      output += String(chunk);
-      if (output.length > 1_000_000) {
+    if (!toolBlock)
+      throw new Error("President Anthropic reviewer returned no structured review");
+    raw = toolBlock.input;
+  } else {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        binary,
+        [
+          "--print",
+          "--output-format",
+          "json",
+          "--model",
+          model,
+          "--max-budget-usd",
+          process.env.PRESIDENT_REVIEW_MAX_USD?.trim() || "3",
+          "--tools",
+          "Read,Glob,Grep",
+          "--allowedTools",
+          "Read,Glob,Grep",
+          "--strict-mcp-config",
+          "--mcp-config",
+          '{"mcpServers":{}}',
+          "--setting-sources",
+          "user",
+          "--settings",
+          '{"disableAllHooks":true}',
+          "--disable-slash-commands",
+          "--no-session-persistence",
+          "--system-prompt",
+          system,
+        ],
+        {
+          cwd: input.cwd,
+          stdio: ["pipe", "pipe", "pipe"],
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            USER: process.env.USER,
+            LOGNAME: process.env.LOGNAME,
+            TMPDIR: process.env.TMPDIR,
+          },
+        }
+      );
+      let output = "";
+      const timer = setTimeout(() => {
         child.kill("SIGTERM");
-        reject(new Error("President independent review output exceeded bound"));
-      }
+        reject(new Error("President independent review timed out"));
+      }, 20 * 60 * 1000);
+      child.stdout.on("data", chunk => {
+        output += String(chunk);
+        if (output.length > 1_000_000) {
+          child.kill("SIGTERM");
+          reject(new Error("President independent review output exceeded bound"));
+        }
+      });
+      child.stderr.resume();
+      child.on("error", error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.on("close", code => {
+        clearTimeout(timer);
+        code === 0
+          ? resolve(output)
+          : reject(new Error(`President reviewer exited ${code}`));
+      });
+      child.stdin.end(prompt);
     });
-    child.stderr.resume();
-    child.on("error", error => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", code => {
-      clearTimeout(timer);
-      code === 0
-        ? resolve(output)
-        : reject(new Error(`President reviewer exited ${code}`));
-    });
-    child.stdin.end(prompt);
-  });
 
-  const envelope = JSON.parse(stdout) as {
-    is_error?: boolean;
-    result?: string;
-    structured_output?: unknown;
-  };
-  if (envelope.is_error) throw new Error("President reviewer returned an error");
-  const raw =
-    envelope.structured_output !== undefined
-      ? envelope.structured_output
-      : JSON.parse(
-          String(envelope.result ?? "")
-            .trim()
-            .replace(/^\`\`\`(?:json)?\s*/i, "")
-            .replace(/\s*\`\`\`$/, "")
-        );
+    const envelope = JSON.parse(stdout) as {
+      is_error?: boolean;
+      result?: string;
+      structured_output?: unknown;
+    };
+    if (envelope.is_error)
+      throw new Error("President reviewer returned an error");
+    raw =
+      envelope.structured_output !== undefined
+        ? envelope.structured_output
+        : JSON.parse(
+            String(envelope.result ?? "")
+              .trim()
+              .replace(/^\`\`\`(?:json)?\s*/i, "")
+              .replace(/\s*\`\`\`$/, "")
+          );
+  }
+
   if (typeof raw !== "object" || raw === null)
     throw new Error("President reviewer returned invalid JSON");
   const value = raw as {
@@ -256,7 +329,11 @@ PASS requires every exact criterion to appear once and pass.`;
 }
 
 export class PresidentIndependentReviewer {
-  readonly actorId = "president-reviewer:claude-cli";
+  get actorId() {
+    return process.env.ANTHROPIC_API_KEY?.trim()
+      ? "president-reviewer:anthropic-api"
+      : "president-reviewer:claude-cli";
+  }
 
   async review(
     mission: PresidentCycleMission,
