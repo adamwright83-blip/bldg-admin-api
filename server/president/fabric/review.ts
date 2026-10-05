@@ -110,8 +110,6 @@ PASS requires every exact criterion to appear once and pass.`;
     validation: input.validation.map(item => ({
       command: commandLabel(item),
       exitCode: item.exitCode,
-      stdoutTail: item.stdout.slice(-5000),
-      stderrTail: item.stderr.slice(-5000),
     })),
     diff: input.diff.slice(0, 180_000),
   });
