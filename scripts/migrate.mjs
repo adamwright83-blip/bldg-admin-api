@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Canonical sales readers require durable economic decisions and source revisions.
+const salesTruthDdl = await readFile(new URL("../drizzle/0116_claire_sales_reconciliation.sql", import.meta.url), "utf8");
+for (const statement of salesTruthDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Claire sales reconciliation");
+}
+
 // Mitch event inbox is required: never boot an event worker without durable dedupe.
 const mitchEventDdl = await readFile(new URL("../drizzle/0111_mitch_producer_events.sql", import.meta.url), "utf8");
 for (const statement of mitchEventDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {

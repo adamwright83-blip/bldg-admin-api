@@ -1,0 +1,354 @@
+{
+  "boundary": "candidate canonical reader against production database; deployed HTTP conversation unverified",
+  "results": [
+    {
+      "acceptance": 1,
+      "parser": "query",
+      "metric": "customer_history",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "all_time"
+        },
+        "start": "2020-01-01",
+        "end": "2026-10-04",
+        "startUtc": "2020-01-01T08:00:00.000Z",
+        "endExclusiveUtc": "2026-10-05T07:00:00.000Z",
+        "days": 2469,
+        "timeZone": "America/Los_Angeles",
+        "label": "all time"
+      },
+      "observationReference": "canonical-sales:7af0befc58472c29595eba03a95aa3dcc896e12197eb69c810f24f71836b00de",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "customer_history",
+      "matchedCustomers": 3,
+      "knownCustomerResolved": true
+    },
+    {
+      "acceptance": 2,
+      "parser": "query",
+      "metric": "customer_history",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "all_time"
+        },
+        "start": "2020-01-01",
+        "end": "2026-10-04",
+        "startUtc": "2020-01-01T08:00:00.000Z",
+        "endExclusiveUtc": "2026-10-05T07:00:00.000Z",
+        "days": 2469,
+        "timeZone": "America/Los_Angeles",
+        "label": "all time"
+      },
+      "observationReference": "canonical-sales:7af0befc58472c29595eba03a95aa3dcc896e12197eb69c810f24f71836b00de",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "customer_history",
+      "matchedCustomers": 3,
+      "knownCustomerResolved": true
+    },
+    {
+      "acceptance": 3,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:3b2bb9e0d92230a311849becfb8b3a55c8d402e3066be53a6a31e6f65ac7c51a",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 374595,
+        "orderCount": 48,
+        "aovCents": 7804
+      },
+      "previous": {
+        "revenueCents": 218378,
+        "orderCount": 34,
+        "aovCents": 6423
+      }
+    },
+    {
+      "acceptance": 4,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:3b2bb9e0d92230a311849becfb8b3a55c8d402e3066be53a6a31e6f65ac7c51a",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 374595,
+        "orderCount": 48,
+        "aovCents": 7804
+      },
+      "previous": null
+    },
+    {
+      "acceptance": 5,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:decdd6961961484a326f8118e3413d0d449e9a94e4e77e00eac1744e22ad9c86",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 25096,
+        "orderCount": 6,
+        "aovCents": 4183
+      },
+      "previous": null
+    },
+    {
+      "acceptance": 6,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:2855b5453cd119d8f77eb258b38af9fb01e12711454cad3a8bae7d3ec7f1cbe4",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 0,
+        "orderCount": 0,
+        "aovCents": null
+      },
+      "previous": null
+    },
+    {
+      "acceptance": 7,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:0f50769c001b463b004a8925dc7eb75dbec0055d48ffb8fa07e820464e29a80d",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 349499,
+        "orderCount": 42,
+        "aovCents": 8321
+      },
+      "previous": null
+    },
+    {
+      "acceptance": 8,
+      "parser": "query",
+      "metric": "revenue",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:a20cf10b517ba5e12059658070dda3bc8a9a3070df88198640828421c3424618",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 52951,
+        "orderCount": 8,
+        "aovCents": 6619
+      },
+      "previous": null
+    },
+    {
+      "acceptance": 9,
+      "parser": "query",
+      "metric": "composition",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "all_time"
+        },
+        "start": "2020-01-01",
+        "end": "2026-10-04",
+        "startUtc": "2020-01-01T08:00:00.000Z",
+        "endExclusiveUtc": "2026-10-05T07:00:00.000Z",
+        "days": 2469,
+        "timeZone": "America/Los_Angeles",
+        "label": "all time"
+      },
+      "observationReference": "canonical-sales:9837ee68f675d1a8c6a0553c3abb82023e2471005cc9a6204af2ca03cb3f4aaa",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "composition",
+      "serviceLines": [
+        {
+          "key": "laundry_butler",
+          "label": "Laundry Butler",
+          "cents": 219701,
+          "orders": 41
+        },
+        {
+          "key": "unresolved",
+          "label": "unresolved service line",
+          "cents": 81650,
+          "orders": 15
+        }
+      ]
+    },
+    {
+      "acceptance": 10,
+      "parser": "query",
+      "metric": "dormant_customers",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "trailing_days",
+          "days": 90
+        },
+        "start": "2026-07-07",
+        "end": "2026-10-04",
+        "startUtc": "2026-07-07T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-05T07:00:00.000Z",
+        "days": 90,
+        "timeZone": "America/Los_Angeles",
+        "label": "the last 90 days"
+      },
+      "observationReference": "canonical-sales:0fdb367aca579d3b33d0091ecb7d3acb1e5c0b2b11414cf6580d6c98c4b26313",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "customers",
+      "derivedCustomerCount": 66
+    },
+    {
+      "acceptance": 11,
+      "parser": "query",
+      "metric": "top_customers",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "last_month"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "last month"
+      },
+      "observationReference": "canonical-sales:3b2bb9e0d92230a311849becfb8b3a55c8d402e3066be53a6a31e6f65ac7c51a",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "top_customers",
+      "derivedCustomerCount": 5
+    },
+    {
+      "acceptance": 12,
+      "parser": "query",
+      "metric": "revenue_drivers",
+      "status": "ok",
+      "period": {
+        "spec": {
+          "kind": "between",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        },
+        "start": "2026-09-01",
+        "end": "2026-09-30",
+        "startUtc": "2026-09-01T07:00:00.000Z",
+        "endExclusiveUtc": "2026-10-01T07:00:00.000Z",
+        "days": 30,
+        "timeZone": "America/Los_Angeles",
+        "label": "September"
+      },
+      "observationReference": "canonical-sales:3b2bb9e0d92230a311849becfb8b3a55c8d402e3066be53a6a31e6f65ac7c51a",
+      "precision": "recorded_only",
+      "mayStateExact": false,
+      "dataKind": "totals",
+      "current": {
+        "revenueCents": 374595,
+        "orderCount": 48,
+        "aovCents": 7804
+      },
+      "previous": {
+        "revenueCents": 218378,
+        "orderCount": 34,
+        "aovCents": 6423
+      }
+    }
+  ]
+}

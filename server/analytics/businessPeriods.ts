@@ -215,6 +215,10 @@ export function previousPeriod(period: ResolvedPeriod, now = new Date()): Resolv
   const today = zonedYmd(now, tz);
   const between = (start: string, end: string, label: string): ResolvedPeriod =>
     build({ kind: "between", start, end, label }, start, end, today, tz);
+  if (period.spec.kind === "between" && period.start === monthStart(period.start) && period.end === monthEnd(period.start)) {
+    const start = addMonthsToMonthStart(period.start, -1);
+    return between(start, monthEnd(start), MONTHS[Number(start.slice(5, 7)) - 1]!);
+  }
   switch (period.spec.kind) {
     case "today":
       return resolvePeriod({ kind: "yesterday" }, now, tz);
@@ -361,7 +365,8 @@ export function parsePeriodPhrase(
     }
   }
 
-  const inMonth = new RegExp(`\\b(?:in|for|during|of)\\s+${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text);
+  const inMonth = new RegExp(`\\b(?:in|for|during|of)\\s+${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text)
+    ?? new RegExp(`\\b${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text);
   if (inMonth) {
     const idx = monthIndex(inMonth[1]!);
     const start = pastDate(idx, 1, today, inMonth[2] ? Number(inMonth[2]) : undefined);

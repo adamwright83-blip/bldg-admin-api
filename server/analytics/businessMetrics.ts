@@ -32,10 +32,11 @@ export function eventsInSpan(
  */
 export function summarizeTotals(events: readonly PaidOrderEvent[]): RevenueTotals {
   const revenueCents = events.reduce((sum, event) => sum + event.cents, 0);
+  const orderCount = events.filter(event => event.cents > 0).length;
   return {
     revenueCents,
-    orderCount: events.length,
-    aovCents: events.length ? Math.round(revenueCents / events.length) : null,
+    orderCount,
+    aovCents: orderCount ? Math.round(revenueCents / orderCount) : null,
   };
 }
 
@@ -94,7 +95,7 @@ export function bucketSeries(
       groupBy === "day" ? event.businessDate : groupBy === "week" ? weekStart(event.businessDate) : event.businessDate.slice(0, 7);
     const point = buckets.get(bucket) ?? { bucket, revenueCents: 0, orderCount: 0 };
     point.revenueCents += event.cents;
-    point.orderCount += 1;
+    if (event.cents > 0) point.orderCount += 1;
     buckets.set(bucket, point);
   }
   return Array.from(buckets.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
@@ -134,6 +135,7 @@ export function groupCustomers(events: readonly PaidOrderEvent[]): CustomerGroup
 
 function summarize(group: CustomerGroup, records: readonly PaidOrderEvent[]): CustomerSummary {
   const sorted = [...records].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const sales = sorted.filter(record => record.cents > 0);
   const named = [...group.records]
     .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
     .find(record => record.customerName);
@@ -141,10 +143,10 @@ function summarize(group: CustomerGroup, records: readonly PaidOrderEvent[]): Cu
     identityId: group.identityId,
     displayName: named?.customerName ?? "an unnamed customer",
     matched: group.matched,
-    orderCount: sorted.length,
+    orderCount: sorted.filter(record => record.cents > 0).length,
     revenueCents: sorted.reduce((sum, record) => sum + record.cents, 0),
-    firstOrderDate: sorted[0]?.businessDate ?? null,
-    lastOrderDate: sorted[sorted.length - 1]?.businessDate ?? null,
+    firstOrderDate: sales[0]?.businessDate ?? null,
+    lastOrderDate: sales[sales.length - 1]?.businessDate ?? null,
     sources: Array.from(new Set(sorted.map(record => record.source))),
   };
 }
@@ -158,7 +160,9 @@ function population(members: CustomerSummary[]): CustomerPopulation {
 }
 
 function byRevenue(a: CustomerSummary, b: CustomerSummary): number {
-  return b.revenueCents - a.revenueCents || b.orderCount - a.orderCount || a.displayName.localeCompare(b.displayName);
+  return (
+    b.revenueCents - a.revenueCents || b.orderCount - a.orderCount || a.displayName.localeCompare(b.displayName)
+  );
 }
 
 /** Customers with at least `minOrders` paid orders inside `span`. */
@@ -169,7 +173,7 @@ export function activeCustomerPopulation(
 ): CustomerPopulation {
   const members = groupCustomers(historyEvents)
     .map(group => ({ group, inSpan: eventsInSpan(group.records, span) }))
-    .filter(({ inSpan }) => inSpan.length >= Math.max(1, minOrders))
+    .filter(({ inSpan }) => inSpan.filter(event => event.cents > 0).length >= Math.max(1, minOrders))
     .map(({ group, inSpan }) => summarize(group, inSpan))
     .sort(byRevenue);
   return population(members);
@@ -192,9 +196,9 @@ export function newCustomerPopulation(
     inSpan: eventsInSpan(group.records, span),
     prior: eventsInSpan(group.records, before),
   }));
-  const active = groups.filter(({ inSpan }) => inSpan.length >= Math.max(1, minOrders));
+  const active = groups.filter(({ inSpan }) => inSpan.filter(event => event.cents > 0).length >= Math.max(1, minOrders));
   const members = active
-    .filter(({ prior }) => prior.length === 0)
+    .filter(({ prior }) => prior.filter(event => event.cents > 0).length === 0)
     .map(({ group, inSpan }) => summarize(group, inSpan))
     .sort(byRevenue);
   return { ...population(members), activeCount: active.length };
@@ -213,7 +217,7 @@ export function dormantCustomerPopulation(
   const before = { start: lookbackStart, end: addDaysYmd(quietSpan.start, -1) };
   const members = groupCustomers(historyEvents)
     .map(group => ({ group, prior: eventsInSpan(group.records, before), quiet: eventsInSpan(group.records, quietSpan) }))
-    .filter(({ prior, quiet }) => prior.length >= Math.max(1, minPriorOrders) && quiet.length === 0)
+    .filter(({ prior, quiet }) => prior.filter(event => event.cents > 0).length >= Math.max(1, minPriorOrders) && quiet.every(event => event.cents <= 0))
     .map(({ group, prior }) => summarize(group, prior))
     .sort((a, b) => (b.lastOrderDate ?? "").localeCompare(a.lastOrderDate ?? "") || byRevenue(a, b));
   return population(members);
@@ -330,18 +334,19 @@ export function customerDetailFor(
 ): CustomerDetail {
   const inSpan = eventsInSpan(group.records, span).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
   const base = summarize(group, inSpan);
-  const days = Array.from(new Set(inSpan.map(event => event.businessDate))).map(dayNumber).sort((a, b) => a - b);
+  const paidSales = inSpan.filter(event => event.cents > 0);
+  const days = Array.from(new Set(paidSales.map(event => event.businessDate))).map(dayNumber).sort((a, b) => a - b);
   const gaps = days.slice(1).map((day, index) => day - days[index]!);
   const largest = inSpan.reduce<PaidOrderEvent | null>((best, event) => (!best || event.cents > best.cents ? event : best), null);
-  const allSorted = [...group.records].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const allSorted = group.records.filter(event => event.cents > 0).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
   const lastEver = allSorted[allSorted.length - 1];
   return {
     ...base,
     identityKeys: group.keys,
     nameVariants: Array.from(new Set(group.records.map(record => record.customerName).filter((name): name is string => Boolean(name)))),
     largestOrder: largest ? orderBrief(largest) : null,
-    lastOrder: inSpan.length ? orderBrief(inSpan[inSpan.length - 1]!) : null,
-    firstOrder: inSpan.length ? orderBrief(inSpan[0]!) : null,
+    lastOrder: paidSales.length ? orderBrief(paidSales[paidSales.length - 1]!) : null,
+    firstOrder: paidSales.length ? orderBrief(paidSales[0]!) : null,
     medianGapDays: median(gaps),
     averageGapDays: gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null,
     daysSinceLastOrder: lastEver ? dayNumber(today) - dayNumber(lastEver.businessDate) : null,
@@ -389,7 +394,7 @@ export function eventsForCustomerKeys(events: readonly PaidOrderEvent[], keys: r
 
 // ── Grouping and ranking ─────────────────────────────────────────────────────
 
-export type GroupDimension = "month" | "week" | "day" | "business_line" | "source" | "processor" | "building" | "service";
+export type GroupDimension = | "month" | "week" | "day" | "business_line" | "source" | "processor" | "building" | "service";
 
 export type GroupRow = { key: string; revenueCents: number; orderCount: number; aovCents: number | null };
 
@@ -419,7 +424,7 @@ export function groupEvents(events: readonly PaidOrderEvent[], dimension: GroupD
     const key = keyOf(event);
     const row = map.get(key) ?? { key, revenueCents: 0, orderCount: 0, aovCents: null };
     row.revenueCents += event.cents;
-    row.orderCount += 1;
+    if (event.cents > 0) row.orderCount += 1;
     map.set(key, row);
   }
   return Array.from(map.values())

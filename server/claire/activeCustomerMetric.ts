@@ -1,3 +1,4 @@
+import { reconcileLedgerSpan } from "../analytics/canonicalRevenue";
 import { fromZonedTime } from "date-fns-tz";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { activeCustomerPopulation } from "../analytics/businessMetrics";
@@ -87,7 +88,7 @@ export async function getActiveCustomerMetric(input: {
     loaders
   );
   const population = activeCustomerPopulation(
-    ledger.events,
+    reconcileLedgerSpan(ledger, { start: zonedYmd(window.start, timeZone), end: zonedYmd(now, timeZone) }).includedEvents,
     { start: zonedYmd(window.start, timeZone), end: zonedYmd(now, timeZone) },
     1
   );

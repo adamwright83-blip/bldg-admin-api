@@ -1,11 +1,12 @@
 /* LEGACY DAYFORGE COMPATIBILITY: cleancloud browser sync ingestion foundation */
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { salesSourceRevisions } from "../analytics/salesReconciliationStore";
 import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
-import { validatePayload } from "./validation";
+import { validatePayload, validateHistoricalPayload } from "./validation";
 import {
   cleancloudPaidOrders,
   cleancloudImportBatches,
@@ -61,6 +62,11 @@ function businessFields(row: Record<string, unknown>): string {
     updatedAt,
     ...business
   } = row;
+  // MySQL DECIMAL returns fixed-scale strings; exports may omit trailing zeros.
+  if (business.totalWeightLbs != null)
+    business.totalWeightLbs = Number(
+      Number(business.totalWeightLbs).toFixed(2)
+    );
   const canonical = (value: unknown): unknown => {
     if (value instanceof Date) return value.toISOString();
     if (Array.isArray(value)) return value.map(canonical);
@@ -169,7 +175,8 @@ export async function recordSyncAttempt(input: {
  * bridges to Persistent Growth Operator, and assimilates customer truth.
  */
 export async function executeCleanCloudIngestion(
-  input: CleanCloudIngestionInput
+  input: CleanCloudIngestionInput,
+  options?: { trustedLocalHistoricalImport: true }
 ): Promise<CleanCloudIngestionResult> {
   const db = await getDb();
   if (!db) {
@@ -183,7 +190,10 @@ export async function executeCleanCloudIngestion(
   const sourcePrefix = input.sourcePrefix ?? "browser";
 
   // 1. Validate payload
-  const { normalized, digest } = validatePayload(
+  const { normalized, digest } = (
+    options?.trustedLocalHistoricalImport
+      ? validateHistoricalPayload
+      : validatePayload)(
     {
       csv: input.csv,
       exportUrl: input.exportUrl,
@@ -197,15 +207,25 @@ export async function executeCleanCloudIngestion(
 
   // 2. Resolve physical entity IDs for addresses
   const physicalIds = new Map<string, string | null>();
+  const addressPhysicalIds = new Map<string, string | null>();
   for (const row of normalized) {
+    if (row.buildingResolutionStatus !== "resolved" || !row.address) {
     physicalIds.set(
       row.cleancloudOrderId,
-      row.buildingResolutionStatus === "resolved"
-        ? await findPhysicalEntityIdByAddress({
+      null);
+      continue;
+    }
+    if (!addressPhysicalIds.has(row.address))
+      addressPhysicalIds.set(
+        row.address,
+        await findPhysicalEntityIdByAddress({
             tenantId: input.tenantId,
             address: row.address,
           })
-        : null
+        );
+    physicalIds.set(
+      row.cleancloudOrderId,
+      addressPhysicalIds.get(row.address) ?? null
     );
   }
 
@@ -275,6 +295,33 @@ export async function executeCleanCloudIngestion(
 
     for (const row of normalized) {
       const values = { ...row, importBatchId: batch.id, sourceFileName };
+      const fingerprint = createHash("sha256")
+        .update(businessFields(row))
+        .digest("hex");
+      await tx
+        .insert(salesSourceRevisions)
+        .values({
+          tenantId: input.tenantId,
+          orderId: row.cleancloudOrderId,
+          reportType,
+          fingerprint,
+          importBatchId: batch.id,
+          amounts: {
+            paid: row.paid,
+            netCents: row.totalCents,
+            subtotalCents: row.subtotalCents,
+            discountCents: row.discountCents,
+            creditCents: row.creditCents,
+          },
+          dates: {
+            placedAt: row.placedAtUtc?.toISOString() ?? null,
+            paymentAt:
+              row.paymentDateUtc?.toISOString() ??
+              row.paidDateUtc?.toISOString() ??
+              null,
+          },
+        })
+        .onDuplicateKeyUpdate({ set: { fingerprint } });
       await enqueueEconomicSnapshot(
         tx,
         values,
@@ -339,6 +386,9 @@ export async function executeCleanCloudIngestion(
       from: input.from,
       to: input.to,
       reportType,
+      sourceEvidenceKind: options?.trustedLocalHistoricalImport
+        ? "operator_supplied_historical_export"
+        : "observed_export",
       completedAt: completedAt.toISOString(),
       batchId: batch.id,
       inserted,
@@ -346,6 +396,21 @@ export async function executeCleanCloudIngestion(
       unchanged,
       skipped: 0,
       totalRows: normalized.length,
+      uniqueOrderCount: new Set(normalized.map(row => row.cleancloudOrderId))
+        .size,
+      sourceDateCoverage: {
+        earliest:
+          normalized
+            .map(row => row.placedAtUtc?.toISOString())
+            .filter(Boolean)
+            .sort()[0] ?? null,
+        latest:
+          normalized
+            .map(row => row.placedAtUtc?.toISOString())
+            .filter(Boolean)
+            .sort()
+            .at(-1) ?? null,
+      },
       importCommitted: true,
       ...summarizeOrders(normalized),
       scope:

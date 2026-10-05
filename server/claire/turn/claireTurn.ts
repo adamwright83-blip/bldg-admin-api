@@ -1,3 +1,4 @@
+import type { SalesInsightArtifact } from "../proactive/salesInsights";
 import { businessToday } from "../../analytics/businessPeriods";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import type { DayDirectorProposal } from "../../../shared/dayDirector";
@@ -232,6 +233,7 @@ export type ClaireTurnInput = {
 };
 
 export type ClaireTurnResult = {
+  salesArtifacts?: SalesInsightArtifact[];
   speak: string;
   kind:
     | "listening"
@@ -303,7 +305,7 @@ export type ClaireTurnDeps = {
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
-  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; recoveryAccounts?: Array<{ id: string; name: string }> }>;
+  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; salesArtifacts?: SalesInsightArtifact[]; recoveryAccounts?: Array<{ id: string; name: string }> }>;
   recoveryObligations?: typeof loadObligations;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
@@ -370,7 +372,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
             (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
         )
         .map(item => ({ id: item.subjectKey, name: item.subjectName }));
-      return { brief: board.brief, recoveryAccounts };
+      return { brief: board.brief, salesArtifacts: board.salesArtifacts, recoveryAccounts };
     },
     recoveryObligations: loadObligations,
     doctrineTurn: handleDoctrineTurn,
@@ -1300,7 +1302,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         const surfaced = recoveryRefsNamedInSpeech(board.brief, board.recoveryAccounts ?? []);
         if (surfaced.length) state.surfacedRecoveryAccounts = surfaced;
         mark("proactive_board");
-        return finish({ speak: board.brief, kind: "answered" });
+        return finish({ speak: board.brief, salesArtifacts: "salesArtifacts" in board ? board.salesArtifacts : undefined, kind: "answered" });
       }
     }
   }
@@ -2549,7 +2551,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     const loadedEvidence: ClaireRouteEvidence[] = [];
-    if (encyclopediaResult?.kind !== "no_retrieval_needed") {
+    if (encyclopediaResult?.kind !== "no_retrieval_needed"|| /\b(revenue|sales|spent|spend|customers?|ordered|orders?)\b|^who (?:is|was)\b/i.test(question)) {
       loadedEvidence.push(...(await gatherDeterministicEvidence(question)));
       if (encyclopediaResult && (encyclopediaResult.kind === "answered" || encyclopediaResult.kind === "unsupported_fact")) {
         for (const item of encyclopediaResult.evidence) {

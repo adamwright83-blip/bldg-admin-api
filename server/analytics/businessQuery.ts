@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import {
   getDataCompleteness,
@@ -53,6 +54,7 @@ import {
   interpretSourceCoverage,
   loadRevenueSourceCoverage,
   reconcilePaidRevenue,
+  reconcileLedgerSpan,
   revenueMayStateExact,
   type CanonicalRevenuePrecision,
   type ReadBusinessSourceCoverage,
@@ -170,6 +172,15 @@ export function defaultBusinessQuery(metric: BusinessMetric): BusinessQuery {
 }
 
 export type BusinessCoverage = {
+  observationReference?: string;
+  money?: {
+    netRevenueCents: number;
+    refundCents: number;
+    creditCents: number | null;
+    discountCents: number | null;
+    grossSalesCents: null;
+    undatedAdjustmentCents: number;
+  };
   completeness: LedgerCompleteness;
   loadedSources: LedgerSource[];
   failedSources: LedgerSource[];
@@ -191,6 +202,7 @@ export type BusinessCoverage = {
     recordedCents: number;
     statedExactCents: number | null;
     mayStateExact: boolean;
+    comparisonMayStateExact?: boolean;
     exactIncludedOrderCount: number;
     definiteDuplicateExclusionCents: number;
     suspectedWithheldCents: number;
@@ -414,7 +426,8 @@ export async function runBusinessQuery(
     if (!LEDGER_METRICS.has(query.metric)) return unavailable("unsupported_metric");
 
     const needsLookback = query.metric === "new_customers" || query.metric === "dormant_customers";
-    const lookbackStart = needsLookback ? addDaysYmd(period.start, -CUSTOMER_LOOKBACK_DAYS) : null;
+    // New/repeat and dormant classification need the entire retained history.
+    const lookbackStart = needsLookback ? "2020-01-01" : null;
     const windowStart = [period.start, comparisonPeriod?.start, lookbackStart]
       .filter((value): value is string => Boolean(value))
       .sort()[0]!;
@@ -431,7 +444,11 @@ export async function runBusinessQuery(
 
     const spans = [period, comparisonPeriod].filter((span): span is ResolvedPeriod => Boolean(span));
     const inScope = (date: string) => spans.some(span => date >= span.start && date <= span.end);
-    const filtered = scopeEvents(ledger.events, query.filters, query.filterUnion);
+    const canonicalBook = reconcileLedgerSpan(ledger, {
+      start: windowStart,
+      end: businessToday(now, timeZone),
+    });
+    const filtered = scopeEvents(canonicalBook.includedEvents, query.filters, query.filterUnion);
     const scopedEvents = filtered.filter(event => inScope(event.businessDate));
     const unverified = ledger.unverifiedNative.filter(order => inScope(order.businessDate));
     const unclassified = query.serviceType
@@ -440,7 +457,7 @@ export async function runBusinessQuery(
     const history = query.serviceType ? filtered.filter(event => event.serviceType === query.serviceType) : filtered;
     let union: BusinessCoverage["union"] = null;
     if (query.filterUnion?.length) {
-      const base = scopeEvents(ledger.events, query.filters).filter(event => inScope(event.businessDate));
+      const base = scopeEvents(canonicalBook.includedEvents, query.filters).filter(event => inScope(event.businessDate));
       const combined = unionOfSlices(base, query.filterUnion.map(slice => ({ filters: slice, label: "" })));
       union = { overlapOrders: combined.overlapOrders, overlapCents: combined.overlapCents };
     }
@@ -469,13 +486,80 @@ export async function runBusinessQuery(
     const reconcileHistorySpan = (span: { start: string; end: string }) => {
       const events = eventsInSpan(history, span);
       const keys = new Set(events.map(event => event.eventKey));
-      return reconcilePaidRevenue({
+      const read = reconcilePaidRevenue({
         events,
         provenExclusions: ledger.provenDuplicateExclusions.filter(item => keys.has(item.keptEventKey)),
         unverifiedNative: ledger.unverifiedNative.filter(
           order => order.businessDate >= span.start && order.businessDate <= span.end
         ),
       });
+      const suspected = canonicalBook.suspectedWithheld.items.filter(item => {
+        const event = ledger.events.find(
+          event => event.eventKey === item.withheldEventKey
+        );
+        return (
+          event &&
+          event.businessDate >= span.start &&
+          event.businessDate <= span.end
+        );
+      });
+      return {
+        ...read,
+        unresolvedLinkCount: canonicalBook.unresolvedLinkCount,
+        undatedAdjustments: {
+          count: ledger.undatedAdjustments?.length ?? 0,
+          cents: (ledger.undatedAdjustments ?? []).reduce(
+            (sum, item) => sum + item.cents,
+            0
+          ),
+        },
+        suspectedWithheld: {
+          count: suspected.length,
+          cents: suspected.reduce((sum, item) => sum + item.cents, 0),
+          items: suspected,
+        },
+      };
+    };
+    const initialRead = reconcileHistorySpan(period);
+    stampCanonicalRevenue(
+      coverage,
+      initialRead,
+      await readCoverageSeam(deps, tenantId, period),
+      ledger,
+      period,
+      queryAllowsExactRevenueScope(query)
+    );
+    coverage.observationReference = `canonical-sales:${createHash("sha256")
+      .update(
+        JSON.stringify({
+          tenantId,
+          period: { start: period.start, end: period.end },
+          events: initialRead.includedEvents.map(event => [
+            event.eventKey,
+            event.cents,
+          ]),
+          withheld: initialRead.suspectedWithheld.items,
+          undated: initialRead.undatedAdjustments,
+        })
+      )
+      .digest("hex")}`;
+    coverage.lineage = lineageBreakdown(initialRead.includedEvents);
+    const sumKnown = (key: "creditCents" | "discountCents") =>
+      initialRead.includedEvents.every(event => event[key] != null)
+        ? initialRead.includedEvents.reduce(
+            (sum, event) => sum + event[key]!,
+            0
+          )
+        : null;
+    coverage.money = {
+      netRevenueCents: initialRead.exactIncludedCents,
+      refundCents: initialRead.includedEvents
+        .filter(event => event.cents < 0)
+        .reduce((sum, event) => sum + event.cents, 0),
+      creditCents: sumKnown("creditCents"),
+      discountCents: sumKnown("discountCents"),
+      grossSalesCents: null,
+      undatedAdjustmentCents: initialRead.undatedAdjustments?.cents ?? 0,
     };
 
     switch (query.metric) {
@@ -498,7 +582,23 @@ export async function runBusinessQuery(
             ? historyKeepingIncluded(history, period, comparisonPeriod, currentRead, previousRead)
             : history;
         if (currentRead) {
-          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, queryAllowsExactRevenueScope(query));
+          if (previousRead && comparisonPeriod && coverage.canonicalRevenue) {
+            coverage.canonicalRevenue.comparisonMayStateExact =
+              queryAllowsExactRevenueScope(query) &&
+              revenueMayStateExact({
+                coverage: interpretSourceCoverage({
+                  snapshot: coverageSeam,
+                  window: {
+                    from: comparisonPeriod.start,
+                    to: comparisonPeriod.end,
+                  },
+                  loadedSources: ledger.loadedSources,
+                  failedSources: ledger.failedSources,
+                }),
+                reconciled: previousRead,
+              });
+          }
         }
         return ok({
           kind: "totals",
@@ -522,7 +622,7 @@ export async function runBusinessQuery(
         }
         const coverageSeam = await readCoverageSeam(deps, tenantId, period);
         const currentRead = reconcileHistorySpan(period);
-        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, queryAllowsExactRevenueScope(query));
         return ok({ kind: "profit", revenue: totalsFromReconciled(currentRead), missing });
       }
       case "active_customers":
@@ -639,6 +739,13 @@ async function readCoverageSeam(
 
 function queryNarrowsRevenue(query: BusinessQuery): boolean {
   return Boolean(query.serviceType || query.filterUnion?.length || hasLineageFilters(query.filters));
+}
+
+/** Source membership is explicit on every economic event; other narrower scopes stay conservative. */
+function queryAllowsExactRevenueScope(query: BusinessQuery): boolean {
+  if (!queryNarrowsRevenue(query)) return true;
+  return Boolean(!query.serviceType && !query.filterUnion?.length && query.filters?.sources?.length === 1 &&
+    Object.entries(query.filters).every(([key, value]) => key === "sources" || value == null || (Array.isArray(value) && !value.length)));
 }
 
 function stampCanonicalRevenue(

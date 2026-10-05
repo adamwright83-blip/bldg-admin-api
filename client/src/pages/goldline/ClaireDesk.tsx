@@ -1,3 +1,4 @@
+import type { SalesInsightArtifact } from "../../../../server/claire/proactive/salesInsights";
 import { FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -7,7 +8,13 @@ import { trpc } from "@/lib/trpc";
  */
 export default function ClaireDesk() {
   const [utterance, setUtterance] = useState("");
-  const [log, setLog] = useState<Array<{ role: "you" | "claire"; text: string }>>([]);
+  const [log, setLog] = useState<
+    Array<{
+      role: "you" | "claire";
+      text: string;
+      salesArtifacts?: SalesInsightArtifact[];
+    }>
+  >([]);
   const [conversationId] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -37,13 +44,21 @@ export default function ClaireDesk() {
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         conversationId,
       });
-      setLog(current => [...current, { role: "claire", text: result.reply }]);
+      setLog(current => [
+        ...current,
+        {
+          role: "claire",
+          text: result.reply,
+          salesArtifacts: result.salesArtifacts,
+        },
+      ]);
     } catch (error) {
       setLog(current => [
         ...current,
         {
           role: "claire",
-          text: error instanceof Error ? error.message : "Claire could not answer.",
+          text:
+            error instanceof Error ? error.message : "Claire could not answer.",
         },
       ]);
     }
@@ -63,16 +78,28 @@ export default function ClaireDesk() {
         minHeight: "100%",
       }}
     >
-      <p style={{ letterSpacing: "0.18em", fontWeight: 800, fontSize: 12, color: "#9b6410" }}>
+      <p
+        style={{
+          letterSpacing: "0.18em",
+          fontWeight: 800,
+          fontSize: 12,
+          color: "#9b6410",
+        }}
+      >
         CLAIRE
       </p>
-      <h1 style={{ fontSize: 36, margin: "8px 0 12px" }}>Same Claire. Deeper desk.</h1>
+      <h1 style={{ fontSize: 36, margin: "8px 0 12px" }}>
+        Same Claire. Deeper desk.
+      </h1>
       <p style={{ maxWidth: 560, lineHeight: 1.5, color: "#3a5f7e" }}>
         This is not a second brain. Desktop just has room for more of the same
         operator, goals, field outcomes, and campaign truth.
       </p>
       {preview.data?.brief ? (
-        <p data-testid="claire-desk-brief" style={{ marginTop: 20, fontSize: 18, lineHeight: 1.45 }}>
+        <p
+          data-testid="claire-desk-brief"
+          style={{ marginTop: 20, fontSize: 18, lineHeight: 1.45 }}
+        >
           {preview.data.brief}
         </p>
       ) : (
@@ -80,8 +107,8 @@ export default function ClaireDesk() {
       )}
       {workday ? (
         <p data-testid="claire-desk-workday" style={{ color: "#4a6a86" }}>
-          {workday.session.replaceAll("_", " ")} · tomorrow items {workday.tomorrowCount} ·
-          overnight deltas {workday.deltaCount}
+          {workday.session.replaceAll("_", " ")} · tomorrow items{" "}
+          {workday.tomorrowCount} · overnight deltas {workday.deltaCount}
         </p>
       ) : null}
       <button
@@ -107,12 +134,52 @@ export default function ClaireDesk() {
       </button>
       <div style={{ marginTop: 28, display: "grid", gap: 12 }}>
         {log.map((entry, index) => (
-          <p key={`${entry.role}-${index}`}>
-            <strong>{entry.role === "you" ? "You" : "Claire"}:</strong> {entry.text}
-          </p>
+          <div key={`${entry.role}-${index}`}>
+            <p>
+              <strong>{entry.role === "you" ? "You" : "Claire"}:</strong>{" "}
+              {entry.text}
+            </p>
+            {entry.salesArtifacts?.map(artifact => (
+              <figure
+                key={artifact.observationReference}
+                data-testid="claire-sales-trend"
+                style={{
+                  padding: 16,
+                  border: "1px solid #e0bd63",
+                  borderRadius: 14,
+                }}
+              >
+                <figcaption>
+                  {artifact.scope} · paid revenue · {artifact.precision}
+                </figcaption>
+                {artifact.series.map(point => (
+                  <div key={point.from} style={{ marginTop: 12 }}>
+                    <p>
+                      {point.from}–{point.to}: ${(point.cents / 100).toFixed(2)}
+                    </p>
+                    <div
+                      role="img"
+                      aria-label={`Paid revenue ${(point.cents / 100).toFixed(2)} dollars`}
+                      style={{
+                        height: 22,
+                        background: "#17385e",
+                        width: `${Math.max(1, (point.cents / Math.max(...artifact.series.map(item => item.cents))) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                ))}
+                <p style={{ fontSize: 12 }}>
+                  Net paid revenue; comparison uses completed calendar months.
+                </p>
+              </figure>
+            ))}
+          </div>
         ))}
       </div>
-      <form onSubmit={event => void onSubmit(event)} style={{ marginTop: 24, display: "grid", gap: 12 }}>
+      <form
+        onSubmit={event => void onSubmit(event)}
+        style={{ marginTop: 24, display: "grid", gap: 12 }}
+      >
         <textarea
           value={utterance}
           onChange={event => setUtterance(event.target.value)}
@@ -164,13 +231,14 @@ export default function ClaireDesk() {
         </summary>
         <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
           <p style={{ margin: 0, lineHeight: 1.5 }}>
-            Preview the safe closing record Claire can produce from verified shared
-            history and things you explicitly told her. It never deletes or changes
-            orders, customers, revenue, routes, or other business records.
+            Preview the safe closing record Claire can produce from verified
+            shared history and things you explicitly told her. It never deletes
+            or changes orders, customers, revenue, routes, or other business
+            records.
           </p>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>
-            This is a preview only. Generating it does not disable future relationship
-            context or delete stored history.
+            This is a preview only. Generating it does not disable future
+            relationship context or delete stored history.
           </p>
           <button
             type="button"
@@ -210,7 +278,8 @@ export default function ClaireDesk() {
                 {relationshipClosing.data.closingMessage}
               </p>
               <p style={{ margin: "10px 0 0", fontSize: 12, color: "#6a7890" }}>
-                Business records: preserved · eligible history items: {relationshipClosing.data.eligibleHistoryIds.length}
+                Business records: preserved · eligible history items:{" "}
+                {relationshipClosing.data.eligibleHistoryIds.length}
               </p>
             </div>
           ) : null}

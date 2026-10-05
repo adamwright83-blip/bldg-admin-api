@@ -10,6 +10,7 @@ import {
   interpretSourceCoverage,
   loadRevenueSourceCoverage,
   reconcilePaidRevenue,
+  reconcileLedgerSpan,
 } from "../analytics/canonicalRevenue";
 import { activeCustomerPopulation } from "../analytics/businessMetrics";
 import { resolveCustomerIdentities } from "../analytics/customerIdentityResolution";
@@ -130,7 +131,7 @@ export async function getStrategyActiveCustomers(
     const weekEndTime = new Date(now.getTime() - i * 7 * 86_400_000);
     const window = activeCustomerWindow(weekEndTime, timeZone);
     const pop = activeCustomerPopulation(
-      ledger.events,
+      reconcileLedgerSpan(ledger, { start: zonedYmd(historyStartUtc, timeZone), end: zonedYmd(now, timeZone) }).includedEvents,
       { start: zonedYmd(window.start, timeZone), end: zonedYmd(weekEndTime, timeZone) },
       1
     );
@@ -195,7 +196,7 @@ export async function getStrategyGrowthMetrics(
       },
       loaders
     );
-    events = ledger.events;
+    events = reconcileLedgerSpan(ledger, { start: "2020-01-01", end: input.period.endYmd }).includedEvents;
     loadedSources = ledger.loadedSources;
     failedSources = ledger.failedSources;
     provenExclusions = ledger.provenDuplicateExclusions;

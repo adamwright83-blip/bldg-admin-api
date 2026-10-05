@@ -1,4 +1,3 @@
-/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -402,6 +401,7 @@ export const claireRouter = router({
 
       return {
         reply: result.speak || preview.brief,
+        salesArtifacts: result.salesArtifacts ?? [],
         brief: preview.brief,
         workday: preview.workday,
         relationshipDimensions: preview.relationshipDimensions,

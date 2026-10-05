@@ -1,0 +1,92 @@
+{
+  "productionReceipts": [
+    {
+      "reportType": "orders_sales",
+      "replay": 0,
+      "batchId": 23,
+      "inserted": 253,
+      "updated": 217,
+      "unchanged": 63,
+      "skipped": 0,
+      "totalRows": 533,
+      "digest": "48755798ab6501e2d6f7f388e9360d7a6846c0e7ce8fe591f36643714dd507c1",
+      "completedAt": "2026-10-05T02:24:27.927Z",
+      "uniqueOrderCount": 533
+    },
+    {
+      "reportType": "orders_sales",
+      "replay": 1,
+      "batchId": 24,
+      "inserted": 0,
+      "updated": 0,
+      "unchanged": 533,
+      "skipped": 0,
+      "totalRows": 533,
+      "digest": "48755798ab6501e2d6f7f388e9360d7a6846c0e7ce8fe591f36643714dd507c1",
+      "completedAt": "2026-10-05T02:26:50.483Z",
+      "uniqueOrderCount": 533
+    },
+    {
+      "reportType": "orders_revenue",
+      "replay": 0,
+      "batchId": 25,
+      "inserted": 285,
+      "updated": 194,
+      "unchanged": 13,
+      "skipped": 0,
+      "totalRows": 492,
+      "digest": "32ce7aa68d2c781d51d3fff62aff398cfdf99781c4f019fe328fc3206a6078e0",
+      "completedAt": "2026-10-05T02:29:25.778Z",
+      "uniqueOrderCount": 492
+    },
+    {
+      "reportType": "orders_revenue",
+      "replay": 1,
+      "batchId": 26,
+      "inserted": 0,
+      "updated": 0,
+      "unchanged": 492,
+      "skipped": 0,
+      "totalRows": 492,
+      "digest": "32ce7aa68d2c781d51d3fff62aff398cfdf99781c4f019fe328fc3206a6078e0",
+      "completedAt": "2026-10-05T02:31:41.276Z",
+      "uniqueOrderCount": 492
+    }
+  ],
+  "productionControls": {
+    "ordersAccounted": 533,
+    "revenueAccounted": 492,
+    "missingRevenueIds": 0,
+    "revenueCents": 2724697,
+    "matchingOrdersNetCents": 2724697,
+    "ordersOnly": 41,
+    "refundAccounted": true
+  },
+  "canonicalBook": {
+    "recordedCents": 3122059,
+    "datedEvents": 577,
+    "undatedAdjustments": {
+      "count": 1,
+      "cents": -1000
+    },
+    "provenDuplicates": 492,
+    "unresolvedPairs": 0,
+    "withheldCents": 0,
+    "provenDistinctPairs": 0,
+    "serviceLines": [
+      {
+        "key": "unresolved",
+        "label": "unresolved service line",
+        "cents": 2724697,
+        "orders": 492
+      },
+      {
+        "key": "laundry_butler",
+        "label": "Laundry Butler",
+        "cents": 397362,
+        "orders": 85
+      }
+    ],
+    "readerStatus": "complete"
+  }
+}

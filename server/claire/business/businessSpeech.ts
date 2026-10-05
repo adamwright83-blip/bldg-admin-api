@@ -22,6 +22,8 @@ import type { CustomerAspect, FreshnessAspect, LineageScope, OrderAspect } from 
 export type ClaireSurface = "voice" | "text";
 
 export type SpeechHint =
+  | { kind: "money_semantics"; field: "refunds" | "credits" | "discounts" | "gross" }
+  | { kind: "composition_service_claim" }
   | { kind: "freshness"; aspect: FreshnessAspect }
   | { kind: "composition_building"; buildings: BuildingKey[] }
   | { kind: "customer_aspect"; aspect: CustomerAspect | null }
@@ -186,7 +188,16 @@ export function scopeWords(query: Pick<BusinessQuery, "filters" | "serviceType">
   const filters: LedgerFilters = query.filters ?? {};
   const service = query.serviceType === "wash_fold" ? "wash-and-fold " : query.serviceType === "dry_cleaning" ? "dry-cleaning " : "";
   const parts: string[] = [];
-  if (filters.businessLines?.length === 1) parts.push(BUSINESS_LINE_LABEL[filters.businessLines[0]!]);
+  if (filters.serviceLines?.length === 1)
+    parts.push(
+      filters.serviceLines[0] === "laundry_farm_core"
+        ? "Laundry Farm core"
+        : filters.serviceLines[0] === "unresolved"
+          ? "unresolved service line"
+          : "Laundry Butler"
+    );
+  else if (filters.companies?.length === 1) parts.push("Laundry Farm total");
+  else if (filters.businessLines?.length === 1) parts.push(BUSINESS_LINE_LABEL[filters.businessLines[0]!]);
   else if (filters.sources?.length === 1) parts.push(filters.sources[0] === "cleancloud" ? "CleanCloud" : "Goldline-order");
   if (filters.processors?.length === 1) parts.push(processorWord(filters.processors[0]!));
   const suffix: string[] = [];
@@ -439,6 +450,19 @@ function speakTotals(
 
 export function speakComposition(breakdown: LineageBreakdown, periodLabel: string, speech: Speech, hint?: SpeechHint | null): void {
   const when = during(periodLabel);
+  if (hint?.kind === "composition_service_claim") {
+    const butler = breakdown.byServiceLine.find(
+      slice => slice.key === "laundry_butler"
+    );
+    if (breakdown.total.orders > 0 && butler?.orders === breakdown.total.orders)
+      speech.say(
+        "The recorded orders in this scope all have positive Laundry Butler service evidence."
+      );
+    else
+      speech.say(
+        "No, I cannot classify all of that as Laundry Butler. Property, CleanCloud, and Clearent are not service-line evidence; unproven attribution stays unresolved."
+      );
+  }
   if (hint?.kind === "composition_building") {
     for (const building of hint.buildings) {
       const slice = breakdown.byBuilding.find(item => item.key === building);
@@ -461,24 +485,33 @@ export function speakComposition(breakdown: LineageBreakdown, periodLabel: strin
     speech.say(`There's nothing ${when} to break down.`);
     return;
   }
-  const butler = breakdown.byBusinessLine.find(slice => slice.key === "laundry_butler");
-  const farm = breakdown.byBusinessLine.find(slice => slice.key === "laundry_farm");
+  const butler = breakdown.byServiceLine.find(slice => slice.key === "laundry_butler");
+  const farm = breakdown.byCompany.find(slice => slice.key === "laundry_farm");
   const unattributed = breakdown.byBusinessLine.find(slice => slice.key === "unattributed");
-  if (butler && farm) speech.say("That's both businesses.");
+  if (butler && farm) speech.say("Laundry Butler is a service line within Laundry Farm.");
   else if (butler || farm) speech.say(`That's all ${(butler ?? farm)!.label}${unattributed ? " that I can attribute" : ""}.`);
   if (butler) {
     speech.say(
-      `Laundry Butler, Goldline's own Stripe-paid orders, was ${speech.money(butler.cents)} across ${speech.count(butler.orders)} ${plural(butler.orders, "order")}.`
+      `Laundry Butler service was ${speech.money(butler.cents)} across ${speech.count(butler.orders)} ${plural(butler.orders, "order")}.`
+    );
+  }
+  for (const slice of breakdown.byServiceLine.filter(
+    slice => slice.key !== "laundry_butler"
+  )) {
+    speech.say(
+      `${slice.label}: ${speech.money(slice.cents)} across ${speech.count(slice.orders)} ${plural(slice.orders, "order")}.`
     );
   }
   if (farm) {
+    const stripe = breakdown.byProcessor.find(slice => slice.key === "stripe");
     const clearent = breakdown.byProcessor.find(slice => slice.key === "clearent");
     const cash = breakdown.byProcessor.find(slice => slice.key === "cash");
     const other = breakdown.byProcessor.find(slice => slice.key === "other_or_unknown");
     let detail = "";
-    if (clearent && clearent.orders === farm.orders) detail = ", all on Clearent cards";
-    else if (clearent || cash || other) {
+    if (!unattributed && clearent && !stripe && clearent.orders === farm.orders) detail = ", all on Clearent cards";
+    else if (!unattributed && (stripe || clearent || cash || other)) {
       const parts = [
+        stripe ? `${speech.money(stripe.cents)} on Stripe` : null,
         clearent ? `${speech.money(clearent.cents)} on Clearent cards` : null,
         cash ? `${speech.money(cash.cents)} cash` : null,
         other ? `${speech.money(other.cents)} with no recorded payment method` : null,
@@ -486,7 +519,7 @@ export function speakComposition(breakdown: LineageBreakdown, periodLabel: strin
       detail = `: ${joinList(parts)}`;
     }
     speech.say(
-      `Laundry Farm, through CleanCloud, was ${speech.money(farm.cents)} across ${speech.count(farm.orders)} ${plural(farm.orders, "order")}${detail}.`
+      `Laundry Farm total was ${speech.money(farm.cents)} across ${speech.count(farm.orders)} ${plural(farm.orders, "order")}${detail}.`
     );
     const residents = breakdown.laundryFarmBuildingResidents;
     if (residents.orders > 0) {
@@ -497,7 +530,7 @@ export function speakComposition(breakdown: LineageBreakdown, periodLabel: strin
   }
   if (unattributed) {
     speech.say(
-      `${capitalize(speech.money(unattributed.cents))} across ${speech.count(unattributed.orders)} CleanCloud ${plural(unattributed.orders, "order")} I can't assign to either business, because CleanCloud isn't paired to a named store.`
+      `${capitalize(speech.money(unattributed.cents))} across ${speech.count(unattributed.orders)} CleanCloud ${plural(unattributed.orders, "order")} I can't attribute to the company, because CleanCloud isn't paired to a named store.`
     );
   }
 }
@@ -939,7 +972,14 @@ export function speakBusinessResult(
   const scope = scopeWords(query);
   switch (data.kind) {
     case "totals":
-      speakTotals(result, data, speech, context);
+      if (context.hint?.kind === "money_semantics") {
+        const field = context.hint.field;
+        const amounts = result.coverage?.money;
+        const cents = field === "refunds" ? amounts?.refundCents : field === "credits" ? amounts?.creditCents : field === "discounts" ? amounts?.discountCents : null;
+        if (cents == null) speech.say(`I don't have a canonically defined ${field === "gross" ? "gross sales" : field} total for this scope ${during(label)}.`);
+        else speech.say(`Recorded ${field}${scope.suffix} ${during(label)}: ${speech.money(Math.abs(cents))}.`);
+        if (field === "refunds" && amounts?.undatedAdjustmentCents) speech.say(`The book also contains ${speech.money(Math.abs(amounts.undatedAdjustmentCents))} in adjustments with unknown payment dates; I cannot assign them to this period.`);
+      } else speakTotals(result, data, speech, context);
       break;
     case "composition":
       speakComposition(data.breakdown, label, speech, context.hint);
@@ -1051,7 +1091,7 @@ export function speakBusinessResult(
         break;
       }
       const top = rows[0]!;
-      const word = query.rank === "worst" ? (data.groupBy === "day" ? "slowest" : "weakest") : "best";
+      const word = query.rank === "worst" ? data.groupBy === "day" ? "slowest" : "weakest": "best";
       speech.say(
         `Your ${word} ${data.groupBy}${scope.suffix} ${during(label)} was ${bucketLabel(top.key, data.groupBy, speech)}, with ${speech.money(top.revenueCents)} across ${speech.count(top.orderCount)} ${plural(top.orderCount, "order")}.`
       );
@@ -1064,7 +1104,7 @@ export function speakBusinessResult(
         speech.say(`I don't see a customer named ${name} in paid orders ${during(label)}.`);
       } else if (data.details.length > 1) {
         speech.say(
-          `I found ${speech.count(data.details.length)} customers matching ${name}: ${joinList(data.details.slice(0, 4).map(detail => describeCustomerOption(detail, speech)))}. Which one do you mean?`
+          `I found ${speech.count(data.details.length)} customers matching ${name}: ${joinList(data.details.slice(0, 4).map(detail => `${describeCustomerOption(detail, speech)}${context.hint?.kind === "customer_aspect" && context.hint.aspect === "spend" ? `, recorded spend ${speech.money(detail.revenueCents)}` : ""}`))}.${/^who (?:is|was)\b/i.test(context.utterance.trim()) ? " These are the customer histories already on record." : " Which one do you mean?"}`
         );
       } else {
         speakCustomerDetail(data.details[0]!, context.hint?.kind === "customer_aspect" ? context.hint.aspect : null, label, speech);
@@ -1074,7 +1114,7 @@ export function speakBusinessResult(
     case "profit": {
       const costGaps = data.missing
         .filter(item => /payroll|labor|supply|cost/i.test(`${item.source} ${item.prevents}`))
-        .map(item => (/payroll|labor/i.test(item.source) ? "payroll" : /supply/i.test(item.source) ? "supply costs" : item.source.toLowerCase()));
+        .map(item => /payroll|labor/i.test(item.source) ? "payroll" : /supply/i.test(item.source) ? "supply costs" : item.source.toLowerCase());
       const gaps = costGaps.length ? joinList(Array.from(new Set(costGaps))) : "cost data";
       speech.say(
         `I can give you revenue: ${revenueSubject(scope)} ${during(label)} ${period.end >= context.today ? "is" : "was"} ${speech.money(data.revenue.revenueCents)}. But I can't calculate trustworthy profit, because Goldline doesn't have ${gaps} connected.`
@@ -1094,9 +1134,9 @@ export function speakBusinessResult(
     coverageNotes(result, speech, context);
   }
   return {
-    text: speech.text(),
-    facts: speech.facts,
-    disclosures: speech.disclosures,
-    presentedMemberIds: speech.presentedMemberIds,
-  };
+      text: speech.text(),
+      facts: speech.facts,
+      disclosures: speech.disclosures,
+      presentedMemberIds: speech.presentedMemberIds,
+    };
 }

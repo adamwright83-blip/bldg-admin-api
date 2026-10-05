@@ -1,4 +1,4 @@
-import type { BuildingKey, BusinessLine, LedgerFilters, LedgerSource, PaymentProcessor } from "../../analytics/businessLineage";
+import type { BuildingKey, LedgerFilters, LedgerSource, PaymentProcessor } from "../../analytics/businessLineage";
 import { findNeighborhood } from "../../analytics/laNeighborhoods";
 
 /**
@@ -11,16 +11,19 @@ export function normalizeUtterance(text: string): string {
   return text.trim().toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ");
 }
 
-export type LineageScope = Pick<LedgerFilters, "businessLines" | "processors" | "sources">;
+export type LineageScope = Pick<LedgerFilters, "businessLines" | "processors" | "sources"| "companies" | "serviceLines"
+>;
 
 /**
  * `allowClearance`: telephone speech recognition hears "Clearent" as
  * "clearance"; accept that only in a revenue/sales conversation.
  */
 export function lineageScope(lower: string, allowClearance: boolean): LineageScope | null {
-  const businessLines: BusinessLine[] = [];
-  if (/\blaundry ?butler\b|\bbutler\b/.test(lower)) businessLines.push("laundry_butler");
-  if (/\blaundry ?farm\b|\bthe farm\b/.test(lower)) businessLines.push("laundry_farm");
+  const butler = /\blaundry ?butler\b|\bbutler\b/.test(lower);
+  const farm = /\blaundry ?farm\b|\bthe farm\b/.test(lower);
+  const serviceLines: LedgerFilters["serviceLines"] = butler ? ["laundry_butler"] : /\bcore\b/.test(lower) ? ["laundry_farm_core"]
+    : /\bunresolved\b/.test(lower)? ["unresolved"]
+      : null;
   const processors: PaymentProcessor[] = [];
   if (/\bstripe\b/.test(lower)) processors.push("stripe");
   if (/\bclear ?ent\b|\bclarent\b|\bxplor ?pay\b|\bexplore ?pay\b/.test(lower) || (allowClearance && /\bclearances?\b/.test(lower))) {
@@ -30,9 +33,14 @@ export function lineageScope(lower: string, allowClearance: boolean): LineageSco
   const sources: LedgerSource[] = [];
   if (/\bclean ?cloud\b/.test(lower)) sources.push("cleancloud");
   if (/\bgoldline(?:'s)? own\b|\bnative (?:orders?|goldline)\b|\bgoldline orders?\b/.test(lower)) sources.push("laundry_butler");
-  if (!businessLines.length && !processors.length && !sources.length) return null;
+  if (!butler && !processors.length && !sources.length&&
+    !farm &&
+    !serviceLines
+  ) return null;
   return {
-    businessLines: businessLines.length ? businessLines : null,
+    companies: farm ? ["laundry_farm"] : null,
+    serviceLines,
+    businessLines: null,
     processors: processors.length ? processors : null,
     sources: sources.length ? sources : null,
   };

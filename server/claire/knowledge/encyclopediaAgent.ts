@@ -154,6 +154,21 @@ async function runTool(call: z.infer<typeof planSchema>["calls"][number], input:
     case "account": {
       const accounts = await listAccountRefs(input.tenantId);
       const matches = matchAccounts((call.name || call.question || input.utterance).toLowerCase(), accounts);
+      if (!matches.length) {
+        const residential = await runBusinessQuery(input.tenantId, { ...defaultBusinessQuery("customer_history"), customerName: call.name.trim() });
+        if (residential.status === "ok" && residential.data.kind === "customer_history" && residential.data.details.length) {
+          return { tool: "customer", text: speakBusinessResult(residential, {
+          surface: input.surface,
+          previous: null,
+          refinement: false,
+          utterance: call.question || input.utterance,
+          today,
+          disclosed: [],
+          timeZone: input.timeZone,
+          hint: null,
+        }).text };
+        }
+      }
       if (matches.length !== 1) {
         return { tool: call.tool, text: matches.length ? `Several accounts match: ${matches.map(item => item.name).join(", ")}.` : "No commercial account matches that name." };
       }

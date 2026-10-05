@@ -229,7 +229,7 @@ export function decideClaireAnswerRoute(input: {
     return { outcome: "unsupported_fact", evidence, unsupportedText: enc.text };
   }
 
-  if (enc?.kind === "no_retrieval_needed") {
+  if (enc?.kind === "no_retrieval_needed"&& !(input.loadedEvidence ?? []).some(item => item.source.startsWith("business_reader") && item.text.length)) {
     return { outcome: "judgment_synthesis_no_retrieval", evidence: [] };
   }
 

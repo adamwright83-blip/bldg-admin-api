@@ -1,0 +1,40 @@
+name: Claire sales truth
+on:
+  pull_request:
+    paths:
+      - 'server/analytics/**'
+      - 'server/cleancloudBrowserSync/**'
+      - 'server/claire/**'
+      - 'server/geography/customerOrderTruth*'
+      - 'client/src/pages/goldline/ClaireDesk.tsx'
+      - 'drizzle/0116_claire_sales_reconciliation.sql'
+      - 'scripts/claire-sales-*'
+      - 'scripts/migrate.mjs'
+      - '.github/workflows/claire-sales-truth.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sales-truth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Canonical money, source completeness, customer knowledge and artifacts
+        run: >-
+          pnpm vitest run
+          server/analytics
+          server/cleancloudBrowserSync
+          server/geography/customerOrderTruth.test.ts
+          server/claire/businessConversation.test.ts
+          server/claire/claireOralExam.test.ts
+          server/claire/proactive/salesInsights.test.ts
+      - run: node --check scripts/migrate.mjs

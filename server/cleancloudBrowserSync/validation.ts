@@ -118,7 +118,43 @@ export function validatePayload(
   } catch (error) {
     invalid(error instanceof Error ? error.message : "Invalid report.");
   }
-  const normalized = rows!.map((row, index) => {
+  return normalizeSourceCsv(input, tenantId);
+}
+
+/** Trusted local backfill only; browser callers still enforce observed URL and 32-day range. */
+export function validateHistoricalPayload(
+  input: {
+    csv: string;
+    from: string;
+    to: string;
+    storeId: string;
+    reportType?: "orders_sales" | "orders_revenue";
+  },
+  tenantId: string
+) {
+  for (const date of [input.from, input.to]) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      new Date(date).toISOString().slice(0, 10) !== date
+    )
+      invalid("Invalid historical range.");
+  }
+  if (input.from > input.to) invalid("Invalid historical range.");
+  return normalizeSourceCsv(input, tenantId);
+}
+
+function normalizeSourceCsv(
+  input: {
+    csv: string;
+    from: string;
+    to: string;
+    storeId: string;
+    reportType?: "orders_sales" | "orders_revenue";
+  },
+  tenantId: string
+) {
+  const reportType = input.reportType ?? "orders_sales";
+  const normalized = parseCsv(input.csv, reportType).map((row, index) => {
     const prefix = `Row ${index + 2}: `;
     const paid = row.Paid.trim().toLowerCase();
     if (
@@ -159,6 +195,7 @@ export function validatePayload(
     if (
       reportType === "orders_sales" &&
       order!.paid &&
+      (order!.totalCents ?? 0) >= 0 &&
       (!order!.paymentDateUtc || !Number.isFinite(order!.paymentDateUtc.getTime()))
     )
       invalid(prefix + "paid order has no valid payment date.");

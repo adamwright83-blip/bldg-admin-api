@@ -1,4 +1,9 @@
-import { and, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
+import {
+  loadSalesReconciliationEvidence,
+  type SalesReconciliationEvidence,
+} from "./salesReconciliationStore";
+import { and, eq, gte, inArray, isNotNull, isNull,
+  lt, or, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
 import { browserSyncBindings } from "../cleancloudBrowserSync/schema";
@@ -42,11 +47,16 @@ export const LEDGER_SOURCES: readonly LedgerSource[] = ["laundry_butler", "clean
 export type ServiceType = "wash_fold" | "dry_cleaning";
 
 export type PaidOrderEvent = {
+  company?: "laundry_farm" | null;
+  serviceLine?: import("./businessLineage").ServiceLine;
   source: LedgerSource;
   eventKey: string;
   occurredAt: Date;
   businessDate: string;
   cents: number;
+  discountCents?: number | null;
+  creditCents?: number | null;
+  subtotalCents?: number | null;
   /** Native orders record a service type; CleanCloud orders are classified from their summary. */
   serviceType: ServiceType | null;
   customerName: string | null;
@@ -78,7 +88,16 @@ export type ProvenDuplicateExclusion = {
   reason: "cleancloud_sales_and_revenue_report";
 };
 
+export type UndatedEconomicAdjustment = {
+  eventKey: string;
+  cents: number;
+  source: "cleancloud";
+  reason: "payment_date_unknown";
+};
+
 export type PaidOrderLedger = {
+  reconciliationEvidence?: SalesReconciliationEvidence;
+  undatedAdjustments?: UndatedEconomicAdjustment[];
   startUtc: Date;
   endExclusiveUtc: Date;
   timeZone: string;
@@ -117,6 +136,9 @@ export type NativeOrderRow = {
 };
 
 export type CleanCloudOrderRow = {
+  discountCents?: number | null;
+  creditCents?: number | null;
+  subtotalCents?: number | null;
   cleancloudOrderId: string;
   cleancloudCustomerId: string | null;
   sourceReportType: "orders_sales" | "orders_revenue";
@@ -141,6 +163,7 @@ export type CleanCloudOrderRow = {
 export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: Date };
 
 export type LedgerLoaders = {
+  reconciliation?: (tenantId: string) => Promise<SalesReconciliationEvidence>;
   laundry_butler: (window: LedgerWindow) => Promise<NativeOrderRow[]>;
   cleancloud: (window: LedgerWindow) => Promise<CleanCloudOrderRow[]>;
 };
@@ -254,6 +277,9 @@ export function partitionCleanCloudOrders(
       occurredAt,
       businessDate: businessDateOf(occurredAt, timeZone),
       cents: Math.round(Number(preferred.totalCents ?? 0)),
+      discountCents: preferred.discountCents ?? null,
+      creditCents: preferred.creditCents ?? null,
+      subtotalCents: preferred.subtotalCents ?? null,
       serviceType: serviceTypeFromCleanCloudClass(serviceClass),
       customerName: preferred.customerName?.trim() || null,
       identity: {
@@ -317,6 +343,7 @@ async function pairedStoreLabel(db: NonNullable<Awaited<ReturnType<typeof getDb>
 }
 
 export const databaseLedgerLoaders: LedgerLoaders = {
+  reconciliation: loadSalesReconciliationEvidence,
   async laundry_butler(window) {
     const db = await requireDb();
     return db
@@ -358,6 +385,9 @@ export const databaseLedgerLoaders: LedgerLoaders = {
       paidDateUtc: cleancloudPaidOrders.paidDateUtc,
       paid: cleancloudPaidOrders.paid,
       totalCents: cleancloudPaidOrders.totalCents,
+      discountCents: cleancloudPaidOrders.discountCents,
+      creditCents: cleancloudPaidOrders.creditCents,
+      subtotalCents: cleancloudPaidOrders.subtotalCents,
       customerName: cleancloudPaidOrders.customerName,
       customerPhone: cleancloudPaidOrders.customerPhone,
       customerEmail: cleancloudPaidOrders.customerEmail,
@@ -377,6 +407,11 @@ export const databaseLedgerLoaders: LedgerLoaders = {
           eq(cleancloudPaidOrders.tenantId, window.tenantId),
           eq(cleancloudPaidOrders.paid, true),
           or(
+            and(
+              isNull(cleancloudPaidOrders.paymentDateUtc),
+              isNull(cleancloudPaidOrders.paidDateUtc),
+              lt(cleancloudPaidOrders.totalCents, 0)
+            ),
             and(
               eq(cleancloudPaidOrders.sourceReportType, "orders_sales"),
               gte(cleancloudPaidOrders.paymentDateUtc, window.startUtc),
@@ -424,9 +459,15 @@ export async function loadPaidOrderLedger(
     startUtc: input.startUtc,
     endExclusiveUtc: input.endExclusiveUtc,
   };
-  const [native, cleancloud] = await Promise.allSettled([
+  const [native, cleancloud, reconciliation] = await Promise.allSettled([
     loaders.laundry_butler(window),
     loaders.cleancloud(window),
+    loaders.reconciliation
+      ? loaders.reconciliation(input.tenantId)
+      : Promise.resolve({
+          decisions: [],
+          attributions: [],
+        } as SalesReconciliationEvidence),
   ]);
   const loadedSources: LedgerSource[] = [];
   const failedSources: LedgerSource[] = [];
@@ -453,12 +494,59 @@ export async function loadPaidOrderLedger(
     failedSources.push("cleancloud");
   }
 
+  if (reconciliation.status === "fulfilled") {
+    const attribution = new Map(
+      reconciliation.value.attributions
+        .filter(row => row.evidenceReference.trim())
+        .map(row => [row.eventKey, row.serviceLine])
+    );
+    for (const event of events) {
+      event.company =
+        event.source === "laundry_butler" ||
+        event.businessLine === "laundry_farm"
+          ? "laundry_farm"
+          : null;
+      event.serviceLine =
+        attribution.get(event.eventKey) ??
+        (event.source === "laundry_butler" ? "laundry_butler" : "unresolved");
+    }
+  } else {
+    // An unread durable reconciliation store cannot license exact revenue.
+    for (const source of loadedSources)
+      if (!failedSources.includes(source)) failedSources.push(source);
+  }
   events.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.eventKey.localeCompare(b.eventKey));
   return {
     startUtc: input.startUtc,
     endExclusiveUtc: input.endExclusiveUtc,
     timeZone: input.timeZone,
     events,
+    reconciliationEvidence:
+      reconciliation.status === "fulfilled" ? reconciliation.value : undefined,
+    undatedAdjustments:
+      cleancloud.status === "fulfilled"
+        ? Array.from(
+            new Map(
+              cleancloud.value
+                .filter(
+                  row =>
+                    row.paid &&
+                    (row.totalCents ?? 0) < 0 &&
+                    !row.paymentDateUtc &&
+                    !row.paidDateUtc
+                )
+                .map(row => [
+                  row.cleancloudOrderId,
+                  {
+                    eventKey: `cleancloud:${row.cleancloudOrderId}`,
+                    cents: row.totalCents!,
+                    source: "cleancloud" as const,
+                    reason: "payment_date_unknown" as const,
+                  },
+                ])
+            ).values()
+          )
+        : [],
     unverifiedNative,
     provenDuplicateExclusions,
     loadedSources,
