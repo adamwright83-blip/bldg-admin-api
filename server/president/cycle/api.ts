@@ -23,9 +23,22 @@ export function createPresidentCycleRouter(deps: {
   startCycle?: (tenantId: string) => Promise<Cycle>;
   readiness?: () => Promise<unknown>;
   afterApproval?: (cycleId: string) => Awaitable<void>;
+  allowMutation?: (req: Request) => boolean;
 }): Router {
   const r = express.Router();
   r.use(express.json());
+  r.use((req, res, next) => {
+    if (
+      req.method !== "GET" &&
+      req.method !== "HEAD" &&
+      deps.allowMutation &&
+      !deps.allowMutation(req)
+    ) {
+      res.status(403).json({ error: "Invalid request origin" });
+      return;
+    }
+    next();
+  });
 
   const auth = async (req: Request, res: Response) => {
     const [adam, tenant] = await Promise.all([
