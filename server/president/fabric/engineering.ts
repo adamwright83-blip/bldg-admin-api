@@ -38,12 +38,31 @@ export async function prepareWorkspace(
   const dir = join(workRoot, mission.missionId);
   const branch = `president/${mission.missionId}`;
   if (!existsSync(dir)) {
-    const r = await runCommand(
-      `git worktree add -b ${sh(branch)} ${sh(dir)} ${sh(baseSha)}`,
-      repoRoot,
-      { timeoutMs: 120_000 }
+    // A worker host may disappear after the branch has already been created/pushed.
+    // Prune dead worktree registrations, then resume the mission branch when it
+    // exists instead of trying to recreate it from the original base.
+    await runCommand("git worktree prune", repoRoot, { timeoutMs: 30_000 });
+    const local = await runCommand(
+      `git show-ref --verify --quiet refs/heads/${branch}`,
+      repoRoot
     );
-    if (r.exitCode !== 0) throw new Error(`worktree add failed: ${r.stderr.slice(0, 300)}`);
+    const remote = await runCommand(
+      `git show-ref --verify --quiet refs/remotes/origin/${branch}`,
+      repoRoot
+    );
+    let command: string;
+    if (local.exitCode === 0) {
+      command = `git worktree add ${sh(dir)} ${sh(branch)}`;
+    } else if (remote.exitCode === 0) {
+      command =
+        `git branch --track ${sh(branch)} ${sh(`origin/${branch}`)} && ` +
+        `git worktree add ${sh(dir)} ${sh(branch)}`;
+    } else {
+      command = `git worktree add -b ${sh(branch)} ${sh(dir)} ${sh(baseSha)}`;
+    }
+    const r = await runCommand(command, repoRoot, { timeoutMs: 120_000 });
+    if (r.exitCode !== 0)
+      throw new Error(`worktree add/resume failed: ${r.stderr.slice(0, 300)}`);
     const nm = join(repoRoot, "node_modules");
     if (existsSync(nm) && !existsSync(join(dir, "node_modules")))
       symlinkSync(nm, join(dir, "node_modules"));
