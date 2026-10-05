@@ -1,4 +1,5 @@
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
+import { classifyTerritory } from "@shared/lanternTerritories";
 
 export type GeographicCustomer = {
   identityKey: string;
@@ -25,6 +26,40 @@ export type GeographicCustomer = {
     canonicalAddress: string | null;
   };
 };
+
+export type CanonicalLanternTerritory = { id: string; name: string };
+
+/**
+ * Every known customer with a canonical location exists in Lantern City.
+ * Cadence changes presentation/urgency; it must never erase a real customer
+ * or make a territory falsely appear empty.
+ */
+export function isLiveLanternCustomer(
+  customer: Pick<GeographicCustomer, "location" | "cadence">
+): boolean {
+  return Boolean(customer.location);
+}
+
+/**
+ * Canonical territory ownership for a customer lantern.
+ *
+ * The two Century Park East residential towers are a deliberate hard truth:
+ * 2160 and 2170 Century Park East are both Century City. Provider parcel
+ * coordinates or the fantasy board's nearest-island geometry may never move
+ * either tower into an adjacent neighbourhood.
+ */
+export function canonicalLanternTerritory(
+  customer: Pick<GeographicCustomer, "address" | "location">
+): CanonicalLanternTerritory | null {
+  const location = customer.location;
+  if (!location) return null;
+  const street = streetIdentity(location.canonicalAddress ?? customer.address);
+  if (street === "2160 century" || street === "2170 century") {
+    return { id: "century-city", name: "Century City" };
+  }
+  const territory = classifyTerritory(location.latitude, location.longitude);
+  return territory ? { id: territory.id, name: territory.name } : null;
+}
 
 export type CustomerLocationCluster = {
   key: string;

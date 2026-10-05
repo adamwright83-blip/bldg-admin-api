@@ -5,11 +5,30 @@ import type { EpisodeState, ResidentState } from "../logic/episode";
 import type { GuestId } from "../logic/guests";
 import { Mouse, type Mode } from "./mice";
 import { cellPos } from "./items";
+import { FIXTURES, type FixtureId, type RoutineId } from "../logic/foraging";
+
+const ROUTINE_FIXTURE: Record<Exclude<RoutineId, "ignores_it">, FixtureId> = {
+  signals_trains: "signal_mirror",
+  perches_by_window: "spool_stool",
+  warms_hands: "thimble_stove",
+  has_tea: "thimble_stove",
+};
+const ROUTINE_MODE: Record<Exclude<RoutineId, "ignores_it">, Mode> = {
+  signals_trains: "signal",
+  perches_by_window: "sit",
+  warms_hands: "warm",
+  has_tea: "warm",
+};
 
 interface LiveResident {
   record: ResidentState;
   mouse: Mouse;
   phaseOffset: number;
+  placed?: boolean;
+  /** set when a fixture has changed what this resident does */
+  routineMode?: Mode;
+  /** a visible walk to a new routine spot rather than a teleport */
+  move?: { from: THREE.Vector3; to: THREE.Vector3; t0: number; dur: number; yaw: number; mode: Mode };
 }
 
 function firstFree(layout: Layout, preferred: { x: number; z: number }[]) {
@@ -41,7 +60,22 @@ function fallbackPose(guest: GuestId, layout: Layout): { p: THREE.Vector3; yaw: 
   return { p: cellPos(c), yaw: -0.25, mode: "read" };
 }
 
+function routinePose(guest: GuestId, episode: EpisodeState) {
+  const routine = episode.routines[guest];
+  if (!routine || routine === "ignores_it") return null;
+  const fixture = ROUTINE_FIXTURE[routine];
+  if (!episode.fixtures.includes(fixture)) return null;
+  const fx = FIXTURES[fixture];
+  const placed = fixture === "signal_mirror" ? episode.placements?.signal_mirror : undefined;
+  const home = placed ? { x: placed.x, z: -1.55 } : fx.home;
+  const stand = placed ? { x: placed.x - 0.85, z: -0.95, y: 0 } : fx.stand;
+  const yaw = routine === "perches_by_window" ? Math.PI : Math.atan2(home.x - stand.x, home.z - stand.z);
+  return { p: new THREE.Vector3(stand.x, stand.y, stand.z), yaw, mode: ROUTINE_MODE[routine] };
+}
+
 function authoredPose(guest: GuestId, episode: EpisodeState, layout: Layout) {
+  const routine = routinePose(guest, episode);
+  if (routine) return routine;
   if (guest === "baker" && episode.projects.includes("strap_hammock")) {
     return { p: new THREE.Vector3(-1.15, 0.72, -1.20), yaw: 0.1, mode: "nap" as Mode };
   }
@@ -56,7 +90,7 @@ export class ResidentLife {
 
   constructor(private room: THREE.Group) {}
 
-  sync(episode: EpisodeState, layout: Layout, now: number) {
+  sync(episode: EpisodeState, layout: Layout, now: number, animated = false) {
     const wanted = new Set(episode.residents.map(r => r.guest));
     for (const [guest, live] of this.live) {
       if (!wanted.has(guest)) {
@@ -75,7 +109,7 @@ export class ResidentLife {
       } else {
         live.record = record;
       }
-      this.place(live, episode, layout, now);
+      this.place(live, episode, layout, now, animated);
     }
   }
 
@@ -90,8 +124,20 @@ export class ResidentLife {
     this.place(live, episode, layout, now);
   }
 
-  private place(live: LiveResident, episode: EpisodeState, layout: Layout, now: number) {
+  private place(live: LiveResident, episode: EpisodeState, layout: Layout, now: number, animated = false) {
     const pose = authoredPose(live.record.guest, episode, layout);
+    live.routineMode = routinePose(live.record.guest, episode)?.mode;
+    if (animated && live.placed) {
+      const from = live.mouse.root.position.clone();
+      const dist = Math.hypot(pose.p.x - from.x, pose.p.z - from.z);
+      if (dist > 0.05) {
+        live.move = { from, to: pose.p.clone(), t0: now, dur: Math.max(0.6, dist / 1.9), yaw: pose.yaw, mode: pose.mode };
+        live.mouse.lying = false; live.mouse.baseY = 0;
+        return;
+      }
+    }
+    live.placed = true;
+    live.move = undefined;
     live.mouse.root.position.copy(pose.p);
     live.mouse.root.rotation.y = pose.yaw;
     live.mouse.lying = false;
@@ -99,17 +145,46 @@ export class ResidentLife {
     live.mouse.setMode(pose.mode, now);
   }
 
-  update(t: number) {
+  update(t: number, now = t) {
     for (const live of this.live.values()) {
       const guest = live.record.guest;
+      if (live.move) {
+        const m = live.move;
+        const k = Math.min(1, (now - m.t0) / m.dur);
+        live.mouse.root.position.lerpVectors(m.from, m.to, k);
+        const heading = Math.atan2(m.to.x - m.from.x, m.to.z - m.from.z);
+        live.mouse.root.rotation.y = k < 1 ? heading : m.yaw;
+        live.mouse.walkPhase += 0.9;
+        live.mouse.setMode(k < 1 ? "walk" : m.mode, t);
+        live.mouse.update(t + live.phaseOffset);
+        if (k >= 1) { live.mouse.root.position.copy(m.to); live.move = undefined; live.placed = true; }
+        continue;
+      }
       // A tiny domestic rhythm rather than a frozen trophy pose.
       const cycle = Math.floor((t + live.phaseOffset) / 8) % 3;
       const mode: Mode =
+        live.routineMode === "signal" ? (cycle === 1 ? "watch-train" : "signal") :
+        live.routineMode === "sit" ? (cycle === 1 ? "sigh" : "sit") :
+        live.routineMode === "warm" ? "warm" :
         guest === "conductor" ? (cycle === 1 ? "idle" : "watch-train") :
         guest === "baker" ? (cycle === 2 ? "idle" : live.mouse.root.position.y > 0.5 ? "nap" : "wrap") :
         (cycle === 1 ? "idle" : "read");
       live.mouse.setMode(mode, t);
       live.mouse.update(t + live.phaseOffset);
+    }
+  }
+
+  /** while the proprietor works the light, anyone standing in the beam's way steps to the window's far side */
+  makeRoom(now: number) {
+    let slot = 0;
+    for (const live of this.live.values()) {
+      const p = live.mouse.root.position;
+      if (p.y > 0.4 || p.x < -0.6 || p.x > 2.6 || p.z > 0.3) continue; // on a shelf, or nowhere near the lining
+      const to = new THREE.Vector3(2.35, 0, -1.0 + slot * 0.7); slot++;
+      const dist = Math.hypot(to.x - p.x, to.z - p.z);
+      if (dist < 0.05) continue;
+      live.mouse.lying = false; live.mouse.baseY = 0;
+      live.move = { from: p.clone(), to, t0: now, dur: Math.max(0.6, dist / 1.9), yaw: Math.PI, mode: "idle" };
     }
   }
 

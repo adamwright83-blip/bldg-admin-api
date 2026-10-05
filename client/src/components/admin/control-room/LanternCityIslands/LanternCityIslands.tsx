@@ -1,14 +1,18 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import type { GeographicCustomer } from "../customerGeography";
+import {
+  canonicalLanternTerritory,
+  isLiveLanternCustomer,
+  type GeographicCustomer,
+} from "../customerGeography";
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
 
-// Small Comforts: the playable room inside the lost-property suitcase on Hollywood (zoom to the island, click the suitcase)
+// Small Comforts: the playable Tin Can House in Hollywood (zoom to the island, click the house).
 const SmallComforts = lazy(() => import("../SmallComforts/SmallComforts"));
 
 // Fonts load as their own <link> (a failed @import would take the lazy chunk's CSS down with it)
@@ -81,7 +85,7 @@ export default function LanternCityIslands({
         : ((atlas.data?.customers ?? []) as GeographicCustomer[]),
     [atlas.data, usingSample],
   );
-  const customers = useMemo(() => allCustomers.filter(c => c.location), [allCustomers]);
+  const customers = useMemo(() => allCustomers.filter(isLiveLanternCustomer), [allCustomers]);
   const byKey = useMemo(() => new Map(customers.map(c => [c.identityKey, c])), [customers]);
 
   useEffect(() => {
@@ -111,8 +115,19 @@ export default function LanternCityIslands({
   }, []);
 
   useEffect(() => {
-    // islands open only on real customers: one lantern per customer with a located home
-    board.current?.setLanterns(customers.map(c => ({ key: c.identityKey, latitude: c.location!.latitude, longitude: c.location!.longitude, name: c.displayName })));
+    // Current business truth only: historical/dormant customers stay in history,
+    // but only active located customers light Lantern City. Territory ownership
+    // comes from canonical geography, never nearest-island presentation geometry.
+    board.current?.setLanterns(customers.map(c => {
+      const territory = canonicalLanternTerritory(c);
+      return {
+        key: c.identityKey,
+        latitude: c.location!.latitude,
+        longitude: c.location!.longitude,
+        name: c.displayName,
+        territoryName: territory?.name,
+      };
+    }));
   }, [customers]);
 
   useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
@@ -182,8 +197,8 @@ export default function LanternCityIslands({
       ) : null}
       {suitcaseTip ? (
         <div className={styles.tip} style={{ left: Math.min(suitcaseTip.x + 16, window.innerWidth - 280), top: Math.max(suitcaseTip.y - 60, 8) }}>
-          <b>Lost property</b>
-          <span className={styles.tipHint}>Click to look inside</span>
+          <b>Tin Can House · Small Comforts</b>
+          <span className={styles.tipHint}>Click to enter</span>
         </div>
       ) : null}
       {inSuitcase ? (

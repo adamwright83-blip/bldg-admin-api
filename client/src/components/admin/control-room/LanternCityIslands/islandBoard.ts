@@ -28,7 +28,7 @@ import {
   ringArea, rng, roadDistance, roadSegments, S, styleFor, TOP, type Field, type IslandLayout, type WorldManifest,
 } from "./islandLayout";
 
-export type IslandLantern = { key: string; latitude: number; longitude: number; name?: string };
+export type IslandLantern = { key: string; latitude: number; longitude: number; name?: string; territoryName?: string };
 export type IslandInfo = { name: string; lanterns: number; served: boolean; x: number; z: number };
 export type IslandEvents = {
   onReady?: () => void;
@@ -43,9 +43,9 @@ export type IslandEvents = {
   onOperationsHub?: () => void;
   /** the pointer is over the Operations Hub (page px), or left it */
   onOperationsHubHover?: (h: { x: number; y: number } | null) => void;
-  /** the lost-property suitcase was clicked up close: the camera has arrived, open the game */
+  /** the Hollywood Tin Can House was clicked up close: the camera has arrived, open the game */
   onSuitcase?: () => void;
-  /** the pointer is over the suitcase (page px), or left it */
+  /** the pointer is over the Tin Can House (page px), or left it */
   onSuitcaseHover?: (h: { x: number; y: number } | null) => void;
 };
 
@@ -505,34 +505,108 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   function addSuitcase() {
     const isl = islands.find(i => i.name === "Hollywood") ?? islands.find(i => i.plans.length);
     if (!isl) return;
-    let { x, z } = ontoLand(F, isl.label[0], isl.label[1], 90);   // dead centre once you've flown to the island
+    let { x, z } = ontoLand(F, isl.label[0], isl.label[1], 90);
     const own = ownerAt(F, x, z);
     if (own !== isl.index) ({ x, z } = { x: isl.label[0], z: isl.label[1] });
-    isl.plans = isl.plans.filter(p => Math.hypot(p.x - x / S, p.z - z / S) > 56);
-    isl.trees = isl.trees.filter(t => Math.hypot(t.x - x / S, t.z - z / S) > 40);
+    isl.plans = isl.plans.filter(p => Math.hypot(p.x - x / S, p.z - z / S) > 62);
+    isl.trees = isl.trees.filter(t => Math.hypot(t.x - x / S, t.z - z / S) > 44);
+
     const mx = x / S, mz = z / S, y = H(x, z) / S;
-    const blue = "#2f5f7a", blueD = "#244b61", brass = "#d8a93d", cream = "#f6ebd3", burg = "#8e2f3f";
-    const f = 1.5;   // a giant suitcase: it has to read from the island view
-    const box = (w: number, h: number, d: number, px: number, py: number, pz: number) => new THREE.BoxGeometry(w * f, h * f, d * f).translate(mx + px * f, y + py * f, mz + pz * f);
-    const parts: { g: THREE.BufferGeometry; col: string; k: number }[] = [
-      { g: box(40, 12, 28, 0, 6, 0), col: blue, k: K.TRIM },
-      { g: box(42, 2, 30, 0, 12.5, 0), col: blueD, k: K.TRIM },
-      { g: box(42, 1.2, 4, 0, 7, 0), col: brass, k: K.TRIM },
-      { g: box(5, 3, 3, -9, 7, 14.6), col: brass, k: K.TRIM },
-      { g: box(5, 3, 3, 9, 7, 14.6), col: brass, k: K.TRIM },
-      { g: box(14, 1.5, 1.5, 0, 15.6, 0), col: cream, k: K.TRIM },
-      { g: box(1.5, 4, 1.5, -7, 14.5, 0), col: cream, k: K.TRIM },
-      { g: box(1.5, 4, 1.5, 7, 14.5, 0), col: cream, k: K.TRIM },
-      { g: box(8, 7, 0.8, -12, 6, 14.3), col: burg, k: K.TRIM },
-    ];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push({ g: new THREE.SphereGeometry(2.4 * f, 10, 8).translate(mx + sx * 20 * f, y + 12.5 * f, mz + sz * 14 * f), col: brass, k: K.TRIM });
-    // a gold pin floating over it, so it reads as the thing to click
-    parts.push({ g: new THREE.ConeGeometry(5, 11, 12).rotateX(Math.PI).translate(mx, y + 36, mz), col: brass, k: K.TRIM });
-    parts.push({ g: new THREE.SphereGeometry(4.2, 12, 8).translate(mx, y + 46, mz), col: brass, k: K.TRIM });
-    extraMeshes.push(kitGeo(parts, 900300));
-    suitcase = { x, z, h: 40 * S };
-    // a warm pool of light so the eye finds it from the island view
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(520, 520).rotateX(-Math.PI / 2), haloMat);
+    const metal = "#9ea4a6", metalDark = "#60676b", rust = "#955a3c";
+    const brass = "#d8a93d", cream = "#f6ebd3", warm = "#ffb347";
+    const f = 1.55;
+    const parts: { g: THREE.BufferGeometry; col: string; k: number }[] = [];
+
+    // The Hollywood landmark is the Tin Can House: an oversized found-object
+    // dwelling that visually matches the updated Small Comforts proprietor game.
+    parts.push({
+      g: new THREE.CylinderGeometry(20 * f, 20 * f, 30 * f, 28).translate(mx, y + 15 * f, mz),
+      col: metal,
+      k: K.WALL,
+    });
+    parts.push({
+      g: new THREE.CylinderGeometry(21.5 * f, 21.5 * f, 2.6 * f, 28).translate(mx, y + 31 * f, mz),
+      col: metalDark,
+      k: K.ROOF,
+    });
+    parts.push({
+      g: new THREE.CylinderGeometry(21 * f, 21 * f, 2.2 * f, 28).translate(mx, y + 1.1 * f, mz),
+      col: rust,
+      k: K.TRIM,
+    });
+    for (const h of [7, 14, 21, 28]) {
+      parts.push({
+        g: new THREE.TorusGeometry(20.25 * f, 0.65 * f, 6, 28)
+          .rotateX(Math.PI / 2)
+          .translate(mx, y + h * f, mz),
+        col: metalDark,
+        k: K.TRIM,
+      });
+    }
+
+    // Front door and found-object windows.
+    parts.push({
+      g: new THREE.BoxGeometry(8 * f, 13 * f, 1.4 * f).translate(mx, y + 7 * f, mz + 20.2 * f),
+      col: cream,
+      k: K.TRIM,
+    });
+    parts.push({
+      g: new THREE.CylinderGeometry(4.2 * f, 4.2 * f, 1.5 * f, 20)
+        .rotateX(Math.PI / 2)
+        .translate(mx - 8 * f, y + 19 * f, mz + 20.5 * f),
+      col: warm,
+      k: K.BEACON,
+    });
+    parts.push({
+      g: new THREE.CylinderGeometry(3.6 * f, 3.6 * f, 1.5 * f, 20)
+        .rotateZ(Math.PI / 2)
+        .translate(mx + 20.5 * f, y + 18 * f, mz - 5 * f),
+      col: warm,
+      k: K.BEACON,
+    });
+
+    // Thimble chimney and brass roof marker.
+    parts.push({
+      g: new THREE.CylinderGeometry(3.4 * f, 2.8 * f, 10 * f, 16)
+        .translate(mx + 10 * f, y + 36 * f, mz - 3 * f),
+      col: rust,
+      k: K.TRIM,
+    });
+    parts.push({
+      g: new THREE.ConeGeometry(5, 11, 12).rotateX(Math.PI).translate(mx, y + 58, mz),
+      col: brass,
+      k: K.TRIM,
+    });
+    parts.push({
+      g: new THREE.SphereGeometry(4.2, 12, 8).translate(mx, y + 68, mz),
+      col: brass,
+      k: K.BEACON,
+    });
+
+    // Use the approved Small Comforts Tin Can House art on the map instead
+    // of a low-detail procedural placeholder. The interaction anchor remains
+    // in world space so click/hover/fly behavior is unchanged.
+    const tinCanTexture = new THREE.TextureLoader().load(
+      "/assets/joystick-home/tin-can-house.webp"
+    );
+    tinCanTexture.colorSpace = THREE.SRGBColorSpace;
+    const tinCanSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: tinCanTexture,
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+      })
+    );
+    tinCanSprite.position.set(mx, y + 30 * f, mz);
+    tinCanSprite.scale.set(88, 59, 1);
+    tinCanSprite.center.set(0.5, 0.08);
+    tinCanSprite.renderOrder = 5;
+    tinCanSprite.layers.set(INK_SKIP);
+    mini.add(tinCanSprite);
+
+    suitcase = { x, z, h: 58 * S };
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(560, 560).rotateX(-Math.PI / 2), haloMat);
     halo.position.set(x, H(x, z) + 3, z);
     halo.layers.set(INK_SKIP);
     scene.add(halo);
@@ -1478,9 +1552,13 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     for (const L of lanternInputs) {
       const b = lonLatToBoard(M, L.latitude, L.longitude);
       const p = ontoLand(F, b.x, b.z, 30);
-      const island = ownerAt(F, p.x, p.z);
+      const canonicalIsland = L.territoryName
+        ? islands.find(candidate => candidate.name === L.territoryName) ?? null
+        : null;
+      const island = canonicalIsland?.index ?? ownerAt(F, p.x, p.z);
       if (island < 0) continue;
-      // the customer's home: the nearest building on that island not already lit
+      // Territory identity is business/geographic truth. Inside that territory,
+      // the real coordinate still chooses the nearest physical-looking building.
       let best: Plan | null = null, bd = Infinity;
       for (const q of allPlans) {
         // a tower is an apartment building: many customers can share it
@@ -1490,7 +1568,13 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         if (d < bd) { bd = d; best = q; }
       }
       if (best) litIds.add(best.i);
-      placed.push({ key: L.key, x: best ? best.x * S : p.x, z: best ? best.z * S : p.z, island, plan: best });
+      placed.push({
+        key: L.key,
+        x: best ? best.x * S : canonicalIsland?.label[0] ?? p.x,
+        z: best ? best.z * S : canonicalIsland?.label[1] ?? p.z,
+        island,
+        plan: best,
+      });
       counts.set(island, (counts.get(island) ?? 0) + 1);
     }
     const data = litTex.image.data as Uint8Array;
@@ -1622,7 +1706,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const toT = new THREE.Vector3(x, TOP, z);
     fly = { t: 0, fromT, fromP, toT, toP: toT.clone().add(off), done };
   }
-  /** the lost-property suitcase under the pointer. Touch gets a larger hit target than a mouse. */
+  /** the Hollywood Tin Can House under the pointer. Touch gets a larger hit target than a mouse. */
   function suitcaseAt(cx: number, cy: number, radius = 64) {
     if (!suitcase) return null;
     const r = renderer.domElement.getBoundingClientRect();
@@ -1816,7 +1900,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const x = ((v.x + 1) / 2) * w, y = ((1 - v.y) / 2) * h;
       return { x, y, visible: v.z < 1 && x >= -40 && y >= -40 && x <= w + 40 && y <= h + 40 };
     },
-    /** where the lost-property suitcase is on screen, in container pixels (null until loaded) */
+    /** where the Hollywood Tin Can House is on screen, in container pixels (null until loaded) */
     suitcaseScreen() {
       if (!suitcase) return null;
       const v = new THREE.Vector3(suitcase.x, H(suitcase.x, suitcase.z) + suitcase.h * 0.5, suitcase.z).project(camera);

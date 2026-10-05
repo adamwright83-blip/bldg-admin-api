@@ -39,7 +39,14 @@ export const SMALL_COMFORTS_MARKUP = /* html */ `
     <button id="btn-rotate" class="act">⟳<span>Rotate</span></button>
     <button id="btn-pick" class="act" disabled>✋<span>Pick up</span></button>
   </div>
+  <button id="btn-out" aria-label="Step outside onto the lost-property shelf"><span class="bellic">🐀</span><span>Step outside</span></button>
   <button id="btn-bell" aria-label="Open the hotel to the next arrival"><span class="bellic">🔔</span><span>Open the hotel</span></button>
+</div>
+
+<div id="shelfbar">
+  <span id="forage-line">Hands free</span>
+  <button id="btn-drop" class="pill" hidden>Put it down</button>
+  <button id="btn-home" class="pill home">Back inside</button>
 </div>
 
 <div id="card" class="overlay center">
