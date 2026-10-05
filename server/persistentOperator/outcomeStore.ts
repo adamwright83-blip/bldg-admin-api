@@ -267,7 +267,7 @@ async function assertConsequentialOutcomeAuthority(
 ): Promise<void> {
   const requirements: Record<
     string,
-    { claimType: "action_completed" | "account_won" | "payment_verified"; subjectType: string; subjectIdKey: string }
+    { claimType: "action_completed" | "account_won" | "payment_verified" | "field_observation_attested"; subjectType: string; subjectIdKey: string }
   > = {
     visit_completed: {
       claimType: "action_completed",
@@ -283,6 +283,11 @@ async function assertConsequentialOutcomeAuthority(
       claimType: "payment_verified",
       subjectType: "cleancloud_order",
       subjectIdKey: "cleancloudOrderId",
+    },
+    field_debrief_analyzed: {
+      claimType: "field_observation_attested",
+      subjectType: "commercial_mission",
+      subjectIdKey: "missionId",
     },
   };
   const requirement = requirements[input.outcomeKind];
@@ -318,11 +323,22 @@ async function assertConsequentialOutcomeAuthority(
     );
   }
   if (
-    input.outcomeKind === "visit_completed" &&
+    (input.outcomeKind === "visit_completed" ||
+      input.outcomeKind === "field_debrief_analyzed") &&
     receipt.sourceRef !== input.evidenceReference
   ) {
     throw new Error(
-      "visit_completed Authority Receipt must match the persisted completion event"
+      `${input.outcomeKind} Authority Receipt must match the persisted source event`
+    );
+  }
+  if (
+    input.outcomeKind === "field_debrief_analyzed" &&
+    (receipt.sourceType !== "commercial_mission_event" ||
+      receipt.evidenceClass !== "operator_attested" ||
+      receipt.verificationClass !== "ATTESTED")
+  ) {
+    throw new Error(
+      "field_debrief_analyzed requires ATTESTED persisted human testimony"
     );
   }
 
