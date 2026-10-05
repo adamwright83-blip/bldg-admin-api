@@ -115,6 +115,51 @@ export class PresidentCycleService {
     private readonly claude: PresidentCycleModelProvider = new ClaudePresidentCycleProvider()
   ) {}
 
+  async gatherCurrentCompanyTruth(limit = 50): Promise<string[]> {
+    const bounded = Math.max(1, Math.min(50, Math.trunc(limit)));
+    const [rows] = await this.intelligence.pool.query<
+      Array<{ id: string }>
+    >(
+      `SELECT id FROM president_evidence
+       WHERE origin=? AND availability='AVAILABLE'
+         AND (expiresAt IS NULL OR expiresAt>NOW(3))
+       ORDER BY capturedAt DESC,id DESC LIMIT ?`,
+      [this.intelligence.origin, bounded]
+    );
+    return rows.map(row => row.id);
+  }
+
+  async startFromCurrentCompanyTruth(): Promise<PresidentCycle> {
+    const evidenceIds = await this.gatherCurrentCompanyTruth(50);
+    if (!evidenceIds.length)
+      throw new Error("President has no current company evidence to deliberate on");
+    return this.createAndDeliberate(evidenceIds);
+  }
+
+  async maybeStartScheduledCycle(now = new Date()): Promise<PresidentCycle | null> {
+    const latest = await this.store.latestCycle();
+    if (
+      latest &&
+      !["COMPLETED", "BLOCKED", "READY_FOR_HUMAN"].includes(latest.state)
+    )
+      return null;
+    const intervalHours = Math.max(
+      1,
+      Number(process.env.PRESIDENT_CYCLE_INTERVAL_HOURS?.trim() || 24)
+    );
+    if (
+      latest &&
+      now.getTime() - new Date(latest.createdAt).getTime() <
+        intervalHours * 60 * 60 * 1000
+    )
+      return null;
+    const readiness = await this.readiness();
+    if (!readiness.chatgpt || !readiness.claude) return null;
+    const evidenceIds = await this.gatherCurrentCompanyTruth(50);
+    if (!evidenceIds.length) return null;
+    return this.createAndDeliberate(evidenceIds);
+  }
+
   async createAndDeliberate(evidenceIds: string[]): Promise<PresidentCycle> {
     const uniqueIds = [...new Set(evidenceIds)];
     if (!uniqueIds.length || uniqueIds.length > 50)
