@@ -45,7 +45,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
     const admission = source("server/authority/fieldObservationAdmission.ts");
     expect(admission).toContain("PARKING_LOT_CLERK_EVENT_NAME");
     expect(admission).toContain("PARKING_LOT_CLERK_PROVENANCE");
-    expect(admission).toContain("System/model actors cannot attest field observations");
+    expect(admission).toContain("System/model or anonymous actors cannot attest field observations");
     expect(admission).toContain("Field observation testimony is not bound to its persisted visit outcome");
     expect(admission).toContain('claimType: "field_observation_attested"');
   });
