@@ -18,7 +18,7 @@
  */
 import { z } from "zod";
 import {
-  legacyDayforgeTenantAdminProcedure,
+  legacyAdminRoleProcedure,
   legacyDayforgeMissionFieldProcedure,
   router,
 } from "../_core/trpc";
@@ -64,7 +64,7 @@ export const goldlineEventRouter = router({
     }),
 
   /** Compact admin effectiveness view. Admin-only, same as Sales Intel. */
-  effectivenessSummary: legacyDayforgeTenantAdminProcedure
+  effectivenessSummary: legacyAdminRoleProcedure
     .input(z.object({ windowDays: z.number().int().min(1).max(90).optional() }).optional())
     .query(({ ctx, input }) =>
       getGoldlineEffectivenessSummary({
