@@ -10,6 +10,8 @@ import {
 } from "../../drizzle/schema";
 import { sourcedFact, unknownValue } from "../../shared/businessGame";
 import { getDb } from "../db";
+import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
+import { resolvePeriod } from "../analytics/businessPeriods";
 import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
 import type { RankedTerritoryOpportunity } from "../territory/territoryDiscovery";
 import type { BusinessStage, BusinessWorldProjection, WorldPoint } from "./businessWorldTypes";
@@ -40,7 +42,8 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const now = input.now ?? new Date();
-  const [assets, tenants, locations, memberships, territoryRows, paymentEvents, missionEvents, capabilityEvaluations] = await Promise.all([
+  const period = resolvePeriod({ kind: "all_time" }, now);
+  const [assets, tenants, locations, memberships, territoryRows, paymentEvents, missionEvents, capabilityEvaluations, revenue] = await Promise.all([
     listCustomerAssets({ tenantId: input.tenantId }),
     db.select().from(legacyDayforgeSaasTenants).where(eq(legacyDayforgeSaasTenants.id, input.tenantId)).limit(1),
     db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
@@ -49,12 +52,19 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
     db.select().from(orderPaymentEvents).where(eq(orderPaymentEvents.tenantId, input.tenantId)).orderBy(desc(orderPaymentEvents.occurredAt)).limit(20),
     db.select().from(commercialMissionEvents).where(eq(commercialMissionEvents.tenantId, input.tenantId)).orderBy(desc(commercialMissionEvents.createdAt)).limit(20),
     getCapabilityEvaluations({ tenantId: input.tenantId }),
+    readCanonicalRevenue({ tenantId: input.tenantId, from: period.start, to: period.end, timeZone: period.timeZone, now }),
   ]);
   const tenant = tenants[0];
   const primaryLocation = locations.find(location => location.isPrimary) ?? locations[0] ?? null;
   const activeNonOwnerMembers = memberships.filter(member => member.role !== "owner").length;
   const firstHire = capabilityEvaluations.find(item => item.capability === "FIRST_HIRE_READY");
-  const paidRevenue = assets.filter(asset => asset.kind === "residential").reduce((sum, asset) => sum + (asset.lifetimeValue.value ?? 0), 0);
+  const revenueSource = `canonical_paid_revenue:${input.tenantId}:${period.start}:${period.end}:${period.timeZone}`;
+  const paidRevenue = revenue.status === "unavailable"
+    ? unknownValue<number>("Canonical paid revenue sources are unavailable")
+    : { ...sourcedFact(revenue.recordedCents, `${revenueSource}:${revenue.precision}`), confidence: revenue.mayStateExact ? "high" as const : "medium" as const };
+  const revenueWarnings = revenue.status === "unavailable"
+    ? ["Canonical paid revenue is unavailable; unknown is not zero"]
+    : revenue.mayStateExact ? [] : [`Collected revenue is recorded only for ${period.start} through ${period.end}; canonical coverage does not license an exact total`];
   const commercialRevenue = assets.filter(asset => asset.kind === "commercial").reduce((sum, asset) => sum + (asset.commercial?.realizedRevenue.value ?? 0), 0);
   const receivables = assets.filter(asset => asset.kind === "residential").reduce((sum, asset) => sum + (asset.outstandingReceivables.value ?? 0), 0);
   const properties: WorldPoint[] = assets.filter(asset => asset.kind === "residential").map(asset => ({
@@ -92,18 +102,18 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
   return {
     generatedAt: now.toISOString(),
     business: { tenantId: input.tenantId, name: tenant?.businessName ?? hqName, brandName: hqName, stage: deriveBusinessStage({ activeNonOwnerMembers, firstHireReady: firstHire?.status === "READY" }), primaryColor: tenant?.primaryColor ?? "#0B5FFF" },
-    hq: { id: "hq", kind: "hq", name: hqName, latitude: primaryLocation?.latitude == null ? null : Number(primaryLocation.latitude), longitude: primaryLocation?.longitude == null ? null : Number(primaryLocation.longitude), geoStatus: primaryLocation?.latitude && primaryLocation.longitude ? "resolved" : "unresolved", state: "active", value: sourcedFact(paidRevenue + commercialRevenue, "customer asset projections"), detailPath: "/product/money", sourceReference: primaryLocation ? `dayforge_saas_tenant_locations:${primaryLocation.id}` : `tenant:${input.tenantId}`, customerAsset: null },
+    hq: { id: "hq", kind: "hq", name: hqName, latitude: primaryLocation?.latitude == null ? null : Number(primaryLocation.latitude), longitude: primaryLocation?.longitude == null ? null : Number(primaryLocation.longitude), geoStatus: primaryLocation?.latitude && primaryLocation.longitude ? "resolved" : "unresolved", state: "active", value: paidRevenue, detailPath: "/product/money", sourceReference: primaryLocation ? `dayforge_saas_tenant_locations:${primaryLocation.id}` : `tenant:${input.tenantId}`, customerAsset: null },
     properties, commercialAssets, territorySignals,
     openThreats,
     growthSignals: territorySignals.slice(0, 5).map(point => ({ id: point.id, title: point.name, value: point.value, sourceReference: point.sourceReference })),
-    financialSummary: { collectedRevenue: sourcedFact(paidRevenue, "orders + order_payment_projections"), realizedCommercialRevenue: sourcedFact(commercialRevenue, "commercial_pipeline_records.realizedRevenueCents"), receivables: sourcedFact(receivables, "orders + order_payment_projections") },
+    financialSummary: { collectedRevenue: paidRevenue, realizedCommercialRevenue: sourcedFact(commercialRevenue, "commercial_pipeline_records.realizedRevenueCents"), receivables: sourcedFact(receivables, "orders + order_payment_projections") },
     capabilities: capabilityEvaluations.filter(item => ["READY", "ACTIVE"].includes(item.status)).map(item => item.capability),
     teamSummary: { activeNonOwnerMembers, ownerIndependentRevenue: unknownValue("Executor attribution is not sufficient to compute owner-independent revenue") },
     recentChanges,
     dataQuality: {
       status: tenant && primaryLocation ? "partial" : "insufficient",
-      warnings: [...(!tenant ? ["Tenant profile is missing; using the legacy Laundry Butler label only for the default tenant"] : []), ...(!primaryLocation ? ["HQ location is not configured"] : []), "Residential customer coordinates are unresolved until a verified geocoder writes them"],
-      sources: ["dayforge_saas_tenants", "dayforge_saas_tenant_locations", "orders", "order_payment_projections", "commercial_accounts", "commercial_pipeline_records", "territory_scan_results"],
+      warnings: [...revenueWarnings, ...(!tenant ? ["Tenant profile is missing; using the legacy Laundry Butler label only for the default tenant"] : []), ...(!primaryLocation ? ["HQ location is not configured"] : []), "Residential customer coordinates are unresolved until a verified geocoder writes them"],
+      sources: ["canonical_paid_revenue", "dayforge_saas_tenants", "dayforge_saas_tenant_locations", "orders", "order_payment_projections", "commercial_accounts", "commercial_pipeline_records", "territory_scan_results"],
     },
   };
 }
