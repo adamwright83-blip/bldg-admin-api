@@ -26,6 +26,16 @@ describe("President runtime boundaries", () => {
   });
   it("rejects missing, malformed, wrong and cross-actor callback tokens", () => {
     const tokens = { executor: "secret-token-long-enough" };
+    expect(
+      authorizePresidentCallback("__proto__", "Bearer [object Object]", tokens)
+    ).toBe(false);
+    expect(
+      authorizePresidentCallback(
+        "toString",
+        "Bearer " + Object.prototype.toString,
+        tokens
+      )
+    ).toBe(false);
     for (const header of [
       undefined,
       "secret-token-long-enough",
