@@ -142,7 +142,8 @@ export default function LanternCityIslands({
             </div>
             {stats && atlas.data && !atlas.isError ? (
               <div className={styles.stats}>
-                <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;lanterns</div>
+                <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;mapped lanterns</div>
+                <div className={styles.pill}>{customers.length} located customers · {Math.max(0, customers.length - stats.lanterns)} outside mapped islands</div>
                 <div className={styles.pill}>Islands open&nbsp;<b>{stats.open} of {stats.islands}</b></div>
               </div>
             ) : null}
@@ -163,6 +164,12 @@ export default function LanternCityIslands({
               ? `${island.lanterns} lantern${island.lanterns === 1 ? "" : "s"} lit here: every customer's home burns gold.`
               : "Still under cloud. The first customer here clears the island."}
           </p>
+          {island.name === "Hollywood" ? (
+            <button type="button" className={styles.tinCanEntry} onClick={() => board.current?.enterSmallComforts()}>
+              <img src="/assets/joystick-home/tin-can-house.webp" alt="" width="80" height="54" />
+              <span>Tin Can House · Small Comforts</span>
+            </button>
+          ) : null}
           <button type="button" onClick={() => { setIsland(null); board.current?.board(); }}>Back to the board</button>
         </section>
       ) : null}
@@ -194,7 +201,7 @@ export default function LanternCityIslands({
         </div>
       ) : null}
       {inSuitcase ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className={styles.loading} role="status">Opening Small Comforts…</div>}>
           <SmallComforts onExit={leaveSuitcase} />
         </Suspense>
       ) : null}
@@ -207,7 +214,7 @@ export default function LanternCityIslands({
       {showUtilityDock && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
-          <button type="button" onClick={() => onNavigate?.("/customers")}>Customers <b className={styles.count}>{customers.length}</b></button>
+          <button type="button" onClick={() => onNavigate?.("/customers")}>Located customers <b className={styles.count}>{customers.length}</b></button>
           <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
         </nav>
       ) : null}
