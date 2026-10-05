@@ -94,7 +94,7 @@ async function ensureDemoTenant() {
     tenantId: DEMO_TENANT_ID,
     name: DEMO_BUSINESS_NAME,
     loginMethod: "goldline_demo_bypass",
-    role: "admin",
+    role: "user",
     lastSignedIn: new Date(),
   });
 
@@ -177,7 +177,7 @@ export function registerGoldlineDemoRoutes(app: express.Express) {
       await ensureDemoTenant();
       const sessionToken = await sdk.createSessionToken(DEMO_OPEN_ID, {
         name: DEMO_BUSINESS_NAME,
-        role: "admin",
+        role: "user",
         expiresInMs: DEMO_SESSION_MS,
       });
       res.cookie(DEMO_COOKIE_NAME, sessionToken, {
