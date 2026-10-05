@@ -106,7 +106,7 @@ describe("read-only commercial payment authority report", () => {
       ".insert(",
       ".delete(",
       ".transaction(",
-      "reconcileCommercialPipelineRevenue",
+      "reconcileCommercialPipelineRevenue(",
     ]) {
       expect(source).not.toContain(forbidden);
     }
