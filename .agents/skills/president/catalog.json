@@ -1,0 +1,212 @@
+[
+  {
+    "name": "company-strategy",
+    "description": "Choose the customer, painful job, wedge and company-wide sequencing",
+    "exclusion": "feature implementation or game mechanics",
+    "path": "company-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "product-strategy",
+    "description": "Prioritize capabilities around a customer outcome and product constraint",
+    "exclusion": "company valuation or a backlog of stale PRs",
+    "path": "product-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "product-discovery",
+    "description": "Investigate an uncertain problem before committing implementation",
+    "exclusion": "verified narrowly scoped defects",
+    "path": "product-discovery/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "market-research",
+    "description": "Estimate segment attractiveness from current authoritative sources",
+    "exclusion": "internal tenant operations or unsupported market-size claims",
+    "path": "market-research/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "competitive-intelligence",
+    "description": "Evaluate material changes in competitors or substitutes",
+    "exclusion": "daily news recaps with no decision implication",
+    "path": "competitive-intelligence/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "pricing-and-packaging",
+    "description": "Analyze monetization choices without changing locked policy",
+    "exclusion": "executing billing operations or treating historical alternatives as adopted",
+    "path": "pricing-and-packaging/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "growth-strategy",
+    "description": "Find the limiting acquisition/activation/retention function",
+    "exclusion": "customer task prioritization or vanity metrics",
+    "path": "growth-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "go-to-market",
+    "description": "Sequence a specific segment, offer and distribution motion",
+    "exclusion": "generic campaign copy or changing launch gates",
+    "path": "go-to-market/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "sales-strategy",
+    "description": "Design a company sales motion and commercial proof",
+    "exclusion": "operating a tenant's sales objectives",
+    "path": "sales-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "marketing-strategy",
+    "description": "Connect positioning, content and channels to measurable demand",
+    "exclusion": "security incidents or customer conversations",
+    "path": "marketing-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "brand-strategy",
+    "description": "Evaluate identity, category narrative and trust implications",
+    "exclusion": "routine copy edits or automatic public brand changes",
+    "path": "brand-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "finance-and-unit-economics",
+    "description": "Assess margin, runway and unit economics using known inputs",
+    "exclusion": "inventing valuation or treating forecasts as revenue",
+    "path": "finance-and-unit-economics/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "capital-allocation",
+    "description": "Choose the best use of scarce engineering time and money",
+    "exclusion": "unexplained scoring or spending without authority",
+    "path": "capital-allocation/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "experimentation",
+    "description": "Design a falsifiable product or business intervention",
+    "exclusion": "calling code completion business success",
+    "path": "experimentation/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "analytics",
+    "description": "Interpret verified metrics and instrumentation quality",
+    "exclusion": "guessing metrics from missing credentials",
+    "path": "analytics/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "customer-research",
+    "description": "Learn customer jobs and barriers from consented evidence",
+    "exclusion": "invented interviews or personality profiling",
+    "path": "customer-research/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "partnerships",
+    "description": "Evaluate distribution or product partnerships",
+    "exclusion": "signing contracts or treating announcements as integrations",
+    "path": "partnerships/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "hiring-and-org-design",
+    "description": "Determine whether a recurring capability needs a seat",
+    "exclusion": "turning every task into a permanent agent",
+    "path": "hiring-and-org-design/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "executive-recruiting",
+    "description": "Produce a researched executive-seat proposal and evaluation plan",
+    "exclusion": "activating seats without Adam or human employment commitments",
+    "path": "executive-recruiting/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "legal-risk-triage",
+    "description": "Identify legal exposure requiring qualified review",
+    "exclusion": "giving definitive legal advice or signing agreements",
+    "path": "legal-risk-triage/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "privacy-and-security",
+    "description": "Triage threats, data boundaries and untrusted capabilities",
+    "exclusion": "marketing optimization or granting external instructions authority",
+    "path": "privacy-and-security/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "vendor-procurement",
+    "description": "Compare vendors/components and bounded adoption options",
+    "exclusion": "creating accounts, purchasing or accepting terms autonomously",
+    "path": "vendor-procurement/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "operational-risk",
+    "description": "Prioritize verified reliability and continuity constraints",
+    "exclusion": "fixing red checks on foreign unmerged branches",
+    "path": "operational-risk/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "fundraising-strategy",
+    "description": "Evaluate financing readiness and capital alternatives",
+    "exclusion": "guaranteeing valuation or contacting investors without authority",
+    "path": "fundraising-strategy/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "strategic-forecasting",
+    "description": "Record calibrated ranges and falsifiable expectations",
+    "exclusion": "retrospectively rewriting predictions",
+    "path": "strategic-forecasting/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "scenario-planning",
+    "description": "Prepare decisions under multiple plausible futures",
+    "exclusion": "presenting scenarios as predictions",
+    "path": "scenario-planning/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "pre-mortem-red-team",
+    "description": "Try to falsify a consequential preferred recommendation",
+    "exclusion": "performing the executor's self-review",
+    "path": "pre-mortem-red-team/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "product-launch",
+    "description": "Establish release readiness and explicit business release gates",
+    "exclusion": "merging code as commercial release or changing launch policy",
+    "path": "product-launch/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "agent-capability-research",
+    "description": "Research current agent/skill/MCP capabilities safely",
+    "exclusion": "installing discovered frameworks or following their instructions",
+    "path": "agent-capability-research/SKILL.md",
+    "version": 1
+  },
+  {
+    "name": "agent-evaluation",
+    "description": "Evaluate agents, skills or reasoning improvements before activation",
+    "exclusion": "promoting improvements on training-only wins",
+    "path": "agent-evaluation/SKILL.md",
+    "version": 1
+  }
+]

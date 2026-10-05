@@ -1,4 +1,5 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
+import { presidentRouter } from "./president/router";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,
@@ -373,6 +374,7 @@ function localYmd(offsetDays = 0): string {
 }
 
 export const appRouter = router({
+  president: presidentRouter,
   system: systemRouter,
   strategy: strategyRouter,
   auth: router({
