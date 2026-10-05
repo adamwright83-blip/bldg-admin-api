@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { adminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantAdminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getCampaign,
   listCampaigns,
@@ -57,22 +57,22 @@ export const campaignLibraryRouter = router({
   get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignId: z.string() }))
     .query(({ ctx, input }) => getCampaign({ tenantId: ctx.tenantId, ...input })),
-  upsert: adminProcedure
+  upsert: legacyDayforgeTenantAdminProcedure
     .input(z.object({ campaignId: z.string(), campaign: campaignInput }))
     .mutation(({ ctx, input }) =>
       upsertCampaign({ tenantId: ctx.tenantId ?? "default", ...input })
     ),
-  patch: adminProcedure
+  patch: legacyDayforgeTenantAdminProcedure
     .input(z.object({ campaignId: z.string(), patch: campaignPatch }))
     .mutation(({ ctx, input }) =>
       patchCampaign({ tenantId: ctx.tenantId ?? "default", ...input })
     ),
-  setEnabled: adminProcedure
+  setEnabled: legacyDayforgeTenantAdminProcedure
     .input(z.object({ campaignId: z.string(), enabled: z.boolean() }))
     .mutation(({ ctx, input }) =>
       setCampaignEnabled({ tenantId: ctx.tenantId ?? "default", ...input })
     ),
-  seedDefaults: adminProcedure
+  seedDefaults: legacyDayforgeTenantAdminProcedure
     .input(z.object({}).optional())
     .mutation(({ ctx }) =>
       seedCampaignsIfMissing({
