@@ -2,6 +2,7 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import type { PresidentFounderDecision } from "@shared/presidentOperatingSystem";
 import "./PresidentPage.css";
+import PresidentAutonomousReview from "@/components/president/PresidentAutonomousReview";
 
 function Decision({
   decision,
@@ -163,6 +164,7 @@ export default function PresidentPage() {
         <span>Updated {new Date(brief.generatedAt).toLocaleString()}</span>
       </div>
       {mutationError && <p role="alert">{mutationError.message}</p>}
+      <PresidentAutonomousReview />
       {evidence.length > 0 && (
         <form
           className="president-focus"
