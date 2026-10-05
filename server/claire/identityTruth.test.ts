@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claireIdentityClaimViolation, formatClaireIdentityAuthority, loadClaireIdentityTruth, renderClaireIdentityAnswer } from "./identityTruth";
+import { claireIdentityClaimViolation, formatClaireIdentityAuthority, isExplicitClaireIdentityTurn, loadClaireIdentityTruth, renderClaireIdentityAnswer } from "./identityTruth";
 
 describe("Claire identity truth kernel", () => {
   it("loads the configured platform and account identities", async () => {
@@ -30,5 +30,14 @@ describe("Claire identity truth kernel", () => {
   it("renders Goldline from platform authority", async () => {
     const truth = await loadClaireIdentityTruth("default");
     expect(renderClaireIdentityAnswer("goldline", truth)).toContain("Goldline is a game inside JOYSTICK");
+  });
+
+  it("lets identity own only explicit identity turns", () => {
+    expect(isExplicitClaireIdentityTurn("business_name", "What is my business name?")).toBe(true);
+    expect(isExplicitClaireIdentityTurn("business_name", "What businesses are on this account?")).toBe(true);
+    expect(isExplicitClaireIdentityTurn("business_name", "My business is Seaweed Burgers.")).toBe(true);
+    expect(isExplicitClaireIdentityTurn("business_name", "How much did Laundry Farm make in September?")).toBe(false);
+    expect(isExplicitClaireIdentityTurn("claire_role", "What's your job?")).toBe(true);
+    expect(isExplicitClaireIdentityTurn("claire_role", "Your job was to walk me through the week.")).toBe(false);
   });
 });
