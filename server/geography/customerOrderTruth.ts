@@ -351,8 +351,8 @@ export function projectGeographicCustomers(input: {
       unit: latest.unit,
       cadence,
       totalOrders: sorted.length,
-      // lifetime spend: paid, non-cancelled orders only
-      totalSpendCents: sorted.reduce((sum, order) => sum + (order.paid && !order.cancelled ? order.totalCents : 0), 0),
+      // Geography establishes customer history, not paid financial authority.
+      // Paid spend belongs to the canonical payment reader, never these source flags.
       firstOrderAt: sorted[0]!.createdAt.toISOString(),
       lastOrderAt: latest.createdAt.toISOString(),
       sources,

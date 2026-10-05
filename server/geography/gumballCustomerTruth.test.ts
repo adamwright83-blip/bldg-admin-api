@@ -430,3 +430,13 @@ describe("digest stability for existing browser-sync tests", () => {
     );
   });
 });
+
+
+describe("geographic history is not payment authority", () => {
+  it("keeps paid-flag customer history without manufacturing a paid-spend claim", () => {
+    const { customers } = project(header, [native({ id: 90, paid: true, total: "100.00" })]);
+    expect(customers).toHaveLength(1);
+    expect(customers[0].totalOrders).toBe(1);
+    expect(customers[0]).not.toHaveProperty("totalSpendCents");
+  });
+});
