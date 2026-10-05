@@ -7,6 +7,7 @@ import {
   isPlatformAdministrator,
   tenantForAuthenticatedUser,
 } from "../../joystick/tenantIdentity";
+import { assertTrpcMutationOrigin } from "../../legacyDayforgeSecurity/legacyDayforgeSecurity";
 import { createPresidentCycleRouter } from "./api";
 import type { CycleStore } from "./cycleStore";
 import {
@@ -99,6 +100,8 @@ export function registerPresidentCycleHttpRoutes(app: Express) {
       )
         await runPresidentApprovedCycle(cycleId);
     },
+    allowMutation: req =>
+      assertTrpcMutationOrigin({ req, isMutation: true }).allowed,
   });
   app.use("/api/president/autonomous", router);
 }
