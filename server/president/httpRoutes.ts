@@ -5,6 +5,7 @@ import {
 } from "../../shared/presidentOperatingSystem";
 import { authorizePresidentCallback } from "./agentRuntime";
 import { getPresidentRuntime, presidentRuntimeConfig } from "./runtime";
+import { registerPresidentCycleHttpRoutes } from "./cycle/httpRuntime";
 
 function authorization(req: Request): string | undefined {
   const value = req.headers.authorization;
@@ -91,4 +92,8 @@ export function registerPresidentAgentRoutes(
         .json({ error: "President review callback rejected" });
     }
   });
+
+  // Autonomous improvement-cycle surface. This does not depend on the legacy
+  // external-agent transport being configured; it has its own readiness gate.
+  registerPresidentCycleHttpRoutes(app);
 }
