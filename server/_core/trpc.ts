@@ -56,10 +56,11 @@ export const protectedProcedure = baseProcedure.use(requireUser);
 export const adminProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    if (!isPlatformAdminIdentity(ctx.user)) {
+    const user = ctx.user;
+    if (!isPlatformAdminIdentity(user)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
-    return next({ ctx: { ...ctx, user: ctx.user } });
+    return next({ ctx: { ...ctx, user } });
   })
 );
 
