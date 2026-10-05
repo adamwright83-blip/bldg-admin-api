@@ -115,7 +115,8 @@ Implement only the approved mission. Inspect the repository before editing.
 Do not merge, push, create a pull request, modify git remotes, or rewrite history; the execution wrapper owns git publication.
 Do not modify server/mitch/**, shared/mitch*, server/commercialPipeline/**, server/commercialCampaigns/**, server/authority/**, .github/**, package.json, pnpm-lock.yaml, or reconcileCommercialPipelineRevenue.
 Do not write production data or credentials.
-Run useful targeted checks while working, but the wrapper will independently run mandatory validation after you finish.
+You do not have a shell tool. The wrapper owns commands, tests, git, network publication and pull-request creation.
+The wrapper will independently run mandatory validation after you finish editing.
 If the mission cannot be completed safely, make no speculative broad changes and explain the blocker in your final response.`;
 
   const prompt = JSON.stringify({
@@ -141,9 +142,9 @@ If the mission cannot be completed safely, make no speculative broad changes and
         "--max-budget-usd",
         process.env.PRESIDENT_ENGINEERING_MAX_USD?.trim() || "8",
         "--tools",
-        "Read,Write,Edit,Bash,Glob,Grep",
+        "Read,Write,Edit,Glob,Grep",
         "--allowedTools",
-        "Read,Write,Edit,Bash,Glob,Grep",
+        "Read,Write,Edit,Glob,Grep",
         "--strict-mcp-config",
         "--mcp-config",
         '{"mcpServers":{}}',
@@ -272,9 +273,7 @@ export class PresidentEngineeringExecutor {
       "president/" +
       safeSlug(mission.title) +
       "-" +
-      mission.id.slice(0, 8) +
-      "-a" +
-      Math.max(1, mission.attemptCount);
+      mission.id.slice(0, 8);
     const worktreeBase =
       process.env.PRESIDENT_WORKTREE_ROOT?.trim() ||
       path.join(root, ".president-worktrees");
@@ -320,9 +319,13 @@ export class PresidentEngineeringExecutor {
         });
         const changedPaths = changed.stdout
           .split("\n")
-          .map(line => line.slice(3).trim())
-          .filter(Boolean)
-          .map(value => (value.includes(" -> ") ? value.split(" -> ").pop()! : value));
+          .flatMap(line => {
+            const value = line.slice(3).trim();
+            if (!value) return [];
+            return value.includes(" -> ")
+              ? value.split(" -> ").map(part => part.trim())
+              : [value];
+          });
         const forbidden = changedPaths.find(protectedPath);
         if (forbidden)
           throw new Error(`President executor modified protected path: ${forbidden}`);
@@ -367,14 +370,16 @@ export class PresidentEngineeringExecutor {
 
       const fileList = await runPresidentCommand({
         command: "git",
-        args: ["diff", "--name-only", baseSha],
+        args: ["diff", "--name-status", "-M", baseSha],
         cwd: worktree,
         timeoutMs: 10_000,
       });
       const changedFiles = fileList.stdout
         .split("\n")
-        .map(value => value.trim())
-        .filter(Boolean);
+        .flatMap(line => {
+          const parts = line.split("\t").map(value => value.trim()).filter(Boolean);
+          return parts.slice(1);
+        });
       const forbidden = changedFiles.find(protectedPath);
       if (forbidden)
         throw new Error(`President executor changed protected path: ${forbidden}`);
@@ -424,7 +429,7 @@ export class PresidentEngineeringExecutor {
 
       const push = await runPresidentCommand({
         command: "git",
-        args: ["push", "-u", "origin", branch],
+        args: ["push", "--force-with-lease", "-u", "origin", branch],
         cwd: worktree,
         timeoutMs: 180_000,
       });
