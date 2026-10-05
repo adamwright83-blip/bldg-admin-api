@@ -300,3 +300,42 @@ describe("no demo data", () => {
     }
   });
 });
+
+
+describe("live sales scope and undated precision", () => {
+  it("keeps the named month through company and service follow-ups", async () => {
+    const { ask, state } = claire();
+    await say(ask, "How did August compare with July?");
+    await say(ask, "How much did Laundry Farm make in August?");
+    for (const utterance of ["How much of that was Laundry Butler?", "How much was core Laundry Farm?", "How much is unresolved by service line?"]) {
+      const text = await say(ask, utterance);
+      expect(text).toContain("August");
+      expect(text).not.toContain("last 30 days");
+      expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
+    }
+    await say(ask, "How much revenue came from Century Park East?");
+    expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
+    expect(state.analytics?.query.filters?.serviceLines).toBeFalsy();
+    expect(state.analytics?.query.filters?.includeBuildings).toEqual(["centuryparkeast"]);
+    await say(ask, "How much was Laundry Butler in July?");
+    expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-07-01", end: "2026-07-31" });
+    await say(ask, "How much has OPUS LA generated?");
+    expect(state.analytics?.query.period).toEqual({ kind: "all_time" });
+    expect(state.analytics?.query.filters?.serviceLines).toBeFalsy();
+  });
+
+  it("qualifies dated revenue when a refund cannot be assigned a payment date", async () => {
+    const loaders = fixtureLoaders();
+    const base = await loaders.cleancloud({ tenantId: "tenant-1", startUtc: new Date("2020-01-01"), endExclusiveUtc: FIXTURE_NOW });
+    const makeClaire = () => claire({ loaders: {
+      ...loaders,
+      cleancloud: async () => [...base, { ...base[0]!, cleancloudOrderId: "undated-refund", totalCents: -1000, paymentDateUtc: null, paidDateUtc: null, sourceReportType: "orders_sales" }],
+    } });
+    const text = await say(makeClaire().ask, "How much did Laundry Farm make in August?");
+    expect(text).toContain("recorded dated totals");
+    expect(text).toContain("$10.00 in adjustments with unknown payment dates");
+    expect(text).toContain("cannot assign them to this period");
+    const history = await say(makeClaire().ask, "How much has Ava spent?");
+    expect(history).toContain("$10.00 in adjustments with unknown payment dates");
+  });
+});
