@@ -255,6 +255,16 @@ export async function commitAndPush(
   return { commitSha: head };
 }
 
+const SAFE_BROWSER_START =
+  /^(pnpm (dev|run dev|exec vite)|npx vite)(?:\s+[A-Za-z0-9_./:=@-]+)*$/;
+
+export function assertSafeBrowserStartCommand(command: string) {
+  if (!SAFE_BROWSER_START.test(command.trim()))
+    throw new Error(
+      `Browser start command not allowed: ${command.slice(0, 120)}`
+    );
+}
+
 /** Real browser validation via Playwright. Fails on console errors or missing text. */
 export async function runBrowserCheck(
   check: { url: string; expectText?: string; startCommand?: string },
@@ -264,6 +274,7 @@ export async function runBrowserCheck(
   let server: ReturnType<typeof spawn> | null = null;
   try {
     if (check.startCommand) {
+      assertSafeBrowserStartCommand(check.startCommand);
       server = spawn("sh", ["-c", check.startCommand], { cwd, detached: true, stdio: "ignore" });
       const deadline = Date.now() + 90_000;
       for (;;) {
