@@ -17,9 +17,29 @@ function numberEnv(name: string, fallback: number): number {
   return value;
 }
 
-const status = presidentRuntimeStatus();
-const legacyRuntime =
-  status.executionState === "CONFIGURED" ? getPresidentRuntime() : null;
+let legacyStatus:
+  | ReturnType<typeof presidentRuntimeStatus>
+  | {
+      executionState: "UNCONFIGURED";
+      configurationError: string;
+    };
+let legacyRuntime: ReturnType<typeof getPresidentRuntime> | null = null;
+
+try {
+  legacyStatus = presidentRuntimeStatus();
+  if (legacyStatus.executionState === "CONFIGURED")
+    legacyRuntime = getPresidentRuntime();
+} catch (error) {
+  legacyStatus = {
+    executionState: "UNCONFIGURED",
+    configurationError:
+      error instanceof Error ? error.message : String(error),
+  };
+  console.error(
+    "[PresidentWorker] legacy external-agent runtime disabled; autonomous cycle runtime remains available",
+    error
+  );
+}
 const pool = presidentPool();
 const programs = legacyRuntime?.programs ?? new MysqlPresidentProgramStore(pool);
 const intelligence =
@@ -81,7 +101,7 @@ const server = http.createServer((request, response) => {
   response.end(
     JSON.stringify({
       ok,
-      runtime: presidentRuntimeStatus(),
+      runtime: legacyStatus,
       worker: {
         inFlight,
         lastRunAt,
