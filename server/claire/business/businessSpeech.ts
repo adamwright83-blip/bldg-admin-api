@@ -502,13 +502,15 @@ export function speakComposition(breakdown: LineageBreakdown, periodLabel: strin
     );
   }
   if (farm) {
+    const stripe = breakdown.byProcessor.find(slice => slice.key === "stripe");
     const clearent = breakdown.byProcessor.find(slice => slice.key === "clearent");
     const cash = breakdown.byProcessor.find(slice => slice.key === "cash");
     const other = breakdown.byProcessor.find(slice => slice.key === "other_or_unknown");
     let detail = "";
-    if (clearent && clearent.orders === farm.orders) detail = ", all on Clearent cards";
-    else if (clearent || cash || other) {
+    if (!unattributed && clearent && !stripe && clearent.orders === farm.orders) detail = ", all on Clearent cards";
+    else if (!unattributed && (stripe || clearent || cash || other)) {
       const parts = [
+        stripe ? `${speech.money(stripe.cents)} on Stripe` : null,
         clearent ? `${speech.money(clearent.cents)} on Clearent cards` : null,
         cash ? `${speech.money(cash.cents)} cash` : null,
         other ? `${speech.money(other.cents)} with no recorded payment method` : null,

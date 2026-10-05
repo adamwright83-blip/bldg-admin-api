@@ -526,7 +526,7 @@ export async function runBusinessQuery(
       await readCoverageSeam(deps, tenantId, period),
       ledger,
       period,
-      !queryNarrowsRevenue(query)
+      queryAllowsExactRevenueScope(query)
     );
     coverage.observationReference = `canonical-sales:${createHash("sha256")
       .update(
@@ -581,10 +581,10 @@ export async function runBusinessQuery(
             ? historyKeepingIncluded(history, period, comparisonPeriod, currentRead, previousRead)
             : history;
         if (currentRead) {
-          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, queryAllowsExactRevenueScope(query));
           if (previousRead && comparisonPeriod && coverage.canonicalRevenue) {
             coverage.canonicalRevenue.comparisonMayStateExact =
-              !queryNarrowsRevenue(query) &&
+              queryAllowsExactRevenueScope(query) &&
               revenueMayStateExact({
                 coverage: interpretSourceCoverage({
                   snapshot: coverageSeam,
@@ -621,7 +621,7 @@ export async function runBusinessQuery(
         }
         const coverageSeam = await readCoverageSeam(deps, tenantId, period);
         const currentRead = reconcileHistorySpan(period);
-        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, queryAllowsExactRevenueScope(query));
         return ok({ kind: "profit", revenue: totalsFromReconciled(currentRead), missing });
       }
       case "active_customers":
@@ -738,6 +738,13 @@ async function readCoverageSeam(
 
 function queryNarrowsRevenue(query: BusinessQuery): boolean {
   return Boolean(query.serviceType || query.filterUnion?.length || hasLineageFilters(query.filters));
+}
+
+/** Source membership is explicit on every economic event; other narrower scopes stay conservative. */
+function queryAllowsExactRevenueScope(query: BusinessQuery): boolean {
+  if (!queryNarrowsRevenue(query)) return true;
+  return Boolean(!query.serviceType && !query.filterUnion?.length && query.filters?.sources?.length === 1 &&
+    Object.entries(query.filters).every(([key, value]) => key === "sources" || value == null || (Array.isArray(value) && !value.length)));
 }
 
 function stampCanonicalRevenue(

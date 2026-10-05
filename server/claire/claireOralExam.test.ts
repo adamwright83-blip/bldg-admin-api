@@ -311,6 +311,7 @@ describe("I — source / filter thread, and business lineage", () => {
     expect(composition).toContain("Laundry Butler is a service line within Laundry Farm.");
     expect(composition).toContain("Laundry Butler service was $231 across 6 orders.");
     expect(composition).toContain("Laundry Farm total was $604 across 12 orders");
+    expect(composition).toContain("$231 on Stripe");
     expect(await ask("How much is Stripe?")).toBe("Stripe-backed revenue in the last 30 days is $231 across 6 orders.");
     expect(await ask("What about Clearent?")).toContain("Clearent card revenue in the last 30 days is $338 across 5 orders.");
     expect(await ask("What's the latest sale you have?")).toBe("The newest sale I have is $52.00 for Sean Cohen, paid September 10 at 7:35 PM.");

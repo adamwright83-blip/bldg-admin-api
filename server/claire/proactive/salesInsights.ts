@@ -74,7 +74,7 @@ export function selectSalesInsight(
     },
     { from: result.period.start, to: result.period.end, cents: current },
   ];
-  const observationReference = `sales-trend:${createHash("sha256").update(JSON.stringify(series)).digest("hex")}`;
+  const observationReference = `sales-trend:${createHash("sha256").update(JSON.stringify({ scope, series, canonicalObservation: result.coverage?.observationReference })).digest("hex")}`;
   return {
     kind: "sales_trend",
     observationReference,

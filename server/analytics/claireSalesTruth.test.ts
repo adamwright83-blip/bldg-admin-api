@@ -246,3 +246,22 @@ it("compares a named completed September with the entire August", () => {
   const september = resolvePeriod({ kind: "between", start: "2026-09-01", end: "2026-09-30" }, now, "America/Los_Angeles");
   expect(previousPeriod(september, now)).toMatchObject({ start: "2026-08-01", end: "2026-08-31" });
 });
+it("licenses a source-only trend when canonical reconciliation and coverage prove both periods", async () => {
+  const query = { ...defaultBusinessQuery("revenue"), period: { kind: "last_month" as const }, comparison: "previous" as const, filters: { sources: ["cleancloud" as const] } };
+  const result = await runBusinessQuery("test", query, {
+    loadLedger: async input => {
+      const ledger = await loadPaidOrderLedger(input, fixtureLoaders());
+      return { ...ledger, unverifiedNative: [] };
+    },
+    loadOpenOrders: async () => ({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
+    loadCompleteness: async () => fixtureCompleteness,
+    readSourceCoverage: async () => provenBusinessCoverageSnapshot("test"),
+    now: () => FIXTURE_NOW,
+    timeZone: () => FIXTURE_TZ,
+  });
+  expect(result.status).toBe("ok");
+  if (result.status === "ok") {
+    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(true);
+    expect(result.coverage?.canonicalRevenue?.comparisonMayStateExact).toBe(true);
+  }
+});
