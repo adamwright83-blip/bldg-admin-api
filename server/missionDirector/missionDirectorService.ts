@@ -227,7 +227,7 @@ export async function listPlanRevisions(input: {
  * touching persistence. Exposed separately so the determinism-invariant
  * test can call it directly with a frozen bundle.
  */
-export async function computeMissionPlan(input: {
+type MissionPlanInput = {
   tenantId: string;
   operatorId: string;
   operatorIds?: readonly string[];
@@ -235,7 +235,28 @@ export async function computeMissionPlan(input: {
   operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
-}): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+};
+
+function attachMissionExplanation(
+  bare: MissionPlanOutcome,
+  explanation: string,
+  intelligence: "anthropic" | "deterministic_fallback"
+): MissionPlanOutcome {
+  return bare.status === "no_plan"
+    ? bare
+    : bare.status === "fallback_only"
+      ? { ...bare, explanation }
+      : { ...bare, explanation, intelligence };
+}
+
+/**
+ * Computes the deterministic selection and fingerprint without invoking the
+ * explanation model and without persistence. planForDate uses this first so
+ * an unchanged refresh can return the stored revision before any LLM call.
+ */
+async function prepareMissionPlan(
+  input: MissionPlanInput
+): Promise<{ bareOutcome: MissionPlanOutcome; inputFingerprint: string }> {
   const operatorUserId = input.operatorUserId?.trim() || input.operatorId;
   const operatorUserIds = [...new Set(
     [operatorUserId, ...(input.operatorUserIds ?? [])].map(id => id.trim()).filter(Boolean)
@@ -306,17 +327,6 @@ export async function computeMissionPlan(input: {
     libraryEnabledCount: enabledCampaigns.length,
     rankingContext,
   });
-  const { explanation, intelligence } = await explainMissionPlan({
-    tenantId: input.tenantId,
-    outcome: bare,
-  });
-  const outcome: MissionPlanOutcome =
-    bare.status === "no_plan"
-      ? bare
-      : bare.status === "fallback_only"
-        ? { ...bare, explanation }
-        : { ...bare, explanation, intelligence };
-
   const inputFingerprint = computePlanningFingerprint({
     businessDate: input.businessDate,
     fieldItemIds: fieldToday.timeline.map(item => item.id),
@@ -326,7 +336,27 @@ export async function computeMissionPlan(input: {
     rankingContext,
     commandFingerprint: command?.constraints.fingerprint ?? null,
   });
-  return { outcome, inputFingerprint };
+
+  return { bareOutcome: bare, inputFingerprint };
+}
+
+/**
+ * Computes the deterministic plan + explanation for a bundle, without
+ * touching persistence. Exposed separately so the determinism-invariant
+ * test can call it directly with a frozen bundle.
+ */
+export async function computeMissionPlan(
+  input: MissionPlanInput
+): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+  const { bareOutcome, inputFingerprint } = await prepareMissionPlan(input);
+  const { explanation, intelligence } = await explainMissionPlan({
+    tenantId: input.tenantId,
+    outcome: bareOutcome,
+  });
+  return {
+    outcome: attachMissionExplanation(bareOutcome, explanation, intelligence),
+    inputFingerprint,
+  };
 }
 
 const activeRuns = new Map<string, Promise<MissionDirectorPlan>>();
@@ -397,11 +427,20 @@ async function planForDateInner(input: {
       }).catch(() => ({ projectedIds: [], created: 0 }))
     )
   );
-  const { outcome, inputFingerprint } = await computeMissionPlan(input);
+  const { bareOutcome, inputFingerprint } = await prepareMissionPlan(input);
   const latest = await getLatestPlan(input);
   if (latest && latest.inputFingerprint === inputFingerprint) {
     return latest;
   }
+  const { explanation, intelligence } = await explainMissionPlan({
+    tenantId: input.tenantId,
+    outcome: bareOutcome,
+  });
+  const outcome = attachMissionExplanation(
+    bareOutcome,
+    explanation,
+    intelligence
+  );
   // Reads span the authorized alias group, but revisions are unique per
   // concrete operatorId. Compute the next revision only from the canonical
   // write key so an alias-owned revision number cannot collide with an
