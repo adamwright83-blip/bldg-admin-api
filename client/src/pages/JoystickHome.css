@@ -10,9 +10,8 @@
   padding:0 26px;border-bottom:1px solid rgba(20,24,30,.08);
   background:rgba(250,249,246,.91);backdrop-filter:blur(18px) saturate(150%);
 }
-.jh-brand{display:flex;align-items:center;gap:8px;min-width:190px;font-size:25px;letter-spacing:-.04em}
-.jh-brand svg{width:21px;color:#b57917;fill:#d5a043;stroke-width:1.8}
-.jh-brand strong{font-weight:850}
+.jh-brand{display:flex;align-items:center;min-width:190px}
+.jh-brand-logo{display:block;width:156px;height:auto;max-height:44px;object-fit:contain;object-position:left center}
 .jh-nav{display:flex;align-items:center;gap:6px;flex:1}
 .jh-nav a{
   height:42px;display:flex;align-items:center;gap:9px;padding:0 14px;border-radius:13px;
@@ -123,7 +122,7 @@
   .jh-intro{grid-template-columns:1fr}.jh-greeting{border-right:0;border-bottom:1px solid #ded9cf;padding-bottom:12px}
 }
 @media (max-width:640px){
-  .jh-brand strong{font-size:20px}.jh-new-order span{display:none}.jh-new-order{width:42px;padding:0;justify-content:center}
+  .jh-brand-logo{width:132px}.jh-new-order span{display:none}.jh-new-order{width:42px;padding:0;justify-content:center}
   .jh-avatar,.jh-icon-button{display:none}.jh-intro{padding:18px 16px 14px}.jh-greeting h1{font-size:46px}
   .jh-dashboard{padding:0 10px 20px}.jh-world-card{min-height:470px}.jh-world-copy{left:18px;top:20px;width:235px}
   .jh-world-copy h2{font-size:48px}.jh-world-copy p{font-size:16px}.jh-president-row{grid-template-columns:96px 1fr 16px}
