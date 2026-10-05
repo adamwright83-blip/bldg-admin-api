@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { ENV } from "../../_core/env";
 import { notifyOwner } from "../../_core/notification";
 import { presidentPool } from "../database";
+import { MysqlPresidentIntelligenceStore } from "../intelligenceStore";
 import { createCycle, presentToAdam } from "./cycleService";
 import { MysqlCycleStore, type CycleStore } from "./cycleStore";
 import { runDeliberation } from "./deliberation";
@@ -65,15 +66,62 @@ const notificationPort = {
   },
 };
 
+async function durablePresidentEvidence() {
+  const intelligence = new MysqlPresidentIntelligenceStore(presidentPool());
+  const kinds = [
+    "RESEARCH",
+    "PROGRESS",
+    "LESSON",
+    "METRIC",
+    "RISK",
+    "OPPORTUNITY",
+    "CONVERSATION",
+    "EVALUATION",
+    "STRATEGY",
+  ] as const;
+  const records = (
+    await Promise.all(kinds.map(kind => intelligence.list(kind, 12)))
+  ).flat();
+  const ids = [
+    ...new Set(records.flatMap(record => record.evidenceIds)),
+  ].slice(0, 100);
+  if (!ids.length) return [];
+  const now = Date.now();
+  const evidence = await intelligence.evidence(ids);
+  return evidence
+    .filter(
+      e =>
+        e.availability === "AVAILABLE" &&
+        (!e.expiresAt || new Date(e.expiresAt).getTime() > now)
+    )
+    .map(e => ({
+      id: `intel_${e.id}`,
+      source: e.source,
+      kind: e.kind,
+      observedAt: e.capturedAt,
+      summary: e.statement,
+      ref: `president-evidence:${e.id}`,
+      basis: e.kind === "FACT" ? ("EVIDENCE" as const) : ("JUDGMENT" as const),
+    }));
+}
+
 export async function queuePresidentRecommendationCycle(input: {
   tenantId: string;
   operatorEvidenceFile?: string;
 }) {
   if (!input.tenantId.trim()) throw new Error("tenantId required");
-  const evidence = await gatherCompanyEvidence({
-    repoRoot: presidentCycleRepoRoot(),
-    operatorEvidenceFile: input.operatorEvidenceFile,
-  });
+  const [repoEvidence, durableEvidence] = await Promise.all([
+    gatherCompanyEvidence({
+      repoRoot: presidentCycleRepoRoot(),
+      operatorEvidenceFile: input.operatorEvidenceFile,
+    }),
+    durablePresidentEvidence(),
+  ]);
+  const evidence = [
+    ...new Map(
+      [...durableEvidence, ...repoEvidence].map(item => [item.id, item])
+    ).values(),
+  ];
   return createCycle(getPresidentCycleStore(), {
     tenantId: input.tenantId,
     evidence,
