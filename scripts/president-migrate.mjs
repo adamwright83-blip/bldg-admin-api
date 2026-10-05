@@ -19,6 +19,7 @@ const files = [
   "../drizzle/0109_president_stage1.sql",
   "../drizzle/0113_president_intelligence.sql",
   "../drizzle/0114_president_operating_system.sql",
+  "../drizzle/0120_president_autonomous_cycles.sql",
 ];
 
 const connection = await mysql.createConnection(databaseUrl);
