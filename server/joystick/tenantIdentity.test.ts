@@ -12,6 +12,7 @@ import {
   authorizeJoystickClaireDesk,
   claireOperatorScope,
   isLegacySharedPasswordOpenId,
+  isPlatformAdministrator,
   sharedPasswordLoginSelection,
   tenantForAuthenticatedUser,
 } from "./tenantIdentity";
@@ -168,6 +169,41 @@ describe("JOYSTICK tenant identity", () => {
         platformRole: "driver",
       })
     ).toBeNull();
+  });
+
+  it("never treats shared-password or demo identities as platform administrators", () => {
+    expect(
+      isPlatformAdministrator({ openId: "admin-owner", role: "admin" })
+    ).toBe(false);
+    expect(
+      isPlatformAdministrator({
+        openId: "goldline-demo:wright-contractors",
+        role: "admin",
+      })
+    ).toBe(false);
+    expect(
+      isPlatformAdministrator({ openId: "oauth-platform-admin", role: "admin" })
+    ).toBe(true);
+  });
+
+  it("keeps the shared admin password as tenant membership, not platform authority", async () => {
+    const decision = await authorizeJoystickClaireDesk(
+      {
+        tenantId: "default",
+        user: { openId: "admin-owner", role: "admin" },
+      },
+      vi.fn().mockResolvedValue({
+        tenantId: "default",
+        userOpenId: "admin-owner",
+        role: "owner",
+      })
+    );
+    expect(decision).toEqual({
+      ok: true,
+      tenantId: "default",
+      operatorUserId: "admin-owner",
+      authority: "membership",
+    });
   });
 
   it("reads only the shared-password role and ignores tenant selectors", () => {
