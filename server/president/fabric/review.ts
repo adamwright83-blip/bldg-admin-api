@@ -237,12 +237,17 @@ Reply with ONLY JSON: {"verdict":"PASS"|"FAIL"|"BLOCKED","reasons":["..."]}. FAI
 
   async reviewResearch(ctx: {
     mission: Mission;
-    artifactPath: string;
+    artifactPath?: string;
+    artifactText?: string;
     repoSnapshot: string;
     executorActorId: string;
   }): Promise<ReviewResult> {
     assertIndependentReviewer(ctx.executorActorId, this.actorId);
-    const text = existsSync(ctx.artifactPath) ? readFileSync(ctx.artifactPath, "utf8") : "";
+    const text =
+      ctx.artifactText ??
+      (ctx.artifactPath && existsSync(ctx.artifactPath)
+        ? readFileSync(ctx.artifactPath, "utf8")
+        : "");
     const problems = validateResearchArtifact(text, ctx.repoSnapshot);
     let modelVerdict: ReviewVerdict | null = null;
     let reasons: string[] = [];
