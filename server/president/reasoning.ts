@@ -291,10 +291,6 @@ export async function reasonAboutCompany(input: {
       throw new Error("Fixture cannot masquerade as real evidence");
     for (const e of input.evidence) await input.store.putEvidence(e);
     const route = routeExecutiveSkills(input.question);
-    if (route.domain === "GAMES")
-      throw new Error(
-        "Games reasoning belongs to Mitch; supply executive-level objective to its existing domain interface"
-      );
     const selected = await activateExecutiveSkills(route.skills);
     const context = {
       company: input.context,

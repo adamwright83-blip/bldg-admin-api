@@ -19,6 +19,8 @@ import { AnthropicWebSearchPresidentProvider } from "./webResearchProvider";
 import { reasonAboutCompany } from "./reasoning";
 import { researchCompanyQuestion, researchPlanSchema } from "./research";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
+import { getPresidentCycleRuntime, presidentCycleReadiness } from "./cycle/runtime";
+import { buildPresidentMorningReport } from "./fabric/morningReport";
 import {
   PRESIDENT_AUTHORITY_CLASSES,
   PRESIDENT_CONSEQUENTIAL_DOMAINS,
@@ -533,6 +535,107 @@ export const presidentRouter = router({
     .mutation(({ input }) =>
       new MysqlPresidentIntelligenceStore(database()).putEvidence(input)
     ),
+
+  cycleReadiness: founderProcedure.query(() => presidentCycleReadiness()),
+
+  latestCycle: founderProcedure.query(async () => {
+    const runtime = getPresidentCycleRuntime();
+    const cycle = await runtime.store.latestCycle();
+    return {
+      cycle,
+      missions: cycle ? await runtime.store.listMissions(cycle.id) : [],
+    };
+  }),
+
+  startImprovementCycle: founderProcedure
+    .input(
+      z
+        .object({
+          evidenceIds: z
+            .array(z.string().min(1).max(64))
+            .min(1)
+            .max(50)
+            .optional(),
+        })
+        .strict()
+    )
+    .mutation(async ({ input }) => {
+      try {
+        const service = getPresidentCycleRuntime().service;
+        return input.evidenceIds
+          ? await service.createAndDeliberate(input.evidenceIds)
+          : await service.startFromCurrentCompanyTruth();
+      } catch (error) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "President deliberation failed",
+        });
+      }
+    }),
+
+  cycleOtherSeven: founderProcedure
+    .input(z.object({ cycleId: z.string().uuid() }).strict())
+    .query(({ input }) =>
+      getPresidentCycleRuntime().service.otherSeven(input.cycleId)
+    ),
+
+  approveImprovementCycle: founderProcedure
+    .input(
+      z
+        .object({
+          cycleId: z.string().uuid(),
+          approvedCandidateIds: z
+            .array(z.string().min(1).max(96))
+            .min(1)
+            .max(3),
+        })
+        .strict()
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await getPresidentCycleRuntime().service.approve({
+          cycleId: input.cycleId,
+          approvedCandidateIds: input.approvedCandidateIds,
+          founderId: ctx.user.openId,
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "President approval failed",
+        });
+      }
+    }),
+
+  runApprovedCycle: founderProcedure
+    .input(z.object({ cycleId: z.string().uuid() }).strict())
+    .mutation(async ({ input }) => {
+      try {
+        return await getPresidentCycleRuntime().runner.runApprovedCycle(
+          input.cycleId
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "President overnight execution failed",
+        });
+      }
+    }),
+
+  cycleMorningReport: founderProcedure
+    .input(z.object({ cycleId: z.string().uuid() }).strict())
+    .query(({ input }) => {
+      const runtime = getPresidentCycleRuntime();
+      return buildPresidentMorningReport(runtime.store, input.cycleId);
+    }),
 
   ledger: founderProcedure
     .input(

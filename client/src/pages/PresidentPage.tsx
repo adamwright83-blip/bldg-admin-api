@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import type { PresidentFounderDecision } from "@shared/presidentOperatingSystem";
 import "./PresidentPage.css";
@@ -95,9 +96,27 @@ function Decision({
 
 export default function PresidentPage() {
   const [companyFocus, setCompanyFocus] = useState("");
+  const [showOtherSeven, setShowOtherSeven] = useState(false);
+  const [selectedCycleCandidates, setSelectedCycleCandidates] = useState<string[]>([]);
   const state = trpc.president.founderSurface.useQuery(undefined, {
     refetchInterval: 15000,
     retry: false,
+  });
+  const cycleState = trpc.president.latestCycle.useQuery(undefined, {
+    refetchInterval: 15000,
+    retry: false,
+  });
+  const startCycle = trpc.president.startImprovementCycle.useMutation({
+    onSuccess: async () => {
+      await cycleState.refetch();
+      toast("President has recommendations ready for review.");
+    },
+  });
+  const approveCycle = trpc.president.approveImprovementCycle.useMutation({
+    onSuccess: async () => {
+      await cycleState.refetch();
+      toast.success("President's overnight work is approved.");
+    },
   });
   const request = trpc.president.requestObjectiveSelection.useMutation({
     onSuccess: () => void state.refetch(),
@@ -114,6 +133,28 @@ export default function PresidentPage() {
       void state.refetch();
     },
   });
+
+  const latestCycle = cycleState.data?.cycle ?? null;
+  useEffect(() => {
+    if (!latestCycle || latestCycle.state !== "AWAITING_ADAM_REVIEW") return;
+    setSelectedCycleCandidates(current =>
+      current.length ? current : latestCycle.proposedCandidateIds
+    );
+    const key = "president-review-notified:" + latestCycle.id;
+    if (!sessionStorage.getItem(key)) {
+      toast("President has 3 recommendations ready for review.");
+      sessionStorage.setItem(key, "1");
+    }
+  }, [latestCycle?.id, latestCycle?.state]);
+
+  const toggleCycleCandidate = (candidateId: string) => {
+    setSelectedCycleCandidates(current => {
+      if (current.includes(candidateId))
+        return current.filter(id => id !== candidateId);
+      if (current.length >= 3) return current;
+      return [...current, candidateId];
+    });
+  };
   if (state.isLoading)
     return (
       <main className="president-page">
@@ -163,6 +204,28 @@ export default function PresidentPage() {
         <span>Updated {new Date(brief.generatedAt).toLocaleString()}</span>
       </div>
       {mutationError && <p role="alert">{mutationError.message}</p>}
+      {startCycle.error && <p role="alert">{startCycle.error.message}</p>}
+      {!latestCycle && (
+        <section className="president-section">
+          <div className="president-section-heading">
+            <p>President cycle</p>
+            <h2>Prepare tonight's recommendations</h2>
+          </div>
+          <p>
+            President will gather the current durable company evidence, ask
+            ChatGPT for ten improvements, have Claude challenge them, then ask
+            ChatGPT for the final ranked ten before recommending three to you.
+          </p>
+          <button
+            disabled={startCycle.isPending}
+            onClick={() => startCycle.mutate({})}
+          >
+            {startCycle.isPending
+              ? "Deliberating…"
+              : "Prepare recommendations"}
+          </button>
+        </section>
+      )}
       {evidence.length > 0 && (
         <form
           className="president-focus"
@@ -199,6 +262,92 @@ export default function PresidentPage() {
           <p>01 · Your decisions</p>
           <h2>What needs Adam now</h2>
         </div>
+        {latestCycle?.state === "AWAITING_ADAM_REVIEW" &&
+          latestCycle.finalCandidates && (
+            <article className="president-decision">
+              <span className="president-tag">AWAITING ADAM REVIEW</span>
+              <h3>President's recommended overnight work</h3>
+              <p>
+                President recommends three items from the final ChatGPT → Claude
+                → ChatGPT ranked ten. Nothing executes until you approve the final set.
+              </p>
+              <div className="president-grid">
+                {latestCycle.finalCandidates.candidates
+                  .filter(candidate =>
+                    showOtherSeven
+                      ? true
+                      : latestCycle.proposedCandidateIds.includes(candidate.id)
+                  )
+                  .map(candidate => {
+                    const selected = selectedCycleCandidates.includes(candidate.id);
+                    return (
+                      <article key={candidate.id}>
+                        <span className="president-tag">#{candidate.rank}</span>
+                        <h3>{candidate.title}</h3>
+                        <p>{candidate.proposedChange}</p>
+                        <small>{candidate.executionDomain} · {candidate.roughScope}</small>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleCycleCandidate(candidate.id)}
+                          />
+                          {selected ? " Selected" : " Select"}
+                        </label>
+                      </article>
+                    );
+                  })}
+              </div>
+              <p>
+                {selectedCycleCandidates.length}/3 selected
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowOtherSeven(value => !value)}
+                >
+                  {showOtherSeven ? "Show President's 3" : "View other 7"}
+                </button>{" "}
+                <button
+                  type="button"
+                  disabled={
+                    approveCycle.isPending ||
+                    selectedCycleCandidates.length < 1 ||
+                    selectedCycleCandidates.length > 3
+                  }
+                  onClick={() =>
+                    approveCycle.mutate({
+                      cycleId: latestCycle.id,
+                      approvedCandidateIds: selectedCycleCandidates,
+                    })
+                  }
+                >
+                  {approveCycle.isPending
+                    ? "Approving…"
+                    : "Approve selected for overnight"}
+                </button>
+              </div>
+              {approveCycle.error && (
+                <p role="alert">{approveCycle.error.message}</p>
+              )}
+            </article>
+          )}
+        {latestCycle &&
+          ["ADAM_APPROVED", "EXECUTING", "READY_FOR_HUMAN", "COMPLETED", "BLOCKED"].includes(
+            latestCycle.state
+          ) && (
+            <article className="president-decision">
+              <span className="president-tag">
+                {latestCycle.state.replaceAll("_", " ")}
+              </span>
+              <h3>Overnight President cycle</h3>
+              <p>
+                {latestCycle.approval
+                  ? `${latestCycle.approval.approvedCandidateIds.length} mission(s) approved by Adam. President will execute only that stored set.`
+                  : "No approval receipt is present."}
+              </p>
+            </article>
+          )}
         {brief.questions.length ? (
           brief.questions.map(decision => (
             <Decision
