@@ -678,11 +678,11 @@ export function parseBusinessTurn(
   const minOrders = parseMinOrders(lower);
   const listMembers = LIST_MEMBERS.test(lower) || whoOrdered;
   const period = mentionedPeriod ?? (metric === "dormant_customers" || (session?.query.metric === "dormant_customers" && !metric) ? bareDays(lower) : null);
+  const scopePeriodFollowup = Boolean(session && scopeMentioned && !mentionedPeriod && metric === "revenue" && TOTALS_METRICS.has(session.query.metric));
   const refinement =
     Boolean(session) &&
     !(metric === null && NON_ANALYTIC_SUBJECT.test(lower)) &&
-    ((session && scopeMentioned && !mentionedPeriod && metric === "revenue" && TOTALS_METRICS.has(session.query.metric)) ||
-      REFINEMENT.test(lower) ||
+    (REFINEMENT.test(lower) ||
       PRECEDING.test(lower) ||
       WHICH.test(lower) ||
       (!metric && (period !== null || service !== undefined || minOrders !== null || listMembers || scopeMentioned || there)) ||
@@ -755,6 +755,8 @@ export function parseBusinessTurn(
         : null,
     };
   }
+  // A new explicit scope keeps the period, but does not inherit another service/property filter.
+  if (scopePeriodFollowup && !refinement && session) query.period = session.query.period;
   if (
     listMembers &&
     !CUSTOMER_METRICS.has(query.metric) &&

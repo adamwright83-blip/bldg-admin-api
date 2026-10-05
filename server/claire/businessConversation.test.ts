@@ -313,6 +313,10 @@ describe("live sales scope and undated precision", () => {
       expect(text).not.toContain("last 30 days");
       expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
     }
+    await say(ask, "How much revenue came from Century Park East?");
+    expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
+    expect(state.analytics?.query.filters?.serviceLines).toBeFalsy();
+    expect(state.analytics?.query.filters?.includeBuildings).toEqual(["centuryparkeast"]);
     await say(ask, "How much was Laundry Butler in July?");
     expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-07-01", end: "2026-07-31" });
   });
