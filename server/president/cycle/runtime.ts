@@ -8,7 +8,7 @@ import { createCycle, presentToAdam } from "./cycleService";
 import { MysqlCycleStore, type CycleStore } from "./cycleStore";
 import { runDeliberation } from "./deliberation";
 import { gatherCompanyEvidence } from "./evidence";
-import { rosterFromEnv } from "./models";
+import { redactSecrets, rosterFromEnv } from "./models";
 import {
   ClaudeCodeEngineeringAgent,
   GhCliGitHost,
@@ -92,6 +92,7 @@ async function durablePresidentEvidence() {
     .filter(
       e =>
         e.availability === "AVAILABLE" &&
+        !/mitch/i.test(e.source) &&
         (!e.expiresAt || new Date(e.expiresAt).getTime() > now)
     )
     .map(e => ({
@@ -99,7 +100,7 @@ async function durablePresidentEvidence() {
       source: e.source,
       kind: e.kind,
       observedAt: e.capturedAt,
-      summary: e.statement,
+      summary: redactSecrets(e.statement),
       ref: `president-evidence:${e.id}`,
       basis: e.kind === "FACT" ? ("EVIDENCE" as const) : ("JUDGMENT" as const),
     }));
