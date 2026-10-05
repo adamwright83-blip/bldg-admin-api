@@ -87,7 +87,8 @@ export class PresidentCycleRunner {
     await this.store.recoverExpiredLeases();
     let cycle = await this.store.getCycle(cycleId);
     if (!cycle) throw new Error("President cycle not found");
-    if (!cycle.approval || !["ADAM_APPROVED", "EXECUTING"].includes(cycle.state))
+    const approval = cycle.approval;
+    if (!approval || !["ADAM_APPROVED", "EXECUTING"].includes(cycle.state))
       return {
         action: "WAITING",
         reason: "President cycle is not Adam-approved for execution",
@@ -100,7 +101,7 @@ export class PresidentCycleRunner {
         blockReason: null,
       });
 
-    const approvedIds = new Set(cycle.approval.approvedCandidateIds);
+    const approvedIds = new Set(approval.approvedCandidateIds);
     const missions = await this.store.listMissions(cycleId);
     if (
       missions.some(mission => !approvedIds.has(mission.candidateId)) ||
@@ -129,7 +130,10 @@ export class PresidentCycleRunner {
           reviewerId: this.engineeringReviewer.actorId,
           blocker: null,
         });
-        if (this.engineering.actorId === this.engineeringReviewer.actorId)
+        if (
+          String(this.engineering.actorId) ===
+          String(this.engineeringReviewer.actorId)
+        )
           throw new Error("President engineering executor cannot review its own work");
 
         const current = (await this.store.getMission(mission.id))!;
@@ -239,7 +243,10 @@ export class PresidentCycleRunner {
           reviewerId: this.researchReviewer.actorId,
           blocker: null,
         });
-        if (this.research.actorId === this.researchReviewer.actorId)
+        if (
+          String(this.research.actorId) ===
+          String(this.researchReviewer.actorId)
+        )
           throw new Error("President research executor cannot review its own work");
 
         const current = (await this.store.getMission(mission.id))!;
