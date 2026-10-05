@@ -67,7 +67,9 @@ export function createPresidentCycleRouter(deps: {
   });
 
   if (deps.readiness) {
-    r.get("/readiness", async (_req, res) => {
+    r.get("/readiness", async (req, res) => {
+      const a = await auth(req, res);
+      if (!a) return;
       try {
         res.json(await deps.readiness!());
       } catch (error) {
