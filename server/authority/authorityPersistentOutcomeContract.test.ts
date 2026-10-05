@@ -22,17 +22,32 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(store).toContain('claimType: "account_won"');
     expect(store).toContain('cleancloud_order_paid: {');
     expect(store).toContain('claimType: "payment_verified"');
+    expect(store).toContain('field_debrief_analyzed: {');
+    expect(store).toContain('claimType: "field_observation_attested"');
     expect(store).toContain("cleancloud_order_paid amount does not match persisted paid-order evidence");
     expect(store).toContain("row.totalCents === input.monetaryValueCents");
   });
 
-  it("binds win and paid-order bridges to existing authority rather than caller claims", () => {
+  it("binds win, payment, and debrief bridges to durable authority rather than caller claims", () => {
     const bridge = source("server/persistentOperator/fieldEventBridge.ts");
     expect(bridge).toContain("admitCompletedCommercialVisit");
     expect(bridge).toContain("Account win event is not bound to its Authority Receipt");
     expect(bridge).toContain("payment_evidence_mismatch");
     expect(bridge).toContain("payment_authority_missing");
     expect(bridge).toContain("authorityReceiptId: paymentAuthority.id");
+    expect(bridge).toContain("admitCommercialFieldObservation");
+    expect(bridge).toContain("admitted.observationText");
+    expect(bridge).toContain("authorityReceiptId: admitted.receipt.id");
+    expect(bridge).toContain("debrief learning failed closed");
+  });
+
+  it("admits debrief testimony only from a persisted human observation bound to its visit outcome", () => {
+    const admission = source("server/authority/fieldObservationAdmission.ts");
+    expect(admission).toContain("PARKING_LOT_CLERK_EVENT_NAME");
+    expect(admission).toContain("PARKING_LOT_CLERK_PROVENANCE");
+    expect(admission).toContain("System/model or anonymous actors cannot attest field observations");
+    expect(admission).toContain("Field observation testimony is not bound to its persisted visit outcome");
+    expect(admission).toContain('claimType: "field_observation_attested"');
   });
 
   it("repairs historical consequential outcomes and removes learning when authority cannot be proven", () => {
@@ -43,5 +58,9 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(migrate).toContain("attach payment authority to historical Persistent Operator revenue outcomes");
     expect(migrate).toContain("remove learning derived from unreceipted consequential outcomes");
     expect(migrate).toContain("downgrade unreceipted consequential Persistent Operator outcomes");
+    expect(migrate).toContain("legacy_field_observation_backfill_v1");
+    expect(migrate).toContain("attach field observation authority to historical debrief outcomes");
+    expect(migrate).toContain("remove learning derived from unreceipted field debrief outcomes");
+    expect(migrate).toContain("downgrade unreceipted field debrief outcomes");
   });
 });

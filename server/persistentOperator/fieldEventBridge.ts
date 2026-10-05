@@ -10,6 +10,7 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { admitCompletedCommercialVisit } from "../authority/actionCompletionAdmission";
+import { admitCommercialFieldObservation } from "../authority/fieldObservationAdmission";
 import { findAuthorityReceiptForSubject } from "../authority/authorityReceipt";
 import {
   getGoalCycleObjective,
@@ -920,6 +921,12 @@ export async function bridgeParkingLotDebrief(
     return { bridged: false, reason: "Database unavailable" };
   }
 
+  const admitted = await admitCommercialFieldObservation({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+    evidenceReference: input.evidenceReference,
+  });
+
   const matchingObjectives = await findDeterministicObjectivesForDriverAction({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -933,15 +940,17 @@ export async function bridgeParkingLotDebrief(
       reason: `No active objective deterministically linked to mission ${input.missionId}`,
     };
   }
+  if (matchingObjectives.length > 1) {
+    return {
+      bridged: false,
+      reason: `Ambiguous objective lineage for mission ${input.missionId}; debrief learning failed closed`,
+    };
+  }
 
-  // If multiple cycle objectives target the same mission, bind to the most recent one
-  const sortedObjectives = [...matchingObjectives].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-  const targetObjective = sortedObjectives[0];
+  const targetObjective = matchingObjectives[0];
   const tacticalSignal = extractTacticalSignalsFromDebrief(
-    input.debriefText,
-    input.visitOutcome
+    admitted.observationText,
+    admitted.visitOutcome
   );
 
   const recorded = await recordGoalCycleOutcome({
@@ -957,10 +966,11 @@ export async function bridgeParkingLotDebrief(
     observedAt: input.observedAt ?? new Date(),
     explanation: tacticalSignal.explanation,
     metadata: {
+      ...(input.metadata ?? {}),
       missionId: input.missionId,
-      debriefText: input.debriefText,
+      debriefText: admitted.observationText,
       tacticalSignal,
-      ...input.metadata,
+      authorityReceiptId: admitted.receipt.id,
     },
   });
 

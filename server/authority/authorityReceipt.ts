@@ -8,6 +8,7 @@ export const AUTHORITY_CLAIM_TYPES = [
   "account_won",
   "message_sent",
   "action_completed",
+  "field_observation_attested",
 ] as const;
 
 export type AuthorityClaimType = (typeof AUTHORITY_CLAIM_TYPES)[number];
@@ -119,6 +120,18 @@ export function assertAuthorityClaimPolicy(
     if (!attested)
       throw new Error(
         "action_completed requires an explicit human-attested commercial mission event"
+      );
+  }
+
+  if (input.claimType === "field_observation_attested") {
+    const attested =
+      input.evidenceClass === "operator_attested" &&
+      input.verificationClass === "ATTESTED" &&
+      input.sourceType === "commercial_mission_event" &&
+      ["operator", "driver", "human", "voice"].includes(input.actorType);
+    if (!attested)
+      throw new Error(
+        "field_observation_attested requires explicit human testimony from a persisted commercial mission event"
       );
   }
 
