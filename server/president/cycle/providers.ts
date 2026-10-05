@@ -35,10 +35,7 @@ export class OpenAIPresidentCycleProvider implements PresidentCycleModelProvider
   readonly id = "openai" as const;
 
   async available(): Promise<boolean> {
-    return Boolean(
-      process.env.OPENAI_API_KEY?.trim() &&
-        process.env.PRESIDENT_OPENAI_MODEL?.trim()
-    );
+    return Boolean(process.env.OPENAI_API_KEY?.trim());
   }
 
   async generate(input: {
@@ -48,11 +45,10 @@ export class OpenAIPresidentCycleProvider implements PresidentCycleModelProvider
     signal?: AbortSignal;
   }): Promise<PresidentCycleModelResult> {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
-    const model = process.env.PRESIDENT_OPENAI_MODEL?.trim();
-    if (!apiKey || !model)
-      throw new Error(
-        "President ChatGPT stage requires OPENAI_API_KEY and PRESIDENT_OPENAI_MODEL"
-      );
+    const model =
+      process.env.PRESIDENT_OPENAI_MODEL?.trim() || "chat-latest";
+    if (!apiKey)
+      throw new Error("President ChatGPT stage requires OPENAI_API_KEY");
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
