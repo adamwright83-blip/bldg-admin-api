@@ -305,6 +305,35 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await expect(page.locator(".lc-tether").first()).toBeAttached();
   });
 
+  test("admin Lantern City has one top-left chrome owner at the reported viewport", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "mobile", "The reported overlap is the desktop admin world");
+
+    await signIn(page, "admin");
+    await page.setViewportSize({ width: 675, height: 422 });
+    await page.goto("/");
+    await expect(page.locator('[data-lantern-city="islands"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".gl-world-title")).toBeVisible();
+
+    // The embedded island scene must not paint a second header/stats row or
+    // tower shortcut stack underneath the shell-owned Laundry Farm title.
+    const island = page.locator('[data-lantern-city="islands"]');
+    await expect(island.locator("header")).toHaveCount(0);
+    await expect(island.getByRole("button", { name: "OPUS LA floors" })).toHaveCount(0);
+    await expect(island.getByRole("button", { name: "Century Park East floors" })).toHaveCount(0);
+
+    const titleBox = await page.locator(".gl-world-title").boundingBox();
+    expect(titleBox).not.toBeNull();
+    expect(titleBox!.x).toBeGreaterThanOrEqual(0);
+    expect(titleBox!.y).toBeGreaterThanOrEqual(0);
+    expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(675);
+    expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(422);
+
+    await page.screenshot({
+      path: "artifacts/operator-representative-v1-qa/lantern-city-admin-chrome-675x422.png",
+      fullPage: false,
+    });
+  });
+
   test("today's campaign is already in the world", async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem("goldline:day1:dismissed", "1");
