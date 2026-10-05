@@ -1,0 +1,375 @@
+.scp-root,
+.scp-root * {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scp-root {
+  --sc-look-x: 0px;
+  --sc-look-y: 0px;
+  --sc-tilt-x: 0deg;
+  --sc-tilt-y: 0deg;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(128, 77, 35, .28), transparent 52%),
+    linear-gradient(180deg, #101219 0%, #090b10 62%, #05070b 100%);
+  color: #f7ead0;
+  font-family: Georgia, "Times New Roman", serif;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+  animation: scp-enter .55s cubic-bezier(.2,.75,.25,1) both;
+  cursor: default;
+}
+
+.scp-world {
+  position: absolute;
+  inset: -3%;
+  perspective: 1100px;
+  transform-style: preserve-3d;
+  overflow: hidden;
+}
+
+.scp-backdrop {
+  position: absolute;
+  inset: -9%;
+  background:
+    linear-gradient(180deg, rgba(9, 13, 22, .30), rgba(3, 4, 8, .62)),
+    url("/assets/joystick-home/tin-can-house.webp") 50% 50% / cover no-repeat;
+  filter: blur(26px) saturate(.82) brightness(.48);
+  transform:
+    translate3d(calc(var(--sc-look-x) * -.34), calc(var(--sc-look-y) * -.24), -120px)
+    scale(1.18);
+  will-change: transform;
+}
+
+.scp-house {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(92vw, 1240px);
+  max-width: none;
+  height: auto;
+  transform:
+    translate3d(calc(-50% + var(--sc-look-x)), calc(-50% + var(--sc-look-y)), 30px)
+    rotateX(var(--sc-tilt-x))
+    rotateY(var(--sc-tilt-y))
+    scale(1.025);
+  transform-origin: 50% 54%;
+  filter:
+    drop-shadow(0 42px 70px rgba(0, 0, 0, .72))
+    drop-shadow(0 0 34px rgba(255, 159, 61, .10));
+  pointer-events: none;
+  will-change: transform;
+}
+
+.scp-glow,
+.scp-window-shimmer {
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  will-change: opacity, transform;
+}
+
+.scp-glow {
+  border-radius: 50%;
+  filter: blur(18px);
+  animation: scp-lamp-breathe 3.4s ease-in-out infinite alternate;
+}
+
+.scp-glow-left {
+  left: 30%;
+  top: 32%;
+  width: 18vw;
+  height: 18vw;
+  max-width: 290px;
+  max-height: 290px;
+  background: radial-gradient(circle, rgba(255, 190, 92, .34), rgba(255, 126, 24, .10) 38%, transparent 68%);
+  transform: translate3d(calc(var(--sc-look-x) * .78), calc(var(--sc-look-y) * .7), 55px);
+}
+
+.scp-glow-right {
+  left: 66%;
+  top: 36%;
+  width: 16vw;
+  height: 16vw;
+  max-width: 250px;
+  max-height: 250px;
+  background: radial-gradient(circle, rgba(255, 207, 120, .30), rgba(255, 135, 38, .08) 42%, transparent 70%);
+  transform: translate3d(calc(var(--sc-look-x) * .88), calc(var(--sc-look-y) * .78), 60px);
+  animation-delay: -1.25s;
+}
+
+.scp-window-shimmer {
+  right: 19%;
+  top: 43%;
+  width: 10vw;
+  height: 18vw;
+  max-width: 150px;
+  max-height: 280px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 54% 38%, rgba(202, 220, 255, .22), transparent 44%),
+    radial-gradient(circle at 48% 70%, rgba(152, 196, 255, .13), transparent 56%);
+  filter: blur(7px);
+  transform: translate3d(calc(var(--sc-look-x) * 1.05), calc(var(--sc-look-y) * .92), 80px);
+  animation: scp-window 4.8s ease-in-out infinite alternate;
+}
+
+.scp-rain {
+  position: absolute;
+  inset: -18%;
+  pointer-events: none;
+  transform: rotate(4deg);
+  opacity: .55;
+  will-change: background-position, transform;
+}
+
+.scp-rain-far {
+  background-image:
+    repeating-linear-gradient(
+      102deg,
+      transparent 0 26px,
+      rgba(198, 221, 255, .22) 27px 28px,
+      transparent 29px 67px
+    );
+  background-size: 120px 220px;
+  animation: scp-rain-fall 1.55s linear infinite;
+  filter: blur(.45px);
+}
+
+.scp-rain-near {
+  background-image:
+    repeating-linear-gradient(
+      101deg,
+      transparent 0 61px,
+      rgba(230, 240, 255, .52) 62px 64px,
+      transparent 65px 143px
+    );
+  background-size: 220px 320px;
+  animation: scp-rain-fall-near .94s linear infinite;
+  filter: blur(.2px);
+  opacity: .42;
+}
+
+.scp-steam {
+  position: absolute;
+  left: 42.4%;
+  top: 51.7%;
+  width: 44px;
+  height: 76px;
+  transform: translate3d(calc(var(--sc-look-x) * 1.06), calc(var(--sc-look-y) * .95), 96px);
+  pointer-events: none;
+}
+
+.scp-steam i {
+  position: absolute;
+  left: 18px;
+  bottom: 1px;
+  width: 7px;
+  height: 48px;
+  border-radius: 50%;
+  border-left: 3px solid rgba(255, 250, 238, .48);
+  filter: blur(1.6px);
+  opacity: 0;
+  animation: scp-steam 3s ease-in infinite;
+}
+
+.scp-steam i:nth-child(2) {
+  left: 27px;
+  height: 56px;
+  animation-delay: -1s;
+  animation-duration: 3.4s;
+}
+
+.scp-steam i:nth-child(3) {
+  left: 10px;
+  height: 43px;
+  animation-delay: -2.15s;
+  animation-duration: 2.8s;
+}
+
+.scp-puddle {
+  position: absolute;
+  left: 23%;
+  right: 14%;
+  bottom: 2%;
+  height: 16%;
+  pointer-events: none;
+  background:
+    repeating-radial-gradient(ellipse at center, rgba(255, 200, 112, .08) 0 2px, transparent 3px 22px);
+  filter: blur(.2px);
+  transform: perspective(420px) rotateX(68deg) translateZ(0);
+  transform-origin: 50% 100%;
+  opacity: .48;
+  animation: scp-puddle 4.5s ease-in-out infinite;
+}
+
+.scp-ripple {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 225, 164, .92);
+  box-shadow:
+    0 0 20px rgba(255, 188, 82, .62),
+    inset 0 0 16px rgba(255, 221, 155, .30);
+  pointer-events: none;
+  z-index: 8;
+  animation: scp-ripple .78s cubic-bezier(.18,.7,.25,1) forwards;
+}
+
+.scp-exit {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+  z-index: 12;
+  border: 1px solid rgba(250, 233, 205, .34);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: rgba(20, 17, 15, .56);
+  color: #f8ead0;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  box-shadow: 0 10px 30px rgba(0,0,0,.22);
+  font: 600 13px/1.1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .01em;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  transition: background .18s ease, transform .18s ease, border-color .18s ease;
+}
+
+.scp-exit:hover {
+  background: rgba(42, 31, 23, .72);
+  border-color: rgba(250, 233, 205, .58);
+  transform: translateY(-1px);
+}
+
+.scp-exit:active {
+  transform: translateY(1px) scale(.985);
+}
+
+.scp-hint {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 12;
+  max-width: min(460px, calc(100vw - 36px));
+  padding: 11px 15px 12px;
+  border: 1px solid rgba(246, 229, 198, .24);
+  border-radius: 14px;
+  background: rgba(14, 12, 11, .48);
+  color: rgba(248, 234, 208, .78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .18);
+  pointer-events: none;
+  display: grid;
+  gap: 2px;
+}
+
+.scp-hint b {
+  font: 700 11px/1.1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .16em;
+  color: #f8e7c5;
+}
+
+.scp-hint span {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+@keyframes scp-enter {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scp-lamp-breathe {
+  0% { opacity: .55; filter: blur(19px) brightness(.92); }
+  28% { opacity: .76; }
+  47% { opacity: .61; }
+  64% { opacity: .82; filter: blur(17px) brightness(1.12); }
+  100% { opacity: .66; }
+}
+
+@keyframes scp-window {
+  from { opacity: .46; transform: translate3d(calc(var(--sc-look-x) * 1.05), calc(var(--sc-look-y) * .92), 80px) scale(.96); }
+  to { opacity: .76; transform: translate3d(calc(var(--sc-look-x) * 1.05), calc(var(--sc-look-y) * .92), 80px) scale(1.05); }
+}
+
+@keyframes scp-rain-fall {
+  from { background-position: 0 -260px; }
+  to { background-position: 24px 260px; }
+}
+
+@keyframes scp-rain-fall-near {
+  from { background-position: 0 -380px; }
+  to { background-position: 38px 380px; }
+}
+
+@keyframes scp-steam {
+  0% { opacity: 0; transform: translate3d(0, 8px, 0) scale(.7) rotate(-3deg); }
+  18% { opacity: .55; }
+  62% { opacity: .28; }
+  100% { opacity: 0; transform: translate3d(9px, -34px, 0) scale(1.2) rotate(12deg); }
+}
+
+@keyframes scp-puddle {
+  0%, 100% { opacity: .34; transform: perspective(420px) rotateX(68deg) scale(1); }
+  50% { opacity: .58; transform: perspective(420px) rotateX(68deg) scale(1.035); }
+}
+
+@keyframes scp-ripple {
+  0% { opacity: 0; transform: scale(.22); }
+  12% { opacity: 1; }
+  100% { opacity: 0; transform: scale(7.5); border-width: .5px; }
+}
+
+@media (max-width: 900px) {
+  .scp-world { inset: -7%; }
+  .scp-house {
+    width: max(118vw, 780px);
+    transform:
+      translate3d(calc(-50% + var(--sc-look-x)), calc(-50% + var(--sc-look-y)), 30px)
+      rotateX(var(--sc-tilt-x))
+      rotateY(var(--sc-tilt-y))
+      scale(1.015);
+  }
+  .scp-hint {
+    font-size: 12px;
+    max-width: calc(100vw - 100px);
+  }
+  .scp-steam { left: 39%; top: 52%; }
+}
+
+@media (max-width: 680px) and (orientation: portrait) {
+  .scp-house { width: max(178vw, 820px); left: 55%; }
+  .scp-backdrop { filter: blur(30px) saturate(.78) brightness(.42); }
+  .scp-hint { display: none; }
+  .scp-exit { top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+  .scp-glow-left { left: 20%; top: 35%; width: 42vw; height: 42vw; }
+  .scp-glow-right { left: 68%; top: 39%; width: 34vw; height: 34vw; }
+  .scp-steam { left: 34%; top: 53%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scp-root,
+  .scp-rain,
+  .scp-glow,
+  .scp-window-shimmer,
+  .scp-steam i,
+  .scp-puddle,
+  .scp-ripple {
+    animation: none !important;
+  }
+  .scp-house,
+  .scp-backdrop {
+    transform: translate3d(0, 0, 0) !important;
+  }
+}
