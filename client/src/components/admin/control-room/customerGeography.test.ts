@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalLanternTerritory,
   clusterAtCanonicalAddress,
   clusterGeographicCustomers,
   fanOutAtlasCollisions,
+  isLiveLanternCustomer,
   lanternDensityClass,
   mergeClusters,
   streetIdentity,
@@ -124,5 +126,40 @@ describe("atlas lantern collision fan-out", () => {
     expect(lanternDensityClass(1)).toBe("density-single");
     expect(lanternDensityClass(3)).toBe("density-medium");
     expect(lanternDensityClass(8)).toBe("density-major");
+  });
+});
+
+
+describe("canonical live Lantern City truth", () => {
+  it("lights only current active customers", () => {
+    expect(isLiveLanternCustomer(customer("active", "1 Main St", "active"))).toBe(true);
+    expect(isLiveLanternCustomer(customer("dimming", "1 Main St", "dimming"))).toBe(false);
+    expect(isLiveLanternCustomer(customer("dark", "1 Main St", "dark"))).toBe(false);
+    expect(isLiveLanternCustomer({ cadence: { state: "active", daysSinceLastOrder: 0 }, location: null })).toBe(false);
+  });
+
+  it("keeps both Century Park East towers in Century City regardless of parcel coordinates", () => {
+    const north = customer("north", "2170 Century Park East, Los Angeles, CA 90067", "active");
+    const south = customer("south", "2160 Century Park East, Los Angeles, CA 90067", "active");
+    expect(canonicalLanternTerritory(north)).toEqual({ id: "century-city", name: "Century City" });
+    expect(canonicalLanternTerritory(south)).toEqual({ id: "century-city", name: "Century City" });
+  });
+
+  it("uses authoritative territory geometry for other located customers", () => {
+    const hollywood: GeographicCustomer = {
+      identityKey: "hollywood",
+      displayName: "Hollywood customer",
+      phone: null,
+      cadence: { state: "active", daysSinceLastOrder: 1 },
+      location: {
+        latitude: 34.0928,
+        longitude: -118.3287,
+        x: 0,
+        y: 0,
+        outOfBounds: false,
+        canonicalAddress: "6801 Hollywood Blvd, Los Angeles, CA 90028",
+      },
+    };
+    expect(canonicalLanternTerritory(hollywood)?.id).toBe("hollywood");
   });
 });
