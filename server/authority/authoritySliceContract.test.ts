@@ -27,10 +27,14 @@ describe("three-fact authority slice", () => {
     expect(nativeAdmission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
       nativeAdmission.indexOf("paid: true")
     );
-    expect(commercial).toContain("findAuthorityReceiptForSubjectWith");
-    expect(commercial).toContain("hasNativePaymentAuthority(order)");
-    expect(commercial).toContain('paymentAuthority?.sourceType === "stripe_payment_intent"');
-    expect(commercial).toContain("paymentAuthority.sourceRef === paymentIntentId");
+    const decision = source("server/commercialPipeline/commercialOrderPaymentDecision.ts");
+    expect(commercial).toContain("readCommercialOrderPaymentDecisionWith(tx");
+    expect(decision).toContain("findAuthorityReceiptForSubjectWith");
+    expect(decision).toContain("paymentAuthorityReceiptMatches");
+    expect(decision).toContain('sourceType: "stripe_payment_intent"');
+    expect(decision).toContain('subjectType: "order"');
+    expect(decision).toContain("order.stripePaymentIntentId?.trim()");
+
   });
 
   it("creates account-win authority in the same mission transaction and makes Goldline require it", () => {

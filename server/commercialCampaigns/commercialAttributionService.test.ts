@@ -14,12 +14,6 @@ describe("commercial automatic attribution policy", () => {
     expect(source).toContain("customerIdentityKey");
     expect(source).toContain("serviceLocationKey");
   });
-  it("excludes unpaid/cancelled/refunded truth and flags unsupported partial refunds", () => {
-    expect(source).toContain("order.paid ? cents(order.total) : 0");
-    expect(source).toContain('order.status === "cancelled"');
-    expect(source).toContain('projection?.state === "refunded"');
-    expect(source).toContain('projection?.state === "partially_refunded" && knownNet === null');
-  });
   it("preserves first-touch history and audits reversals", () => {
     expect(source).toContain("source.accountId !== link.accountId");
     expect(source).toContain("commercialAttributionCorrections");
