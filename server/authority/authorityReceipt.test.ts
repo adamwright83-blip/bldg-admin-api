@@ -116,6 +116,36 @@ describe("authority receipt policy", () => {
     ).toThrow(/human-attested/);
   });
 
+  it("allows persisted human field observation attestation but not system claims", () => {
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "field_observation_attested",
+        subjectType: "commercial_mission",
+        subjectId: "77",
+        sourceType: "commercial_mission_event",
+        sourceRef: "commercial_mission_events:902",
+        evidenceClass: "operator_attested",
+        verificationClass: "ATTESTED",
+        actorType: "driver",
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "field_observation_attested",
+        subjectType: "commercial_mission",
+        subjectId: "77",
+        sourceType: "commercial_mission_event",
+        sourceRef: "commercial_mission_events:902",
+        evidenceClass: "operator_attested",
+        verificationClass: "ATTESTED",
+        actorType: "system",
+      })
+    ).toThrow(/human testimony/);
+  });
+
   it("keeps idempotency on the semantic claim and source identity", () => {
     const first = authorityReceiptIdempotencyKey({
       claimType: "payment_verified",
