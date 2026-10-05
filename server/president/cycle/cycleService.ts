@@ -105,7 +105,7 @@ export async function presentToAdam(
   notifier: NotificationPort,
   reviewBaseUrl: string
 ) {
-  const link = `${reviewBaseUrl.replace(/\/$/, "")}/president/cycles/${cycleId}/review`;
+  const link = `${reviewBaseUrl.replace(/\/$/, "")}/president?cycle=${encodeURIComponent(cycleId)}`;
   const message = "President has 3 recommendations ready for your review.";
   await store.update(cycleId, c => {
     if (c.status !== "PRESIDENT_RECOMMENDED")
