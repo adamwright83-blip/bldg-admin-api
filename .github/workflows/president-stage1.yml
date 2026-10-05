@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - "server/president/**"
+      - "client/src/pages/PresidentPage.*"
+      - "client/src/App.tsx"
+      - "e2e/president/**"
+      - "playwright.president.config.ts"
       - "shared/presidentContracts.ts"
       - "shared/presidentIntelligence.ts"
       - "shared/presidentOperatingSystem.ts"
@@ -20,7 +24,9 @@ permissions:
 jobs:
   president-stage1:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
     services:
       mysql:
         image: mysql:8.0
@@ -44,11 +50,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check:nomenclature
       - run: pnpm exec vitest run server/president
         env:
           PRESIDENT_MYSQL_TEST: "1"
       - run: pnpm president:stage1:witness
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify founder surface against durable fixture
+        run: |
+          pnpm exec vite --host 127.0.0.1 --port 4189 > /tmp/president-vite.log 2>&1 &
+          pnpm exec playwright test --config playwright.president.config.ts
       - uses: actions/upload-artifact@v7
         with:
           name: president-stage1-database-witness
-          path: artifacts/president-stage1/database-witness.json
+          path: |
+            artifacts/president-stage1/database-witness.json
+            artifacts/president-intelligence/witness.json
+            artifacts/president-intelligence/founder-surface-fixture.json
+            artifacts/president-browser/**

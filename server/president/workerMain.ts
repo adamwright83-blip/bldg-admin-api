@@ -1,5 +1,6 @@
 import "dotenv/config";
 import http from "node:http";
+import { AppPresidentJudgmentProvider } from "./appProvider";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
 
 function numberEnv(name: string, fallback: number): number {
@@ -32,6 +33,8 @@ async function tick() {
   lastRunAt = new Date().toISOString();
   try {
     await runtime.coordinator.recover();
+    await runtime.service.finalizeVerifiedMeasurements();
+    await runtime.service.advanceObjectives(new AppPresidentJudgmentProvider());
     lastSuccessAt = new Date().toISOString();
     lastError = null;
   } catch (error) {
@@ -47,7 +50,7 @@ const server = http.createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
-  const ok = lastError === null || lastSuccessAt !== null;
+  const ok = lastError === null && lastSuccessAt !== null;
   response.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
   response.end(
     JSON.stringify({

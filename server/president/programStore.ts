@@ -1,3 +1,4 @@
+import { canonicalJson } from "./canonicalJson";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { DurableExecutionStore } from "../durableExecution/worker";
@@ -26,7 +27,9 @@ const decode = <T>(value: unknown): T =>
   (typeof value === "string" ? JSON.parse(value) : value) as T;
 
 const iso = (value: unknown): string =>
-  value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
+  value instanceof Date
+    ? value.toISOString()
+    : new Date(String(value)).toISOString();
 const isoNullable = (value: unknown): string | null =>
   value == null ? null : iso(value);
 
@@ -151,9 +154,61 @@ function seatFromRow(r: RowDataPacket): PresidentExecutiveSeat {
 export class MysqlPresidentProgramStore
   implements DurableExecutionStore<ClaimedPresidentProgramStep>
 {
-  constructor(readonly pool: Pool) {}
+  constructor(
+    readonly pool: Pool,
+    private readonly transactionConnection?: PoolConnection
+  ) {}
 
-  async putAuthorityPolicy(input: PresidentAuthorityPolicy): Promise<PresidentAuthorityPolicy> {
+  async transaction<T>(
+    programId: string,
+    operation: (store: MysqlPresidentProgramStore) => Promise<T>
+  ): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        "SELECT id FROM president_programs WHERE id=? FOR UPDATE",
+        [programId]
+      );
+      const result = await operation(
+        new MysqlPresidentProgramStore(
+          connection as unknown as Pool,
+          connection
+        )
+      );
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async callbackReplay(
+    input: PresidentExecutionHandback | PresidentIndependentReview
+  ): Promise<boolean> {
+    const execution = "executorId" in input;
+    const table = execution
+      ? "president_execution_handbacks"
+      : "president_independent_reviews";
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT stepId FROM ${table} WHERE eventId=?`,
+      [input.eventId]
+    );
+    if (!rows[0]) return false;
+    const saved = execution
+      ? await this.getHandback(rows[0].stepId)
+      : await this.latestReview(rows[0].stepId);
+    if (!saved || canonicalJson(saved) !== canonicalJson(input))
+      throw new Error("Callback event identity conflict");
+    return true;
+  }
+
+  async putAuthorityPolicy(
+    input: PresidentAuthorityPolicy
+  ): Promise<PresidentAuthorityPolicy> {
     const policy = presidentAuthorityPolicySchema.parse(input);
     await this.pool.execute(
       `INSERT INTO president_authority_policies
@@ -185,7 +240,9 @@ export class MysqlPresidentProgramStore
     return policy;
   }
 
-  async getAuthorityPolicy(version?: string): Promise<PresidentAuthorityPolicy | null> {
+  async getAuthorityPolicy(
+    version?: string
+  ): Promise<PresidentAuthorityPolicy | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       version
         ? "SELECT * FROM president_authority_policies WHERE policyVersion=? LIMIT 1"
@@ -200,7 +257,9 @@ export class MysqlPresidentProgramStore
       internalMergeAllowed: Boolean(r.internalMergeAllowed),
       internalDeployAllowed: Boolean(r.internalDeployAllowed),
       maxAutonomousUsdPerDay: Number(r.maxAutonomousUsdPerDay),
-      autonomousProgramSelectionAllowed: Boolean(r.autonomousProgramSelectionAllowed),
+      autonomousProgramSelectionAllowed: Boolean(
+        r.autonomousProgramSelectionAllowed
+      ),
       allowedRepositories: decode(r.allowedRepositoriesJson),
       allowedEnvironments: decode(r.allowedEnvironmentsJson),
       prohibitedDomains: decode(r.prohibitedDomainsJson),
@@ -238,12 +297,14 @@ export class MysqlPresidentProgramStore
       );
     } catch (error) {
       if ((error as { code?: string }).code !== "ER_DUP_ENTRY") throw error;
-      const prior =
-        program.objectiveRecordId
-          ? await this.findProgramByObjective(program.objectiveRecordId)
-          : program.assessmentId && program.candidateId
-            ? await this.findProgramByCandidate(program.assessmentId, program.candidateId)
-            : null;
+      const prior = program.objectiveRecordId
+        ? await this.findProgramByObjective(program.objectiveRecordId)
+        : program.assessmentId && program.candidateId
+          ? await this.findProgramByCandidate(
+              program.assessmentId,
+              program.candidateId
+            )
+          : null;
       if (!prior) throw error;
       return prior;
     }
@@ -502,7 +563,7 @@ export class MysqlPresidentProgramStore
       `INSERT INTO president_execution_handbacks
        (id,eventId,stepId,executorId,exactArtifactId,branch,commitSha,summary,changedFilesJson,testsActuallyRunJson,testsNotRunJson,evidenceJson,knownLimitationsJson,costUsd,reversible,rollbackInstructions,completedAt,createdAt)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE id=id`,
+`,
       [
         randomUUID(),
         h.eventId,
@@ -527,7 +588,9 @@ export class MysqlPresidentProgramStore
     return h;
   }
 
-  async getHandback(stepId: string): Promise<PresidentExecutionHandback | null> {
+  async getHandback(
+    stepId: string
+  ): Promise<PresidentExecutionHandback | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_execution_handbacks WHERE stepId=? ORDER BY createdAt DESC LIMIT 1",
       [stepId]
@@ -577,20 +640,28 @@ export class MysqlPresidentProgramStore
     const step = await this.getStep(review.stepId);
     if (!step) throw new Error("Review step not found");
     const handback = await this.getHandback(review.stepId);
-    if (!handback) throw new Error("Review requires a durable execution handback");
+    if (!handback)
+      throw new Error("Review requires a durable execution handback");
+    if (review.evidence.executionEventId !== handback.eventId)
+      throw new Error("Review belongs to a stale execution run");
     if (handback.executorId === review.reviewerId)
-      throw new Error("President cannot self-certify: reviewer must be independent of executor");
+      throw new Error(
+        "President cannot self-certify: reviewer must be independent of executor"
+      );
     if (
       review.exactArtifactId !== handback.exactArtifactId ||
       review.exactArtifactId !== step.exactArtifactId
     )
-      throw new Error("Review artifact identity does not match exact executed artifact");
+      throw new Error(
+        "Review artifact identity does not match exact executed artifact"
+      );
     if (
       review.verdict === "PASS" &&
       (review.acceptanceResults.length !== step.acceptanceCriteria.length ||
         review.acceptanceResults.some(
           (result, index) =>
-            result.criterion !== step.acceptanceCriteria[index] || !result.passed
+            result.criterion !== step.acceptanceCriteria[index] ||
+            !result.passed
         ))
     )
       throw new Error("PASS requires every exact acceptance criterion to pass");
@@ -599,7 +670,7 @@ export class MysqlPresidentProgramStore
       `INSERT INTO president_independent_reviews
        (id,eventId,stepId,reviewerId,exactArtifactId,verdict,acceptanceResultsJson,observedRisksJson,requiredRevision,evidenceJson,reviewedAt,createdAt)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE id=id`,
+`,
       [
         randomUUID(),
         review.eventId,
@@ -618,7 +689,9 @@ export class MysqlPresidentProgramStore
     return review;
   }
 
-  async latestReview(stepId: string): Promise<PresidentIndependentReview | null> {
+  async latestReview(
+    stepId: string
+  ): Promise<PresidentIndependentReview | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_independent_reviews WHERE stepId=? ORDER BY reviewedAt DESC,id DESC LIMIT 1",
       [stepId]
@@ -643,15 +716,16 @@ export class MysqlPresidentProgramStore
     input: PresidentFounderDecision
   ): Promise<PresidentFounderDecision> {
     const d = presidentFounderDecisionSchema.parse(input);
-    const connection = await this.pool.getConnection();
+    const connection =
+      this.transactionConnection ?? (await this.pool.getConnection());
     try {
-      await connection.beginTransaction();
+      if (!this.transactionConnection) await connection.beginTransaction();
       const [openRows] = await connection.execute<RowDataPacket[]>(
         "SELECT * FROM president_founder_decisions WHERE questionKey=? AND status='OPEN' ORDER BY decisionRound DESC LIMIT 1 FOR UPDATE",
         [d.questionKey]
       );
       if (d.status === "OPEN" && openRows[0]) {
-        await connection.commit();
+        if (!this.transactionConnection) await connection.commit();
         return decisionFromRow(openRows[0]);
       }
       const [roundRows] = await connection.execute<RowDataPacket[]>(
@@ -679,21 +753,23 @@ export class MysqlPresidentProgramStore
           d.answeredAt ? new Date(d.answeredAt) : null,
         ]
       );
-      await connection.commit();
+      if (!this.transactionConnection) await connection.commit();
       return d;
     } catch (error) {
-      await connection.rollback();
+      if (!this.transactionConnection) await connection.rollback();
       if ((error as { code?: string }).code === "ER_DUP_ENTRY") {
         const existing = await this.findOpenDecision(d.questionKey);
         if (existing) return existing;
       }
       throw error;
     } finally {
-      connection.release();
+      if (!this.transactionConnection) connection.release();
     }
   }
 
-  async findOpenDecision(questionKey: string): Promise<PresidentFounderDecision | null> {
+  async findOpenDecision(
+    questionKey: string
+  ): Promise<PresidentFounderDecision | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_founder_decisions WHERE questionKey=? AND status='OPEN' ORDER BY askedAt DESC LIMIT 1",
       [questionKey]
@@ -720,7 +796,8 @@ export class MysqlPresidentProgramStore
     if (!rows[0]) throw new Error("Founder decision not found");
     const prior = decisionFromRow(rows[0]);
     if (prior.status === "ANSWERED") {
-      if (prior.answer !== answer) throw new Error("Founder decision already answered differently");
+      if (prior.answer !== answer)
+        throw new Error("Founder decision already answered differently");
       return prior;
     }
     if (!prior.options.includes(answer))
@@ -791,7 +868,9 @@ export class MysqlPresidentProgramStore
     return rows.map(capabilityFromRow);
   }
 
-  async putExecutiveSeat(input: PresidentExecutiveSeat): Promise<PresidentExecutiveSeat> {
+  async putExecutiveSeat(
+    input: PresidentExecutiveSeat
+  ): Promise<PresidentExecutiveSeat> {
     const seat = presidentExecutiveSeatSchema.parse(input);
     await this.pool.execute(
       `INSERT INTO president_executive_seats
@@ -820,7 +899,9 @@ export class MysqlPresidentProgramStore
     return found;
   }
 
-  async getExecutiveSeat(roleKey: string): Promise<PresidentExecutiveSeat | null> {
+  async getExecutiveSeat(
+    roleKey: string
+  ): Promise<PresidentExecutiveSeat | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_executive_seats WHERE roleKey=? LIMIT 1",
       [roleKey]
@@ -856,15 +937,17 @@ export class MysqlPresidentProgramStore
     );
   }
 
-  async listEvents(programId: string): Promise<Array<{
-    id: string;
-    programId: string;
-    stepId: string | null;
-    eventType: string;
-    actorId: string;
-    details: Record<string, unknown>;
-    occurredAt: string;
-  }>> {
+  async listEvents(programId: string): Promise<
+    Array<{
+      id: string;
+      programId: string;
+      stepId: string | null;
+      eventType: string;
+      actorId: string;
+      details: Record<string, unknown>;
+      occurredAt: string;
+    }>
+  > {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_program_events WHERE programId=? ORDER BY occurredAt,id",
       [programId]
@@ -884,7 +967,7 @@ export class MysqlPresidentProgramStore
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       `SELECT s.* FROM president_program_steps s
        JOIN president_programs p ON p.id=s.programId
-       WHERE s.state='PENDING'
+       WHERE s.state='PENDING' AND s.attemptCount<s.maxAttempts
          AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')
          AND (s.nextAttemptAt IS NULL OR s.nextAttemptAt<=NOW(3))
          AND NOT EXISTS (
@@ -910,7 +993,7 @@ export class MysqlPresidentProgramStore
       const [rows] = await connection.execute<RowDataPacket[]>(
         `SELECT s.* FROM president_program_steps s
          JOIN president_programs p ON p.id=s.programId
-         WHERE s.id=? AND s.state='PENDING'
+         WHERE s.id=? AND s.state='PENDING' AND s.attemptCount<s.maxAttempts
            AND p.state IN ('READY','RUNNING','REVISION_REQUIRED')
            AND (s.nextAttemptAt IS NULL OR s.nextAttemptAt<=NOW(3))
            AND NOT EXISTS (
@@ -926,6 +1009,46 @@ export class MysqlPresidentProgramStore
         await connection.commit();
         return null;
       }
+      const [programRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT * FROM president_programs WHERE id=? FOR UPDATE",
+        [rows[0].programId]
+      );
+      const program = programRows[0];
+      const [policies] = await connection.execute<RowDataPacket[]>(
+        "SELECT * FROM president_authority_policies WHERE policyVersion=? FOR UPDATE",
+        [program.authorityPolicyVersion]
+      );
+      if (!policies[0])
+        throw new Error("President authority policy disappeared");
+      // Reserve every attempted ceiling conservatively, including lost returns.
+      // Unknown actual spend can never free authority for another execution.
+      const [reserved] = await connection.execute<RowDataPacket[]>(
+        "SELECT COALESCE(SUM(s.maxUsd*s.attemptCount),0) AS total FROM president_program_steps s WHERE s.programId=?",
+        [program.id]
+      );
+      if (
+        Number(reserved[0].total) + Number(rows[0].maxUsd) >
+        Number(program.maxProgramUsd)
+      ) {
+        await connection.execute(
+          "UPDATE president_programs SET state='BLOCKED_CAPABILITY',blockReason='Bounded program attempt budget exhausted',updatedAt=NOW(3) WHERE id=?",
+          [program.id]
+        );
+        await connection.commit();
+        return null;
+      }
+      const [daily] = await connection.execute<RowDataPacket[]>(
+        "SELECT COALESCE(SUM(s.maxUsd*s.attemptCount),0) AS total FROM president_program_steps s JOIN president_programs p ON p.id=s.programId WHERE p.authorityPolicyVersion=? AND s.updatedAt>=UTC_DATE()",
+        [program.authorityPolicyVersion]
+      );
+      if (
+        rows[0].authorityClass !== "FOUNDER_APPROVAL" &&
+        Number(daily[0].total) + Number(rows[0].maxUsd) >
+          Number(policies[0].maxAutonomousUsdPerDay)
+      )
+        throw new Error(
+          "President attempts exceed daily standing spend authority"
+        );
       const leaseExpiresAt = new Date(Date.now() + input.leaseMs);
       await connection.execute(
         `UPDATE president_program_steps
@@ -960,16 +1083,34 @@ export class MysqlPresidentProgramStore
     );
     const step = await this.getStep(handback.stepId);
     if (!step) throw new Error("President execution callback step not found");
-    if (eventRows[0]) return step;
+    if (eventRows[0]) {
+      await this.callbackReplay(handback);
+      return step;
+    }
+    const activeProgram = await this.getProgram(step.programId);
+    if (activeProgram?.state !== "RUNNING")
+      throw new Error("Execution callback program is not running");
     if (!["CLAIMED", "RUNNING"].includes(step.state))
-      throw new Error("President execution callback arrived for a non-running step");
+      throw new Error(
+        "President execution callback arrived for a non-running step"
+      );
     if (!step.executorId || step.executorId !== handback.executorId)
-      throw new Error("President execution callback actor is not the assigned executor");
+      throw new Error(
+        "President execution callback actor is not the assigned executor"
+      );
     if (
       !step.leaseExpiresAt ||
       new Date(step.leaseExpiresAt).getTime() <= Date.now()
     )
-      throw new Error("President execution callback arrived after the execution lease expired");
+      throw new Error(
+        "President execution callback arrived after the execution lease expired"
+      );
+    if (handback.evidence.executionAttempt !== step.attemptCount)
+      throw new Error("President execution callback belongs to a stale run");
+    if (handback.costUsd === null || handback.costUsd > step.maxUsd)
+      throw new Error(
+        "President execution callback requires known cost inside step budget"
+      );
     await this.recordHandback(handback);
     const updated = await this.updateStep(step.id, {
       state: "REVIEW_PENDING",
@@ -997,17 +1138,24 @@ export class MysqlPresidentProgramStore
     return updated;
   }
 
-  async assignReviewer(stepId: string, reviewerId: string): Promise<PresidentProgramStep> {
+  async assignReviewer(
+    stepId: string,
+    reviewerId: string
+  ): Promise<PresidentProgramStep> {
     const step = await this.getStep(stepId);
     if (!step) throw new Error("President review step not found");
     if (step.state !== "REVIEW_PENDING")
       throw new Error("President step is not awaiting independent review");
     if (step.executorId === reviewerId)
-      throw new Error("President cannot assign the executor as its own independent reviewer");
+      throw new Error(
+        "President cannot assign the executor as its own independent reviewer"
+      );
     return this.updateStep(step.id, { reviewerId });
   }
 
-  async decisionsForProgram(programId: string): Promise<PresidentFounderDecision[]> {
+  async decisionsForProgram(
+    programId: string
+  ): Promise<PresidentFounderDecision[]> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_founder_decisions WHERE programId=? ORDER BY askedAt,id",
       [programId]
@@ -1015,7 +1163,9 @@ export class MysqlPresidentProgramStore
     return rows.map(decisionFromRow);
   }
 
-  async findDecisionByKey(questionKey: string): Promise<PresidentFounderDecision | null> {
+  async findDecisionByKey(
+    questionKey: string
+  ): Promise<PresidentFounderDecision | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT * FROM president_founder_decisions WHERE questionKey=? ORDER BY askedAt DESC LIMIT 1",
       [questionKey]
@@ -1083,7 +1233,8 @@ export class MysqlPresidentProgramStore
       );
       await connection.commit();
       const claimed = await this.getStep(r.id);
-      if (!claimed || !claimed.leaseOwner || !claimed.leaseExpiresAt) return null;
+      if (!claimed || !claimed.leaseOwner || !claimed.leaseExpiresAt)
+        return null;
       return {
         ...claimed,
         leaseOwner: claimed.leaseOwner,
@@ -1133,7 +1284,8 @@ export class MysqlPresidentProgramStore
     if (handback.stepId !== step.id)
       throw new Error("President handback step identity mismatch");
     const current = await this.getStep(step.id);
-    const assignedExecutor = current?.executorId ?? step.executorId ?? step.leaseOwner;
+    const assignedExecutor =
+      current?.executorId ?? step.executorId ?? step.leaseOwner;
     if (handback.executorId !== assignedExecutor)
       throw new Error("President handback does not match assigned executor");
     if (
@@ -1187,7 +1339,10 @@ export class MysqlPresidentProgramStore
       nextAttemptAt: terminal
         ? null
         : new Date(Date.now() + retryDelayMs).toISOString(),
-      error: error instanceof Error ? error.message.slice(0, 4000) : String(error).slice(0, 4000),
+      error:
+        error instanceof Error
+          ? error.message.slice(0, 4000)
+          : String(error).slice(0, 4000),
     });
     if (terminal)
       await this.updateProgram(step.programId, {

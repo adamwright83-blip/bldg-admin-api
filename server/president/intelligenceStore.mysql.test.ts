@@ -13,14 +13,14 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
   () => {
     beforeAll(async () => {
       const admin = await mysql.createConnection(
-        "mysql://root:root@127.0.0.1:3411/"
+        `mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/`
       );
       await admin.query(
         "CREATE DATABASE IF NOT EXISTS president_intelligence_store_test"
       );
       await admin.end();
       pool = mysql.createPool({
-        uri: "mysql://root:root@127.0.0.1:3411/president_intelligence_store_test",
+        uri: `mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/president_intelligence_store_test`,
         timezone: "Z",
         connectionLimit: 8,
       });

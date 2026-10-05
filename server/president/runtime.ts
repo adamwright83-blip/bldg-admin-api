@@ -56,7 +56,7 @@ export function presidentRuntimeStatus() {
   const config = presidentRuntimeConfig();
   return {
     executionState: config.configured ? ("CONFIGURED" as const) : ("NOT_CONFIGURED" as const),
-    capabilities: Object.keys(config.targets).sort(),
+    executionCapabilities: Object.keys(config.targets).sort(),
     actors: [...new Set(Object.values(config.targets).map(target => target.actorId))].sort(),
     callbackBaseConfigured: Boolean(config.callbackBaseUrl),
     missingCallbackActors: config.missingCallbackActors,

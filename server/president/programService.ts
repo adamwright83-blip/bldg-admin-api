@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import type {
-  PresidentCandidateProject,
-} from "../../shared/presidentContracts";
+import type { PresidentCandidateProject } from "../../shared/presidentContracts";
 import {
   assertPresidentStepAuthority,
   presidentProgramPlanDraftSchema,
@@ -18,6 +16,9 @@ import {
 } from "../../shared/presidentOperatingSystem";
 import { executiveSkillCatalog } from "./skillRouter";
 import { canonicalJson } from "./canonicalJson";
+import { evidenceHash } from "./intelligenceStore";
+import { planPresidentProgram } from "./programPlanner";
+import type { PresidentJudgmentProvider } from "./reasoning";
 import type { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
 import { MysqlPresidentProgramStore } from "./programStore";
 
@@ -76,7 +77,13 @@ export class PresidentProgramService {
     private readonly intelligence: MysqlPresidentIntelligenceStore
   ) {}
 
-  async selectedCandidate(programId: string): Promise<PresidentCandidateProject> {
+  withProgramStore(programs: MysqlPresidentProgramStore) {
+    return new PresidentProgramService(this.pool, programs, this.intelligence);
+  }
+
+  async selectedCandidate(
+    programId: string
+  ): Promise<PresidentCandidateProject> {
     const program = await this.programs.getProgram(programId);
     if (!program?.assessmentId || !program.candidateId)
       throw new Error("President program is not tied to a Stage-1 candidate");
@@ -85,7 +92,8 @@ export class PresidentProgramService {
        WHERE p.assessmentId=? AND p.id=? LIMIT 1`,
       [program.assessmentId, program.candidateId]
     );
-    if (!rows[0]) throw new Error("Selected President candidate no longer exists");
+    if (!rows[0])
+      throw new Error("Selected President candidate no longer exists");
     return candidateFromRow(rows[0]);
   }
 
@@ -118,9 +126,12 @@ export class PresidentProgramService {
     maxProgramUsd: number;
   }) {
     const policy = await this.programs.getAuthorityPolicy(input.policyVersion);
-    if (!policy) throw new Error("President authority policy is not configured");
+    if (!policy)
+      throw new Error("President authority policy is not configured");
     if (policy.founderId !== input.founderId)
-      throw new Error("Only the configured founder may select a President program");
+      throw new Error(
+        "Only the configured founder may select a President program"
+      );
     if (
       !Number.isFinite(input.maxProgramUsd) ||
       input.maxProgramUsd < 0 ||
@@ -184,8 +195,19 @@ export class PresidentProgramService {
     actorId: string;
     maxProgramUsd: number;
   }) {
+    return this.intelligence.exclusive("objective-selection", () =>
+      this.createProgramFromObjectiveInside(input)
+    );
+  }
+
+  private async createProgramFromObjectiveInside(input: {
+    objectiveRecordId: string;
+    actorId: string;
+    maxProgramUsd: number;
+  }) {
     const policy = await this.programs.getAuthorityPolicy();
-    if (!policy) throw new Error("President authority policy is not configured");
+    if (!policy)
+      throw new Error("President authority policy is not configured");
     const founder = input.actorId === policy.founderId;
     if (
       !founder &&
@@ -204,22 +226,28 @@ export class PresidentProgramService {
     if (!founder && input.maxProgramUsd > policy.maxAutonomousUsdPerDay)
       throw new Error("Autonomous President program exceeds standing budget");
 
-    const proposed = await this.intelligence.byId(input.objectiveRecordId);
+    const original = await this.intelligence.byId(input.objectiveRecordId);
+    const proposed = original
+      ? await this.intelligence.current("OBJECTIVE", original.key)
+      : null;
     if (!proposed || proposed.kind !== "OBJECTIVE")
       throw new Error("President strategic objective not found");
     if (!["PROPOSED", "ACTIVE"].includes(String(proposed.payload.status)))
       throw new Error("President objective is not eligible for selection");
 
-    const activated = await this.intelligence.appendCurrent({
-      kind: "OBJECTIVE",
-      key: proposed.key,
-      evidenceIds: proposed.evidenceIds,
-      idempotencyKey: `objective:${input.objectiveRecordId}:activate`,
-      payload: {
-        ...proposed.payload,
-        status: "ACTIVE",
-      },
-    });
+    const activated =
+      proposed.payload.status === "ACTIVE"
+        ? proposed
+        : await this.intelligence.appendCurrent({
+            kind: "OBJECTIVE",
+            key: proposed.key,
+            evidenceIds: proposed.evidenceIds,
+            idempotencyKey: `objective:${input.objectiveRecordId}:activate`,
+            payload: {
+              ...proposed.payload,
+              status: "ACTIVE",
+            },
+          });
     const existing = await this.programs.findProgramByObjective(activated.id);
     if (existing)
       return { program: existing, objective: activated, reused: true };
@@ -280,7 +308,9 @@ export class PresidentProgramService {
     if (!objective || objective.kind !== "OBJECTIVE")
       throw new Error("President strategic objective not found");
     if (objective.payload.status !== "PROPOSED")
-      throw new Error("Only a proposed objective may request founder selection");
+      throw new Error(
+        "Only a proposed objective may request founder selection"
+      );
     const questionKey = `objective:${objective.id}:selection`;
     const existing = await this.programs.findOpenDecision(questionKey);
     if (existing) return existing;
@@ -294,7 +324,9 @@ export class PresidentProgramService {
       )}?`,
       options: ["Authorize this program", "Not now", "Stop objective"],
       recommendedOption: "Authorize this program",
-      reason: String(objective.payload.reason ?? "Source-backed strategic objective"),
+      reason: String(
+        objective.payload.reason ?? "Source-backed strategic objective"
+      ),
       status: "OPEN",
       answer: null,
       askedAt: new Date().toISOString(),
@@ -310,13 +342,18 @@ export class PresidentProgramService {
   }) {
     const policy = await this.programs.getAuthorityPolicy();
     if (!policy || policy.founderId !== input.founderId)
-      throw new Error("Only the configured founder may select a President objective");
+      throw new Error(
+        "Only the configured founder may select a President objective"
+      );
     const decision = await this.programs.answerFounderDecision(
       input.decisionId,
       input.answer
     );
-    const match = decision.questionKey.match(/^objective:([0-9a-f-]+):selection$/i);
-    if (!match) throw new Error("Founder decision is not an objective selection");
+    const match = decision.questionKey.match(
+      /^objective:([0-9a-f-]+):selection$/i
+    );
+    if (!match)
+      throw new Error("Founder decision is not an objective selection");
     const objective = await this.intelligence.byId(match[1]);
     if (!objective || objective.kind !== "OBJECTIVE")
       throw new Error("President objective disappeared");
@@ -357,11 +394,32 @@ export class PresidentProgramService {
     providerRunId?: string | null;
     model?: string | null;
   }) {
+    return this.programs.transaction(input.programId, store =>
+      this.withProgramStore(store).applyPlanInside(input)
+    );
+  }
+
+  private async applyPlanInside(input: {
+    programId: string;
+    plan: PresidentProgramPlanDraft;
+    plannerId: string;
+    providerRunId?: string | null;
+    model?: string | null;
+  }) {
     const plan = presidentProgramPlanDraftSchema.parse(input.plan);
     const program = await this.programs.getProgram(input.programId);
     if (!program) throw new Error("President program not found");
-    if (!["SELECTED", "PREFLIGHT", "BLOCKED_FOUNDER", "BLOCKED_CAPABILITY"].includes(program.state))
-      throw new Error("President program cannot be replanned in its current state");
+    if (
+      ![
+        "SELECTED",
+        "PREFLIGHT",
+        "BLOCKED_FOUNDER",
+        "BLOCKED_CAPABILITY",
+      ].includes(program.state)
+    )
+      throw new Error(
+        "President program cannot be replanned in its current state"
+      );
     const policy = await this.programs.getAuthorityPolicy(
       program.authorityPolicyVersion
     );
@@ -375,7 +433,9 @@ export class PresidentProgramService {
 
     const priorSteps = await this.programs.listSteps(program.id);
     if (priorSteps.some(step => !["CANCELED", "BLOCKED"].includes(step.state)))
-      throw new Error("Cannot replace a President plan after execution has begun");
+      throw new Error(
+        "Cannot replace a President plan after execution has begun"
+      );
 
     const result = derivePreflightResult(plan);
     const hasPlanQuestions = plan.founderQuestions.length > 0;
@@ -465,7 +525,9 @@ export class PresidentProgramService {
       const questionKey = `program:${program.id}:plan:${question.key}`;
       const priorQuestion = await this.programs.findDecisionByKey(questionKey);
       if (priorQuestion?.status === "ANSWERED")
-        throw new Error("President planner repeated an already answered founder question");
+        throw new Error(
+          "President planner repeated an already answered founder question"
+        );
       await this.programs.createFounderDecision({
         id: randomUUID(),
         programId: program.id,
@@ -509,14 +571,13 @@ export class PresidentProgramService {
           : "BLOCKED_CAPABILITY";
     const updated = await this.programs.updateProgram(program.id, {
       state,
-      blockReason:
-        hasPlanQuestions
-          ? "Founder answer required before President replans"
-          : state === "BLOCKED_FOUNDER"
-            ? "Founder decision required by preflight"
-            : state === "BLOCKED_CAPABILITY"
-              ? "Preflight contains unresolved unknowns"
-              : null,
+      blockReason: hasPlanQuestions
+        ? "Founder answer required before President replans"
+        : state === "BLOCKED_FOUNDER"
+          ? "Founder decision required by preflight"
+          : state === "BLOCKED_CAPABILITY"
+            ? "Preflight contains unresolved unknowns"
+            : null,
       currentStepId: steps[0]?.id ?? null,
     });
     await this.programs.recordEvent({
@@ -541,7 +602,9 @@ export class PresidentProgramService {
   }) {
     const policy = await this.programs.getAuthorityPolicy();
     if (!policy || policy.founderId !== input.founderId)
-      throw new Error("Only the configured founder may answer President plan questions");
+      throw new Error(
+        "Only the configured founder may answer President plan questions"
+      );
     const decision = await this.programs.answerFounderDecision(
       input.decisionId,
       input.answer
@@ -560,7 +623,9 @@ export class PresidentProgramService {
         answer: input.answer,
       },
     });
-    const remaining = (await this.programs.decisionsForProgram(program.id)).filter(
+    const remaining = (
+      await this.programs.decisionsForProgram(program.id)
+    ).filter(
       item => item.status === "OPEN" && item.questionKey.includes(":plan:")
     );
     return this.programs.updateProgram(program.id, {
@@ -578,7 +643,9 @@ export class PresidentProgramService {
   }) {
     const policy = await this.programs.getAuthorityPolicy();
     if (!policy || policy.founderId !== input.founderId)
-      throw new Error("Only the configured founder may answer President authority decisions");
+      throw new Error(
+        "Only the configured founder may answer President authority decisions"
+      );
     const decision = await this.programs.answerFounderDecision(
       input.decisionId,
       input.answer
@@ -600,9 +667,9 @@ export class PresidentProgramService {
         blockReason: "Founder requested a revised program plan",
       });
     }
-    const otherOpen = (await this.programs.decisionsForProgram(program.id)).filter(
-      item => item.status === "OPEN" && item.id !== decision.id
-    );
+    const otherOpen = (
+      await this.programs.decisionsForProgram(program.id)
+    ).filter(item => item.status === "OPEN" && item.id !== decision.id);
     if (otherOpen.length)
       return this.programs.updateProgram(program.id, {
         state: "BLOCKED_FOUNDER",
@@ -622,6 +689,10 @@ export class PresidentProgramService {
 
   async acceptIndependentReview(review: PresidentIndependentReview) {
     const saved = await this.programs.recordReview(review);
+    await this.programs.updateStep(review.stepId, {
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    });
     const step = await this.programs.getStep(review.stepId);
     if (!step) throw new Error("Reviewed President step disappeared");
     const program = await this.programs.getProgram(step.programId);
@@ -659,9 +730,21 @@ export class PresidentProgramService {
       });
     }
 
+    if (review.verdict === "REVISE" && step.attemptCount >= step.maxAttempts) {
+      await this.programs.updateStep(step.id, {
+        state: "DEAD_LETTER",
+        error: "Review revisions exhausted bounded retries",
+      });
+      return this.programs.updateProgram(program.id, {
+        state: "BLOCKED_CAPABILITY",
+        blockReason: "Review revisions exhausted bounded retries",
+      });
+    }
     if (review.verdict === "REVISE") {
       if (!review.requiredRevision)
-        throw new Error("Revision verdict requires an explicit bounded revision");
+        throw new Error(
+          "Revision verdict requires an explicit bounded revision"
+        );
       await this.programs.updateStep(step.id, {
         state: "PENDING",
         reviewerId: review.reviewerId,
@@ -730,7 +813,8 @@ export class PresidentProgramService {
       state: "STOPPED",
       currentStepId: step.id,
       stopReason:
-        review.requiredRevision ?? "Independent reviewer rejected the program step",
+        review.requiredRevision ??
+        "Independent reviewer rejected the program step",
     });
   }
 
@@ -754,7 +838,9 @@ export class PresidentProgramService {
       );
     const evidence = await this.intelligence.evidence(input.evidenceIds);
     if (evidence.length !== new Set(input.evidenceIds).size)
-      throw new Error("Measured President outcome requires real durable evidence");
+      throw new Error(
+        "Measured President outcome requires real durable evidence"
+      );
 
     const progressKey = `program:${program.id}:outcome`;
     const lessonKey = `program:${program.id}:lesson`;
@@ -762,7 +848,16 @@ export class PresidentProgramService {
       const progress = await this.intelligence.current("PROGRESS", progressKey);
       const lesson = await this.intelligence.current("LESSON", lessonKey);
       if (!progress || !lesson)
-        throw new Error("Completed President program is missing durable learning records");
+        throw new Error(
+          "Completed President program is missing durable learning records"
+        );
+      if (
+        progress.payload.observedOutcome !== input.observedOutcome ||
+        progress.payload.success !== input.success ||
+        lesson.payload.lesson !== input.lesson ||
+        canonicalJson(progress.evidenceIds) !== canonicalJson(input.evidenceIds)
+      )
+        throw new Error("Completed outcome retry changes measured evidence");
       return { program, progress, lesson, reused: true };
     }
 
@@ -802,12 +897,118 @@ export class PresidentProgramService {
       actorId: input.actorId,
       details: { progressRecordId: progress.id, lessonRecordId: lesson.id },
     });
+    if (program.objectiveRecordId) {
+      const objective = await this.intelligence.byId(program.objectiveRecordId);
+      if (objective)
+        await this.intelligence.appendCurrent({
+          kind: "OBJECTIVE",
+          key: objective.key,
+          evidenceIds: [
+            ...new Set([...objective.evidenceIds, ...input.evidenceIds]),
+          ],
+          idempotencyKey: `program:${program.id}:objective-outcome`,
+          payload: {
+            ...objective.payload,
+            status: input.success ? "ACHIEVED" : "STOPPED",
+          },
+        });
+    }
     const completed = await this.programs.updateProgram(program.id, {
       state: "COMPLETED",
       currentStepId: null,
       blockReason: null,
     });
     return { program: completed, progress, lesson, reused: false };
+  }
+
+  async advanceObjectives(provider: PresidentJudgmentProvider) {
+    const policy = await this.programs.getAuthorityPolicy();
+    if (!policy) return;
+    const objectives = await this.intelligence.listCurrent("OBJECTIVE", 20);
+    for (const objective of objectives
+      .filter(o => o.payload.status === "PROPOSED")
+      .slice(0, 3)) {
+      if (policy.autonomousProgramSelectionAllowed) {
+        await this.createProgramFromObjective({
+          objectiveRecordId: objective.id,
+          actorId: "seat.president",
+          maxProgramUsd: Math.min(2, policy.maxAutonomousUsdPerDay),
+        });
+      } else if ((await this.programs.openFounderDecisions(3)).length < 3) {
+        await this.requestObjectiveSelectionDecision({
+          objectiveRecordId: objective.id,
+        });
+      }
+    }
+    for (const program of (await this.programs.listPrograms(50))
+      .filter(p => p.state === "SELECTED")
+      .slice(0, 1)) {
+      const plan = await planPresidentProgram({
+        program,
+        selectedWork: await this.selectedWork(program.id),
+        policy,
+        provider,
+        repositorySha: null,
+        capabilities: await this.programs.listAgentCapabilities(),
+        maxUsd: 1,
+      });
+      await this.applyPlan({
+        programId: program.id,
+        plan: plan.plan,
+        plannerId: "seat.president",
+        providerRunId: plan.providerRunId,
+        model: plan.model,
+      });
+    }
+  }
+
+  async finalizeVerifiedMeasurements() {
+    for (const program of await this.programs.listPrograms(50)) {
+      if (
+        !["VERIFIED_INTERNAL", "MEASURING", "LEARNING"].includes(program.state)
+      )
+        continue;
+      const steps = await this.programs.listSteps(program.id);
+      const measurement = steps.at(-1);
+      if (measurement?.type !== "MEASURE" || measurement.state !== "VERIFIED")
+        continue;
+      const review = await this.programs.latestReview(measurement.id);
+      if (
+        !review ||
+        review.verdict !== "PASS" ||
+        review.exactArtifactId !== program.verifiedArtifactId
+      )
+        continue;
+      const statement =
+        `Independent reviewer ${review.reviewerId} accepted the exact internal artifact ${review.exactArtifactId}: ` +
+        review.acceptanceResults
+          .map(r => `${r.criterion}: ${r.evidence}`)
+          .join("; ");
+      const id = "review-" + review.eventId;
+      const existing = (await this.intelligence.evidence([id]))[0];
+      await this.intelligence.putEvidence({
+        id,
+        source: `president-review:${review.eventId}`,
+        statement: statement.slice(0, 16000),
+        sha256: evidenceHash(statement.slice(0, 16000)),
+        kind: "FACT",
+        confidence: 1,
+        availability: "AVAILABLE",
+        capturedAt: existing?.capturedAt ?? new Date().toISOString(),
+        sourceAt: review.reviewedAt,
+        origin: this.intelligence.origin,
+        expiresAt: null,
+      });
+      await this.recordMeasuredOutcome({
+        programId: program.id,
+        evidenceIds: [id],
+        observedOutcome: statement.slice(0, 8000),
+        success: true,
+        lesson:
+          "The exact bounded internal outcome passed independent measurement; this does not establish production or commercial success.",
+        actorId: "seat.president",
+      });
+    }
   }
 
   async nightlyBrief(): Promise<PresidentNightlyBrief> {
@@ -822,12 +1023,20 @@ export class PresidentProgramService {
         ["BLOCKED_FOUNDER", "BLOCKED_CAPABILITY"].includes(program.state)
       )
       .slice(0, 10)
-      .map(program => `${program.title}: ${program.blockReason ?? program.state}`);
+      .map(
+        program => `${program.title}: ${program.blockReason ?? program.state}`
+      );
     const inProgress = programs
       .filter(program =>
-        ["READY", "RUNNING", "AWAITING_REVIEW", "REVISION_REQUIRED", "VERIFIED_INTERNAL", "MEASURING", "LEARNING"].includes(
-          program.state
-        )
+        [
+          "READY",
+          "RUNNING",
+          "AWAITING_REVIEW",
+          "REVISION_REQUIRED",
+          "VERIFIED_INTERNAL",
+          "MEASURING",
+          "LEARNING",
+        ].includes(program.state)
       )
       .slice(0, 10)
       .map(program => `${program.title} — ${program.state}`);
@@ -840,7 +1049,11 @@ export class PresidentProgramService {
       summary:
         questions.length > 0
           ? `President needs ${questions.length} founder decision${questions.length === 1 ? "" : "s"}; all other eligible work remains delegated.`
-          : "No founder decision is currently required; President can continue inside existing authority.",
+          : programs.some(p =>
+                ["READY", "RUNNING", "AWAITING_REVIEW"].includes(p.state)
+              )
+            ? "No founder decision is currently required. Eligible work can continue inside existing authority."
+            : "No founder decision is currently open. The brief reflects the durable work recorded so far.",
       completed,
       inProgress,
       blocked,
@@ -858,7 +1071,8 @@ export class PresidentProgramService {
     idempotencyKey: string;
   }) {
     const policy = await this.programs.getAuthorityPolicy();
-    if (!policy) throw new Error("President authority policy is not configured");
+    if (!policy)
+      throw new Error("President authority policy is not configured");
     const isFounder = input.requestedBy === policy.founderId;
     if (!isFounder) {
       if (
@@ -866,29 +1080,47 @@ export class PresidentProgramService {
         input.capability.kind !== "TEMPORARY_SPECIALIST" ||
         !input.capability.programId
       )
-        throw new Error("Only founder may create enduring President capabilities");
-      const program = await this.programs.getProgram(input.capability.programId);
+        throw new Error(
+          "Only founder may create enduring President capabilities"
+        );
+      const program = await this.programs.getProgram(
+        input.capability.programId
+      );
       if (
         !program ||
-        ["SELECTED", "PREFLIGHT", "BLOCKED_FOUNDER", "STOPPED", "COMPLETED"].includes(
-          program.state
-        )
+        [
+          "SELECTED",
+          "PREFLIGHT",
+          "BLOCKED_FOUNDER",
+          "STOPPED",
+          "COMPLETED",
+        ].includes(program.state)
       )
-        throw new Error("Temporary specialist requires an already-authorized active program");
+        throw new Error(
+          "Temporary specialist requires an already-authorized active program"
+        );
       if (input.capability.maxUsdPerRun > policy.maxAutonomousUsdPerDay)
-        throw new Error("Temporary specialist exceeds autonomous policy budget");
+        throw new Error(
+          "Temporary specialist exceeds autonomous policy budget"
+        );
     }
 
-    const evidence = await this.intelligence.evidence(input.capability.evidenceIds);
+    const evidence = await this.intelligence.evidence(
+      input.capability.evidenceIds
+    );
     if (evidence.length !== new Set(input.capability.evidenceIds).size)
-      throw new Error("Capability recruitment requires durable supporting evidence");
+      throw new Error(
+        "Capability recruitment requires durable supporting evidence"
+      );
 
     if (input.capability.kind === "EXECUTIVE_SEAT") {
       const seat = input.capability.seatRoleKey
         ? await this.programs.getExecutiveSeat(input.capability.seatRoleKey)
         : null;
       if (!seat || !["AUTHORIZED", "ACTIVE"].includes(seat.state))
-        throw new Error("Executive capability requires a founder-authorized executive seat");
+        throw new Error(
+          "Executive capability requires a founder-authorized executive seat"
+        );
     }
 
     for (const skill of input.capability.skillNames)
@@ -915,7 +1147,9 @@ export class PresidentProgramService {
         justification: existing.justification,
       };
       if (canonicalJson(persistedShape) !== canonicalJson(input.capability))
-        throw new Error("Active President capability cannot be silently redefined");
+        throw new Error(
+          "Active President capability cannot be silently redefined"
+        );
     }
 
     const capability =
@@ -971,7 +1205,9 @@ export class PresidentProgramService {
     actorId: string;
     idempotencyKey: string;
   }) {
-    const capability = await this.programs.getAgentCapability(input.capabilityKey);
+    const capability = await this.programs.getAgentCapability(
+      input.capabilityKey
+    );
     if (!capability) throw new Error("President capability not found");
     const evidence = await this.intelligence.evidence(input.evidenceIds);
     if (evidence.length !== new Set(input.evidenceIds).size)
@@ -1010,8 +1246,11 @@ export class PresidentProgramService {
     idempotencyKey: string;
   }) {
     const policy = await this.programs.getAuthorityPolicy();
-    if (!policy) throw new Error("President authority policy is not configured");
-    const capability = await this.programs.getAgentCapability(input.capabilityKey);
+    if (!policy)
+      throw new Error("President authority policy is not configured");
+    const capability = await this.programs.getAgentCapability(
+      input.capabilityKey
+    );
     if (!capability) throw new Error("President capability not found");
     const isFounder = input.actorId === policy.founderId;
     const canPresidentRevokeTemporary =
@@ -1049,7 +1288,10 @@ export class PresidentProgramService {
         programId: capability.programId,
         eventType: "SPECIALIST_CAPABILITY_REVOKED",
         actorId: input.actorId,
-        details: { capabilityKey: capability.capabilityKey, reason: input.reason },
+        details: {
+          capabilityKey: capability.capabilityKey,
+          reason: input.reason,
+        },
       });
     return revoked;
   }
@@ -1116,7 +1358,9 @@ export class PresidentProgramService {
   }) {
     const policy = await this.programs.getAuthorityPolicy();
     if (!policy || policy.founderId !== input.founderId)
-      throw new Error("Only the configured founder may authorize an executive seat");
+      throw new Error(
+        "Only the configured founder may authorize an executive seat"
+      );
     const seat = await this.programs.getExecutiveSeat(input.roleKey);
     if (!seat || seat.founderDecisionId !== input.decisionId)
       throw new Error("Executive seat proposal/decision mismatch");
@@ -1132,7 +1376,7 @@ export class PresidentProgramService {
           : "REJECTED",
       provider:
         input.answer === "Authorize executive agent"
-          ? input.provider ?? null
+          ? (input.provider ?? null)
           : null,
       updatedAt: now,
     });

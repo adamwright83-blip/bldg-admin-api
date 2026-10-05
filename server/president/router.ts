@@ -30,7 +30,10 @@ function database() {
   } catch (error) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: error instanceof Error ? error.message : "President durable database unavailable",
+      message:
+        error instanceof Error
+          ? error.message
+          : "President durable database unavailable",
     });
   }
 }
@@ -83,8 +86,9 @@ export const presidentRouter = router({
       thesis: (await intelligence.listCurrent("THESIS", 20)).filter(record =>
         acceptedStrategyIds.has(String(record.payload.strategyRecordId))
       ),
-      objectives: (await intelligence.listCurrent("OBJECTIVE", 20)).filter(record =>
-        acceptedStrategyIds.has(String(record.payload.strategyRecordId))
+      objectives: (await intelligence.listCurrent("OBJECTIVE", 20)).filter(
+        record =>
+          acceptedStrategyIds.has(String(record.payload.strategyRecordId))
       ),
       metrics: await intelligence.listCurrent("METRIC", 30),
       research: await intelligence.list("RESEARCH", 20),
@@ -95,6 +99,34 @@ export const presidentRouter = router({
       agentCapabilities: await programs.listAgentCapabilities(),
       skills: executiveSkillCatalog,
       ...presidentRuntimeStatus(),
+    };
+  }),
+
+  founderSurface: founderProcedure.query(async () => {
+    const { programs, service, intelligence } = operatingServices();
+    const objectives = await intelligence.listCurrent("OBJECTIVE", 20);
+    const thesis = await intelligence.listCurrent("THESIS", 12);
+    const research = await intelligence.list("RESEARCH", 10);
+    const work = await programs.listPrograms(20);
+    const events = (
+      await Promise.all(work.slice(0, 5).map(p => programs.listEvents(p.id)))
+    )
+      .flat()
+      .slice(-20);
+    const evidenceIds = [
+      ...new Set(
+        [...objectives, ...thesis, ...research].flatMap(r => r.evidenceIds)
+      ),
+    ].slice(0, 50);
+    return {
+      runtime: presidentRuntimeStatus(),
+      brief: await service.nightlyBrief(),
+      objectives,
+      thesis,
+      research,
+      programs: work,
+      evidence: await intelligence.evidence(evidenceIds),
+      events,
     };
   }),
 
@@ -116,7 +148,10 @@ export const presidentRouter = router({
       const { programs } = operatingServices();
       const program = await programs.getProgram(input.id);
       if (!program)
-        throw new TRPCError({ code: "NOT_FOUND", message: "President program not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "President program not found",
+        });
       return {
         program,
         preflight: await programs.getPreflight(input.id),
@@ -182,9 +217,15 @@ export const presidentRouter = router({
     .mutation(async ({ input }) => {
       const { pool, programs, service } = operatingServices();
       const program = await programs.getProgram(input.programId);
-      if (!program) throw new TRPCError({ code: "NOT_FOUND", message: "President program not found" });
+      if (!program)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "President program not found",
+        });
       const selectedWork = await service.selectedWork(program.id);
-      const policy = await programs.getAuthorityPolicy(program.authorityPolicyVersion);
+      const policy = await programs.getAuthorityPolicy(
+        program.authorityPolicyVersion
+      );
       if (!policy) throw new Error("President authority policy disappeared");
       const [rows] = program.assessmentId
         ? await pool.execute<RowDataPacket[]>(
@@ -216,12 +257,22 @@ export const presidentRouter = router({
       return { ...plan, applied };
     }),
 
+  requestObjectiveSelection: founderProcedure
+    .input(z.object({ objectiveRecordId: z.string().uuid() }).strict())
+    .mutation(({ input }) =>
+      operatingServices().service.requestObjectiveSelectionDecision(input)
+    ),
+
   answerObjectiveSelection: founderProcedure
     .input(
       z
         .object({
           decisionId: z.string().uuid(),
-          answer: z.enum(["Authorize this program", "Not now", "Stop objective"]),
+          answer: z.enum([
+            "Authorize this program",
+            "Not now",
+            "Stop objective",
+          ]),
           maxProgramUsd: z.number().min(0).max(10000),
         })
         .strict()
@@ -254,7 +305,11 @@ export const presidentRouter = router({
       z
         .object({
           decisionId: z.string().uuid(),
-          answer: z.enum(["Approve bounded program", "Revise plan", "Stop program"]),
+          answer: z.enum([
+            "Approve bounded program",
+            "Revise plan",
+            "Stop program",
+          ]),
         })
         .strict()
     )
@@ -271,12 +326,17 @@ export const presidentRouter = router({
     } catch (error) {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
-        message: error instanceof Error ? error.message : "President runtime unavailable",
+        message:
+          error instanceof Error
+            ? error.message
+            : "President runtime unavailable",
       });
     }
   }),
 
-  nightlyBrief: founderProcedure.query(() => operatingServices().service.nightlyBrief()),
+  nightlyBrief: founderProcedure.query(() =>
+    operatingServices().service.nightlyBrief()
+  ),
 
   reason: founderProcedure
     .input(
@@ -287,7 +347,10 @@ export const presidentRouter = router({
           requestKey: z.string().min(1).max(191),
           maxUsd: z.number().positive().max(2).default(1),
           consequential: z.boolean().default(false),
-          admittedCandidateIds: z.array(z.string().min(1).max(64)).max(20).default([]),
+          admittedCandidateIds: z
+            .array(z.string().min(1).max(64))
+            .max(20)
+            .default([]),
         })
         .strict()
     )
@@ -295,7 +358,10 @@ export const presidentRouter = router({
       const { intelligence } = operatingServices();
       const evidence = await intelligence.evidence(input.evidenceIds);
       if (evidence.length !== new Set(input.evidenceIds).size)
-        throw new TRPCError({ code: "BAD_REQUEST", message: "President evidence IDs are incomplete" });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "President evidence IDs are incomplete",
+        });
       return reasonAboutCompany({
         question: input.question,
         evidence,
@@ -413,7 +479,9 @@ export const presidentRouter = router({
         })
         .strict()
     )
-    .mutation(({ input }) => operatingServices().service.proposeExecutiveSeat(input)),
+    .mutation(({ input }) =>
+      operatingServices().service.proposeExecutiveSeat(input)
+    ),
 
   authorizeExecutiveSeat: founderProcedure
     .input(
@@ -476,6 +544,9 @@ export const presidentRouter = router({
         .strict()
     )
     .query(({ input }) =>
-      new MysqlPresidentIntelligenceStore(database()).list(input.kind, input.limit)
+      new MysqlPresidentIntelligenceStore(database()).list(
+        input.kind,
+        input.limit
+      )
     ),
 });

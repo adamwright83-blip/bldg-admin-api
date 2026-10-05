@@ -58,7 +58,9 @@ export class PresidentAgentWakeClient {
     new URL(callbackBaseUrl);
     for (const [capability, target] of Object.entries(targets)) {
       if (!capability || !target.actorId || !target.url || !target.wakeToken)
-        throw new Error("Every President agent target needs capability, actorId, url and wakeToken");
+        throw new Error(
+          "Every President agent target needs capability, actorId, url and wakeToken"
+        );
       new URL(target.url);
     }
   }
@@ -67,7 +69,10 @@ export class PresidentAgentWakeClient {
     return this.targets[capability] ?? null;
   }
 
-  async wake(target: PresidentAgentTarget, payload: PresidentWakeEnvelope): Promise<void> {
+  async wake(
+    target: PresidentAgentTarget,
+    payload: PresidentWakeEnvelope
+  ): Promise<void> {
     const response = await fetch(target.url, {
       method: "POST",
       headers: {
@@ -79,6 +84,7 @@ export class PresidentAgentWakeClient {
             : `review:${payload.step.id}:${payload.handback.exactArtifactId}`,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20_000),
     });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
@@ -102,7 +108,10 @@ export class PresidentAgentRuntimeCoordinator {
     const decision = await this.programs.findDecisionByKey(
       `program:${programId}:preflight`
     );
-    return decision?.status === "ANSWERED" && decision.answer === "Approve bounded program";
+    return (
+      decision?.status === "ANSWERED" &&
+      decision.answer === "Approve bounded program"
+    );
   }
 
   async dispatchNext(): Promise<
@@ -110,7 +119,8 @@ export class PresidentAgentRuntimeCoordinator {
     | { action: "WAITING"; reason: string }
   > {
     const step = await this.programs.nextPendingStep();
-    if (!step) return { action: "WAITING", reason: "No eligible President step" };
+    if (!step)
+      return { action: "WAITING", reason: "No eligible President step" };
     const program = await this.programs.getProgram(step.programId);
     if (!program) throw new Error("President program disappeared");
     const policy = await this.programs.getAuthorityPolicy(
@@ -137,7 +147,8 @@ export class PresidentAgentRuntimeCoordinator {
           question: `This program needs a human action: ${step.title}. What should President do?`,
           options: ["I completed it", "Not now", "Stop program"],
           recommendedOption: null,
-          reason: "President cannot fabricate or autonomously perform human-world evidence.",
+          reason:
+            "President cannot fabricate or autonomously perform human-world evidence.",
           status: "OPEN",
           answer: null,
           askedAt: new Date().toISOString(),
@@ -188,7 +199,8 @@ export class PresidentAgentRuntimeCoordinator {
       executorId: capability.actorId,
       leaseMs: target.leaseMs ?? 60 * 60 * 1000,
     });
-    if (!claimed) return { action: "WAITING", reason: "Step was claimed elsewhere" };
+    if (!claimed)
+      return { action: "WAITING", reason: "Step was claimed elsewhere" };
 
     try {
       await this.wake.wake(target, {
@@ -210,45 +222,66 @@ export class PresidentAgentRuntimeCoordinator {
           targetCapability: capability.targetCapability,
         },
       });
-      return { action: "DISPATCHED", stepId: step.id, actorId: capability.actorId };
+      return {
+        action: "DISPATCHED",
+        stepId: step.id,
+        actorId: capability.actorId,
+      };
     } catch (error) {
-      await this.programs.updateStep(step.id, {
-        state: "PENDING",
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
-        error: String(error).slice(0, 4000),
-      });
-      await this.programs.updateProgram(program.id, {
-        state: "BLOCKED_CAPABILITY",
-        blockReason: `Executor wake failed for ${step.executorCapability}`,
-      });
+      await this.programs.failStep(
+        {
+          ...claimed,
+          leaseOwner: claimed.leaseOwner!,
+          leaseExpiresAt: claimed.leaseExpiresAt!,
+        },
+        error,
+        60_000
+      );
       throw error;
     }
   }
 
   async receiveExecution(input: PresidentExecutionHandback) {
     const handback = presidentExecutionHandbackSchema.parse(input);
-    if (await this.programs.hasExecutionEvent(handback.eventId)) {
-      const step = await this.programs.getStep(handback.stepId);
-      return { reused: true, step };
-    }
-    const step = await this.programs.submitExternalHandback(handback);
+    const priorStep = await this.programs.getStep(handback.stepId);
+    if (!priorStep) throw new Error("President callback step not found");
+    const result = await this.programs.transaction(
+      priorStep.programId,
+      async store => {
+        const reused = await store.callbackReplay(handback);
+        const step = reused
+          ? (await store.getStep(handback.stepId))!
+          : await store.submitExternalHandback(handback);
+        return { reused, step };
+      }
+    );
+    const { step } = result;
+    if (step.state !== "REVIEW_PENDING") return result;
     await this.requestReview(step);
-    return { reused: false, step };
+    return result;
   }
 
   async requestReview(step: PresidentProgramStep) {
     if (step.state !== "REVIEW_PENDING")
-      throw new Error("President cannot request review before a durable handback");
+      throw new Error(
+        "President cannot request review before a durable handback"
+      );
     const program = await this.programs.getProgram(step.programId);
     if (!program) throw new Error("President program disappeared");
     const handback = await this.programs.getHandback(step.id);
-    if (!handback) throw new Error("President review requires exact execution handback");
+    if (!handback)
+      throw new Error("President review requires exact execution handback");
     const reviewerCapability = await this.programs.getAgentCapability(
       step.reviewerCapability
     );
-    if (!reviewerCapability || reviewerCapability.status !== "ACTIVE") {
+    if (
+      !reviewerCapability ||
+      reviewerCapability.status !== "ACTIVE" ||
+      (reviewerCapability.programId &&
+        reviewerCapability.programId !== program.id) ||
+      !reviewerCapability.authorityClasses.includes("AUTO_READ_ONLY") ||
+      !reviewerCapability.consequentialDomains.includes("NONE")
+    ) {
       await this.programs.updateProgram(program.id, {
         state: "BLOCKED_CAPABILITY",
         currentStepId: step.id,
@@ -266,11 +299,53 @@ export class PresidentAgentRuntimeCoordinator {
       return { action: "WAITING_REVIEWER" as const };
     }
     if (reviewerCapability.actorId === handback.executorId)
-      throw new Error("President executor and independent reviewer resolve to the same actor");
-    const assigned = await this.programs.assignReviewer(
-      step.id,
-      reviewerCapability.actorId
+      throw new Error(
+        "President executor and independent reviewer resolve to the same actor"
+      );
+    const assigned = await this.programs.transaction(
+      program.id,
+      async store => {
+        const current = await store.getStep(step.id);
+        if (current?.state !== "REVIEW_PENDING") return null;
+        if (
+          current.leaseExpiresAt &&
+          new Date(current.leaseExpiresAt).getTime() > Date.now()
+        )
+          return null;
+        const attempts = (await store.listEvents(program.id)).filter(
+          event =>
+            event.stepId === step.id &&
+            event.eventType === "REVIEW_WAKE_ATTEMPT" &&
+            event.details.exactArtifactId === handback.exactArtifactId
+        ).length;
+        if (attempts >= current.maxAttempts) {
+          await store.updateStep(step.id, {
+            state: "DEAD_LETTER",
+            error: "Independent review exhausted bounded wake retries",
+          });
+          await store.updateProgram(program.id, {
+            state: "BLOCKED_CAPABILITY",
+            blockReason: "Independent review exhausted bounded wake retries",
+          });
+          return null;
+        }
+        await store.recordEvent({
+          programId: program.id,
+          stepId: step.id,
+          eventType: "REVIEW_WAKE_ATTEMPT",
+          actorId: reviewerCapability.actorId,
+          details: { exactArtifactId: handback.exactArtifactId },
+        });
+        return store.updateStep(step.id, {
+          reviewerId: reviewerCapability.actorId,
+          leaseOwner: "review:" + reviewerCapability.actorId,
+          leaseExpiresAt: new Date(
+            Date.now() + (target.leaseMs ?? 60_000)
+          ).toISOString(),
+        });
+      }
     );
+    if (!assigned) return { action: "WAITING_REVIEWER" as const };
     await this.wake.wake(target, {
       kind: "PRESIDENT_REVIEW",
       programId: program.id,
@@ -300,17 +375,35 @@ export class PresidentAgentRuntimeCoordinator {
 
   async receiveReview(input: PresidentIndependentReview) {
     const review = presidentIndependentReviewSchema.parse(input);
-    if (await this.programs.hasReviewEvent(review.eventId)) {
-      const step = await this.programs.getStep(review.stepId);
-      const program = step ? await this.programs.getProgram(step.programId) : null;
-      return { reused: true, program };
-    }
     const step = await this.programs.getStep(review.stepId);
     if (!step) throw new Error("President review callback step not found");
-    if (!step.reviewerId || step.reviewerId !== review.reviewerId)
-      throw new Error("President review callback actor is not the assigned reviewer");
-
-    const program = await this.service.acceptIndependentReview(review);
+    const result = await this.programs.transaction(
+      step.programId,
+      async store => {
+        const reused = await store.callbackReplay(review);
+        if (reused)
+          return { reused, program: (await store.getProgram(step.programId))! };
+        const currentProgram = await store.getProgram(step.programId);
+        if (
+          !currentProgram ||
+          ["STOPPED", "COMPLETED"].includes(currentProgram.state)
+        )
+          throw new Error("Review callback program is no longer active");
+        const current = await store.getStep(step.id);
+        if (
+          current?.state !== "REVIEW_PENDING" ||
+          current.reviewerId !== review.reviewerId
+        )
+          throw new Error("President review is not assigned to this actor/run");
+        const service = this.service.withProgramStore(store);
+        return {
+          reused: false,
+          program: await service.acceptIndependentReview(review),
+        };
+      }
+    );
+    const { program } = result;
+    if (result.reused) return result;
     await this.programs.recordEvent({
       programId: program.id,
       stepId: step.id,
@@ -321,11 +414,17 @@ export class PresidentAgentRuntimeCoordinator {
 
     if (["READY", "REVISION_REQUIRED"].includes(program.state))
       await this.dispatchNext();
-    return { reused: false, program };
+    return result;
   }
 
   async recover(): Promise<void> {
     await this.programs.deadLetterExpiredSteps();
+    for (const program of await this.programs.listPrograms(50)) {
+      if (["STOPPED", "COMPLETED"].includes(program.state)) continue;
+      for (const step of await this.programs.listSteps(program.id)) {
+        if (step.state === "REVIEW_PENDING") await this.requestReview(step);
+      }
+    }
     await this.dispatchNext();
   }
 }

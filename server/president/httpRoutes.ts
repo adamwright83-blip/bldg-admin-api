@@ -11,12 +11,20 @@ function authorization(req: Request): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function registerPresidentAgentRoutes(app: Express): void {
+export function registerPresidentAgentRoutes(
+  app: Express,
+  dependencies = {
+    config: presidentRuntimeConfig,
+    runtime: getPresidentRuntime,
+  }
+): void {
   app.post("/api/president/agent/execution", async (req, res) => {
     const parsed = presidentExecutionHandbackSchema.safeParse(req.body);
     if (!parsed.success)
-      return res.status(400).json({ error: "Invalid President execution handback" });
-    const config = presidentRuntimeConfig();
+      return res
+        .status(400)
+        .json({ error: "Invalid President execution handback" });
+    const config = dependencies.config();
     if (
       !authorizePresidentCallback(
         parsed.data.executorId,
@@ -24,21 +32,29 @@ export function registerPresidentAgentRoutes(app: Express): void {
         config.callbackTokens
       )
     )
-      return res.status(401).json({ error: "Unauthorized President executor callback" });
+      return res
+        .status(401)
+        .json({ error: "Unauthorized President executor callback" });
     try {
-      const result = await getPresidentRuntime().coordinator.receiveExecution(parsed.data);
+      const result = await dependencies
+        .runtime()
+        .coordinator.receiveExecution(parsed.data);
       return res.status(200).json({ ok: true, reused: result.reused });
     } catch (error) {
       console.error("[President] execution callback failed", error);
-      return res.status(409).json({ error: "President execution callback rejected" });
+      return res
+        .status(409)
+        .json({ error: "President execution callback rejected" });
     }
   });
 
   app.post("/api/president/agent/review", async (req, res) => {
     const parsed = presidentIndependentReviewSchema.safeParse(req.body);
     if (!parsed.success)
-      return res.status(400).json({ error: "Invalid President independent review" });
-    const config = presidentRuntimeConfig();
+      return res
+        .status(400)
+        .json({ error: "Invalid President independent review" });
+    const config = dependencies.config();
     if (
       !authorizePresidentCallback(
         parsed.data.reviewerId,
@@ -46,13 +62,19 @@ export function registerPresidentAgentRoutes(app: Express): void {
         config.callbackTokens
       )
     )
-      return res.status(401).json({ error: "Unauthorized President reviewer callback" });
+      return res
+        .status(401)
+        .json({ error: "Unauthorized President reviewer callback" });
     try {
-      const result = await getPresidentRuntime().coordinator.receiveReview(parsed.data);
+      const result = await dependencies
+        .runtime()
+        .coordinator.receiveReview(parsed.data);
       return res.status(200).json({ ok: true, reused: result.reused });
     } catch (error) {
       console.error("[President] review callback failed", error);
-      return res.status(409).json({ error: "President review callback rejected" });
+      return res
+        .status(409)
+        .json({ error: "President review callback rejected" });
     }
   });
 }

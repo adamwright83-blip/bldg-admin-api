@@ -129,8 +129,11 @@ export async function researchCompanyQuestion(input: {
   store: MysqlPresidentIntelligenceStore;
   requestKey: string;
   signal?: AbortSignal;
+  fixtureSnapshot?: (url: string) => Promise<{ content: string; hash: string; capturedAt: string; contentType: string | null }>;
 }) {
   const plan = researchPlanSchema.parse(input.plan);
+  for (const domain of plan.allowedDomains) assertPublicResearchUrl(`https://${domain}/`, plan.allowedDomains);
+  if (input.fixtureSnapshot && input.store.origin !== "TEST_FIXTURE") throw new Error("Fixture research is forbidden in real company evidence");
   return input.store.exclusive(input.requestKey, async () => {
     const prior = await input.store.current("RESEARCH", input.requestKey);
     const planHash = evidenceHash(JSON.stringify(plan));
@@ -161,10 +164,9 @@ export async function researchCompanyQuestion(input: {
     for (const source of findings.sources) {
       assertPublicResearchUrl(source.url, plan.allowedDomains);
       try {
-        const snapshot = await snapshotPublicSource(
-          source.url,
-          plan.allowedDomains
-        );
+        const snapshot = input.fixtureSnapshot
+          ? await input.fixtureSnapshot(source.url)
+          : await snapshotPublicSource(source.url, plan.allowedDomains);
         const id =
           "research-" + evidenceHash(source.url + snapshot.hash).slice(0, 40);
         const existing = await input.store.evidence([id]);

@@ -23,12 +23,12 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
   "President operating lifecycle real MySQL",
   () => {
     beforeAll(async () => {
-      const admin = await mysql.createConnection("mysql://root:root@127.0.0.1:3411/");
+      const admin = await mysql.createConnection(`mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/`);
       await admin.query("DROP DATABASE IF EXISTS president_operating_lifecycle_test");
       await admin.query("CREATE DATABASE president_operating_lifecycle_test");
       await admin.end();
       pool = mysql.createPool({
-        uri: "mysql://root:root@127.0.0.1:3411/president_operating_lifecycle_test",
+        uri: `mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/president_operating_lifecycle_test`,
         timezone: "Z",
         connectionLimit: 8,
       });
@@ -143,7 +143,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         changedFiles: ["test.txt"],
         testsActuallyRun: ["bounded acceptance"],
         testsNotRun: [],
-        evidence: { witness: "executor handback is not verification" },
+        evidence: { executionAttempt: claimed!.attemptCount, witness: "executor handback is not verification" },
         knownLimitations: [],
         costUsd: 0.1,
         reversible: true,
@@ -162,7 +162,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         changedFiles: [],
         testsActuallyRun: [],
         testsNotRun: [],
-        evidence: {},
+        evidence: { executionEventId: eventId },
         knownLimitations: [],
         costUsd: 0.1,
         reversible: true,
@@ -195,7 +195,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
           ],
           observedRisks: [],
           requiredRevision: null,
-          evidence: {},
+          evidence: { executionEventId: eventId },
           reviewedAt: new Date().toISOString(),
         })
       ).rejects.toThrow("artifact identity");
@@ -215,7 +215,7 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         ],
         observedRisks: [],
         requiredRevision: null,
-        evidence: { independent: true },
+        evidence: { independent: true, executionEventId: eventId },
         reviewedAt: new Date().toISOString(),
       });
       expect((await recoveredPrograms.getProgram(programId))?.state).toBe("VERIFIED_INTERNAL");

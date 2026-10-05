@@ -1,239 +1,254 @@
 {
-  "inspectedMainSha": "fe958884762ce3c24d38fa46ab410745445a4680",
-  "snapshot": "evidence-d17c436a5074b111b3791d3b9c89b1d6a08ce1cbd0e796793b34cff59545a132",
-  "database": "127.0.0.1:3411/president_intelligence_witness_v2",
+  "origin": "TEST_FIXTURE",
   "productionTouched": false,
-  "provider": "claude-cli:tool-free",
-  "recordId": "716d11a6-48af-4c4f-bf02-ee0e0a56052d",
-  "durableThesisIds": [
-    "4a0a0878-d85b-4948-a8ce-f084e1e69e69",
-    "bb15da1d-d6d5-4b91-834b-5fff4ee69ed9",
-    "abcd6192-bf05-411c-86f7-bc62bece33fc",
-    "ae59e2f4-2745-4789-8071-ef30d23d3e01"
-  ],
-  "durableObjectiveIds": [
-    "9bc80e4e-6925-46ff-93a4-a7398bd590b5"
-  ],
+  "baseMainSha": "8a8a284473fd33855481ac34fcf9034f356b6849",
+  "sourceHead": "62a23a16a17b9b51c9e04b43e8422acb21e76bf4",
   "recommendation": {
-    "summary": "The inspected launch-operations document records an audited unmet production MySQL recovery gate: scheduled backups are not configured and no restore drill has been proven. The document explicitly designates these two items as blocking public paid launch. Because data loss is irreversible and all other launch gates depend on a recoverable database, the recovery gate deserves attention first. Billing, isolation, and log-clearance production status are UNKNOWN from the supplied evidence and must not be treated as unmet or met.",
+    "summary": "A bounded drill can establish evidence without touching production.",
     "evidenceIds": [
-      "main-launch-fe958884762ce3c24d38fa46ab410745445a4680",
-      "unavailable-51716367a81656e9f2c2ffd0094076cb",
-      "unavailable-c441a369a767b20f0cca34b0df9f7f8c",
-      "unavailable-ccbd9d2f296e6a329fa0ef3af53e5e96",
-      "unavailable-8ebfe9dbcd3f71ea8b280f1a40838b92"
+      "fixture-company"
     ],
     "facts": [
       {
-        "statement": "Current audited production posture before public launch:",
+        "statement": "TEST FIXTURE: JOYSTICK needs an independently verified bounded recovery drill before any production change.",
         "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- MySQL service is single-node.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- Scheduled volume backups are not configured.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- Point-in-time recovery (PITR) is not enabled.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- The current custom MySQL start command includes `--disable-log-bin`.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- No restore drill has been proven.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "Public paid launch is blocked until at least a scheduled backup and a restore drill on a copy have been completed.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "Never prove recovery by restoring over production.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "PITR is not a substitute for the restore drill.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "It is intentionally inert until production configuration is supplied.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "The public paid product is launch-ready only when all of these operations gates are also true:",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- daily production backup configured",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "- restore drill on a copy proven",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "PITR is strongly recommended before scale; enabling it requires a deliberate human-controlled Railway conversion because of the existing custom MySQL command.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "Railway's MySQL PITR flow requires binary logging and Railway's PITR-capable MySQL image. The current service has a custom start command and explicitly disables binary logging, so do **not** attempt a blind automatic conversion.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "After recovery, Stripe and retention gates are satisfied:",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ]
-      },
-      {
-        "statement": "This is the production activation handoff after the code-side SaaS commercialization gates are green.",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+          "fixture-company"
         ]
       }
     ],
     "inferences": [
-      "The document's section 4 header ('After recovery, Stripe and retention gates are satisfied') implies the customer launch canary depends on the recovery gate being closed first, making recovery logically prior to the canary even if the document does not establish a strict dependency ordering for all gates.",
-      "A single-node MySQL instance with no backup and no proven restore procedure means any production data-loss event before recovery is satisfied would be unrecoverable; this asymmetry justifies treating the recovery gate as higher-urgency than the retention gate, whose misconfiguration is correctable.",
-      "The disabled binary logging (`--disable-log-bin`) in the custom start command means PITR cannot be enabled without a deliberate, human-controlled redeploy; the restore drill via volume backup is the only currently achievable recovery proof path.",
-      "The retention workflow being 'intentionally inert' means it poses no immediate harm in its current state, making it lower-urgency than the recovery gap which exposes all existing production data to permanent loss.",
-      "Billing, isolation, and log-clearance status cannot be inferred from the launch-operations document alone, and no production telemetry is available, so those gates must remain UNKNOWN."
+      "An isolated drill is a useful next step"
     ],
     "unknowns": [
-      "Whether daily backups have since been enabled in Railway production (railway_production source unavailable).",
-      "Whether a restore drill has been conducted and recorded since the document was authored (railway_production source unavailable).",
-      "Current live billing configuration status — whether Stripe secrets are or are not set in production (stripe_live and railway_production sources unavailable).",
-      "Whether the retention workflow has been configured and run (production_runtime source unavailable).",
-      "Whether production logs are currently clean or contain schema errors, raw transcript bodies, or cross-tenant identifiers (production_runtime and posthog_live_product_data unavailable).",
-      "Whether tenant isolation has been verified by a customer launch canary (production_runtime unavailable).",
-      "Whether the unavailable sources (posthog_live_product_data, production_runtime, railway_production, stripe_live) would confirm or contradict the audited posture stated in the document."
+      "Production recoverability is UNKNOWN"
     ],
-    "preferredOption": "Close the production MySQL recovery gate: configure a daily Railway volume backup, wait for a completed backup, then conduct and record a restore drill into an isolated copy — satisfying the document-explicit blocker on public paid launch (candidate president-candidate-ca0a31bf42d3bb006a4a50c3).",
-    "bestAlternative": "Activate and verify retention (candidate president-candidate-90b71f2014bf1a0d01bb34f3): configure the saas-retention workflow secrets, run a dry dispatch, and execute one bounded live batch to satisfy that launch gate.",
-    "opportunityCost": "Choosing retention activation before recovery means every hour JOYSTICK operates without proven backup and restore capability is an hour in which a production failure could produce permanent, total data loss with no recovery path. Retention misconfiguration, by contrast, is correctable after the fact. Deferring retention adds no irreversible risk in the short window needed to close the recovery gate; deferring recovery compounds irreversible risk each day.",
-    "falsification": "The recovery-first priority would be falsified if authoritative evidence showed that daily backups are already configured and a restore drill has already been recorded — at which point the recovery gate would be closed and the next unmet gate would become the priority. It would also be challenged if the retention workflow were actively running with unbounded policy enforcement, creating live privacy or legal exposure that outweighed the data-loss risk.",
-    "nextAction": "Adam reviews and authorizes the recovery gate work: enable a daily Railway volume backup on the production MySQL service, wait for a confirmed completed backup, and execute a restore drill into an isolated sibling volume per the procedure in the inspected document — recording drill date, source backup timestamp, restored service/volume identity, and verification result before removing temporary infrastructure.",
-    "founderDecision": "Adam must authorize and execute (or delegate) the production MySQL recovery gate: (1) enable daily volume backups in Railway without replacing the production volume, (2) wait for a backup to complete and confirm it is visible, and (3) conduct a restore drill into an isolated copy verifying the required schema tables, then record and preserve the drill evidence. No agent has authority to execute production infrastructure changes.",
+    "preferredOption": "Isolated recovery drill",
+    "bestAlternative": "Defer the drill",
+    "opportunityCost": "One bounded engineering cycle",
+    "falsification": "The fixture cannot reproduce recovery",
+    "nextAction": "Request bounded founder authorization",
+    "founderDecision": "Authorize this bounded drill?",
     "skills": [
-      "operational-risk",
-      "product-launch",
-      "capital-allocation",
-      "pre-mortem-red-team"
+      "company-strategy"
     ],
     "thesisUpdates": [
       {
         "topic": "RISK",
-        "claim": "The inspected document records an audited single-node MySQL production database with no scheduled backups and no proven restore drill, representing a documented irreversible data-loss exposure that the document designates as blocking public paid launch.",
-        "kind": "INFERENCE",
+        "claim": "A recovery drill reduces uncertainty",
+        "kind": "HYPOTHESIS",
         "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+          "fixture-company"
         ],
-        "confidence": 0.95,
-        "reviewedAt": "2026-10-04T17:54:30Z",
-        "falsification": "Falsified if authoritative production evidence shows daily backups are already active and a restore drill has been recorded since the document's audit.",
-        "status": "CURRENT"
-      },
-      {
-        "topic": "CONSTRAINT",
-        "claim": "Binary logging is explicitly disabled via the custom MySQL start command, which prevents PITR enablement without a controlled redeploy; volume backup and restore drill are the only currently achievable recovery proof path before public launch.",
-        "kind": "INFERENCE",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ],
-        "confidence": 0.93,
-        "reviewedAt": "2026-10-04T17:54:30Z",
-        "falsification": "Falsified if Railway production inspection shows binary logging is active or the custom start command has been updated to remove --disable-log-bin.",
-        "status": "CURRENT"
-      },
-      {
-        "topic": "PRODUCT",
-        "claim": "Code-side SaaS commercialization gates are described as green in the document; the remaining blockers to public paid launch are operational, not code-side — recovery, billing configuration, retention activation, customer canary, and log inspection.",
-        "kind": "INFERENCE",
-        "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
-        ],
-        "confidence": 0.85,
-        "reviewedAt": "2026-10-04T17:54:30Z",
-        "falsification": "Falsified if CI gates are not currently green or if a new code-side issue is identified that independently blocks launch.",
-        "status": "CURRENT"
-      },
-      {
-        "topic": "RISK",
-        "claim": "Whether billing secrets, isolation, and log-clearance gates are currently met or unmet in production is UNKNOWN; no production telemetry is available to this analysis.",
-        "kind": "UNKNOWN",
-        "evidenceIds": [
-          "unavailable-ccbd9d2f296e6a329fa0ef3af53e5e96",
-          "unavailable-8ebfe9dbcd3f71ea8b280f1a40838b92",
-          "unavailable-c441a369a767b20f0cca34b0df9f7f8c",
-          "unavailable-51716367a81656e9f2c2ffd0094076cb"
-        ],
-        "confidence": 0,
-        "reviewedAt": "2026-10-04T17:54:30Z",
-        "falsification": "Resolved when production_runtime, railway_production, and stripe_live sources become available and are inspected.",
+        "confidence": 0.5,
+        "reviewedAt": "2026-10-05T02:19:57.986Z",
+        "falsification": "Independent recovery fails",
         "status": "CURRENT"
       }
     ],
     "objectives": [
       {
         "admission": {
-          "type": "GAP_RESOLUTION",
-          "candidateId": "president-candidate-ca0a31bf42d3bb006a4a50c3"
+          "type": "STRATEGIC_EXPERIMENT",
+          "hypothesis": "An isolated drill establishes recoverability",
+          "test": "Measure the fixture recovery result"
         },
-        "outcome": "Production MySQL recovery gate closed: a daily Railway volume backup is active with at least one confirmed completed backup visible, and a restore drill on an isolated copy has been completed and recorded with drill date, source backup timestamp, restored service/volume identity, and verification of required schema tables.",
-        "indicator": "Recorded drill evidence artifact containing: drill date, source backup timestamp, restored volume/service identity, and confirmed presence of dayforge_saas_tenants, dayforge_saas_memberships, commercial_missions, and claire_conversation_sessions in the restored copy.",
+        "outcome": "Verify isolated company recovery drill",
+        "indicator": "Independent fixture measurement",
         "baseline": null,
         "target": null,
-        "source": "main-launch-fe958884762ce3c24d38fa46ab410745445a4680",
-        "horizon": "Before public paid launch",
-        "owner": "Adam",
+        "source": "fixture:company-brief",
+        "horizon": null,
+        "owner": "seat.president",
         "status": "PROPOSED",
         "dependencies": [],
-        "reason": "The inspected document explicitly states 'Public paid launch is blocked until at least a scheduled backup and a restore drill on a copy have been completed' and records both as not yet satisfied in the audited production posture. Data loss from a single-node database with no backup is irreversible; all other launch gates including the customer canary are sequenced after recovery in the document.",
+        "reason": "Prioritize reversible proof before production authority",
         "evidenceIds": [
-          "main-launch-fe958884762ce3c24d38fa46ab410745445a4680"
+          "fixture-company"
         ]
       }
     ]
   },
-  "providerRunId": "47dc7f41-a9db-465d-bf3d-6764730c2f2f",
-  "costUsd": 0.1543865,
-  "reused": true,
-  "sameRecordId": true,
-  "executedProjects": 0,
-  "cabinetExecuted": false
+  "objectiveRecordId": "4813549f-7503-4fbf-a353-d032ceda09b3",
+  "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+  "researchRecordId": "9db36db8-317e-46e4-9429-03f147bee85e",
+  "evidenceIds": [
+    "fixture-company",
+    "research-92ce22d134135b7043aea234d41895a2def2c935"
+  ],
+  "callbackChecks": {
+    "malformed": 400,
+    "unauthorized": 401,
+    "staleRun": 409,
+    "wrongObject": 409,
+    "replay": 200,
+    "changedReplay": 409
+  },
+  "executionAttempts": 2,
+  "returnedState": "REVIEW_PENDING",
+  "reviewedState": "VERIFIED_INTERNAL",
+  "finalState": "COMPLETED",
+  "brief": {
+    "generatedAt": "2026-10-05T02:19:59.410Z",
+    "summary": "No founder decision is currently open. The brief reflects the durable work recorded so far.",
+    "completed": [
+      "Verify isolated company recovery drill"
+    ],
+    "inProgress": [],
+    "blocked": [],
+    "questions": [],
+    "tomorrow": []
+  },
+  "events": [
+    {
+      "id": "dfd1cb83-2dc4-43ca-b500-d8f88bff3ab9",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": null,
+      "eventType": "STRATEGIC_OBJECTIVE_SELECTED",
+      "actorId": "fixture-founder",
+      "details": {
+        "decisionRecordId": "03afddb3-39c9-44fb-8937-eaffd57820aa",
+        "objectiveRecordId": "8a5df6c6-e0d0-466b-a0a5-79b78bcdce31"
+      },
+      "occurredAt": "2026-10-05T02:19:58.278Z"
+    },
+    {
+      "id": "05805fb8-e5bb-4d87-921b-e820facc6fe6",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": null,
+      "eventType": "PROGRAM_PLANNED",
+      "actorId": "seat.president",
+      "details": {
+        "model": null,
+        "result": "CLEAR",
+        "stepCount": 1,
+        "measurement": {
+          "question": "Did isolated recovery work?",
+          "stopCondition": "Recovery fails",
+          "evidenceRequired": [
+            "fixture measurement"
+          ],
+          "successCondition": "Independent fixture recovery passes"
+        },
+        "providerRunId": null
+      },
+      "occurredAt": "2026-10-05T02:19:58.420Z"
+    },
+    {
+      "id": "f80fbf72-04d1-415a-b795-01db91f960b3",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "STEP_RETRY_SCHEDULED",
+      "actorId": "executor",
+      "details": {
+        "error": "Error: Fixture transport outage",
+        "retryDelayMs": 60000
+      },
+      "occurredAt": "2026-10-05T02:19:58.542Z"
+    },
+    {
+      "id": "fd904209-4f74-422c-8ebf-19cade9be341",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "EXECUTOR_WOKEN",
+      "actorId": "executor",
+      "details": {
+        "capability": "engineering",
+        "targetCapability": "engineering"
+      },
+      "occurredAt": "2026-10-05T02:19:58.745Z"
+    },
+    {
+      "id": "1fd39355-8684-4dc4-84da-ce3dae5e2c20",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "EXECUTION_HANDBACK",
+      "actorId": "executor",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:19:58.990Z"
+    },
+    {
+      "id": "f3a99388-7357-4f66-b4e6-4467ec191831",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "REVIEW_WAKE_ATTEMPT",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:19:59.017Z"
+    },
+    {
+      "id": "bfdf2c98-4ce1-40ba-ad1d-7542555b15b0",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "INDEPENDENT_REVIEWER_WOKEN",
+      "actorId": "reviewer",
+      "details": {
+        "capability": "review",
+        "exactArtifactId": "fixture:recovery:attempt-2",
+        "targetCapability": "review"
+      },
+      "occurredAt": "2026-10-05T02:19:59.034Z"
+    },
+    {
+      "id": "f46644c1-9122-48f2-b24d-2abe13a10935",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "REVIEW_WAKE_ATTEMPT",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:19:59.132Z"
+    },
+    {
+      "id": "4bef28eb-b98b-4650-b56d-d413b694fc3a",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "INDEPENDENT_REVIEWER_WOKEN",
+      "actorId": "reviewer",
+      "details": {
+        "capability": "review",
+        "exactArtifactId": "fixture:recovery:attempt-2",
+        "targetCapability": "review"
+      },
+      "occurredAt": "2026-10-05T02:19:59.140Z"
+    },
+    {
+      "id": "8ee34745-1baf-454f-80c4-187dafcbd1cb",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "STEP_INDEPENDENTLY_VERIFIED",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:19:59.254Z"
+    },
+    {
+      "id": "c0d31897-c941-4d62-b4b9-63b80e3bdb04",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": "aeca38c9-0ced-4388-99ec-f597f9c75eb9",
+      "eventType": "INDEPENDENT_REVIEW_PASS",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:19:59.268Z"
+    },
+    {
+      "id": "267f73a0-891b-442e-aa74-867343c55320",
+      "programId": "2a893a48-f3a9-48fb-bcb2-12255fd8ced7",
+      "stepId": null,
+      "eventType": "PROGRAM_MEASURED_AND_LEARNED",
+      "actorId": "seat.president",
+      "details": {
+        "lessonRecordId": "ed55a1c7-6513-49ce-95d4-8c1e10ce8bed",
+        "progressRecordId": "c221d2eb-6521-4226-99fe-14ffb4c02892"
+      },
+      "occurredAt": "2026-10-05T02:19:59.367Z"
+    }
+  ]
 }

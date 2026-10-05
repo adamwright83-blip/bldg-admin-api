@@ -17,14 +17,14 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
     beforeAll(async () => {
       // Dedicated loopback CI database; application DATABASE_URL is never consumed.
       const admin = await mysql.createConnection(
-        "mysql://root:root@127.0.0.1:3411/"
+        `mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/`
       );
       const databaseName =
         "president_stage1_test_" + randomUUID().replaceAll("-", "");
       await admin.query(`CREATE DATABASE ${databaseName}`);
       await admin.end();
       pool = mysql.createPool({
-        uri: "mysql://root:root@127.0.0.1:3411/" + databaseName,
+        uri: `mysql://root:root@127.0.0.1:${process.env.PRESIDENT_MYSQL_TEST_PORT ?? "3411"}/` + databaseName,
         timezone: "Z",
         connectionLimit: 8,
       });
