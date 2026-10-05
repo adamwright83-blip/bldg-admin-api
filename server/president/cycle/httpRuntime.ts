@@ -13,8 +13,8 @@ import type { CycleStore } from "./cycleStore";
 import {
   getPresidentCycleStore,
   presidentCycleReadiness,
+  queuePresidentRecommendationCycle,
   runPresidentApprovedCycle,
-  startPresidentRecommendationCycle,
 } from "./runtime";
 
 function sessionRef(req: Request, openId: string) {
@@ -88,9 +88,8 @@ export function registerPresidentCycleHttpRoutes(app: Express) {
       maxAttempts: 3,
     },
     startCycle: tenantId =>
-      startPresidentRecommendationCycle({
+      queuePresidentRecommendationCycle({
         tenantId,
-        reviewBaseUrl: ENV.adminBaseUrl,
       }),
     readiness: presidentCycleReadiness,
     afterApproval: async cycleId => {
