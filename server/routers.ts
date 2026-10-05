@@ -26,7 +26,8 @@ import { postConsentActionPlanRouter } from "./procurement/postConsentActionPlan
 import {
   publicProcedure,
   protectedProcedure,
-  adminProcedure,
+  legacyDayforgeTenantAdminProcedure,
+  platformProcedure,
   adminOrDriverProcedure,
   platformOrVendorProcedure,
   vendorProcedure,
@@ -699,7 +700,7 @@ export const appRouter = router({
      * HS256 JWT for app.bldg.chat welcome handoff (APP_SHARED_API_SECRET).
      * Claims: phone, firstName, lastName, orderId, buildingSlug, exp (15m).
      */
-    generatePortalToken: adminProcedure
+    generatePortalToken: legacyDayforgeTenantAdminProcedure
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ input }) => {
         const order = await getOrderById(input.orderId);
@@ -764,7 +765,7 @@ export const appRouter = router({
 
   /* ===== ADMIN ROUTES (protected — owner only) ===== */
   admin: router({
-    askComposer: adminProcedure
+    askComposer: legacyDayforgeTenantAdminProcedure
       .input(
         z.object({
           question: z.string().min(1).max(500),
@@ -798,7 +799,7 @@ export const appRouter = router({
     vendorAcquisitionMission: vendorAcquisitionMissionRouter,
     postConsentActionPlan: postConsentActionPlanRouter,
     opsTasks: router({
-      list: adminProcedure
+      list: legacyDayforgeTenantAdminProcedure
         .input(
           z
             .object({
@@ -831,7 +832,7 @@ export const appRouter = router({
             limit: input?.limit ?? 200,
           })
         ),
-      complete: adminProcedure
+      complete: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             taskId: z.number().int().positive(),
@@ -851,7 +852,7 @@ export const appRouter = router({
               (ctx.user?.id != null ? String(ctx.user.id) : null),
           })
         ),
-      dismiss: adminProcedure
+      dismiss: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             taskId: z.number().int().positive(),
@@ -867,7 +868,7 @@ export const appRouter = router({
             note: input.reason ?? null,
           })
         ),
-      createManual: adminProcedure
+      createManual: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             title: z.string().min(1).max(255),
@@ -898,10 +899,10 @@ export const appRouter = router({
             createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
           })
         ),
-      weeklyReflection: adminProcedure.query(async ({ ctx }) =>
+      weeklyReflection: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) =>
         getWeeklyOperatorReflection(ctx.tenantId)
       ),
-      performanceMetrics: adminProcedure.query(async ({ ctx }) => {
+      performanceMetrics: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
         const [metrics, clearent] = await Promise.all([
           getPerformanceMetrics(ctx.tenantId),
           getClearentCollectedTodayCents(),
@@ -916,19 +917,19 @@ export const appRouter = router({
     }),
 
     level4Mission: router({
-      current: adminProcedure.query(async ({ ctx }) =>
+      current: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) =>
         getCurrentLevel4MissionState({
           tenantId: ctx.tenantId,
           operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
         })
       ),
-      start: adminProcedure.mutation(async ({ ctx }) =>
+      start: legacyDayforgeTenantAdminProcedure.mutation(async ({ ctx }) =>
         markLevel4MissionStarted({
           tenantId: ctx.tenantId,
           operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
         })
       ),
-      complete: adminProcedure
+      complete: legacyDayforgeTenantAdminProcedure
         .input(
           z
             .object({
@@ -1158,7 +1159,7 @@ export const appRouter = router({
     }),
 
     /** Manual recovery actions logged today (attempted/delivered — not cash collection). */
-    getActedOnToday: adminProcedure.query(async ({ ctx }) => {
+    getActedOnToday: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       const r = await getActedOnTodayCents(ctx.tenantId);
       if (!r) {
         return {
@@ -1177,7 +1178,7 @@ export const appRouter = router({
     }),
 
     /** Unpaid intervention pipeline — sum of at-risk order totals plus optional manual adjustment. */
-    getAwaitingPayment: adminProcedure.query(async ({ ctx }) => {
+    getAwaitingPayment: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       const r = await getAwaitingPaymentCents(ctx.tenantId);
       if (!r) {
         return {
@@ -1200,7 +1201,7 @@ export const appRouter = router({
     }),
 
     /** Manual adjustment to "Awaiting payment" (display = max(0, pipeline + adjustment)). */
-    setAwaitingPaymentAdjustment: adminProcedure
+    setAwaitingPaymentAdjustment: legacyDayforgeTenantAdminProcedure
       .input(z.object({ adjustmentCents: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
         const clamped = Math.max(
@@ -1220,7 +1221,7 @@ export const appRouter = router({
       }),
 
     /** Paid orders today — sums totals where `paidAt` falls in the business day (not action logs). */
-    getCollectedToday: adminProcedure.query(async ({ ctx }) => {
+    getCollectedToday: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       const r = await getCollectedTodayCents(ctx.tenantId);
       const clearent = await getClearentCollectedTodayCents();
       if (!r) {
@@ -1256,17 +1257,17 @@ export const appRouter = router({
      * Uses orders + admin_action_log only. Stale items surface as decay warnings
      * but do not block today's boss unlock.
      */
-    getLevel4GateState: adminProcedure.query(async ({ ctx }) => {
+    getLevel4GateState: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       return loadLevel4GateState(ctx.tenantId);
     }),
 
     /** War for the Bridge — daily territory duel state (front line, boss HP, combo, projectiles). */
-    getLevel4WarState: adminProcedure.query(async ({ ctx }) => {
+    getLevel4WarState: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       return loadLevel4WarState(ctx.tenantId);
     }),
 
     /** Sky Covenant — the Command screen's weather (mode, hope windows, campaign). */
-    getCommandSky: adminProcedure
+    getCommandSky: legacyDayforgeTenantAdminProcedure
       .input(
         z
           .object({ netCents: z.number().int().nullable().optional() })
@@ -1279,11 +1280,11 @@ export const appRouter = router({
         });
       }),
 
-    getCommandSkySettings: adminProcedure.query(async ({ ctx }) =>
+    getCommandSkySettings: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) =>
       getCommandSkySettings(ctx.tenantId)
     ),
 
-    updateCommandSkySettings: adminProcedure
+    updateCommandSkySettings: legacyDayforgeTenantAdminProcedure
       .input(
         z.object({
           mode: z.enum(["profit", "campaign"]).optional(),
@@ -1309,7 +1310,7 @@ export const appRouter = router({
       ),
 
     /** Log a Win — verbal commitment (3h blue) or first order (blue to block end). */
-    logCommandSkyWin: adminProcedure
+    logCommandSkyWin: legacyDayforgeTenantAdminProcedure
       .input(
         z.object({
           kind: z.enum(["verbal_commitment", "first_order"]),
@@ -1342,7 +1343,7 @@ export const appRouter = router({
      * outreach) are instrumented inside their own mutations — this endpoint
      * covers actions that have no other server mutation to ride on.
      */
-    recordLevel4WarAction: adminProcedure
+    recordLevel4WarAction: legacyDayforgeTenantAdminProcedure
       .input(
         z.object({
           kind: z.enum([
@@ -1365,18 +1366,18 @@ export const appRouter = router({
       }),
 
     agent: router({
-      listTools: adminProcedure.query(() => listAgentTools()),
-      events: adminProcedure
+      listTools: legacyDayforgeTenantAdminProcedure.query(() => listAgentTools()),
+      events: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({ limit: z.number().int().min(1).max(500).default(100) })
         )
         .query(async ({ ctx, input }) =>
           getAgentEventTimeline(ctx.tenantId, input.limit)
         ),
-      aiUsageState: adminProcedure.query(async ({ ctx }) =>
+      aiUsageState: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) =>
         getTenantAiLimitState(ctx.tenantId)
       ),
-      runTool: adminProcedure
+      runTool: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             toolName: z.string().min(1),
@@ -1420,7 +1421,7 @@ export const appRouter = router({
             trustedUiFlow: input.trustedUiFlow ?? false,
           });
         }),
-      runOperatorVoiceCommand: adminProcedure
+      runOperatorVoiceCommand: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             note: z.string().min(1),
@@ -1439,12 +1440,12 @@ export const appRouter = router({
             trustedUiFlow: true,
           });
         }),
-      previewEmergencyTaskIntake: adminProcedure
+      previewEmergencyTaskIntake: legacyDayforgeTenantAdminProcedure
         .input(z.object({ note: z.string().min(1).max(4000) }))
         .query(({ input }) => ({
           tasks: parseEmergencyTaskIntake(input.note),
         })),
-      runEmergencyTaskIntake: adminProcedure
+      runEmergencyTaskIntake: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             note: z.string().min(1).max(4000),
@@ -1468,7 +1469,7 @@ export const appRouter = router({
             });
           }
         }),
-      listOperatorTasks: adminProcedure
+      listOperatorTasks: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             status: z
@@ -1510,7 +1511,7 @@ export const appRouter = router({
                 : null,
           }));
         }),
-      updateOperatorTaskStatus: adminProcedure
+      updateOperatorTaskStatus: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             id: z.number().int().positive(),
@@ -1636,12 +1637,12 @@ export const appRouter = router({
       }),
 
     /** Static UI hints (env-backed); delivery truth remains on admin_action_log + webhooks. */
-    revenueInterventionUiContext: adminProcedure.query(() => ({
+    revenueInterventionUiContext: legacyDayforgeTenantAdminProcedure.query(() => ({
       outboundReminderProviderConfigured: ENV.revenueReminderOutboundConfigured,
     })),
 
     /** Development-only: raw eligibility + log status for one order (NODE_ENV !== production). */
-    getRevenueInterventionOrderDebug: adminProcedure
+    getRevenueInterventionOrderDebug: legacyDayforgeTenantAdminProcedure
       .input(z.object({ orderId: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
         if (process.env.NODE_ENV === "production") {
@@ -1674,7 +1675,7 @@ export const appRouter = router({
       }),
 
     /** Highest-scored at-risk order without send_reminder attempted/delivered today. */
-    getLevel1ApexCommand: adminProcedure.query(async ({ ctx }) => {
+    getLevel1ApexCommand: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       const r = await loadLevel1ApexCommand(ctx.tenantId);
       if (!r) {
         return {
@@ -1720,7 +1721,7 @@ export const appRouter = router({
     }),
 
     /** Next 2–3 scored actions after Level 1 (same ordering); optional aggregate hint when one mutation type. */
-    getLevel2TacticalCluster: adminProcedure.query(async ({ ctx }) => {
+    getLevel2TacticalCluster: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       const r = await loadLevel2TacticalCluster(ctx.tenantId);
       if (!r) {
         return {
@@ -1763,7 +1764,7 @@ export const appRouter = router({
     }),
 
     /** Level 4 Offensive Growth — read-only deterministic snapshot of the three offensive blocks (no scoring engine). */
-    getLevel4OffensiveState: adminProcedure.query(async ({ ctx }) => {
+    getLevel4OffensiveState: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
       return loadLevel4OffensiveState(ctx.tenantId);
     }),
 
@@ -1772,7 +1773,7 @@ export const appRouter = router({
      * Block C (market_hole) returns a deterministic stub; no LLM call is made for it.
      * Caller passes the same per-block payload shape returned by getLevel4OffensiveState.
      */
-    generateOffensiveCopy: adminProcedure
+    generateOffensiveCopy: legacyDayforgeTenantAdminProcedure
       .input(
         z.discriminatedUnion("block", [
           z.object({
@@ -1822,7 +1823,7 @@ export const appRouter = router({
      * and dedups per the per-block rules in server/level4OffensiveExecute.ts.
      * No outbound delivery in v1 — logging the decision retires the card.
      */
-    executeOffensiveAction: adminProcedure
+    executeOffensiveAction: legacyDayforgeTenantAdminProcedure
       .input(
         z.discriminatedUnion("block", [
           z.object({
@@ -1925,7 +1926,7 @@ export const appRouter = router({
       }),
 
     /** Logs admin_action_log (send_reminder, status=attempted); idempotent per order per dashboard business day. */
-    sendPaymentReminder: adminProcedure
+    sendPaymentReminder: legacyDayforgeTenantAdminProcedure
       .input(z.object({ orderId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const out = await sendPaymentReminderForOrder({
@@ -2847,7 +2848,7 @@ export const appRouter = router({
      * reward only lands once the customer leg is confirmed >=20s connected
      * via the Twilio status webhook — this mutation itself does not decide
      * success, it only starts the attempt. */
-    startBoldPitchCall: adminProcedure
+    startBoldPitchCall: legacyDayforgeTenantAdminProcedure
       .input(
         z.object({
           leadId: z.number().optional(),
@@ -2900,7 +2901,7 @@ export const appRouter = router({
     /** Poll a Bold Pitch attempt's status — the frontend uses this to know
      * when to report completeWeaponAction/failWeaponAction back into the
      * Saleslay engine once Twilio's status callbacks resolve the call. */
-    getBoldPitchCallAttempt: adminProcedure
+    getBoldPitchCallAttempt: legacyDayforgeTenantAdminProcedure
       .input(z.object({ attemptId: z.number() }))
       .query(async ({ input }) => {
         const attempt = await getBoldPitchCallAttempt(input.attemptId);
@@ -3389,7 +3390,7 @@ export const appRouter = router({
      * Re-run Google Sheets revenue write for a paid order only.
      * Does not charge, notify, webhook, or update the database.
      */
-    resendToSheets: adminProcedure
+    resendToSheets: legacyDayforgeTenantAdminProcedure
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ input }) => {
         console.log(
@@ -3991,7 +3992,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    setVendorUserPassword: adminProcedure
+    setVendorUserPassword: platformProcedure
       .input(
         z.object({
           vendorId: z.number(),
@@ -4019,7 +4020,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    updateVendorBranding: adminProcedure
+    updateVendorBranding: platformProcedure
       .input(
         z.object({
           vendorId: z.number(),
@@ -4035,7 +4036,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    updateVendorSlug: adminProcedure
+    updateVendorSlug: platformProcedure
       .input(
         z.object({ vendorId: z.number(), slug: z.string().min(1).max(50) })
       )
@@ -4044,7 +4045,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    listVendorUsers: adminProcedure
+    listVendorUsers: platformProcedure
       .input(z.object({ vendorId: z.number() }))
       .query(async ({ input }) => {
         return listVendorUsers(input.vendorId);
@@ -4081,7 +4082,7 @@ export const appRouter = router({
     // Use this only when a vendor is linked to the wrong Stripe Connect account.
     // Creates a brand-new Connect Express account and assigns it to the vendor.
     // The old account is never modified or deleted.
-    replaceConnectAccount: adminProcedure
+    replaceConnectAccount: platformProcedure
       .input(
         z.object({
           vendorId: z.number(),
@@ -4331,7 +4332,7 @@ export const appRouter = router({
         return { cleaners, itemPrices };
       }),
 
-      savePrice: adminProcedure
+      savePrice: legacyDayforgeTenantAdminProcedure
         .input(
           z
             .object({
@@ -4371,7 +4372,7 @@ export const appRouter = router({
           });
         }),
 
-      create: adminProcedure
+      create: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             slug: z
@@ -4430,7 +4431,7 @@ export const appRouter = router({
           }
         }),
 
-      update: adminProcedure
+      update: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             id: z.number().int(),
@@ -4501,7 +4502,7 @@ export const appRouter = router({
           }
         }),
 
-      archive: adminProcedure
+      archive: legacyDayforgeTenantAdminProcedure
         .input(z.object({ id: z.number().int() }))
         .mutation(async ({ ctx, input }) => {
           const ok = await archiveCatalogItemRow(input.id, ctx.tenantId);
@@ -4513,14 +4514,14 @@ export const appRouter = router({
           return { success: true as const };
         }),
 
-      reorder: adminProcedure
+      reorder: legacyDayforgeTenantAdminProcedure
         .input(z.object({ orderedIds: z.array(z.number().int()) }))
         .mutation(async ({ ctx, input }) => {
           await reorderCatalogItemsForTenant(ctx.tenantId, input.orderedIds);
           return { success: true as const };
         }),
 
-      parseMenuImport: adminProcedure
+      parseMenuImport: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             mimeType: z.enum([
@@ -4571,7 +4572,7 @@ export const appRouter = router({
           }
         }),
 
-      confirmMenuImport: adminProcedure
+      confirmMenuImport: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             rows: z.array(
@@ -4615,7 +4616,7 @@ export const appRouter = router({
           return bulkApplyCatalogImport(ctx.tenantId, mapped);
         }),
 
-      parseCommand: adminProcedure
+      parseCommand: legacyDayforgeTenantAdminProcedure
         .input(z.object({ command: z.string().min(1).max(2000) }))
         .mutation(async ({ ctx, input }) => {
           try {
@@ -4635,7 +4636,7 @@ export const appRouter = router({
           }
         }),
 
-      applyCommand: adminProcedure
+      applyCommand: legacyDayforgeTenantAdminProcedure
         .input(
           z.object({
             intent: z.enum([
