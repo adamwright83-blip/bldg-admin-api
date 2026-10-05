@@ -129,6 +129,7 @@ import {
 import type { NarrativePresentationPlan } from "../../narratorOs/presentationPlan";
 import {
   claireIdentityEvidenceSources,
+  isExplicitClaireIdentityTurn,
   renderClaireIdentityAnswer,
 } from "../identityTruth";
 import {
@@ -1062,7 +1063,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * remember or infer names.
    */
   const identityTopic = brainV3.identityTopic ?? "none";
-  if (identityTopic !== "none") {
+  if (
+    identityTopic !== "none" &&
+    isExplicitClaireIdentityTurn(identityTopic, utterance)
+  ) {
     const identityAnswer = renderClaireIdentityAnswer(
       identityTopic,
       input.context?.identityTruth
