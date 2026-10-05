@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   commercialOrderAttributions,
   orders,
@@ -154,6 +154,14 @@ export async function readCommercialPaymentAuthorityMismatchReport(
     };
   }
 
+  // "default" is the real Laundry Farm tenant. Historical native orders may
+  // still have a null tenantId, so that one tenant explicitly includes those
+  // legacy rows. Other tenants never inherit null/default rows.
+  const orderTenantPredicate =
+    tenantId === "default"
+      ? or(eq(orders.tenantId, tenantId), isNull(orders.tenantId))
+      : eq(orders.tenantId, tenantId);
+
   const sourceOrders = await db
     .select({
       id: orders.id,
@@ -164,7 +172,7 @@ export async function readCommercialPaymentAuthorityMismatchReport(
     .from(orders)
     .where(
       and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+        orderTenantPredicate,
         inArray(
           orders.id,
           attributions.map(item => item.orderId)
