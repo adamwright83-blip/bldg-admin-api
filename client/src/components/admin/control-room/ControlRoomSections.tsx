@@ -127,7 +127,7 @@ export function MoneyControlRoom() {
           <img src={`${ASSET_ROOT}/status/success.svg`} alt="" />
           <span>Collected today</span>
           <strong>
-            {collected.data?.dbAvailable
+            {collected.data?.dbAvailable && collected.data.cents != null
               ? dollarsFromCents(collected.data.cents)
               : "Unavailable"}
           </strong>

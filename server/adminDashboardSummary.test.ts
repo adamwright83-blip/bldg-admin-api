@@ -15,6 +15,8 @@ import {
 import { createContext } from "./_core/context";
 import { sdk } from "./_core/sdk";
 import { appRouter } from "./routers";
+import { getCollectedTodayCents } from "./revenueIntervention";
+import { getClearentCollectedTodayCents } from "./clearent";
 
 vi.mock("./_core/sdk", () => ({
   sdk: { authenticateRequest: vi.fn(), authenticateSessionToken: vi.fn() },
@@ -24,7 +26,7 @@ vi.mock("./goldlineOnboarding/demoAccess", () => ({
 }));
 vi.mock("./clearent", async importOriginal => ({
   ...(await importOriginal<typeof import("./clearent")>()),
-  getClearentCollectedTodayCents: async () => null,
+  getClearentCollectedTodayCents: vi.fn(async () => null),
 }));
 const actualRead = canonical.readCanonicalRevenue;
 const now = new Date("2026-10-05T19:00:00Z");
@@ -246,5 +248,72 @@ describe("Home canonical revenue integration", () => {
     expect(home.revenueMonth).toBeNull();
     expect(home.paidOrderCountMonth).toBeNull();
     expect(home.revenuePeriods).toBeNull();
+  });
+});
+
+
+describe("Collected today canonical integration", () => {
+  it("uses explicit tenant combined cents and canonical overlap/precision, without adding settlement totals", async () => {
+    const read = integrate({
+      "tenant-a": {
+        native: [native(1, "85.80")],
+        cleancloud: [cleancloud("orders_sales"), cleancloud("orders_revenue")],
+      },
+      "tenant-b": { native: [native(2, "999.00")], cleancloud: [] },
+    });
+    vi.mocked(getClearentCollectedTodayCents).mockResolvedValue({
+      collectedCents: 50000,
+      settledCents: 40000,
+    } as any);
+    const caller = (tenantId: string) =>
+      appRouter.createCaller({
+        user: { openId: "admin-owner", role: "admin", tenantId },
+        tenantId,
+        vendorSession: null,
+      } as any);
+    const result = await caller("tenant-a").admin.getCollectedToday();
+    expect(result).toMatchObject({
+      cents: 82319,
+      stripeCents: 8580,
+      cleanCloudCents: 73739,
+      clearentCents: 50000,
+      precision: "recorded_only",
+      statedExactCents: null,
+      dbAvailable: true,
+      processorLabel: "Stripe + CleanCloud",
+    });
+    expect(read.mock.calls[0][0]).toMatchObject({
+      tenantId: "tenant-a",
+      from: "2026-10-05",
+      to: "2026-10-05",
+      timeZone: "America/Los_Angeles",
+    });
+    expect((await caller("tenant-b").admin.getCollectedToday()).cents).toBe(
+      99900,
+    );
+  });
+  it("returns unknown when canonical sources are unavailable, even when settlement evidence exists", async () => {
+    integrate({}, true);
+    vi.mocked(getClearentCollectedTodayCents).mockResolvedValue({
+      collectedCents: 50000,
+      settledCents: 40000,
+    } as any);
+    expect(await getCollectedTodayCents("tenant-a", now)).toBeNull();
+    const result = await appRouter
+      .createCaller({
+        user: { openId: "admin-owner", role: "admin" },
+        tenantId: "tenant-a",
+        vendorSession: null,
+      } as any)
+      .admin.getCollectedToday();
+    expect(result).toMatchObject({
+      cents: null,
+      stripeCents: null,
+      cleanCloudCents: null,
+      dbAvailable: false,
+      precision: "unavailable",
+      statedExactCents: null,
+      clearentCents: 50000,
+    });
   });
 });

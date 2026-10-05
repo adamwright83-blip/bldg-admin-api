@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { adminActionLog, adminSettings, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
+import { readCanonicalRevenue, type CanonicalRevenueCoverage } from "./analytics/canonicalRevenue";
 import {
   getDashboardTimeZone,
   zonedDayStartUtc,
@@ -362,34 +363,41 @@ export async function upsertAwaitingPaymentAdjustmentCents(tenantId: string, adj
     });
 }
 
-/**
- * Actual cash collected: paid orders whose `paidAt` falls in the dashboard business day (tenant-scoped).
- * Does not use manual action logs. Requires `paidAt` set at payment time.
- */
+/** Business-local collected payments from the owning canonical combined revenue reader. */
 export async function getCollectedTodayCents(
   tenantId: string,
   now: Date = new Date()
-): Promise<{ bounds: DashboardBusinessDayBounds; cents: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
+): Promise<{
+  bounds: DashboardBusinessDayBounds;
+  cents: number;
+  stripeCents: number;
+  cleanCloudCents: number;
+  precision: "exact" | "recorded_only";
+  statedExactCents: number | null;
+  coverage: CanonicalRevenueCoverage;
+} | null> {
   const bounds = getDashboardBusinessDayBoundsUtc(now);
-
-  const [row] = await db
-    .select({
-      cents: sql<number>`COALESCE(SUM(ROUND(CAST(${orders.total} AS DECIMAL(14,4)) * 100)), 0)`,
-    })
-    .from(orders)
-    .where(
-      and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-        eq(orders.paid, true),
-        isNotNull(orders.paidAt),
-        gte(orders.paidAt, bounds.startUtc),
-        lt(orders.paidAt, bounds.endUtc)
-      )
-    );
-
-  return { bounds, cents: Number(row?.cents ?? 0) };
+  const revenue = await readCanonicalRevenue({
+    tenantId,
+    from: bounds.ymd,
+    to: bounds.ymd,
+    timeZone: bounds.timeZone,
+    now
+  });
+  if (revenue.status === "unavailable") return null;
+  const sourceCents = (source: "laundry_butler" | "cleancloud") =>
+    revenue.includedEvents
+      .filter(event => event.source === source)
+      .reduce((sum, event) => sum + event.cents, 0);
+  return {
+    bounds,
+    cents: revenue.recordedCents,
+    stripeCents: sourceCents("laundry_butler"),
+    cleanCloudCents: sourceCents("cleancloud"),
+    precision: revenue.precision,
+    statedExactCents: revenue.statedExactCents,
+    coverage: revenue.coverage
+  };
 }
 
 /**
