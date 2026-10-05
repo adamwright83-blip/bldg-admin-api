@@ -135,7 +135,7 @@ export default function JoystickHome({
         <Link href="/" className="jh-brand" aria-label="JOYSTICK Home">
           <img
             className="jh-brand-logo"
-            src="/assets/joystick-home/joystick-logo.jpg"
+            src="/assets/joystick-home/joystick-logo.webp"
             alt="JOYSTICK"
           />
         </Link>
