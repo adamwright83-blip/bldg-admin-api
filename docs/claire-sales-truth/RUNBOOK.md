@@ -82,7 +82,7 @@ licensed. Deployed live conversation acceptance must be verified after deploymen
 
 ## Verification and baseline failures
 
-Targeted sales/ingestion/customer/Claire/proactive suite: 293 passed, 6 skipped.
+Targeted sales/ingestion/customer/Claire/proactive suite: 295 passed, 6 skipped.
 TypeScript and production build passed. Migration JavaScript syntax passed.
 Database release-exam requires an isolated test database; it mutates fixtures and
 was not run against production. Production import/replay is the safe database
@@ -91,10 +91,15 @@ integration witness.
 Three decisionRecord tests failed identically on a clean origin/main snapshot:
 pending concerns expect continues_pending but receive replaces_pending. They are
 pre-existing and were not changed or weakened. Earlier full-concurrency runs also
-hit repair2SliceB timeouts; focused reruns passed. Broad suite: 2,228 passed, 6 skipped, the same 3 baseline failures. Final post-President and CI results
+hit repair2SliceB timeouts; focused reruns passed. Broad suite: 2,230 passed, 6 skipped, the same 3 baseline failures. Final post-President and CI results
 are recorded in the PR, including any remaining failures.
 
 Automated review corrections: a source-only scope can be exact only when the
 canonical reconciliation and existing full coverage contract prove both periods;
 other narrower scopes remain conservative. Company processor breakdowns include
 Stripe and are withheld when company attribution would make their parts unsafe.
+
+Direct refund, credit and discount questions use canonical money metadata; gross
+remains unknown. Undated adjustments are disclosed without assigning a date.
+New/returning and dormant reads use all retained history rather than a one-year
+cutoff, so older customers remain visible.

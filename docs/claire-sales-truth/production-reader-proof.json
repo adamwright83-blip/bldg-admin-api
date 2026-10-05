@@ -290,7 +290,8 @@
       "observationReference": "canonical-sales:0fdb367aca579d3b33d0091ecb7d3acb1e5c0b2b11414cf6580d6c98c4b26313",
       "precision": "recorded_only",
       "mayStateExact": false,
-      "dataKind": "customers"
+      "dataKind": "customers",
+      "derivedCustomerCount": 66
     },
     {
       "acceptance": 11,
@@ -312,7 +313,8 @@
       "observationReference": "canonical-sales:3b2bb9e0d92230a311849becfb8b3a55c8d402e3066be53a6a31e6f65ac7c51a",
       "precision": "recorded_only",
       "mayStateExact": false,
-      "dataKind": "top_customers"
+      "dataKind": "top_customers",
+      "derivedCustomerCount": 5
     },
     {
       "acceptance": 12,

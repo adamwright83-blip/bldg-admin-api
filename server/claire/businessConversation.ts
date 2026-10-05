@@ -207,6 +207,7 @@ const CUSTOMER_METRICS = new Set<BusinessMetric>(["active_customers", "new_custo
 const TOTALS_METRICS = new Set<BusinessMetric>(["revenue", "orders", "aov", "revenue_drivers"]);
 
 function explicitMetric(lower: string): BusinessMetric | null {
+  if (/\b(refunds?|credits?|discounts?|gross sales)\b/.test(lower)) return "revenue";
   if (PROFIT.test(lower)) return "profit";
   if (COVERAGE.test(lower)) return "data_coverage";
   if (DRIVERS.test(lower)) return "revenue_drivers";
@@ -848,7 +849,8 @@ export function parseBusinessTurn(
   if (limit) query.limit = limit;
   query.listMembers = listMembers || query.metric === "top_customers" || query.metric === "frequent_customers";
   if (CUSTOMER_METRICS.has(query.metric) && /^(?:and |so |now |okay )?(?:who|which)\b/.test(lower)) query.listMembers = true;
-  return { kind: "query", query, refinement };
+  const moneyField = /\brefunds?\b/.test(lower) ? "refunds" : /\bcredits?\b/.test(lower) ? "credits" : /\bdiscounts?\b/.test(lower) ? "discounts" : /\bgross sales\b/.test(lower) ? "gross" : null;
+  return { kind: "query", query, refinement, hint: moneyField ? { kind: "money_semantics", field: moneyField } : null };
 }
 
 // ── Optional LLM planning (one call, never writes numbers) ──────────────────

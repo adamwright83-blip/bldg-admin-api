@@ -22,6 +22,7 @@ import type { CustomerAspect, FreshnessAspect, LineageScope, OrderAspect } from 
 export type ClaireSurface = "voice" | "text";
 
 export type SpeechHint =
+  | { kind: "money_semantics"; field: "refunds" | "credits" | "discounts" | "gross" }
   | { kind: "composition_service_claim" }
   | { kind: "freshness"; aspect: FreshnessAspect }
   | { kind: "composition_building"; buildings: BuildingKey[] }
@@ -971,7 +972,14 @@ export function speakBusinessResult(
   const scope = scopeWords(query);
   switch (data.kind) {
     case "totals":
-      speakTotals(result, data, speech, context);
+      if (context.hint?.kind === "money_semantics") {
+        const field = context.hint.field;
+        const amounts = result.coverage?.money;
+        const cents = field === "refunds" ? amounts?.refundCents : field === "credits" ? amounts?.creditCents : field === "discounts" ? amounts?.discountCents : null;
+        if (cents == null) speech.say(`I don't have a canonically defined ${field === "gross" ? "gross sales" : field} total for this scope ${during(label)}.`);
+        else speech.say(`Recorded ${field}${scope.suffix} ${during(label)}: ${speech.money(Math.abs(cents))}.`);
+        if (field === "refunds" && amounts?.undatedAdjustmentCents) speech.say(`The book also contains ${speech.money(Math.abs(amounts.undatedAdjustmentCents))} in adjustments with unknown payment dates; I cannot assign them to this period.`);
+      } else speakTotals(result, data, speech, context);
       break;
     case "composition":
       speakComposition(data.breakdown, label, speech, context.hint);

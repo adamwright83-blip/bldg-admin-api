@@ -436,3 +436,11 @@ describe("answers never contain invented numbers", () => {
     expect(text).not.toMatch(INVENTED);
   });
 });
+
+describe("canonical money semantics", () => {
+  it("keeps unsupported gross and credit totals unknown instead of substituting net revenue", async () => {
+    const { ask } = exam();
+    expect(await ask("What were gross sales last month?")).toContain("don't have a canonically defined gross sales total");
+    expect(await ask("How much customer credit was used last month?")).toContain("don't have a canonically defined credits total");
+  });
+});

@@ -41,6 +41,8 @@ for (const [index, prompt] of prompts.entries()) {
     precision: coverage?.canonicalRevenue?.precision,
     mayStateExact: coverage?.canonicalRevenue?.mayStateExact,
     dataKind: data?.kind,
+    ...(data?.kind === "customers" ? { derivedCustomerCount: data.population.members.length } : {}),
+    ...(data?.kind === "top_customers" ? { derivedCustomerCount: data.members.length } : {}),
     ...(data?.kind === "totals"
       ? { current: data.current, previous: data.previous }
       : {}),

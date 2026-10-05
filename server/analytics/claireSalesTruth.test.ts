@@ -265,3 +265,18 @@ it("licenses a source-only trend when canonical reconciliation and coverage prov
     expect(result.coverage?.canonicalRevenue?.comparisonMayStateExact).toBe(true);
   }
 });
+it("uses older retained history for dormant and returning-customer knowledge", async () => {
+  const old = event("old", "cleancloud", { occurredAt: new Date("2024-11-18T19:00:00Z"), businessDate: "2024-11-18" });
+  const deps = {
+    loadLedger: async (input: Parameters<typeof loadPaidOrderLedger>[0]) => ({ ...(await loadPaidOrderLedger(input, fixtureLoaders())), events: [old], unverifiedNative: [] }),
+    loadOpenOrders: async () => ({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
+    loadCompleteness: async () => fixtureCompleteness,
+    readSourceCoverage: async () => provenBusinessCoverageSnapshot("test"),
+    now: () => FIXTURE_NOW,
+    timeZone: () => FIXTURE_TZ,
+  };
+  const dormant = await runBusinessQuery("test", { ...defaultBusinessQuery("dormant_customers"), period: { kind: "trailing_days", days: 90 } }, deps);
+  expect(dormant.status === "ok" && dormant.data.kind === "customers" && dormant.data.population.members.length).toBe(1);
+  const returning = await runBusinessQuery("test", { ...defaultBusinessQuery("new_customers"), period: { kind: "this_month" } }, { ...deps, loadLedger: async input => ({ ...(await deps.loadLedger(input)), events: [old, event("recent", "cleancloud", { occurredAt: new Date("2026-09-10T19:00:00Z"), businessDate: "2026-09-10" })] }) });
+  expect(returning.status === "ok" && returning.data.kind === "customers" && returning.data.population.members.length).toBe(0);
+});

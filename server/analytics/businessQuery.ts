@@ -426,7 +426,8 @@ export async function runBusinessQuery(
     if (!LEDGER_METRICS.has(query.metric)) return unavailable("unsupported_metric");
 
     const needsLookback = query.metric === "new_customers" || query.metric === "dormant_customers";
-    const lookbackStart = needsLookback ? addDaysYmd(period.start, -CUSTOMER_LOOKBACK_DAYS) : null;
+    // New/repeat and dormant classification need the entire retained history.
+    const lookbackStart = needsLookback ? "2020-01-01" : null;
     const windowStart = [period.start, comparisonPeriod?.start, lookbackStart]
       .filter((value): value is string => Boolean(value))
       .sort()[0]!;
