@@ -361,7 +361,8 @@ export function parsePeriodPhrase(
     }
   }
 
-  const inMonth = new RegExp(`\\b(?:in|for|during|of)\\s+${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text);
+  const inMonth = new RegExp(`\\b(?:in|for|during|of)\\s+${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text)
+    ?? new RegExp(`\\b${MONTH_PATTERN}\\b(?:\\s+(\\d{4}))?`).exec(text);
   if (inMonth) {
     const idx = monthIndex(inMonth[1]!);
     const start = pastDate(idx, 1, today, inMonth[2] ? Number(inMonth[2]) : undefined);

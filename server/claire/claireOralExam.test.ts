@@ -297,7 +297,7 @@ describe("I — source / filter thread, and business lineage", () => {
   it("Laundry Farm last month, Laundry Butler, dry cleaning only, laundry again", async () => {
     const { ask } = exam();
     expect(await ask("How much did Laundry Farm do last month?")).toBe(
-      "Laundry Farm revenue last month was $224 across 4 orders."
+      "Laundry Farm total revenue last month was $328 across 7 orders."
     );
     expect(await ask("What about Laundry Butler?")).toBe("Laundry Butler revenue last month was $104 across 3 orders.");
     expect(await ask("Dry cleaning only.")).toContain("Laundry Butler dry-cleaning revenue was $12.00 across 1 order.");
@@ -308,9 +308,9 @@ describe("I — source / filter thread, and business lineage", () => {
     const { ask } = exam();
     expect(await ask("What was revenue the last 30 days?")).toContain("$604 across 12 orders");
     const composition = await ask("Is that Laundry Butler only or Laundry Farm too?");
-    expect(composition).toContain("That's both businesses.");
-    expect(composition).toContain("Laundry Butler, Goldline's own Stripe-paid orders, was $231 across 6 orders.");
-    expect(composition).toContain("Laundry Farm, through CleanCloud, was $373 across 6 orders");
+    expect(composition).toContain("Laundry Butler is a service line within Laundry Farm.");
+    expect(composition).toContain("Laundry Butler service was $231 across 6 orders.");
+    expect(composition).toContain("Laundry Farm total was $604 across 12 orders");
     expect(await ask("How much is Stripe?")).toBe("Stripe-backed revenue in the last 30 days is $231 across 6 orders.");
     expect(await ask("What about Clearent?")).toContain("Clearent card revenue in the last 30 days is $338 across 5 orders.");
     expect(await ask("What's the latest sale you have?")).toBe("The newest sale I have is $52.00 for Sean Cohen, paid September 10 at 7:35 PM.");

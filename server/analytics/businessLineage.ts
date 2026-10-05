@@ -22,6 +22,30 @@ import type { LaundryFarmServiceClass } from "./cleancloudServiceClass";
 
 export type LedgerSource = "laundry_butler" | "cleancloud";
 export type BusinessLine = "laundry_butler" | "laundry_farm";
+export type Company = "laundry_farm";
+export type ServiceLine = "laundry_butler" | "laundry_farm_core" | "unresolved";
+
+/** Legacy businessLine is source attribution, never proof of core service. */
+export function salesDimensions(event: {
+  source: LedgerSource;
+  company?: Company | null;
+  serviceLine?: ServiceLine;
+  businessLine?: BusinessLine | null;
+}) {
+  return {
+    company:
+      event.company ??
+      (event.source === "laundry_butler" ||
+      event.businessLine === "laundry_farm"
+        ? "laundry_farm"
+        : null),
+    serviceLine:
+      event.serviceLine ??
+      (event.source === "laundry_butler" ? "laundry_butler" : "unresolved"),
+    sourceSystem:
+      event.source === "laundry_butler" ? "goldline_native" : "cleancloud",
+  } as const;
+}
 export type PaymentProcessor = "stripe" | "clearent" | "cash" | "other_or_unknown";
 export type BuildingKey = "opusla" | "centuryparkeast";
 
@@ -90,6 +114,8 @@ export function serviceTypeFromCleanCloudClass(value: LaundryFarmServiceClass): 
 
 /** Minimal event shape the lineage filters need (PaidOrderEvent satisfies it). */
 export type LineageEvent = {
+  company?: Company | null;
+  serviceLine?: ServiceLine;
   source: LedgerSource;
   cents: number;
   eventKey: string;
@@ -102,6 +128,8 @@ export type LineageEvent = {
 };
 
 export type LedgerFilters = {
+  companies?: Company[] | null;
+  serviceLines?: ServiceLine[] | null;
   businessLines?: BusinessLine[] | null;
   /** Includes null = orders whose business line cannot be attributed. */
   processors?: PaymentProcessor[] | null;
@@ -124,6 +152,8 @@ export function hasLineageFilters(filters: LedgerFilters | null | undefined): bo
   if (!filters) return false;
   return Boolean(
     filters.businessLines?.length ||
+      filters.companies?.length ||
+      filters.serviceLines?.length ||
       filters.processors?.length ||
       filters.sources?.length ||
       filters.includeBuildings?.length ||
@@ -136,6 +166,17 @@ export function hasLineageFilters(filters: LedgerFilters | null | undefined): bo
 
 export function matchesLineageFilters(event: LineageEvent, filters: LedgerFilters | null | undefined): boolean {
   if (!filters) return true;
+  const dimensions = salesDimensions(event);
+  if (
+    filters.companies?.length &&
+    !(dimensions.company && filters.companies.includes(dimensions.company))
+  )
+    return false;
+  if (
+    filters.serviceLines?.length &&
+    !filters.serviceLines.includes(dimensions.serviceLine)
+  )
+    return false;
   if (filters.businessLines?.length && !(event.businessLine && filters.businessLines.includes(event.businessLine))) {
     return false;
   }
@@ -173,6 +214,8 @@ export function applyLineageFilters<T extends LineageEvent>(events: readonly T[]
 export type LineageSlice<K extends string> = { key: K; label: string; cents: number; orders: number };
 
 export type LineageBreakdown = {
+  byServiceLine: Array<LineageSlice<ServiceLine>>;
+  byCompany: Array<LineageSlice<Company | "unattributed">>;
   total: { cents: number; orders: number };
   byBusinessLine: Array<LineageSlice<BusinessLine | "unattributed">>;
   bySource: Array<LineageSlice<LedgerSource>>;
@@ -194,7 +237,7 @@ function slices<K extends string>(
     if (key === null) continue;
     const slice = map.get(key) ?? { key, label: label(key), cents: 0, orders: 0 };
     slice.cents += event.cents;
-    slice.orders += 1;
+    if (event.cents > 0) slice.orders += 1;
     map.set(key, slice);
   }
   return Array.from(map.values()).sort((a, b) => b.cents - a.cents || a.key.localeCompare(b.key));
@@ -203,15 +246,29 @@ function slices<K extends string>(
 export function lineageBreakdown(events: readonly LineageEvent[]): LineageBreakdown {
   const sum = (list: readonly LineageEvent[]) => ({
     cents: list.reduce((total, event) => total + event.cents, 0),
-    orders: list.length,
+    orders: list.filter(event => event.cents > 0).length,
   });
   return {
+    byCompany: slices(
+      events,
+      event => salesDimensions(event).company ?? "unattributed",
+      key => (key === "laundry_farm" ? "Laundry Farm total" : "unattributed")
+    ),
+    byServiceLine: slices(
+      events,
+      event => salesDimensions(event).serviceLine,
+      key =>
+        key === "laundry_butler"
+          ? "Laundry Butler"
+          : key === "laundry_farm_core"
+            ? "Laundry Farm core"
+            : "unresolved service line"
+    ),
     total: sum(events),
     byBusinessLine: slices<BusinessLine | "unattributed">(
       events,
       event => event.businessLine ?? "unattributed",
-      key => (key === "unattributed" ? "unattributed" : BUSINESS_LINE_LABEL[key])
-    ),
+      key => key === "unattributed" ? "unattributed" : BUSINESS_LINE_LABEL[key]),
     bySource: slices<LedgerSource>(events, event => event.source, key => SOURCE_LABEL[key]),
     byProcessor: slices<PaymentProcessor>(
       events,

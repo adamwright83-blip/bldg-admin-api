@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "kind": "attached_source_certificate",
+  "passed": true,
+  "checks": {
+    "orders": true,
+    "revenue": true,
+    "subset": true,
+    "money": true,
+    "twins": true,
+    "ordersOnly": true,
+    "refund": true
+  },
+  "source": {
+    "orders": {
+      "rows": 533,
+      "uniqueIds": 533,
+      "digest": "c2488214641b8885623063cae7ea7285a4930030b070a190361e8f88e2fd0b12"
+    },
+    "revenue": {
+      "rows": 492,
+      "uniqueIds": 492,
+      "digest": "9fbb6b25b068d8aab4700e7e4815da60900015e2303c91a4345869c11d93408b"
+    },
+    "missingRevenueIds": 0,
+    "earliestOrder": "2024-11-18T19:37:00.000Z",
+    "latestOrder": "2026-10-04T19:15:00.000Z"
+  },
+  "money": {
+    "expectedRevenueCents": 2724697,
+    "revenueCents": 2724697,
+    "ordersNetCents": 2724697,
+    "differenceCents": 0,
+    "datedPaidBookCents": 2724697
+  },
+  "reconciliation": {
+    "twins": 492,
+    "ordersOnly": 41,
+    "ordersOnlyPaidCents": -1000,
+    "refundAccounted": true,
+    "undatedAdjustments": {
+      "count": 1,
+      "cents": -1000
+    },
+    "duplicateCounting": 0
+  },
+  "coverage": {
+    "latestPayment": "2026-10-04T02:28:00.000Z",
+    "status": "attached_sources_only",
+    "productionFreshness": "unverified"
+  },
+  "crossSystem": {
+    "status": "not_observed",
+    "provenDuplicatePairs": null,
+    "provenDistinctPairs": null,
+    "unresolvedPairs": null,
+    "withheldCents": null
+  },
+  "claireReader": {
+    "status": "requires_live_acceptance"
+  }
+}

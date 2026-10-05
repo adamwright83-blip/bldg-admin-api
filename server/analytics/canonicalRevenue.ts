@@ -117,7 +117,9 @@ export type CanonicalRevenueCoverage = {
 };
 
 export type ReconciledRevenue = {
+  unresolvedLinkCount?: number;
   /** Cents that may be stated as exact for the records included. Suspected copies are absent. */
+  undatedAdjustments?: { count: number; cents: number };
   exactIncludedCents: number;
   exactIncludedOrderCount: number;
   includedEvents: PaidOrderEvent[];
@@ -167,12 +169,14 @@ export function reconcilePaidRevenue(input: {
   events: readonly PaidOrderEvent[];
   provenExclusions?: readonly ProvenDuplicateExclusion[];
   explicitEconomicLinks?: readonly ExplicitEconomicLink[];
+  provenDistinctPairs?: readonly ExplicitEconomicLink[];
   unverifiedNative?: readonly UnverifiedPaidOrder[];
 }): ReconciledRevenue {
   const events = [...input.events].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.eventKey.localeCompare(b.eventKey)
   );
   const present = new Set(events.map(event => event.eventKey));
+  if (present.size !== events.length) throw new Error("Duplicate economic event key");
   const definiteItems: DuplicateExclusionItem[] = [];
 
   for (const exclusion of input.provenExclusions ?? []) {
@@ -181,14 +185,33 @@ export function reconcilePaidRevenue(input: {
   }
 
   const excludedByLink = new Set<string>();
+  const parentByExcluded = new Map<string, string>();
   for (const link of input.explicitEconomicLinks ?? []) {
-    if (!present.has(link.keptEventKey) || !present.has(link.excludedEventKey)) continue;
-    if (link.keptEventKey === link.excludedEventKey) continue;
+    if (link.keptEventKey === link.excludedEventKey) throw new Error("Economic link cannot point to itself");
+    const parent = parentByExcluded.get(link.excludedEventKey);
+    if (parent && parent !== link.keptEventKey) throw new Error("Economic link has conflicting canonical parents");
+    parentByExcluded.set(link.excludedEventKey, link.keptEventKey);
+  }
+  const rootOf = (key: string) => {
+    const visited = new Set<string>();
+    while (parentByExcluded.has(key)) {
+      if (visited.has(key)) throw new Error("Economic link cycle");
+      visited.add(key);
+      key = parentByExcluded.get(key)!;
+    }
+    return key;
+  };
+  for (const key of parentByExcluded.keys()) rootOf(key);
+  let unresolvedLinkCount = 0;
+  for (const link of input.explicitEconomicLinks ?? []) {
+    if (!present.has(link.excludedEventKey)) continue;
+    const keptEventKey = rootOf(link.keptEventKey);
+    if (!present.has(keptEventKey)) unresolvedLinkCount++;
     const excluded = events.find(event => event.eventKey === link.excludedEventKey);
     if (!excluded || excludedByLink.has(excluded.eventKey)) continue;
     excludedByLink.add(excluded.eventKey);
     definiteItems.push({
-      keptEventKey: link.keptEventKey,
+      keptEventKey,
       excludedEventKey: link.excludedEventKey,
       cents: excluded.cents,
       reason: "explicit_economic_link",
@@ -196,7 +219,17 @@ export function reconcilePaidRevenue(input: {
   }
 
   const afterProven = events.filter(event => !excludedByLink.has(event.eventKey));
-  const suspectedItems: SuspectedWithheldItem[] = findSuspectedCrossSourcePairs(afterProven).map(pair => ({
+  const suspectedItems: SuspectedWithheldItem[] = findSuspectedCrossSourcePairs(afterProven)
+    .filter(
+      pair =>
+        !(input.provenDistinctPairs ?? []).some(
+          link =>
+            (link.keptEventKey === pair.native.eventKey &&
+              link.excludedEventKey === pair.cleancloud.eventKey) ||
+            (link.excludedEventKey === pair.native.eventKey &&
+              link.keptEventKey === pair.cleancloud.eventKey)
+        )
+    ).map(pair => ({
     keptEventKey: pair.native.eventKey,
     withheldEventKey: pair.cleancloud.eventKey,
     cents: pair.cleancloud.cents,
@@ -209,8 +242,9 @@ export function reconcilePaidRevenue(input: {
   const sources = Array.from(new Set(includedEvents.map(event => event.source))).sort();
 
   return {
+    unresolvedLinkCount,
     exactIncludedCents,
-    exactIncludedOrderCount: includedEvents.length,
+    exactIncludedOrderCount: includedEvents.filter(event => event.cents > 0).length,
     includedEvents,
     definiteDuplicateExclusions: {
       count: definiteItems.length,
@@ -371,24 +405,54 @@ export function revenueMayStateExact(input: {
     input.coverage.coverageAllowsExact &&
     input.reconciled.suspectedWithheld.count === 0 &&
     input.reconciled.unverifiedNative.count === 0
+  &&
+    (input.reconciled.undatedAdjustments?.count ?? 0) === 0 &&
+    (input.reconciled.unresolvedLinkCount ?? 0) === 0
   );
 }
 
 export function reconcileLedgerSpan(
-  ledger: Pick<PaidOrderLedger, "events" | "provenDuplicateExclusions" | "unverifiedNative">,
+  ledger: Pick<PaidOrderLedger, | "events" | "provenDuplicateExclusions" | "unverifiedNative"| "reconciliationEvidence"
+    | "undatedAdjustments"
+  >,
   span: { start: string; end: string },
   explicitEconomicLinks?: readonly ExplicitEconomicLink[]
 ): ReconciledRevenue {
   const events = ledger.events.filter(event => event.businessDate >= span.start && event.businessDate <= span.end);
   const keys = new Set(events.map(event => event.eventKey));
-  return reconcilePaidRevenue({
+  const read = reconcilePaidRevenue({
     events,
     provenExclusions: ledger.provenDuplicateExclusions.filter(item => keys.has(item.keptEventKey)),
-    explicitEconomicLinks,
+    explicitEconomicLinks: [
+      ...(explicitEconomicLinks ?? []),
+      ...(ledger.reconciliationEvidence?.decisions ?? [])
+        .filter(
+          row => row.decision === "same_sale" && row.evidenceReference.trim()
+        )
+        .map(row => ({
+          keptEventKey: row.keptEventKey,
+          excludedEventKey: row.otherEventKey,
+        })),
+    ],
+    provenDistinctPairs: (ledger.reconciliationEvidence?.decisions ?? [])
+      .filter(
+        row => row.decision === "distinct_sales" && row.evidenceReference.trim()
+      )
+      .map(row => ({
+        keptEventKey: row.keptEventKey,
+        excludedEventKey: row.otherEventKey,
+      })),
     unverifiedNative: ledger.unverifiedNative.filter(
       order => order.businessDate >= span.start && order.businessDate <= span.end
     ),
   });
+  read.undatedAdjustments = {
+    count: ledger.undatedAdjustments?.length ?? 0,
+    cents: (ledger.undatedAdjustments ?? []).reduce(
+      (sum, item) => sum + item.cents, 0
+    ),
+  };
+  return read;
 }
 
 export async function readCanonicalRevenue(input: {
@@ -435,6 +499,12 @@ export async function readCanonicalRevenue(input: {
     };
   }
   const reconciled = reconcileLedgerSpan(ledger, { start: from, end: to }, input.explicitEconomicLinks);
+  reconciled.undatedAdjustments = {
+    count: ledger.undatedAdjustments?.length ?? 0,
+    cents: (ledger.undatedAdjustments ?? []).reduce(
+      (sum, item) => sum + item.cents, 0
+    ),
+  };
   const mayStateExact = revenueMayStateExact({ coverage, reconciled });
   return {
     status: "ok",

@@ -1,3 +1,5 @@
+import { loadSalesInsight, type SalesInsightArtifact } from "./salesInsights";
+import { reconcileLedgerSpan } from "../../analytics/canonicalRevenue";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { json, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
@@ -56,6 +58,7 @@ export { claireProactiveObligations };
 
 const lastSweepAtByOperator = new Map<string, number>();
 const SWEEP_MS = 60_000;
+const surfacedSalesInsights = new Map<string, string>();
 
 function daysBetween(later: string, earlier: string): number {
   return Math.round((Date.parse(`${later}T00:00:00Z`) - Date.parse(`${earlier}T00:00:00Z`)) / 86_400_000);
@@ -191,7 +194,7 @@ export async function ensureOperatorBoard(input: {
     serviceLabel: string;
   };
   force?: boolean;
-}): Promise<{ brief: string; created: number }> {
+}): Promise<{ brief: string; created: number ; salesArtifacts?: SalesInsightArtifact[] }> {
   if (!isStrategyFeatureEnabled(input.tenantId, STRATEGY_FLAGS.LEGACY_AUTONOMY)) {
     return { brief: "", created: 0 };
   }
@@ -232,7 +235,7 @@ export async function ensureOperatorBoard(input: {
       endExclusiveUtc: new Date(now + 86_400_000),
       timeZone,
     });
-    customers = groupCustomers(ledger.events)
+    customers = groupCustomers(reconcileLedgerSpan(ledger, { start: "2020-01-01", end: today }).includedEvents)
       .filter(group => group.matched)
       .map(group => {
         const sorted = [...group.records].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
@@ -386,15 +389,19 @@ export async function ensureOperatorBoard(input: {
     /* optional */
   }
 
+  const insight = await loadSalesInsight(input.tenantId, new Date(now), timeZone).catch(() => null);
+  const freshInsight = insight && surfacedSalesInsights.get(sweepKey) !== insight.observationReference ? insight : null;
+  if (freshInsight) surfacedSalesInsights.set(sweepKey, freshInsight.observationReference);
   return {
     created,
-    brief: morningChiefOfStaffBrief({
+    salesArtifacts: freshInsight ? [freshInsight] : [],
+    brief: [freshInsight?.speech, morningChiefOfStaffBrief({
       recoveries: obligations.filter(item => item.kind === "dormant_recovery"),
       sales: obligations.filter(item => item.kind === "sales_follow_up" && item.status === "scheduled"),
       warnings,
       overload: overloadJudgment([]),
       skipSales,
-    }),
+    })].filter(Boolean).join(" "),
   };
 }
 
@@ -407,7 +414,7 @@ export async function ensureAdamBoard(input: {
   operatorUserId: string;
   actorId: string;
   force?: boolean;
-}): Promise<{ brief: string; created: number }> {
+}): Promise<{ brief: string; created: number ; salesArtifacts?: SalesInsightArtifact[] }> {
   return ensureOperatorBoard({
     ...input,
     timeZone: getDashboardTimeZone(),
