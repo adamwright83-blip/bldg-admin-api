@@ -1,7 +1,7 @@
 # Claire sales book operations
 
 Original base: `045f96f96db671f2b7dba54440408a688cb50521`.
-Reconciled main: `8a8a284473fd33855481ac34fcf9034f356b6849`.
+Reconciled main: `df9b99b97054df97e64f3461a7bb47c403926ff6`.
 
 Private inputs are the supplied CC-Orders-09102024-04102026.csv and
 CC-Revenue-09102024-04102026.csv. Keep them outside git. Read DATABASE_URL
@@ -82,7 +82,7 @@ licensed. Deployed live conversation acceptance must be verified after deploymen
 
 ## Verification and baseline failures
 
-Targeted sales/ingestion/customer/Claire/proactive suite: 289 passed, 6 skipped.
+Targeted sales/ingestion/customer/Claire/proactive suite: 290 passed, 6 skipped.
 TypeScript and production build passed. Migration JavaScript syntax passed.
 Database release-exam requires an isolated test database; it mutates fixtures and
 was not run against production. Production import/replay is the safe database
@@ -91,5 +91,5 @@ integration witness.
 Three decisionRecord tests failed identically on a clean origin/main snapshot:
 pending concerns expect continues_pending but receive replaces_pending. They are
 pre-existing and were not changed or weakened. Earlier full-concurrency runs also
-hit repair2SliceB timeouts; focused reruns passed. Final broad-suite and CI results
+hit repair2SliceB timeouts; focused reruns passed. Broad suite: 2,226 passed, 6 skipped, the same 3 baseline failures. Final post-President and CI results
 are recorded in the PR, including any remaining failures.
