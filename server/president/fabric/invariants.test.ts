@@ -18,7 +18,12 @@ import {
 import { runDeliberation } from "../cycle/deliberation";
 import { redactSecrets, type ModelProvider } from "../cycle/models";
 import { assertIndependentReviewer, assertPresidentActor, DOMAIN_ROUTES, routeMission } from "./router";
-import { decideVerdict, IndependentReviewer, type ReviewerModel } from "./review";
+import {
+  decideVerdict,
+  IndependentReviewer,
+  type ResearchAgent,
+  type ReviewerModel,
+} from "./review";
 import { claimMission, runApprovedMissions, runMissionPass, type FabricDeps } from "./runner";
 import type { EngineeringAgent, GitHost } from "./engineering";
 import { generateMorningReport } from "./morningReport";
@@ -358,6 +363,46 @@ describe("execution fabric (real git worktrees, fake agent/host)", () => {
     expect(rep.missions[0].levels).toMatchObject({ implemented: true, independentlyReviewed: true, prReady: true, merged: false, deployed: false, outcomeObserved: false });
     expect(rep.unapprovedMissionsExecuted).toBe(0);
     expect(rep.remainingCandidateIds).toHaveLength(9);
+  });
+  it("research: persists artifact bytes in durable handback and independent review can PASS (10, 11)", async () => {
+    const researchAgent: ResearchAgent = {
+      actorId: "president-research-executor",
+      async run() {
+        return [
+          "## Findings (evidence)",
+          "README exists in the repository.",
+          "",
+          "## Inferences (judgment)",
+          "The repository snapshot is readable.",
+          "",
+          "## Sources",
+          "- `README.md:1`",
+          "",
+          "## State changes",
+          "None",
+        ].join("\n");
+      },
+    };
+    const { store, c, deps } = await fabricFor(["RESEARCH"], {
+      researchAgent,
+    });
+    await approve(store, c);
+    const out = await runApprovedMissions(deps, c.cycleId);
+    const m = out.missions[0];
+    expect(m.status).toBe("COMPLETED");
+    expect(m.executorActorId).toBe("president-research-executor");
+    expect(m.reviewerActorId).toBe("president-independent-reviewer");
+    expect(m.handback?.artifactText).toContain("## Findings (evidence)");
+    expect(m.handback?.artifactSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(m.handback?.reviewVerdict).toBe("PASS");
+    expect(out.morningReport?.missions[0].levels).toMatchObject({
+      implemented: true,
+      independentlyReviewed: true,
+      prReady: false,
+      merged: false,
+      deployed: false,
+      outcomeObserved: false,
+    });
   });
   it("failed required check -> repair loop with feedback -> then passes (14, 17)", async () => {
     const log: string[] = [];
