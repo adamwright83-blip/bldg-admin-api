@@ -203,18 +203,20 @@ export async function runPresidentCycleWorkerTick() {
     };
 
   const store = getPresidentCycleStore();
-  const cycles = (await store.list()).filter(c =>
-    [
+  const roster = rosterFromEnv();
+  const deliberationReady = Boolean(roster.chatgpt && roster.claude);
+  const cycles = (await store.list()).filter(c => {
+    if (c.status === "DELIBERATION_BLOCKED") return deliberationReady;
+    return [
       "GATHERING_EVIDENCE",
-      "DELIBERATION_BLOCKED",
       "DELIBERATING_PROPOSAL",
       "DELIBERATING_CRITIQUE",
       "DELIBERATING_SYNTHESIS",
       "PRESIDENT_RECOMMENDED",
       "AWAITING_ADAM_REVIEW",
       "EXECUTING",
-    ].includes(c.status)
-  );
+    ].includes(c.status);
+  });
   const results: Array<{ cycleId: string; status: string }> = [];
 
   for (const cycle of cycles) {
