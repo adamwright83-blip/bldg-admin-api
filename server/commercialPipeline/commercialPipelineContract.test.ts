@@ -92,8 +92,10 @@ describe("DayForge commercial pipeline production contract", () => {
     expect(core).toContain("commercialMissionFinalRewards");
     expect(service).toContain("invoicedCents: 0");
     expect(service).toContain(
-      "const paidCents = order.paid ? cents(order.total) : 0"
+      "const paidCents = legacyCommercialPaidCents(order)"
     );
+    expect(service).toContain("verifiedCommercialPaidCents(");
+    expect(service).toContain("paymentAuthorityShadow");
     expect(service).toContain("realizedCents: paidCents");
   });
 
