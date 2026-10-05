@@ -78,6 +78,10 @@ jobs:
           pnpm vitest run
           server/commercialPipeline/commercialRevenueAuthorityShadow.test.ts
           server/commercialPipeline/commercialPipelineContract.test.ts
+      - name: Prove read-only commercial payment mismatch report
+        run: >-
+          pnpm vitest run
+          server/commercialPipeline/commercialPaymentAuthorityReport.test.ts
 
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-
