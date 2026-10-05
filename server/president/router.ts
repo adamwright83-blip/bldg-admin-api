@@ -345,11 +345,7 @@ export const presidentRouter = router({
       z
         .object({
           question: z.string().min(1).max(16000),
-          evidenceIds: z
-            .array(z.string().min(1).max(64))
-            .min(1)
-            .max(50)
-            .optional(),
+          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
           requestKey: z.string().min(1).max(191),
           maxUsd: z.number().positive().max(2).default(1),
           consequential: z.boolean().default(false),
@@ -555,7 +551,11 @@ export const presidentRouter = router({
     .input(
       z
         .object({
-          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+          evidenceIds: z
+            .array(z.string().min(1).max(64))
+            .min(1)
+            .max(50)
+            .optional(),
         })
         .strict()
     )
