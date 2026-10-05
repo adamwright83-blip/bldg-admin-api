@@ -146,7 +146,11 @@ export async function advancePresidentRecommendationCycle(
   ) {
     cycle = await runDeliberation(store, cycleId, rosterFromEnv());
   }
-  if (cycle.status === "PRESIDENT_RECOMMENDED") {
+  if (
+    cycle.status === "PRESIDENT_RECOMMENDED" ||
+    (cycle.status === "AWAITING_ADAM_REVIEW" &&
+      !cycle.notifications.some(n => n.channel === "owner"))
+  ) {
     await presentToAdam(store, cycleId, notificationPort, reviewBaseUrl);
   }
   return (await store.get(cycleId))!;
@@ -207,6 +211,7 @@ export async function runPresidentCycleWorkerTick() {
       "DELIBERATING_CRITIQUE",
       "DELIBERATING_SYNTHESIS",
       "PRESIDENT_RECOMMENDED",
+      "AWAITING_ADAM_REVIEW",
       "EXECUTING",
     ].includes(c.status)
   );
