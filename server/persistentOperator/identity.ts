@@ -7,7 +7,10 @@ import {
 } from "../../drizzle/schema";
 import type { SaasTenantMemberRole } from "../../shared/saasTenant";
 import { getDb } from "../db";
-import { isLegacySharedPasswordOpenId } from "../joystick/tenantIdentity";
+import {
+  isLegacySharedPasswordOpenId,
+  isPlatformAdministrator,
+} from "../joystick/tenantIdentity";
 import {
   isLegacyDayforgeTenant,
   resolveLegacyDayforgeMembership,
@@ -565,7 +568,7 @@ export async function requireEffectiveOperatorIdentityForTenant(input: {
   }
 
   // 2. Cross-tenant view: strictly requires platform admin
-  if (input.callerUser.role !== "admin") {
+  if (!isPlatformAdministrator(input.callerUser)) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: `Cross-tenant inspection of tenant '${targetTenantId}' is restricted to platform administrators.`,
