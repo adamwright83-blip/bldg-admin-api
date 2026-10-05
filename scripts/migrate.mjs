@@ -4874,6 +4874,109 @@ await runRequired(
   "backfill Twilio message-sent authority receipts"
 );
 
+// Persisted commercial visit-completion events are the only historical source
+// admitted for action_completed. System/model events are deliberately excluded.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(e.tenantId, ':action-completed:', e.id), 256), 1, 40)),
+     e.tenantId,
+     'action_completed', 'commercial_mission', CAST(e.missionId AS CHAR),
+     'commercial_mission_event', CONCAT('commercial_mission_events:', e.id),
+     e.actorType, e.actorId, 'operator_attested', 'ATTESTED',
+     'legacy_commercial_visit_completion_backfill_v1',
+     e.createdAt, CURRENT_TIMESTAMP(3),
+     JSON_OBJECT('backfilled', TRUE, 'eventId', e.id),
+     CONCAT('authority:action_completed:', SHA2(CONCAT('action_completed', CHAR(0), 'commercial_mission', CHAR(0), CAST(e.missionId AS CHAR), CHAR(0), 'commercial_mission_event', CHAR(0), CONCAT('commercial_mission_events:', e.id)), 256))
+   FROM commercial_mission_events e
+   WHERE e.eventName = 'visit_completed'
+     AND e.actorType IN ('operator','driver','human','voice')`,
+  "backfill commercial visit-completion authority receipts"
+);
+
+// Attach the new/existing receipts to historical Persistent Operator outcomes.
+// The joins prove the exact real-world source before preserving verified state.
+await runRequired(
+  `UPDATE goal_cycle_outcomes o
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY o.tenantId
+    AND a.claimType = 'action_completed'
+    AND a.subjectType = 'commercial_mission'
+    AND BINARY a.sourceRef = BINARY o.evidenceReference
+   SET o.metadataJson = JSON_SET(
+     COALESCE(o.metadataJson, JSON_OBJECT()),
+     '$.missionId', a.subjectId,
+     '$.authorityReceiptId', a.id
+   )
+   WHERE o.outcomeKind = 'visit_completed'`,
+  "attach action authority to historical Persistent Operator visit outcomes"
+);
+await runRequired(
+  `UPDATE goal_cycle_outcomes o
+   JOIN commercial_mission_events e
+     ON BINARY e.tenantId = BINARY o.tenantId
+    AND BINARY CONCAT('commercial_mission_events:', e.id) = BINARY o.evidenceReference
+    AND e.eventName = 'account_won'
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY e.tenantId
+    AND a.claimType = 'account_won'
+    AND a.subjectType = 'commercial_mission'
+    AND BINARY a.subjectId = BINARY CAST(e.missionId AS CHAR)
+    AND JSON_UNQUOTE(JSON_EXTRACT(e.metadataJson, '$.authorityReceiptId')) = a.id
+   SET o.metadataJson = JSON_SET(
+     COALESCE(o.metadataJson, JSON_OBJECT()),
+     '$.missionId', e.missionId,
+     '$.authorityReceiptId', a.id
+   )
+   WHERE o.outcomeKind = 'account_won'`,
+  "attach win authority to historical Persistent Operator outcomes"
+);
+await runRequired(
+  `UPDATE goal_cycle_outcomes o
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY o.tenantId
+    AND a.claimType = 'payment_verified'
+    AND a.subjectType = 'cleancloud_order'
+    AND BINARY a.subjectId = BINARY JSON_UNQUOTE(JSON_EXTRACT(o.metadataJson, '$.cleancloudOrderId'))
+   JOIN cleancloud_paid_orders p
+     ON BINARY p.tenantId = BINARY o.tenantId
+    AND BINARY p.cleancloudOrderId = BINARY a.subjectId
+    AND p.paid = 1
+    AND COALESCE(p.totalCents, 0) > 0
+    AND p.totalCents = o.monetaryValueCents
+   SET o.metadataJson = JSON_SET(
+     COALESCE(o.metadataJson, JSON_OBJECT()),
+     '$.authorityReceiptId', a.id
+   )
+   WHERE o.outcomeKind = 'cleancloud_order_paid'`,
+  "attach payment authority to historical Persistent Operator revenue outcomes"
+);
+
+// Previously verified consequential outcomes that cannot be re-proven no longer
+// qualify for learning. Remove their derived deltas first, then mark them unknown.
+await runRequired(
+  `DELETE d
+   FROM goal_cycle_learned_deltas d
+   JOIN goal_cycle_outcomes o
+     ON BINARY o.tenantId = BINARY d.tenantId
+    AND BINARY o.id = BINARY d.outcomeId
+   WHERE o.outcomeKind IN ('visit_completed','account_won','cleancloud_order_paid')
+     AND o.epistemicStatus = 'verified'
+     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(o.metadataJson, '$.authorityReceiptId')), '') IS NULL`,
+  "remove learning derived from unreceipted consequential outcomes"
+);
+await runRequired(
+  `UPDATE goal_cycle_outcomes
+   SET epistemicStatus = 'unverified'
+   WHERE outcomeKind IN ('visit_completed','account_won','cleancloud_order_paid')
+     AND epistemicStatus = 'verified'
+     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadataJson, '$.authorityReceiptId')), '') IS NULL`,
+  "downgrade unreceipted consequential Persistent Operator outcomes"
+);
+
 // Preserve historical Goldline wins only when their evidence reference resolves
 // to an admitted account_won receipt.
 await runRequired(
