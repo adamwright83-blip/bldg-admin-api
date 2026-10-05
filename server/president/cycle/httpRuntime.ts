@@ -3,7 +3,10 @@ import type { Express, Request } from "express";
 import { ENV } from "../../_core/env";
 import { sdk } from "../../_core/sdk";
 import { resolveTenantIdFromHeaders } from "../../../shared/tenantConfig";
-import { tenantForAuthenticatedUser } from "../../joystick/tenantIdentity";
+import {
+  isPlatformAdministrator,
+  tenantForAuthenticatedUser,
+} from "../../joystick/tenantIdentity";
 import { createPresidentCycleRouter } from "./api";
 import type { CycleStore } from "./cycleStore";
 import {
@@ -31,7 +34,12 @@ async function authenticatedFounder(req: Request) {
   } catch {
     user = null;
   }
-  if (!user || !ENV.ownerOpenId || user.openId !== ENV.ownerOpenId)
+  if (
+    !user ||
+    !ENV.ownerOpenId ||
+    user.openId !== ENV.ownerOpenId ||
+    !isPlatformAdministrator(user)
+  )
     return null;
   return user;
 }
