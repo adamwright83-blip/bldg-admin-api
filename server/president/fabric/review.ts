@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import type { Mission, ReviewVerdict } from "../../../shared/presidentCycle";
 import { runCommand, assertSafeValidationCommand, type CommandResult } from "./exec";
 import {
@@ -313,7 +313,16 @@ export function validateResearchArtifact(text: string, repoRoot: string): string
   const sources = text.split("## Sources")[1]?.split(/\n## /)[0] ?? "";
   const refs = [...sources.matchAll(/`([^`\s:]+\.[A-Za-z0-9]+)(?::\d+(?:-\d+)?)?`/g)].map(m => m[1]);
   if (refs.length === 0) problems.push("no sources cited");
-  for (const r of refs) if (!existsSync(join(repoRoot, r))) problems.push(`cited source does not exist: ${r}`);
+  const root = resolve(repoRoot);
+  for (const r of refs) {
+    const candidate = resolve(root, r);
+    if (candidate !== root && !candidate.startsWith(root + sep)) {
+      problems.push(`cited source escapes repository: ${r}`);
+      continue;
+    }
+    if (!existsSync(candidate))
+      problems.push(`cited source does not exist: ${r}`);
+  }
   const changes = text.split("## State changes")[1] ?? "";
   if (!/none/i.test(changes.slice(0, 200))) problems.push("research must declare no production state change");
   return problems;
