@@ -8,6 +8,8 @@ Current ontology. One meaning per noun. Read this before `docs/GOLDLINE-TASKS.md
 product.joystick
 ├── surface.admin
 │   ├── admin.lantern_city
+│   │   └── hidden_game.*
+│   │       └── hidden_game.lost_property
 │   └── admin.tower_wars
 ├── surface.driver
 │   └── domain.goldline
@@ -60,6 +62,8 @@ Later Kingdoms have no locked place-name. Do not invent one.
 - `system.narrator_os` — Selects authored story eligibility from verified truth + canon. Cannot create business truth.
 - `world.overworld` — Driver fantasy connective world. Exists before `level.colosseum`. Trailblazer can travel it while Colosseum is the only unlocked destination.
 - `admin.lantern_city` — Admin real-business territory visualization. Not the Overworld.
+- `hidden_game.*` — A complete, authored game (its own story, chapters, finale) that appears inside `admin.lantern_city` when a territory gets its first verified sale. Its chapters are rewards for real work. Not a `minigame.*`, not a `kingdom.*`, not an `encounter.*`.
+- `hidden_game.lost_property` — The first Hidden Game: a slapstick cozy puzzle game (four mice, a man-child prankster). The camera changes every chapter (2D side view → 3D → top-down …); the art style never does. A dark twist arrives only in the last minute. The story bible lives outside this repository (Claude Doc "Lost Property: Story Bible").
 - `admin.tower_wars` — Specific Admin visualization/mode. Legacy-feeling gameplay may remain visual-only. Not the Overworld.
 - `ship.wayward` — Trailblazer's in-world ship/home. Nothing else.
 - `kingdom.brass_republic` — Kingdom One.
@@ -89,7 +93,23 @@ Admin loop:
 
 `admin.lantern_city` starts mostly obscured → established customers/activity are visible islands → verified sales/marketing action may reveal territory → map changes because business changed → next real action
 
-These loops stay separate.
+These loops stay separate, except for the one sanctioned link in §3a.
+
+## 3a. Hidden Game unlock rule
+
+Decided by Adam, 2026-10-04. Applies to every `hidden_game.*`.
+
+**A sale opens the door. Objectives walk you through. Traction earns the ending.**
+
+1. **First verified sale in a new territory** → the territory reveals in `admin.lantern_city` **and** a Hidden Game appears there. Chapter 1 is playable the same day. It is never gated behind Objectives after the sale.
+2. **Middle chapters** → unlocked by completed Objectives on `plan.day_line` (Missions, Challenges, or Hybrid Objectives). The unlock counts verified **action** (dials made, doors knocked, messages sent), not **outcome** (whether anyone bought).
+3. **Pacing** → about 2–3 completed Objectives per chapter, tuned so one Hidden Game lasts roughly as long as opening the next territory takes. Each new territory then brings the next Hidden Game.
+4. **Finale** → a traction milestone in that same territory (for example, its third customer).
+5. **Visible all day** → a Day Line card shows the next locked chapter before the work is done (for example, "Tonight: Lost Property, Chapter 2").
+6. **Permanent, never punitive** → unlocked chapters are kept forever. A missed day costs time, never content: no expiry, no clawback, no "no game tonight" withholding.
+7. **Never an empty card** → if a Hidden Game is finished before the next territory opens, replay and Second Look fill the gap.
+8. **No XP, coins, badges, streaks, or leaderboards** (GOLDLINE_CANON §9). The reward is authored entertainment.
+9. **Content** → a Hidden Game with dark themes carries a content note where it is offered. Violence is never shown or playable.
 
 ## 4. Naming registry (stable slugs)
 
@@ -111,6 +131,8 @@ These loops stay separate.
 | `world.overworld` | Driver fantasy connective world |
 | `admin.lantern_city` | Admin real-business territory visualization |
 | `admin.tower_wars` | Admin visualization/mode |
+| `hidden_game.*` | Authored game unlocked by a territory's first sale; chapters unlocked by Objectives (§3a) |
+| `hidden_game.lost_property` | First Hidden Game |
 | `ship.wayward` | Trailblazer's ship/home |
 | `kingdom.brass_republic` | Kingdom One |
 | `level.colosseum` | Level inside Kingdom One |
@@ -144,6 +166,7 @@ One noun = one layer.
 - Completing a Mission or a Challenge may satisfy the real-world side of a `kingdom_binding`. It does not automatically defeat a Boss, resolve a Level, or complete a Kingdom.
 - `system.mission_director` is not renamed. It can prioritize both Missions and Challenges. There is no second planner. Existing code, API, and system names containing `mission` are legacy implementation vocabulary and may still represent field, remote, or hybrid Objectives until explicitly migrated. Do not infer Objective type from an old identifier containing `mission`; infer it from the actual execution contract.
 - `world.overworld` ≠ `admin.lantern_city`.
+- `hidden_game.*` ≠ `minigame.*` ≠ `kingdom.*` ≠ `encounter.*`. Unlocking a Hidden Game chapter does not resolve a Level, complete a Kingdom, or satisfy a `kingdom_binding`, and none of those unlocks a chapter unless §3a says so.
 - `system.claire` ≠ `companion.*`.
 - `kingdom.boreslay` ≠ `minigame.boreslay_duel` ≠ `legacy.boreslay_product`.
 - `business.laundry_farm` ≠ `service.laundry_butler` ≠ `legacy.laundry_butler_chrome` ≠ `product.joystick`.
@@ -196,5 +219,9 @@ Forbidden for user-visible copy, docs, modules, symbols, filenames, and CI names
 - inferring Objective type from an existing code, API, or system name that contains `mission`
 - renaming an existing API or system whose name contains `mission`, or adding a second planner beside `system.mission_director`
 - treating a completed Mission or Challenge as a Boss defeat, a Level resolution, or Kingdom completion
+- calling a Hidden Game a minigame, or placing one inside a Kingdom
+- gating a Hidden Game's Chapter 1 behind Objectives after the territory's first sale
+- unlocking Hidden Game chapters on outcomes (sales closed) instead of verified actions
+- expiring, revoking, or withholding an unlocked chapter
 
 The nomenclature guard is part of the repository contract.
