@@ -35,7 +35,11 @@ import {
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
-import { findAuthorityReceiptForSubjectWith } from "../authority/authorityReceipt";
+import {
+  findAuthorityReceiptForSubject,
+  findAuthorityReceiptForSubjectWith,
+  type AuthorityReceipt,
+} from "../authority/authorityReceipt";
 import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 
 type Transaction = Parameters<
@@ -51,6 +55,31 @@ function affectedRows(result: unknown): number {
 function cents(value: string | null): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
+}
+
+export type CommercialPaymentAuthorityOrder = {
+  paid: boolean | number | null;
+  total: string | null;
+  stripePaymentIntentId: string | null;
+};
+
+export function legacyCommercialPaidCents(
+  order: CommercialPaymentAuthorityOrder
+): number {
+  return order.paid ? cents(order.total) : 0;
+}
+
+export function verifiedCommercialPaidCents(
+  order: CommercialPaymentAuthorityOrder,
+  receipt: AuthorityReceipt | null
+): number {
+  const paymentIntentId = order.stripePaymentIntentId?.trim() ?? "";
+  return hasNativePaymentAuthority(order) &&
+    receipt?.claimType === "payment_verified" &&
+    receipt.sourceType === "stripe_payment_intent" &&
+    receipt.sourceRef === paymentIntentId
+    ? cents(order.total)
+    : 0;
 }
 
 function revenueBand(centsValue: number): string {
@@ -158,7 +187,17 @@ export async function reconcileCommercialPipelineRevenue(tenantId: string) {
     .select()
     .from(commercialOrderAttributions)
     .where(eq(commercialOrderAttributions.tenantId, tenantId));
-  if (attributions.length === 0) return { updated: 0 };
+  if (attributions.length === 0)
+    return {
+      updated: 0,
+      paymentAuthorityShadow: {
+        compared: 0,
+        mismatchCount: 0,
+        legacyPaidCents: 0,
+        verifiedPaidCents: 0,
+        mismatches: [],
+      },
+    };
   const sourceOrders = await db
     .select()
     .from(orders)
@@ -174,10 +213,46 @@ export async function reconcileCommercialPipelineRevenue(tenantId: string) {
   const byId = new Map(sourceOrders.map(order => [order.id, order]));
   let updated = 0;
   const changedMissions = new Set<number>();
+  let shadowLegacyPaidCents = 0;
+  let shadowVerifiedPaidCents = 0;
+  const shadowMismatches: Array<{
+    attributionId: number;
+    orderId: number;
+    legacyPaidCents: number;
+    verifiedPaidCents: number;
+    paidFlag: boolean;
+    paymentIntentPresent: boolean;
+    authorityReceiptId: string | null;
+  }> = [];
   for (const attribution of attributions) {
     const order = byId.get(attribution.orderId);
     if (!order) continue;
-    const paidCents = order.paid ? cents(order.total) : 0;
+    const paidCents = legacyCommercialPaidCents(order);
+    const paymentAuthority = order.paid
+      ? await findAuthorityReceiptForSubject({
+          tenantId,
+          claimType: "payment_verified",
+          subjectType: "order",
+          subjectId: String(order.id),
+        })
+      : null;
+    const verifiedPaidCents = verifiedCommercialPaidCents(
+      order,
+      paymentAuthority
+    );
+    shadowLegacyPaidCents += paidCents;
+    shadowVerifiedPaidCents += verifiedPaidCents;
+    if (paidCents !== verifiedPaidCents) {
+      shadowMismatches.push({
+        attributionId: attribution.id,
+        orderId: order.id,
+        legacyPaidCents: paidCents,
+        verifiedPaidCents,
+        paidFlag: Boolean(order.paid),
+        paymentIntentPresent: Boolean(order.stripePaymentIntentId?.trim()),
+        authorityReceiptId: paymentAuthority?.id ?? null,
+      });
+    }
     const realizedCents = paidCents;
     if (
       attribution.paidCents === paidCents &&
@@ -238,7 +313,17 @@ export async function reconcileCommercialPipelineRevenue(tenantId: string) {
       changedMissions.add(attribution.missionId);
     });
   }
-  return { updated, missionIds: Array.from(changedMissions) };
+  return {
+    updated,
+    missionIds: Array.from(changedMissions),
+    paymentAuthorityShadow: {
+      compared: attributions.length,
+      mismatchCount: shadowMismatches.length,
+      legacyPaidCents: shadowLegacyPaidCents,
+      verifiedPaidCents: shadowVerifiedPaidCents,
+      mismatches: shadowMismatches,
+    },
+  };
 }
 
 function iso(value: Date | null): string | null {
