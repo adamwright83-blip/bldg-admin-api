@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { goalCycleOutcomes } from "../../drizzle/schema";
+import { cleancloudPaidOrders, goalCycleOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { getAuthorityReceiptById } from "../authority/authorityReceipt";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
@@ -324,6 +324,43 @@ async function assertConsequentialOutcomeAuthority(
     throw new Error(
       "visit_completed Authority Receipt must match the persisted completion event"
     );
+  }
+
+  if (input.outcomeKind === "cleancloud_order_paid") {
+    if (
+      receipt.sourceType !== "cleancloud_paid_order" ||
+      input.monetaryValueCents == null ||
+      input.monetaryValueCents <= 0
+    ) {
+      throw new Error(
+        "cleancloud_order_paid requires verified CleanCloud payment evidence and a positive amount"
+      );
+    }
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    const rows = await db
+      .select({
+        paid: cleancloudPaidOrders.paid,
+        totalCents: cleancloudPaidOrders.totalCents,
+      })
+      .from(cleancloudPaidOrders)
+      .where(
+        and(
+          eq(cleancloudPaidOrders.tenantId, input.tenantId),
+          eq(cleancloudPaidOrders.cleancloudOrderId, subjectId)
+        )
+      );
+    const amountMatches = rows.some(
+      row =>
+        row.paid === true &&
+        (row.totalCents ?? 0) > 0 &&
+        row.totalCents === input.monetaryValueCents
+    );
+    if (!amountMatches) {
+      throw new Error(
+        "cleancloud_order_paid amount does not match persisted paid-order evidence"
+      );
+    }
   }
 }
 
