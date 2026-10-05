@@ -1,7 +1,7 @@
 import type { RowDataPacket } from "mysql2/promise";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { adminProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { MysqlPresidentAssessmentStore } from "./mysqlStore";
 import { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
@@ -50,7 +50,7 @@ function operatingServices() {
   };
 }
 
-export const founderProcedure = adminProcedure.use(async ({ ctx, next }) => {
+export const founderProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   if (!ENV.ownerOpenId || ctx.user.openId !== ENV.ownerOpenId)
     throw new TRPCError({
       code: "FORBIDDEN",
