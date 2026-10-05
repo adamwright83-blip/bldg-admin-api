@@ -131,7 +131,8 @@ function explicitPreferenceItem(pref: OperatorExplicitPreference): InternalItem 
 }
 
 function observedPatternItem(pattern: OperatorObservedPattern): InternalItem {
-  const id = stableItemId("pattern", pattern.kind, ...pattern.evidenceRefs);
+  const semanticScope = pattern.scopeKey?.trim() || "operator_context_global";
+  const id = stableItemId("pattern", pattern.kind, semanticScope);
   return {
     item: {
       id,

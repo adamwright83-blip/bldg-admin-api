@@ -8,7 +8,8 @@ import {
   type CanonicalOperatorIdentity,
 } from "../persistentOperator/identity";
 import {
-  listOperatorRepresentativeDirectives,
+  listActiveOperatorRepresentativeDirectives,
+  loadOperatorRepresentativeDirectiveSnapshot,
   revokeOperatorRepresentativeDirective,
   setOperatorRepresentativeDirective,
   type OperatorRepresentativeDirectiveKind,
@@ -43,24 +44,30 @@ async function resolveIdentity(input: {
 async function loadSnapshot(input: {
   identity: CanonicalOperatorIdentity;
 }) {
-  const [packet, directives] = await Promise.all([
+  const [packet, directiveSnapshot] = await Promise.all([
     buildOperatorContextPacket({
       tenantId: input.identity.tenantId,
       identity: input.identity,
     }),
-    listOperatorRepresentativeDirectives({
+    loadOperatorRepresentativeDirectiveSnapshot({
       tenantId: input.identity.tenantId,
       canonicalOperatorId: input.identity.canonicalOperatorId,
-      includeRevoked: true,
-      limit: 100,
+      recentHistoryLimit: 100,
     }),
   ]);
+  const directives = directiveSnapshot.directives;
   const snapshot = buildOperatorRepresentativeSnapshot({
     identity: input.identity,
     packet,
     directives,
   });
-  return { packet, directives, snapshot };
+  return {
+    packet,
+    directives,
+    activeDirectives: directiveSnapshot.active,
+    recentDirectiveHistory: directiveSnapshot.recentHistory,
+    snapshot,
+  };
 }
 
 function validateDirectiveTarget(input: {
@@ -148,10 +155,9 @@ export const operatorRepresentativeRouter = router({
           tenantId: ctx.tenantId,
           subsystem: "operator_representative.adaptation_status",
         });
-        const directives = await listOperatorRepresentativeDirectives({
+        const directives = await listActiveOperatorRepresentativeDirectives({
           tenantId: identity.tenantId,
           canonicalOperatorId: identity.canonicalOperatorId,
-          includeRevoked: false,
         });
         return buildOperatorRepresentativeAdaptationPolicy({
           tenantId: identity.tenantId,
