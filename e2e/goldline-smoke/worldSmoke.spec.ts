@@ -10,6 +10,7 @@
  * most expensive and least obvious.
  */
 
+import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import {
   WORLD_HOME,
@@ -328,8 +329,19 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(675);
     expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(422);
 
+    const artifactDir = "artifacts/operator-representative-v1-qa";
+    mkdirSync(artifactDir, { recursive: true });
     await page.screenshot({
-      path: "artifacts/operator-representative-v1-qa/lantern-city-admin-chrome-675x422.png",
+      path: `${artifactDir}/lantern-city-admin-chrome-675x422.png`,
+      fullPage: false,
+    });
+
+    // Also retain the normal desktop composition as proof that the fix does not
+    // merely trade the reported narrow overlap for a wide-screen regression.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.locator(".gl-world-title")).toBeVisible();
+    await page.screenshot({
+      path: `${artifactDir}/lantern-city-admin-chrome-1440x900.png`,
       fullPage: false,
     });
   });
