@@ -65,12 +65,12 @@ async function main() {
     validationCommands: [], browserCheck: null, ...extra,
   });
   const eng = mk(1, "ENGINEERING", {
-    title: "Add President cycle status label map",
-    problem: "Cycle statuses have no human-readable labels for the review UI.",
-    proposedChange: "Create shared/presidentCycleLabels.ts exporting CYCLE_STATUS_LABELS: Record<CycleStatus,string> covering every status in shared/presidentCycle.ts (import CYCLE_STATUSES), with AWAITING_ADAM_REVIEW labelled 'Awaiting Adam review' and ADAM_APPROVED labelled 'Approved by Adam'. Create shared/presidentCycleLabels.test.ts (vitest) asserting every CYCLE_STATUSES entry has a non-empty label and the two named labels. Touch only those two new files.",
-    scope: "Exactly two new files: shared/presidentCycleLabels.ts and shared/presidentCycleLabels.test.ts",
-    acceptanceCriteria: ["Every CycleStatus has a non-empty label", "AWAITING_ADAM_REVIEW label is 'Awaiting Adam review'", "No other files changed"],
-    validationCommands: ["npx vitest run shared/presidentCycleLabels.test.ts"],
+    title: "Add a self-contained President execution acceptance probe",
+    problem: "The autonomous engineering fabric needs a real repository-editing witness that can run before this feature branch itself is merged.",
+    proposedChange: "Create server/president/autonomousAcceptanceProbe.ts exporting presidentAutonomousAcceptanceProbe(): string that returns exactly 'president-autonomous-execution-ok'. Create server/president/autonomousAcceptanceProbe.test.ts (vitest) asserting the exact return value. Touch only those two new files and do not import any files that exist only on this feature branch.",
+    scope: "Exactly two new files: server/president/autonomousAcceptanceProbe.ts and server/president/autonomousAcceptanceProbe.test.ts",
+    acceptanceCriteria: ["The exported probe returns exactly 'president-autonomous-execution-ok'", "The focused Vitest passes", "No other files changed"],
+    validationCommands: ["npx vitest run server/president/autonomousAcceptanceProbe.test.ts"],
   });
   const res = mk(2, "RESEARCH", {
     title: "Document how the existing President agentRuntime dispatches work",
