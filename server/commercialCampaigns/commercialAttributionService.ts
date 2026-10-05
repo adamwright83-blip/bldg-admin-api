@@ -7,9 +7,9 @@ import {
   commercialCustomers,
   commercialOrderAcquisitionAttributions,
   commercialOrderAttributions,
-  orderPaymentProjections,
   orders,
 } from "../../drizzle/schema";
+import { readCommercialOrderPaymentDecisionWith } from "../commercialPipeline/commercialOrderPaymentDecision";
 import { getDb } from "../db";
 import { hashCommercialCampaignLinkToken } from "./commercialCampaignLinkService";
 
@@ -49,11 +49,6 @@ export async function reverseCommercialOrderAttribution(input: {
 export function normalizedAttributionLocation(input: { buildingSlug?: string | null; address: string }) {
   const value = input.buildingSlug?.trim().toLowerCase() || input.address.toLowerCase().replace(/[^a-z0-9]/g, "");
   return createHash("sha256").update(value).digest("hex");
-}
-
-function cents(total: string | null) {
-  const value = Number(total ?? 0);
-  return Number.isFinite(value) ? Math.max(0, Math.round(value * 100)) : 0;
 }
 
 export async function attributeOrderFromCampaign(input: {
@@ -121,28 +116,15 @@ export async function attributeOrderFromCampaign(input: {
       const prior = await tx.select({ id: commercialOrderAttributions.id }).from(commercialOrderAttributions).where(and(
         eq(commercialOrderAttributions.tenantId, input.tenantId), eq(commercialOrderAttributions.commercialCustomerId, customer.id)
       )).limit(1);
-      const projection = (await tx.select().from(orderPaymentProjections).where(and(
-        eq(orderPaymentProjections.tenantId, input.tenantId), eq(orderPaymentProjections.orderId, order.id)
-      )).limit(1))[0];
-      const cancelled = order.status === "cancelled";
-      const knownNet = projection?.netPaidCents ?? null;
-      const paidCents = cancelled ? 0 : knownNet ?? (order.paid ? cents(order.total) : 0);
-      const financialReview = projection?.state === "partially_refunded" && knownNet === null;
+      const { decision } = await readCommercialOrderPaymentDecisionWith(tx, { tenantId: input.tenantId, order });
       await tx.insert(commercialOrderAttributions).values({
         tenantId: input.tenantId, commercialCustomerId: customer.id, missionId: link.missionId,
         orderId: order.id, acquisitionAttributionId: attributionId,
         attributionType: prior[0] ? "recurring" : "first_order",
-        status: financialReview ? "financial_review" : cancelled || projection?.state === "refunded" ? "reversed" : "active",
-        currency: projection?.currency ?? "usd", capturedCents: projection?.capturedCents ?? null,
-        refundedCents: projection?.refundedCents ?? null, netPaidCents: knownNet,
-        paidCents, realizedCents: paidCents, paidAt: order.paidAt,
+        ...decision,
         requestId: input.requestId, createdBy: input.actorId,
-        financialReviewReason: financialReview ? "Canonical net amount is unavailable for a known partial refund." : null,
         lastReconciledAt: new Date(),
-      }).onDuplicateKeyUpdate({ set: {
-        paidCents, realizedCents: paidCents, paidAt: order.paidAt,
-        status: financialReview ? "financial_review" : cancelled || projection?.state === "refunded" ? "reversed" : "active",
-      }});
+      }).onDuplicateKeyUpdate({ set: { ...decision, lastReconciledAt: new Date() }});
     }
     return (await tx.select().from(commercialOrderAcquisitionAttributions).where(eq(commercialOrderAcquisitionAttributions.id, attributionId)).limit(1))[0];
   });

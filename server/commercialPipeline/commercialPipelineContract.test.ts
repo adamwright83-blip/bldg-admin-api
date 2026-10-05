@@ -92,11 +92,11 @@ describe("DayForge commercial pipeline production contract", () => {
     expect(core).toContain("commercialMissionFinalRewards");
     expect(service).toContain("invoicedCents: 0");
     expect(service).toContain(
-      "const paidCents = legacyCommercialPaidCents(order)"
+      "readCommercialOrderPaymentDecisionWith(tx"
     );
-    expect(service).toContain("verifiedCommercialPaidCents(");
+    expect(service).not.toContain("const paidCents = legacyCommercialPaidCents(order)");
     expect(service).toContain("paymentAuthorityShadow");
-    expect(service).toContain("realizedCents: paidCents");
+    expect(service).toContain("...decision");
   });
 
   it("requires explicit proof and tenant order attribution", () => {
@@ -106,12 +106,9 @@ describe("DayForge commercial pipeline production contract", () => {
     expect(router).toContain(
       "I verified this order belongs to this commercial account"
     );
-    expect(service).toContain(
-      "COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}"
-    );
-    expect(service).toContain(
-      "COALESCE(${orders.tenantId}, 'default') = ${tenantId}"
-    );
+    expect(service).toContain("commercialOrderTenantPredicate(input.tenantId)");
+    expect(service).toContain("commercialOrderTenantPredicate(tenantId)");
+    expect(service).not.toContain("COALESCE(${orders.tenantId}");
     expect(service).toContain("first_order_attributed");
     expect(service).toContain(".innerJoin(");
     expect(service).not.toContain("Promise.all(\n    rows.map(row =>");

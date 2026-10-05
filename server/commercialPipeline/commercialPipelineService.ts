@@ -35,11 +35,11 @@ import {
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
+import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import {
-  findAuthorityReceiptForSubject,
-  findAuthorityReceiptForSubjectWith,
-  type AuthorityReceipt,
-} from "../authority/authorityReceipt";
+  commercialOrderTenantPredicate,
+  readCommercialOrderPaymentDecisionWith,
+} from "./commercialOrderPaymentDecision";
 import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 
 type Transaction = Parameters<
@@ -203,7 +203,7 @@ export async function reconcileCommercialPipelineRevenue(tenantId: string) {
     .from(orders)
     .where(
       and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+        commercialOrderTenantPredicate(tenantId),
         inArray(
           orders.id,
           attributions.map(item => item.orderId)
@@ -227,47 +227,42 @@ export async function reconcileCommercialPipelineRevenue(tenantId: string) {
   for (const attribution of attributions) {
     const order = byId.get(attribution.orderId);
     if (!order) continue;
-    const paidCents = legacyCommercialPaidCents(order);
-    const paymentAuthority = order.paid
-      ? await findAuthorityReceiptForSubject({
-          tenantId,
-          claimType: "payment_verified",
-          subjectType: "order",
-          subjectId: String(order.id),
-        })
-      : null;
-    const verifiedPaidCents = verifiedCommercialPaidCents(
-      order,
-      paymentAuthority
-    );
-    shadowLegacyPaidCents += paidCents;
-    shadowVerifiedPaidCents += verifiedPaidCents;
-    if (paidCents !== verifiedPaidCents) {
-      shadowMismatches.push({
-        attributionId: attribution.id,
-        orderId: order.id,
-        legacyPaidCents: paidCents,
-        verifiedPaidCents,
-        paidFlag: Boolean(order.paid),
-        paymentIntentPresent: Boolean(order.stripePaymentIntentId?.trim()),
-        authorityReceiptId: paymentAuthority?.id ?? null,
-      });
-    }
-    const realizedCents = paidCents;
-    if (
-      attribution.paidCents === paidCents &&
-      attribution.realizedCents === realizedCents &&
-      attribution.paidAt?.getTime() === order.paidAt?.getTime()
-    )
-      continue;
     await db.transaction(async tx => {
+      const [currentOrder] = await tx
+        .select()
+        .from(orders)
+        .where(and(commercialOrderTenantPredicate(tenantId), eq(orders.id, order.id)))
+        .limit(1)
+        .for("update");
+      if (!currentOrder) return;
+      const { decision, receipt: paymentAuthority } =
+        await readCommercialOrderPaymentDecisionWith(tx, { tenantId, order: currentOrder });
+      const { paidCents } = decision;
+      const legacyPaidCents = legacyCommercialPaidCents(currentOrder); // Diagnostic only, never written.
+      shadowLegacyPaidCents += legacyPaidCents;
+      shadowVerifiedPaidCents += paidCents;
+      if (legacyPaidCents !== paidCents) {
+        shadowMismatches.push({
+          attributionId: attribution.id,
+          orderId: currentOrder.id,
+          legacyPaidCents,
+          verifiedPaidCents: paidCents,
+          paidFlag: Boolean(currentOrder.paid),
+          paymentIntentPresent: Boolean(currentOrder.stripePaymentIntentId?.trim()),
+          authorityReceiptId: paymentAuthority?.id ?? null,
+        });
+      }
+      if (
+        Object.entries(decision).every(([key, value]) => {
+          const existing = attribution[key as keyof typeof attribution];
+          return value instanceof Date
+            ? existing instanceof Date && existing.getTime() === value.getTime()
+            : existing === value;
+        })
+      ) return;
       const result = await tx
         .update(commercialOrderAttributions)
-        .set({
-          paidCents,
-          realizedCents,
-          paidAt: order.paidAt,
-        })
+        .set({ ...decision, lastReconciledAt: new Date() })
         .where(
           and(
             eq(commercialOrderAttributions.tenantId, tenantId),
@@ -1165,7 +1160,7 @@ export async function attributeCommercialOrder(input: {
         .from(orders)
         .where(
           and(
-            sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`,
+            commercialOrderTenantPredicate(input.tenantId),
             eq(orders.id, input.orderId)
           )
         )
@@ -1174,21 +1169,11 @@ export async function attributeCommercialOrder(input: {
       const order = sourceOrders[0];
       if (!order) throw new Error("Tenant order not found");
       const firstOrder = pipeline.firstOrderId === null;
-      const paymentAuthority = order.paid
-        ? await findAuthorityReceiptForSubjectWith(tx, {
-            tenantId: input.tenantId,
-            claimType: "payment_verified",
-            subjectType: "order",
-            subjectId: String(order.id),
-          })
-        : null;
-      const paymentIntentId = order.stripePaymentIntentId?.trim() ?? "";
-      const paidCents =
-        hasNativePaymentAuthority(order) &&
-        paymentAuthority?.sourceType === "stripe_payment_intent" &&
-        paymentAuthority.sourceRef === paymentIntentId
-          ? cents(order.total)
-          : 0;
+      const { decision } = await readCommercialOrderPaymentDecisionWith(tx, {
+        tenantId: input.tenantId,
+        order,
+      });
+      const { paidCents } = decision;
       await tx.insert(commercialOrderAttributions).values({
         tenantId: input.tenantId,
         commercialCustomerId: pipeline.commercialCustomerId,
@@ -1196,9 +1181,8 @@ export async function attributeCommercialOrder(input: {
         orderId: order.id,
         attributionType: firstOrder ? "first_order" : "recurring",
         invoicedCents: 0,
-        paidCents,
-        realizedCents: paidCents,
-        paidAt: order.paidAt,
+        ...decision,
+        lastReconciledAt: new Date(),
         requestId: input.requestId,
         createdBy: input.actorId,
       });
