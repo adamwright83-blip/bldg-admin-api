@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { adminProcedure, protectedProcedure, router } from "./trpc";
+import {
+  adminProcedure,
+  legacyAdminRoleProcedure,
+  protectedProcedure,
+  router,
+} from "./trpc";
 
 const authorityRouter = router({
   generic: protectedProcedure.query(() => "generic-ok"),
+  legacyAdmin: legacyAdminRoleProcedure.query(() => "legacy-admin-ok"),
   platform: adminProcedure.query(() => "platform-ok"),
 });
 
@@ -21,6 +27,12 @@ describe("platform authority boundary", () => {
     await expect(
       caller({ openId: "admin-owner", role: "admin" }).platform()
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("preserves the shared Admin's historical local Admin access", async () => {
+    await expect(
+      caller({ openId: "admin-owner", role: "admin" }).legacyAdmin()
+    ).resolves.toBe("legacy-admin-ok");
   });
 
   it("rejects demo identities from generic authenticated and platform-only procedures", async () => {
