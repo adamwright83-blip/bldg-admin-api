@@ -131,10 +131,10 @@ describe("atlas lantern collision fan-out", () => {
 
 
 describe("canonical live Lantern City truth", () => {
-  it("lights only current active customers", () => {
+  it("keeps every canonical customer in the city regardless of cadence", () => {
     expect(isLiveLanternCustomer(customer("active", "1 Main St", "active"))).toBe(true);
-    expect(isLiveLanternCustomer(customer("dimming", "1 Main St", "dimming"))).toBe(false);
-    expect(isLiveLanternCustomer(customer("dark", "1 Main St", "dark"))).toBe(false);
+    expect(isLiveLanternCustomer(customer("dimming", "1 Main St", "dimming"))).toBe(true);
+    expect(isLiveLanternCustomer(customer("dark", "1 Main St", "dark"))).toBe(true);
     expect(isLiveLanternCustomer({ cadence: { state: "active", daysSinceLastOrder: 0 }, location: null })).toBe(false);
   });
 
