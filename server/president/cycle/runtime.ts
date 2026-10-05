@@ -40,7 +40,11 @@ function runtimeRoot(env = process.env): string {
 
 async function baseSha(repoRoot: string, env = process.env): Promise<string> {
   const pinned = env.PRESIDENT_EXECUTION_BASE_SHA?.trim();
-  if (pinned) return pinned;
+  if (pinned) {
+    if (!/^[a-f0-9]{40}$/i.test(pinned))
+      throw new Error("PRESIDENT_EXECUTION_BASE_SHA must be a full commit SHA");
+    return pinned;
+  }
   const result = await runCommand("git rev-parse origin/main", repoRoot, {
     timeoutMs: 20_000,
   });
