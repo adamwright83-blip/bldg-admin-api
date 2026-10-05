@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { PresidentAgentRuntimeCoordinator, PresidentAgentWakeClient } from "./agentRuntime";
+import {
+  PresidentAgentRuntimeCoordinator,
+  PresidentAgentWakeClient,
+} from "./agentRuntime";
 import { presidentPool } from "./database";
 import { MysqlPresidentIntelligenceStore } from "./intelligenceStore";
 import { PresidentProgramService } from "./programService";
@@ -10,7 +13,14 @@ const targetSchema = z
     actorId: z.string().min(1),
     url: z.string().url(),
     wakeToken: z.string().min(16),
-    leaseMs: z.number().int().min(1000).max(24 * 60 * 60 * 1000).optional(),
+    repository: z.string().min(1),
+    environment: z.string().min(1),
+    leaseMs: z
+      .number()
+      .int()
+      .min(1000)
+      .max(24 * 60 * 60 * 1000)
+      .optional(),
   })
   .strict();
 
@@ -36,9 +46,12 @@ export function presidentRuntimeConfig() {
     callbackTokensSchema,
     {}
   );
-  const callbackBaseUrl = process.env.PRESIDENT_CALLBACK_BASE_URL?.trim() || null;
+  const callbackBaseUrl =
+    process.env.PRESIDENT_CALLBACK_BASE_URL?.trim() || null;
   const actors = new Set(Object.values(targets).map(target => target.actorId));
-  const missingCallbackActors = [...actors].filter(actor => !callbackTokens[actor]);
+  const missingCallbackActors = [...actors].filter(
+    actor => !callbackTokens[actor]
+  );
   const configured =
     Boolean(callbackBaseUrl) &&
     Object.keys(targets).length > 0 &&
@@ -55,9 +68,13 @@ export function presidentRuntimeConfig() {
 export function presidentRuntimeStatus() {
   const config = presidentRuntimeConfig();
   return {
-    executionState: config.configured ? ("CONFIGURED" as const) : ("NOT_CONFIGURED" as const),
+    executionState: config.configured
+      ? ("CONFIGURED" as const)
+      : ("NOT_CONFIGURED" as const),
     executionCapabilities: Object.keys(config.targets).sort(),
-    actors: [...new Set(Object.values(config.targets).map(target => target.actorId))].sort(),
+    actors: [
+      ...new Set(Object.values(config.targets).map(target => target.actorId)),
+    ].sort(),
     callbackBaseConfigured: Boolean(config.callbackBaseUrl),
     missingCallbackActors: config.missingCallbackActors,
   };
@@ -83,7 +100,10 @@ export function getPresidentRuntime() {
   const programs = new MysqlPresidentProgramStore(pool);
   const intelligence = new MysqlPresidentIntelligenceStore(pool);
   const service = new PresidentProgramService(pool, programs, intelligence);
-  const wake = new PresidentAgentWakeClient(config.targets, config.callbackBaseUrl);
+  const wake = new PresidentAgentWakeClient(
+    config.targets,
+    config.callbackBaseUrl
+  );
   singleton = {
     programs,
     intelligence,

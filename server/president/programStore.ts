@@ -214,16 +214,7 @@ export class MysqlPresidentProgramStore
       `INSERT INTO president_authority_policies
        (policyVersion,founderId,internalMergeAllowed,internalDeployAllowed,maxAutonomousUsdPerDay,autonomousProgramSelectionAllowed,allowedRepositoriesJson,allowedEnvironmentsJson,prohibitedDomainsJson,updatedAt)
        VALUES (?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE
-         founderId=VALUES(founderId),
-         internalMergeAllowed=VALUES(internalMergeAllowed),
-         internalDeployAllowed=VALUES(internalDeployAllowed),
-         maxAutonomousUsdPerDay=VALUES(maxAutonomousUsdPerDay),
-         autonomousProgramSelectionAllowed=VALUES(autonomousProgramSelectionAllowed),
-         allowedRepositoriesJson=VALUES(allowedRepositoriesJson),
-         allowedEnvironmentsJson=VALUES(allowedEnvironmentsJson),
-         prohibitedDomainsJson=VALUES(prohibitedDomainsJson),
-         updatedAt=VALUES(updatedAt)`,
+       ON DUPLICATE KEY UPDATE policyVersion=policyVersion`,
       [
         policy.policyVersion,
         policy.founderId,
@@ -237,7 +228,16 @@ export class MysqlPresidentProgramStore
         new Date(policy.updatedAt),
       ]
     );
-    return policy;
+    const persisted = await this.getAuthorityPolicy(policy.policyVersion);
+    if (!persisted)
+      throw new Error("President authority policy persistence failed");
+    const { updatedAt: _inputAt, ...requestedAuthority } = policy;
+    const { updatedAt: _savedAt, ...savedAuthority } = persisted;
+    if (canonicalJson(requestedAuthority) !== canonicalJson(savedAuthority))
+      throw new Error(
+        "Authority policy versions are immutable; create a new policy version"
+      );
+    return persisted;
   }
 
   async getAuthorityPolicy(

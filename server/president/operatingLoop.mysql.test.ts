@@ -49,11 +49,15 @@ class FixtureWake extends PresidentAgentWakeClient {
           actorId: "executor",
           url: "http://127.0.0.1",
           wakeToken: tokens.executor,
+          repository: "fixture",
+          environment: "test",
         },
         review: {
           actorId: "reviewer",
           url: "http://127.0.0.1",
           wakeToken: tokens.reviewer,
+          repository: "fixture",
+          environment: "test",
         },
       },
       "http://127.0.0.1"
@@ -237,6 +241,12 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         ],
         updatedAt: evidence.capturedAt,
       });
+      await expect(
+        programs.putAuthorityPolicy({
+          ...(await programs.getAuthorityPolicy())!,
+          internalDeployAllowed: true,
+        })
+      ).rejects.toThrow("immutable");
       const question = await service.requestObjectiveSelectionDecision({
         objectiveRecordId: objectiveRecord.id,
       });
@@ -423,6 +433,31 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         service,
         wake
       );
+      const unauthorizedWake = new PresidentAgentWakeClient(
+        {
+          engineering: {
+            actorId: "executor",
+            url: "http://127.0.0.1",
+            wakeToken: tokens.executor,
+            repository: "other-repository",
+            environment: "production",
+          },
+        },
+        "http://127.0.0.1"
+      );
+      await new PresidentAgentRuntimeCoordinator(
+        programs,
+        service,
+        unauthorizedWake
+      ).recover();
+      expect((await programs.getStep(step.id))!.attemptCount).toBe(1);
+      expect((await programs.getProgram(program.id))!.blockReason).toContain(
+        "repository/environment authority"
+      );
+      await programs.updateProgram(program.id, {
+        state: "READY",
+        blockReason: null,
+      });
       await coordinator.recover();
       step = (await programs.getStep(step.id))!;
       expect(step.attemptCount).toBe(2);
@@ -459,6 +494,8 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         testsNotRun: ["production recovery"],
         evidence: {
           executionAttempt: step.attemptCount,
+          repository: "fixture",
+          environment: "test",
           fixtureMeasurement: true,
         },
         knownLimitations: ["Fixture evidence only"],
@@ -475,7 +512,11 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         (
           await post("execution", {
             ...handback,
-            evidence: { executionAttempt: 1 },
+            evidence: {
+              executionAttempt: 1,
+              repository: "fixture",
+              environment: "test",
+            },
           })
         ).status
       ).toBe(409);
@@ -697,7 +738,11 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         eventId: randomUUID(),
         stepId,
         exactArtifactId: "fixture:unreviewed",
-        evidence: { executionAttempt: 1 },
+        evidence: {
+          executionAttempt: 1,
+          repository: "fixture",
+          environment: "test",
+        },
       });
       const wake = new FixtureWake();
       const startingWakes = envelopes.filter(

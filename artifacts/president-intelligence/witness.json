@@ -40,7 +40,7 @@
           "fixture-company"
         ],
         "confidence": 0.5,
-        "reviewedAt": "2026-10-05T02:27:55.221Z",
+        "reviewedAt": "2026-10-05T02:31:39.224Z",
         "falsification": "Independent recovery fails",
         "status": "CURRENT"
       }
@@ -68,9 +68,9 @@
       }
     ]
   },
-  "objectiveRecordId": "50d956ad-cf17-45cd-88f4-846f0cfa951c",
-  "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-  "researchRecordId": "9a8520e8-4ce8-4d8e-85f5-5efc37c990f9",
+  "objectiveRecordId": "39b6d7e5-60eb-4c93-8647-9f5a00b41980",
+  "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+  "researchRecordId": "36cdedb8-c223-462a-8765-924055ee8ae0",
   "evidenceIds": [
     "fixture-company",
     "research-92ce22d134135b7043aea234d41895a2def2c935"
@@ -88,7 +88,7 @@
   "reviewedState": "VERIFIED_INTERNAL",
   "finalState": "COMPLETED",
   "brief": {
-    "generatedAt": "2026-10-05T02:27:55.883Z",
+    "generatedAt": "2026-10-05T02:31:39.820Z",
     "summary": "No founder decision is currently open. The brief reflects the durable work recorded so far.",
     "completed": [
       "Verify isolated company recovery drill"
@@ -100,20 +100,20 @@
   },
   "events": [
     {
-      "id": "bde38fa7-2c27-4532-b907-ebad39c6d6e7",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
+      "id": "d2ffdf54-b012-4c34-afb7-811386db1b40",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
       "stepId": null,
       "eventType": "STRATEGIC_OBJECTIVE_SELECTED",
       "actorId": "fixture-founder",
       "details": {
-        "decisionRecordId": "238382fb-0c77-4408-8158-4aa73c65b9f2",
-        "objectiveRecordId": "bcfc8dd3-8eb8-4a70-a8bf-4859f45b884d"
+        "decisionRecordId": "f0bf6e66-89a2-4191-9031-5892bd3cf22e",
+        "objectiveRecordId": "390140b7-2169-4d89-8bd4-e3eb00b99506"
       },
-      "occurredAt": "2026-10-05T02:27:55.437Z"
+      "occurredAt": "2026-10-05T02:31:39.375Z"
     },
     {
-      "id": "f902ca06-9f91-4680-b893-c65fd0a1dec6",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
+      "id": "1c4e30ce-7d13-443a-a2ec-9490affcad74",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
       "stepId": null,
       "eventType": "PROGRAM_PLANNED",
       "actorId": "seat.president",
@@ -131,58 +131,58 @@
         },
         "providerRunId": null
       },
-      "occurredAt": "2026-10-05T02:27:55.537Z"
+      "occurredAt": "2026-10-05T02:31:39.481Z"
     },
     {
-      "id": "8a5cbbdc-9751-43fc-bca6-76006c14ba2d",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "71f37e0c-2083-4f21-9835-7a5b34f03dc5",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "STEP_RETRY_SCHEDULED",
       "actorId": "executor",
       "details": {
         "error": "Error: Fixture transport outage",
         "retryDelayMs": 60000
       },
-      "occurredAt": "2026-10-05T02:27:55.566Z"
+      "occurredAt": "2026-10-05T02:31:39.515Z"
     },
     {
-      "id": "557979f8-86b5-4955-8159-b9ab94468836",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "11b5d086-e31b-4cf3-8720-bb8d967860d5",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "EXECUTOR_WOKEN",
       "actorId": "executor",
       "details": {
         "capability": "engineering",
         "targetCapability": "engineering"
       },
-      "occurredAt": "2026-10-05T02:27:55.610Z"
+      "occurredAt": "2026-10-05T02:31:39.563Z"
     },
     {
-      "id": "65556c06-4f29-4830-a64a-5bcf04922be6",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "4265b2a1-0c07-408b-a04d-61d5b26a9e07",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "EXECUTION_HANDBACK",
       "actorId": "executor",
       "details": {
         "exactArtifactId": "fixture:recovery:attempt-2"
       },
-      "occurredAt": "2026-10-05T02:27:55.731Z"
+      "occurredAt": "2026-10-05T02:31:39.671Z"
     },
     {
-      "id": "159d725d-e2b6-467f-ac32-78618de0cf92",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "2716824f-8f6f-442c-a6a6-249ad1a0c798",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "REVIEW_WAKE_ATTEMPT",
       "actorId": "reviewer",
       "details": {
         "exactArtifactId": "fixture:recovery:attempt-2"
       },
-      "occurredAt": "2026-10-05T02:27:55.740Z"
+      "occurredAt": "2026-10-05T02:31:39.681Z"
     },
     {
-      "id": "ee489e49-6ce0-4ca4-9b24-5036d02029cb",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "4ff1488d-9a53-4184-9efb-fb349ff24f59",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "INDEPENDENT_REVIEWER_WOKEN",
       "actorId": "reviewer",
       "details": {
@@ -190,23 +190,23 @@
         "exactArtifactId": "fixture:recovery:attempt-2",
         "targetCapability": "review"
       },
-      "occurredAt": "2026-10-05T02:27:55.744Z"
+      "occurredAt": "2026-10-05T02:31:39.684Z"
     },
     {
-      "id": "8e576f41-6bf4-48c5-adff-c90fed0e6067",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "86eabc43-3785-4197-902b-87d8ede26ac9",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "REVIEW_WAKE_ATTEMPT",
       "actorId": "reviewer",
       "details": {
         "exactArtifactId": "fixture:recovery:attempt-2"
       },
-      "occurredAt": "2026-10-05T02:27:55.782Z"
+      "occurredAt": "2026-10-05T02:31:39.712Z"
     },
     {
-      "id": "03a1dc6c-a1f9-4775-8e21-2015753886a6",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "43549655-c6d9-49e4-a05b-cddfea5e6fcd",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "INDEPENDENT_REVIEWER_WOKEN",
       "actorId": "reviewer",
       "details": {
@@ -214,41 +214,41 @@
         "exactArtifactId": "fixture:recovery:attempt-2",
         "targetCapability": "review"
       },
-      "occurredAt": "2026-10-05T02:27:55.785Z"
+      "occurredAt": "2026-10-05T02:31:39.715Z"
     },
     {
-      "id": "5c6c31c7-3411-4fdd-96f5-81bb2110ffec",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "e2364d5f-f9ed-4be7-ba79-e9329b70e691",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "STEP_INDEPENDENTLY_VERIFIED",
       "actorId": "reviewer",
       "details": {
         "exactArtifactId": "fixture:recovery:attempt-2"
       },
-      "occurredAt": "2026-10-05T02:27:55.824Z"
+      "occurredAt": "2026-10-05T02:31:39.748Z"
     },
     {
-      "id": "f6d45127-8869-4732-8262-c496bfba458b",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
-      "stepId": "8301fe0a-ea05-436a-b7c6-321dbceb00bc",
+      "id": "662e09d8-81a3-4313-af22-d5f657abec3c",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
       "eventType": "INDEPENDENT_REVIEW_PASS",
       "actorId": "reviewer",
       "details": {
         "exactArtifactId": "fixture:recovery:attempt-2"
       },
-      "occurredAt": "2026-10-05T02:27:55.827Z"
+      "occurredAt": "2026-10-05T02:31:39.753Z"
     },
     {
-      "id": "6d3dcc1d-41b8-48ef-b985-288a0b276bf0",
-      "programId": "9b8b7cee-accb-4270-95a0-c5b72250847d",
+      "id": "12aa4e55-4010-4586-9c18-db5490faca1d",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
       "stepId": null,
       "eventType": "PROGRAM_MEASURED_AND_LEARNED",
       "actorId": "seat.president",
       "details": {
-        "lessonRecordId": "da72f6dd-17f9-4869-9f4e-a997da7f2676",
-        "progressRecordId": "2eef1f0a-1fee-4e0f-8c5e-72c34951ba5b"
+        "lessonRecordId": "8967fc91-691e-414b-af68-53d3ea79356c",
+        "progressRecordId": "41e82749-a419-4cc7-90cd-5c25dc343f12"
       },
-      "occurredAt": "2026-10-05T02:27:55.869Z"
+      "occurredAt": "2026-10-05T02:31:39.787Z"
     }
   ]
 }

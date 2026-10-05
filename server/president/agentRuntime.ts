@@ -14,6 +14,8 @@ export type PresidentAgentTarget = {
   actorId: string;
   url: string;
   wakeToken: string;
+  repository: string;
+  environment: string;
   leaseMs?: number;
 };
 
@@ -22,12 +24,28 @@ export type PresidentAgentTargets = Record<string, PresidentAgentTarget>;
 export type PresidentWakeEnvelope =
   | {
       kind: "PRESIDENT_EXECUTE";
+      authority: {
+        repository: string;
+        environment: string;
+        policyVersion: string;
+        founderApproved: boolean;
+        internalMergeAllowed: boolean;
+        internalDeployAllowed: boolean;
+        maxUsd: number;
+      };
       programId: string;
       step: PresidentProgramStep;
       callbackUrl: string;
     }
   | {
       kind: "PRESIDENT_REVIEW";
+      authority: {
+        repository: string;
+        environment: string;
+        policyVersion: string;
+        readOnly: true;
+        maxUsd: number;
+      };
       programId: string;
       step: PresidentProgramStep;
       handback: PresidentExecutionHandback;
@@ -197,6 +215,24 @@ export class PresidentAgentRuntimeCoordinator {
       };
     }
 
+    if (
+      !policy.allowedRepositories.includes(target.repository) ||
+      !policy.allowedEnvironments.includes(target.environment) ||
+      (step.authorityClass === "AUTO_SANDBOX" &&
+        !["test", "sandbox", "preview", "development"].includes(
+          target.environment
+        ))
+    ) {
+      await this.programs.updateProgram(program.id, {
+        state: "BLOCKED_CAPABILITY",
+        blockReason:
+          "Configured execution target is outside repository/environment authority",
+      });
+      return {
+        action: "WAITING",
+        reason: "Execution target is outside authority scope",
+      };
+    }
     const claimed = await this.programs.claimSpecificStep({
       stepId: step.id,
       executorId: capability.actorId,
@@ -208,6 +244,15 @@ export class PresidentAgentRuntimeCoordinator {
     try {
       await this.wake.wake(target, {
         kind: "PRESIDENT_EXECUTE",
+        authority: {
+          repository: target.repository,
+          environment: target.environment,
+          policyVersion: policy.policyVersion,
+          founderApproved: approved,
+          internalMergeAllowed: policy.internalMergeAllowed,
+          internalDeployAllowed: policy.internalDeployAllowed,
+          maxUsd: claimed.maxUsd,
+        },
         programId: program.id,
         step: claimed,
         callbackUrl: new URL(
@@ -248,6 +293,22 @@ export class PresidentAgentRuntimeCoordinator {
     const handback = presidentExecutionHandbackSchema.parse(input);
     const priorStep = await this.programs.getStep(handback.stepId);
     if (!priorStep) throw new Error("President callback step not found");
+    const executionCapability = await this.programs.getAgentCapability(
+      priorStep.executorCapability
+    );
+    const executionTarget = executionCapability
+      ? this.wake.target(executionCapability.targetCapability)
+      : null;
+    if (
+      !executionTarget ||
+      executionCapability?.status !== "ACTIVE" ||
+      executionTarget.actorId !== handback.executorId ||
+      handback.evidence.repository !== executionTarget.repository ||
+      handback.evidence.environment !== executionTarget.environment
+    )
+      throw new Error(
+        "Execution callback scope does not match its governed transport"
+      );
     const result = await this.programs.transaction(
       priorStep.programId,
       async store => {
@@ -301,6 +362,17 @@ export class PresidentAgentRuntimeCoordinator {
       });
       return { action: "WAITING_REVIEWER" as const };
     }
+    const policy = await this.programs.getAuthorityPolicy(
+      program.authorityPolicyVersion
+    );
+    if (
+      !policy ||
+      !policy.allowedRepositories.includes(target.repository) ||
+      !policy.allowedEnvironments.includes(target.environment)
+    )
+      throw new Error(
+        "Independent reviewer transport is outside repository/environment authority"
+      );
     if (reviewerCapability.actorId === handback.executorId)
       throw new Error(
         "President executor and independent reviewer resolve to the same actor"
@@ -351,6 +423,13 @@ export class PresidentAgentRuntimeCoordinator {
     if (!assigned) return { action: "WAITING_REVIEWER" as const };
     await this.wake.wake(target, {
       kind: "PRESIDENT_REVIEW",
+      authority: {
+        repository: target.repository,
+        environment: target.environment,
+        policyVersion: policy.policyVersion,
+        readOnly: true,
+        maxUsd: reviewerCapability.maxUsdPerRun,
+      },
       programId: program.id,
       step: assigned,
       handback,

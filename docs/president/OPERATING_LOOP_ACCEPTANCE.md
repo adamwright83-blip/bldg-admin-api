@@ -58,8 +58,13 @@ Deployment requires `OWNER_OPEN_ID`, President durable DB configuration,
 independent-review transports. Set `PRESIDENT_AGENT_TARGETS_JSON`,
 `PRESIDENT_AGENT_CALLBACK_TOKENS_JSON`, and `PRESIDENT_CALLBACK_BASE_URL`, then run
 `start:president-worker`. Configuration status is not a connectivity proof.
+Each transport target requires explicit `repository` and `environment` fields within
+the immutable versioned authority policy. AUTO_SANDBOX execution is restricted to
+test, sandbox, preview, or development environments. Wake envelopes carry the
+repository, environment, policy version, permission limits, and spend ceiling.
 Executor transport must honor `x-president-work-id` idempotency and echo
-`step.attemptCount` as `evidence.executionAttempt`. Reviewer transport must echo
+`step.attemptCount` as `evidence.executionAttempt`, together with matching
+`evidence.repository` and `evidence.environment`. Reviewer transport must echo
 `handback.eventId` as `evidence.executionEventId`. These bind callbacks to the
 current exact work rather than trusting an actor's success claim.
 
@@ -102,3 +107,7 @@ No unrelated test or product behavior was changed to hide these failures.
 An initial TypeScript run hit Node's default heap limit; with an explicit 6 GB heap
 it passes. President CI provides that memory ceiling. No live paid provider request
 or production mutation was used for acceptance.
+
+Remote CI: President gates pass. Both Claire conversation contracts and release
+journey fail on the same three pre-existing Claire decisionRecord assertions
+(`replaces_pending` versus `continues_pending`), reproduced on original main.
