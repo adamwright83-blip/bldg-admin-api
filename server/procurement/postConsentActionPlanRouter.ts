@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeTenantAdminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { createProcurementPool } from "./migrations";
 import { PostConsentActionPlanStore } from "./postConsentActionPlanStore";
 
@@ -23,19 +23,19 @@ function resolveStore(injected?: PlanStore): PlanStore {
  */
 export function createPostConsentActionPlanRouter(injectedStore?: PlanStore) {
   return router({
-    list: legacyDayforgeTenantAdminProcedure.input(z.object({
+    list: legacyAdminRoleProcedure.input(z.object({
       limit: z.number().int().min(1).max(50).default(20),
       offset: z.number().int().min(0).max(1000).default(0),
     }).default({ limit: 20, offset: 0 })).query(({ input }) => resolveStore(injectedStore).listPlans(input)),
 
-    get: legacyDayforgeTenantAdminProcedure.input(z.object({ consentId: z.string().min(1).max(191) })).query(async ({ input }) => {
+    get: legacyAdminRoleProcedure.input(z.object({ consentId: z.string().min(1).max(191) })).query(async ({ input }) => {
       const plan = await resolveStore(injectedStore).getPlanByConsentId(input.consentId);
       if (!plan) return { plan: null, draft: null };
       const draft = await resolveStore(injectedStore).getDraftByPlanId(plan.id);
       return { plan, draft };
     }),
 
-    run: legacyDayforgeTenantAdminProcedure.input(z.object({ consentId: z.string().min(1).max(191) })).mutation(async ({ input, ctx }) => {
+    run: legacyAdminRoleProcedure.input(z.object({ consentId: z.string().min(1).max(191) })).mutation(async ({ input, ctx }) => {
       try {
         const { decision, plan, draft } = await resolveStore(injectedStore).runPlan({
           id: crypto.randomUUID(), consentId: input.consentId, createdBy: `admin:${ctx.user?.id ?? "unknown"}`,
