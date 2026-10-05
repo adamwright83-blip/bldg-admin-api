@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgeTenantAdminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   earnCompanion,
   getCompanion,
@@ -17,7 +17,7 @@ export const companionRouter = router({
   get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ companionId: z.string() }))
     .query(({ ctx, input }) => getCompanion({ tenantId: ctx.tenantId, ...input })),
-  seedDefaults: legacyDayforgeTenantAdminProcedure.mutation(async ({ ctx }) =>
+  seedDefaults: legacyAdminRoleProcedure.mutation(async ({ ctx }) =>
     seedCompanionRoster({ tenantId: ctx.tenantId ?? "default" })
   ),
   myUnlocks: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
