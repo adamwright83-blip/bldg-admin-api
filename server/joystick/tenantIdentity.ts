@@ -58,18 +58,21 @@ export function isLegacySharedPasswordOpenId(
   return legacySharedPasswordOpenIds(env).has(openId);
 }
 
-/**
- * Platform administration is an explicit principal class, not merely role="admin".
- * Legacy shared-password and disposable demo identities may operate inside their
- * intended tenant flows but can never become cross-tenant platform administrators.
- */
-export function isPlatformAdminIdentity<
-  T extends Pick<JoystickUser, "openId" | "role">,
->(user: T | null | undefined): user is T & { role: "admin" } {
-  if (!user || user.role !== "admin") return false;
-  if (isLegacySharedPasswordOpenId(user.openId)) return false;
-  if (user.openId.startsWith("goldline-demo:")) return false;
-  return true;
+export function isGoldlineDemoOpenId(openId: string): boolean {
+  return openId.startsWith("goldline-demo:");
+}
+
+/** Platform authority is never implied by a tenant/demo/shared-password role string. */
+export function isPlatformAdministrator(
+  user: Pick<JoystickUser, "openId" | "role"> | null,
+  env?: OpenIdEnv
+): boolean {
+  return Boolean(
+    user &&
+      user.role === "admin" &&
+      !isGoldlineDemoOpenId(user.openId) &&
+      !isLegacySharedPasswordOpenId(user.openId, env)
+  );
 }
 
 /**
@@ -209,28 +212,23 @@ export async function authorizeJoystickClaireDesk(
 ): Promise<ClaireDeskDecision> {
   if (!input.user) return { ok: false, reason: "unauthenticated" };
 
-  if (isLegacySharedPasswordOpenId(input.user.openId)) {
-    if (
-      input.user.role === "admin" &&
-      isLegacyDayforgeTenant(input.tenantId)
-    ) {
-      return {
-        ok: true,
-        tenantId: input.tenantId,
-        operatorUserId: input.user.openId,
-        authority: "platform_admin",
-      };
-    }
-    return { ok: false, reason: "legacy_password_not_saas" };
-  }
-
-  if (input.user.role === "admin") {
+  if (isPlatformAdministrator(input.user)) {
     return {
       ok: true,
       tenantId: input.tenantId,
       operatorUserId: input.user.openId,
       authority: "platform_admin",
     };
+  }
+
+  // The shared driver shortcut is never Claire authority. The shared admin
+  // password may continue only as a tenant owner on legacy Laundry Farm hosts;
+  // it is resolved through membership below, never as platform administration.
+  if (
+    isLegacySharedPasswordOpenId(input.user.openId) &&
+    input.user.role === "driver"
+  ) {
+    return { ok: false, reason: "legacy_password_not_saas" };
   }
 
   let membership: Awaited<ReturnType<MembershipLookup>>;
