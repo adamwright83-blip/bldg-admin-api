@@ -9,6 +9,9 @@ import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunSer
 import { bridgeDriverAction } from "../../persistentOperator/fieldEventBridge";
 import { completeDayDirectorCommitment } from "../../dayDirector/dayDirectorService";
 import { readCurrentDayLine } from "./currentDayLineService";
+import { planForDate } from "../../missionDirector/missionDirectorService";
+import { getDashboardTimeZone } from "../../dashboardZoned";
+import { businessDateInZone } from "../../../shared/currentDayLine";
 
 export function surfacedObjectiveIds(
   line: CurrentDayLine,
@@ -31,6 +34,54 @@ export function surfacedObjectiveIds(
   return [...surfaced];
 }
 
+type EffectiveOperatorIdentity = Awaited<
+  ReturnType<typeof requireEffectiveOperatorIdentityForTenant>
+>;
+
+async function recordDayLineSurfaceDiagnostics(
+  identity: EffectiveOperatorIdentity,
+  line: CurrentDayLine
+): Promise<void> {
+  const reason =
+    line.rankingStatus === "unavailable"
+      ? "day_line_unavailable"
+      : line.items.length === 0 && !line.designated
+        ? "legitimate_no_work"
+        : null;
+
+  await recordPersistentOperatorDiagnosticEvent({
+    tenantId: identity.tenantId,
+    canonicalOperatorId: identity.canonicalOperatorId,
+    operatorUserId: identity.canonicalOpenId,
+    subsystem: "day_line",
+    eventKind: "selection_attempt",
+    reason,
+  }).catch(() => undefined);
+
+  const operatorUserIds = [...new Set([
+    identity.canonicalOpenId,
+    identity.sourceOpenId,
+    ...identity.aliases.map(alias => alias.openId),
+  ])];
+  const runs = await listOperatorRunsForIdentities({
+    tenantId: identity.tenantId,
+    operatorUserIds,
+  }).catch(() => []);
+
+  await Promise.all(
+    surfacedObjectiveIds(line, runs).map(objectiveId =>
+      recordPersistentOperatorDiagnosticEvent({
+        tenantId: identity.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId,
+        operatorUserId: identity.canonicalOpenId,
+        subsystem: "day_line",
+        eventKind: "objective_surfaced",
+        objectiveId,
+      }).catch(() => undefined)
+    )
+  );
+}
+
 export const currentDayLineRouter = router({
   today: legacyDayforgeTenantMemberProcedure
     .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
@@ -41,52 +92,49 @@ export const currentDayLineRouter = router({
         targetTenantId: input?.targetTenantId,
         subsystem: "day_line.today",
       });
-      const line = await readCurrentDayLine({
+      return readCurrentDayLine({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
         operatorUserId: identity.canonicalOpenId,
         operatorUserIds: identity.aliases.map(alias => alias.openId),
       });
+    }),
 
-    const reason =
-      line.rankingStatus === "unavailable"
-        ? "day_line_unavailable"
-        : line.items.length === 0 && !line.designated
-          ? "legitimate_no_work"
-          : null;
-    await recordPersistentOperatorDiagnosticEvent({
-      tenantId: identity.tenantId,
-      canonicalOperatorId: identity.canonicalOperatorId,
-      operatorUserId: identity.canonicalOpenId,
-      subsystem: "day_line",
-      eventKind: "selection_attempt",
-      reason,
-    }).catch(() => undefined);
+  refresh: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireEffectiveOperatorIdentityForTenant({
+        callerUser: ctx.user,
+        callerTenantId: ctx.tenantId,
+        targetTenantId: input?.targetTenantId,
+        subsystem: "day_line.refresh",
+      });
+      const timeZone = getDashboardTimeZone();
+      const businessDate = businessDateInZone(new Date(), timeZone);
 
-    const operatorUserIds = [...new Set([
-      identity.canonicalOpenId,
-      identity.sourceOpenId,
-      ...identity.aliases.map(alias => alias.openId),
-    ])];
-    const runs = await listOperatorRunsForIdentities({
-      tenantId: identity.tenantId,
-      operatorUserIds,
-    }).catch(() => []);
-    await Promise.all(
-      surfacedObjectiveIds(line, runs).map(objectiveId =>
-        recordPersistentOperatorDiagnosticEvent({
-          tenantId: identity.tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
-          operatorUserId: identity.canonicalOpenId,
-          subsystem: "day_line",
-          eventKind: "objective_surfaced",
-          objectiveId,
-        }).catch(() => undefined)
-      )
-    );
-    return line;
-  }),
+      await planForDate({
+        tenantId: identity.tenantId,
+        operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
+        businessDate,
+        timeZone,
+      });
+
+      const line = await readCurrentDayLine({
+        tenantId: identity.tenantId,
+        operatorId: identity.dayDirectorActorId,
+        operatorIds: identity.dayDirectorActorIds,
+        operatorUserId: identity.canonicalOpenId,
+        operatorUserIds: identity.aliases.map(alias => alias.openId),
+        businessDate,
+        timeZone,
+      });
+      await recordDayLineSurfaceDiagnostics(identity, line);
+      return line;
+    }),
 
   completeItem: legacyDayforgeTenantMemberProcedure
     .input(
