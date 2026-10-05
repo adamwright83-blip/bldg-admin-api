@@ -12,7 +12,7 @@ import {
   resolveLegacyDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
-import { authorizeJoystickClaireDesk } from "../joystick/tenantIdentity";
+import { authorizeJoystickClaireDesk, isPlatformAdminIdentity } from "../joystick/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
@@ -56,7 +56,7 @@ export const protectedProcedure = baseProcedure.use(requireUser);
 export const adminProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
+    if (!isPlatformAdminIdentity(ctx.user)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({ ctx: { ...ctx, user: ctx.user } });
