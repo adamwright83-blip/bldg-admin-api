@@ -345,7 +345,11 @@ export const presidentRouter = router({
       z
         .object({
           question: z.string().min(1).max(16000),
-          evidenceIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+          evidenceIds: z
+            .array(z.string().min(1).max(64))
+            .min(1)
+            .max(50)
+            .optional(),
           requestKey: z.string().min(1).max(191),
           maxUsd: z.number().positive().max(2).default(1),
           consequential: z.boolean().default(false),
@@ -557,9 +561,10 @@ export const presidentRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        return await getPresidentCycleRuntime().service.createAndDeliberate(
-          input.evidenceIds
-        );
+        const service = getPresidentCycleRuntime().service;
+        return input.evidenceIds
+          ? await service.createAndDeliberate(input.evidenceIds)
+          : await service.startFromCurrentCompanyTruth();
       } catch (error) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
