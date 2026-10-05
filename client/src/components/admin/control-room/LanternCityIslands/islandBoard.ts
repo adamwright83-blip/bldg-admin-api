@@ -583,7 +583,28 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       k: K.BEACON,
     });
 
-    extraMeshes.push(kitGeo(parts, 900300));
+    // Use the approved Small Comforts Tin Can House art on the map instead
+    // of a low-detail procedural placeholder. The interaction anchor remains
+    // in world space so click/hover/fly behavior is unchanged.
+    const tinCanTexture = new THREE.TextureLoader().load(
+      "/assets/joystick-home/tin-can-house.webp"
+    );
+    tinCanTexture.colorSpace = THREE.SRGBColorSpace;
+    const tinCanSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: tinCanTexture,
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+      })
+    );
+    tinCanSprite.position.set(mx, y + 30 * f, mz);
+    tinCanSprite.scale.set(88, 59, 1);
+    tinCanSprite.center.set(0.5, 0.08);
+    tinCanSprite.renderOrder = 5;
+    tinCanSprite.layers.set(INK_SKIP);
+    mini.add(tinCanSprite);
+
     suitcase = { x, z, h: 58 * S };
     const halo = new THREE.Mesh(new THREE.PlaneGeometry(560, 560).rotateX(-Math.PI / 2), haloMat);
     halo.position.set(x, H(x, z) + 3, z);
