@@ -63,9 +63,9 @@ export function isLegacySharedPasswordOpenId(
  * Legacy shared-password and disposable demo identities may operate inside their
  * intended tenant flows but can never become cross-tenant platform administrators.
  */
-export function isPlatformAdminIdentity(
-  user: Pick<JoystickUser, "openId" | "role"> | null | undefined
-): boolean {
+export function isPlatformAdminIdentity<
+  T extends Pick<JoystickUser, "openId" | "role">,
+>(user: T | null | undefined): user is T & { role: "admin" } {
   if (!user || user.role !== "admin") return false;
   if (isLegacySharedPasswordOpenId(user.openId)) return false;
   if (user.openId.startsWith("goldline-demo:")) return false;
