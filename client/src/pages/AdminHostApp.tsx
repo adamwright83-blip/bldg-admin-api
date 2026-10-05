@@ -15,6 +15,7 @@ import {
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
+import JoystickHome from "./JoystickHome";
 import AdminLive from "./AdminLive";
 import AdminCatalog from "./AdminCatalog";
 import OperatorReflection from "./OperatorReflection";
@@ -311,6 +312,15 @@ export default function AdminHostApp() {
   // design-partner sessions remain persisted data, but they no longer replace
   // either the world home or the canonical Tower Wars route.
   if (isWorldHome && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
+
+  if (path === "/" || path === "/home") {
+    return (
+      <JoystickHome
+        operatorName={user?.name || "Adam"}
+        onNavigate={nextPath => navigate(nextPath)}
+      />
+    );
+  }
 
   if (isLevel4) {
     return (
