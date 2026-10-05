@@ -174,6 +174,39 @@ async function block(deps: FabricDeps, cycleId: string, id: string, held: Held, 
   });
 }
 
+/**
+ * Reconstructs ephemeral worker state from durable mission identity. Engineering
+ * resumes its mission branch; research needs only a clean snapshot of the pinned
+ * base. This is safe to call on every pass.
+ */
+async function ensureMissionWorkspace(
+  deps: FabricDeps,
+  m: Mission,
+  kind: "ENGINEERING" | "RESEARCH",
+  wsDir: string
+) {
+  if (kind === "ENGINEERING") {
+    await prepareWorkspace(deps.repoRoot, deps.workRoot, m, deps.baseSha);
+    return;
+  }
+  if (existsSync(wsDir)) return;
+  mkdirSync(deps.workRoot, { recursive: true });
+  await runCommand("git worktree prune", deps.repoRoot, { timeoutMs: 30_000 });
+  const r = await runCommand(
+    `git worktree add --detach '${wsDir}' ${deps.baseSha}`,
+    deps.repoRoot,
+    { timeoutMs: 120_000 }
+  );
+  if (r.exitCode !== 0)
+    throw new Error(`snapshot failed: ${r.stderr.slice(0, 200)}`);
+  const nodeModules = join(deps.repoRoot, "node_modules");
+  if (existsSync(nodeModules))
+    await runCommand(
+      `ln -s '${nodeModules}' '${wsDir}/node_modules'`,
+      deps.repoRoot
+    );
+}
+
 /** One leased pass. Returns when the mission reaches a state needing another claim, or terminates. */
 export async function runMissionPass(
   deps: FabricDeps,
@@ -208,15 +241,11 @@ export async function runMissionPass(
 
   try {
     /* ---------------------------------------------------------- PREPARING */
+    // PREPARING and recovered REPAIR/REVIEW passes all reconstruct any
+    // ephemeral worktree they need before touching the mission.
+    await ensureMissionWorkspace(deps, m, kind, wsDir);
+
     if (claim.status === "PREPARING") {
-      if (kind === "ENGINEERING")
-        await prepareWorkspace(deps.repoRoot, deps.workRoot, m, deps.baseSha);
-      else if (!existsSync(wsDir)) {
-        mkdirSync(deps.workRoot, { recursive: true });
-        const r = await runCommand(`git worktree add --detach '${wsDir}' ${deps.baseSha}`, deps.repoRoot);
-        if (r.exitCode !== 0) throw new Error(`snapshot failed: ${r.stderr.slice(0, 200)}`);
-        await runCommand(`ln -s '${deps.repoRoot}/node_modules' '${wsDir}/node_modules'`, deps.repoRoot);
-      }
       await mutate(deps, cycleId, missionId, held, mm => {
         mm.executorActorId = executor.actorId;
         mm.attempt += 1;
@@ -242,11 +271,21 @@ export async function runMissionPass(
         const w = writeArtifact(deps.artifactRoot, m.cycleId, m.missionId, md);
         artifactPath = w.path;
         summary = `artifact sha256 ${w.sha256}`;
+        await mutate(deps, cycleId, missionId, held, mm => {
+          mm.handback = {
+            artifactPath: w.path,
+            artifactText: md,
+            artifactSha256: w.sha256,
+            checks: [],
+            evidenceIds: [],
+          };
+        });
       }
       await mutate(deps, cycleId, missionId, held, mm => {
         renew(deps, mm, held);
         receipt(mm, "EXECUTED", held.workerId, { summary: tail(summary, 1500), artifactPath });
-        if (artifactPath) mm.handback = { artifactPath, checks: [], evidenceIds: [] };
+        if (artifactPath && !mm.handback)
+          throw new Error("Research artifact handback was not persisted");
         go(mm, "VALIDATING", held.workerId);
       });
     }
@@ -256,9 +295,14 @@ export async function runMissionPass(
     /* --------------------------------------------------------- VALIDATING */
     if (m.status === "VALIDATING") {
       if (kind === "RESEARCH") {
-        const text = m.handback?.artifactPath
-          ? (await import("node:fs")).readFileSync(m.handback.artifactPath, "utf8")
-          : "";
+        const text =
+          m.handback?.artifactText ??
+          (m.handback?.artifactPath && existsSync(m.handback.artifactPath)
+            ? (await import("node:fs")).readFileSync(
+                m.handback.artifactPath,
+                "utf8"
+              )
+            : "");
         const problems = validateResearchArtifact(text, wsDir);
         await mutate(deps, cycleId, missionId, held, mm => {
           renew(deps, mm, held);
@@ -380,7 +424,8 @@ export async function runMissionPass(
             })
           : await reviewer.reviewResearch({
               mission: m,
-              artifactPath: m.handback!.artifactPath!,
+              artifactPath: m.handback!.artifactPath,
+              artifactText: m.handback!.artifactText,
               repoSnapshot: wsDir,
               executorActorId: m.executorActorId!,
             });
