@@ -1,0 +1,133 @@
+{
+  "database": {
+    "host": "127.0.0.1",
+    "port": "3419",
+    "name": "president_stage1_witness",
+    "productionTouched": false,
+    "migration": "0109",
+    "tables": [
+      "president_assessments",
+      "president_candidate_projects"
+    ]
+  },
+  "inspectedSha": "045f96f96db671f2b7dba54440408a688cb50521",
+  "snapshot": {
+    "repositorySha": "045f96f96db671f2b7dba54440408a688cb50521",
+    "sourceContents": {
+      "docs/JOYSTICK-SAAS-LAUNCH-OPS.md": "<!-- LEGACY DAYFORGE COMPATIBILITY: retired internal names below are compatibility identifiers only; customer-facing product is JOYSTICK. -->\\n# JOYSTICK SaaS launch operations\n\nThis is the production activation handoff after the code-side SaaS commercialization gates are green.\n\nThe customer architecture remains:\n\n**one application → one shared MySQL database → isolated tenant per business**\n\nDo not create a deployment or database per customer.\n\n## 1. Production MySQL recovery gate\n\nCurrent audited production posture before public launch:\n\n- MySQL service is single-node.\n- Scheduled volume backups are not configured.\n- Point-in-time recovery (PITR) is not enabled.\n- The current custom MySQL start command includes `--disable-log-bin`.\n- No restore drill has been proven.\n\nPublic paid launch is blocked until at least a scheduled backup and a restore drill on a copy have been completed.\n\n### Enable scheduled backups\n\nIn Railway:\n\n1. Open the production MySQL service.\n2. Open the mounted volume / Backups controls.\n3. Enable a **Daily** scheduled volume backup.\n4. Do not replace or recreate the production volume.\n5. Wait for a backup to complete and verify the completed backup is visible.\n\nRailway volume backups may also support weekly/monthly schedules. Daily is the minimum launch requirement.\n\n### Restore drill\n\nNever prove recovery by restoring over production.\n\n1. Select a completed production backup.\n2. Restore it into a separate restored/sibling volume or service.\n3. Leave the source production volume untouched.\n4. Start the restored MySQL copy.\n5. Verify representative schema and data exist, including:\n   - `dayforge_saas_tenants`\n   - `dayforge_saas_memberships`\n   - `commercial_missions`\n   - `claire_conversation_sessions`\n6. Record the restore date, source backup timestamp, restored service/volume identity, and verification result.\n7. Remove the temporary restore infrastructure only after the drill evidence is recorded.\n\n### PITR\n\nPITR is desirable but is a separate deliberate infrastructure change.\n\nRailway's MySQL PITR flow requires binary logging and Railway's PITR-capable MySQL image. The current service has a custom start command and explicitly disables binary logging, so do **not** attempt a blind automatic conversion.\n\nBefore enabling PITR:\n\n1. Confirm the current MySQL major/minor version.\n2. Review the custom start-command flags and determine which are still required.\n3. Use Railway's current supported PITR conversion flow for the same MySQL major/minor version.\n4. Expect one controlled redeploy/downtime event.\n5. Verify the first full archive/backup completes and PITR shows a current restorable point.\n6. Do not combine PITR conversion with unrelated schema/application changes.\n\nPITR is not a substitute for the restore drill.\n\n## 2. Live Stripe activation\n\nThe code-side billing lifecycle is tested with configurable SaaS plans. Do not hard-code one JOYSTICK price or tier.\n\nA plan row owns its Stripe price ID, trial policy, entitlements and plan rules.\n\n### Production secrets\n\nConfigure on the production API only when live billing is intentionally being activated:\n\n- `DAYFORGE_BILLING_STRIPE_SECRET_KEY`\n- `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`\n- `DAYFORGE_BILLING_APP_URL` if the production customer URL should differ from the current default\n- `DAYFORGE_BILLING_GRACE_DAYS` if the default grace policy should be changed\n\nHistorical `DAYFORGE_*` names are compatibility names; customer-facing branding remains JOYSTICK.\n\n### Stripe objects\n\nFor every live JOYSTICK tier:\n\n1. Create/confirm the live Stripe Product/Price.\n2. Put the live Stripe Price ID in that tier's active SaaS billing-plan row.\n3. Configure trial days and entitlement/rules JSON deliberately for that tier.\n4. Do not infer pricing from old DayForge founding-plan data.\n\n### Webhook\n\nProduction webhook path:\n\n`/api/dayforge/billing/stripe-webhook`\n\nConfigure the Stripe live webhook to the actual production API origin plus that path.\n\nAt minimum subscribe to the event families already handled by the application:\n\n- `checkout.session.completed`\n- `checkout.session.expired`\n- `customer.subscription.*`\n- `invoice.paid`\n- `invoice.payment_failed`\n\nStore the resulting signing secret in `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`.\n\n### Controlled live canary\n\nBefore putting the public purchase CTA live:\n\n1. Use one controlled canary identity.\n2. Select one configured live tier.\n3. Complete Checkout.\n4. Verify exactly one tenant is provisioned.\n5. Activate the owner and sign in.\n6. Verify subscription and entitlements.\n7. Open the Billing Portal.\n8. Exercise the intended cancellation/status path.\n9. Verify no duplicate tenant/membership/subscription is produced by webhook retries.\n10. Confirm the canary charge/refund/cancellation state in Stripe.\n\nDo not use a real customer as the first live canary.\n\n## 3. Retention activation\n\nThe scheduled workflow is:\n\n`.github/workflows/saas-retention.yml`\n\nIt is intentionally inert until production configuration is supplied.\n\nRequired configuration:\n\n### Production API / Railway\n\n- `DAYFORGE_RETENTION_SECRET`\n\n### GitHub Actions\n\nRepository variables:\n\n- `JOYSTICK_RETENTION_ENABLED`\n- `JOYSTICK_RETENTION_BATCH_LIMIT` (optional; bounded by the runner)\n\nRepository secrets:\n\n- `JOYSTICK_RETENTION_URL`\n- `JOYSTICK_RETENTION_SECRET`\n\n`JOYSTICK_RETENTION_SECRET` must match the production API's `DAYFORGE_RETENTION_SECRET`.\n\n### Safe activation\n\n1. Configure the matching secrets and production URL.\n2. Leave `JOYSTICK_RETENTION_ENABLED` disabled.\n3. Manually dispatch the workflow with `dry_run=true`.\n4. Verify policy version and eligible counts.\n5. Enable `JOYSTICK_RETENTION_ENABLED=1`.\n6. Run one bounded non-dry batch manually.\n7. Verify only expected expired data was removed.\n8. Leave the daily schedule active.\n\n## 4. Customer launch canary\n\nAfter recovery, Stripe and retention gates are satisfied:\n\n1. Create Customer A through the real paid onboarding path.\n2. Import only Customer A's test business book.\n3. Verify the customer product contains no Laundry Farm/default-tenant data.\n4. Create Customer B independently.\n5. Verify A cannot read/write/search/complete/access B's customers, missions, pipeline, churn data, Day Line, team or Claire conversations.\n6. Verify B cannot do the same to A.\n7. Verify both subscriptions map to their own plans/entitlements.\n8. Verify provider/AI cost usage is attributed to the correct tenant.\n9. Verify infrastructure logs contain Claire metadata but no raw transcript bodies.\n\n## 5. Production log gate\n\nAfter the first production deployment carrying the SaaS hardening series:\n\nInspect production logs for:\n\n- missing table errors\n- missing column errors\n- migration failures hidden behind success\n- raw Claire transcript bodies\n- cross-tenant identifiers appearing in another tenant's request path\n\nDo not call launch complete while any required product schema error is recurring.\n\n## Launch definition\n\nThe code is launch-capable when CI gates are green.\n\nThe public paid product is launch-ready only when all of these operations gates are also true:\n\n- daily production backup configured\n- restore drill on a copy proven\n- live Stripe plans/secrets/webhook deliberately configured\n- controlled live billing canary passed\n- retention dry-run and bounded live run passed\n- production logs clean after the launch deployment\n\nPITR is strongly recommended before scale; enabling it requires a deliberate human-controlled Railway conversion because of the existing custom MySQL command."
+    },
+    "sourceDigests": {
+      "docs/JOYSTICK-SAAS-LAUNCH-OPS.md": "7f22833d6d9bcded68d99b18aabf94ce9d36fc307958becb814d46f4f21d3a1e"
+    },
+    "availableSources": [
+      "docs/JOYSTICK-SAAS-LAUNCH-OPS.md"
+    ],
+    "unavailableSources": [
+      "posthog_live_product_data",
+      "production_runtime",
+      "railway_production",
+      "stripe_live"
+    ],
+    "id": "evidence-5244337421014fcedc3f088266275a2f367912e350e8bf01c91a1faf834ca4bf"
+  },
+  "assessment": {
+    "id": "president-assessment-b466dcc4952533087e0b5105",
+    "seat": "seat.president",
+    "inspectedRepositorySha": "045f96f96db671f2b7dba54440408a688cb50521",
+    "evidenceSnapshotId": "evidence-5244337421014fcedc3f088266275a2f367912e350e8bf01c91a1faf834ca4bf",
+    "status": "COMPLETED",
+    "resultState": "WAITING_FOR_HUMAN_SELECTION",
+    "evidenceSourcesAvailable": [
+      "docs/JOYSTICK-SAAS-LAUNCH-OPS.md"
+    ],
+    "evidenceSourcesUnavailable": [
+      "posthog_live_product_data",
+      "production_runtime",
+      "railway_production",
+      "stripe_live"
+    ],
+    "provider": "deterministic-policy",
+    "model": "president-stage1-v3",
+    "startedAt": "2026-10-05T02:14:30.000Z",
+    "completedAt": "2026-10-05T02:14:30.000Z",
+    "candidates": [
+      {
+        "id": "president-candidate-e4ef712a9093b8ba6f30b28e",
+        "assessmentId": "president-assessment-b466dcc4952533087e0b5105",
+        "title": "Prove production database recovery",
+        "missingCapability": "The inspected evidence states JOYSTICK has not yet satisfied the requirement to restore customer data safely after database loss.",
+        "currentGap": "The inspected launch-operations document states that scheduled volume backups are not configured and no restore drill has been proven.",
+        "proposedBuild": "Configure daily backups and record a restore drill on an isolated copy, under Adam's authorization.",
+        "resultingCapability": "JOYSTICK can demonstrate a tested recovery procedure.",
+        "rank": 1,
+        "rankReason": "Rank 1 of the supported menu. Recovery proof reduces irreversible data-loss risk.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "verified": true,
+            "statement": "The inspected launch-operations document states that scheduled volume backups are not configured and no restore drill has been proven.",
+            "sourceLocation": "1. Production MySQL recovery gate"
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "verified": true,
+            "statement": "Verifying this affirmatively unmet documented gate may deserve attention before public launch.",
+            "sourceLocation": "1. Production MySQL recovery gate"
+          }
+        ],
+        "blockers": [
+          "Requires Adam's authorization and the documented operational prerequisites."
+        ],
+        "humanDecisionDependency": "Adam controls production operations and the launch decision.",
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      },
+      {
+        "id": "president-candidate-e468aaa0c1ea500a006c370d",
+        "assessmentId": "president-assessment-b466dcc4952533087e0b5105",
+        "title": "Activate and verify retention safely",
+        "missingCapability": "The inspected evidence states JOYSTICK has not yet satisfied the requirement to demonstrate bounded production retention of eligible expired data.",
+        "currentGap": "The inspected launch-operations document states that the scheduled retention workflow is intentionally inert until production configuration is supplied.",
+        "proposedBuild": "Configure the existing workflow, verify a dry run, then record one human-authorized bounded live run.",
+        "resultingCapability": "JOYSTICK can demonstrate retention policy enforcement.",
+        "rank": 2,
+        "rankReason": "Rank 2 of the supported menu. Retention proof protects privacy through bounded operational activation.",
+        "evidence": [
+          {
+            "kind": "FACT",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "verified": true,
+            "statement": "The inspected launch-operations document states that the scheduled retention workflow is intentionally inert until production configuration is supplied.",
+            "sourceLocation": "3. Retention activation"
+          },
+          {
+            "kind": "INFERENCE",
+            "sourceId": "docs/JOYSTICK-SAAS-LAUNCH-OPS.md",
+            "verified": true,
+            "statement": "Verifying this affirmatively unmet documented gate may deserve attention before public launch.",
+            "sourceLocation": "3. Retention activation"
+          }
+        ],
+        "blockers": [
+          "Requires Adam's authorization and the documented operational prerequisites."
+        ],
+        "humanDecisionDependency": "Adam controls production operations and the launch decision.",
+        "status": "PROPOSED_AWAITING_HUMAN_SELECTION"
+      }
+    ],
+    "executionCount": 0
+  },
+  "afterFirst": {
+    "assessments": 1,
+    "candidates": 2
+  },
+  "afterRerun": {
+    "assessments": 1,
+    "candidates": 2
+  },
+  "reused": true,
+  "sameAssessmentId": true,
+  "finalState": "WAITING_FOR_HUMAN_SELECTION",
+  "executionCount": 0
+}
