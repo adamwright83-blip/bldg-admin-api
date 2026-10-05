@@ -250,7 +250,7 @@ export class PresidentEngineeringExecutor {
     const root = repoRoot();
     const fetch = await runPresidentCommand({
       command: "git",
-      args: ["fetch", "origin", "main"],
+      args: ["fetch", "origin", "--prune"],
       cwd: root,
       timeoutMs: 120_000,
     });
