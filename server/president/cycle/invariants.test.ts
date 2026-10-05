@@ -5,7 +5,8 @@ import {
   presidentApprovalReceiptSchema,
   presidentCandidateListSchema,
 } from "../../../shared/presidentCycle";
-import { isPresidentProtectedPath, PresidentEngineeringExecutor } from "../fabric/engineering";
+import { PresidentEngineeringExecutor } from "../fabric/engineering";
+import { isPresidentProtectedPath } from "../fabric/policy";
 import { PresidentIndependentReviewer } from "../fabric/review";
 import { PresidentResearchExecutor, PresidentResearchReviewer } from "../fabric/research";
 
