@@ -141,7 +141,20 @@ export class PresidentCycleRunner {
           branch: execution.branch,
           commitSha: execution.commitSha,
           pullRequestUrl: execution.pullRequestUrl,
-          result: { ...execution },
+          result: {
+            executorId: execution.executorId,
+            baseSha: execution.baseSha,
+            branch: execution.branch,
+            commitSha: execution.commitSha,
+            pullRequestUrl: execution.pullRequestUrl,
+            changedFiles: execution.changedFiles,
+            validation: execution.validation.map(result => ({
+              command: result.command,
+              args: result.args,
+              exitCode: result.exitCode,
+            })),
+            artifactId: execution.artifactId,
+          },
           blocker: null,
         });
 
@@ -158,7 +171,19 @@ export class PresidentCycleRunner {
           const updated = await this.store.updateMission(mission.id, {
             state: "READY_FOR_HUMAN",
             reviewerId: review.reviewerId,
-            review: { ...review },
+            review: {
+              reviewerId: review.reviewerId,
+              verdict: review.verdict,
+              acceptanceResults: review.acceptanceResults,
+              observedRisks: review.observedRisks,
+              requiredRevision: review.requiredRevision,
+              validation: review.validation.map(result => ({
+                command: result.command,
+                args: result.args,
+                exitCode: result.exitCode,
+              })),
+              reviewedAt: review.reviewedAt,
+            },
             blocker: null,
           });
           await this.store.releaseLease(mission.id);
@@ -176,7 +201,19 @@ export class PresidentCycleRunner {
               ? "REPAIR_REQUIRED"
               : "BLOCKED",
           reviewerId: review.reviewerId,
-          review: { ...review },
+          review: {
+            reviewerId: review.reviewerId,
+            verdict: review.verdict,
+            acceptanceResults: review.acceptanceResults,
+            observedRisks: review.observedRisks,
+            requiredRevision: review.requiredRevision,
+            validation: review.validation.map(result => ({
+              command: result.command,
+              args: result.args,
+              exitCode: result.exitCode,
+            })),
+            reviewedAt: review.reviewedAt,
+          },
           blocker:
             review.requiredRevision ??
             (review.verdict === "BLOCKED"
