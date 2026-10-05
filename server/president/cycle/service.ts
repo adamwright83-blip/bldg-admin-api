@@ -1,3 +1,4 @@
+import type { RowDataPacket } from "mysql2/promise";
 import { createHash } from "node:crypto";
 import {
   presidentCandidateListSchema,
@@ -117,9 +118,7 @@ export class PresidentCycleService {
 
   async gatherCurrentCompanyTruth(limit = 50): Promise<string[]> {
     const bounded = Math.max(1, Math.min(50, Math.trunc(limit)));
-    const [rows] = await this.intelligence.pool.query<
-      Array<{ id: string }>
-    >(
+    const [rows] = await this.intelligence.pool.query<RowDataPacket[]>(
       `SELECT id FROM president_evidence
        WHERE origin=? AND availability='AVAILABLE'
          AND (expiresAt IS NULL OR expiresAt>NOW(3))
