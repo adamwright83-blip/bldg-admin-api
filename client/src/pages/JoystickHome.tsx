@@ -202,7 +202,7 @@ export default function JoystickHome({
             <p>Real customers. Real places.<br />Real progress.</p>
             <div className="jh-world-facts">
               <b>{lanternCount ?? "—"}</b>
-              <span>customer lanterns</span>
+              <span>located customers</span>
             </div>
             <Link href="/growth/lantern-city" className="jh-enter">
               Open city <ArrowRight />
@@ -305,7 +305,7 @@ export default function JoystickHome({
           <ul>
             <li>{summary?.distinctCustomerPhones ?? "—"} customer phones in the connected order history</li>
             <li>{dayItems.filter(item => item.urgency === "overdue").length} overdue Day Line follow-ups</li>
-            <li>{lanternCount ?? "—"} located customers currently represented in Lantern City</li>
+            <li>{lanternCount ?? "—"} customers with resolved geographic locations</li>
           </ul>
         </article>
       </section>
