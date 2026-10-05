@@ -25,7 +25,6 @@ if (typeof document !== "undefined" && !document.querySelector(`link[href="${FON
   document.head.appendChild(link);
 }
 
-const money = (c?: number) => (c == null ? "—" : `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
 const day = (iso?: string) => {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -174,7 +173,7 @@ export default function LanternCityIslands({
             <div key={c.identityKey} className={styles.tipRow}>
               <b>{c.displayName}</b>
               <span>{c.location?.canonicalAddress?.split(",")[0] ?? ""}</span>
-              <span>{money(c.totalSpendCents)} lifetime · last order {day(c.lastOrderAt)}</span>
+              <span>{c.totalOrders ?? 0} historical orders · last order {day(c.lastOrderAt)}</span>
             </div>
           ))}
           {hovered.length > 4 ? <span>+{hovered.length - 4} more here</span> : null}
