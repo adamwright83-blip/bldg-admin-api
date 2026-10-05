@@ -7,7 +7,7 @@
       "paths": [
         "server/_core",
         "server/durableExecution",
-        "server/db.ts"
+        "server/db"
       ]
     },
     {
@@ -162,7 +162,7 @@
       ],
       "to": [
         "server/db.ts",
-        "drizzle/schema.ts"
+        "drizzle/schema"
       ],
       "reason": "Claire must move toward domain read ports; no new direct database/schema dependencies."
     },
