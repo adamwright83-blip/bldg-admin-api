@@ -564,7 +564,7 @@ export async function getGeographicTruth(input: {
   tenantId: string;
   now?: Date;
 }) {
-  await syncGeographicEntities(input.tenantId);
+  // Atlas reads never synchronize or geocode production rows; the existing reconciliation job owns writes.
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const now = input.now ?? new Date();

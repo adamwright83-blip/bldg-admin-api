@@ -57,11 +57,6 @@ describe("geographic truth commercial CRM source", () => {
           throw new Error(`unexpected table ${name}`);
         },
       }),
-      insert: () => ({
-        values: () => ({
-          onDuplicateKeyUpdate: async () => undefined,
-        }),
-      }),
     } as never);
 
     const truth = await getGeographicTruth({
