@@ -10,11 +10,14 @@ const names = new Set(catalog.map(x => x.name));
  * activation still enforces the bounded, versioned local allowlist. */
 export function routeExecutiveSkills(question: string): {
   skills: string[];
-  domain: "COMPANY" | "GAMES";
+  domain: "COMPANY";
 } {
   const q = question.toLowerCase();
-  if (/\b(kingdom|boreslay|game mechanic|mitch)\b/.test(q))
-    return { skills: ["product-strategy"], domain: "GAMES" };
+  if (/\b(kingdom|boreslay|game mechanic)\b/.test(q))
+    return {
+      skills: ["product-strategy", "analytics"],
+      domain: "COMPANY",
+    };
   if (/\b(security|breach|injection|privacy|incident)\b/.test(q))
     return {
       skills: ["privacy-and-security", "operational-risk", "legal-risk-triage"],
