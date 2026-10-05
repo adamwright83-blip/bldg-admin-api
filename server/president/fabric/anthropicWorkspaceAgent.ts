@@ -4,7 +4,7 @@ import path from "node:path";
 import { ENV } from "../../_core/env";
 import type { PresidentCycleMission } from "../../../shared/presidentCycle";
 import { runPresidentCommand } from "./exec";
-import { isPresidentProtectedPath } from "./engineering";
+import { isPresidentMitchPath, isPresidentProtectedPath } from "./policy";
 
 const MAX_READ_BYTES = 180_000;
 const MAX_TOOL_TURNS = 16;
