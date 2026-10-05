@@ -37,11 +37,14 @@ export default function LanternCityIslands({
   onOpenCustomer,
   onNavigate,
   showUtilityDock = true,
+  showBrand = true,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
   /** Commercial members get the world without Laundry Butler admin shortcuts. */
   showUtilityDock?: boolean;
+  /** The admin world shell owns the sales-facing brand when this scene is embedded there. */
+  showBrand?: boolean;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -124,10 +127,12 @@ export default function LanternCityIslands({
     <div className={styles.scene} data-lantern-city="islands">
       <div ref={host} className={styles.stage} aria-label="Lantern City island board" />
       <header className={styles.top}>
-        <div className={styles.brand}>
-          <div className={styles.mark}>LANTERN CITY</div>
-          <div className={styles.sub}>Joystick</div>
-        </div>
+        {showBrand ? (
+          <div className={styles.brand}>
+            <div className={styles.mark}>LANTERN CITY</div>
+            <div className={styles.sub}>Joystick</div>
+          </div>
+        ) : null}
         {stats ? (
           <div className={styles.stats}>
             <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;lanterns</div>

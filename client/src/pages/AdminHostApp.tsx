@@ -400,7 +400,12 @@ export default function AdminHostApp() {
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           {lanternScene === "islands" ? (
             <Suspense fallback={<div className="cr-route-loading">Raising the islands…</div>}>
-              <LanternCityIslands onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+              <LanternCityIslands
+                onOpenCustomer={phone => setProfilePhone(phone)}
+                onNavigate={nextPath => navigate(nextPath)}
+                showBrand={isLanternCity}
+                showUtilityDock={isLanternCity}
+              />
             </Suspense>
           ) : lanternScene === "map" ? (
             <Suspense fallback={<div className="cr-route-loading">Lifting the fog…</div>}>
@@ -418,7 +423,17 @@ export default function AdminHostApp() {
             heading. Kept out of the map's transform so panning never drags it.
           */}
           <div className="gl-world-title">
-            <img className="gl-world-title-art" src="/assets/goldline/lantern-city/v4/world-title.png" alt={`${PRODUCT_NAME} Lantern City — Luxury towers. Real power.`} />
+            <div className="gl-world-title-lockup" aria-label="Lantern City: Laundry Farm">
+              <span className="gl-world-title-kicker">LANTERN CITY:</span>
+              <div className="gl-world-title-brand">
+                <svg viewBox="0 0 64 64" aria-hidden="true">
+                  <path d="M32 58c-1-12 0-22 0-30 0 0-10-6-12-22 12 4 14 14 12 22 0 0 4-14 18-18-2 14-12 18-18 18v30z" />
+                  <path d="M30 56C22 52 10 44 8 30c10 2 18 10 22 26z" opacity=".95" />
+                  <path d="M34 56c8-4 20-12 22-26-10 2-18 10-22 26z" opacity=".95" />
+                </svg>
+                <strong>Laundry Farm</strong>
+              </div>
+            </div>
             <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen} aria-label={worldIntelOpen ? "Close intelligence" : "City intelligence"}>
               <img src="/assets/goldline/lantern-city/v4/city-intelligence.png" alt="" />
             </button>
