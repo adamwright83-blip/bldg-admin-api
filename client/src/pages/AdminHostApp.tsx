@@ -195,8 +195,11 @@ export default function AdminHostApp() {
   const isOperatorRepresentative = path === "/operator";
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
-  const isWorldHome = isHome || isLanternCity;
-  // one Lantern City (the island board) at Home and /growth/lantern-city; the rest only behind ?scene=
+  // Home is the JOYSTICK HQ cockpit. Lantern City is the playable world,
+  // mounted only after the user enters /growth/lantern-city.
+  const isWorldHome = isLanternCity;
+  const isWorldEntry = isHome || isLanternCity;
+  // Lantern City scene variants remain behind explicit QA parameters.
   const lanternScene = lanternSceneFor(path, window.location.search);
   const worldDebugChrome =
     typeof window !== "undefined" &&
@@ -310,7 +313,7 @@ export default function AdminHostApp() {
   // Lantern City is the canonical returning-user world. Completed historical
   // design-partner sessions remain persisted data, but they no longer replace
   // either the world home or the canonical Tower Wars route.
-  if (isWorldHome && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
+  if (isWorldEntry && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
 
   if (isLevel4) {
     return (
@@ -395,7 +398,7 @@ export default function AdminHostApp() {
       ) : null}
 
       <div className="cr-main-column">
-        {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
+        {!isHome && !isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Home</Link> : null}
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           {lanternScene === "islands" ? (
@@ -487,9 +490,17 @@ export default function AdminHostApp() {
           />
         ) : null}
 
-        {isWorldHome ? null : isOperatorDemo ? (
+        {isHome ? (
           <AdminHome
-            experienceMode={isOperatorDemo ? "operator-demo" : "kingdom"}
+            operatorName={user?.name || "Admin"}
+            path={path}
+            onOpenMobileNav={() => setMobileNavOpen(true)}
+            onNavigate={path => navigate(path)}
+            onOpenCustomer={phone => setProfilePhone(phone)}
+          />
+        ) : isWorldHome ? null : isOperatorDemo ? (
+          <AdminHome
+            experienceMode="operator-demo"
             operatorName={user?.name || "Admin"}
             path={path}
             onOpenMobileNav={() => setMobileNavOpen(true)}
