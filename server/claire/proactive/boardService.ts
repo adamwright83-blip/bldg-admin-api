@@ -236,9 +236,9 @@ export async function ensureOperatorBoard(input: {
       timeZone,
     });
     customers = groupCustomers(reconcileLedgerSpan(ledger, { start: "2020-01-01", end: today }).includedEvents)
-      .filter(group => group.matched)
+      .filter(group => group.matched && group.records.some(record => record.cents > 0))
       .map(group => {
-        const sorted = [...group.records].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+        const sorted = group.records.filter(record => record.cents > 0).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
         const last = sorted[sorted.length - 1]!;
         const intervals = sorted
           .slice(1)

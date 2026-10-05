@@ -368,6 +368,12 @@ describe("K — mixed intent", () => {
 });
 
 describe("L — ambiguous customer", () => {
+  it("shows each recorded spend when a name matches multiple customers", async () => {
+    const { ask } = exam();
+    const answer = await ask("How much has Maria spent?");
+    expect(answer.match(/recorded spend/g)).toHaveLength(2);
+    expect(answer).toContain("Maria Lopez");
+  });
   it("asks which Maria instead of choosing, then answers for the one picked", async () => {
     const { ask } = exam();
     const clarify = await ask("When did Maria last order?");

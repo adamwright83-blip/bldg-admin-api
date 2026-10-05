@@ -1094,7 +1094,7 @@ export function speakBusinessResult(
         speech.say(`I don't see a customer named ${name} in paid orders ${during(label)}.`);
       } else if (data.details.length > 1) {
         speech.say(
-          `I found ${speech.count(data.details.length)} customers matching ${name}: ${joinList(data.details.slice(0, 4).map(detail => describeCustomerOption(detail, speech)))}.${/^who (?:is|was)\b/i.test(context.utterance.trim()) ? " These are the customer histories already on record." : " Which one do you mean?"}`
+          `I found ${speech.count(data.details.length)} customers matching ${name}: ${joinList(data.details.slice(0, 4).map(detail => `${describeCustomerOption(detail, speech)}${context.hint?.kind === "customer_aspect" && context.hint.aspect === "spend" ? `, recorded spend ${speech.money(detail.revenueCents)}` : ""}`))}.${/^who (?:is|was)\b/i.test(context.utterance.trim()) ? " These are the customer histories already on record." : " Which one do you mean?"}`
         );
       } else {
         speakCustomerDetail(data.details[0]!, context.hint?.kind === "customer_aspect" ? context.hint.aspect : null, label, speech);
