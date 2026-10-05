@@ -247,6 +247,9 @@ export type MissionHandback = {
   commitSha?: string;
   changedFiles?: string[];
   artifactPath?: string;
+  /** Durable copy for non-code artifacts; paths may live on ephemeral worker disks. */
+  artifactText?: string;
+  artifactSha256?: string;
   checks: { command: string; exitCode: number; ok: boolean }[];
   browserEvidence?: { screenshotPath?: string; consoleErrors: string[]; ok: boolean };
   reviewVerdict?: ReviewVerdict;
