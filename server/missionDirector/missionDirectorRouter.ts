@@ -24,7 +24,7 @@ async function missionDirectorIdentity(ctx: {
 export const missionDirectorRouter = router({
   planForDate: legacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date }))
-    .query(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const identity = await missionDirectorIdentity(ctx, "mission_director.plan");
       return planForDate({
         tenantId: identity.tenantId,
