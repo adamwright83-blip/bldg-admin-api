@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import type { EvidenceItem } from "../../../shared/presidentCycle";
 import { runCommand } from "../fabric/exec";
+import { redactSecrets } from "./models";
 
 const FOREIGN = /mitch/i;
 
@@ -22,7 +23,7 @@ function item(
     source,
     kind,
     observedAt,
-    summary,
+    summary: redactSecrets(summary),
     ref,
     basis,
   };
