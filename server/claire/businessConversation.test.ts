@@ -105,6 +105,7 @@ describe("Claire business conversation — revenue thread (A–C)", () => {
     const text = await say(ask, "Why is revenue up over the last 30 days?");
     expect(text).toContain("up 100 percent");
     expect(text).toContain("Most of that is order volume: 5 paid orders versus 2.");
+    expect(text).toContain("Average order value also");
   });
 });
 
@@ -311,6 +312,9 @@ describe("live sales scope and undated precision", () => {
       const text = await say(ask, utterance);
       expect(text).toContain("August");
       expect(text).not.toContain("last 30 days");
+      if (!utterance.includes("unresolved")) {
+        expect(text).toContain("positively attributed");
+      }
       expect(state.analytics?.query.period).toEqual({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
     }
     await say(ask, "How much revenue came from Century Park East?");
