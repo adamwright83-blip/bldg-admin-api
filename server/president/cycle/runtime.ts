@@ -65,7 +65,12 @@ export async function presidentCycleReadiness() {
       ready: engineering,
       requiresGitRepository: true,
       requiresGithubCliAuth: true,
-      requiresClaudeCli: true,
+      executionBackend: process.env.ANTHROPIC_API_KEY?.trim()
+        ? "ANTHROPIC_API"
+        : "CLAUDE_CLI",
+      requiresClaudeCli: !process.env.ANTHROPIC_API_KEY?.trim(),
+      requiresAnthropicApiKey: Boolean(process.env.ANTHROPIC_API_KEY?.trim()),
+      independentReviewer: true,
       mergeAllowed: false,
     },
     presidentAutonomousExecutionReady:
