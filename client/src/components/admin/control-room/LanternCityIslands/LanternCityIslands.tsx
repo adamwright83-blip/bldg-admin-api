@@ -43,7 +43,7 @@ export default function LanternCityIslands({
   onNavigate?: (path: string) => void;
   /** Commercial members get the world without Laundry Butler admin shortcuts. */
   showUtilityDock?: boolean;
-  /** The admin world shell owns the sales-facing brand when this scene is embedded there. */
+  /** The admin world shell owns all top-left scene chrome when this board is embedded there. */
   showBrand?: boolean;
 }) {
   const { user } = useAuth();
@@ -126,25 +126,27 @@ export default function LanternCityIslands({
   return (
     <div className={styles.scene} data-lantern-city="islands">
       <div ref={host} className={styles.stage} aria-label="Lantern City island board" />
-      <header className={styles.top}>
-        {showBrand ? (
-          <div className={styles.brand}>
-            <div className={styles.mark}>LANTERN CITY</div>
-            <div className={styles.sub}>Joystick</div>
+      {showBrand ? (
+        <>
+          <header className={styles.top}>
+            <div className={styles.brand}>
+              <div className={styles.mark}>LANTERN CITY</div>
+              <div className={styles.sub}>Joystick</div>
+            </div>
+            {stats ? (
+              <div className={styles.stats}>
+                <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;lanterns</div>
+                <div className={styles.pill}>Islands open&nbsp;<b>{stats.open} of {stats.islands}</b></div>
+              </div>
+            ) : null}
+          </header>
+          <div className={styles.towers}>
+            <button type="button" onClick={() => setTower("opus_la")}>OPUS LA floors</button>
+            <button type="button" onClick={() => setTower("century_park_east")}>Century Park East floors</button>
           </div>
-        ) : null}
-        {stats ? (
-          <div className={styles.stats}>
-            <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;lanterns</div>
-            <div className={styles.pill}>Islands open&nbsp;<b>{stats.open} of {stats.islands}</b></div>
-          </div>
-        ) : null}
-      </header>
+        </>
+      ) : null}
       <ObjectiveMarksLayer board={board} ready={ready} onNavigate={onNavigate} />
-      <div className={styles.towers}>
-        <button type="button" onClick={() => setTower("opus_la")}>OPUS LA floors</button>
-        <button type="button" onClick={() => setTower("century_park_east")}>Century Park East floors</button>
-      </div>
 
       {island ? (
         <section className={styles.card} aria-label={island.name}>
