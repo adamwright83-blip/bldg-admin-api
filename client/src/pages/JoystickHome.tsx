@@ -6,7 +6,6 @@ import {
   Box,
   Building2,
   CalendarDays,
-  Crown,
   Home,
   Map,
   Mic,
@@ -15,6 +14,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { isLiveLanternCustomer } from "@/components/admin/control-room/customerGeography";
 import "./JoystickHome.css";
 
 const LanternCityIslands = lazy(
@@ -27,15 +27,15 @@ type Props = {
 };
 
 const presidentImages = [
-  "/assets/joystick-home/president-growth.svg",
-  "/assets/joystick-home/president-retention.svg",
-  "/assets/joystick-home/president-conversion.svg",
+  "/assets/joystick-home/president-feature-growth.webp",
+  "/assets/joystick-home/president-feature-system.webp",
+  "/assets/joystick-home/president-feature-company.webp",
 ];
 
 const mitchImages = [
-  "/assets/joystick-home/mitch-emberline.svg",
-  "/assets/joystick-home/mitch-northreach.svg",
-  "/assets/joystick-home/mitch-thornhollow.svg",
+  "/assets/joystick-home/mitch-emberline.webp",
+  "/assets/joystick-home/mitch-northreach.webp",
+  "/assets/joystick-home/mitch-thornhollow.webp",
 ];
 
 function money(value: number | null | undefined) {
@@ -112,7 +112,7 @@ export default function JoystickHome({
   );
 
   const lanternCount =
-    atlas.data?.customers?.filter(customer => Boolean(customer.location)).length ?? null;
+    atlas.data?.customers?.filter(isLiveLanternCustomer).length ?? null;
   const weekShare =
     summary?.revenueMonth && summary.revenueMonth > 0
       ? Math.round((summary.revenueWeek / summary.revenueMonth) * 100)
@@ -133,8 +133,11 @@ export default function JoystickHome({
     <main className="jh-page">
       <header className="jh-topbar">
         <Link href="/" className="jh-brand" aria-label="JOYSTICK Home">
-          <Crown aria-hidden />
-          <strong>JOYSTICK</strong>
+          <img
+            className="jh-brand-logo"
+            src="/assets/joystick-home/joystick-logo.webp"
+            alt="JOYSTICK"
+          />
         </Link>
 
         <nav className="jh-nav" aria-label="Primary">
