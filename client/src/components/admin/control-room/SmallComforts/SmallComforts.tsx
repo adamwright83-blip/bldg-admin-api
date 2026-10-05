@@ -1,47 +1,116 @@
 import { useEffect, useRef, useState } from "react";
-import { Game } from "./game/game";
-import { SMALL_COMFORTS_MARKUP } from "./markup";
-import "./smallComforts.css";
+import "./smallComfortsPlate.css";
+
+type Ripple = { id: number; x: number; y: number };
 
 /**
- * Small Comforts: the playable room inside Lantern City's lost-property suitcase.
- * Mounted full-screen over the city once you've zoomed to Hollywood and into the suitcase.
- * The game owns its own DOM and WebGL context; leaving disposes both.
+ * Small Comforts plate build.
+ *
+ * This is the cinematic painted-scene version, not the retired realtime
+ * primitive-room prototype. The finished art is the room; JOYSTICK layers
+ * motion, weather, light and interaction on top of it.
  */
 export default function SmallComforts({ onExit }: { onExit: () => void }) {
-  const host = useRef<HTMLDivElement>(null);
-  const exit = useRef(onExit);
-  exit.current = onExit;
-  const [failed, setFailed] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const [ripple, setRipple] = useState<Ripple | null>(null);
 
   useEffect(() => {
-    const mount = host.current;
-    if (!mount) return;
-    const ui = document.createElement("div");
-    ui.className = "sc-root";
-    ui.dataset.phase = "title";
-    ui.innerHTML = SMALL_COMFORTS_MARKUP;
-    mount.appendChild(ui);
-    let game: Game | null = null;
-    try {
-      game = new Game(ui.querySelector<HTMLElement>("#app")!, ui, { onExit: () => exit.current(), autoStart: true });
-    } catch (e) {
-      console.warn("Small Comforts needs WebGL", e);
-      setFailed(true);
-    }
-    return () => { game?.dispose(); ui.remove(); };
+    const el = root.current;
+    if (!el) return;
+
+    const setLook = (x: number, y: number) => {
+      el.style.setProperty("--sc-look-x", `${x.toFixed(2)}px`);
+      el.style.setProperty("--sc-look-y", `${y.toFixed(2)}px`);
+      el.style.setProperty("--sc-tilt-x", `${(-y / 28).toFixed(2)}deg`);
+      el.style.setProperty("--sc-tilt-y", `${(x / 28).toFixed(2)}deg`);
+    };
+
+    const pointerMove = (event: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const nx = ((event.clientX - rect.left) / Math.max(rect.width, 1) - 0.5) * 2;
+      const ny = ((event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5) * 2;
+      setLook(nx * 14, ny * 10);
+    };
+    const pointerLeave = () => setLook(0, 0);
+    const orientation = (event: DeviceOrientationEvent) => {
+      if (event.gamma == null || event.beta == null) return;
+      setLook(
+        Math.max(-14, Math.min(14, event.gamma * 0.45)),
+        Math.max(-10, Math.min(10, (event.beta - 45) * 0.22)),
+      );
+    };
+
+    el.addEventListener("pointermove", pointerMove, { passive: true });
+    el.addEventListener("pointerleave", pointerLeave, { passive: true });
+    window.addEventListener("deviceorientation", orientation, { passive: true });
+
+    return () => {
+      el.removeEventListener("pointermove", pointerMove);
+      el.removeEventListener("pointerleave", pointerLeave);
+      window.removeEventListener("deviceorientation", orientation);
+    };
   }, []);
 
+  const makeRipple = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRipple({
+      id: Date.now(),
+      x: ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 100,
+      y: ((event.clientY - rect.top) / Math.max(rect.height, 1)) * 100,
+    });
+  };
+
   return (
-    <div ref={host} data-small-comforts="">
-      {failed ? (
-        <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "grid", placeItems: "center", background: "#8EC5FF", color: "#2f5f7a", font: "18px system-ui", textAlign: "center", padding: 24 }}>
-          <div>
-            Small Comforts needs WebGL.
-            <div><button type="button" onClick={onExit} style={{ marginTop: 16, padding: "10px 18px" }}>Back to Lantern City</button></div>
-          </div>
+    <div
+      ref={root}
+      className="scp-root"
+      data-small-comforts="plate"
+      onPointerDown={makeRipple}
+    >
+      <div className="scp-world" aria-label="Small Comforts">
+        <div className="scp-backdrop" />
+        <img
+          className="scp-house"
+          src="/assets/joystick-home/tin-can-house.webp"
+          alt="Small Comforts, a warm tiny home built inside a weathered found-object tin"
+          draggable={false}
+        />
+
+        <div className="scp-glow scp-glow-left" />
+        <div className="scp-glow scp-glow-right" />
+        <div className="scp-window-shimmer" />
+
+        <div className="scp-rain scp-rain-far" aria-hidden="true" />
+        <div className="scp-rain scp-rain-near" aria-hidden="true" />
+
+        <div className="scp-steam" aria-hidden="true">
+          <i />
+          <i />
+          <i />
         </div>
-      ) : null}
+
+        <div className="scp-puddle" aria-hidden="true" />
+        {ripple ? (
+          <span
+            key={ripple.id}
+            className="scp-ripple"
+            style={{ left: `${ripple.x}%`, top: `${ripple.y}%` }}
+            onAnimationEnd={() => setRipple(null)}
+            aria-hidden="true"
+          />
+        ) : null}
+      </div>
+
+      <button type="button" className="scp-exit" onClick={onExit}>
+        <span aria-hidden="true">←</span>
+        Lantern City
+      </button>
+
+      <div className="scp-hint">
+        <b>SMALL COMFORTS</b>
+        <span>Move to look around · tap for a little light</span>
+      </div>
     </div>
   );
 }
