@@ -75,8 +75,8 @@ export async function admitCommercialFieldObservation(input: {
       "field_observation_attested requires a parking-lot Clerk observation event"
     );
   }
-  if (!HUMAN_ACTORS.has(event.actorType)) {
-    throw new Error("System/model actors cannot attest field observations");
+  if (!HUMAN_ACTORS.has(event.actorType) || !event.actorId?.trim()) {
+    throw new Error("System/model or anonymous actors cannot attest field observations");
   }
 
   const metadata =
