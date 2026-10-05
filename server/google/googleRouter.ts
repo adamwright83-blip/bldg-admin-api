@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { legacyDayforgeTenantAdminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { googleWorldService } from "./googleWorldService";
 
 export const googleRouter = router({
-  capabilities: legacyDayforgeTenantAdminProcedure.query(async () => {
+  capabilities: legacyAdminRoleProcedure.query(async () => {
     const [capabilities, runtimeConfig] = await Promise.all([
       googleWorldService.getCapabilities(),
       Promise.resolve(googleWorldService.getPublicRuntimeConfig()),
@@ -22,7 +22,7 @@ export const googleRouter = router({
    * hygiene. Referrer restrictions in Google Cloud remain the real control;
    * this removes the free scraping surface in front of them.
    */
-  runtimeConfig: legacyDayforgeTenantAdminProcedure.query(() => {
+  runtimeConfig: legacyAdminRoleProcedure.query(() => {
     return googleWorldService.getPublicRuntimeConfig();
   }),
 
@@ -31,31 +31,31 @@ export const googleRouter = router({
    * Quality calls, so an anonymous caller could drive metered provider spend
    * simply by polling it. Its only consumers are admin surfaces.
    */
-  atmosphere: legacyDayforgeTenantAdminProcedure
+  atmosphere: legacyAdminRoleProcedure
     .input(z.object({ forceFresh: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
       return googleWorldService.getAtmosphere(input?.forceFresh);
     }),
 
-  opportunityPressure: legacyDayforgeTenantAdminProcedure
+  opportunityPressure: legacyAdminRoleProcedure
     .input(z.object({ forceFresh: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
       return googleWorldService.getOpportunityPressure(input?.forceFresh);
     }),
 
-  buildingReality: legacyDayforgeTenantAdminProcedure
+  buildingReality: legacyAdminRoleProcedure
     .input(z.object({ buildingId: z.string().min(1) }))
     .query(async ({ input }) => {
       return googleWorldService.getPlaceReality(input.buildingId);
     }),
 
-  validateAndGeocode: legacyDayforgeTenantAdminProcedure
+  validateAndGeocode: legacyAdminRoleProcedure
     .input(z.object({ address: z.string().min(1) }))
     .mutation(async ({ input }) => {
       return googleWorldService.validateAndGeocodeAddress(input.address);
     }),
 
-  telemetry: legacyDayforgeTenantAdminProcedure.query(() => {
+  telemetry: legacyAdminRoleProcedure.query(() => {
     return googleWorldService.getTelemetry();
   }),
 });
