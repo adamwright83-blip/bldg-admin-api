@@ -16,7 +16,7 @@ import { getDriverSafeSalesIntel } from "../salesIntel/driverSafeSalesIntelServi
 
 /**
  * Gameplay-side Armory. Drivers CONSUME intelligence here; corpus
- * administration lives behind `adminProcedure` in `salesIntelRouter` and is
+ * administration lives behind `legacyDayforgeTenantAdminProcedure` in `salesIntelRouter` and is
  * unreachable from these procedures.
  */
 export const armoryRouter = router({
