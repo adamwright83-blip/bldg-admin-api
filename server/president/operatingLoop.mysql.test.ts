@@ -650,5 +650,85 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         JSON.stringify(report, null, 2) + "\n"
       );
     }, 30_000);
+    it("bounds reviewer wake retries across restart without accepting unreviewed work", async () => {
+      const programs = new MysqlPresidentProgramStore(pool);
+      const intelligence = new MysqlPresidentIntelligenceStore(
+        pool,
+        "TEST_FIXTURE"
+      );
+      const service = new PresidentProgramService(pool, programs, intelligence);
+      const original = (await programs.listPrograms(20)).find(
+        p => p.state === "COMPLETED"
+      )!;
+      const originalStep = (await programs.listSteps(original.id))[0];
+      const programId = randomUUID();
+      const stepId = randomUUID();
+      const now = new Date().toISOString();
+      await programs.createProgram({
+        ...original,
+        id: programId,
+        objectiveRecordId: null,
+        title: "Fixture review transport outage",
+        state: "AWAITING_REVIEW",
+        currentStepId: stepId,
+        verifiedArtifactId: null,
+        spentUsd: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await programs.createStep({
+        ...originalStep,
+        id: stepId,
+        programId,
+        state: "REVIEW_PENDING",
+        executorId: "executor",
+        reviewerId: null,
+        exactArtifactId: "fixture:unreviewed",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        attemptCount: 1,
+        maxAttempts: 2,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const priorReturn = (await programs.getHandback(originalStep.id))!;
+      await programs.recordHandback({
+        ...priorReturn,
+        eventId: randomUUID(),
+        stepId,
+        exactArtifactId: "fixture:unreviewed",
+        evidence: { executionAttempt: 1 },
+      });
+      const wake = new FixtureWake();
+      const startingWakes = envelopes.filter(
+        e => e.kind === "PRESIDENT_REVIEW"
+      ).length;
+      for (let i = 0; i < 3; i++) {
+        await new PresidentAgentRuntimeCoordinator(
+          new MysqlPresidentProgramStore(pool),
+          service,
+          wake
+        ).recover();
+        if (i < 2)
+          await programs.updateStep(stepId, {
+            leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
+          });
+      }
+      expect(envelopes.filter(e => e.kind === "PRESIDENT_REVIEW")).toHaveLength(
+        startingWakes + 2
+      );
+      expect((await programs.getStep(stepId))!.state).toBe("DEAD_LETTER");
+      expect((await programs.getProgram(programId))!.state).toBe(
+        "BLOCKED_CAPABILITY"
+      );
+      expect(
+        (await programs.getProgram(programId))!.verifiedArtifactId
+      ).toBeNull();
+      expect(
+        (await service.nightlyBrief()).blocked.some(item =>
+          item.includes("bounded wake retries")
+        )
+      ).toBe(true);
+    });
   }
 );

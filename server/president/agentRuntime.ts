@@ -45,6 +45,7 @@ export function authorizePresidentCallback(
   authorization: string | undefined,
   tokens: Record<string, string>
 ): boolean {
+  if (!Object.hasOwn(tokens, actorId)) return false;
   const expected = tokens[actorId];
   if (!expected || !authorization?.startsWith("Bearer ")) return false;
   return secureEqual(authorization, "Bearer " + expected);
@@ -66,7 +67,9 @@ export class PresidentAgentWakeClient {
   }
 
   target(capability: string): PresidentAgentTarget | null {
-    return this.targets[capability] ?? null;
+    return Object.hasOwn(this.targets, capability)
+      ? this.targets[capability]
+      : null;
   }
 
   async wake(

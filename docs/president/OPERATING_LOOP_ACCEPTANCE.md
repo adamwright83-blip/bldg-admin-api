@@ -88,8 +88,8 @@ request ceilings; this pass does not claim audited provider billing telemetry.
 
 ## Validation classification
 
-President-specific: 62 tests pass, including real MySQL lifecycle and executive-cycle
-coverage. Authority plus President focused run: 79 tests passed before the final nomenclature regression (now 80). Desktop browser: 3 tests pass. Full TypeScript,
+President-specific: 63 tests pass, including real MySQL lifecycle and executive-cycle
+coverage. Authority plus President focused run: 79 tests passed before the final nomenclature regression (now 81). Desktop browser: 3 tests pass. Full TypeScript,
 production build, nomenclature, tenant ratchet, and vertical dependency gates pass.
 
 Full repository unit run: 9158 passed, 18 failed, 18 skipped (908 files). All 18
