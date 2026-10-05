@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   adminProcedure,
+  legacyAdminRoleProcedure,
   legacyDayforgeTenantOperatorProcedure,
   router,
 } from "../_core/trpc";
@@ -20,7 +21,7 @@ export const geographicTruthRouter = router({
     .query(({ ctx, input }) =>
       getGeographicTruth({ tenantId: input?.targetTenantId || ctx.tenantId })
     ),
-  geocodePending: adminProcedure
+  geocodePending: legacyAdminRoleProcedure
     .input(
       z
         .object({ batchSize: z.number().int().min(1).max(50).default(20) })

@@ -165,7 +165,7 @@ describe("operator macro goals", () => {
   it("exposes goal writes only through the structured admin mutation, not the voice loop", () => {
     const router = readFileSync(new URL("./claireRouter.ts", import.meta.url), "utf8");
     const voiceLoop = readFileSync(new URL("./voiceCommitmentLoop.ts", import.meta.url), "utf8");
-    expect(router).toMatch(/setMacroGoal:\s*adminProcedure/);
+    expect(router).toMatch(/setMacroGoal:\s*legacyAdminRoleProcedure/);
     expect(voiceLoop).not.toContain("setActiveMacroGoal");
   });
 

@@ -10,7 +10,7 @@ import {
   runCustomerChurnScan,
 } from "../churnRadar/customerChurnService";
 import {
-  adminProcedure,
+  legacyAdminRoleProcedure,
   legacyDayforgeChurnProcedure,
   legacyDayforgeClaireVoiceProcedure,
   legacyDayforgeMissionFieldProcedure,
@@ -163,7 +163,7 @@ function recoveryAction(
 const DESK_CONVERSATION_TTL_MS = 12 * 60 * 60 * 1000;
 
 export const claireRouter = router({
-  setMacroGoal: adminProcedure
+  setMacroGoal: legacyAdminRoleProcedure
     .input(
       z.object({
         operatorUserId: z.string().trim().min(1).max(128),
@@ -652,7 +652,7 @@ export const claireRouter = router({
 
   // Admin-only audit trail: which tier transitions happened for a given
   // operator, with reasons and supporting event ids (Slice 7).
-  relationshipTierTransitions: adminProcedure
+  relationshipTierTransitions: legacyAdminRoleProcedure
     .input(z.object({ operatorUserId: z.string().trim().min(1) }))
     .query(({ ctx, input }) =>
       listClaireTierTransitions({
@@ -763,7 +763,7 @@ export const claireRouter = router({
    * operator-facing game UI. Read-only; answers "why is this operator at this
    * rung, what evidence backs it, and would this topic be answered right now".
    */
-  progressionDebug: adminProcedure
+  progressionDebug: legacyAdminRoleProcedure
     .input(
       z.object({
         operatorUserId: z.string().min(1),
@@ -817,7 +817,7 @@ export const claireRouter = router({
       };
     }),
 
-  routingAudit: adminProcedure
+  routingAudit: legacyAdminRoleProcedure
     .input(
       z.object({
         days: z.number().int().min(1).max(90).default(30),

@@ -58,6 +58,23 @@ export function isLegacySharedPasswordOpenId(
   return legacySharedPasswordOpenIds(env).has(openId);
 }
 
+export function isGoldlineDemoOpenId(openId: string): boolean {
+  return openId.startsWith("goldline-demo:");
+}
+
+/** Platform authority is never implied by a tenant/demo/shared-password role string. */
+export function isPlatformAdministrator(
+  user: Pick<JoystickUser, "openId" | "role"> | null,
+  env?: OpenIdEnv
+): boolean {
+  return Boolean(
+    user &&
+      user.role === "admin" &&
+      !isGoldlineDemoOpenId(user.openId) &&
+      !isLegacySharedPasswordOpenId(user.openId, env)
+  );
+}
+
 /**
  * The shared-password route accepts a password and admin|driver role only.
  * Tenant, slug, email, and operator ids in the body are not part of the decision.
@@ -195,28 +212,23 @@ export async function authorizeJoystickClaireDesk(
 ): Promise<ClaireDeskDecision> {
   if (!input.user) return { ok: false, reason: "unauthenticated" };
 
-  if (isLegacySharedPasswordOpenId(input.user.openId)) {
-    if (
-      input.user.role === "admin" &&
-      isLegacyDayforgeTenant(input.tenantId)
-    ) {
-      return {
-        ok: true,
-        tenantId: input.tenantId,
-        operatorUserId: input.user.openId,
-        authority: "platform_admin",
-      };
-    }
-    return { ok: false, reason: "legacy_password_not_saas" };
-  }
-
-  if (input.user.role === "admin") {
+  if (isPlatformAdministrator(input.user)) {
     return {
       ok: true,
       tenantId: input.tenantId,
       operatorUserId: input.user.openId,
       authority: "platform_admin",
     };
+  }
+
+  // The shared driver shortcut is never Claire authority. The shared admin
+  // password may continue only as a tenant owner on legacy Laundry Farm hosts;
+  // it is resolved through membership below, never as platform administration.
+  if (
+    isLegacySharedPasswordOpenId(input.user.openId) &&
+    input.user.role === "driver"
+  ) {
+    return { ok: false, reason: "legacy_password_not_saas" };
   }
 
   let membership: Awaited<ReturnType<MembershipLookup>>;

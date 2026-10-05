@@ -19,9 +19,9 @@
  *      refuses to boot rather than quietly opening a real business.
  *   4. Reset deletes only rows carrying the fixture tenant id.
  *
- * It therefore cannot weaken auth for any other user: a bypassed session is
- * scoped by the same ctx.tenantId mechanism every other session uses, and that
- * tenant owns nothing but demo fixtures.
+ * The bypass identity is deliberately NOT a platform administrator. It is a
+ * tenant demo identity and generic protected/platform procedures reject it.
+ * Tenant-scoped demo capabilities must opt in through tenant membership guards.
  *
  * Turning GOLDLINE_DEMO_BYPASS on in production DOES mean anyone who knows the
  * URL can enter the WRIGHT CONTRACTORS demo tenant unauthenticated. That is the
@@ -40,6 +40,7 @@ export const DEMO_BUSINESS_NAME = "WRIGHT CONTRACTORS";
 export const DEMO_COOKIE_NAME = "goldline_demo_session";
 export const DEMO_CONTEXT_HEADER = "x-goldline-demo-context";
 export const DEMO_CONTEXT_VALUE = "wright-contractors";
+export const DEMO_PLATFORM_ROLE = "user" as const;
 const DEMO_SESSION_MS = 1000 * 60 * 60 * 8;
 const DEMO_OPEN_ID = "goldline-demo:wright-contractors";
 
@@ -94,7 +95,7 @@ async function ensureDemoTenant() {
     tenantId: DEMO_TENANT_ID,
     name: DEMO_BUSINESS_NAME,
     loginMethod: "goldline_demo_bypass",
-    role: "admin",
+    role: DEMO_PLATFORM_ROLE,
     lastSignedIn: new Date(),
   });
 
@@ -177,7 +178,7 @@ export function registerGoldlineDemoRoutes(app: express.Express) {
       await ensureDemoTenant();
       const sessionToken = await sdk.createSessionToken(DEMO_OPEN_ID, {
         name: DEMO_BUSINESS_NAME,
-        role: "admin",
+        role: DEMO_PLATFORM_ROLE,
         expiresInMs: DEMO_SESSION_MS,
       });
       res.cookie(DEMO_COOKIE_NAME, sessionToken, {

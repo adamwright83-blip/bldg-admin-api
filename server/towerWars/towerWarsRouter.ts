@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import {
   activateTowerWarsPromise,
   fulfillTowerWarsPromise,
@@ -17,10 +17,10 @@ import { listSeasonRevisions } from "./impactStore";
 const buildingId = z.enum(["opus_la", "century_park_east"]);
 
 export const towerWarsRouter = router({
-  seasonRevisions: adminProcedure.input(z.object({ seasonId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+  seasonRevisions: legacyAdminRoleProcedure.input(z.object({ seasonId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(({ ctx, input }) => listSeasonRevisions(ctx.tenantId, input.seasonId)),
-  sandboxCapability: adminProcedure.query(() => ({ enabled: sandboxEnabled() })),
-  sandbox: adminProcedure.query(() => {
+  sandboxCapability: legacyAdminRoleProcedure.query(() => ({ enabled: sandboxEnabled() })),
+  sandbox: legacyAdminRoleProcedure.query(() => {
     requireSandboxEnabled();
     return {
       banner: "SANDBOX — NO BUSINESS DATA WILL BE WRITTEN",
@@ -35,7 +35,7 @@ export const towerWarsRouter = router({
       }),
     };
   }),
-  sandboxReplay: adminProcedure
+  sandboxReplay: legacyAdminRoleProcedure
     .input(z.object({ businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(async ({ ctx, input }) => {
       requireSandboxEnabled();
@@ -46,7 +46,7 @@ export const towerWarsRouter = router({
       const replay = await getTowerWarsSettlement({ tenantId: ctx.tenantId, now: new Date(`${input.businessDate}T19:00:00.000Z`) });
       return { ...replay, readOnly: true as const, cursorScope: `sandbox:replay:${input.businessDate}` };
     }),
-  today: adminProcedure
+  today: legacyAdminRoleProcedure
     .input(z.object({ businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).optional())
     .query(async ({ ctx, input }) => {
       const date = input?.businessDate;
@@ -59,7 +59,7 @@ export const towerWarsRouter = router({
       return date ? { ...result, promises: [] } : result;
     }),
   /** Today's legible match plus the permanent strata beneath it. */
-  settlement: adminProcedure
+  settlement: legacyAdminRoleProcedure
     .input(
       z
         .object({ historyDays: z.number().int().min(1).max(3650).optional(), businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
@@ -72,7 +72,7 @@ export const towerWarsRouter = router({
         now: input?.businessDate ? zonedDayStartUtc(input.businessDate, getDashboardTimeZone()) : undefined,
       })
     ),
-  recordPromise: adminProcedure
+  recordPromise: legacyAdminRoleProcedure
     .input(
       z.object({
         buildingId,
@@ -113,7 +113,7 @@ export const towerWarsRouter = router({
     .mutation(({ ctx, input }) =>
       recordTowerWarsPromise({ ...input, tenantId: ctx.tenantId })
     ),
-  fulfillPromise: adminProcedure
+  fulfillPromise: legacyAdminRoleProcedure
     .input(
       z.object({
         promiseId: z.string().uuid(),
@@ -127,7 +127,7 @@ export const towerWarsRouter = router({
         actorId: dayDirectorActorId(ctx),
       })
     ),
-  activatePromise: adminProcedure
+  activatePromise: legacyAdminRoleProcedure
     .input(z.object({ promiseId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       activateTowerWarsPromise({

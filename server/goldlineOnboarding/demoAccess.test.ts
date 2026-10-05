@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEMO_BUSINESS_NAME, DEMO_TENANT_ID, demoBypassEnabled, demoSessionTokenFromRequest, protectedTenantIds } from "./demoAccess";
+import { DEMO_BUSINESS_NAME, DEMO_PLATFORM_ROLE, DEMO_TENANT_ID, demoBypassEnabled, demoSessionTokenFromRequest, protectedTenantIds } from "./demoAccess";
 
 const repo = (...p: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", ...p), "utf8");
 const server = repo("server", "goldlineOnboarding", "demoAccess.ts");
@@ -49,6 +49,12 @@ describe("demo bypass cannot reach a real tenant", () => {
   it("refuses to boot if the fixture id is ever pointed at a real tenant", () => {
     expect(server).toContain("if (protectedTenantIds().has(DEMO_TENANT_ID))");
     expect(server).toContain("Refusing to start.");
+  });
+
+  it("never mints platform-admin authority for the fixture user", () => {
+    expect(DEMO_PLATFORM_ROLE).toBe("user");
+    expect(server).toContain("role: DEMO_PLATFORM_ROLE");
+    expect(server).not.toMatch(/createSessionToken\(DEMO_OPEN_ID,[\s\S]{0,160}role:\s*"admin"/);
   });
 
   it("mints a separate short-lived session only for the fixture user", () => {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { listRequestJobCardSourceRecords } from "../db";
 import { buildCastingSprintBootstrapHandoff, type CastingSprintBootstrapHandoff } from "./castingSprintBootstrapBridgePolicy";
 import {
@@ -210,19 +210,19 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * live email/SMS/form SDK. liveSendingEnabled is always false in this
    * slice regardless of what env vars or flags are set.
    */
-  providerReadiness: adminProcedure.query((): ProviderReadiness & { agentMail: ReturnType<typeof inspectAgentMailReadiness> } => ({
+  providerReadiness: legacyAdminRoleProcedure.query((): ProviderReadiness & { agentMail: ReturnType<typeof inspectAgentMailReadiness> } => ({
     ...buildProviderReadiness(),
     agentMail: inspectAgentMailReadiness(),
   })),
 
-  mission: adminProcedure
+  mission: legacyAdminRoleProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191) }))
     .query(async ({ ctx, input }): Promise<CastingMissionResult> => {
       const { found, blockedReasons, mission } = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
       return { found, blockedReasons, mission };
     }),
 
-  bootstrapHandoff: adminProcedure
+  bootstrapHandoff: legacyAdminRoleProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191), leadId: z.string().min(1).max(191).optional() }))
     .query(async ({ ctx, input }): Promise<CastingSprintBootstrapHandoffResponse> => {
       const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
@@ -236,7 +236,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       return { found: true, allowed: true, blockedReasons: [], handoff: handoffResult.handoff };
     }),
 
-  generateOutreachDraft: adminProcedure
+  generateOutreachDraft: legacyAdminRoleProcedure
     .input(z.object({
       sourceKey: z.string().min(3).max(191),
       leadId: z.string().min(1).max(191),
@@ -298,7 +298,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * the admin UI separately calls firstRealProposalBootstrap.createCandidate
    * with this payload, as an explicit, distinct admin action.
    */
-  candidateCreationPayload: adminProcedure
+  candidateCreationPayload: legacyAdminRoleProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191), leadId: z.string().min(1).max(191), vendorFacts: vendorFactsInput }))
     .mutation(async ({ ctx, input }): Promise<CandidateCreationPayloadResponse> => {
       const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
@@ -321,7 +321,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * a no-op provider adapter only. No adapter here makes a real network
    * call or invokes a live provider; liveProviderInvoked is always false.
    */
-  runContactAttempt: adminProcedure
+  runContactAttempt: legacyAdminRoleProcedure
     .input(z.object({
       sourceKey: z.string().min(3).max(191),
       leadId: z.string().min(1).max(191),
@@ -505,7 +505,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * outcome via recordLiveSendResult(), which never writes
    * provider_accepted/booking_confirmed/payment_authorized/dispatched.
    */
-  runSupervisedAgentMailCanary: adminProcedure
+  runSupervisedAgentMailCanary: legacyAdminRoleProcedure
     .input(z.object({
       sourceKey: z.string().min(3).max(191),
       durableDraftId: z.string().min(1).max(191),
@@ -672,7 +672,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * vendor said. inboundProvider is always noop_test. Performs no real
    * inbound channel listening and no production write.
    */
-  simulateVendorReply: adminProcedure
+  simulateVendorReply: legacyAdminRoleProcedure
     .input(z.object({
       sourceKey: z.string().min(3).max(191),
       attemptId: z.string().min(1).max(191),
@@ -753,7 +753,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
     }),
 
     /** Tenant-scoped, admin-only audit feed: a single durable attempt by id. */
-    contactAttemptById: adminProcedure
+    contactAttemptById: legacyAdminRoleProcedure
       .input(z.object({ attemptId: z.string().min(1).max(191) }))
       .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary | null> => {
         const store = resolveContactAttemptStore(injectedStore);
@@ -762,7 +762,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       }),
 
     /** Tenant-scoped, admin-only audit feed: every durable attempt for a sourceKey. */
-    contactAttemptsBySourceKey: adminProcedure
+    contactAttemptsBySourceKey: legacyAdminRoleProcedure
       .input(z.object({ sourceKey: z.string().min(3).max(191), limit: z.number().int().min(1).max(250).default(50) }))
       .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary[]> => {
         const store = resolveContactAttemptStore(injectedStore);
@@ -771,7 +771,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       }),
 
     /** Tenant-scoped, admin-only audit feed: every durable attempt for a candidateId. */
-    contactAttemptsByCandidateId: adminProcedure
+    contactAttemptsByCandidateId: legacyAdminRoleProcedure
       .input(z.object({ candidateId: z.string().min(1).max(191), limit: z.number().int().min(1).max(250).default(50) }))
       .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary[]> => {
         const store = resolveContactAttemptStore(injectedStore);
@@ -780,7 +780,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       }),
 
     /** Tenant-scoped, admin-only audit feed: most recent durable attempts across all sources. */
-    recentContactAttempts: adminProcedure
+    recentContactAttempts: legacyAdminRoleProcedure
       .input(z.object({ limit: z.number().int().min(1).max(250).default(50), cursor: z.string().nullable().optional() }))
       .query(async ({ ctx, input }): Promise<{ attempts: AuditFeedAttemptSummary[]; nextCursor: string | null }> => {
         const store = resolveContactAttemptStore(injectedStore);

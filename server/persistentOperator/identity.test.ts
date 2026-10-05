@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   operatorUserCanResolveOnTenant,
+  requireEffectiveOperatorIdentityForTenant,
   resolveCanonicalOperatorIdentity,
   type OperatorIdentityBinding,
   type OperatorIdentityResolverDeps,
@@ -302,6 +303,22 @@ describe("canonical operator identity", () => {
         "saas-tenant-b"
       )
     ).toBe(false);
+  });
+
+  it("rejects shared-password admin before any cross-tenant operator lookup", async () => {
+    await expect(
+      requireEffectiveOperatorIdentityForTenant({
+        callerUser: {
+          id: 1,
+          openId: "admin-owner",
+          role: "admin",
+          tenantId: "default",
+        },
+        callerTenantId: "default",
+        targetTenantId: "tenant-b",
+        subsystem: "test.cross_tenant",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("records only typed join metadata on failure, not raw identity values", async () => {

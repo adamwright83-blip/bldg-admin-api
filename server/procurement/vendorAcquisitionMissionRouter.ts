@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import {
   buildAgentMailLabels, evaluateAgentMailLiveSendGate, sendVendorEmailViaAgentMail,
 } from "./agentMailVendorEmailProvider";
@@ -614,7 +614,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedDiscoverEmailFn: typeof discoverWebsiteContactEmail = discoverWebsiteContactEmail,
 ) {
   return router({
-    createMission: adminProcedure
+    createMission: legacyAdminRoleProcedure
       .input(z.object({
         category: z.string().min(1).max(100),
         geographyLabel: z.string().min(1).max(255),
@@ -654,7 +654,7 @@ export function createVendorAcquisitionMissionRouter(
         }
       }),
 
-    listMissions: adminProcedure
+    listMissions: legacyAdminRoleProcedure
       .input(z.object({ status: z.string().optional(), limit: z.number().int().min(1).max(250).default(50) }))
       .query(async ({ ctx, input }) => {
         const store = resolveStore(injectedStore);
@@ -669,7 +669,7 @@ export function createVendorAcquisitionMissionRouter(
      * Filters by category, not mission id -- vendor_sourcing_candidates
      * has no mission_id column.
      */
-    listDiscoveredCandidates: adminProcedure
+    listDiscoveredCandidates: legacyAdminRoleProcedure
       .input(z.object({ category: z.string().optional(), limit: z.number().int().min(1).max(250).default(50) }))
       .query(async ({ ctx, input }) => {
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
@@ -688,7 +688,7 @@ export function createVendorAcquisitionMissionRouter(
      * approving the same candidate twice returns the existing draft
      * rather than creating a duplicate.
      */
-    approveCandidateForDraftOutreach: adminProcedure
+    approveCandidateForDraftOutreach: legacyAdminRoleProcedure
       .input(z.object({ candidateId: z.string().min(1) }))
       .mutation(async ({ ctx, input }) => {
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
@@ -748,7 +748,7 @@ export function createVendorAcquisitionMissionRouter(
      * status "sent". provider_accepted/booking_confirmed/payment_authorized/
      * dispatched are never referenced by this mutation at all.
      */
-    sendCandidateDraftOutreachCanary: adminProcedure
+    sendCandidateDraftOutreachCanary: legacyAdminRoleProcedure
       .input(z.object({
         missionId: z.string().min(1),
         candidateId: z.string().min(1),
@@ -863,7 +863,7 @@ export function createVendorAcquisitionMissionRouter(
      * copy as the existing draft queue (78a) and one-at-a-time send
      * (80a); never a different/storefront/mobile-claiming template.
      */
-    previewReadyAgentMailBatchForMission: adminProcedure
+    previewReadyAgentMailBatchForMission: legacyAdminRoleProcedure
       .input(z.object({ missionId: z.string().min(1) }))
       .query(async ({ ctx, input }) => {
         const missionStore = resolveStore(injectedStore);
@@ -914,7 +914,7 @@ export function createVendorAcquisitionMissionRouter(
      * Never invoked automatically -- requires explicitConfirmation from
      * an operator action.
      */
-    sendReadyAgentMailBatchForMission: adminProcedure
+    sendReadyAgentMailBatchForMission: legacyAdminRoleProcedure
       .input(z.object({
         missionId: z.string().min(1),
         explicitConfirmation: z.boolean(),
@@ -1048,7 +1048,7 @@ export function createVendorAcquisitionMissionRouter(
      * never fabricates one. Validates tenant ownership by confirming the
      * candidate exists for this tenant before reading any intake row.
      */
-    getCandidateAvailabilityIntake: adminProcedure
+    getCandidateAvailabilityIntake: legacyAdminRoleProcedure
       .input(z.object({ candidateId: z.string().min(1) }))
       .query(async ({ ctx, input }) => {
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
@@ -1069,7 +1069,7 @@ export function createVendorAcquisitionMissionRouter(
      * candidate updates the existing intake row via the table's own
      * UNIQUE KEY, never creating a duplicate.
      */
-    saveCandidateAvailabilityIntake: adminProcedure
+    saveCandidateAvailabilityIntake: legacyAdminRoleProcedure
       .input(z.object({
         candidateId: z.string().min(1),
         mobileServiceConfirmed: z.enum(MOBILE_SERVICE_CONFIRMED_VALUES).optional(),
@@ -1120,7 +1120,7 @@ export function createVendorAcquisitionMissionRouter(
      * is even created. Never calls an LLM/AI provider, never persists
      * anything, never touches the database.
      */
-    previewQueryPlan: adminProcedure
+    previewQueryPlan: legacyAdminRoleProcedure
       .input(z.object({
         missionText: z.string().max(2000).nullable().optional(),
         category: z.string().min(1).max(100),
@@ -1150,7 +1150,7 @@ export function createVendorAcquisitionMissionRouter(
      * application-level idempotency check by (tenantId, sourceType,
      * placeId).
      */
-    runDiscovery: adminProcedure
+    runDiscovery: legacyAdminRoleProcedure
       .input(z.object({ missionId: z.string().min(1) }))
       .mutation(async ({ ctx, input }): Promise<RunDiscoveryResult> => {
         const missionStore = resolveStore(injectedStore);
@@ -1420,7 +1420,7 @@ export function createVendorAcquisitionMissionRouter(
      * creates, sends, contacts, or marks any provider-acceptance/
      * booking/payment/dispatch truth.
      */
-    listMissionShortlist: adminProcedure
+    listMissionShortlist: legacyAdminRoleProcedure
       .input(z.object({ missionId: z.string().min(1), includeOverflow: z.boolean().default(false) }))
       .query(async ({ ctx, input }) => {
         const missionStore = resolveStore(injectedStore);

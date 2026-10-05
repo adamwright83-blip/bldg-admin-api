@@ -1,7 +1,7 @@
 /**
  * Sales Intel administration.
  *
- * EVERY procedure here is gated on `adminProcedure`, which requires the
+ * EVERY procedure here is gated on `legacyAdminRoleProcedure`, which requires the
  * platform role `admin`. The `driver` role is excluded at the server boundary,
  * not merely hidden in navigation — a driver-role user calling these endpoints
  * directly receives FORBIDDEN.
@@ -10,7 +10,7 @@
  * administer the corpus.
  */
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import {
   SALES_INTEL_REVIEW_STATES,
   salesIntelImportSchema,
@@ -75,15 +75,15 @@ const segmentSchema = z.object({
 
 export const salesIntelRouter = router({
   /** Adapter capability list, so the admin UI states honestly what works. */
-  adapters: adminProcedure.query(() =>
+  adapters: legacyAdminRoleProcedure.query(() =>
     createSalesIntelAdapterRegistry().list()
   ),
 
-  sources: adminProcedure
+  sources: legacyAdminRoleProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
     .query(({ input }) => listSourceArtifacts(input?.limit ?? 50)),
 
-  source: adminProcedure
+  source: legacyAdminRoleProcedure
     .input(z.object({ sourceArtifactId: z.string().uuid() }))
     .query(async ({ input }) => {
       const artifact = await getSourceArtifact(input.sourceArtifactId);
@@ -99,7 +99,7 @@ export const salesIntelRouter = router({
    * The `+ ADD SALES INTEL` action. One field: a YouTube URL, an Instagram
    * Reel URL, or transcript text.
    */
-  ingest: adminProcedure
+  ingest: legacyAdminRoleProcedure
     .input(
       z.object({
         input: z.string().trim().min(1).max(200_000),
@@ -123,7 +123,7 @@ export const salesIntelRouter = router({
     ),
 
   /** Supplies content for a source that was awaiting it. */
-  attachContent: adminProcedure
+  attachContent: legacyAdminRoleProcedure
     .input(
       z.object({
         sourceArtifactId: z.string().uuid(),
@@ -146,7 +146,7 @@ export const salesIntelRouter = router({
       })
     ),
 
-  reextract: adminProcedure
+  reextract: legacyAdminRoleProcedure
     .input(z.object({ sourceArtifactId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       reextractSalesIntelSource({
@@ -155,20 +155,20 @@ export const salesIntelRouter = router({
       })
     ),
 
-  frameworkVersions: adminProcedure
+  frameworkVersions: legacyAdminRoleProcedure
     .input(z.object({ frameworkKey: z.string().trim().min(1).max(64) }))
     .query(({ input }) => listFrameworkVersions(input.frameworkKey)),
 
   /** Every framework awaiting a human decision, with explainable quality signals. */
-  reviewQueue: adminProcedure.query(() => getFrameworkReviewQueue()),
+  reviewQueue: legacyAdminRoleProcedure.query(() => getFrameworkReviewQueue()),
 
   /** What the accepted corpus actually covers — counts and gaps, never an invented percentage. */
-  coverage: adminProcedure.query(async () => {
+  coverage: legacyAdminRoleProcedure.query(async () => {
     const frameworks = await listAllAcceptedFrameworks();
     return computeSalesIntelCoverage(frameworks);
   }),
 
-  review: adminProcedure
+  review: legacyAdminRoleProcedure
     .input(
       z.object({
         frameworkId: z.string().uuid(),
@@ -189,9 +189,9 @@ export const salesIntelRouter = router({
    */
   teachings: router({
     /** Every teaching awaiting a human decision, with real source evidence. */
-    reviewQueue: adminProcedure.query(() => getTeachingReviewQueue()),
+    reviewQueue: legacyAdminRoleProcedure.query(() => getTeachingReviewQueue()),
 
-    review: adminProcedure
+    review: legacyAdminRoleProcedure
       .input(
         z.object({
           teachingId: z.string().uuid(),
@@ -207,12 +207,12 @@ export const salesIntelRouter = router({
       ),
 
     /** What the accepted teaching corpus covers by category/creator/source — counts only. */
-    coverage: adminProcedure.query(async () => {
+    coverage: legacyAdminRoleProcedure.query(async () => {
       const teachings = await listAllAcceptedTeachings();
       return computeSalesIntelTeachingCoverage(teachings);
     }),
 
-    forSource: adminProcedure
+    forSource: legacyAdminRoleProcedure
       .input(z.object({ sourceArtifactId: z.string().uuid() }))
       .query(({ input }) => listTeachingsForSource(input.sourceArtifactId)),
 
@@ -223,7 +223,7 @@ export const salesIntelRouter = router({
      * transcripts (e.g. Shelby Sapp's long-form video, already processed
      * through Gemini in a prior run).
      */
-    reextractFromExistingTranscripts: adminProcedure
+    reextractFromExistingTranscripts: legacyAdminRoleProcedure
       .input(z.object({ sourceArtifactId: z.string().uuid() }))
       .mutation(({ ctx, input }) =>
         reextractGeneralTeachingsFromTranscripts({
@@ -234,7 +234,7 @@ export const salesIntelRouter = router({
   }),
 
   /** Bulk import for the sourced researcher corpus. */
-  importCorpus: adminProcedure
+  importCorpus: legacyAdminRoleProcedure
     .input(z.object({ payload: salesIntelImportSchema }))
     .mutation(({ ctx, input }) =>
       importSalesIntelCorpus({
@@ -248,7 +248,7 @@ export const salesIntelRouter = router({
    * `sources`/`source` above, which list individual ingested artifacts.
    */
   sourceRegistry: router({
-    list: adminProcedure
+    list: legacyAdminRoleProcedure
       .input(
         z
           .object({ status: z.enum(SALES_INTEL_SOURCE_REGISTRY_STATUSES).optional() })
@@ -256,7 +256,7 @@ export const salesIntelRouter = router({
       )
       .query(({ input }) => listSalesIntelSources(input)),
 
-    create: adminProcedure
+    create: legacyAdminRoleProcedure
       .input(salesIntelSourceRegistryCreateSchema)
       .mutation(async ({ ctx, input }) => {
         try {
@@ -272,7 +272,7 @@ export const salesIntelRouter = router({
         }
       }),
 
-    setStatus: adminProcedure
+    setStatus: legacyAdminRoleProcedure
       .input(
         z.object({
           id: z.string().uuid(),
@@ -287,16 +287,16 @@ export const salesIntelRouter = router({
      * carries the stable id) before its UC... id was resolved. Never
      * creates a new row, never touches creator/URL/provenance.
      */
-    setExternalChannelId: adminProcedure
+    setExternalChannelId: legacyAdminRoleProcedure
       .input(salesIntelSourceRegistrySetChannelIdSchema)
       .mutation(({ input }) => setSalesIntelSourceExternalChannelId(input)),
 
-    recentArtifacts: adminProcedure
+    recentArtifacts: legacyAdminRoleProcedure
       .input(z.object({ id: z.string().uuid() }))
       .query(({ input }) => listSourceArtifactsForRegistry(input.id)),
 
     /** Manual "CHECK FOR NEW CONTENT" for one source — idempotent, safe to re-run. */
-    checkNow: adminProcedure
+    checkNow: legacyAdminRoleProcedure
       .input(z.object({ id: z.string().uuid() }))
       .mutation(async ({ input }) => {
         const source = await getSalesIntelSource(input.id);
@@ -312,18 +312,18 @@ export const salesIntelRouter = router({
      * per-minute). This mutation itself is what makes that safe to wire up
      * later without further engineering.
      */
-    checkAllEnabled: adminProcedure.mutation(async () => {
+    checkAllEnabled: legacyAdminRoleProcedure.mutation(async () => {
       const sources = await listEnabledYouTubeSources();
       return checkAllEnabledYouTubeSources(sources);
     }),
 
     /** PREVIEW / DRY RUN — classifies every entry, mutates nothing. */
-    previewImport: adminProcedure
+    previewImport: legacyAdminRoleProcedure
       .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
       .mutation(({ input }) => previewSalesIntelSourceImport(input.entries)),
 
     /** Idempotent: only "new"-classified entries are actually inserted. */
-    applyImport: adminProcedure
+    applyImport: legacyAdminRoleProcedure
       .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
       .mutation(({ ctx, input }) =>
         applySalesIntelSourceImport({ rawEntries: input.entries, createdBy: ctx.user.openId })

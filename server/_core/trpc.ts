@@ -12,7 +12,11 @@ import {
   resolveLegacyDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
-import { authorizeJoystickClaireDesk } from "../joystick/tenantIdentity";
+import {
+  authorizeJoystickClaireDesk,
+  isGoldlineDemoOpenId,
+  isPlatformAdministrator,
+} from "../joystick/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
@@ -48,18 +52,42 @@ const requireUser = t.middleware(async opts => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
+  // Demo bypass sessions are tenant-demo credentials, not generic legacy
+  // platform sessions. They must enter through explicit tenant procedures.
+  if (isGoldlineDemoOpenId(ctx.user.openId)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 export const protectedProcedure = baseProcedure.use(requireUser);
 
-export const adminProcedure = baseProcedure.use(
+/**
+ * Compatibility guard for routes that historically meant users.role === "admin".
+ * It preserves the old access surface while those routes are audited one by one.
+ * It is NOT platform-wide authority and demo bypass identities never satisfy it.
+ */
+export const legacyAdminRoleProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
+    if (
+      !ctx.user ||
+      ctx.user.role !== "admin" ||
+      isGoldlineDemoOpenId(ctx.user.openId)
+    ) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({ ctx: { ...ctx, user: ctx.user } });
+  })
+);
+
+export const adminProcedure = baseProcedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!isPlatformAdministrator(ctx.user)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user! } });
   })
 );
 

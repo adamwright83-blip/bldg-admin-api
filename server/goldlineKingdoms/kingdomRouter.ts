@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { adminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getKingdom,
   selectKingdomCampaign,
@@ -19,14 +19,14 @@ export const kingdomRouter = router({
   get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ kingdomId: z.string() }))
     .query(({ ctx, input }) => getKingdom({ tenantId: ctx.tenantId, ...input })),
-  seedDefaults: adminProcedure.mutation(async ({ ctx }) => {
+  seedDefaults: legacyAdminRoleProcedure.mutation(async ({ ctx }) => {
     await seedGoldlineKingdoms(ctx.tenantId ?? "default");
     return deriveKingdomStatuses({
       tenantId: ctx.tenantId ?? "default",
       operatorId: ctx.user.openId,
     });
   }),
-  selectCampaign: adminProcedure
+  selectCampaign: legacyAdminRoleProcedure
     .input(
       z.object({
         kingdomId: z.string(),
@@ -37,12 +37,12 @@ export const kingdomRouter = router({
     .mutation(({ ctx, input }) =>
       selectKingdomCampaign({ tenantId: ctx.tenantId ?? "default", ...input })
     ),
-  setCompanion: adminProcedure
+  setCompanion: legacyAdminRoleProcedure
     .input(z.object({ kingdomId: z.string(), companionEarnedId: z.string() }))
     .mutation(({ ctx, input }) =>
       setKingdomCompanion({ tenantId: ctx.tenantId ?? "default", ...input })
     ),
-  setStatus: adminProcedure
+  setStatus: legacyAdminRoleProcedure
     .input(
       z.object({
         kingdomId: z.string(),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { listRequestJobCardSourceRecords } from "../db";
 import {
   buildRequestJobCardPage,
@@ -7,7 +7,7 @@ import {
 } from "./requestJobCardReadModel";
 
 export const requestJobCardRouter = router({
-  list: adminProcedure
+  list: legacyAdminRoleProcedure
     .input(z.object({
       limit: z.number().int().min(1).max(50).default(25),
       offset: z.number().int().min(0).max(1000).default(0),
