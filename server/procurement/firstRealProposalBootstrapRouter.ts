@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeTenantAdminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { createProcurementPool } from "./migrations";
 import { VendorOutreachDraftingStore } from "./vendorOutreachDraftingStore";
 import { VendorProposalVersionStore } from "./vendorProposalVersionStore";
@@ -208,8 +208,8 @@ function validateNoAutomatedForbiddenBehavior(text: string): void {
 
 export function createFirstRealProposalBootstrapRouter(injected?: Partial<BootstrapStores>) {
   return router({
-    runbook: legacyDayforgeTenantAdminProcedure.query(() => runbook()),
-    assemblyChecklist: legacyDayforgeTenantAdminProcedure.input(assembleChecklistInput).query(({ input }) => {
+    runbook: legacyAdminRoleProcedure.query(() => runbook()),
+    assemblyChecklist: legacyAdminRoleProcedure.input(assembleChecklistInput).query(({ input }) => {
       const missing = [
         !input.candidateId ? "candidate_id_required" : null,
         !input.responseTermsId ? "response_terms_id_required" : null,
@@ -226,7 +226,7 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
         stateMutated: false,
       };
     }),
-    createCandidate: legacyDayforgeTenantAdminProcedure.input(candidateInput).mutation(async ({ ctx, input }) => {
+    createCandidate: legacyAdminRoleProcedure.input(candidateInput).mutation(async ({ ctx, input }) => {
       validateNoAutomatedForbiddenBehavior(`${input.businessName}\n${input.qualificationNotes}`);
       const stores = resolveStores(injected);
       const candidateId = id("candidate", input.id);
@@ -245,7 +245,7 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
       });
       return { candidateId, stateMutated: true, sentByHeld: false, booked: false, paid: false, dispatched: false };
     }),
-    scoreCandidate: legacyDayforgeTenantAdminProcedure.input(scoringInput).mutation(async ({ ctx, input }) => {
+    scoreCandidate: legacyAdminRoleProcedure.input(scoringInput).mutation(async ({ ctx, input }) => {
       const stores = resolveStores(injected);
       const scoreId = id("score", input.id);
       const result = await stores.scoring.scoreCandidate({
@@ -271,12 +271,12 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
       });
       return { scoreId, ...result, stateMutated: true, sentByHeld: false };
     }),
-    promoteCandidate: legacyDayforgeTenantAdminProcedure.input(promoteInput).mutation(async ({ input }) => {
+    promoteCandidate: legacyAdminRoleProcedure.input(promoteInput).mutation(async ({ input }) => {
       const stores = resolveStores(injected);
       await stores.scoring.promoteAfterOperatorApproval(input);
       return { promoted: true, stateMutated: true, sentByHeld: false };
     }),
-    createOutreachDraft: legacyDayforgeTenantAdminProcedure.input(draftInput).mutation(async ({ ctx, input }) => {
+    createOutreachDraft: legacyAdminRoleProcedure.input(draftInput).mutation(async ({ ctx, input }) => {
       const stores = resolveStores(injected);
       const draftId = id("draft", input.id);
       const result = await stores.drafting.createDraft({
@@ -291,7 +291,7 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
       });
       return { ...result, draftId, stateMutated: true, sendable: false, sentByHeld: false };
     }),
-    recordManualVendorResponse: legacyDayforgeTenantAdminProcedure.input(manualResponseInput).mutation(async ({ ctx, input }) => {
+    recordManualVendorResponse: legacyAdminRoleProcedure.input(manualResponseInput).mutation(async ({ ctx, input }) => {
       validateNoAutomatedForbiddenBehavior(`${input.exactVendorStatement}\n${JSON.stringify(input.constraints)}`);
       const stores = resolveStores(injected);
       const eventId = id("event", input.id);
@@ -322,13 +322,13 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
       });
       return { eventId, stateMutated: true, sentByHeld: false, booked: false, accepted: false };
     }),
-    storeResponseTerms: legacyDayforgeTenantAdminProcedure.input(responseTermsInput).mutation(async ({ input }) => {
+    storeResponseTerms: legacyAdminRoleProcedure.input(responseTermsInput).mutation(async ({ input }) => {
       const stores = resolveStores(injected);
       const termsId = id("terms", input.id);
       const result = await stores.terms.storeResponseTerms({ id: termsId, outreachEventId: input.outreachEventId });
       return { termsId, ...result, stateMutated: true, booked: false, paid: false, dispatched: false };
     }),
-    createReputationEvidence: legacyDayforgeTenantAdminProcedure.input(evidenceInput).mutation(async ({ ctx, input }) => {
+    createReputationEvidence: legacyAdminRoleProcedure.input(evidenceInput).mutation(async ({ ctx, input }) => {
       const stores = resolveStores(injected);
       const evidenceId = id("evidence", input.id);
       const result = await stores.evidence.createSnapshot({
@@ -349,7 +349,7 @@ export function createFirstRealProposalBootstrapRouter(injected?: Partial<Bootst
       });
       return { evidenceId, ...result, stateMutated: true, fakeReviewCreated: false };
     }),
-    markReadyForResidentPresentation: legacyDayforgeTenantAdminProcedure.input(markReadyInput).mutation(async ({ input }) => {
+    markReadyForResidentPresentation: legacyAdminRoleProcedure.input(markReadyInput).mutation(async ({ input }) => {
       const stores = resolveStores(injected);
       const result = await stores.proposals.markReadyForResidentPresentation({ proposalId: input.proposalId });
       return { ...result, stateMutated: result.ok, consentCreated: false, booked: false, paid: false, dispatched: false };
