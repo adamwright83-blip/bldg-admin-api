@@ -311,7 +311,9 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
     await signIn(page, "admin");
     await page.setViewportSize({ width: 675, height: 422 });
-    await page.goto("/");
+    // localhost proof routing exposes the same command-center home at /home;
+    // admin.bldg.chat maps / and /home to this same AdminHostApp world surface.
+    await page.goto("/home");
     await expect(page.locator('[data-lantern-city="islands"]')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".gl-world-title")).toBeVisible();
 
