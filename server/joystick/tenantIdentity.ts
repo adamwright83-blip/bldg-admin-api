@@ -59,6 +59,20 @@ export function isLegacySharedPasswordOpenId(
 }
 
 /**
+ * Platform administration is an explicit principal class, not merely role="admin".
+ * Legacy shared-password and disposable demo identities may operate inside their
+ * intended tenant flows but can never become cross-tenant platform administrators.
+ */
+export function isPlatformAdminIdentity(
+  user: Pick<JoystickUser, "openId" | "role"> | null | undefined
+): boolean {
+  if (!user || user.role !== "admin") return false;
+  if (isLegacySharedPasswordOpenId(user.openId)) return false;
+  if (user.openId.startsWith("goldline-demo:")) return false;
+  return true;
+}
+
+/**
  * The shared-password route accepts a password and admin|driver role only.
  * Tenant, slug, email, and operator ids in the body are not part of the decision.
  */
