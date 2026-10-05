@@ -4667,11 +4667,12 @@ await assertRequiredColumns("authority_receipts", [
 ]);
 await runRequired(
   `ALTER TABLE authority_receipts
-   MODIFY COLUMN claimType enum('payment_verified','account_won','message_sent','action_completed') NOT NULL`,
-  "extend authority receipts with action_completed"
+   MODIFY COLUMN claimType enum('payment_verified','account_won','message_sent','action_completed','field_observation_attested') NOT NULL`,
+  "extend authority receipts with action_completed and field_observation_attested"
 );
 await assertEnumContainsValues("authority_receipts", "claimType", [
   "payment_verified", "account_won", "message_sent", "action_completed",
+  "field_observation_attested",
 ]);
 await assertEnumContainsValues("authority_receipts", "evidenceClass", [
   "authoritative_external", "operator_attested",
@@ -4975,6 +4976,78 @@ await runRequired(
      AND epistemicStatus = 'verified'
      AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadataJson, '$.authorityReceiptId')), '') IS NULL`,
   "downgrade unreceipted consequential Persistent Operator outcomes"
+);
+
+// Persisted parking-lot Clerk observations are explicit human testimony, not
+// model truth. Backfill only events still bound to the visit outcome recorded by
+// the same operator.
+await runRequired(
+  `INSERT IGNORE INTO authority_receipts
+    (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
+     actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
+     occurredAt, admittedAt, metadataJson, idempotencyKey)
+   SELECT
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(e.tenantId, ':field-observation:', e.id), 256), 1, 40)),
+     e.tenantId,
+     'field_observation_attested', 'commercial_mission', CAST(e.missionId AS CHAR),
+     'commercial_mission_event', CONCAT('commercial_mission_events:', e.id),
+     e.actorType, e.actorId, 'operator_attested', 'ATTESTED',
+     'legacy_field_observation_backfill_v1',
+     e.createdAt, CURRENT_TIMESTAMP(3),
+     JSON_OBJECT(
+       'backfilled', TRUE,
+       'eventId', e.id,
+       'visitOutcomeId', v.id,
+       'provenance', 'operator_reported'
+     ),
+     CONCAT('authority:field_observation_attested:', SHA2(CONCAT('field_observation_attested', CHAR(0), 'commercial_mission', CHAR(0), CAST(e.missionId AS CHAR), CHAR(0), 'commercial_mission_event', CHAR(0), CONCAT('commercial_mission_events:', e.id)), 256))
+   FROM commercial_mission_events e
+   JOIN commercial_visit_outcomes v
+     ON BINARY v.tenantId = BINARY e.tenantId
+    AND v.missionId = e.missionId
+    AND BINARY v.recordedBy = BINARY e.actorId
+    AND BINARY CAST(v.id AS CHAR) = BINARY JSON_UNQUOTE(JSON_EXTRACT(e.metadataJson, '$.visitOutcomeId'))
+   WHERE e.eventName = 'parking_lot_clerk_observation'
+     AND e.actorType IN ('operator','driver','human','voice')
+     AND JSON_UNQUOTE(JSON_EXTRACT(e.metadataJson, '$.provenance')) = 'operator_reported'
+     AND NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(e.metadataJson, '$.text'))), '') IS NOT NULL`,
+  "backfill persisted field observation authority receipts"
+);
+
+await runRequired(
+  `UPDATE goal_cycle_outcomes o
+   JOIN authority_receipts a
+     ON BINARY a.tenantId = BINARY o.tenantId
+    AND a.claimType = 'field_observation_attested'
+    AND a.subjectType = 'commercial_mission'
+    AND BINARY a.sourceRef = BINARY o.evidenceReference
+   SET o.metadataJson = JSON_SET(
+     COALESCE(o.metadataJson, JSON_OBJECT()),
+     '$.missionId', a.subjectId,
+     '$.authorityReceiptId', a.id
+   )
+   WHERE o.outcomeKind = 'field_debrief_analyzed'`,
+  "attach field observation authority to historical debrief outcomes"
+);
+
+await runRequired(
+  `DELETE d
+   FROM goal_cycle_learned_deltas d
+   JOIN goal_cycle_outcomes o
+     ON BINARY o.tenantId = BINARY d.tenantId
+    AND BINARY o.id = BINARY d.outcomeId
+   WHERE o.outcomeKind = 'field_debrief_analyzed'
+     AND o.epistemicStatus = 'verified'
+     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(o.metadataJson, '$.authorityReceiptId')), '') IS NULL`,
+  "remove learning derived from unreceipted field debrief outcomes"
+);
+await runRequired(
+  `UPDATE goal_cycle_outcomes
+   SET epistemicStatus = 'unverified'
+   WHERE outcomeKind = 'field_debrief_analyzed'
+     AND epistemicStatus = 'verified'
+     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadataJson, '$.authorityReceiptId')), '') IS NULL`,
+  "downgrade unreceipted field debrief outcomes"
 );
 
 // Preserve historical Goldline wins only when their evidence reference resolves
