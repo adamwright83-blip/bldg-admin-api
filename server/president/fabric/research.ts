@@ -1,5 +1,7 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
 import type { PresidentCycleMission } from "../../../shared/presidentCycle";
+import { ENV } from "../../_core/env";
 
 export type PresidentResearchExecutionResult = {
   executorId: string;
@@ -119,8 +121,119 @@ function invokeClaude(input: {
   });
 }
 
+async function invokeAnthropicResearch(input: {
+  system: string;
+  prompt: string;
+}): Promise<string> {
+  if (!ENV.anthropicApiKey?.trim())
+    throw new Error("ANTHROPIC_API_KEY is required for President API research");
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+  const model =
+    process.env.PRESIDENT_RESEARCH_MODEL?.trim() ||
+    process.env.PRESIDENT_MODEL?.trim() ||
+    ENV.anthropicModel;
+  const messages: any[] = [{ role: "user", content: input.prompt }];
+  let response: any;
+  for (let continuation = 0; continuation < 5; continuation++) {
+    response = await client.messages.create({
+      model,
+      max_tokens: 8192,
+      system: input.system,
+      messages,
+      tools: [
+        {
+          type: "web_search_20260318",
+          name: "web_search",
+          max_uses: 6,
+          allowed_callers: ["direct"],
+        },
+      ],
+    } as any);
+    if (response.stop_reason !== "pause_turn") break;
+    messages.push({ role: "assistant", content: response.content });
+    if (continuation === 4)
+      throw new Error("President API research exceeded continuation bound");
+  }
+  const text = (response?.content ?? [])
+    .filter((block: any) => block.type === "text")
+    .map((block: any) => String(block.text ?? ""))
+    .join("\n")
+    .trim();
+  if (!text) throw new Error("President API research returned no final text");
+  return text;
+}
+
+async function invokeAnthropicResearchReview(input: {
+  system: string;
+  prompt: string;
+}): Promise<unknown> {
+  if (!ENV.anthropicApiKey?.trim())
+    throw new Error("ANTHROPIC_API_KEY is required for President API research review");
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+  const model =
+    process.env.PRESIDENT_RESEARCH_REVIEW_MODEL?.trim() ||
+    process.env.PRESIDENT_REVIEW_MODEL?.trim() ||
+    process.env.PRESIDENT_MODEL?.trim() ||
+    ENV.anthropicModel;
+  const response: any = await client.messages.create({
+    model,
+    max_tokens: 8192,
+    temperature: 0,
+    system: input.system,
+    messages: [{ role: "user", content: input.prompt }],
+    tools: [
+      {
+        name: "submit_research_review",
+        description: "Submit the independent President research review.",
+        input_schema: {
+          type: "object",
+          properties: {
+            verdict: { type: "string", enum: ["PASS", "FAIL", "BLOCKED"] },
+            acceptanceResults: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  criterion: { type: "string" },
+                  passed: { type: "boolean" },
+                  evidence: { type: "string" },
+                },
+                required: ["criterion", "passed", "evidence"],
+                additionalProperties: false,
+              },
+            },
+            observedRisks: { type: "array", items: { type: "string" } },
+            requiredRevision: {
+              anyOf: [{ type: "string" }, { type: "null" }],
+            },
+          },
+          required: [
+            "verdict",
+            "acceptanceResults",
+            "observedRisks",
+            "requiredRevision",
+          ],
+          additionalProperties: false,
+        },
+      },
+    ],
+    tool_choice: { type: "tool", name: "submit_research_review" },
+  } as any);
+  const toolBlock = (response.content ?? []).find(
+    (block: any) =>
+      block.type === "tool_use" && block.name === "submit_research_review"
+  );
+  if (!toolBlock)
+    throw new Error("President API research reviewer returned no structured review");
+  return toolBlock.input;
+}
+
 export class PresidentResearchExecutor {
-  readonly actorId = "president-research-executor:claude-cli";
+  get actorId() {
+    return process.env.ANTHROPIC_API_KEY?.trim()
+      ? "president-research-executor:anthropic-api"
+      : "president-research-executor:claude-cli";
+  }
 
   async execute(mission: PresidentCycleMission): Promise<PresidentResearchExecutionResult> {
     if (!["RESEARCH", "ANALYSIS", "DOCUMENTATION"].includes(mission.executionDomain))
@@ -142,13 +255,15 @@ Return JSON only:
       acceptanceCriteria: mission.acceptanceCriteria,
       evidenceIds: mission.evidenceIds,
     });
-    const raw = await invokeClaude({
-      system,
-      prompt,
-      tools: "WebSearch",
-      maxUsd: process.env.PRESIDENT_RESEARCH_MAX_USD?.trim() || "3",
-      timeoutMs: 15 * 60 * 1000,
-    });
+    const raw = process.env.ANTHROPIC_API_KEY?.trim()
+      ? await invokeAnthropicResearch({ system, prompt })
+      : await invokeClaude({
+          system,
+          prompt,
+          tools: "WebSearch",
+          maxUsd: process.env.PRESIDENT_RESEARCH_MAX_USD?.trim() || "3",
+          timeoutMs: 15 * 60 * 1000,
+        });
     const parsed = JSON.parse(
       raw
         .replace(/^\`\`\`(?:json)?\s*/i, "")
@@ -169,7 +284,11 @@ Return JSON only:
 }
 
 export class PresidentResearchReviewer {
-  readonly actorId = "president-research-reviewer:claude-cli";
+  get actorId() {
+    return process.env.ANTHROPIC_API_KEY?.trim()
+      ? "president-research-reviewer:anthropic-api"
+      : "president-research-reviewer:claude-cli";
+  }
 
   async review(
     mission: PresidentCycleMission,
@@ -188,26 +307,33 @@ Return JSON only:
   "requiredRevision":null
 }
 PASS requires every exact criterion to pass.`;
-    const raw = await invokeClaude({
-      system,
-      prompt: JSON.stringify({
-        mission: {
-          id: mission.id,
-          title: mission.title,
-          objective: mission.objective,
-          acceptanceCriteria: mission.acceptanceCriteria,
-        },
-        artifact: execution.artifact,
-        sources: execution.sources,
-      }),
-      tools: "",
-      maxUsd: process.env.PRESIDENT_RESEARCH_REVIEW_MAX_USD?.trim() || "1",
-      timeoutMs: 10 * 60 * 1000,
+    const reviewPrompt = JSON.stringify({
+      mission: {
+        id: mission.id,
+        title: mission.title,
+        objective: mission.objective,
+        acceptanceCriteria: mission.acceptanceCriteria,
+      },
+      artifact: execution.artifact,
+      sources: execution.sources,
     });
-    const parsed = JSON.parse(
-      raw
-        .replace(/^\`\`\`(?:json)?\s*/i, "")
-        .replace(/\s*\`\`\`$/, "")
+    const raw = process.env.ANTHROPIC_API_KEY?.trim()
+      ? await invokeAnthropicResearchReview({ system, prompt: reviewPrompt })
+      : await invokeClaude({
+          system,
+          prompt: reviewPrompt,
+          tools: "",
+          maxUsd: process.env.PRESIDENT_RESEARCH_REVIEW_MAX_USD?.trim() || "1",
+          timeoutMs: 10 * 60 * 1000,
+        });
+    const parsed = (
+      typeof raw === "string"
+        ? JSON.parse(
+            raw
+              .replace(/^\`\`\`(?:json)?\s*/i, "")
+              .replace(/\s*\`\`\`$/, "")
+          )
+        : raw
     ) as {
       verdict?: unknown;
       acceptanceResults?: unknown;
