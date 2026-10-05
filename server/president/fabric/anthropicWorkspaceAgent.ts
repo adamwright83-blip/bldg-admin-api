@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ENV } from "../../_core/env";
 import type { PresidentCycleMission } from "../../../shared/presidentCycle";
@@ -90,8 +90,8 @@ async function handleTool(
     const requestedPath = String(rawInput.path ?? ".");
     const { relative } = resolveWorkspacePath(cwd, requestedPath);
     assertReadable(relative);
-    const args = ["grep", "-n", "-I", "-F", "--", query];
-    if (relative && relative !== ".") args.push("--", relative);
+    const args = ["grep", "-n", "-I", "-F", "-e", query, "--"];
+    if (relative && relative !== ".") args.push(relative);
     const result = await runPresidentCommand({
       command: "git",
       args,
@@ -119,6 +119,7 @@ async function handleTool(
     const content = String(rawInput.content ?? "");
     if (content.length > 800_000)
       throw new Error("write_file content exceeds bounded size");
+    await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, content, "utf8");
     return "wrote " + relative;
   }
