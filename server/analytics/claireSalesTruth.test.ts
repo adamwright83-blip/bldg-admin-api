@@ -241,3 +241,8 @@ describe("economic decision graph safety", () => {
     expect(result.unresolvedLinkCount).toBe(1);
   });
 });
+it("compares a named completed September with the entire August", () => {
+  const now = new Date("2026-10-04T22:00:00Z");
+  const september = resolvePeriod({ kind: "between", start: "2026-09-01", end: "2026-09-30" }, now, "America/Los_Angeles");
+  expect(previousPeriod(september, now)).toMatchObject({ start: "2026-08-01", end: "2026-08-31" });
+});

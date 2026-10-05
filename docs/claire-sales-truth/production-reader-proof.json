@@ -265,7 +265,7 @@
           "key": "unresolved",
           "label": "unresolved service line",
           "cents": 81650,
-          "orders": 16
+          "orders": 15
         }
       ]
     },
@@ -343,9 +343,9 @@
         "aovCents": 7804
       },
       "previous": {
-        "revenueCents": 210978,
-        "orderCount": 33,
-        "aovCents": 6393
+        "revenueCents": 218378,
+        "orderCount": 34,
+        "aovCents": 6423
       }
     }
   ]
