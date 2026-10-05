@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "./businessLedgerFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({ getDb: vi.fn().mockResolvedValue(null) }));
@@ -57,7 +58,7 @@ function cleancloud(overrides: Partial<CleanCloudOrderRow> & { cleancloudOrderId
 
 function depsWith(loaders: LedgerLoaders): AnalyticsQueryDeps {
   return {
-    loadLedger: input => loadPaidOrderLedger(input, loaders),
+    loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(loaders)),
     timeZone: () => TZ,
   };
 }

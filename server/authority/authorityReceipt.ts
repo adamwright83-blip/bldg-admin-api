@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { authorityReceipts } from "../../drizzle/schema";
 import { getDb } from "../db";
 
@@ -313,4 +313,74 @@ export async function getAuthorityReceiptById(input: {
     db as unknown as AuthorityTransaction,
     input
   );
+}
+
+
+export type PaymentAuthorityExpectation = {
+  tenantId: string;
+  subjectType: "order" | "cleancloud_order";
+  subjectId: string;
+  sourceType: "stripe_payment_intent" | "cleancloud_paid_order";
+  sourceRef: string | null;
+};
+
+/** Reuse admission policy while binding an admitted claim to the actual payment evidence. */
+export function paymentAuthorityReceiptMatches(
+  receipt: AuthorityReceipt,
+  expected: PaymentAuthorityExpectation
+): boolean {
+  if (
+    !expected.sourceRef ||
+    receipt.tenantId !== expected.tenantId ||
+    receipt.claimType !== "payment_verified" ||
+    receipt.subjectType !== expected.subjectType ||
+    receipt.subjectId !== expected.subjectId ||
+    receipt.sourceType !== expected.sourceType ||
+    receipt.sourceRef !== expected.sourceRef
+  )
+    return false;
+  try {
+    assertAuthorityClaimPolicy(receipt);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** SELECT-only, bounded batch read. All subject versions remain eligible for exact source/ref matching. */
+export async function readPaymentAuthorityReceipts(input: {
+  tenantId: string;
+  expectations: readonly PaymentAuthorityExpectation[];
+}): Promise<AuthorityReceipt[]> {
+  const tenantId = required(input.tenantId, "tenantId", 64);
+  if (input.expectations.some(e => e.tenantId !== tenantId))
+    throw new Error("Payment authority batch crosses tenant boundary");
+  if (!input.expectations.length) return [];
+  const db = await getDb();
+  if (!db) throw new Error("Authority receipts unavailable");
+  const receipts: AuthorityReceipt[] = [];
+  for (const subjectType of ["order", "cleancloud_order"] as const) {
+    const ids = [
+      ...new Set(
+        input.expectations
+          .filter(e => e.subjectType === subjectType)
+          .map(e => e.subjectId)
+      ),
+    ];
+    for (let i = 0; i < ids.length; i += 200) {
+      const rows = await db
+        .select()
+        .from(authorityReceipts)
+        .where(
+          and(
+            eq(authorityReceipts.tenantId, tenantId),
+            eq(authorityReceipts.claimType, "payment_verified"),
+            eq(authorityReceipts.subjectType, subjectType),
+            inArray(authorityReceipts.subjectId, ids.slice(i, i + 200))
+          )
+        );
+      receipts.push(...rows.map(toReceipt));
+    }
+  }
+  return receipts;
 }

@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -33,7 +34,7 @@ function claire(options: { loaders?: LedgerLoaders; surface?: ClaireSurface; now
     loadBindings: async () => ({ laundry_butler: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [], latestAttempt: null, isSystemOfRecord: true }, cleancloud: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [{ from: "2020-01-01", to: "2099-12-31", completedAt: new Date(), basis: "economic_event" as const, provenance: "test_fixture" as const }], latestAttempt: null, isSystemOfRecord: false } }),
     runQuery: (tenantId, query) =>
       runBusinessQuery(tenantId, query, {
-        loadLedger: input => loadPaidOrderLedger(input, options.loaders ?? fixtureLoaders(options.seenTenants)),
+        loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(options.loaders ?? fixtureLoaders(options.seenTenants))),
         loadOpenOrders: async () => ({ openTotal: 4, byStatus: {}, awaitingPayment: 1 }),
         loadCompleteness: async () => fixtureCompleteness,
         readSourceCoverage: async () => provenBusinessCoverageSnapshot(tenantId),

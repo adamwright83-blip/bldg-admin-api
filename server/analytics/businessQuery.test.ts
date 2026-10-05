@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "./businessLedgerFixture";
 import { describe, expect, it } from "vitest";
 import { getRepeatCustomerStats, getRevenueSummary, getTopCustomersByRevenue } from "./analyticsQueries";
 import {
@@ -13,7 +14,7 @@ import { loadPaidOrderLedger, type LedgerLoaders } from "./paidOrderLedger";
 
 function deps(loaders: LedgerLoaders): BusinessQueryDeps {
   return {
-    loadLedger: input => loadPaidOrderLedger(input, loaders),
+    loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(loaders)),
     loadOpenOrders: async () => ({ openTotal: 4, byStatus: {}, awaitingPayment: 1 }),
     loadCompleteness: async () => fixtureCompleteness,
     now: () => FIXTURE_NOW,

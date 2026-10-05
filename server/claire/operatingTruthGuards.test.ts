@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 import { describe, expect, it, vi } from "vitest";
 import { answerClaireBusinessTurn, type ClaireBusinessTurnDeps } from "./businessConversation";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
@@ -75,7 +76,7 @@ function turnDeps(bindings: LedgerSourceEvidence, loaders = emptyLoaders): Parti
     loadBindings: async () => bindings,
     runQuery: (tenantId, query) =>
       runBusinessQuery(tenantId, query, {
-        loadLedger: input => loadPaidOrderLedger(input, loaders),
+        loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(loaders)),
         loadOpenOrders: async () => ({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }) as never,
         loadCompleteness: async () => ({ missing: [] }) as never,
         now: () => NOW,
