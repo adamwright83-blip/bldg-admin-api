@@ -1142,7 +1142,7 @@ export function speakBusinessResult(
       break;
     }
   }
-  if (data.kind !== "freshness" && data.kind !== "orders" && data.kind !== "customer_history") {
+  if (data.kind !== "freshness" && data.kind !== "orders") {
     coverageNotes(result, speech, context);
   }
   return {
