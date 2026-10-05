@@ -138,12 +138,12 @@ export default function JoystickHome({
         </Link>
 
         <nav className="jh-nav" aria-label="Primary">
-          <Link href="/" className="is-active"><Home />Home</Link>
-          <Link href="/growth/lantern-city"><Map />Lantern City</Link>
-          <Link href="/play"><CalendarDays />Day Line</Link>
-          <Link href="/operations"><Box />Operations</Link>
-          <Link href="/president"><Building2 />Company</Link>
-          <Link href="/operator"><UserRound />Operator</Link>
+          <Link href="/" className="is-active"><Home /><span>Home</span></Link>
+          <Link href="/growth/lantern-city"><Map /><span>Lantern City</span></Link>
+          <Link href="/play"><CalendarDays /><span>Day Line</span></Link>
+          <Link href="/operations"><Box /><span>Operations</span></Link>
+          <Link href="/president"><Building2 /><span>Company</span></Link>
+          <Link href="/operator"><UserRound /><span>Operator</span></Link>
         </nav>
 
         <div className="jh-top-actions">
@@ -182,7 +182,7 @@ export default function JoystickHome({
 
       <section className="jh-dashboard">
         <article className="jh-world-card">
-          <div className="jh-world-stage" aria-hidden="true">
+          <div className="jh-world-stage">
             <Suspense fallback={<div className="jh-world-loading">Raising Lantern City…</div>}>
               <LanternCityIslands
                 showBrand={false}
