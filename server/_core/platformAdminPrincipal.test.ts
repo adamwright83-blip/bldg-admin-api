@@ -44,4 +44,10 @@ describe("platform admin principal", () => {
       callerFor({ openId: "goldline-demo:wright-contractors", role: "admin" }).platformOnly()
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("does not accidentally promote an ordinary tenant user", async () => {
+    await expect(
+      callerFor({ openId: "dayforge:member-a", role: "user" }).platformOnly()
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
