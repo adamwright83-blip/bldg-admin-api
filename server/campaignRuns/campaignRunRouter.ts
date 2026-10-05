@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import {
-  legacyDayforgeTenantAdminProcedure,
+  legacyAdminRoleProcedure,
   legacyDayforgeTenantMemberProcedure,
   router,
 } from "../_core/trpc";
@@ -108,7 +108,7 @@ export const campaignRunRouter = router({
       listTargets({ tenantId: ctx.tenantId, targetSetId: input.targetSetId })
     ),
 
-  freezeTargets: legacyDayforgeTenantAdminProcedure
+  freezeTargets: legacyAdminRoleProcedure
     .input(
       z.object({
         targetSetId: z.string().min(1).max(64),
@@ -123,7 +123,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  start: legacyDayforgeTenantAdminProcedure
+  start: legacyAdminRoleProcedure
     .input(
       z.object({
         campaignId: z.string().min(1).max(64),
