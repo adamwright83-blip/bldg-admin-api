@@ -7,6 +7,13 @@ import { makeItem, place, itemCenter, cellPos, bedHeadCell } from "./items";
 import { setImportedLampEmissive } from "./assets";
 import { AnatomyWorks } from "./anatomy";
 import { ResidentLife } from "./residents";
+import { Forage } from "./forage";
+import { FixtureWorks } from "./fixtures";
+import { Playtest } from "./playtest";
+import { modeFromSearch } from "../logic/playtest";
+
+declare const __SC_DEFAULT_PLAYTEST__: string | undefined;
+import type { FixtureId } from "../logic/foraging";
 import { rbox, toon, easeOutBack, clamp01 } from "./style";
 import {
   Layout, Item, ItemKind, Rot, Cell, emptyLayout, canPlace, prune, itemAt, footprint, onBed, LIMITS, COLS, ROWS, DOOR, ITEM_LABEL, inBounds,
@@ -27,7 +34,7 @@ import {
   type EpisodeState,
 } from "../logic/episode";
 
-type Phase = "title" | "descent" | "closed" | "opening" | "furnish" | "night" | "morning" | "end";
+type Phase = "title" | "descent" | "closed" | "opening" | "furnish" | "outside" | "night" | "morning" | "end";
 type Tool = ItemKind | "scissors" | null;
 
 const GUEST_TAG: Record<GuestId, string> = {
@@ -66,6 +73,11 @@ export class Game {
   episode: EpisodeState = emptyEpisode();
   anatomy!: AnatomyWorks;
   residents!: ResidentLife;
+  forage!: Forage;
+  fixtureWorks = new FixtureWorks();
+  /** only exists for ?playtest=mirror-cold|mirror-hinted */
+  pt: Playtest | null = null;
+  private ptStep: "wait_closed" | "wait_furnish" | "wait_idle" | "done" = "wait_closed";
   keepsakeGroup = new THREE.Group();
   private storyTimer = 0;
   meshes = new Map<number, THREE.Group>();
@@ -117,10 +129,16 @@ export class Game {
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), toon("#f2cc6b")); knob.position.y = 0.46;
     this.bell.add(base, dome, knob); this.bell.position.set(4.6, -0.2, 3.2); this.world.scene.add(this.bell);
     this.buildCutDots();
+    // a standalone playtest build (where no query string reaches the page) can bake its entry in at build time
+    const builtIn = typeof __SC_DEFAULT_PLAYTEST__ === "string" ? modeFromSearch(`?playtest=${__SC_DEFAULT_PLAYTEST__}`) : null;
+    const ptMode = modeFromSearch(location.search) ?? builtIn;
+    if (ptMode) this.pt = new Playtest(this, ptMode);
     this.load();
     this.anatomy = new AnatomyWorks();
     this.world.caseGroup.add(this.anatomy.group);
     this.residents = new ResidentLife(this.world.room);
+    this.world.caseGroup.add(this.fixtureWorks.group);
+    this.forage = new Forage(this);
     this.world.room.add(this.keepsakeGroup);
     this.syncEpisodeVisuals();
     this.wireUi();
@@ -129,6 +147,7 @@ export class Game {
     if (window.visualViewport) this.on(window.visualViewport, "resize", () => this.resize());
     this.world.setCamera(0);
     this.world.setNight(0);
+    this.seedSpike();
     this.setPhase("title");
     this.world.renderer.setAnimationLoop(() => this.frame());
     if (opts.autoStart) this.begin();
@@ -142,12 +161,15 @@ export class Game {
     for (const f of this.cleanups) f();
     this.cleanups = [];
     this.sound.dispose();
+    this.pt?.dispose();
+    this.forage.dispose();
     this.world.dispose();
   }
 
   // ------------------------------------------------------------------ persistence
   load() {
-    const saved = store.get<SaveData | null>("sc.save", null);
+    // a playtest never reads or writes the tester's own save
+    const saved = this.pt ? null : store.get<SaveData | null>("sc.save", null);
     if (saved && saved.layout && Array.isArray(saved.layout.items)) {
       this.layout = saved.layout;
       this.notes = saved.notes || [];
@@ -164,6 +186,7 @@ export class Game {
     this.sound.muted = store.get("sc.muted", false);
   }
   save() {
+    if (this.pt) return;
     store.set("sc.save", {
       layout: this.layout,
       nightIdx: this.episode.residents.length,
@@ -196,9 +219,10 @@ export class Game {
       if (p !== "closed") $("guestline").classList.remove("show");
     }
     $("nightlabel").textContent = p === "end" || p === "title" ? "" : `Lost Property Hotel · ${this.episode.residents.length} home`;
+    if (p === "furnish" || p === "outside") this.refreshForageUi();
   }
-  hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); }
-  toast(t: string) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), 1600); }
+  hint(t: string) { const h = $("hint"); h.textContent = t; h.classList.add("show"); this.pt?.text("hint", t); }
+  toast(t: string) { this.pt?.text("toast", t); const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout((el as unknown as { _t: number })._t); (el as unknown as { _t: number })._t = window.setTimeout(() => el.classList.remove("show"), Math.max(1600, t.length * 55)); }
 
   begin() {
     if (this.phase !== "title") return;
@@ -409,6 +433,7 @@ export class Game {
   }
 
   onCanvasDown(e: PointerEvent) {
+    this.pt?.canvasDown(e);
     if (this.phase === "title") return;
     if (this.phase === "descent") { this.skipIntro(); return; }
     if (this.phase === "closed") {
@@ -416,6 +441,7 @@ export class Game {
       if (this.world.pickLatch(this.raycaster)) this.openCase();
       return;
     }
+    if (this.phase === "outside") { this.forage.onTap(e); return; }
     if (this.phase !== "furnish") return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     if (this.armed === "scissors") { if (!this.layout.windowCut) { this.cutting = true; this.cutMove(this.ndcOf(e)); } return; }
@@ -425,6 +451,7 @@ export class Game {
     else { this.selected = null; this.updateSelection(); }
   }
   onCanvasMove(e: PointerEvent) {
+    if (this.phase === "outside") { this.forage.onMove(e); return; }
     if (this.phase !== "furnish") return;
     if (this.cutting) { this.cutMove(this.ndcOf(e)); return; }
     this.hoverCell = this.cellAt(e);
@@ -434,6 +461,7 @@ export class Game {
     this.updateHover();
   }
   onCanvasUp(e: PointerEvent) {
+    if (this.phase === "outside") { this.forage.onUp(); return; }
     if (this.phase !== "furnish") return;
     if (this.cutting) { this.cutting = false; return; }
     const c = this.cellAt(e);
@@ -525,6 +553,9 @@ export class Game {
         this.armed = null; this.clearHover(); this.refreshTray();
       } else this.armTool(d.kind);
     });
+    $("btn-out").addEventListener("click", () => this.stepOutside());
+    $("btn-home").addEventListener("click", () => this.forage.goHome());
+    $("btn-drop").addEventListener("click", () => this.forage.putDown());
     $("btn-undo").addEventListener("click", () => this.undo());
     $("btn-rotate").addEventListener("click", () => this.rotateSelected());
     $("btn-pick").addEventListener("click", () => this.pickUpSelected());
@@ -552,6 +583,57 @@ export class Game {
   }
 
   exit() { track("left_suitcase"); this.opts.onExit?.(); }
+
+  // ------------------------------------------------------------------ the proprietor
+  /** `?spike=1` drops you straight into the proprietor loop with the Conductor already living here */
+  private seedSpike() {
+    const q = new URLSearchParams(location.search);
+    if (q.get("spike") !== "1" && !this.pt) return;
+    if (q.get("spike") === "1") (window as unknown as { __smallComforts?: Game }).__smallComforts = this;
+    if (!this.episode.residents.length) {
+      this.episode = completeStay(this.episode, "conductor", "spike_seed");
+      this.nightIdx = 1;
+      this.syncEpisodeVisuals();
+    }
+    // the playable mirror needs a window: the seed has already cut one (?window=0 keeps the lining shut to test the fallback)
+    if (q.get("window") !== "0" && !this.layout.windowCut) {
+      this.commit(l => { l.windowCut = true; l.windowCol = 3; });
+    }
+  }
+
+  stepOutside() {
+    if (this.phase !== "furnish") return;
+    if (!this.episode.residents.length) { this.sound.nope(); this.toast("Someone has to live here first."); return; }
+    this.armed = null; this.selected = null; this.updateSelection(); this.clearHover();
+    this.setPhase("outside");
+    this.forage.begin();
+    this.refreshForageUi();
+    track("proprietor_stepped_out");
+  }
+
+  /** the proprietor is home again */
+  onForageDone() {
+    this.setPhase("furnish");
+    this.save();
+    this.saveSnapshotQuiet();
+  }
+
+  refreshForageUi() {
+    const f = this.forage;
+    const free = !f.busy;
+    ($("btn-home") as HTMLButtonElement).disabled = !free;
+    const drop = $("btn-drop") as HTMLButtonElement;
+    drop.toggleAttribute("hidden", !f.carrying);
+    drop.disabled = !free;
+    this.ui.setAttribute("data-sub", f.placing ? "placing" : "");
+    $("forage-line").textContent = f.carrying
+      ? `Carrying: ${f.carrying.replace("_", " ")}`
+      : "Hands free";
+    const out = $("btn-out") as HTMLButtonElement;
+    out.disabled = !this.episode.residents.length;
+  }
+
+  trackForage(fixture: FixtureId, reactions: string) { track("fixture_built", { fixture, reactions }); }
 
   // ------------------------------------------------------------------ the night
   ring() {
@@ -731,6 +813,7 @@ export class Game {
   }
 
   showStory(text: string, ms = 4200) {
+    this.pt?.text("story", text);
     const el = $("story");
     el.textContent = text;
     el.classList.add("show");
@@ -782,6 +865,7 @@ export class Game {
 
   syncEpisodeVisuals() {
     this.anatomy?.sync(this.episode.projects, this.time);
+    this.fixtureWorks.sync(this.episode.fixtures, this.time, false, this.episode.placements);
     this.residents?.sync(this.episode, this.layout, this.time);
     this.syncKeepsakes();
   }
@@ -869,6 +953,7 @@ export class Game {
   }
 
   saveSnapshotQuiet() {
+    if (this.pt) return;
     try {
       this.world.renderer.render(this.world.scene, this.world.camera);
       const src = this.world.renderer.domElement;
@@ -930,9 +1015,24 @@ export class Game {
     this.ui.classList.toggle("portrait", w < h);
   }
 
+  /** cold-playtest entry: walk the normal flow to "proprietor on the shelf, hands free" without a tester having to */
+  private ptAdvance() {
+    if (!this.pt || this.ptStep === "done") return;
+    if (this.ptStep === "wait_closed") {
+      if (this.phase === "title") this.begin();
+      else if (this.phase === "descent") this.skipIntro();
+      else if (this.phase === "closed") { this.openCase(); this.ptStep = "wait_furnish"; }
+    } else if (this.ptStep === "wait_furnish") {
+      if (this.phase === "furnish") { this.stepOutside(); this.ptStep = "wait_idle"; }
+    } else if (this.forage.stage === "idle") {
+      this.pt.begin(); this.ptStep = "done";
+    }
+  }
+
   frame() {
     const dt = Math.min(MAXDT, this.clock.getDelta());
     this.time += dt;
+    this.ptAdvance();
     const t = this.time;
     if (this.phase === "descent") {
       this.descentT += dt;
@@ -951,6 +1051,8 @@ export class Game {
     // lamps: a warm pool grows with the dark
     this.world.update(dt, t);
     this.anatomy.update(t);
+    this.fixtureWorks.update(t);
+    this.forage.update(dt);
     this.fx.update(dt);
     if (this.phase === "night" || this.phase === "morning") this.tickRun(dt);
     // stop-motion: characters only move on 12 fps frames
@@ -965,7 +1067,8 @@ export class Game {
         this.mouse.baseY = 0;
         this.mouse.update(f12 / 12);
       }
-      this.residents.update(f12 / 12);
+      this.forage.step12(f12 / 12);
+      this.residents.update(f12 / 12, t);
     }
     // item pop-ins, full rate
     for (const [id, g] of this.meshes) {

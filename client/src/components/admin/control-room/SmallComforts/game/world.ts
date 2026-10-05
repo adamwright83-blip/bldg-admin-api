@@ -364,6 +364,14 @@ export class World {
   /** 0..1 camera fly from high in the clouds to the desk */
   setCamera(t: number) { this.introT = t; this.updateCamera(); }
 
+  /** 0 = desk shot of the suitcase, 1 = pulled back over the shelf, following (fx, fz) */
+  outK = 0;
+  outFocus = new THREE.Vector2(0, 2);
+  setOutside(k: number, fx: number, fz: number) {
+    if (k === this.outK && fx === this.outFocus.x && fz === this.outFocus.y) return;
+    this.outK = k; this.outFocus.set(fx, fz); this.updateCamera();
+  }
+
   private updateCamera() {
     const asp = this.camera.aspect;
     const e = easeInOut(clamp01(this.introT));
@@ -372,10 +380,22 @@ export class World {
     const tanH = Math.tan(THREE.MathUtils.degToRad(fov / 2)) * asp;
     const dist = Math.max(10.6, 4.7 / tanH);
     const dir = new THREE.Vector3(0, 0.5, 0.866).normalize();
-    const finalPos = new THREE.Vector3(0, 1.0, 0.2).addScaledVector(dir, dist);
+    let finalTarget = new THREE.Vector3(0, 1.0, 0.2);
+    let finalPos = finalTarget.clone().addScaledVector(dir, dist);
+    if (this.outK > 0) {
+      // out on the shelf: higher, wider, drifting after the proprietor so the suitcase stays in frame
+      const k = easeInOut(clamp01(this.outK));
+      // portrait cannot fit the whole shelf, so the camera tracks the proprietor closely there
+      const follow = asp < 1 ? 0.95 : 0.55;
+      const outTarget = new THREE.Vector3(this.outFocus.x * follow, 0.2, this.outFocus.y * 0.5 + 0.6);
+      const outDir = new THREE.Vector3(0, 0.66, 0.75).normalize();
+      const outPos = outTarget.clone().addScaledVector(outDir, dist * (asp < 1 ? 1.25 : 1.62));
+      finalTarget = finalTarget.lerp(outTarget, k);
+      finalPos = finalPos.lerp(outPos, k);
+    }
     const startPos = new THREE.Vector3(0, 46, 6);
     this.camera.position.lerpVectors(startPos, finalPos, e);
-    this.target.set(0, THREE.MathUtils.lerp(0, 1.0, e), THREE.MathUtils.lerp(0, 0.2, e));
+    this.target.set(finalTarget.x * e, THREE.MathUtils.lerp(0, finalTarget.y, e), THREE.MathUtils.lerp(0, finalTarget.z, e));
     this.camera.fov = THREE.MathUtils.lerp(55, fov, e);
     this.camera.lookAt(this.target);
     this.camera.updateProjectionMatrix();
