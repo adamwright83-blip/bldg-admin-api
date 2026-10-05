@@ -1,0 +1,75 @@
+name: President operating-system database witness
+on:
+  pull_request:
+    paths:
+      - "server/president/**"
+      - "client/src/pages/PresidentPage.*"
+      - "client/src/App.tsx"
+      - "e2e/president/**"
+      - "playwright.president.config.ts"
+      - "shared/presidentContracts.ts"
+      - "shared/presidentIntelligence.ts"
+      - "shared/presidentOperatingSystem.ts"
+      - ".agents/skills/president/**"
+      - "docs/JOYSTICK-SAAS-LAUNCH-OPS.md"
+      - "scripts/president-stage1-witness.ts"
+      - ".github/workflows/president-stage1.yml"
+      - "drizzle/0109_president_stage1.sql"
+      - "drizzle/0113_president_intelligence.sql"
+      - "drizzle/0114_president_operating_system.sql"
+      - "scripts/president-migrate.mjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  president-stage1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3411:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check:nomenclature
+      - run: pnpm exec vitest run server/president
+        env:
+          PRESIDENT_MYSQL_TEST: "1"
+      - run: pnpm president:stage1:witness
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify founder surface against durable fixture
+        run: |
+          pnpm exec vite --host 127.0.0.1 --port 4189 > /tmp/president-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4189/president >/dev/null && break
+            sleep 1
+          done
+          pnpm exec playwright test --config playwright.president.config.ts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: president-stage1-database-witness
+          path: |
+            artifacts/president-stage1/database-witness.json
+            artifacts/president-intelligence/witness.json
+            artifacts/president-intelligence/founder-surface-fixture.json
+            artifacts/president-browser/**

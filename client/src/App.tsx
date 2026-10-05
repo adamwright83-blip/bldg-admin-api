@@ -34,6 +34,7 @@ const JoystickAcquisitionPage = lazy(() => import("./pages/JoystickAcquisitionPa
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
+const PresidentPage = lazy(() => import("./pages/PresidentPage"));
 const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const GoldlineEffectivenessAdmin = lazy(() => import("./pages/GoldlineEffectivenessAdmin"));
 const GoldlineCampaignLibraryAdmin = lazy(() => import("./pages/GoldlineCampaignLibraryAdmin"));
@@ -356,6 +357,7 @@ function isSaasCustomerSafePath(pathname: string): boolean {
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
+  "/president",
   "/war-room",
   "/driver/cockpit",
   "/franchise",
@@ -445,9 +447,17 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/product/team",
 ]);
 
+function PresidentRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div>Loading President…</div>;
+  if (!user) return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
+  return <Suspense fallback={<div>Loading President…</div>}><PresidentPage /></Suspense>;
+}
+
 function AdminHostRouter() {
   return (
     <Switch>
+      <Route path="/president" component={PresidentRoute} />
       {/* admin.bldg.chat/onboarding is the first-run Goldline onboarding.
           admin.bldg.chat itself stays the returning-customer experience. */}
       <Route path="/onboarding">
@@ -710,6 +720,8 @@ function Router() {
   ) {
     return <Redirect to="/product" />;
   }
+
+  if (window.location.pathname.replace(/\/+$/, "") === "/president") return <PresidentRoute />;
 
   // The proof route is answered before host routing so no host redirect or
   // auth gate swallows it, and so it never enters the Goldline route graph.

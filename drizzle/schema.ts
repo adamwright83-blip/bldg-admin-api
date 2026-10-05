@@ -3,6 +3,8 @@ import {
   bigint,
   boolean,
   customType,
+  datetime,
+  double,
   decimal,
   index,
   int,
@@ -9642,3 +9644,72 @@ export const authorityReceipts = mysqlTable(
 );
 
 export type AuthorityReceiptRow = typeof authorityReceipts.$inferSelect;
+
+/** Company evidence is immutable; external instructions never become authority. */
+export const presidentEvidence = mysqlTable("president_evidence", {
+  id: varchar("id", {length:64}).primaryKey(), origin: varchar("origin",{length:16}).notNull(),
+  source: varchar("source",{length:512}).notNull(), capturedAt: datetime("capturedAt",{fsp:3}).notNull(),
+  sourceAt: datetime("sourceAt",{fsp:3}), sha256: varchar("sha256",{length:64}).notNull(),
+  kind: varchar("kind",{length:24}).notNull(),confidence:double("confidence").notNull(),
+  availability:varchar("availability",{length:16}).notNull(),expiresAt:datetime("expiresAt",{fsp:3}),statement:text("statement").notNull(),
+},t=>({originLookup:index("idx_president_evidence_origin").on(t.origin,t.capturedAt)}));
+export const presidentIntelligenceRecords=mysqlTable("president_intelligence_records",{
+  id:varchar("id",{length:64}).primaryKey(),origin:varchar("origin",{length:16}).notNull(),kind:varchar("kind",{length:32}).notNull(),
+  recordKey:varchar("recordKey",{length:191}).notNull(),version:int("version").notNull(),createdAt:datetime("createdAt",{fsp:3}).notNull(),
+  evidenceIds:json("evidenceIds").notNull(),payload:json("payload").notNull(),supersedesId:varchar("supersedesId",{length:64}),
+  idempotencyKey:varchar("idempotencyKey",{length:191}).notNull(),requestHash:varchar("requestHash",{length:64}).notNull(),
+},t=>({revision:uniqueIndex("uq_president_record_revision").on(t.origin,t.kind,t.recordKey,t.version),retry:uniqueIndex("uq_president_record_retry").on(t.origin,t.idempotencyKey),kindLookup:index("idx_president_record_kind").on(t.origin,t.kind,t.createdAt)}));
+
+/** Out-of-game JOYSTICK company assessment; never tenant/customer runtime state. */
+export const presidentAssessments = mysqlTable(
+  "president_assessments",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    seat: varchar("seat", { length: 64 }).notNull(),
+    inspectedRepositorySha: varchar("inspectedRepositorySha", {
+      length: 40,
+    }).notNull(),
+    evidenceSnapshotId: varchar("evidenceSnapshotId", { length: 80 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    resultState: varchar("resultState", { length: 64 }).notNull(),
+    availableSourcesJson: json("availableSourcesJson").notNull(),
+    unavailableSourcesJson: json("unavailableSourcesJson").notNull(),
+    provider: varchar("provider", { length: 64 }).notNull(),
+    model: varchar("model", { length: 128 }).notNull(),
+    startedAt: timestamp("startedAt").notNull(),
+    completedAt: timestamp("completedAt").notNull(),
+  },
+  table => ({
+    evidenceIdentity: uniqueIndex("uq_president_assessment_evidence").on(
+      table.inspectedRepositorySha,
+      table.evidenceSnapshotId
+    ),
+  })
+);
+export const presidentCandidateProjects = mysqlTable(
+  "president_candidate_projects",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    assessmentId: varchar("assessmentId", { length: 64 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    missingCapability: text("missingCapability").notNull(),
+    currentGap: text("currentGap").notNull(),
+    proposedBuild: text("proposedBuild").notNull(),
+    resultingCapability: text("resultingCapability").notNull(),
+    rank: int("rank").notNull(),
+    rankReason: text("rankReason").notNull(),
+    evidenceJson: json("evidenceJson").notNull(),
+    blockersJson: json("blockersJson").notNull(),
+    humanDecisionDependency: text("humanDecisionDependency"),
+    status: varchar("status", { length: 64 }).notNull(),
+  },
+  table => ({
+    rankIdentity: uniqueIndex("uq_president_candidate_rank").on(
+      table.assessmentId,
+      table.rank
+    ),
+    assessmentLookup: index("idx_president_candidates_assessment").on(
+      table.assessmentId
+    ),
+  })
+);

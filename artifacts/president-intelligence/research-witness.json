@@ -1,0 +1,138 @@
+{
+  "productionTouched": false,
+  "recordId": "90e3d2be-626a-4c97-9c9f-304592204d92",
+  "reused": true,
+  "sameRecordId": true,
+  "research": {
+    "plan": {
+      "question": "As of October 2026, what current primary-source patterns from Agent Skills, Anthropic web research and A2A capability cards should a small JOYSTICK executive agent adopt architecturally without installing another agent framework? Research the live internet and identify 3 independent official sources with concrete security/provenance implications.",
+      "reason": "Executive intelligence kernel source-backed integration design, not vendor procurement or capability adoption",
+      "allowedDomains": [
+        "agentskills.io",
+        "platform.claude.com",
+        "a2a-protocol.org",
+        "github.com",
+        "www.anthropic.com",
+        "modelcontextprotocol.io"
+      ],
+      "recencyDays": 120,
+      "maxSources": 4,
+      "maxUsd": 0.5
+    },
+    "planHash": "8b6871d7569b7f0a474a836360539e7a0a2c64a3e00ab038ebc5ea22aa4a3b88",
+    "findings": {
+      "sources": [
+        {
+          "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+          "title": "Agent Skills – Claude Platform Docs (Anthropic)",
+          "relevance": "Primary Anthropic documentation defining Agent Skills as modular capability units with explicit security and provenance controls directly applicable to an executive agent kernel.",
+          "claim": "Skills must be pinned to specific versions with checksums computed and verified at deployment; signed commits in the Skill repository enforce provenance; only Skills from trusted or self-authored sources should be loaded, because a malicious Skill can redirect Claude to invoke tools or exfiltrate data in ways that contradict its stated purpose. Automated security scanning (enterprise tier) detects hidden code execution, exfiltration hooks, and safeguard-tampering instructions.",
+          "claimType": "SOURCE_STATEMENT",
+          "sourceAt": null
+        },
+        {
+          "url": "https://platform.claude.com/cookbook/claude-agent-sdk-01-the-chief-of-staff-agent",
+          "title": "The Chief of Staff Agent – Claude Agent SDK Cookbook (Anthropic)",
+          "relevance": "Canonical Anthropic example of an executive/orchestrator agent pattern built natively on the Claude Agent SDK without installing a third-party framework, directly modeling a JOYSTICK-style coordinator.",
+          "claim": "An executive agent uses the native Task tool to delegate to specialised subagents, each scoped with its own instructions and tool permissions; CLAUDE.md acts as persistent provenance-bearing memory; the Agent SDK's embedded agent loop gives programmatic control over tool permissions, cost limits, and output without requiring any additional agent framework installation.",
+          "claimType": "SOURCE_STATEMENT",
+          "sourceAt": null
+        },
+        {
+          "url": "https://a2a-protocol.org/latest/specification/",
+          "title": "Agent2Agent (A2A) Protocol Specification – a2a-protocol.org",
+          "relevance": "Official A2A specification defining Agent Cards (capability cards) as the discovery and trust anchor mechanism an executive agent must evaluate before delegating tasks to remote agents.",
+          "claim": "An AgentCard is the sole trust anchor for all subsequent interaction: it is a self-asserted JSON document declaring identity, skills, endpoint, and auth scheme (OAuth 2.0 / API key / mTLS). Signing via JSON Web Signature (JWS) is supported but optional in the spec; authentication is strictly hop-by-hop, meaning the executive agent must independently verify each downstream agent card and cannot inherit authority attestation from the prior hop. Sensitive card endpoints must be protected by mTLS or network-layer access controls.",
+          "claimType": "SOURCE_STATEMENT",
+          "sourceAt": null
+        },
+        {
+          "url": "https://a2a-protocol.org/latest/topics/enterprise-ready/",
+          "title": "Enterprise-Ready Features – A2A Protocol",
+          "relevance": "Official A2A guidance on enterprise security posture for agents consuming capability cards, relevant to a small executive agent that must interoperate without installing a full agent framework.",
+          "claim": "Enterprise A2A deployments are expected to enforce push-notification authentication (HTTPS callbacks with token verification), use long-running async task patterns with explicit state polling rather than maintaining stateful SDK sessions, and protect the AgentCard serving endpoint as a first-class security boundary. The protocol does not specify delegation scope, consent requirements, or credential revocation natively — these must be layered by the consuming executive agent.",
+          "claimType": "SOURCE_STATEMENT",
+          "sourceAt": null
+        }
+      ],
+      "synthesis": "A small JOYSTICK executive agent that must avoid installing another agent framework should adopt three interlocking architectural patterns drawn from these three independent official sources:\n\n**1. Skill-Execution Authority Separation with Verifiable Provenance (Anthropic Agent Skills docs)**\nLoad Skills only from self-authored or Anthropic-vetted sources. Pin every Skill to a specific version, verify SHA checksums at boot, and require signed Git commits as the provenance record. Never grant a Skill authority that exceeds its declared contract. This pattern means the JOYSTICK kernel stays lightweight: it references capability packages without embedding their logic, keeping the blast radius of a malicious or drifting Skill contained.\n\n**2. Native SDK Agent Loop with Task-Scoped Delegation (Anthropic Chief-of-Staff cookbook)**\nEmbed the Claude Agent SDK's own agent loop directly — no third-party orchestration layer needed. Use the Task tool to spawn subagents with narrowly-scoped instructions, explicit tool whitelists, and hard cost limits. Persist executive context in a CLAUDE.md file that carries behavioural provenance across sessions. This directly instantiates the Skill–Execution Authority Separation principle: the executive agent dispatches Tasks but does not absorb subagent permissions into its own scope.\n\n**3. Agent Card as Explicit Trust Anchor with Hop-by-Hop Verification (A2A Specification + Enterprise docs)**\nBefore delegating any Task to a remote agent via A2A, the JOYSTICK kernel must fetch and independently verify that agent's AgentCard — ideally checking a JWS signature if present — and treat each hop as a fresh authentication boundary. Because A2A auth is strictly hop-by-hop and the spec does not define delegation scope or credential revocation, the executive agent must implement its own scope-bounding layer (e.g., capability allow-lists derived from AgentCard skill declarations) and log the full delegation chain for audit. Card endpoints must be served over mTLS or equivalent to prevent card-substitution attacks.\n\nTogether these three patterns give the JOYSTICK agent a minimal, framework-free architecture: a provenance-checked Skill registry, a natively-looped executor with permission-bounded Task delegation, and a card-verification layer that treats every A2A peer as untrusted until independently attested.",
+      "contradictions": [
+        "A2A spec marks AgentCard JWS signing as optional, but independent security analyses (arxiv:2603.24775, 2602.11327) treat unsigned cards as a critical trust gap — the spec's permissiveness conflicts with secure deployment practice.",
+        "Anthropic's automated Skill security scanning is documented as an enterprise-tier feature on claude.ai; the API/SDK pathway docs do not confirm equivalent scanning is applied to programmatically loaded Skills, leaving a provenance gap for non-enterprise SDK users.",
+        "A2A enterprise guidance recommends async polling patterns for long-running tasks, while the Claude Agent SDK cookbook defaults to synchronous Task delegation — these need explicit reconciliation in a hybrid executive agent that calls both local subagents and remote A2A peers."
+      ],
+      "unknowns": [
+        "agentskills.io was not directly reachable as a primary domain during this search session; the 'Agent Skills' taxonomy and Skill-Execution Authority Separation patterns cited in synthesis are drawn from arxiv preprints (2606.20631, 2604.02837) that may represent academic proposals rather than a live agentskills.io product specification.",
+        "Precise publication or last-updated timestamps for platform.claude.com docs pages and a2a-protocol.org specification pages were not surfaced by search, so recency within the 120-day window cannot be confirmed; all are treated as current official documentation.",
+        "The extent to which A2A's 'latest' specification version aligns with what Google's production agent infrastructure enforces (vs. the published open spec) is not verifiable from public sources alone.",
+        "Whether CLAUDE.md provenance persistence survives container restarts in production Agent SDK hosting (long-running vs. ephemeral session modes) is not explicitly addressed in the cookbook source."
+      ],
+      "confidence": 0.74
+    },
+    "snapshots": [
+      {
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+        "title": "Agent Skills – Claude Platform Docs (Anthropic)",
+        "relevance": "Primary Anthropic documentation defining Agent Skills as modular capability units with explicit security and provenance controls directly applicable to an executive agent kernel.",
+        "claim": "Skills must be pinned to specific versions with checksums computed and verified at deployment; signed commits in the Skill repository enforce provenance; only Skills from trusted or self-authored sources should be loaded, because a malicious Skill can redirect Claude to invoke tools or exfiltrate data in ways that contradict its stated purpose. Automated security scanning (enterprise tier) detects hidden code execution, exfiltration hooks, and safeguard-tampering instructions.",
+        "claimType": "SOURCE_STATEMENT",
+        "sourceAt": null,
+        "evidenceId": "research-b88149942bb844eeff36d8abc9ce1437d5df03e0",
+        "contentHash": "99ae0357931c3d7ed9131734c7cdaafc73270eed3c214315e2ced8c26b67957c",
+        "capturedAt": "2026-10-04T18:24:16.431Z",
+        "availability": "AVAILABLE",
+        "sourceDateVerified": false,
+        "sourceClaimVerified": false
+      },
+      {
+        "url": "https://platform.claude.com/cookbook/claude-agent-sdk-01-the-chief-of-staff-agent",
+        "title": "The Chief of Staff Agent – Claude Agent SDK Cookbook (Anthropic)",
+        "relevance": "Canonical Anthropic example of an executive/orchestrator agent pattern built natively on the Claude Agent SDK without installing a third-party framework, directly modeling a JOYSTICK-style coordinator.",
+        "claim": "An executive agent uses the native Task tool to delegate to specialised subagents, each scoped with its own instructions and tool permissions; CLAUDE.md acts as persistent provenance-bearing memory; the Agent SDK's embedded agent loop gives programmatic control over tool permissions, cost limits, and output without requiring any additional agent framework installation.",
+        "claimType": "SOURCE_STATEMENT",
+        "sourceAt": null,
+        "evidenceId": "research-5a29def8d7081a7adb2df442d1a841c1e538338f",
+        "contentHash": "db418cb9e89bb12eb7aeb591e2ffc2011fd46463df5fd600b6b9620d968f74f6",
+        "capturedAt": "2026-10-04T18:24:16.605Z",
+        "availability": "AVAILABLE",
+        "sourceDateVerified": false,
+        "sourceClaimVerified": false
+      },
+      {
+        "url": "https://a2a-protocol.org/latest/specification/",
+        "title": "Agent2Agent (A2A) Protocol Specification – a2a-protocol.org",
+        "relevance": "Official A2A specification defining Agent Cards (capability cards) as the discovery and trust anchor mechanism an executive agent must evaluate before delegating tasks to remote agents.",
+        "claim": "An AgentCard is the sole trust anchor for all subsequent interaction: it is a self-asserted JSON document declaring identity, skills, endpoint, and auth scheme (OAuth 2.0 / API key / mTLS). Signing via JSON Web Signature (JWS) is supported but optional in the spec; authentication is strictly hop-by-hop, meaning the executive agent must independently verify each downstream agent card and cannot inherit authority attestation from the prior hop. Sensitive card endpoints must be protected by mTLS or network-layer access controls.",
+        "claimType": "SOURCE_STATEMENT",
+        "sourceAt": null,
+        "evidenceId": null,
+        "availability": "UNAVAILABLE",
+        "reason": "Research source exceeds snapshot bound",
+        "sourceDateVerified": false,
+        "sourceClaimVerified": false
+      },
+      {
+        "url": "https://a2a-protocol.org/latest/topics/enterprise-ready/",
+        "title": "Enterprise-Ready Features – A2A Protocol",
+        "relevance": "Official A2A guidance on enterprise security posture for agents consuming capability cards, relevant to a small executive agent that must interoperate without installing a full agent framework.",
+        "claim": "Enterprise A2A deployments are expected to enforce push-notification authentication (HTTPS callbacks with token verification), use long-running async task patterns with explicit state polling rather than maintaining stateful SDK sessions, and protect the AgentCard serving endpoint as a first-class security boundary. The protocol does not specify delegation scope, consent requirements, or credential revocation natively — these must be layered by the consuming executive agent.",
+        "claimType": "SOURCE_STATEMENT",
+        "sourceAt": null,
+        "evidenceId": "research-93300cccebdeb265ff5b0c0a981cdc6b407b4b81",
+        "contentHash": "a71c5ecfd5a829c90b2e05967a3d3bf1f2dcb0101bb40477de1b992b90e13b4b",
+        "capturedAt": "2026-10-04T18:24:16.987Z",
+        "availability": "AVAILABLE",
+        "sourceDateVerified": false,
+        "sourceClaimVerified": false
+      }
+    ],
+    "provider": "claude-cli:tool-free",
+    "model": "claude-haiku-4-5-20251001,claude-sonnet-4-6",
+    "providerRunId": "eb2d88e0-8c79-43ba-99e6-9f17645edc7f",
+    "costUsd": 0.21899205,
+    "externalInstructionsTrusted": false,
+    "adoptedCapabilities": 0,
+    "claimsIndependentlyVerified": false
+  },
+  "adoptedCapabilities": 0
+}

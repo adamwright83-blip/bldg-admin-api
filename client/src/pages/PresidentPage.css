@@ -1,0 +1,209 @@
+.president-page {
+  min-height: 100vh;
+  background: #f4f2ec;
+  color: #25342f;
+  padding: 64px max(24px, calc((100vw - 1120px) / 2));
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+}
+.president-page header {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: flex-start;
+}
+.president-eyebrow,
+.president-section-heading > p {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #68796d;
+}
+.president-page h1 {
+  font-family: Georgia, serif;
+  font-size: 64px;
+  line-height: 1.1;
+  margin: 12px 0 22px;
+  font-weight: 400;
+}
+.president-lead {
+  font-size: 19px;
+  max-width: 740px;
+}
+.president-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  margin: 24px 0 48px;
+  padding: 16px 0;
+  border-top: 1px solid #d7ded4;
+  border-bottom: 1px solid #d7ded4;
+}
+.president-status > span:last-child {
+  margin-left: auto;
+  color: #68796d;
+}
+.president-dot {
+  width: 8px;
+  height: 8px;
+  background: #bc9151;
+  border-radius: 50%;
+}
+.president-dot.live {
+  background: #467b60;
+}
+.president-section {
+  margin: 0 0 46px;
+}
+.president-section-heading {
+  margin-bottom: 22px;
+}
+.president-section h2 {
+  font-family: Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.president-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+  gap: 20px;
+}
+.president-grid article,
+.president-decision {
+  padding: 26px;
+  background: #fffef9;
+  border: 1px solid #d7ded4;
+  border-radius: 8px;
+}
+.president-page h3 {
+  font-size: 19px;
+  line-height: 1.4;
+  margin: 12px 0;
+}
+.president-page button {
+  display: block;
+  margin-top: 18px;
+  padding: 10px 17px;
+  border: 1px solid #254537;
+  border-radius: 5px;
+  color: #fff;
+  background: #254537;
+  cursor: pointer;
+  font-size: 14px;
+}
+.president-page button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.president-page button:focus-visible,
+.president-page select:focus-visible,
+.president-page input:focus-visible {
+  outline: 3px solid #bc9151;
+  outline-offset: 3px;
+}
+.president-page .president-refresh {
+  background: transparent;
+  color: #254537;
+  margin-top: 0;
+  white-space: nowrap;
+}
+.president-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  background: #e8ede5;
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+.president-page small {
+  display: block;
+  color: #68796d;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  margin-top: 12px;
+}
+.president-empty {
+  padding: 24px 0;
+  color: #68796d;
+}
+.president-block {
+  color: #946533;
+  border-left: 2px solid #bc9151;
+  padding-left: 12px;
+}
+.president-thesis {
+  max-width: 800px;
+}
+.president-page details {
+  border-bottom: 1px solid #d7ded4;
+  padding: 15px 0;
+  overflow-wrap: anywhere;
+}
+.president-page summary {
+  cursor: pointer;
+  font-size: 14px;
+}
+.president-page details p {
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}
+.president-page label {
+  display: block;
+  font-size: 13px;
+  margin: 16px 0;
+}
+.president-page select,
+.president-page input {
+  display: block;
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid #b7c4b6;
+  background: white;
+  margin-top: 6px;
+  border-radius: 4px;
+}
+.president-footnote {
+  font-size: 12px;
+  color: #68796d;
+  max-width: 720px;
+  margin-top: 30px;
+}
+.president-page [role="alert"] {
+  color: #943f2e;
+}
+@media (max-width: 640px) {
+  .president-page {
+    padding: 32px 20px;
+  }
+  .president-page header {
+    display: block;
+  }
+  .president-page h1 {
+    font-size: 48px;
+  }
+  .president-status {
+    flex-wrap: wrap;
+  }
+  .president-status > span:last-child {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.president-focus {
+  margin-bottom: 42px;
+}
+.president-focus textarea {
+  width: 100%;
+  padding: 16px;
+  background: #fffef9;
+  border: 1px solid #b7c4b6;
+  border-radius: 6px;
+  min-height: 90px;
+  font: inherit;
+  resize: vertical;
+}

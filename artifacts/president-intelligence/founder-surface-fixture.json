@@ -1,0 +1,361 @@
+{
+  "runtime": {
+    "executionState": "CONFIGURED",
+    "executionCapabilities": [
+      "engineering",
+      "review"
+    ],
+    "actors": [
+      "executor",
+      "reviewer"
+    ],
+    "callbackBaseConfigured": true,
+    "missingCallbackActors": []
+  },
+  "brief": {
+    "generatedAt": "2026-10-05T02:31:39.820Z",
+    "summary": "No founder decision is currently open. The brief reflects the durable work recorded so far.",
+    "completed": [
+      "Verify isolated company recovery drill"
+    ],
+    "inProgress": [],
+    "blocked": [],
+    "questions": [],
+    "tomorrow": []
+  },
+  "research": [
+    {
+      "id": "36cdedb8-c223-462a-8765-924055ee8ae0",
+      "kind": "RESEARCH",
+      "key": "fixture-cycle-research",
+      "version": 1,
+      "createdAt": "2026-10-05T02:31:39.402Z",
+      "evidenceIds": [
+        "research-92ce22d134135b7043aea234d41895a2def2c935"
+      ],
+      "payload": {
+        "plan": {
+          "maxUsd": 1,
+          "reason": "Read source material before planning the drill",
+          "question": "What does the approved fixture source say?",
+          "maxSources": 1,
+          "recencyDays": 30,
+          "allowedDomains": [
+            "developers.openai.com"
+          ]
+        },
+        "model": "fixture",
+        "costUsd": 0,
+        "findings": {
+          "sources": [
+            {
+              "url": "https://developers.openai.com/fixture",
+              "claim": "A fixture describes bounded verification",
+              "title": "Clearly labeled fixture source",
+              "sourceAt": null,
+              "claimType": "SOURCE_STATEMENT",
+              "relevance": "Source boundary exercise"
+            }
+          ],
+          "unknowns": [
+            "Production remains unknown"
+          ],
+          "synthesis": "Fixture guidance only",
+          "confidence": 0.5,
+          "contradictions": []
+        },
+        "planHash": "ebcdd65b057edbe65fb53f3f3b8a6dbd96908e043042ae9d74a9cd3cb3af0590",
+        "provider": "deterministic:test-fixture",
+        "snapshots": [
+          {
+            "url": "https://developers.openai.com/fixture",
+            "claim": "A fixture describes bounded verification",
+            "title": "Clearly labeled fixture source",
+            "sourceAt": null,
+            "claimType": "SOURCE_STATEMENT",
+            "relevance": "Source boundary exercise",
+            "capturedAt": "2026-10-05T02:31:39.224Z",
+            "evidenceId": "research-92ce22d134135b7043aea234d41895a2def2c935",
+            "contentHash": "eaa5d53a716542f88369ac87282fe06d1ea0dcc2a621250acd4d64b3e580e5c5",
+            "availability": "AVAILABLE",
+            "sourceDateVerified": false,
+            "sourceClaimVerified": false
+          }
+        ],
+        "providerRunId": "7dfac123-9ae7-4382-a856-f207dced561f",
+        "adoptedCapabilities": 0,
+        "claimsIndependentlyVerified": false,
+        "externalInstructionsTrusted": false
+      },
+      "supersedesId": null,
+      "origin": "TEST_FIXTURE"
+    }
+  ],
+  "objectives": [
+    {
+      "id": "a47ced15-2e4e-4ff3-a5a9-d87552ff7ab5",
+      "kind": "OBJECTIVE",
+      "key": "objective:cc4188050e9cfd915d7f",
+      "version": 3,
+      "createdAt": "2026-10-05T02:31:39.798Z",
+      "evidenceIds": [
+        "fixture-company",
+        "review-9637b983-3398-4e5d-9c58-8363ec904461"
+      ],
+      "payload": {
+        "owner": "seat.president",
+        "reason": "Prioritize reversible proof before production authority",
+        "source": "fixture:company-brief",
+        "status": "ACHIEVED",
+        "target": null,
+        "horizon": null,
+        "outcome": "Verify isolated company recovery drill",
+        "baseline": null,
+        "admission": {
+          "test": "Measure the fixture recovery result",
+          "type": "STRATEGIC_EXPERIMENT",
+          "hypothesis": "An isolated drill establishes recoverability"
+        },
+        "indicator": "Independent fixture measurement",
+        "evidenceIds": [
+          "fixture-company"
+        ],
+        "dependencies": [],
+        "priorityRank": 1,
+        "strategyRecordId": "fe985039-ca46-458e-b365-e0e66716c2b0"
+      },
+      "supersedesId": "390140b7-2169-4d89-8bd4-e3eb00b99506",
+      "origin": "TEST_FIXTURE"
+    }
+  ],
+  "thesis": [
+    {
+      "id": "954f2999-6291-457c-810d-eeea05dd5e7c",
+      "kind": "THESIS",
+      "key": "thesis:risk:7e03c1ecbd653f83",
+      "version": 1,
+      "createdAt": "2026-10-05T02:31:39.273Z",
+      "evidenceIds": [
+        "fixture-company"
+      ],
+      "payload": {
+        "kind": "HYPOTHESIS",
+        "claim": "A recovery drill reduces uncertainty",
+        "topic": "RISK",
+        "status": "CURRENT",
+        "confidence": 0.5,
+        "reviewedAt": "2026-10-05T02:31:39.224Z",
+        "evidenceIds": [
+          "fixture-company"
+        ],
+        "falsification": "Independent recovery fails",
+        "strategyRecordId": "fe985039-ca46-458e-b365-e0e66716c2b0"
+      },
+      "supersedesId": null,
+      "origin": "TEST_FIXTURE"
+    }
+  ],
+  "programs": [
+    {
+      "id": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "assessmentId": null,
+      "candidateId": null,
+      "objectiveRecordId": "390140b7-2169-4d89-8bd4-e3eb00b99506",
+      "title": "Verify isolated company recovery drill",
+      "outcome": "Verify isolated company recovery drill",
+      "state": "COMPLETED",
+      "selectedBy": "fixture-founder",
+      "selectedAt": "2026-10-05T02:31:39.354Z",
+      "authorityPolicyVersion": "fixture-cycle-policy",
+      "maxProgramUsd": 2,
+      "spentUsd": 0,
+      "currentStepId": null,
+      "verifiedArtifactId": "fixture:recovery:attempt-2",
+      "blockReason": null,
+      "stopReason": null,
+      "createdAt": "2026-10-05T02:31:39.354Z",
+      "updatedAt": "2026-10-05T02:31:39.806Z"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "fixture-company",
+      "source": "fixture:company-brief",
+      "capturedAt": "2026-10-05T02:31:39.224Z",
+      "sourceAt": null,
+      "sha256": "ca39d5d077b479f7b4e4546df5ec48d8487b181f23f43b32f81823d743b7a594",
+      "kind": "FACT",
+      "statement": "TEST FIXTURE: JOYSTICK needs an independently verified bounded recovery drill before any production change.",
+      "confidence": 1,
+      "availability": "AVAILABLE",
+      "origin": "TEST_FIXTURE",
+      "expiresAt": null
+    },
+    {
+      "id": "review-9637b983-3398-4e5d-9c58-8363ec904461",
+      "source": "president-review:9637b983-3398-4e5d-9c58-8363ec904461",
+      "capturedAt": "2026-10-05T02:31:39.763Z",
+      "sourceAt": "2026-10-05T02:31:39.718Z",
+      "sha256": "0472a7109c8816169037825969777728a6da8ede5e24acd058a0af9e7516c90b",
+      "kind": "FACT",
+      "statement": "Independent reviewer reviewer accepted the exact internal artifact fixture:recovery:attempt-2: Independent fixture recovery passes: TEST FIXTURE: independently reproduced isolated recovery",
+      "confidence": 1,
+      "availability": "AVAILABLE",
+      "origin": "TEST_FIXTURE",
+      "expiresAt": null
+    }
+  ],
+  "events": [
+    {
+      "id": "d2ffdf54-b012-4c34-afb7-811386db1b40",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": null,
+      "eventType": "STRATEGIC_OBJECTIVE_SELECTED",
+      "actorId": "fixture-founder",
+      "details": {
+        "decisionRecordId": "f0bf6e66-89a2-4191-9031-5892bd3cf22e",
+        "objectiveRecordId": "390140b7-2169-4d89-8bd4-e3eb00b99506"
+      },
+      "occurredAt": "2026-10-05T02:31:39.375Z"
+    },
+    {
+      "id": "1c4e30ce-7d13-443a-a2ec-9490affcad74",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": null,
+      "eventType": "PROGRAM_PLANNED",
+      "actorId": "seat.president",
+      "details": {
+        "model": null,
+        "result": "CLEAR",
+        "stepCount": 1,
+        "measurement": {
+          "question": "Did isolated recovery work?",
+          "stopCondition": "Recovery fails",
+          "evidenceRequired": [
+            "fixture measurement"
+          ],
+          "successCondition": "Independent fixture recovery passes"
+        },
+        "providerRunId": null
+      },
+      "occurredAt": "2026-10-05T02:31:39.481Z"
+    },
+    {
+      "id": "71f37e0c-2083-4f21-9835-7a5b34f03dc5",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "STEP_RETRY_SCHEDULED",
+      "actorId": "executor",
+      "details": {
+        "error": "Error: Fixture transport outage",
+        "retryDelayMs": 60000
+      },
+      "occurredAt": "2026-10-05T02:31:39.515Z"
+    },
+    {
+      "id": "11b5d086-e31b-4cf3-8720-bb8d967860d5",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "EXECUTOR_WOKEN",
+      "actorId": "executor",
+      "details": {
+        "capability": "engineering",
+        "targetCapability": "engineering"
+      },
+      "occurredAt": "2026-10-05T02:31:39.563Z"
+    },
+    {
+      "id": "4265b2a1-0c07-408b-a04d-61d5b26a9e07",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "EXECUTION_HANDBACK",
+      "actorId": "executor",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:31:39.671Z"
+    },
+    {
+      "id": "2716824f-8f6f-442c-a6a6-249ad1a0c798",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "REVIEW_WAKE_ATTEMPT",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:31:39.681Z"
+    },
+    {
+      "id": "4ff1488d-9a53-4184-9efb-fb349ff24f59",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "INDEPENDENT_REVIEWER_WOKEN",
+      "actorId": "reviewer",
+      "details": {
+        "capability": "review",
+        "exactArtifactId": "fixture:recovery:attempt-2",
+        "targetCapability": "review"
+      },
+      "occurredAt": "2026-10-05T02:31:39.684Z"
+    },
+    {
+      "id": "86eabc43-3785-4197-902b-87d8ede26ac9",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "REVIEW_WAKE_ATTEMPT",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:31:39.712Z"
+    },
+    {
+      "id": "43549655-c6d9-49e4-a05b-cddfea5e6fcd",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "INDEPENDENT_REVIEWER_WOKEN",
+      "actorId": "reviewer",
+      "details": {
+        "capability": "review",
+        "exactArtifactId": "fixture:recovery:attempt-2",
+        "targetCapability": "review"
+      },
+      "occurredAt": "2026-10-05T02:31:39.715Z"
+    },
+    {
+      "id": "e2364d5f-f9ed-4be7-ba79-e9329b70e691",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "STEP_INDEPENDENTLY_VERIFIED",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:31:39.748Z"
+    },
+    {
+      "id": "662e09d8-81a3-4313-af22-d5f657abec3c",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": "7e4bbe4c-413f-4726-8a85-20066c61492a",
+      "eventType": "INDEPENDENT_REVIEW_PASS",
+      "actorId": "reviewer",
+      "details": {
+        "exactArtifactId": "fixture:recovery:attempt-2"
+      },
+      "occurredAt": "2026-10-05T02:31:39.753Z"
+    },
+    {
+      "id": "12aa4e55-4010-4586-9c18-db5490faca1d",
+      "programId": "c8a9aa9b-572e-4082-ac8b-75ca9e3142a5",
+      "stepId": null,
+      "eventType": "PROGRAM_MEASURED_AND_LEARNED",
+      "actorId": "seat.president",
+      "details": {
+        "lessonRecordId": "8967fc91-691e-414b-af68-53d3ea79356c",
+        "progressRecordId": "41e82749-a419-4cc7-90cd-5c25dc343f12"
+      },
+      "occurredAt": "2026-10-05T02:31:39.787Z"
+    }
+  ]
+}
