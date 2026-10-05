@@ -8,19 +8,8 @@ import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import type { PresidentCycleMission } from "../../../shared/presidentCycle";
 import { commandLabel, runPresidentCommand, type PresidentCommandResult } from "./exec";
-
-const PROTECTED_PATTERNS: RegExp[] = [
-  /^server\/mitch\//,
-  /^shared\/mitch/i,
-  /^server\/commercialPipeline\//,
-  /^server\/commercialCampaigns\//,
-  /^server\/authority\//,
-  /^\.env(?:\.|$)/,
-  /^\.github\//,
-  /^package\.json$/,
-  /^pnpm-lock\.yaml$/,
-  /^scripts\/reconcileCommercialPipelineRevenue/i,
-];
+import { isPresidentProtectedPath } from "./policy";
+import { runAnthropicWorkspaceAgent } from "./anthropicWorkspaceAgent";
 
 export type PresidentEngineeringExecutionResult = {
   executorId: string;
@@ -39,15 +28,6 @@ type TestCommand = {
   args: string[];
   timeoutMs?: number;
 };
-
-function normalizePath(value: string) {
-  return value.replace(/\\/g, "/").replace(/^\.\//, "");
-}
-
-function protectedPath(value: string): boolean {
-  const normalized = normalizePath(value);
-  return PROTECTED_PATTERNS.some(pattern => pattern.test(normalized));
-}
 
 function safeSlug(value: string): string {
   return value
@@ -338,7 +318,7 @@ export class PresidentEngineeringExecutor {
               ? value.split(" -> ").map(part => part.trim())
               : [value];
           });
-        const forbidden = changedPaths.find(protectedPath);
+        const forbidden = changedPaths.find(isPresidentProtectedPath);
         if (forbidden)
           throw new Error(`President executor modified protected path: ${forbidden}`);
         if (!changedPaths.length)
@@ -392,7 +372,7 @@ export class PresidentEngineeringExecutor {
           const parts = line.split("\t").map(value => value.trim()).filter(Boolean);
           return parts.slice(1);
         });
-      const forbidden = changedFiles.find(protectedPath);
+      const forbidden = changedFiles.find(isPresidentProtectedPath);
       if (forbidden)
         throw new Error(`President executor changed protected path: ${forbidden}`);
 
@@ -526,4 +506,4 @@ export class PresidentEngineeringExecutor {
   }
 }
 
-export { protectedPath as isPresidentProtectedPath };
+
