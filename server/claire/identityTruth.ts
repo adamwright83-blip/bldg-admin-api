@@ -221,6 +221,37 @@ export function renderClaireIdentityAnswer(
   return `The businesses on this account are ${businesses.map(item => item.brandName).join(" and ")}.`;
 }
 
+/**
+ * Brain V3 may mention an identity topic while a configured name is merely
+ * incidental to the operator's real question. Deterministic identity answers
+ * are allowed to steal a turn only when the utterance itself explicitly asks
+ * about (or attempts to redefine) that identity.
+ */
+export function isExplicitClaireIdentityTurn(
+  topic: ClaireIdentityTopic,
+  utterance: string
+): boolean {
+  const text = utterance.trim();
+  if (!text || topic === "none") return false;
+
+  if (topic === "platform") {
+    return /\b(?:what(?:'s| is)|who(?:'s| is)|define|explain)\s+(?:the\s+)?JOYSTICK\b|\bis\s+JOYSTICK\s+(?:the\s+)?(?:product|platform|app|business)\b/i.test(text);
+  }
+  if (topic === "goldline") {
+    return /\b(?:what(?:'s| is)|define|explain)\s+(?:the\s+)?Goldline\b|\bis\s+Goldline\s+(?:the\s+)?(?:game|product|business|company)\b/i.test(text);
+  }
+  if (topic === "claire_role") {
+    return /\bwho\s+are\s+you\b|\bwhat(?:'s| is)\s+your\s+(?:job|role)\b|\bwhat\s+do\s+you\s+do\??\s*$/i.test(text);
+  }
+
+  return (
+    /\bwhat(?:'s| is)\s+(?:my|our|the)\s+(?:business|company|brand)(?:\s+name)?\b/i.test(text) ||
+    /\bwhat\s+(?:business|businesses|company|companies|brand|brands)\s+(?:is|are)\s+(?:on|under|for)\s+(?:this|my|our)\s+account\b/i.test(text) ||
+    /\b(?:my|our|the)\s+(?:business|company|brand)(?:'s\s+name)?\s+(?:is|is\s+called|should\s+be\s+called|name\s+is)\b/i.test(text) ||
+    /\b(?:call|rename)\s+(?:my|our|the)\s+(?:business|company|brand)\b/i.test(text)
+  );
+}
+
 function normalizeIdentityName(value: string): string {
   return value
     .toLowerCase()
