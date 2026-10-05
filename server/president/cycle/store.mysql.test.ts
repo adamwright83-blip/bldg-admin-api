@@ -4,6 +4,9 @@ import { resolve } from "node:path";
 import mysql, { type Pool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PresidentCandidateList } from "../../../shared/presidentCycle";
+import { evidenceHash, MysqlPresidentIntelligenceStore } from "../intelligenceStore";
+import { PresidentCycleService } from "./service";
+import type { PresidentCycleModelProvider } from "./providers";
 import { MysqlPresidentCycleStore } from "./store";
 
 let pool: Pool;
@@ -60,11 +63,104 @@ describe.skipIf(process.env.PRESIDENT_MYSQL_TEST !== "1")(
         timezone: "Z",
         connectionLimit: 8,
       });
+      await apply("0113_president_intelligence.sql");
       await apply("0120_president_autonomous_cycles.sql");
     });
 
     afterAll(async () => {
       await pool?.end();
+    });
+
+    it("executes the exact ChatGPT Claude ChatGPT deliberation order before Adam review", async () => {
+      const store = new MysqlPresidentCycleStore(pool);
+      const intelligence = new MysqlPresidentIntelligenceStore(
+        pool,
+        "TEST_FIXTURE"
+      );
+      const statement =
+        "Observed fixture: customers abandoned the tested workflow after an avoidable error.";
+      await intelligence.putEvidence({
+        id: "evidence-1",
+        source: "cycle-test",
+        capturedAt: new Date().toISOString(),
+        sourceAt: null,
+        sha256: evidenceHash(statement),
+        kind: "FACT",
+        statement,
+        confidence: 1,
+        availability: "AVAILABLE",
+        origin: "TEST_FIXTURE",
+        expiresAt: null,
+      });
+
+      const calls: string[] = [];
+      const list = candidates();
+      const openai: PresidentCycleModelProvider = {
+        id: "openai",
+        async available() {
+          return true;
+        },
+        async generate() {
+          const stage = calls.filter(value => value === "openai").length;
+          calls.push("openai");
+          return {
+            text: JSON.stringify({
+              ...list,
+              candidates: list.candidates.map(candidate => ({
+                ...candidate,
+                responseToCritique:
+                  stage === 0 ? "" : "Considered Claude critique.",
+                changedAfterCritique: false,
+              })),
+            }),
+            provider: "openai",
+            model: "test-chatgpt",
+            providerRunId: "openai-" + calls.length,
+          };
+        },
+      };
+      const claude: PresidentCycleModelProvider = {
+        id: "anthropic",
+        async available() {
+          return true;
+        },
+        async generate() {
+          calls.push("anthropic");
+          return {
+            text: JSON.stringify({
+              summary: "Adversarial review",
+              critiques: list.candidates.map(candidate => ({
+                candidateId: candidate.id,
+                verdict: "KEEP",
+                reasoning: "Bounded fixture critique",
+                risks: [],
+                suggestedAlternative: null,
+              })),
+              missingOpportunities: [],
+            }),
+            provider: "anthropic",
+            model: "test-claude",
+            providerRunId: "claude-1",
+          };
+        },
+      };
+
+      const cycle = await new PresidentCycleService(
+        store,
+        intelligence,
+        openai,
+        claude
+      ).createAndDeliberate(["evidence-1"]);
+
+      expect(calls).toEqual(["openai", "anthropic", "openai"]);
+      expect(cycle.state).toBe("AWAITING_ADAM_REVIEW");
+      expect(cycle.proposedCandidateIds).toEqual([
+        "candidate-1",
+        "candidate-2",
+        "candidate-3",
+      ]);
+      expect(cycle.approval).toBeNull();
+      expect(await store.listMissions(cycle.id)).toHaveLength(0);
     });
 
     it("persists the review gate and creates exactly the approved missions", async () => {
