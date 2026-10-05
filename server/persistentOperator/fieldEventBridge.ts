@@ -292,7 +292,7 @@ export async function bridgeCommercialResolution(
     };
   }
   if (isWon) {
-    const match = /^commercial_mission_events:(\\d+)$/.exec(input.evidenceReference.trim());
+    const match = /^commercial_mission_events:(\d+)$/.exec(input.evidenceReference.trim());
     if (!match) {
       return { bridged: false, reason: "Account win evidence is not a persisted mission event" };
     }
