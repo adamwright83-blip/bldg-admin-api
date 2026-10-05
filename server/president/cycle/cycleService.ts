@@ -107,13 +107,34 @@ export async function presentToAdam(
 ) {
   const link = `${reviewBaseUrl.replace(/\/$/, "")}/president?cycle=${encodeURIComponent(cycleId)}`;
   const message = "President has 3 recommendations ready for your review.";
+
+  // Enter the review state before external notification, but do not record a
+  // delivered notification until the notification service actually accepts it.
   await store.update(cycleId, c => {
-    if (c.status !== "PRESIDENT_RECOMMENDED")
+    if (c.status === "PRESIDENT_RECOMMENDED") {
+      setStatus(c, "AWAITING_ADAM_REVIEW", "recommendations ready for Adam");
+      return;
+    }
+    if (c.status !== "AWAITING_ADAM_REVIEW")
       throw new Error(`Cannot present from ${c.status}`);
-    setStatus(c, "AWAITING_ADAM_REVIEW", "recommendations presented to Adam");
-    c.notifications.push({ at: new Date().toISOString(), channel: "owner", message, link });
   });
+
+  const before = await store.get(cycleId);
+  if (before?.notifications.some(n => n.channel === "owner" && n.link === link))
+    return;
+
   await notifier.notify({ title: "President: review ready", message, link });
+  await store.update(cycleId, c => {
+    if (c.status !== "AWAITING_ADAM_REVIEW")
+      throw new Error("Cycle left Adam review state before notification receipt");
+    if (!c.notifications.some(n => n.channel === "owner" && n.link === link))
+      c.notifications.push({
+        at: new Date().toISOString(),
+        channel: "owner",
+        message,
+        link,
+      });
+  });
 }
 
 export type AdamIdentity = AdamApprovalReceipt["approvedBy"];
