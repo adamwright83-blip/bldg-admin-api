@@ -1,4 +1,4 @@
-import { legacyDayforgeTenantAdminProcedure, router } from "../_core/trpc";
+import { legacyAdminRoleProcedure, router } from "../_core/trpc";
 import { getCanonicalBuildingWorld } from "./canonicalBuildingService";
 
 export const canonicalBuildingRouter = router({
@@ -7,7 +7,7 @@ export const canonicalBuildingRouter = router({
    * mission -> account_won -> same canonical object -> resident penetration ->
    * real orders -> Tower Wars -> permanent history.
    */
-  world: legacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
+  world: legacyAdminRoleProcedure.query(({ ctx }) =>
     getCanonicalBuildingWorld({ tenantId: ctx.tenantId })
   ),
 });
