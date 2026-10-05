@@ -59,6 +59,8 @@ describe("demo bypass cannot reach a real tenant", () => {
     expect(server).not.toContain("ONE_YEAR_MS");
     // No other openId can be requested.
     expect(server).not.toMatch(/createSessionToken\((?!DEMO_OPEN_ID)/);
+    expect(server).toContain('role: "user"');
+    expect(server).not.toContain('role: "admin"');
   });
 
   it("requires an explicit fixed demo context and cannot be steered by request tenant data", () => {
