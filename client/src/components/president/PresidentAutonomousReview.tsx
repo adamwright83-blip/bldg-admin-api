@@ -244,6 +244,11 @@ export default function PresidentAutonomousReview() {
       </div>
 
       {error && <p role="alert" className="president-cycle-error">{error}</p>}
+      {cycle?.blockedReason && (
+        <p role="alert" className="president-cycle-error">
+          Blocked: {cycle.blockedReason}
+        </p>
+      )}
       {!cycle && !error && <p>Loading President’s recommendations…</p>}
 
       {cycle && (
