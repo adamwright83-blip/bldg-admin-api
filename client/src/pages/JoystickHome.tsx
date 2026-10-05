@@ -72,7 +72,7 @@ export default function JoystickHome({
     refetchInterval: 30_000,
     retry: false,
   });
-  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
+  const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
     staleTime: 30_000,
     retry: false,
   });
