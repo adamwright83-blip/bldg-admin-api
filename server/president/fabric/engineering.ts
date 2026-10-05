@@ -306,7 +306,19 @@ export class PresidentEngineeringExecutor {
       throw new Error(`President executor could not create worktree: ${add.stderr}`);
 
     try {
-      let agentSummary = await invokeClaudeEngineer({ cwd: worktree, mission });
+      let agentSummary = await invokeClaudeEngineer({
+        cwd: worktree,
+        mission,
+        repairContext:
+          mission.attemptCount > 1
+            ? [
+                mission.blocker,
+                mission.review ? JSON.stringify(mission.review) : null,
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : undefined,
+      });
       const testCommands = configuredTestCommands();
       let validation: PresidentCommandResult[] = [];
 
