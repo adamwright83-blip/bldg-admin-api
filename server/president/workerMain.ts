@@ -47,7 +47,11 @@ async function tick() {
     await service.advanceObjectives(new AppPresidentJudgmentProvider());
 
     try {
-      const cycle = await cycleRuntime.store.latestCycle();
+      let cycle = await cycleRuntime.store.latestCycle();
+      if (!cycle || ["COMPLETED", "BLOCKED", "READY_FOR_HUMAN"].includes(cycle.state)) {
+        const started = await cycleRuntime.service.maybeStartScheduledCycle();
+        if (started) cycle = started;
+      }
       if (cycle && ["ADAM_APPROVED", "EXECUTING"].includes(cycle.state))
         await cycleRuntime.runner.runOne(cycle.id);
       lastCycleError = null;
