@@ -3,7 +3,7 @@ import { goldlineCargoRouter } from "../goldlineCargo/cargoRouter";
 import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
 import { z } from "zod";
 import { notifyOwner } from "./notification";
-import { adminProcedure, publicProcedure, router } from "./trpc";
+import { legacyDayforgeTenantAdminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
 import { voiceWalkInRouter } from "../commercialMissions/voiceWalkInRouter";
 import { adaptiveSalesMeterRouter } from "../commercialMissions/adaptiveSalesMeterRouter";
@@ -145,7 +145,7 @@ export const systemRouter = router({
       "unknown",
   })),
 
-  notifyOwner: adminProcedure
+  notifyOwner: legacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         title: z.string().min(1, "title is required"),
