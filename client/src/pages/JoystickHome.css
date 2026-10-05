@@ -1,5 +1,5 @@
-:root { color-scheme: light; }
 .jh-page{
+  color-scheme:light;
   min-height:100vh;background:#f7f5f0;color:#15171b;
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
@@ -88,9 +88,8 @@
 .jh-build strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jh-build span{font-size:9px;color:#8b8882}
 .jh-now{grid-column:1;display:grid;grid-template-columns:1.08fr .92fr;gap:8px;min-height:215px}
-.jh-now>header{grid-column:1;display:block;margin:0}
+.jh-now>header{grid-column:1;display:flex;align-items:flex-start;justify-content:space-between;margin:0}
 .jh-now>header h2{font-size:25px;margin-top:7px}
-.jh-now>header .jh-round-link{position:absolute}
 .jh-round-link{width:42px;height:42px;border-radius:50%;display:grid!important;place-items:center;background:#f3c86d;color:#151515!important}
 .jh-claire-note{display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:10px 12px;border-radius:13px;background:#f7f0df;color:#5c5140;font-size:11px}
 .jh-claire-note svg{width:16px;flex:0 0 auto}.jh-claire-note span{display:grid;gap:2px}.jh-claire-note b{font-size:10px;color:#292621}
