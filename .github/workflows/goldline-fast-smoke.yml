@@ -58,6 +58,13 @@ jobs:
           pnpm check:nomenclature
           pnpm check:tenant-ratchet
           pnpm check:vertical-dependencies
+      - name: Prove platform-admin principal boundary
+        run: >-
+          pnpm vitest run
+          server/_core/platformAdminPrincipal.test.ts
+          server/goldlineOnboarding/demoAccess.test.ts
+          server/joystick/tenantIdentity.test.ts
+
       - name: Prove Authority Receipt contracts
         run: >-
           pnpm vitest run
