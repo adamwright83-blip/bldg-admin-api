@@ -202,7 +202,7 @@ export default function JoystickHome({
             <p>Real customers. Real places.<br />Real progress.</p>
             <div className="jh-world-facts">
               <b>{lanternCount ?? "—"}</b>
-              <span>live customer lanterns</span>
+              <span>customer lanterns</span>
             </div>
             <Link href="/growth/lantern-city" className="jh-enter">
               Open city <ArrowRight />
