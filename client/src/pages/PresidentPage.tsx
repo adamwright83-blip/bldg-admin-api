@@ -106,6 +106,12 @@ export default function PresidentPage() {
     refetchInterval: 15000,
     retry: false,
   });
+  const startCycle = trpc.president.startImprovementCycle.useMutation({
+    onSuccess: async () => {
+      await cycleState.refetch();
+      toast("President has recommendations ready for review.");
+    },
+  });
   const approveCycle = trpc.president.approveImprovementCycle.useMutation({
     onSuccess: async () => {
       await cycleState.refetch();
@@ -198,6 +204,28 @@ export default function PresidentPage() {
         <span>Updated {new Date(brief.generatedAt).toLocaleString()}</span>
       </div>
       {mutationError && <p role="alert">{mutationError.message}</p>}
+      {startCycle.error && <p role="alert">{startCycle.error.message}</p>}
+      {!latestCycle && (
+        <section className="president-section">
+          <div className="president-section-heading">
+            <p>President cycle</p>
+            <h2>Prepare tonight's recommendations</h2>
+          </div>
+          <p>
+            President will gather the current durable company evidence, ask
+            ChatGPT for ten improvements, have Claude challenge them, then ask
+            ChatGPT for the final ranked ten before recommending three to you.
+          </p>
+          <button
+            disabled={startCycle.isPending}
+            onClick={() => startCycle.mutate({})}
+          >
+            {startCycle.isPending
+              ? "Deliberating…"
+              : "Prepare recommendations"}
+          </button>
+        </section>
+      )}
       {evidence.length > 0 && (
         <form
           className="president-focus"
