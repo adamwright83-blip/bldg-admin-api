@@ -299,7 +299,7 @@ describe("I — source / filter thread, and business lineage", () => {
     expect(await ask("How much did Laundry Farm do last month?")).toBe(
       "Laundry Farm total revenue last month was $328 across 7 orders."
     );
-    expect(await ask("What about Laundry Butler?")).toBe("Laundry Butler revenue last month was $104 across 3 orders.");
+    expect(await ask("What about Laundry Butler?")).toBe("Laundry Butler revenue last month was $104 across 3 orders. That includes only sales positively attributed to this service line; unresolved sales remain separate.");
     expect(await ask("Dry cleaning only.")).toContain("Laundry Butler dry-cleaning revenue was $12.00 across 1 order.");
     expect(await ask("Now include laundry again.")).toContain("Laundry Butler revenue was $104 across 3 orders.");
   });

@@ -681,7 +681,8 @@ export function parseBusinessTurn(
   const refinement =
     Boolean(session) &&
     !(metric === null && NON_ANALYTIC_SUBJECT.test(lower)) &&
-    (REFINEMENT.test(lower) ||
+    ((session && scopeMentioned && !mentionedPeriod && metric === "revenue" && TOTALS_METRICS.has(session.query.metric)) ||
+      REFINEMENT.test(lower) ||
       PRECEDING.test(lower) ||
       WHICH.test(lower) ||
       (!metric && (period !== null || service !== undefined || minOrders !== null || listMembers || scopeMentioned || there)) ||

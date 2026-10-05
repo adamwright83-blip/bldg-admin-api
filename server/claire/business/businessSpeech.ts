@@ -288,6 +288,18 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
         "Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
     );
   }
+  if ((moneyMetric || ["customer_history", "top_customers", "customer_share", "period_ranking", "latest_sales", "biggest_orders"].includes(result.query.metric)) && coverage.money?.undatedAdjustmentCents) {
+    once(
+      `undated-adjustments:${coverage.money.undatedAdjustmentCents}`,
+      () => `These are recorded dated totals. The book also contains ${speech.money(Math.abs(coverage.money!.undatedAdjustmentCents))} in adjustments with unknown payment dates; I cannot assign them to this period.`
+    );
+  }
+  if (moneyMetric && filters.serviceLines?.some(line => line !== "unresolved")) {
+    once(
+      "positive-service-attribution",
+      () => "That includes only sales positively attributed to this service line; unresolved sales remain separate."
+    );
+  }
   if (coverage.serviceFilterUnclassified) {
     const { orders, cents } = coverage.serviceFilterUnclassified;
     once(
