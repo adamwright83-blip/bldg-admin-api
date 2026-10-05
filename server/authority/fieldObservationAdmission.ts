@@ -88,13 +88,15 @@ export async function admitCommercialFieldObservation(input: {
   const observationText =
     typeof metadata.text === "string" ? metadata.text.trim() : "";
   const visitOutcomeId =
-    typeof metadata.visitOutcomeId === "string"
-      ? metadata.visitOutcomeId.trim()
-      : "";
+    typeof metadata.visitOutcomeId === "number" && Number.isInteger(metadata.visitOutcomeId)
+      ? metadata.visitOutcomeId
+      : typeof metadata.visitOutcomeId === "string" && /^\d+$/.test(metadata.visitOutcomeId.trim())
+        ? Number(metadata.visitOutcomeId.trim())
+        : 0;
   if (
     !observationText ||
     metadata.provenance !== PARKING_LOT_CLERK_PROVENANCE ||
-    !visitOutcomeId
+    visitOutcomeId <= 0
   ) {
     throw new Error(
       "Field observation event lacks durable operator testimony provenance"
