@@ -62,6 +62,25 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = baseProcedure.use(requireUser);
 
+/**
+ * Compatibility guard for routes that historically meant users.role === "admin".
+ * It preserves the old access surface while those routes are audited one by one.
+ * It is NOT platform-wide authority and demo bypass identities never satisfy it.
+ */
+export const legacyAdminRoleProcedure = baseProcedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (
+      !ctx.user ||
+      ctx.user.role !== "admin" ||
+      isGoldlineDemoOpenId(ctx.user.openId)
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  })
+);
+
 export const adminProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
