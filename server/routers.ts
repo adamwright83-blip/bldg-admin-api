@@ -1235,35 +1235,24 @@ export const appRouter = router({
         return { ok: true as const };
       }),
 
-    /** Paid orders today — sums totals where `paidAt` falls in the business day (not action logs). */
+    /** Canonical combined paid revenue; Clearent settlement evidence stays separately labeled. */
     getCollectedToday: legacyAdminRoleProcedure.query(async ({ ctx }) => {
       const r = await getCollectedTodayCents(ctx.tenantId);
       const clearent = await getClearentCollectedTodayCents();
-      if (!r) {
-        return {
-          cents: clearent?.collectedCents ?? 0,
-          stripeCents: 0,
-          clearentCents: clearent?.collectedCents ?? 0,
-          clearentSettledCents: clearent?.settledCents ?? 0,
-          businessYmd: "",
-          timeZone: getDashboardTimeZone(),
-          dbAvailable: Boolean(clearent),
-          timestampBasis: "clearent_entered_date" as const,
-          processorLabel: "Clearent / XplorPay",
-        };
-      }
       return {
-        cents: clearent?.collectedCents ?? r.cents,
-        stripeCents: r.cents,
-        clearentCents: clearent?.collectedCents ?? 0,
-        clearentSettledCents: clearent?.settledCents ?? 0,
-        businessYmd: r.bounds.ymd,
-        timeZone: r.bounds.timeZone,
-        dbAvailable: true,
-        timestampBasis: clearent
-          ? ("clearent_entered_date" as const)
-          : ("paidAt" as const),
-        processorLabel: clearent ? "Clearent / XplorPay" : "Stripe/orders",
+        cents: r?.cents ?? null,
+        stripeCents: r?.stripeCents ?? null,
+        cleanCloudCents: r?.cleanCloudCents ?? null,
+        clearentCents: clearent?.collectedCents ?? null,
+        clearentSettledCents: clearent?.settledCents ?? null,
+        businessYmd: r?.bounds.ymd ?? "",
+        timeZone: r?.bounds.timeZone ?? getDashboardTimeZone(),
+        dbAvailable: r !== null,
+        timestampBasis: "canonical_payment_event" as const,
+        processorLabel: "Stripe + CleanCloud",
+        precision: r?.precision ?? "unavailable",
+        statedExactCents: r?.statedExactCents ?? null,
+        coverage: r?.coverage ?? null,
       };
     }),
 
