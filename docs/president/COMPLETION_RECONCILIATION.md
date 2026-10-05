@@ -27,3 +27,8 @@ failures, complete deterministic executive-cycle witness and browser acceptance.
 Initial checks: full TypeScript passes on this base (the reported TS2783 does not
 reproduce), but runtime spread still overwrites intelligence capabilities.
 Nomenclature reproduces the retired-name failure at witness.json:218.
+
+Completed reconciliation: merged main 8a8a284473fd33855481ac34fcf9034f356b6849.
+Its Hidden Game system-map documentation and the President entries both survive.
+The founder route is now /president. Final source reconciliation never selected a
+whole-file ours/theirs side and never changed the Claire/Sales Truth branch.

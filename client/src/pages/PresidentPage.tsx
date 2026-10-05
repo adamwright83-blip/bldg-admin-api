@@ -158,7 +158,7 @@ export default function PresidentPage() {
           }
         />
         {runtime.executionState === "CONFIGURED"
-          ? "Execution connected"
+          ? "Execution configured"
           : "Execution needs configuration"}
         <span>Updated {new Date(brief.generatedAt).toLocaleString()}</span>
       </div>

@@ -118,6 +118,18 @@ describe("intelligence truth", () => {
     thesisUpdates: [],
     objectives: [],
   };
+  it("rejects unqualified retired names even when another legacy reference exists", () => {
+    const retired = ["day", "forge"].join("");
+    expect(() =>
+      validateJudgment(
+        {
+          ...judgment,
+          summary: `Legacy history exists; ${retired} is current`,
+        },
+        [evidence]
+      )
+    ).toThrow("canonical JOYSTICK");
+  });
   it("requires literal quotations, not attributed paraphrases, as facts", () => {
     expect(
       validateJudgment(

@@ -60,6 +60,10 @@ jobs:
       - name: Verify founder surface against durable fixture
         run: |
           pnpm exec vite --host 127.0.0.1 --port 4189 > /tmp/president-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4189/president >/dev/null && break
+            sleep 1
+          done
           pnpm exec playwright test --config playwright.president.config.ts
       - uses: actions/upload-artifact@v7
         with:

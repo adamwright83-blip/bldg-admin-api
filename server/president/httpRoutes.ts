@@ -24,7 +24,14 @@ export function registerPresidentAgentRoutes(
       return res
         .status(400)
         .json({ error: "Invalid President execution handback" });
-    const config = dependencies.config();
+    let config: ReturnType<typeof presidentRuntimeConfig>;
+    try {
+      config = dependencies.config();
+    } catch {
+      return res
+        .status(503)
+        .json({ error: "President callback configuration unavailable" });
+    }
     if (
       !authorizePresidentCallback(
         parsed.data.executorId,
@@ -54,7 +61,14 @@ export function registerPresidentAgentRoutes(
       return res
         .status(400)
         .json({ error: "Invalid President independent review" });
-    const config = dependencies.config();
+    let config: ReturnType<typeof presidentRuntimeConfig>;
+    try {
+      config = dependencies.config();
+    } catch {
+      return res
+        .status(503)
+        .json({ error: "President callback configuration unavailable" });
+    }
     if (
       !authorizePresidentCallback(
         parsed.data.reviewerId,

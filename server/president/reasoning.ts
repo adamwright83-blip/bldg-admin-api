@@ -153,8 +153,12 @@ export function validateJudgment(
 ): ExecutiveRecommendation {
   const result = executiveRecommendationSchema.parse(value);
   const retiredName = ["day", "forge"].join("");
-  if (JSON.stringify(result).toLowerCase().includes(retiredName) && !JSON.stringify(result).toLowerCase().includes("legacy"))
-    throw new Error("Executive judgment must use canonical JOYSTICK terminology");
+  const qualified = new RegExp("legacy[ _-]*" + retiredName, "gi");
+  const strings = JSON.stringify(result).replace(qualified, "legacy-product");
+  if (strings.toLowerCase().includes(retiredName))
+    throw new Error(
+      "Executive judgment must use canonical JOYSTICK terminology"
+    );
   for (const objective of result.objectives) {
     if (
       objective.admission.type === "GAP_RESOLUTION" &&
@@ -231,7 +235,10 @@ async function materializeAcceptedRecommendation(input: {
   }
 
   const objectives = [];
-  for (const [objectiveIndex, objective] of input.recommendation.objectives.entries()) {
+  for (const [
+    objectiveIndex,
+    objective,
+  ] of input.recommendation.objectives.entries()) {
     const key =
       "objective:" +
       createHash("sha256")
