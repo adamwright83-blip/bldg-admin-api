@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "./businessLedgerFixture";
 import { describe, expect, it } from "vitest";
 import {
   activeCustomerPopulation,
@@ -60,7 +61,7 @@ describe("paid-order ledger", () => {
   it("reports partial and unavailable coverage instead of a total", async () => {
     const partial = await loadPaidOrderLedger(
       { tenantId: "tenant-1", ...wideWindow, timeZone: FIXTURE_TZ },
-      { laundry_butler: fixtureLoaders().laundry_butler, cleancloud: failingLoaders.cleancloud }
+      withFixturePaymentAuthority({ laundry_butler: fixtureLoaders().laundry_butler, cleancloud: failingLoaders.cleancloud })
     );
     expect(partial).toMatchObject({ completeness: "partial", loadedSources: ["laundry_butler"], failedSources: ["cleancloud"] });
     const none = await loadPaidOrderLedger({ tenantId: "tenant-1", ...wideWindow, timeZone: FIXTURE_TZ }, failingLoaders);

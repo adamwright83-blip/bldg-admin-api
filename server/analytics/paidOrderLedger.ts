@@ -1,4 +1,10 @@
 import {
+  readPaymentAuthorityReceipts,
+  paymentAuthorityReceiptMatches,
+  type AuthorityReceipt,
+  type PaymentAuthorityExpectation,
+} from "../authority/authorityReceipt";
+import {
   loadSalesReconciliationEvidence,
   type SalesReconciliationEvidence,
 } from "./salesReconciliationStore";
@@ -25,7 +31,9 @@ import { identityKeysFor, type IdentityEvidence } from "./customerIdentityResolu
  * The single read path for paid-order revenue in Goldline analytics.
  *
  * Source rules (shared with Tower Wars' economic-event loader):
- * - Native orders count only with Stripe payment evidence. Migration 0011
+ * - Both sources require an admitted, tenant/subject/source/ref-matching
+ *   payment_verified Authority Receipt before entering the shared ledger.
+ * - Native candidates need Stripe payment evidence. Migration 0011
  *   backfilled `paidAt` from `updatedAt` for older paid rows, and manual
  *   "mark paid" writes carry no processor record, so those are held out and
  *   reported as unverified rather than silently added or dropped.
@@ -47,6 +55,8 @@ export const LEDGER_SOURCES: readonly LedgerSource[] = ["laundry_butler", "clean
 export type ServiceType = "wash_fold" | "dry_cleaning";
 
 export type PaidOrderEvent = {
+  paymentEvidence?: Omit<PaymentAuthorityExpectation, "tenantId">;
+  authorityReceiptId?: string;
   company?: "laundry_farm" | null;
   serviceLine?: import("./businessLineage").ServiceLine;
   source: LedgerSource;
@@ -95,7 +105,10 @@ export type UndatedEconomicAdjustment = {
   reason: "payment_date_unknown";
 };
 
+export type UnverifiedPaymentAuthority = { eventKey: string; businessDate: string; source: LedgerSource; cents: number; reason: "missing_or_invalid_receipt" | "authority_unavailable" };
+
 export type PaidOrderLedger = {
+  unverifiedPaymentAuthority?: UnverifiedPaymentAuthority[];
   reconciliationEvidence?: SalesReconciliationEvidence;
   undatedAdjustments?: UndatedEconomicAdjustment[];
   startUtc: Date;
@@ -136,6 +149,7 @@ export type NativeOrderRow = {
 };
 
 export type CleanCloudOrderRow = {
+  importBatchId?: number | null;
   discountCents?: number | null;
   creditCents?: number | null;
   subtotalCents?: number | null;
@@ -163,6 +177,7 @@ export type CleanCloudOrderRow = {
 export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: Date };
 
 export type LedgerLoaders = {
+  paymentAuthority?: typeof readPaymentAuthorityReceipts;
   reconciliation?: (tenantId: string) => Promise<SalesReconciliationEvidence>;
   laundry_butler: (window: LedgerWindow) => Promise<NativeOrderRow[]>;
   cleancloud: (window: LedgerWindow) => Promise<CleanCloudOrderRow[]>;
@@ -224,6 +239,7 @@ export function mapNativeOrders(
       row.serviceType === "wash_fold" || row.serviceType === "dry_cleaning" ? row.serviceType : null;
     events.push({
       source: "laundry_butler",
+      paymentEvidence: { subjectType: "order", subjectId: String(row.id), sourceType: "stripe_payment_intent", sourceRef: row.stripePaymentIntentId.trim() },
       eventKey,
       occurredAt: row.paidAt,
       businessDate,
@@ -273,6 +289,7 @@ export function partitionCleanCloudOrders(
     const serviceClass = classifyCleanCloudService({ summaryText: preferred.summaryText ?? null });
     events.push({
       source: "cleancloud",
+      paymentEvidence: { subjectType: "cleancloud_order", subjectId: cleancloudOrderId, sourceType: "cleancloud_paid_order", sourceRef: preferred.importBatchId == null ? null : `cleancloud-import:${preferred.importBatchId}:${cleancloudOrderId}` },
       eventKey: keptEventKey,
       occurredAt,
       businessDate: businessDateOf(occurredAt, timeZone),
@@ -378,6 +395,7 @@ export const databaseLedgerLoaders: LedgerLoaders = {
   async cleancloud(window) {
     const db = await requireDb();
     const columns = {
+      importBatchId: cleancloudPaidOrders.importBatchId,
       cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
       cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
       sourceReportType: cleancloudPaidOrders.sourceReportType,
@@ -494,6 +512,61 @@ export async function loadPaidOrderLedger(
     failedSources.push("cleancloud");
   }
 
+  const unverifiedPaymentAuthority: UnverifiedPaymentAuthority[] = [];
+  let authorityUnavailable = false;
+  if (events.length) {
+    const candidates = [...events];
+    try {
+      const expectations = candidates.map(event => ({
+        tenantId: input.tenantId,
+        ...event.paymentEvidence!,
+      }));
+      const receipts = await (
+        loaders.paymentAuthority ?? readPaymentAuthorityReceipts
+      )({ tenantId: input.tenantId, expectations });
+      const bySubject = new Map<string, AuthorityReceipt[]>();
+      for (const receipt of receipts) {
+        const key = `${receipt.subjectType}:${receipt.subjectId}`;
+        bySubject.set(key, [...(bySubject.get(key) ?? []), receipt]);
+      }
+      events.length = 0;
+      for (const event of candidates) {
+        const expected = {
+          tenantId: input.tenantId,
+          ...event.paymentEvidence!,
+        };
+        const receipt = (
+          bySubject.get(`${expected.subjectType}:${expected.subjectId}`) ?? []
+        ).find(receipt => paymentAuthorityReceiptMatches(receipt, expected));
+        if (receipt) events.push({ ...event, authorityReceiptId: receipt.id });
+        else {
+          unverifiedPaymentAuthority.push({
+            eventKey: event.eventKey,
+            businessDate: event.businessDate,
+            source: event.source,
+            cents: event.cents,
+            reason: "missing_or_invalid_receipt",
+          });
+          if (!failedSources.includes(event.source))
+            failedSources.push(event.source);
+        }
+      }
+    } catch {
+      authorityUnavailable = true;
+      events.length = 0;
+      for (const event of candidates)
+        unverifiedPaymentAuthority.push({
+          eventKey: event.eventKey,
+          businessDate: event.businessDate,
+          source: event.source,
+          cents: event.cents,
+          reason: "authority_unavailable",
+        });
+      for (const source of loadedSources)
+        if (!failedSources.includes(source)) failedSources.push(source);
+    }
+  }
+
   if (reconciliation.status === "fulfilled") {
     const attribution = new Map(
       reconciliation.value.attributions
@@ -547,11 +620,12 @@ export async function loadPaidOrderLedger(
             ).values()
           )
         : [],
+    unverifiedPaymentAuthority,
     unverifiedNative,
     provenDuplicateExclusions,
     loadedSources,
     failedSources,
-    completeness: failedSources.length === 0 ? "complete" : loadedSources.length ? "partial" : "unavailable",
+    completeness: authorityUnavailable ? "unavailable" : failedSources.length === 0 ? "complete" : loadedSources.length ? "partial" : "unavailable",
   };
 }
 

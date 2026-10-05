@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 import { describe, expect, it, vi } from "vitest";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { loadPaidOrderLedger, type LedgerLoaders } from "../analytics/paidOrderLedger";
@@ -98,7 +99,7 @@ function exam(options: { loaders?: LedgerLoaders; importedToday?: boolean } = {}
     loadBindings: async () => ({ laundry_butler: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [], latestAttempt: null, isSystemOfRecord: true }, cleancloud: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [{ from: "2020-01-01", to: "2099-12-31", completedAt: new Date(), basis: "economic_event" as const, provenance: "test_fixture" as const }], latestAttempt: null, isSystemOfRecord: false } }),
       runQuery: (tenantId, query) =>
         runBusinessQuery(tenantId, query, {
-          loadLedger: input => loadPaidOrderLedger(input, options.loaders ?? businessLoaders()),
+          loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(options.loaders ?? businessLoaders())),
           loadOpenOrders: async () => ({ openTotal: 2, byStatus: {}, awaitingPayment: 1 }),
           loadCompleteness: async () => businessCompleteness,
           readSourceCoverage: async () => provenBusinessCoverageSnapshot(tenantId),

@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../../analytics/businessLedgerFixture";
 import type { CleanCloudOrderRow, LedgerLoaders, NativeOrderRow } from "../../analytics/paidOrderLedger";
 import type { DataFreshness } from "../../analytics/dataFreshness";
 import { ALWAYS_MISSING_SOURCES, type DataCompleteness } from "../../analytics/analyticsQueries";
@@ -134,10 +135,11 @@ export const businessCleanCloudRows: CleanCloudOrderRow[] = [
 ];
 
 export function businessLoaders(overrides: Partial<LedgerLoaders> = {}): LedgerLoaders {
-  return {
+  return withFixturePaymentAuthority({
     laundry_butler: overrides.laundry_butler ?? (async () => businessNativeRows),
     cleancloud: overrides.cleancloud ?? (async () => businessCleanCloudRows),
-  };
+    paymentAuthority: overrides.paymentAuthority,
+  });
 }
 
 export const businessCompleteness: DataCompleteness = {

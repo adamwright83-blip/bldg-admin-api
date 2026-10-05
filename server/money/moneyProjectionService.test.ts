@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as canonical from "../analytics/canonicalRevenue";
 import type {
@@ -58,7 +59,8 @@ function cleancloud(
 function integrate(
   nativeRows: NativeOrderRow[],
   cleancloudRows: CleanCloudOrderRow[],
-  fail = false
+  fail = false,
+  proof: "admitted" | "missing" | "unavailable" = "admitted"
 ) {
   const loaders: LedgerLoaders = {
     laundry_butler: async () => {
@@ -70,12 +72,15 @@ function integrate(
       return cleancloudRows;
     },
   };
+  const admitted = withFixturePaymentAuthority(loaders);
+  if (proof === "missing") admitted.paymentAuthority = async () => [];
+  if (proof === "unavailable") admitted.paymentAuthority = async () => { throw new Error("authority unavailable"); };
   // Only source loading is substituted: real canonical mapping, deduplication,
   // period filtering and coverage qualification all execute beneath Money.
   return vi
     .spyOn(canonical, "readCanonicalRevenue")
     .mockImplementation(input =>
-      actualRead({ ...input, loaders, coverage: null })
+      actualRead({ ...input, loaders: admitted, coverage: null })
     );
 }
 
@@ -168,4 +173,20 @@ describe("Money canonical paid revenue", () => {
     expect(money.realizedRevenue.provenance).toBe("UNKNOWN");
     expect(money.dataQuality.status).toBe("insufficient");
   });
+});
+
+
+describe("Money Authority Receipt availability", () => {
+ it("keeps an unread receipt batch unknown for cumulative payment revenue", async()=>{
+  integrate([native(701,"85.80")],[cleancloud("orders_sales")],false,"unavailable");
+  const money=await getMoneyProjection({tenantId:"default"});
+  expect(money.collectedRevenue).toMatchObject({value:null,provenance:"UNKNOWN"});
+  expect(money.trust.warnings.join(" ")).toContain("unavailable");
+ });
+ it("holds missing proof out with recorded-only qualification, not an exact cumulative zero",async()=>{
+  integrate([native(701,"85.80")],[cleancloud("orders_sales")],false,"missing");
+  const money=await getMoneyProjection({tenantId:"default"});
+  expect(money.collectedRevenue).toMatchObject({value:0,confidence:"medium"});
+  expect(money.collectedRevenue.sourceReference).toContain(":recorded_only");
+ });
 });

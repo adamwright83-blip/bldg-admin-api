@@ -1,3 +1,4 @@
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deriveBusinessStage, getBusinessWorld } from "./businessWorldService";
 
@@ -60,7 +61,7 @@ describe("World Treasury canonical payment revenue", () => {
         actualRead({
           ...input,
           coverage: null,
-          loaders: {
+          loaders: withFixturePaymentAuthority({
             laundry_butler: async () => [
               {
                 id: 1,
@@ -91,7 +92,7 @@ describe("World Treasury canonical payment revenue", () => {
                     customerEmail: null,
                   }))
                 : [],
-          },
+          }),
         })
       );
     const world = await getBusinessWorld({ tenantId: "tenant-a", now });
@@ -122,14 +123,14 @@ describe("World Treasury canonical payment revenue", () => {
       actualRead({
         ...input,
         coverage: null,
-        loaders: {
+        loaders: withFixturePaymentAuthority({
           laundry_butler: async () => {
             throw new Error("down");
           },
           cleancloud: async () => {
             throw new Error("down");
           },
-        },
+        }),
       })
     );
     const world = await getBusinessWorld({ tenantId: "tenant-a", now });

@@ -1,10 +1,11 @@
+import { withFixturePaymentAuthority } from "./businessLedgerFixture";
 import { describe, expect, it } from "vitest";
 import { speakBusinessResult } from "../claire/business/businessSpeech";
 import { FIXTURE_NOW, FIXTURE_TZ, fixtureCompleteness } from "./businessLedgerFixture";
 import { defaultBusinessQuery, runBusinessQuery, type BusinessQueryDeps } from "./businessQuery";
 import {
   interpretSourceCoverage,
-  readCanonicalRevenue,
+  readCanonicalRevenue as actualReadCanonicalRevenue,
   reconcilePaidRevenue,
 } from "./canonicalRevenue";
 import {
@@ -19,6 +20,9 @@ import type {
   BusinessSourceCoverageSnapshot,
   SourceCoverageStatus,
 } from "./sourceCoverage";
+
+// These source/coverage tests now supply admitted fixture receipts; proof rejection has its own tests.
+const readCanonicalRevenue: typeof actualReadCanonicalRevenue = input => actualReadCanonicalRevenue({ ...input, loaders: input.loaders ? withFixturePaymentAuthority(input.loaders) : undefined });
 
 const WINDOW = { from: "2026-09-01", to: "2026-09-14" };
 const PAID_AT = new Date("2026-09-10T19:00:00.000Z");
@@ -653,7 +657,7 @@ describe("readCanonicalRevenue", () => {
 describe("Claire revenue consumes the canonical read", () => {
   function deps(rows: LedgerLoaders, coverage: BusinessSourceCoverageSnapshot | null = null): BusinessQueryDeps {
     return {
-      loadLedger: input => loadPaidOrderLedger(input, rows),
+      loadLedger: input => loadPaidOrderLedger(input, withFixturePaymentAuthority(rows)),
       loadOpenOrders: async () => ({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
       loadCompleteness: async () => fixtureCompleteness,
       readSourceCoverage: async () => coverage,

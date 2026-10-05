@@ -19,7 +19,7 @@ import {
 /**
  * Canonical revenue read for JOYSTICK.
  *
- * One function states paid revenue across native Stripe orders and CleanCloud.
+ * One function states paid revenue across receipt-admitted native Stripe orders and CleanCloud.
  * `getRevenueSummary`, Claire's revenue / AOV / revenue-driver / profit totals,
  * and strategy `netSales` all derive the stated cents from `reconcilePaidRevenue`.
  * `summarizeTotals` only adds the events it is given; it is not a second
@@ -117,6 +117,7 @@ export type CanonicalRevenueCoverage = {
 };
 
 export type ReconciledRevenue = {
+  unverifiedPaymentAuthority?: { count: number; cents: number };
   unresolvedLinkCount?: number;
   /** Cents that may be stated as exact for the records included. Suspected copies are absent. */
   undatedAdjustments?: { count: number; cents: number };
@@ -403,6 +404,7 @@ export function revenueMayStateExact(input: {
 }): boolean {
   return (
     input.coverage.coverageAllowsExact &&
+    (input.reconciled.unverifiedPaymentAuthority?.count ?? 0) === 0 &&
     input.reconciled.suspectedWithheld.count === 0 &&
     input.reconciled.unverifiedNative.count === 0
   &&
@@ -413,7 +415,7 @@ export function revenueMayStateExact(input: {
 
 export function reconcileLedgerSpan(
   ledger: Pick<PaidOrderLedger, | "events" | "provenDuplicateExclusions" | "unverifiedNative"| "reconciliationEvidence"
-    | "undatedAdjustments"
+    | "undatedAdjustments" | "unverifiedPaymentAuthority"
   >,
   span: { start: string; end: string },
   explicitEconomicLinks?: readonly ExplicitEconomicLink[]
@@ -446,6 +448,8 @@ export function reconcileLedgerSpan(
       order => order.businessDate >= span.start && order.businessDate <= span.end
     ),
   });
+  const unverifiedProof = (ledger.unverifiedPaymentAuthority ?? []).filter(event => event.businessDate >= span.start && event.businessDate <= span.end);
+  read.unverifiedPaymentAuthority = { count: unverifiedProof.length, cents: unverifiedProof.reduce((sum, event) => sum + event.cents, 0) };
   read.undatedAdjustments = {
     count: ledger.undatedAdjustments?.length ?? 0,
     cents: (ledger.undatedAdjustments ?? []).reduce(
