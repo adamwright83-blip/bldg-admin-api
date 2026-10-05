@@ -137,7 +137,48 @@ export default function PresidentAutonomousReview() {
     return () => window.clearInterval(timer);
   }, [cycleId]);
 
-  if (!cycleId) return null;
+  if (!cycleId) {
+    const start = async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const created = await jsonFetch<CycleView>(
+          "/api/president/autonomous/cycles",
+          { method: "POST", body: "{}" }
+        );
+        window.location.assign(
+          `/president?cycle=${encodeURIComponent(created.cycleId)}`
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      }
+    };
+    return (
+      <section className="president-cycle-review">
+        <div className="president-cycle-heading">
+          <div>
+            <p className="president-eyebrow">PRESIDENT · OVERNIGHT CYCLE</p>
+            <h2>Company improvement cycle</h2>
+          </div>
+        </div>
+        <p className="president-cycle-intro">
+          President gathers current company evidence, gets ten recommendations
+          from ChatGPT, has Claude challenge them, returns the critique to
+          ChatGPT, and then brings you three recommendations. Nothing executes
+          until you approve the final set.
+        </p>
+        {error && (
+          <p role="alert" className="president-cycle-error">
+            {error}
+          </p>
+        )}
+        <button disabled={busy} onClick={() => void start()}>
+          {busy ? "Starting cycle…" : "Run recommendation cycle"}
+        </button>
+      </section>
+    );
+  }
 
   const proposed = cycle?.proposed.filter((x): x is Candidate => Boolean(x)) ?? [];
   const candidates = others ? [...proposed, ...others] : proposed;
