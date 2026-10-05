@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import "./smallComfortsPlate.css";
 
 type Ripple = { id: number; x: number; y: number };
@@ -51,7 +51,7 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
     };
   }, []);
 
-  const makeRipple = (event: React.PointerEvent<HTMLDivElement>) => {
+  const makeRipple = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     const rect = event.currentTarget.getBoundingClientRect();
     setRipple({
