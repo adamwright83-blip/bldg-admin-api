@@ -295,8 +295,13 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
     );
   }
   if (moneyMetric && filters.serviceLines?.some(line => line !== "unresolved")) {
+    const attributedLines = filters.serviceLines
+      .filter(line => line !== "unresolved")
+      .slice()
+      .sort()
+      .join(",");
     once(
-      "positive-service-attribution",
+      `positive-service-attribution:${attributedLines}`,
       () => "That includes only sales positively attributed to this service line; unresolved sales remain separate."
     );
   }
@@ -431,6 +436,20 @@ function speakTotals(
           ? `Most of that is order volume: ${speech.count(current.orderCount)} paid orders versus ${speech.count(previous.orderCount)}.`
           : `Most of that is average order value: ${speech.money(current.aovCents ?? 0, true)} versus ${speech.money(previous.aovCents ?? 0, true)}.`
       );
+      if (
+        volume >= aov &&
+        current.aovCents != null &&
+        previous.aovCents != null &&
+        current.aovCents !== previous.aovCents
+      ) {
+        speech.say(
+          `Average order value also ${current.aovCents > previous.aovCents ? "rose" : "fell"} from ${speech.money(previous.aovCents, true)} to ${speech.money(current.aovCents, true)}.`
+        );
+      } else if (volume < aov && current.orderCount !== previous.orderCount) {
+        speech.say(
+          `Order volume also ${current.orderCount > previous.orderCount ? "rose" : "fell"} from ${speech.count(previous.orderCount)} to ${speech.count(current.orderCount)} paid orders.`
+        );
+      }
       if (movers.length) speech.say(moverSentence());
     }
     return;
