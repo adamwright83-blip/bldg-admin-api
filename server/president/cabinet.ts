@@ -40,8 +40,6 @@ export async function consultExecutiveCabinet(input: {
       return { record: prior, reused: true };
     }
     const plan = cabinetRoles(input.question, input.consequential);
-    if (plan.domain !== "COMPANY")
-      throw new Error("Cabinet does not replace Mitch");
     const perCall = input.maxUsd / (plan.members.length + 1);
     if (perCall <= 0 || input.maxUsd > 2)
       throw new Error("Bounded cabinet budget required");
