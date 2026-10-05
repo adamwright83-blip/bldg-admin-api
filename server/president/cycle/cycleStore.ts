@@ -9,14 +9,9 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { Cycle } from "../../../shared/presidentCycle";
 
-/**
- * Durable cycle store. Whole-cycle documents are updated under a cross-process
- * directory lock and written with atomic rename, so a process restart (or kill
- * mid-write) never leaves partial state. A MySQL adapter can implement the same
- * interface later without changing callers.
- */
 export interface CycleStore {
   get(cycleId: string): Promise<Cycle | null>;
   create(cycle: Cycle): Promise<void>;
@@ -25,6 +20,11 @@ export interface CycleStore {
   list(tenantId?: string): Promise<Cycle[]>;
 }
 
+/**
+ * Development/test adapter only. Atomic rename + a cross-process directory lock
+ * protect a single filesystem, but this is not a production durability guarantee:
+ * ephemeral disks and multiple hosts can still lose or fork state.
+ */
 const STALE_LOCK_MS = 30_000;
 
 export class FileCycleStore implements CycleStore {
@@ -87,7 +87,7 @@ export class FileCycleStore implements CycleStore {
       const f = this.file(id);
       if (!existsSync(f)) throw new Error(`Unknown cycle ${id}`);
       const cycle = JSON.parse(readFileSync(f, "utf8")) as Cycle;
-      const result = fn(cycle); // throws => nothing written
+      const result = fn(cycle);
       cycle.version += 1;
       this.write(cycle);
       return result;
@@ -99,6 +99,104 @@ export class FileCycleStore implements CycleStore {
       .filter(n => n.endsWith(".json"))
       .map(n => JSON.parse(readFileSync(join(this.dir, n), "utf8")) as Cycle)
       .filter(c => !tenantId || c.tenantId === tenantId);
+  }
+}
+
+function cycleFromRow(row: RowDataPacket): Cycle {
+  const raw = typeof row.payloadJson === "string" ? JSON.parse(row.payloadJson) : row.payloadJson;
+  const cycle = raw as Cycle;
+  if (!cycle || cycle.cycleId !== row.cycleId || cycle.tenantId !== row.tenantId)
+    throw new Error("President cycle row/payload identity mismatch");
+  if (Number(row.version) !== cycle.version)
+    throw new Error("President cycle row/payload version mismatch");
+  return cycle;
+}
+
+async function selectCycleForUpdate(
+  conn: PoolConnection,
+  cycleId: string
+): Promise<RowDataPacket | null> {
+  const [rows] = await conn.execute<RowDataPacket[]>(
+    "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles WHERE cycleId=? FOR UPDATE",
+    [cycleId]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Production adapter. MySQL row locking serializes concurrent workers across
+ * hosts; the full cycle/approval/mission/review receipt survives process and
+ * host restarts. The table is created by drizzle/0120_president_autonomous_cycles.sql.
+ */
+export class MysqlCycleStore implements CycleStore {
+  constructor(private readonly pool: Pool) {}
+
+  async get(cycleId: string): Promise<Cycle | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles WHERE cycleId=? LIMIT 1",
+      [cycleId]
+    );
+    return rows[0] ? cycleFromRow(rows[0]) : null;
+  }
+
+  async create(cycle: Cycle): Promise<void> {
+    try {
+      await this.pool.execute(
+        "INSERT INTO president_autonomous_cycles (cycleId,tenantId,version,status,payloadJson,createdAt,updatedAt) VALUES (?,?,?,?,?,NOW(3),NOW(3))",
+        [
+          cycle.cycleId,
+          cycle.tenantId,
+          cycle.version,
+          cycle.status,
+          JSON.stringify(cycle),
+        ]
+      );
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code === "ER_DUP_ENTRY") throw new Error("Cycle already exists");
+      throw error;
+    }
+  }
+
+  async update<T>(cycleId: string, fn: (cycle: Cycle) => T): Promise<T> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const row = await selectCycleForUpdate(conn, cycleId);
+      if (!row) throw new Error(`Unknown cycle ${cycleId}`);
+      const cycle = cycleFromRow(row);
+      const result = fn(cycle);
+      cycle.version += 1;
+      await conn.execute(
+        "UPDATE president_autonomous_cycles SET tenantId=?,version=?,status=?,payloadJson=?,updatedAt=NOW(3) WHERE cycleId=?",
+        [
+          cycle.tenantId,
+          cycle.version,
+          cycle.status,
+          JSON.stringify(cycle),
+          cycle.cycleId,
+        ]
+      );
+      await conn.commit();
+      return result;
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
+
+  async list(tenantId?: string): Promise<Cycle[]> {
+    const [rows] = tenantId
+      ? await this.pool.execute<RowDataPacket[]>(
+          "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles WHERE tenantId=? ORDER BY updatedAt DESC",
+          [tenantId]
+        )
+      : await this.pool.query<RowDataPacket[]>(
+          "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles ORDER BY updatedAt DESC"
+        );
+    return rows.map(cycleFromRow);
   }
 }
 
