@@ -147,6 +147,84 @@ describe("Mission Director rankable work", () => {
     ).toContain("DISCRETIONARY_TIME_PROTECTED");
   });
 
+  it("does not let one task priority boost unrelated campaigns with the same task type", () => {
+    const campaignA: GrowthCampaign = {
+      id: "row-a",
+      tenantId: "tenant",
+      campaignId: "campaign-a",
+      enabled: true,
+      title: "Email A",
+      objective: "Email account A",
+      completionCondition: "Email account A",
+      prepLeadDays: 0,
+      prepCondition: null,
+      pocketKind: "any",
+      pocketMinutesMin: 0,
+      fallbackVariant: null,
+      autoVerifiable: [],
+      selfReported: [],
+      missionCategory: "account_acquisition",
+      companionAbilityId: null,
+      timingAssumptions: [],
+      opsTaskType: "office_account_pitch",
+      legacyContract: null,
+      legacyContractRef: null,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    };
+    const campaignB = { ...campaignA, id: "row-b", campaignId: "campaign-b", title: "Email B", objective: "Email account B", completionCondition: "Email account B" };
+    const a = candidate("candidate-a", "Email A", "Email account A", {
+      sourceRefs: [
+        {
+          sourceKind: "unfinished_growth_work",
+          sourceType: "ops_task",
+          sourceId: "task-a",
+        },
+        {
+          sourceKind: "campaign_library",
+          sourceType: "campaign_template",
+          sourceId: "campaign-a",
+        },
+      ],
+    });
+    const b = candidate("candidate-b", "Email B", "Email account B", {
+      sourceRefs: [
+        {
+          sourceKind: "campaign_library",
+          sourceType: "campaign_template",
+          sourceId: "campaign-b",
+        },
+      ],
+    });
+    const plan = rankMissionDirectorWork({
+      candidates: [b, a],
+      campaigns: [campaignA, campaignB],
+      campaignPrepReady: { "campaign-a": true, "campaign-b": true },
+      context: {
+        ...context,
+        openTasks: [
+          {
+            id: "task-a",
+            taskType: "office_account_pitch",
+            status: "open",
+            priority: "high",
+            dueAt: null,
+          },
+        ],
+      },
+      pockets: [],
+    });
+    expect(plan.status).toBe("ranked");
+    if (plan.status !== "ranked") return;
+    expect(plan.primary.workId).toBe("candidate-a");
+    expect(
+      plan.ranking
+        .find(item => item.workId === "candidate-b")
+        ?.factors.find(item => item.name === "explicit_operator_priority")
+        ?.effect
+    ).toBe(0);
+  });
+
   it("requires Mission Director prep receipt truth for a campaign candidate", () => {
     const campaignCandidate = candidate(
       "wgc:tenant:campaign:campaign-1",
