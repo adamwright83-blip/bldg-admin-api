@@ -14,7 +14,6 @@ import { getDashboardTimeZone } from "../../dashboardZoned";
 import { planForDate } from "../../missionDirector/missionDirectorService";
 import {
   listGoalCycleObjectives,
-  projectToRankedDayWork,
   type PersistentGrowthObjective,
 } from "../../persistentOperator/objectiveStore";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
