@@ -1061,8 +1061,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const daphneMayAskInstead =
     closedDecisionBranch === "continue" &&
     hasPendingAction &&
+    closedDecisions.turnReadiness.effectiveOutput === "ambiguous" &&
     effectivePendingRelationship === "continues_pending" &&
-    closedDecisions.pendingActionRelationship.abstained === true &&
     operatorAdaptationDecision?.behaviorClass === DAPHNE_STAGE3B_BEHAVIOR_CLASS;
 
   if (daphneMayAskInstead && operatorAdaptationDecision) {
