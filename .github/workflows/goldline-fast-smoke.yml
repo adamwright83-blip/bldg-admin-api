@@ -82,6 +82,7 @@ jobs:
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
           server/operatorArtifact/sendOperatorArtifact.test.ts
           server/persistentOperator/operationReceipt.test.ts
+          server/persistentOperator/operatorAppointmentExecution.test.ts
 
       - name: Prove commercial paid-revenue authority shadow
         run: >-
