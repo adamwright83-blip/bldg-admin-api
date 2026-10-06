@@ -5,6 +5,7 @@ import {
   isActiveChurnOrder,
   type ChurnDropoffEvidence,
   type ChurnNativeOrder,
+  type ChurnPaymentProjection,
 } from "./authoritativeHistory";
 
 const baseCreatedAt = new Date("2026-08-01T20:00:00.000Z");
@@ -51,6 +52,14 @@ function dropoff(
   };
 }
 
+function projection(
+  orderId: number,
+  state: ChurnPaymentProjection["state"] = "paid",
+  netPaidCents: number | null = 4321
+): ChurnPaymentProjection {
+  return { orderId, state, netPaidCents };
+}
+
 function paid(orderId: number, cents: number): PaidOrderEvent {
   return {
     source: "laundry_butler",
@@ -71,6 +80,7 @@ describe("authoritative churn history", () => {
       orders,
       dropoffEvents: [],
       paidEvents: [paid(1, 6500)],
+      paymentProjections: [],
     });
     expect(history).toEqual([]);
   });
@@ -93,6 +103,7 @@ describe("authoritative churn history", () => {
       orders: [...orders, imported],
       dropoffEvents: [],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history).toMatchObject([
       {
@@ -117,6 +128,7 @@ describe("authoritative churn history", () => {
       orders: [lookalike],
       dropoffEvents: [],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history).toEqual([]);
   });
@@ -126,6 +138,7 @@ describe("authoritative churn history", () => {
       orders,
       dropoffEvents: [dropoff(1)],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history).toMatchObject([
       {
@@ -143,22 +156,52 @@ describe("authoritative churn history", () => {
       orders,
       dropoffEvents: [],
       paidEvents: [paid(2, 7200)],
+      paymentProjections: [projection(2, "paid", 7200)],
     });
     expect(history).toHaveLength(0);
     expect(isActiveChurnOrder(orders[1]!)).toBe(true);
   });
 
-  it("uses only admitted paid-ledger value, never the order total", () => {
+  it("uses the admitted payment plus canonical net projection, never gross/order total", () => {
     const history = buildAuthoritativeChurnHistory({
       orders,
       dropoffEvents: [dropoff(1)],
-      paidEvents: [paid(1, 4321)],
+      paidEvents: [paid(1, 9000)],
+      paymentProjections: [projection(1, "paid", 4321)],
     });
     expect(history[0]).toMatchObject({
       orderId: 1,
       valueCents: 4321,
       paymentAuthorityReceiptId: "receipt-1",
     });
+  });
+
+  it("uses remaining net value for a partially refunded payment", () => {
+    const history = buildAuthoritativeChurnHistory({
+      orders,
+      dropoffEvents: [dropoff(1)],
+      paidEvents: [paid(1, 9000)],
+      paymentProjections: [projection(1, "partially_refunded", 6100)],
+    });
+    expect(history[0]?.valueCents).toBe(6100);
+  });
+
+  it("withholds monetary value for refunded, cancelled, review-required, or missing projections", () => {
+    for (const paymentProjections of [
+      [projection(1, "refunded", 0)],
+      [projection(1, "cancelled", 0)],
+      [projection(1, "review_required", null)],
+      [],
+    ]) {
+      const history = buildAuthoritativeChurnHistory({
+        orders,
+        dropoffEvents: [dropoff(1)],
+        paidEvents: [paid(1, 9000)],
+        paymentProjections,
+      });
+      expect(history[0]?.valueCents).toBeNull();
+      expect(history[0]?.paymentAuthorityReceiptId).toBeNull();
+    }
   });
 
   it("lets the latest voided evidence invalidate an earlier completion", () => {
@@ -174,6 +217,7 @@ describe("authoritative churn history", () => {
         dropoff(3, { eventStatus: "corrected" }),
       ],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history.map(item => item.orderId)).toEqual([3]);
   });
@@ -183,6 +227,7 @@ describe("authoritative churn history", () => {
       orders,
       dropoffEvents: [dropoff(3)],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history.map(item => item.orderId)).toEqual([3]);
     expect(isActiveChurnOrder(orders[2]!)).toBe(false);
@@ -200,6 +245,7 @@ describe("authoritative churn history", () => {
       orders,
       dropoffEvents: [dropoff(1), corrected],
       paidEvents: [],
+      paymentProjections: [],
     });
     expect(history[0]).toMatchObject({
       serviceEvidenceRef: "operations_events:99",
