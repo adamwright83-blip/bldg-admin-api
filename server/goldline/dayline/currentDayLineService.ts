@@ -183,27 +183,7 @@ export async function readCurrentDayLine(
     const seen = new Set<string>();
     const rankedWorks: RankedDayWork[] = [];
 
-    // 1. Persistent Growth Objectives (active operator commitments for today)
-    for (const obj of objectives) {
-      if (
-        obj.status !== "presented" &&
-        obj.status !== "accepted" &&
-        obj.status !== "in_progress"
-      ) {
-        continue;
-      }
-      const work = projectToRankedDayWork(obj);
-      if (!work.id || seen.has(work.id)) continue;
-      seen.add(work.id);
-      work.lineage = {
-        kind: "objective",
-        sourceReference: `goal_cycle_objectives:${obj.id}`,
-        objectiveId: obj.id,
-      };
-      rankedWorks.push(work);
-    }
-
-    // 2. Mission Plan Campaign Ranking
+    // 1. Mission Plan Campaign Ranking — the sole business ordering authority.
     if (plan.outcome.status !== "no_plan") {
       for (const evidence of rankingOf(plan.outcome)) {
         const id = evidence.campaignId.trim();
@@ -222,6 +202,27 @@ export async function readCurrentDayLine(
           },
         });
       }
+    }
+
+    // 2. Persistent Growth Objectives stay visible, but cannot outrank the
+    // Mission Director list merely because they were loaded first.
+    for (const obj of objectives) {
+      if (
+        obj.status !== "presented" &&
+        obj.status !== "accepted" &&
+        obj.status !== "in_progress"
+      ) {
+        continue;
+      }
+      const work = projectToRankedDayWork(obj);
+      if (!work.id || seen.has(work.id)) continue;
+      seen.add(work.id);
+      work.lineage = {
+        kind: "objective",
+        sourceReference: `goal_cycle_objectives:${obj.id}`,
+        objectiveId: obj.id,
+      };
+      rankedWorks.push(work);
     }
 
     // 3. Day Director Commitments

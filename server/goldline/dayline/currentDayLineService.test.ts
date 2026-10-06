@@ -616,6 +616,11 @@ describe("readCurrentDayLine", () => {
     });
 
     expect(line.rankingStatus).toBe("ranked");
+    expect(line.items.map(item => item.id)).toEqual([
+      "later-id",
+      "earlier-id",
+      "obj-growth-1001",
+    ]);
     const surfacedGrowthItem = line.items.find(item => item.id === "obj-growth-1001");
     expect(surfacedGrowthItem).toBeDefined();
     expect(surfacedGrowthItem?.title).toBe("Commercial Acquisition: Tower Alpha");
