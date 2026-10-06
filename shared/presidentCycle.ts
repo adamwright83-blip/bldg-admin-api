@@ -244,6 +244,8 @@ export type Mission = {
 export type MissionHandback = {
   prUrl?: string;
   branch?: string;
+  /** Exact main commit the engineering mission was based on. */
+  baseSha?: string;
   commitSha?: string;
   changedFiles?: string[];
   artifactPath?: string;
