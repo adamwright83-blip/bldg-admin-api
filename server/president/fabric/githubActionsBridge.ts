@@ -152,9 +152,14 @@ async function resolveMainSha(): Promise<string> {
   return body.sha;
 }
 
-export async function claimPresidentGithubMission(store: CycleStore) {
+export async function claimPresidentGithubMission(
+  store: CycleStore,
+  mainShaOverride?: string
+) {
   const cycles = (await store.list()).filter(cycle => cycle.status === "EXECUTING");
-  const currentMain = await resolveMainSha();
+  const currentMain = mainShaOverride ?? (await resolveMainSha());
+  if (!/^[a-f0-9]{40}$/i.test(currentMain))
+    throw new Error("President GitHub execution base SHA is invalid");
 
   for (const cycle of cycles) {
     let response: Record<string, unknown> | null = null;
