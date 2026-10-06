@@ -78,6 +78,9 @@ jobs:
           pnpm vitest run
           server/agents/agentRuntime.test.ts
           server/agents/residentAgentTools.test.ts
+          server/agents/tools/updateResidentAgentPlanTool.test.ts
+          server/agents/tools/updateOrderStatusTool.test.ts
+          server/agents/tools/sendOperatorArtifactTool.test.ts
           server/claire/brain/tests/authority.test.ts
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
           server/operatorArtifact/sendOperatorArtifact.test.ts
