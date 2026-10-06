@@ -340,7 +340,10 @@ export function buildOperatorRepresentativeSnapshot(input: {
         internal.item.canAffectAdaptation = false;
       } else {
         internal.item.adaptationState = "ask_instead";
-        internal.item.canAffectAdaptation = false;
+        // The raw observed signal still has no live authority. The explicit
+        // authenticated ask-first directive is the only thing permitted to
+        // affect the one wired Stage 3B behavior.
+        internal.item.canAffectAdaptation = true;
       }
     }
   }
