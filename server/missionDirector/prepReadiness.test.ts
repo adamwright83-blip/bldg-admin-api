@@ -18,12 +18,14 @@ function evidence(
 
 describe("Mission Director prep completion evidence", () => {
   const deadline = "2026-10-03";
+  const timeZone = "America/Los_Angeles";
 
   it("does not treat status=completed as ready without a completion time", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completedAt: null }),
-        deadline
+        deadline,
+        timeZone
       )
     ).toEqual({
       ready: false,
@@ -35,7 +37,8 @@ describe("Mission Director prep completion evidence", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completedBy: null }),
-        deadline
+        deadline,
+        timeZone
       )
     ).toEqual({
       ready: false,
@@ -47,7 +50,8 @@ describe("Mission Director prep completion evidence", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completionEventId: null }),
-        deadline
+        deadline,
+        timeZone
       )
     ).toEqual({
       ready: false,
@@ -59,7 +63,8 @@ describe("Mission Director prep completion evidence", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completionActorId: null }),
-        deadline
+        deadline,
+        timeZone
       )
     ).toEqual({
       ready: false,
@@ -71,7 +76,8 @@ describe("Mission Director prep completion evidence", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completionActorId: "someone-else" }),
-        deadline
+        deadline,
+        timeZone
       )
     ).toEqual({
       ready: false,
@@ -83,7 +89,32 @@ describe("Mission Director prep completion evidence", () => {
     expect(
       evaluatePrepCompletionEvidence(
         evidence({ completedAt: new Date("2026-10-04T00:00:00.000Z") }),
-        deadline
+        deadline,
+        timeZone
+      )
+    ).toEqual({
+      ready: false,
+      reason: "ops_tasks.completedAt is after the prep lead-time deadline",
+    });
+  });
+
+  it("uses the tenant business date instead of UTC near midnight", () => {
+    expect(
+      evaluatePrepCompletionEvidence(
+        evidence({ completedAt: new Date("2026-10-04T03:00:00.000Z") }),
+        deadline,
+        "America/Los_Angeles"
+      )
+    ).toEqual({
+      ready: true,
+      reason: null,
+    });
+
+    expect(
+      evaluatePrepCompletionEvidence(
+        evidence({ completedAt: new Date("2026-10-03T15:30:00.000Z") }),
+        deadline,
+        "Asia/Tokyo"
       )
     ).toEqual({
       ready: false,
@@ -92,7 +123,9 @@ describe("Mission Director prep completion evidence", () => {
   });
 
   it("admits prep completed by the deadline with matching durable evidence", () => {
-    expect(evaluatePrepCompletionEvidence(evidence(), deadline)).toEqual({
+    expect(
+      evaluatePrepCompletionEvidence(evidence(), deadline, timeZone)
+    ).toEqual({
       ready: true,
       reason: null,
     });
