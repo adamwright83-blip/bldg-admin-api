@@ -90,6 +90,16 @@ jobs:
           server/persistentOperator/operationReceipt.test.ts
           server/persistentOperator/operatorAppointmentExecution.test.ts
 
+      - name: Prove Daphne causal adaptation kernel
+        run: >-
+          pnpm vitest run
+          server/operatorRepresentative/adaptation.test.ts
+          server/operatorRepresentative/adaptationReceipts.test.ts
+          server/claire/turn/daphneAdaptation.test.ts
+          server/operatorRepresentative/readModel.test.ts
+          server/operatorRepresentative/talk.test.ts
+          server/claire/operatorAdaptationContext.test.ts
+
       - name: Prove commercial paid-revenue authority shadow
         run: >-
           pnpm vitest run
@@ -170,6 +180,13 @@ jobs:
           "
           node scripts/migrate.mjs
           node scripts/migrate.mjs
+      - name: Prove Daphne causal chain through authenticated production entrypoints
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/operatorRepresentative/daphneStage3b.mysql.integration.test.ts
+
       - name: Prove Mitch producer durability against clean MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
