@@ -102,9 +102,10 @@ export function isActiveChurnOrder(
  * with its source identity. Ordinary delivered/paid flags are not evidence.
  * Monetary value is attached independently only when the admitted native
  * paid-order ledger and the existing order_payment_projections net-payment
- * state agree. Paid uses netPaidCents; partially_refunded uses the remaining
- * net; refunded/cancelled/review-required/missing projections provide no
- * realized value. Missing monetary authority never erases a real completed
+ * state agree. Paid and partially_refunded use netPaidCents; refunded or
+ * cancelled payments contribute zero realized value when the projection says
+ * netPaidCents=0; review-required/missing projections stay unavailable.
+ * Missing monetary authority never erases a real completed
  * service; it leaves that observation's value unavailable.
  */
 export type AuthoritativeNativePayment = {
@@ -112,7 +113,7 @@ export type AuthoritativeNativePayment = {
   occurredAt: Date;
   netPaidCents: number;
   authorityReceiptId: string;
-  state: "paid" | "partially_refunded";
+  state: "paid" | "partially_refunded" | "refunded" | "cancelled";
 };
 
 export function buildAuthoritativeNativePayments(input: {
@@ -134,11 +135,12 @@ export function buildAuthoritativeNativePayments(input: {
     const net = projection?.netPaidCents ?? null;
     if (
       !projection ||
-      (projection.state !== "paid" &&
-        projection.state !== "partially_refunded") ||
+      !["paid", "partially_refunded", "refunded", "cancelled"].includes(
+        projection.state
+      ) ||
       net === null ||
       !Number.isSafeInteger(net) ||
-      net <= 0
+      net < 0
     ) {
       continue;
     }
