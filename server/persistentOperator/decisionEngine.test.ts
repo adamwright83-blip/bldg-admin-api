@@ -45,6 +45,24 @@ function candidate(
   };
 }
 
+function missionPlan(campaignId: string) {
+  return {
+    id: "plan-1",
+    tenantId: "tenant-a",
+    operatorId: "operator-a",
+    businessDate: "2026-09-29",
+    stableKey: "mission-director:tenant-a:operator-a:2026-09-29",
+    revision: 1,
+    inputFingerprint: "fp",
+    outcome: {
+      status: "planned",
+      primary: { campaignId },
+    },
+    usageOutcome: null,
+    createdAt: "2026-09-29T00:00:00.000Z",
+  } as any;
+}
+
 function obligation(id: string): PersistentObligation {
   return {
     id,
@@ -144,7 +162,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
     });
   });
 
-  it("uses canonical feed order and blocks prep-infeasible candidates", () => {
+  it("does not turn candidate-feed order into business priority", () => {
     const first = candidate("not-ready", {
       prep: {
         leadDays: 2,
@@ -160,13 +178,29 @@ describe("PR4 deterministic goal-cycle selection", () => {
       missionDirectorPlan: null,
     });
     expect(result).toMatchObject({
-      selectionKind: "candidate",
-      selectedRef: "ready",
-      selectedReasonCode: "CANONICAL_FEED_FIRST_ELIGIBLE",
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
     });
     expect(result.blockedCandidates).toEqual([
       { id: "not-ready", reasons: ["INSUFFICIENT_PREP"] },
     ]);
+  });
+
+  it("selects an eligible candidate only when Mission Director chose it", () => {
+    const first = candidate("feed-first");
+    const selected = candidate("director-selected");
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: true,
+      candidates: [first, selected],
+      obligations: [],
+      missionDirectorPlan: missionPlan("director-selected"),
+    });
+    expect(result).toMatchObject({
+      selectionKind: "candidate",
+      selectedRef: "director-selected",
+      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
+    });
   });
 
   it("matches an open obligation due later in the horizon to a feed candidate", () => {
@@ -186,13 +220,13 @@ describe("PR4 deterministic goal-cycle selection", () => {
       candidates: [candidateMatchingFuture],
       obligations: [future],
       dueObligations: [],
-      missionDirectorPlan: null,
+      missionDirectorPlan: missionPlan("candidate-future"),
     });
     expect(result).toMatchObject({
       selectionKind: "obligation",
       selectedRef: "obligation-future",
       selectedObligation: future,
-      selectedReasonCode: "CANONICAL_FEED_EXISTING_OBLIGATION",
+      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
     });
   });
 
