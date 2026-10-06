@@ -73,3 +73,13 @@ export function assertSafeValidationCommand(cmd: string) {
   if (!SAFE_VALIDATION.test(cmd.trim()))
     throw new Error(`Validation command not allowed: ${cmd.slice(0, 120)}`);
 }
+
+
+const SAFE_APP_START =
+  /^(pnpm (dev|run [\w:-]+)|npm run [\w:-]+|npx (vite|tsx)\b[^;&|\`$<>]*|node [\w./-]+)\s*$/;
+
+/** Browser start commands also originate from model output; keep them non-composable. */
+export function assertSafeAppStartCommand(cmd: string) {
+  if (!SAFE_APP_START.test(cmd.trim()))
+    throw new Error(`Browser start command not allowed: ${cmd.slice(0, 120)}`);
+}
