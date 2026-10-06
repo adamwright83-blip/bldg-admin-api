@@ -147,12 +147,16 @@ describe("operationReceipt authority lineage", () => {
         operationStatus: "execution_started",
         authorityBasis: "standing_authorization",
         approvalBasis: "standing_authorization",
+        standingAuthorizationId: "standing-auth-1",
+        standingAuthorizationVersion: 1,
       },
       {
         status: "success",
         operationStatus: "succeeded",
         authorityBasis: "standing_authorization",
         approvalBasis: "standing_authorization",
+        standingAuthorizationId: "standing-auth-1",
+        standingAuthorizationVersion: 1,
       },
     ];
     expect(selectValidatedAuthorityEvent(events)).toMatchObject({
