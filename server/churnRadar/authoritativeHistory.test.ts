@@ -186,17 +186,28 @@ describe("authoritative churn history", () => {
     expect(history[0]?.valueCents).toBe(6100);
   });
 
-  it("records zero realized value for fully reversed payments", () => {
+  it("records zero realized value for reversed payments even with stale positive net", () => {
     for (const state of ["refunded", "cancelled"] as const) {
       const history = buildAuthoritativeChurnHistory({
         orders,
         dropoffEvents: [dropoff(1)],
         paidEvents: [paid(1, 9000)],
-        paymentProjections: [projection(1, state, 0)],
+        paymentProjections: [projection(1, state, 7777)],
       });
       expect(history[0]?.valueCents).toBe(0);
       expect(history[0]?.paymentAuthorityReceiptId).toBe("receipt-1");
     }
+  });
+
+  it("records zero realized value when the order itself was cancelled after completed service", () => {
+    const history = buildAuthoritativeChurnHistory({
+      orders,
+      dropoffEvents: [dropoff(3)],
+      paidEvents: [paid(3, 5000)],
+      paymentProjections: [projection(3, "paid", 5000)],
+    });
+    expect(history[0]?.valueCents).toBe(0);
+    expect(history[0]?.paymentAuthorityReceiptId).toBe("receipt-3");
   });
 
   it("withholds monetary value for review-required or missing net projections", () => {
