@@ -1,4 +1,8 @@
 import { getResidentAgentPlan, updateResidentAgentPlan } from "../../db";
+import {
+  assertResidentOwnedPlan,
+  resolveResidentActionId,
+} from "../residentActionIdentity";
 import type { AgentTool } from "../toolRegistry";
 
 type PlanStatus =
@@ -18,7 +22,7 @@ const allowedPlanStatuses = new Set<PlanStatus>([
 
 function planIdFromInput(value: unknown): number {
   const planId = Number(value);
-  if (!Number.isInteger(planId) || planId <= 0) {
+  if (!Number.isSafeInteger(planId) || planId <= 0) {
     throw new Error("planId must be a positive integer");
   }
   return planId;
@@ -37,11 +41,13 @@ export const updateResidentAgentPlanTool: AgentTool<Record<string, any>, {
   name: "updateResidentAgentPlanTool",
   description: "Update a resident agent parent plan after child operational tools run.",
   async execute(input, ctx) {
+    const residentId = resolveResidentActionId(ctx, input.bldgUserId);
     const planId = planIdFromInput(input.planId);
     const existing = await getResidentAgentPlan(ctx.tenantId, planId);
     if (!existing) {
       throw new Error("Resident agent plan not found");
     }
+    assertResidentOwnedPlan({ ctx, residentId, plan: existing });
 
     const nextStatus = planStatusFromInput(input.planStatus) ?? existing.planStatus;
     await updateResidentAgentPlan(ctx.tenantId, planId, {
