@@ -6,6 +6,7 @@ import {
 
 const originalRailway = process.env.RAILWAY_GIT_COMMIT_SHA;
 const originalVercel = process.env.VERCEL_GIT_COMMIT_SHA;
+const originalGitHub = process.env.GITHUB_SHA;
 const originalGit = process.env.GIT_COMMIT_SHA;
 
 afterEach(() => {
@@ -13,6 +14,8 @@ afterEach(() => {
   else process.env.RAILWAY_GIT_COMMIT_SHA = originalRailway;
   if (originalVercel === undefined) delete process.env.VERCEL_GIT_COMMIT_SHA;
   else process.env.VERCEL_GIT_COMMIT_SHA = originalVercel;
+  if (originalGitHub === undefined) delete process.env.GITHUB_SHA;
+  else process.env.GITHUB_SHA = originalGitHub;
   if (originalGit === undefined) delete process.env.GIT_COMMIT_SHA;
   else process.env.GIT_COMMIT_SHA = originalGit;
 });
@@ -45,6 +48,7 @@ describe("Daphne adaptation receipt contract", () => {
   it("always records an execution-code witness", () => {
     delete process.env.RAILWAY_GIT_COMMIT_SHA;
     delete process.env.VERCEL_GIT_COMMIT_SHA;
+    delete process.env.GITHUB_SHA;
     delete process.env.GIT_COMMIT_SHA;
     expect(daphneExecutingSha()).toBe("unavailable");
     expect(daphneExecutingSha("head-sha")).toBe("head-sha");
