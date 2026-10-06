@@ -25,7 +25,7 @@ export class OpenAiProvider implements ModelProvider {
     private readonly baseUrl = "https://api.openai.com/v1"
   ) {}
   async complete(input: { system: string; prompt: string; signal?: AbortSignal }) {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await fetch(`${this.baseUrl}/responses`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -33,21 +33,25 @@ export class OpenAiProvider implements ModelProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        reasoning_effort:
-          process.env.PRESIDENT_OPENAI_REASONING_EFFORT || "high",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: input.system },
-          { role: "user", content: input.prompt },
-        ],
+        reasoning: {
+          effort: process.env.PRESIDENT_OPENAI_REASONING_EFFORT || "high",
+        },
+        instructions: input.system,
+        input: [{ role: "user", content: input.prompt }],
+        store: false,
       }),
       signal: input.signal,
     });
     if (!res.ok)
-      throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      throw new Error(
+        `OpenAI ${res.status}: ${(await res.text()).slice(0, 300)}`
+      );
     const body = (await res.json()) as any;
-    const text = body?.choices?.[0]?.message?.content;
-    if (typeof text !== "string") throw new Error("OpenAI returned no content");
+    const text = body?.output
+      ?.flatMap((item: any) => item?.content ?? [])
+      ?.find((part: any) => part?.type === "output_text")?.text;
+    if (typeof text !== "string" || !text.trim())
+      throw new Error("OpenAI Responses API returned no output text");
     return text;
   }
 }
