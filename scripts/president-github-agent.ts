@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -60,9 +61,12 @@ async function githubOidc(): Promise<string> {
 
 async function post<T>(
   path: string,
-  token: string,
+  _token: string,
   body: unknown = {}
 ): Promise<T | null> {
+  // GitHub OIDC JWTs are intentionally short-lived. Refresh for every control
+  // plane request so a long mission cannot age out its authentication.
+  const token = await githubOidc();
   const response = await fetch(API + path, {
     method: "POST",
     headers: {
@@ -81,9 +85,70 @@ async function post<T>(
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
+async function startRefreshingModelProxy() {
+  const server = createServer(async (req, res) => {
+    try {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of req) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += buffer.length;
+        if (size > 2_000_000) throw new Error("Claude gateway request too large");
+        chunks.push(buffer);
+      }
+      const token = await githubOidc();
+      const upstream = await fetch(
+        API + "/api/president/autonomous/model" + (req.url || "/v1/messages"),
+        {
+          method: req.method || "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": String(req.headers["content-type"] || "application/json"),
+            "anthropic-version": String(
+              req.headers["anthropic-version"] || "2023-06-01"
+            ),
+            ...(req.headers["anthropic-beta"]
+              ? { "anthropic-beta": String(req.headers["anthropic-beta"]) }
+              : {}),
+          },
+          body: Buffer.concat(chunks),
+          signal: AbortSignal.timeout(20 * 60_000),
+        }
+      );
+      res.statusCode = upstream.status;
+      const type = upstream.headers.get("content-type");
+      if (type) res.setHeader("content-type", type);
+      res.setHeader("cache-control", "no-store");
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (error) {
+      res.statusCode = 502;
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+    }
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Could not bind President model proxy");
+  }
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>(resolve => server.close(() => resolve())),
+  };
+}
+
 async function claude(
   prompt: string,
-  token: string,
+  _token: string,
   opts: { readonly?: boolean } = {}
 ): Promise<string> {
   const claudeDir = join(homedir(), ".claude");
@@ -110,10 +175,13 @@ async function claude(
     args.push("--disallowedTools", "Edit,Write,Bash,NotebookEdit");
   else args.push("--permission-mode", "acceptEdits");
 
+  const proxy = await startRefreshingModelProxy();
   const env = {
     ...process.env,
-    ANTHROPIC_BASE_URL: `${API}/api/president/autonomous/model`,
-    ANTHROPIC_API_KEY: token,
+    ANTHROPIC_BASE_URL: proxy.baseUrl,
+    // Claude Code requires a non-empty API key; the local proxy discards it
+    // and supplies a freshly minted repository-scoped OIDC token upstream.
+    ANTHROPIC_API_KEY: "president-local-oidc-proxy",
     CLAUDE_CONFIG_DIR: claudeDir,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   };
@@ -121,23 +189,28 @@ async function claude(
   writeFileSync(inputFile, prompt);
   const cmd =
     `cat ${shellQuote(inputFile)} | npx ${args.map(shellQuote).join(" ")}`;
-  const result = await runCommand(cmd, ROOT, {
-    timeoutMs: 30 * 60_000,
-    maxBytes: 300_000,
-    env,
-  });
-  if (result.exitCode !== 0)
-    throw new Error(
-      `Claude Code exited ${result.exitCode}: ${result.stderr.slice(-1200)}`
-    );
-  let parsed: any;
   try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
-    throw new Error("Claude Code returned a non-JSON envelope");
+    const result = await runCommand(cmd, ROOT, {
+      timeoutMs: 30 * 60_000,
+      maxBytes: 300_000,
+      env,
+    });
+    if (result.exitCode !== 0)
+      throw new Error(
+        `Claude Code exited ${result.exitCode}: ${result.stderr.slice(-1200)}`
+      );
+    let parsed: any;
+    try {
+      parsed = JSON.parse(result.stdout);
+    } catch {
+      throw new Error("Claude Code returned a non-JSON envelope");
+    }
+    if (parsed?.is_error)
+      throw new Error(String(parsed.result).slice(0, 1200));
+    return String(parsed?.result ?? "");
+  } finally {
+    await proxy.close();
   }
-  if (parsed?.is_error) throw new Error(String(parsed.result).slice(0, 1200));
-  return String(parsed?.result ?? "");
 }
 
 async function validation(mission: Mission, cwd: string) {
