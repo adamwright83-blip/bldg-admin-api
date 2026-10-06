@@ -35,9 +35,14 @@ export function registerPresidentGithubAgentRoutes(app: Express) {
     async (req, res) => {
       if (!(await oidc(req, res))) return;
       try {
+        const baseSha =
+          typeof req.body?.baseSha === "string" ? req.body.baseSha : "";
+        if (!/^[a-f0-9]{40}$/i.test(baseSha))
+          return res.status(400).json({ error: "Valid baseSha required" });
         const claim = await claimExternalExecution(
           getPresidentCycleStore(),
-          "president-github-actions-executor"
+          "president-github-actions-executor",
+          baseSha
         );
         if (!claim) return res.status(204).end();
         return res.json(claim);
