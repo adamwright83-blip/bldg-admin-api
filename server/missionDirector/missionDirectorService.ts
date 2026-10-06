@@ -273,6 +273,7 @@ export async function computeMissionPlan(input: {
     tenantId: input.tenantId,
     businessDate: input.businessDate,
     campaigns: enabledCampaigns,
+    timeZone: input.timeZone ?? "America/Los_Angeles",
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
