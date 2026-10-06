@@ -99,6 +99,34 @@ async function resolveAppointmentIdentity(step: ClaimedOperatorAppointment) {
   return resolution.identity;
 }
 
+export function requireClaireCallExecutionProof(result: unknown): {
+  callSid: string;
+  communicationReceiptId: string;
+} {
+  const call =
+    result && typeof result === "object" && !Array.isArray(result)
+      ? (result as Record<string, unknown>)
+      : {};
+  const callSid =
+    typeof call.callSid === "string" && call.callSid.trim()
+      ? call.callSid.trim()
+      : null;
+  const communicationReceiptId =
+    typeof call.communicationReceiptId === "string" &&
+    call.communicationReceiptId.trim()
+      ? call.communicationReceiptId.trim()
+      : null;
+  if (!callSid) {
+    throw new Error("Claire weekly planning call returned no call SID");
+  }
+  if (!communicationReceiptId) {
+    throw new Error(
+      "Claire weekly planning call returned no durable communication receipt"
+    );
+  }
+  return { callSid, communicationReceiptId };
+}
+
 export function insideSundayStandingWindow(
   step: Pick<ClaimedOperatorAppointment, "timeZone">,
   now: Date
@@ -220,14 +248,8 @@ export async function executeOperatorAppointment(
     return { skipped: result.reason };
   }
 
-  const call = result.result as { callSid?: unknown };
-  const callSid =
-    typeof call.callSid === "string" && call.callSid.trim()
-      ? call.callSid.trim()
-      : null;
-  if (!callSid) {
-    throw new Error("Claire weekly planning call returned no call SID");
-  }
+  const { callSid, communicationReceiptId } =
+    requireClaireCallExecutionProof(result.result);
   await logAgentEvent({
     ctx: {
       tenantId: step.tenantId,
@@ -245,14 +267,15 @@ export async function executeOperatorAppointment(
       weekStart: step.weekStart,
       source: step.source,
     },
-    outputJson: { callSid: callSid },
+    outputJson: { callSid, communicationReceiptId },
     status: "success",
     entityType: "operator_appointment",
     entityId: step.id,
   }).catch(() => undefined);
 
   return {
-    callSid: callSid,
+    callSid,
+    communicationReceiptId,
     appointmentId: step.id,
     appointmentKind: step.appointmentKind,
     weekStart: step.weekStart,

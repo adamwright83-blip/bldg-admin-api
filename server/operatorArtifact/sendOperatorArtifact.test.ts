@@ -14,6 +14,12 @@ const hoisted = vi.hoisted(() => {
       sid: "SM_accepted",
       status: "queued",
     })),
+    twilioRequest: vi.fn(async () => ({
+      body: {
+        sid: "SM_accepted",
+        status: "queued",
+      },
+    })),
     getUserByOpenId: vi.fn(async (openId: string) => ({
       tenantId: "goldline",
       openId,
@@ -45,6 +51,7 @@ vi.mock("twilio", async importOriginal => {
         messages: {
           create: (...args: unknown[]) => hoisted.messagesCreate(...args),
         },
+        request: (...args: unknown[]) => hoisted.twilioRequest(...args),
         calls: { create: vi.fn() },
       };
     },
@@ -97,6 +104,13 @@ beforeEach(() => {
   hoisted.messagesCreate.mockResolvedValue({
     sid: "SM_accepted",
     status: "queued",
+  });
+  hoisted.twilioRequest.mockReset();
+  hoisted.twilioRequest.mockResolvedValue({
+    body: {
+      sid: "SM_accepted",
+      status: "queued",
+    },
   });
   hoisted.getUserByOpenId.mockReset();
   hoisted.getUserByOpenId.mockImplementation(async (openId: string) => ({
@@ -198,11 +212,16 @@ describe("sendOperatorArtifact", () => {
       agentEventId: 42,
       decisionId,
     });
-    const payload = hoisted.messagesCreate.mock.calls.at(-1)?.[0] as {
-      statusCallback?: string;
+    expect(hoisted.messagesCreate).not.toHaveBeenCalled();
+    const request = hoisted.twilioRequest.mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+      data?: Record<string, string>;
     };
-    expect(payload.statusCallback).toContain("agentEventId=42");
-    expect(payload.statusCallback).toContain(
+    expect(request.headers?.["Idempotency-Key"]).toBe(
+      `operator-artifact:goldline:${decisionId}`
+    );
+    expect(request.data?.StatusCallback).toContain("agentEventId=42");
+    expect(request.data?.StatusCallback).toContain(
       "decisionId=11111111-1111-4111-8111-111111111111"
     );
 
@@ -312,9 +331,16 @@ describe("sendOperatorArtifact", () => {
     );
     const refused = await sendOperatorArtifact(plain());
     expect(refused.providerAccepted).toBe(false);
+    expect(refused.sendOutcome).toBe("rejected");
     expect(refused.delivered).toBe(false);
     expect(refused.receipt).toBeNull();
     expect(refused.evidence).toEqual([]);
+
+    hoisted.messagesCreate.mockRejectedValue(new Error("socket timeout"));
+    const unknown = await sendOperatorArtifact(plain("uncertain"));
+    expect(unknown.providerAccepted).toBe(false);
+    expect(unknown.sendOutcome).toBe("unknown");
+    expect(unknown.receipt).toBeNull();
 
     hoisted.messagesCreate.mockResolvedValue({
       sid: "SM_failed",
@@ -342,6 +368,22 @@ describe("sendOperatorArtifact", () => {
     expect(
       seen.some(receipt => receipt.eventType === "MESSAGE_DELIVERED")
     ).toBe(false);
+  });
+
+  it("keeps provider acceptance separate from missing durable receipt proof", async () => {
+    setCommunicationReceiptStoreForTests({
+      async insertOrGet() {
+        throw new Error("receipt database unavailable");
+      },
+    });
+
+    const result = await sendOperatorArtifact(plain("receipt down"));
+
+    expect(result.providerAccepted).toBe(true);
+    expect(result.sendOutcome).toBe("accepted");
+    expect(result.messageSid).toBe("SM_accepted");
+    expect(result.receipt).toBeNull();
+    expect(result.evidence).toEqual([]);
   });
 
   it("does not duplicate the receipt when the same provider message is retried", async () => {

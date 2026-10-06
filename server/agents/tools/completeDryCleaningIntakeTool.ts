@@ -4,10 +4,13 @@ import type { AgentTool } from "../toolRegistry";
 export const completeDryCleaningIntakeTool: AgentTool<Record<string, any>> = {
   name: "completeDryCleaningIntakeTool",
   description: "Save corrected dry-cleaning garment intake and prepare a charge preview without charging.",
-  async execute(input) {
+  async execute(input, ctx) {
     const orderId = Number(input.orderId);
     const order = await getOrderById(orderId);
     if (!order) throw new Error("Order not found");
+    if (!order.tenantId || order.tenantId !== ctx.tenantId) {
+      throw new Error("Order does not belong to tenant");
+    }
     if (order.serviceType !== "dry_cleaning") throw new Error("Dry-cleaning intake requires a dry-cleaning order");
     if (order.paid) throw new Error("Order is already paid");
 

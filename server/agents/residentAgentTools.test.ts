@@ -120,6 +120,9 @@ describe("resident-safe agent tools", () => {
     dbMocks.getResidentAgentPlan.mockResolvedValue({
       id: 901,
       tenantId: "default",
+      bldgUserId: 42,
+      conversationId: "conv_123",
+      sessionId: "sess_123",
       planStatus: "pending_confirmation",
       planJson: null,
     });
@@ -247,14 +250,60 @@ describe("resident-safe agent tools", () => {
   });
 
   it("cancels resident orders directly without vendor permission", async () => {
-    dbMocks.getOrderById.mockResolvedValue({ id: 172, bldgUserId: 42, status: "new" });
+    dbMocks.getOrderById.mockResolvedValue({ id: 172, tenantId: "default", bldgUserId: 42, status: "new" });
 
     const result = await cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx);
 
     expect(dbMocks.updateOrderStatus).toHaveBeenCalledWith(172, "cancelled", expect.objectContaining({
+      actorUserId: "bldg_user:42",
       actorDisplayName: "resident_chat",
     }));
     expect(result.output).toMatchObject({ orderCancelled: true, orderId: 172, status: "cancelled" });
+  });
+
+  it("rejects resident cancellation across tenant or resident authority boundaries", async () => {
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 172,
+      tenantId: "other-tenant",
+      bldgUserId: 42,
+      status: "new",
+    });
+    await expect(
+      cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx)
+    ).rejects.toThrow("Order does not belong to tenant");
+
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 173,
+      tenantId: "default",
+      bldgUserId: 99,
+      status: "new",
+    });
+    await expect(
+      cancelResidentOrderTool.execute({ orderId: 173, bldgUserId: 42 }, residentCtx)
+    ).rejects.toThrow("Order does not belong to resident");
+
+    await expect(
+      cancelResidentOrderTool.execute(
+        { orderId: 174, bldgUserId: 42 },
+        { ...residentCtx, actorId: "bldg_user:99" }
+      )
+    ).rejects.toThrow("Resident actor identity does not match cancellation authority");
+
+    await expect(
+      cancelResidentOrderTool.execute(
+        { orderId: 174 },
+        { ...residentCtx, actorId: "bldg_user:42" }
+      )
+    ).rejects.toThrow("requires the resident owner id");
+
+    await expect(
+      cancelResidentOrderTool.execute(
+        { orderId: 174, bldgUserId: 42 },
+        { ...residentCtx, actorType: "human" }
+      )
+    ).rejects.toThrow("requires the resident action authority");
+
+    expect(dbMocks.updateOrderStatus).not.toHaveBeenCalled();
   });
 
   it("includes a real migration for the new resident tables", () => {

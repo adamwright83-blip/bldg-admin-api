@@ -78,6 +78,43 @@ describe("operationReceipt authority lineage", () => {
     expect(selectValidatedAuthorityEvent(events)).toBeUndefined();
   });
 
+  it("rejects execution-started events with forged or incomplete authority labels", () => {
+    expect(
+      selectValidatedAuthorityEvent([
+        {
+          status: "execution_started",
+          operationStatus: "execution_started",
+          authorityBasis: "made_up_authority",
+          approvalBasis: "explicit_approval",
+        },
+      ])
+    ).toBeUndefined();
+
+    expect(
+      selectValidatedAuthorityEvent([
+        {
+          status: "execution_started",
+          operationStatus: "execution_started",
+          authorityBasis: "standing_authorization",
+          approvalBasis: "standing_authorization",
+          standingAuthorizationId: null,
+          standingAuthorizationVersion: null,
+        },
+      ])
+    ).toBeUndefined();
+
+    expect(
+      selectValidatedAuthorityEvent([
+        {
+          status: "execution_started",
+          operationStatus: "execution_started",
+          authorityBasis: "explicit_approval",
+          approvalBasis: "standing_authorization",
+        },
+      ])
+    ).toBeUndefined();
+  });
+
   it("keeps each decision linked to its originally selected obligation", () => {
     const first = {
       selectionKind: "obligation",
@@ -110,12 +147,16 @@ describe("operationReceipt authority lineage", () => {
         operationStatus: "execution_started",
         authorityBasis: "standing_authorization",
         approvalBasis: "standing_authorization",
+        standingAuthorizationId: "standing-auth-1",
+        standingAuthorizationVersion: 1,
       },
       {
         status: "success",
         operationStatus: "succeeded",
         authorityBasis: "standing_authorization",
         approvalBasis: "standing_authorization",
+        standingAuthorizationId: "standing-auth-1",
+        standingAuthorizationVersion: 1,
       },
     ];
     expect(selectValidatedAuthorityEvent(events)).toMatchObject({

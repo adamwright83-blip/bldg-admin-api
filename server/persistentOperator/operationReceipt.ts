@@ -38,13 +38,32 @@ export function selectValidatedAuthorityEvent<
     operationStatus?: string | null;
     authorityBasis?: string | null;
     approvalBasis?: string | null;
+    standingAuthorizationId?: string | null;
+    standingAuthorizationVersion?: number | null;
   },
 >(events: readonly T[]): T | undefined {
   return events.find(event => {
     const status = event.operationStatus ?? event.status;
+    if (status !== "execution_started") return false;
+
+    if (
+      event.authorityBasis === "automatic" &&
+      event.approvalBasis === "automatic"
+    ) {
+      return true;
+    }
+    if (
+      event.authorityBasis === "explicit_approval" &&
+      event.approvalBasis === "explicit_approval"
+    ) {
+      return true;
+    }
     return (
-      status === "execution_started" &&
-      (event.authorityBasis != null || event.approvalBasis != null)
+      event.authorityBasis === "standing_authorization" &&
+      event.approvalBasis === "standing_authorization" &&
+      Boolean(event.standingAuthorizationId?.trim()) &&
+      Number.isInteger(event.standingAuthorizationVersion) &&
+      Number(event.standingAuthorizationVersion) > 0
     );
   });
 }

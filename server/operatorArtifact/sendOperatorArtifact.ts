@@ -108,11 +108,23 @@ export type OperatorSmsPort = {
     to: string;
     body: string;
     statusCallback?: string;
+    idempotencyKey?: string;
   }): Promise<{ messageSid: string; status: string }>;
 };
 
+export function operatorArtifactIdempotencyKey(input: {
+  tenantId: string;
+  decisionId?: string | null;
+}): string | null {
+  const tenantId = input.tenantId.trim();
+  const decisionId = input.decisionId?.trim() ?? "";
+  if (!tenantId || !decisionId) return null;
+  return `operator-artifact:${tenantId}:${decisionId}`;
+}
+
 export type SendOperatorArtifactResult = {
   providerAccepted: boolean;
+  sendOutcome?: "accepted" | "rejected" | "unknown";
   delivered: false;
   resolvedTo: string;
   messageSid: string | null;
@@ -425,20 +437,76 @@ export function createTwilioOperatorSmsPort(
         );
       }
       const client = getTwilioPlatformClient(env);
-      const created = await client.messages.create({
-        to: input.to,
-        from,
-        body: input.body,
-        ...(input.statusCallback
-          ? { statusCallback: input.statusCallback }
-          : {}),
-      });
+      let created: { sid?: string; status?: string };
+      if (input.idempotencyKey) {
+        const credentials = readTwilioRestCredentials(env);
+        if (!credentials) {
+          throw new OperatorArtifactRequestError(
+            "invalid_payload",
+            "Twilio REST credentials are not configured"
+          );
+        }
+        const response = await client.request({
+          method: "post",
+          uri: `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,
+          headers: { "Idempotency-Key": input.idempotencyKey },
+          data: {
+            To: input.to,
+            From: from,
+            Body: input.body,
+            ...(input.statusCallback
+              ? { StatusCallback: input.statusCallback }
+              : {}),
+          },
+        });
+        const responseBody =
+          (response as { body?: { sid?: string; status?: string } }).body ?? {};
+        created = responseBody;
+      } else {
+        created = await client.messages.create({
+          to: input.to,
+          from,
+          body: input.body,
+          ...(input.statusCallback
+            ? { statusCallback: input.statusCallback }
+            : {}),
+        });
+      }
       const messageSid =
         typeof created.sid === "string" ? created.sid.trim() : "";
       const status = typeof created.status === "string" ? created.status : "";
       return { messageSid, status };
     },
   };
+}
+
+function providerFailureOutcome(
+  error: unknown
+): "rejected" | "unknown" {
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!candidate || typeof candidate !== "object") break;
+    const record = candidate as {
+      status?: unknown;
+      statusCode?: unknown;
+      cause?: unknown;
+    };
+    for (const value of [record.status, record.statusCode]) {
+      const status = typeof value === "string" ? Number(value) : value;
+      if (
+        typeof status === "number" &&
+        Number.isInteger(status) &&
+        status >= 400
+      ) {
+        if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          return "rejected";
+        }
+        return "unknown";
+      }
+    }
+    candidate = record.cause;
+  }
+  return "unknown";
 }
 
 function acceptanceEvent(
@@ -461,9 +529,13 @@ function evidenceFor(
   return receipt ? toCommunicationCandidateEvidence(receipt) : [];
 }
 
-function failureResult(resolvedTo: string): SendOperatorArtifactResult {
+function failureResult(
+  resolvedTo: string,
+  sendOutcome: "rejected" | "unknown" = "rejected"
+): SendOperatorArtifactResult {
   return {
     providerAccepted: false,
+    sendOutcome,
     delivered: false,
     resolvedTo,
     messageSid: null,
@@ -531,6 +603,11 @@ export async function sendOperatorArtifact(
   const env = options?.env ?? process.env;
   const from = readTwilioPlatformConfig(env).smsFromNumber;
   const port = options?.port ?? createTwilioOperatorSmsPort(env);
+  const idempotencyKey =
+    operatorArtifactIdempotencyKey({
+      tenantId,
+      decisionId: input.decisionId,
+    }) ?? undefined;
 
   let sent: { messageSid: string; status: string };
   try {
@@ -543,6 +620,7 @@ export async function sendOperatorArtifact(
         agentEventId: input.agentEventId,
         decisionId: input.decisionId,
       }),
+      idempotencyKey,
     });
   } catch (error) {
     if (
@@ -551,16 +629,22 @@ export async function sendOperatorArtifact(
     ) {
       throw error;
     }
-    console.error("[operator-artifact] provider did not accept SMS", {
-      to: redactEndpointForLog(resolvedTo),
-      errorName: error instanceof Error ? error.name : "unknown",
-    });
-    return failureResult(resolvedTo);
+    const sendOutcome = providerFailureOutcome(error);
+    console.error(
+      sendOutcome === "rejected"
+        ? "[operator-artifact] provider rejected SMS"
+        : "[operator-artifact] provider send outcome is unknown",
+      {
+        to: redactEndpointForLog(resolvedTo),
+        errorName: error instanceof Error ? error.name : "unknown",
+      }
+    );
+    return failureResult(resolvedTo, sendOutcome);
   }
 
   if (!sent.messageSid) {
     return {
-      ...failureResult(resolvedTo),
+      ...failureResult(resolvedTo, "unknown"),
       providerStatus: sent.status || null,
     };
   }
@@ -583,6 +667,7 @@ export async function sendOperatorArtifact(
         : null;
     return {
       providerAccepted: false,
+      sendOutcome: "rejected",
       delivered: false,
       resolvedTo,
       messageSid: sent.messageSid,
@@ -607,33 +692,30 @@ export async function sendOperatorArtifact(
       decisionId: input.decisionId,
     });
   } catch (error) {
-    if (
-      error instanceof TwilioCommunicationReceiptError &&
-      error.code === "persistence_unconfigured"
-    ) {
-      console.warn(
-        "[operator-artifact] provider accepted SMS but the receipt store is not configured",
-        {
-          messageSid: sent.messageSid,
-          to: redactEndpointForLog(resolvedTo),
-        }
-      );
-      return {
-        providerAccepted: true,
-        delivered: false,
-        resolvedTo,
+    console.warn(
+      "[operator-artifact] provider accepted SMS but durable receipt persistence failed",
+      {
         messageSid: sent.messageSid,
-        providerStatus: sent.status || null,
-        receipt: null,
-        receiptDuplicate: false,
-        evidence: [],
-      };
-    }
-    throw error;
+        to: redactEndpointForLog(resolvedTo),
+        errorName: error instanceof Error ? error.name : "unknown",
+      }
+    );
+    return {
+      providerAccepted: true,
+      sendOutcome: "accepted",
+      delivered: false,
+      resolvedTo,
+      messageSid: sent.messageSid,
+      providerStatus: sent.status || null,
+      receipt: null,
+      receiptDuplicate: false,
+      evidence: [],
+    };
   }
 
   return {
     providerAccepted: true,
+    sendOutcome: "accepted",
     delivered: false,
     resolvedTo,
     messageSid: sent.messageSid,

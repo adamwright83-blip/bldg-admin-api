@@ -28,6 +28,11 @@ export const sendOperatorArtifactTool: AgentTool<Record<string, unknown>> = {
   description:
     "Send an artifact by SMS to the authorized operator. The caller does not choose the destination number.",
   async execute(input, ctx) {
+    if (ctx.agentType === "goal_cycle_agent" && !ctx.decisionId?.trim()) {
+      throw new Error(
+        "Persistent operator artifact sends require durable decision lineage"
+      );
+    }
     const raw = input ?? {};
     const decision = {
       action: "send_operator_artifact" as const,

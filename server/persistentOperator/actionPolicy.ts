@@ -24,6 +24,23 @@ export type PersistentActionPolicyInput = {
   now?: Date;
 };
 
+export function approvalMatchesCanonicalOperator(
+  identity: {
+    canonicalOpenId: string;
+    sourceOpenId: string;
+    aliases: Array<{ openId: string }>;
+  },
+  approvedByUserId?: string | null
+): boolean {
+  const approvedBy = approvedByUserId?.trim() ?? "";
+  if (!approvedBy) return false;
+  return (
+    approvedBy === identity.canonicalOpenId ||
+    approvedBy === identity.sourceOpenId ||
+    identity.aliases.some(alias => alias.openId === approvedBy)
+  );
+}
+
 export type PersistentActionPolicyDecision =
   | {
       allowed: true;
@@ -118,6 +135,11 @@ export async function evaluatePersistentActionPolicy(
     return { allowed: false, reason: "role_not_allowed" };
   }
 
+  const hasExplicitApproval = approvalMatchesCanonicalOperator(
+    identity.identity,
+    input.approvedByUserId
+  );
+
   if (input.riskClass === "READ_ONLY" || input.riskClass === "INTERNAL_REVERSIBLE") {
     return {
       allowed: true,
@@ -128,7 +150,7 @@ export async function evaluatePersistentActionPolicy(
   }
 
   if (input.riskClass === "FINANCIAL_OR_CONTRACTUAL") {
-    return input.approvedByUserId?.trim()
+    return hasExplicitApproval
       ? {
           allowed: true,
           authority: "explicit_approval",
@@ -138,7 +160,7 @@ export async function evaluatePersistentActionPolicy(
       : { allowed: false, reason: "explicit_approval_required" };
   }
 
-  if (input.approvedByUserId?.trim()) {
+  if (hasExplicitApproval) {
     return {
       allowed: true,
       authority: "explicit_approval",
@@ -170,6 +192,12 @@ export async function evaluatePersistentActionPolicy(
     )
     .limit(1);
   if (!authorization) {
+    return { allowed: false, reason: "standing_authorization_invalid" };
+  }
+  if (!approvalMatchesCanonicalOperator(
+    identity.identity,
+    authorization.authorizedByUserId
+  )) {
     return { allowed: false, reason: "standing_authorization_invalid" };
   }
   if (

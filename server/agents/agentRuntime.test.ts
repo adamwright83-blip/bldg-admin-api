@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyExternalCommunicationExecution,
   parseOperatorVoiceCommand,
   validatedPersistentPolicyEventContext,
 } from "./agentRuntime";
@@ -65,6 +66,54 @@ describe("validatedPersistentPolicyEventContext", () => {
       standingAuthorizationId: null,
       standingAuthorizationVersion: null,
     });
+  });
+});
+
+
+describe("classifyExternalCommunicationExecution", () => {
+  it("requires durable proof before an external send can be successful", () => {
+    expect(
+      classifyExternalCommunicationExecution({
+        sent: true,
+        communicationReceiptId: "comm-1",
+        authorityReceiptId: "auth-1",
+      })
+    ).toBe("proved");
+
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: true,
+        receipt: { id: "comm-2" },
+      })
+    ).toBe("proved");
+
+    expect(
+      classifyExternalCommunicationExecution({ sent: true })
+    ).toBe("indeterminate");
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: true,
+        receipt: null,
+      })
+    ).toBe("indeterminate");
+    expect(
+      classifyExternalCommunicationExecution({ sent: false })
+    ).toBe("not_sent");
+    expect(
+      classifyExternalCommunicationExecution({ providerAccepted: false })
+    ).toBe("not_sent");
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: false,
+        sendOutcome: "unknown",
+      })
+    ).toBe("indeterminate");
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: false,
+        sendOutcome: "rejected",
+      })
+    ).toBe("not_sent");
   });
 });
 

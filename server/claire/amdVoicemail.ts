@@ -193,34 +193,36 @@ export async function recordAuthorizedCallAttempted(input: {
   callSid: string;
   from: string;
   to: string;
-}): Promise<void> {
-  try {
-    await claireConversationStateStore().save(
-      receiptContextKey(input.callSid),
-      {
-        tenantId: input.tenantId,
-        operatorUserId: input.operatorUserId,
-        surface: "voice",
-      },
-      { from: input.from, to: input.to } satisfies CallReceiptContext,
-      AMD_HANDOFF_TTL_MS
-    );
-    await recordProviderEvent({
+}): Promise<{ communicationReceiptId: string }> {
+  await claireConversationStateStore().save(
+    receiptContextKey(input.callSid),
+    {
       tenantId: input.tenantId,
       operatorUserId: input.operatorUserId,
-      eventType: communicationReceiptEventFromProviderStatus({
-        channel: "voice",
-        status: "initiated",
-      }),
-      callSid: input.callSid,
-      from: input.from,
-      to: input.to,
-      status: "initiated",
-    });
-  } catch (error) {
-    const code = error instanceof TwilioCommunicationReceiptError ? error.code : "unexpected";
-    console.warn("[Claire] call attempt receipt was not stored", code);
+      surface: "voice",
+    },
+    { from: input.from, to: input.to } satisfies CallReceiptContext,
+    AMD_HANDOFF_TTL_MS
+  );
+
+  const eventType = communicationReceiptEventFromProviderStatus({
+    channel: "voice",
+    status: "initiated",
+  });
+  if (!eventType) {
+    throw new Error("Claire call attempt has no provider receipt event mapping");
   }
+  const recorded = await recordCommunicationReceipt({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    eventType,
+    callSid: input.callSid,
+    direction: "outbound",
+    from: input.from,
+    to: input.to,
+    status: "initiated",
+  });
+  return { communicationReceiptId: recorded.receipt.id };
 }
 
 export async function recordExistingCallStatusReceipt(
