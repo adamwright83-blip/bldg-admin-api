@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyExternalCommunicationExecution,
   parseOperatorVoiceCommand,
+  requirePersistentExecutionEventId,
   validatedPersistentPolicyEventContext,
 } from "./agentRuntime";
 import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage } from "../operatorTaskIntake";
@@ -69,6 +70,18 @@ describe("validatedPersistentPolicyEventContext", () => {
   });
 });
 
+
+describe("requirePersistentExecutionEventId", () => {
+  it("fails closed when durable execution-start authority proof is missing", () => {
+    expect(requirePersistentExecutionEventId(41)).toBe(41);
+    expect(() => requirePersistentExecutionEventId(null)).toThrow(
+      "durable execution-start authority event was not persisted"
+    );
+    expect(() => requirePersistentExecutionEventId(0)).toThrow(
+      "durable execution-start authority event was not persisted"
+    );
+  });
+});
 
 describe("classifyExternalCommunicationExecution", () => {
   it("requires durable proof before an external send can be successful", () => {
