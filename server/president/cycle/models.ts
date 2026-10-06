@@ -21,7 +21,7 @@ export class OpenAiProvider implements ModelProvider {
   readonly id = "openai-api";
   constructor(
     private readonly apiKey: string,
-    readonly model = process.env.PRESIDENT_OPENAI_MODEL || "gpt-4.1",
+    readonly model = process.env.PRESIDENT_OPENAI_MODEL || "gpt-6-astra",
     private readonly baseUrl = "https://api.openai.com/v1"
   ) {}
   async complete(input: { system: string; prompt: string; signal?: AbortSignal }) {
@@ -33,6 +33,8 @@ export class OpenAiProvider implements ModelProvider {
       },
       body: JSON.stringify({
         model: this.model,
+        reasoning_effort:
+          process.env.PRESIDENT_OPENAI_REASONING_EFFORT || "high",
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: input.system },
@@ -55,7 +57,7 @@ export class AnthropicApiProvider implements ModelProvider {
   readonly id = "anthropic-api";
   constructor(
     private readonly apiKey: string,
-    readonly model = process.env.PRESIDENT_ANTHROPIC_MODEL || "claude-sonnet-4-5"
+    readonly model = process.env.PRESIDENT_ANTHROPIC_MODEL || "claude-opus-5-5"
   ) {}
   async complete(input: { system: string; prompt: string; signal?: AbortSignal }) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -87,7 +89,7 @@ export class ClaudeCliProvider implements ModelProvider {
   readonly family = "anthropic" as const;
   readonly id = "claude-cli";
   constructor(
-    readonly model = process.env.PRESIDENT_CLAUDE_CLI_MODEL || "sonnet",
+    readonly model = process.env.PRESIDENT_CLAUDE_CLI_MODEL || "claude-opus-5-5",
     private readonly binary = "claude"
   ) {}
   complete(input: { system: string; prompt: string; signal?: AbortSignal }) {
