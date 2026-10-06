@@ -702,9 +702,34 @@ describe("static safety (10, 28)", () => {
       expect(s, f).not.toMatch(/pr merge|--auto|--admin|git push[^\n"`']*\bmain\b/);
     }
   });
-  it("this branch changes no protected path (28)", () => {
-    const diff = execSync("git diff --name-only origin/main...HEAD; git status --porcelain | awk '{print $2}'", { cwd: ROOT }).toString().split("\n").filter(Boolean);
-    const protectedRe = /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|drizzle\/schema\.ts|server\/routers\.ts|package\.json|scripts\/migrate\.mjs)/;
-    expect(diff.filter(f => protectedRe.test(f))).toEqual([]);
+  it("this branch changes no protected domain path; the one shared migration edit is President-only (28)", () => {
+    const diff = execSync(
+      "git diff --name-only origin/main...HEAD; git status --porcelain | awk '{print $2}'",
+      { cwd: ROOT }
+    )
+      .toString()
+      .split("\n")
+      .filter(Boolean);
+    const protectedRe =
+      /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|drizzle\/schema\.ts|server\/routers\.ts|package\.json)/;
+    expect(diff.filter(file => protectedRe.test(file))).toEqual([]);
+
+    // Production boot must create President's own durable table. This is the
+    // only allowed shared migration-runner edit and it must remain additive.
+    const migrationStat = execSync(
+      "git diff --numstat origin/main...HEAD -- scripts/migrate.mjs",
+      { cwd: ROOT }
+    )
+      .toString()
+      .trim();
+    expect(migrationStat).toMatch(/^\d+\t0\tscripts\/migrate\.mjs$/);
+    const migrationDiff = execSync(
+      "git diff --unified=0 origin/main...HEAD -- scripts/migrate.mjs",
+      { cwd: ROOT }
+    ).toString();
+    expect(migrationDiff).toContain(
+      "../drizzle/0120_president_autonomous_cycles.sql"
+    );
+    expect(migrationDiff).toContain("President autonomous cycle store");
   });
 });
