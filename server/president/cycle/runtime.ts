@@ -255,12 +255,17 @@ export async function ensureScheduledPresidentCycle(
   );
   if (active) return active;
 
+  const tenantId = env.PRESIDENT_AUTO_TENANT_ID?.trim();
+  if (!tenantId)
+    throw new Error(
+      "PRESIDENT_AUTO_TENANT_ID is required when automatic President recommendations are enabled"
+    );
   const cycleId = `cyc_auto_${local.dateKey}`;
   const existing = await store.get(cycleId);
   if (existing) return existing;
   try {
     return await queuePresidentRecommendationCycle({
-      tenantId: env.PRESIDENT_AUTO_TENANT_ID?.trim() || "default",
+      tenantId,
       cycleId,
     });
   } catch (error) {
