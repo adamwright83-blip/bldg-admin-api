@@ -29,6 +29,69 @@ function item(
   };
 }
 
+async function githubJson<T>(path: string): Promise<T | null> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/adamwright83-blip/bldg-admin-api" + path,
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "joystick-president-evidence",
+        },
+        signal: AbortSignal.timeout(20_000),
+      }
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function publicGithubEvidence(): Promise<EvidenceItem[]> {
+  const out: EvidenceItem[] = [];
+  const [commits, pulls] = await Promise.all([
+    githubJson<
+      Array<{
+        sha: string;
+        commit?: { message?: string; committer?: { date?: string } };
+      }>
+    >("/commits?sha=main&per_page=40"),
+    githubJson<
+      Array<{
+        number: number;
+        title: string;
+        updated_at: string;
+        head?: { ref?: string };
+      }>
+    >("/pulls?state=open&per_page=30&sort=updated&direction=desc"),
+  ]);
+
+  for (const commit of commits ?? []) {
+    const subject = commit.commit?.message?.split("\n")[0]?.trim();
+    if (!subject || !commit.sha) continue;
+    out.push(
+      item(
+        "github-public",
+        "recent-commit",
+        `${commit.commit?.committer?.date?.slice(0, 10) ?? "unknown date"}: ${subject}`,
+        `commit:${commit.sha.slice(0, 12)}`
+      )
+    );
+  }
+  for (const pr of pulls ?? []) {
+    out.push(
+      item(
+        "github-public",
+        "open-pr",
+        `#${pr.number} ${pr.title} (updated ${pr.updated_at})`,
+        `pr:${pr.number}`
+      )
+    );
+  }
+  return out;
+}
+
 /**
  * Gathers company truth from neutral company sources: git history, open PRs,
  * repository scans, and an optional operator-supplied evidence file. A neutral
@@ -75,11 +138,24 @@ export async function gatherCompanyEvidence(input: {
       );
   }
 
-  const todo = await runCommand(
+  // Railway runtime images are not guaranteed to contain .git or gh. Fall
+  // back to the repository's public GitHub API so nightly President cycles
+  // still have current code/PR evidence in production.
+  if (git.exitCode !== 0 || prs.exitCode !== 0) {
+    out.push(...(await publicGithubEvidence()));
+  }
+
+  let todo = await runCommand(
     "git grep -c -E 'TODO|FIXME' -- 'server/*.ts' 'client/src/*.tsx' | awk -F: '{s+=$2} END {print s+0}'",
     input.repoRoot,
     { timeoutMs: 30_000 }
   );
+  if (todo.exitCode !== 0)
+    todo = await runCommand(
+      "grep -R -E 'TODO|FIXME' server client/src --include='*.ts' --include='*.tsx' 2>/dev/null | wc -l",
+      input.repoRoot,
+      { timeoutMs: 30_000 }
+    );
   if (todo.exitCode === 0)
     out.push(
       item(
@@ -90,16 +166,28 @@ export async function gatherCompanyEvidence(input: {
       )
     );
 
-  const tests = await runCommand(
+  let tests = await runCommand(
     "git ls-files 'server/**/*.test.ts' | wc -l",
     input.repoRoot,
     { timeoutMs: 20_000 }
   );
-  const srcs = await runCommand(
+  let srcs = await runCommand(
     "git ls-files 'server/**/*.ts' | grep -v '.test.ts' | wc -l",
     input.repoRoot,
     { timeoutMs: 20_000 }
   );
+  if (tests.exitCode !== 0 || srcs.exitCode !== 0) {
+    tests = await runCommand(
+      "find server -type f -name '*.test.ts' | wc -l",
+      input.repoRoot,
+      { timeoutMs: 20_000 }
+    );
+    srcs = await runCommand(
+      "find server -type f -name '*.ts' ! -name '*.test.ts' | wc -l",
+      input.repoRoot,
+      { timeoutMs: 20_000 }
+    );
+  }
   if (tests.exitCode === 0 && srcs.exitCode === 0)
     out.push(
       item(
