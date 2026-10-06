@@ -13,6 +13,7 @@ import {
   opsTaskEvents,
   opsTasks,
   operationsEvents,
+  orderPaymentProjections,
   orders,
   tenantCustomerRecoveryProfiles,
 } from "../../drizzle/schema";
@@ -42,9 +43,10 @@ import {
 } from "../customerAssets/customerIdentity";
 import {
   buildAuthoritativeChurnHistory,
+  buildAuthoritativeNativePayments,
   isActiveChurnOrder,
-  nativePaidOrderId,
   type AuthoritativeChurnObservation,
+  type AuthoritativeNativePayment,
 } from "./authoritativeHistory";
 
 type OrderRow = typeof orders.$inferSelect;
@@ -172,7 +174,8 @@ function evidenceForScore(
           kind: "estimate",
           label: "Monthly revenue impact",
           value: `${score.estimatedMonthlyImpactCents} cents (average admitted paid value × inferred monthly cadence; ${withAdmittedValue.length}/${history.length} services have monetary authority)`,
-          source: "canonical paid-order ledger / authority_receipts",
+          source:
+            "authority_receipts + order_payment_projections.netPaidCents",
           sourceIds: withAdmittedValue.map(item => item.orderId),
         }
       : {
@@ -180,7 +183,8 @@ function evidenceForScore(
           label: "Monthly revenue impact",
           value:
             "Completed service history exists, but no admitted paid value is available for these services",
-          source: "canonical paid-order ledger / authority_receipts",
+          source:
+            "authority_receipts + order_payment_projections.netPaidCents",
           sourceIds: [],
         },
     withWeight.length >= 4
@@ -459,7 +463,7 @@ export async function runCustomerChurnScan(input: {
       .from(orders)
       .where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`)
       .orderBy(orders.createdAt, orders.id);
-    const [dropoffEvents, paidEvents] = await Promise.all([
+    const [dropoffEvents, paidEvents, paymentProjections] = await Promise.all([
       db
         .select({
           id: operationsEvents.id,
@@ -482,11 +486,20 @@ export async function runCustomerChurnScan(input: {
         tenantId: input.tenantId,
         orders: sourceRows,
       }),
+      db
+        .select({
+          orderId: orderPaymentProjections.orderId,
+          state: orderPaymentProjections.state,
+          netPaidCents: orderPaymentProjections.netPaidCents,
+        })
+        .from(orderPaymentProjections)
+        .where(eq(orderPaymentProjections.tenantId, input.tenantId)),
     ]);
     const authoritativeHistory = buildAuthoritativeChurnHistory({
       orders: sourceRows,
       dropoffEvents,
       paidEvents,
+      paymentProjections,
     });
     const historyByOrderId = new Map(
       authoritativeHistory.map(observation => [observation.orderId, observation])
@@ -1754,10 +1767,10 @@ async function markRecoveredWith(
     tenantId: string;
     intervention: typeof customerRecoveryInterventions.$inferSelect;
     order: OrderRow;
-    payment: PaidOrderEvent;
+    payment: AuthoritativeNativePayment;
   }
 ) {
-  const recoveredRevenueCents = input.payment.cents;
+  const recoveredRevenueCents = input.payment.netPaidCents;
   const recoveredAt = input.payment.occurredAt;
   const result = await tx
     .update(customerRecoveryInterventions)
@@ -1801,7 +1814,8 @@ async function markRecoveredWith(
       orderId: input.order.id,
       recoveredRevenueCents,
       paidAt: input.payment.occurredAt.toISOString(),
-      paymentAuthorityReceiptId: input.payment.authorityReceiptId ?? null,
+      paymentAuthorityReceiptId: input.payment.authorityReceiptId,
+      paymentState: input.payment.state,
     },
   });
   const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
@@ -1875,22 +1889,29 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
     .from(orders)
     .where(sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`)
     .orderBy(orders.createdAt, orders.id);
-  const admittedPayments = (
-    await loadAdmittedNativePaymentEvents({
+  const [paidEvents, paymentProjections] = await Promise.all([
+    loadAdmittedNativePaymentEvents({
       tenantId,
       orders: tenantOrders,
-    })
-  ).filter(
-    payment =>
-      payment.cents > 0 &&
-      payment.occurredAt.getTime() > earliest.getTime() &&
-      Boolean(payment.authorityReceiptId)
-  );
+    }),
+    db
+      .select({
+        orderId: orderPaymentProjections.orderId,
+        state: orderPaymentProjections.state,
+        netPaidCents: orderPaymentProjections.netPaidCents,
+      })
+      .from(orderPaymentProjections)
+      .where(eq(orderPaymentProjections.tenantId, tenantId)),
+  ]);
+  const admittedPayments = buildAuthoritativeNativePayments({
+    orders: tenantOrders,
+    paidEvents,
+    paymentProjections,
+  }).filter(payment => payment.occurredAt.getTime() > earliest.getTime());
   const orderById = new Map(tenantOrders.map(order => [order.id, order]));
   const paidOrders = admittedPayments
     .flatMap(payment => {
-      const orderId = nativePaidOrderId(payment);
-      const order = orderId == null ? null : orderById.get(orderId);
+      const order = orderById.get(payment.orderId) ?? null;
       return order && order.status !== "cancelled"
         ? [{ order, payment }]
         : [];
@@ -1947,9 +1968,9 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
           metadata: {
             interventionId: intervention.id,
             orderId: match.order.id,
-            recoveredRevenueCents: match.payment.cents,
-            paymentAuthorityReceiptId:
-              match.payment.authorityReceiptId ?? null,
+            recoveredRevenueCents: match.payment.netPaidCents,
+            paymentAuthorityReceiptId: match.payment.authorityReceiptId,
+            paymentState: match.payment.state,
             authoritativePaidOrder: true,
           },
         });
