@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { ActionGatewayError, executeGrantedAction } from "../actions/gateway";
 import { mintActionGrant } from "../executive/grants";
+import { approvalMatchesCanonicalOperator } from "../../../persistentOperator/actionPolicy";
 
 describe("persistent operator Brain authority", () => {
+
+  it("binds explicit approval to the resolved canonical operator identity", () => {
+    const identity = {
+      canonicalOpenId: "adam-admin",
+      sourceOpenId: "adam-driver",
+      aliases: [
+        { openId: "adam-admin" },
+        { openId: "adam-driver" },
+        { openId: "adam-phone" },
+      ],
+    };
+
+    expect(approvalMatchesCanonicalOperator(identity, "adam-admin")).toBe(true);
+    expect(approvalMatchesCanonicalOperator(identity, "adam-driver")).toBe(true);
+    expect(approvalMatchesCanonicalOperator(identity, "adam-phone")).toBe(true);
+    expect(approvalMatchesCanonicalOperator(identity, "someone-else")).toBe(false);
+    expect(approvalMatchesCanonicalOperator(identity, "")).toBe(false);
+  });
   it("background grants require tenant/canonical identity and cannot invent a user utterance", () => {
     expect(() =>
       mintActionGrant({
