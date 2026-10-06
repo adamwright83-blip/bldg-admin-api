@@ -33,11 +33,12 @@ interface CockpitStop {
   isRealDayLineWork: boolean;
   executionType?: string | null;
   lineage?: {
-    kind: "objective" | "campaign" | "commitment";
+    kind: "objective" | "campaign" | "commitment" | "candidate";
     sourceReference: string;
     objectiveId?: string;
     campaignId?: string;
     commitmentId?: string;
+    candidateId?: string;
   };
 }
 
