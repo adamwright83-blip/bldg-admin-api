@@ -37,7 +37,7 @@ jobs:
       - name: Run President autonomous agent
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PRESIDENT_AGENT_BASE_URL: https://admin.bldg.chat
+          PRESIDENT_AGENT_BASE_URL: https://api.bldg.chat
         run: pnpm exec tsx scripts/president-github-agent.ts
 
       - name: Preserve browser validation evidence
