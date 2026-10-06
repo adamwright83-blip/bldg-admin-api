@@ -157,17 +157,20 @@ export function buildAuthoritativeNativePayments(input: {
     ) {
       continue;
     }
+    const state: AuthoritativeNativePayment["state"] =
+      order.status === "cancelled" || projection.state === "cancelled"
+        ? "cancelled"
+        : projection.state === "refunded"
+          ? "refunded"
+          : projection.state === "partially_refunded"
+            ? "partially_refunded"
+            : "paid";
     out.push({
       orderId,
       occurredAt: event.occurredAt,
       netPaidCents: reversed ? 0 : rawNet!,
       authorityReceiptId: event.authorityReceiptId!,
-      state:
-        order.status === "cancelled"
-          ? "cancelled"
-          : projection.state === "refunded" || projection.state === "cancelled"
-            ? projection.state
-            : projection.state,
+      state,
     });
   }
   return out.sort(
