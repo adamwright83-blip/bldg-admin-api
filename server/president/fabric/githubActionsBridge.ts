@@ -152,122 +152,121 @@ async function resolveMainSha(): Promise<string> {
 }
 
 export async function claimPresidentGithubMission(store: CycleStore) {
-  const cycles = (await store.list()).filter(c => c.status === "EXECUTING");
+  const cycles = (await store.list()).filter(cycle => cycle.status === "EXECUTING");
+  const currentMain = await resolveMainSha();
+
   for (const cycle of cycles) {
-    const candidate = cycle.missions.find(m => {
-      if (terminal(m) || !approved(cycle, m) || !dependenciesReady(cycle, m))
-        return false;
-      if (
-        ![
-          "ENGINEERING",
-          "RESEARCH",
-          "ANALYSIS",
-          "DOCUMENTATION",
-        ].includes(m.domain)
-      )
-        return false;
-      const live =
-        m.lease && new Date(m.lease.expiresAt).getTime() > Date.now();
-      return !live;
-    });
-    if (!candidate) continue;
-
-    const baseSha =
-      (candidate.handback?.baseSha as string | undefined) ??
-      (candidate.receipts
-        .find(r => r.kind === "EXECUTION_BASE_PINNED")
-        ?.data.baseSha as string | undefined) ??
-      (await resolveMainSha());
-
     let response: Record<string, unknown> | null = null;
-    await store.update(cycle.cycleId, c => {
-      const m = c.missions.find(x => x.missionId === candidate.missionId);
-      if (!m || terminal(m) || !approved(c, m) || !dependenciesReady(c, m))
-        return;
-      const live =
-        m.lease && new Date(m.lease.expiresAt).getTime() > Date.now();
-      if (live) return;
+    await store.update(cycle.cycleId, current => {
+      const mission = current.missions.find(candidate => {
+        if (
+          terminal(candidate) ||
+          !approved(current, candidate) ||
+          !dependenciesReady(current, candidate)
+        )
+          return false;
+        if (
+          !["ENGINEERING", "RESEARCH", "ANALYSIS", "DOCUMENTATION"].includes(
+            candidate.domain
+          )
+        )
+          return false;
+        const live =
+          candidate.lease &&
+          new Date(candidate.lease.expiresAt).getTime() > Date.now();
+        return !live;
+      });
+      if (!mission) return;
 
-      if (m.lease) {
-        receipt(m, "LEASE_RECOVERED", EXECUTOR_ID, {
-          previousActor: m.lease.actorId,
-          previousStatus: m.status,
+      if (mission.lease) {
+        receipt(mission, "LEASE_RECOVERED", EXECUTOR_ID, {
+          previousActor: mission.lease.actorId,
+          previousStatus: mission.status,
         });
-        if (["PREPARING", "EXECUTING", "VALIDATING"].includes(m.status)) {
-          m.status = "REPAIR_REQUIRED";
-        } else if (m.status === "REVIEWING") {
-          m.status = "READY_FOR_REVIEW";
-        }
-        m.lease = null;
+        if (["PREPARING", "EXECUTING", "VALIDATING"].includes(mission.status))
+          mission.status = "REPAIR_REQUIRED";
+        else if (mission.status === "REVIEWING")
+          mission.status = "READY_FOR_REVIEW";
+        mission.lease = null;
       }
 
-      if (m.status === "ADAM_APPROVED") legalGo(m, "QUEUED", EXECUTOR_ID);
-      if (m.status === "QUEUED") legalGo(m, "PREPARING", EXECUTOR_ID);
-      if (m.status === "REPAIR_REQUIRED") {
-        if (m.attempt >= m.maxAttempts) {
-          legalGo(m, "BLOCKED", EXECUTOR_ID);
-          m.blocker = `Repair attempts exhausted (${m.attempt}/${m.maxAttempts})`;
-          receipt(m, "BLOCKED", EXECUTOR_ID, { reason: m.blocker });
+      if (mission.status === "ADAM_APPROVED")
+        legalGo(mission, "QUEUED", EXECUTOR_ID);
+      if (mission.status === "QUEUED")
+        legalGo(mission, "PREPARING", EXECUTOR_ID);
+
+      const baseSha =
+        (mission.handback?.baseSha as string | undefined) ??
+        (mission.receipts.find(r => r.kind === "EXECUTION_BASE_PINNED")?.data
+          .baseSha as string | undefined) ??
+        currentMain;
+
+      if (mission.status === "REPAIR_REQUIRED") {
+        if (mission.attempt >= mission.maxAttempts) {
+          legalGo(mission, "BLOCKED", EXECUTOR_ID);
+          mission.blocker = `Repair attempts exhausted (${mission.attempt}/${mission.maxAttempts})`;
+          receipt(mission, "BLOCKED", EXECUTOR_ID, { reason: mission.blocker });
           return;
         }
-        legalGo(m, "EXECUTING", EXECUTOR_ID);
-      } else if (m.status === "PREPARING") {
-        legalGo(m, "EXECUTING", EXECUTOR_ID);
-      } else if (!["EXECUTING", "READY_FOR_REVIEW"].includes(m.status)) {
+        legalGo(mission, "EXECUTING", EXECUTOR_ID);
+      } else if (mission.status === "PREPARING") {
+        legalGo(mission, "EXECUTING", EXECUTOR_ID);
+      } else if (!["EXECUTING", "READY_FOR_REVIEW"].includes(mission.status)) {
         return;
       }
 
-      if (m.status === "READY_FOR_REVIEW") {
-        // Publication already happened; the scheduled runner should review only.
-        legalGo(m, "REVIEWING", REVIEWER_ID);
+      if (mission.status === "READY_FOR_REVIEW") {
+        legalGo(mission, "REVIEWING", REVIEWER_ID);
       } else {
-        m.attempt += 1;
-        m.executorActorId = EXECUTOR_ID;
+        mission.attempt += 1;
+        mission.executorActorId = EXECUTOR_ID;
       }
+
       const token = randomUUID();
-      m.lease = {
-        actorId: m.status === "REVIEWING" ? REVIEWER_ID : EXECUTOR_ID,
+      mission.lease = {
+        actorId: mission.status === "REVIEWING" ? REVIEWER_ID : EXECUTOR_ID,
         token,
-        attempt: m.attempt,
+        attempt: mission.attempt,
         expiresAt: new Date(Date.now() + LEASE_MS).toISOString(),
       };
       if (
-        !m.receipts.some(
+        !mission.receipts.some(
           r =>
             r.kind === "EXECUTION_BASE_PINNED" &&
             r.data.baseSha === baseSha
         )
       )
-        receipt(m, "EXECUTION_BASE_PINNED", EXECUTOR_ID, { baseSha });
+        receipt(mission, "EXECUTION_BASE_PINNED", EXECUTOR_ID, { baseSha });
 
       response = {
         claimed: true,
         leaseToken: token,
-        reviewOnly: m.status === "REVIEWING",
+        reviewOnly: mission.status === "REVIEWING",
         baseSha,
-        branch: `president/${m.missionId}`,
-        feedback: feedback(m),
+        branch: `president/${mission.missionId}`,
+        feedback: feedback(mission),
         mission: {
-          missionId: m.missionId,
-          cycleId: m.cycleId,
-          candidateId: m.candidateId,
-          title: m.title,
-          objective: m.objective,
-          businessReason: m.businessReason,
-          acceptanceCriteria: m.acceptanceCriteria,
-          domain: m.domain,
-          scope: m.scope,
-          constraints: m.constraints,
-          approvalReceiptId: m.approvalReceiptId,
-          approvedAt: m.approvedAt,
-          attempt: m.attempt,
-          maxAttempts: m.maxAttempts,
-          requiredValidation: m.requiredValidation,
+          missionId: mission.missionId,
+          cycleId: mission.cycleId,
+          candidateId: mission.candidateId,
+          title: mission.title,
+          objective: mission.objective,
+          businessReason: mission.businessReason,
+          acceptanceCriteria: mission.acceptanceCriteria,
+          domain: mission.domain,
+          scope: mission.scope,
+          constraints: mission.constraints,
+          approvalReceiptId: mission.approvalReceiptId,
+          approvedAt: mission.approvedAt,
+          attempt: mission.attempt,
+          maxAttempts: mission.maxAttempts,
+          requiredValidation: mission.requiredValidation,
         },
       };
     });
     if (response) return response;
   }
+
   return { claimed: false };
 }
 
@@ -396,6 +395,7 @@ export async function presidentGithubModelTurn(
     model:
       process.env.PRESIDENT_ENGINEERING_MODEL?.trim() ||
       process.env.PRESIDENT_MODEL?.trim() ||
+      process.env.ANTHROPIC_MODEL_MISSION_PLANNER?.trim() ||
       "claude-sonnet-4-5",
     max_tokens: 8192,
     temperature: 0,
