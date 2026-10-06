@@ -66,7 +66,7 @@ export function runCommand(
 }
 
 const SAFE_VALIDATION =
-  /^(npx (vitest|tsc|eslint|prettier|tsx)|npm (test|run [\w:-]+)|pnpm (test|run [\w:-]+|check|vitest)|node [\w./-]+|vitest|tsc)\b[^;&|`$<>]*$/;
+  /^(npx (vitest|tsc|eslint|prettier|tsx)|npm (test|run [\w:-]+)|pnpm (test|run [\w:-]+|check|vitest|exec (vitest|tsc|eslint|prettier|tsx))|node [\w./-]+|vitest|tsc)\b[^;&|`$<>]*$/;
 
 /** Validation commands originate from model output. Allowlist them; no shell metacharacters. */
 export function assertSafeValidationCommand(cmd: string) {
