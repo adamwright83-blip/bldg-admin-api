@@ -167,6 +167,31 @@ describe("Operator Representative grounded Talk", () => {
     });
   });
 
+  it("answers usage questions from durable lifecycle instead of configuration alone", () => {
+    const current = snapshot();
+    const item = current.home.learning[0];
+    const answer = answerOperatorRepresentativeQuestion({
+      question: "Are you using this?",
+      snapshot: current,
+      focusedItemId: item.id,
+      adaptationLifecycle: [
+        {
+          directiveId: "11111111-1111-4111-8111-111111111111",
+          targetItemId: item.id,
+          targetKey: item.targetKey ?? null,
+          directiveKind: "ask_instead",
+          directiveStatus: "active",
+          lifecycle: "used",
+          behaviorClass: "ask_before_ambiguous_pending_continuation",
+          useCount: 2,
+          lastUsedAt: "2026-10-06T17:00:00.000Z",
+        },
+      ],
+    });
+    expect(answer.intent).toBe("using");
+    expect(answer.reply).toMatch(/durable receipt proves Claire used this 2 times/i);
+  });
+
   it("explains evidence without turning verification metadata into business truth", () => {
     const current = snapshot();
     const item = current.home.learning[0];
