@@ -79,7 +79,11 @@ function rankingStatusFor(
   return "ranked";
 }
 
-function operatorDesignation(state: DayState | null): RankedDayWork & {
+function operatorDesignation(
+  state: DayState | null,
+  outcome?: MissionPlanOutcome,
+  rankedWorks: readonly RankedDayWork[] = []
+): RankedDayWork & {
   compatibilityPhrase: "todays_mission";
 } | null {
   if (!state) return null;
@@ -92,6 +96,29 @@ function operatorDesignation(state: DayState | null): RankedDayWork & {
     if (!chosen || nextAt > chosenAt) chosen = commitment;
   }
   if (!chosen?.operatorMission) return null;
+
+  // A Mission Director candidate may be the same underlying Day Director
+  // commitment under a stable candidate id. Treat source lineage as identity
+  // for presentation so the operator does not see the same work twice.
+  const workPlan = outcome?.workPlan;
+  if (workPlan?.status === "ranked") {
+    const rankedCandidate = workPlan.ranking.find(
+      item =>
+        item.eligible &&
+        item.sourceRefs.some(
+          ref =>
+            ref.sourceType === "day_director_commitment" &&
+            ref.sourceId === chosen!.id
+        )
+    );
+    const ranked = rankedCandidate
+      ? rankedWorks.find(work => work.id === rankedCandidate.workId) ?? null
+      : null;
+    if (ranked) {
+      return { ...ranked, compatibilityPhrase: "todays_mission" };
+    }
+  }
+
   return {
     id: chosen.id,
     title: chosen.title,
@@ -220,7 +247,7 @@ export async function readCurrentDayLine(
           authoritativeRankingStatus(plan.outcome, authoritativeWorks) ??
           "unavailable",
         rankedWorks: authoritativeWorks,
-        designated: operatorDesignation(state),
+        designated: operatorDesignation(state, plan.outcome, authoritativeWorks),
       });
     }
 
@@ -260,7 +287,7 @@ export async function readCurrentDayLine(
       businessDate,
       rankingStatus: rankingStatusFor(plan.outcome, rankedWorks.length),
       rankedWorks,
-      designated: operatorDesignation(state),
+      designated: operatorDesignation(state, plan.outcome, rankedWorks),
     });
   } catch (error) {
     console.warn(
