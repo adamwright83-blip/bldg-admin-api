@@ -225,6 +225,13 @@ export type ExternalExecutionResult =
       prUrl: string;
       changedFiles: string[];
       checks: { command: string; exitCode: number; ok: boolean }[];
+      browserEvidence?: {
+        ok: boolean;
+        consoleErrors: string[];
+        screenshotPath?: string;
+        detail: string;
+        workflowRunId?: string;
+      };
       summary: string;
     }
   | {
@@ -288,6 +295,11 @@ export async function reportExternalExecution(
         throw new Error(`Protected files changed: ${violations.join(", ")}`);
       if (input.result.checks.some(x => !x.ok))
         throw new Error("Required validation did not pass");
+      if (
+        m.requiredValidation.browser &&
+        input.result.browserEvidence?.ok !== true
+      )
+        throw new Error("Required browser validation did not pass");
       m.handback = {
         baseSha: input.result.baseSha,
         branch: input.result.branch,
@@ -295,6 +307,7 @@ export async function reportExternalExecution(
         prUrl: input.result.prUrl,
         changedFiles: input.result.changedFiles,
         checks: input.result.checks,
+        browserEvidence: input.result.browserEvidence,
         evidenceIds: [],
       };
     } else {
