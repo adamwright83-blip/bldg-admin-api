@@ -19,7 +19,7 @@ const API =
     ""
   );
 const ROOT = resolve(__dirname, "..");
-const MAX_MISSIONS = 3;
+const MAX_MISSIONS = 1;
 
 type ExecutionClaim = {
   cycleId: string;
@@ -101,7 +101,7 @@ async function claude(
     "--output-format",
     "json",
     "--model",
-    process.env.PRESIDENT_AGENT_MODEL || "claude-opus-5-5",
+    process.env.PRESIDENT_AGENT_MODEL || "claude-sonnet-4-6",
     "--allowedTools",
     allowed,
   ];
