@@ -10,12 +10,15 @@ permissions:
   pull-requests: write
   id-token: write
 
-concurrency:
-  group: president-autonomous-execution
-  cancel-in-progress: false
-
 jobs:
   execute-approved-president-mission:
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    concurrency:
+      group: president-autonomous-execution-${{ matrix.slot }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
