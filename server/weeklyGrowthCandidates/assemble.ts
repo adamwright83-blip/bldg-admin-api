@@ -181,25 +181,12 @@ export function assembleWeeklyGrowthCandidates(
   const ranked: Ranked[] = groups
     .map(group => toRanked(group, input, macro, warmRank, swingRank, warmOrder.length))
     .filter(item => item.candidate.title.trim().length > 0 && item.candidate.objective.trim().length > 0);
-  ranked.sort(compareRanked);
-
-  const shown: WeeklyGrowthCandidate[] = [];
-  let followUps = 0;
-  let recoveries = 0;
-  let campaigns = 0;
-  for (const item of ranked) {
-    if (shown.length >= WEEKLY_GROWTH_CAPS.total) break;
-    const kind = item.candidate.sourceKind;
-    if ((kind === "commercial_follow_up" || kind === "proactive_obligation") && followUps >= WEEKLY_GROWTH_CAPS.followUp) {
-      continue;
-    }
-    if (kind === "customer_recovery" && recoveries >= WEEKLY_GROWTH_CAPS.recovery) continue;
-    if (kind === "campaign_library" && campaigns >= WEEKLY_GROWTH_CAPS.campaign) continue;
-    shown.push(item.candidate);
-    if (kind === "commercial_follow_up" || kind === "proactive_obligation") followUps += 1;
-    if (kind === "customer_recovery") recoveries += 1;
-    if (kind === "campaign_library") campaigns += 1;
-  }
+  // Discovery returns the entire eligible universe in a stable technical order.
+  // Business-priority signals remain attached as facts, but discovery neither
+  // chooses a winner nor hides rankable work behind presentation caps.
+  const shown: WeeklyGrowthCandidate[] = ranked
+    .map(item => item.candidate)
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   const sources = {} as Record<WeeklyGrowthSourceReportKey, WeeklyGrowthSourceReport>;
   for (const key of WEEKLY_GROWTH_SOURCE_REPORT_KEYS) {
@@ -213,6 +200,7 @@ export function assembleWeeklyGrowthCandidates(
     candidates: shown,
     sources,
     caps: WEEKLY_GROWTH_CAPS,
+    capsApplied: false,
   };
 }
 
@@ -648,20 +636,6 @@ function signals(
   }
   signalsOut.sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value));
   return signalsOut;
-}
-
-function compareRanked(a: Ranked, b: Ranked): number {
-  if (a.sourceClass !== b.sourceClass) return a.sourceClass - b.sourceClass;
-  if (a.inFlight !== b.inFlight) return b.inFlight - a.inFlight;
-  if (a.due !== b.due) return b.due - a.due;
-  if (a.score !== b.score) {
-    if (a.score == null) return 1;
-    if (b.score == null) return -1;
-    return b.score - a.score;
-  }
-  if (a.prep !== b.prep) return b.prep - a.prep;
-  if (a.macro !== b.macro) return b.macro - a.macro;
-  return a.stableId < b.stableId ? -1 : a.stableId > b.stableId ? 1 : 0;
 }
 
 function macroMetric(source: SourceAvailability<WeeklyGrowthMacroSnapshot>): WeeklyGrowthMacroSnapshot | null {
