@@ -1,9 +1,10 @@
 import { randomUUID, createHash } from "node:crypto";
-import type { Express, Request } from "express";
+import express, { type Express, type Request } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Cycle, Mission, MissionStatus, ReviewVerdict } from "../../../shared/presidentCycle";
 import { generateMorningReport } from "./morningReport";
+import { protectedViolations } from "./engineering";
 import { getPresidentCycleStore } from "../cycle/runtime";
 import type { CycleStore } from "../cycle/cycleStore";
 import { setStatus } from "../cycle/cycleService";
@@ -261,6 +262,7 @@ export async function claimPresidentGithubMission(store: CycleStore) {
           attempt: mission.attempt,
           maxAttempts: mission.maxAttempts,
           requiredValidation: mission.requiredValidation,
+          handback: mission.handback,
         },
       };
     });
@@ -388,6 +390,10 @@ export async function presidentGithubModelTurn(
     !["EXECUTING", "VALIDATING"].includes(mission.status)
   )
     throw new Error("Mission is not executable");
+  if (input.messages.length < 1 || input.messages.length > 50)
+    throw new Error("President model relay message count out of bounds");
+  if (JSON.stringify(input.messages).length > 1_500_000)
+    throw new Error("President model relay payload exceeds bound");
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new Error("ANTHROPIC_API_KEY unavailable");
   const client = new Anthropic({ apiKey: key });
@@ -506,8 +512,29 @@ export async function recordPresidentGithubPublication(
         !input.changedFiles?.length
       )
         throw new Error("Engineering publication requires PR/branch/commit/files");
-    } else if (!input.artifactText?.trim()) {
-      throw new Error("Research/analysis publication requires artifact text");
+      const protectedPaths = protectedViolations(input.changedFiles);
+      if (protectedPaths.length)
+        throw new Error(
+          "Engineering publication touched protected paths: " +
+            protectedPaths.join(", ")
+        );
+    } else {
+      const artifact = input.artifactText?.trim() ?? "";
+      if (!artifact)
+        throw new Error("Research/analysis publication requires artifact text");
+      if (artifact.length > 500_000)
+        throw new Error("Research/analysis artifact exceeds durable bound");
+      for (const section of [
+        "## Findings (evidence)",
+        "## Inferences (judgment)",
+        "## Sources",
+        "## State changes",
+      ])
+        if (!artifact.includes(section))
+          throw new Error("Research artifact missing section: " + section);
+      const changes = artifact.split("## State changes")[1] ?? "";
+      if (!/^\s*None\b/i.test(changes))
+        throw new Error("Research artifact must declare State changes: None");
     }
 
     m.handback = {
@@ -605,6 +632,7 @@ export function registerPresidentGithubActionsBridge(app: Express) {
   const store = getPresidentCycleStore();
   const path = "/api/president/autonomous/github";
 
+  app.use(path, express.json({ limit: "2mb" }));
   app.use(path, async (req, res, next) => {
     try {
       const token = bearer(req);
