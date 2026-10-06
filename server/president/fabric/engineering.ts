@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Mission } from "../../../shared/presidentCycle";
-import { runCommand, type CommandResult } from "./exec";
+import {
+  assertSafeAppStartCommand,
+  runCommand,
+  type CommandResult,
+} from "./exec";
 
 export const PROTECTED_PATHS: RegExp[] = [
   /^server\/commercialPipeline\//,
