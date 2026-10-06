@@ -25,7 +25,6 @@ if (typeof document !== "undefined" && !document.querySelector(`link[href="${FON
   document.head.appendChild(link);
 }
 
-const money = (c?: number) => (c == null ? "—" : `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
 const day = (iso?: string) => {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -63,20 +62,13 @@ export default function LanternCityIslands({
   const [operationsHubTip, setOperationsHubTip] = useState<{ x: number; y: number } | null>(null);
   const [suitcaseTip, setSuitcaseTip] = useState<{ x: number; y: number } | null>(null);
 
-  const isPlatformAdmin = user?.role === "admin";
-  const adminAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
-    enabled: isPlatformAdmin,
+  // The normal world always reads the authenticated tenant, never platform support authority.
+  const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
+    enabled: Boolean(user),
     staleTime: 10_000,
     refetchInterval: 15_000,
     retry: 1,
   });
-  const memberAtlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
-    enabled: !isPlatformAdmin,
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-    retry: 1,
-  });
-  const atlas = isPlatformAdmin ? adminAtlas : memberAtlas;
   const usingSample = import.meta.env.DEV && atlas.isError;
   const allCustomers = useMemo<GeographicCustomer[]>(
     () =>
@@ -115,9 +107,9 @@ export default function LanternCityIslands({
   }, []);
 
   useEffect(() => {
-    // Current business truth only: historical/dormant customers stay in history,
-    // but only active located customers light Lantern City. Territory ownership
+    // Every canonically located customer remains represented; cadence is independent. Territory ownership
     // comes from canonical geography, never nearest-island presentation geometry.
+    if ((!atlas.data && !usingSample) || atlas.isError && !usingSample) return;
     board.current?.setLanterns(customers.map(c => {
       const territory = canonicalLanternTerritory(c);
       return {
@@ -128,7 +120,7 @@ export default function LanternCityIslands({
         territoryName: territory?.name,
       };
     }));
-  }, [customers]);
+  }, [customers, atlas.data, atlas.isError, usingSample]);
 
   useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
   const leaveSuitcase = () => {
@@ -148,9 +140,10 @@ export default function LanternCityIslands({
               <div className={styles.mark}>LANTERN CITY</div>
               <div className={styles.sub}>Joystick</div>
             </div>
-            {stats ? (
+            {stats && atlas.data && !atlas.isError ? (
               <div className={styles.stats}>
-                <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;lanterns</div>
+                <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;mapped lanterns</div>
+                <div className={styles.pill}>{customers.length} located customers · {Math.max(0, customers.length - stats.lanterns)} outside mapped islands</div>
                 <div className={styles.pill}>Islands open&nbsp;<b>{stats.open} of {stats.islands}</b></div>
               </div>
             ) : null}
@@ -171,6 +164,12 @@ export default function LanternCityIslands({
               ? `${island.lanterns} lantern${island.lanterns === 1 ? "" : "s"} lit here: every customer's home burns gold.`
               : "Still under cloud. The first customer here clears the island."}
           </p>
+          {island.name === "Hollywood" ? (
+            <button type="button" className={styles.tinCanEntry} onClick={() => board.current?.enterSmallComforts()}>
+              <img src="/assets/joystick-home/tin-can-house.webp" alt="" width="80" height="54" />
+              <span>Tin Can House · Small Comforts</span>
+            </button>
+          ) : null}
           <button type="button" onClick={() => { setIsland(null); board.current?.board(); }}>Back to the board</button>
         </section>
       ) : null}
@@ -181,7 +180,7 @@ export default function LanternCityIslands({
             <div key={c.identityKey} className={styles.tipRow}>
               <b>{c.displayName}</b>
               <span>{c.location?.canonicalAddress?.split(",")[0] ?? ""}</span>
-              <span>{money(c.totalSpendCents)} lifetime · last order {day(c.lastOrderAt)}</span>
+              <span>{c.totalOrders ?? 0} historical orders · last order {day(c.lastOrderAt)}</span>
             </div>
           ))}
           {hovered.length > 4 ? <span>+{hovered.length - 4} more here</span> : null}
@@ -202,7 +201,7 @@ export default function LanternCityIslands({
         </div>
       ) : null}
       {inSuitcase ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className={styles.loading} role="status">Opening Small Comforts…</div>}>
           <SmallComforts onExit={leaveSuitcase} />
         </Suspense>
       ) : null}
@@ -215,11 +214,18 @@ export default function LanternCityIslands({
       {showUtilityDock && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
-          <button type="button" onClick={() => onNavigate?.("/customers")}>Customers <b className={styles.count}>{customers.length}</b></button>
+          <button type="button" onClick={() => onNavigate?.("/customers")}>Located customers <b className={styles.count}>{customers.length}</b></button>
           <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
         </nav>
       ) : null}
-      {!ready && !failed ? <div className={styles.loading} data-lantern-state="loading">Raising the islands…</div> : null}
+      {(!ready || !atlas.data && !usingSample) && !failed && !atlas.isError ? <div className={styles.loading} data-lantern-state="loading">Loading Lantern City…</div> : null}
+      {atlas.isError && !usingSample ? (
+        <div className={styles.loading} role="alert" data-lantern-state="atlas-unavailable">
+          <div>Customer geography is unavailable. Your world could not be loaded.
+            <button type="button" onClick={() => void atlas.refetch()}>Try again</button>
+          </div>
+        </div>
+      ) : null}
       {failed ? <div className={styles.loading} data-lantern-state="failed">Lantern City could not load its map. Reload to try again.</div> : null}
     </div>
   );

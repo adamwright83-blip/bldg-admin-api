@@ -474,3 +474,10 @@ export function ontoLand(f: Field, x: number, z: number, margin = 30) {
   }
   return { x, z, ok: coastAt(f, x, z) > 0 };
 }
+
+/** Rendering geometry cannot confer territory ownership. */
+export function canonicalIslandFor<T extends { name: string }>(
+  islands: readonly T[], territoryName?: string
+): T | null {
+  return territoryName ? islands.find(island => island.name === territoryName) ?? null : null;
+}

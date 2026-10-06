@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildField, coastAt, layoutIslands, ontoLand, ownerAt, repairOutlines, ringArea, S, type Outline, type WorldManifest,
+  canonicalIslandFor, buildField, coastAt, layoutIslands, ontoLand, ownerAt, repairOutlines, ringArea, S, type Outline, type WorldManifest,
 } from "./islandLayout";
 
 // two neighbourhoods sharing a border, like Hollywood and East Hollywood
@@ -70,5 +70,17 @@ describe("island board layout", () => {
     // building ids are unique across the whole board (the lantern lookup is keyed by them)
     const ids = a.flatMap(i => i.plans.map(p => p.i));
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+
+describe("canonical island admission", () => {
+  const islands = [{ name: "Century City", index: 0 }, { name: "Hollywood", index: 1 }];
+  it("admits the classified territory regardless of presentation position", () => {
+    expect(canonicalIslandFor(islands, "Century City")).toBe(islands[0]);
+  });
+  it("keeps unknown geography and territories outside the board unplaced", () => {
+    expect(canonicalIslandFor(islands)).toBeNull();
+    expect(canonicalIslandFor(islands, "University Park")).toBeNull();
   });
 });

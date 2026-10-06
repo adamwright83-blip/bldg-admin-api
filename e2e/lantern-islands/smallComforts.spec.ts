@@ -1,0 +1,23 @@
+import { expect, test } from "@playwright/test";
+test("Tin Can House opens the current plate and exit preserves tenant customer state", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => { errors.push(error.message); console.error(error.message); });
+  await page.goto("/e2e/lantern-islands/fixture.html");
+  const board = page.getByLabel("Lantern City island board");
+  await expect(board).toHaveAttribute("data-customer-keys", "fixture-customer");
+  await page.getByRole("button", { name: "Tin Can House · Small Comforts" }).click();
+  const plate = page.locator('[data-small-comforts="plate"]');
+  await expect(plate).toBeVisible();
+  await expect(board).toHaveAttribute("data-paused", "true");
+  const art = plate.getByRole("img");
+  await expect(art).toHaveAttribute("src", "/assets/joystick-home/tin-can-house.webp");
+  expect(await art.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBeTruthy();
+  await plate.click({ position: { x: 200, y: 200 } });
+  await expect(plate.locator(".scp-ripple")).toHaveCount(1);
+  await plate.getByRole("button").click();
+  await expect(plate).toHaveCount(0);
+  await expect(board).toHaveAttribute("data-paused", "false");
+  await expect(board).toHaveAttribute("data-focus-island", "Hollywood");
+  await expect(board).toHaveAttribute("data-customer-keys", "fixture-customer");
+  expect(errors).toEqual([]);
+});

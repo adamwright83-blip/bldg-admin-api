@@ -24,7 +24,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { K, LABuilder, planLA, VS, type Plan, type PlanInput } from "../LanternCityV7/laBuildings";
 import {
-  buildField, coastAt, heightSampler, layoutIslands, lonLatToBoard, ontoLand, ownerAt, pointInRing, repairOutlines,
+  canonicalIslandFor, buildField, coastAt, heightSampler, layoutIslands, lonLatToBoard, ontoLand, ownerAt, pointInRing, repairOutlines,
   ringArea, rng, roadDistance, roadSegments, S, styleFor, TOP, type Field, type IslandLayout, type WorldManifest,
 } from "./islandLayout";
 
@@ -1552,11 +1552,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     for (const L of lanternInputs) {
       const b = lonLatToBoard(M, L.latitude, L.longitude);
       const p = ontoLand(F, b.x, b.z, 30);
-      const canonicalIsland = L.territoryName
-        ? islands.find(candidate => candidate.name === L.territoryName) ?? null
-        : null;
-      const island = canonicalIsland?.index ?? ownerAt(F, p.x, p.z);
-      if (island < 0) continue;
+      const canonicalIsland = canonicalIslandFor(islands, L.territoryName);
+      if (!canonicalIsland) continue;
+      const island = canonicalIsland.index;
       // Territory identity is business/geographic truth. Inside that territory,
       // the real coordinate still chooses the nearest physical-looking building.
       let best: Plan | null = null, bd = Infinity;
@@ -1603,7 +1601,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     setClouds(open, immediate);
     islandCounts = counts;
     refreshLabels();
-    events.onStats?.({ islands: islands.filter(l => l.area > 0).length, open: open.size, lanterns: lanternInputs.length });
+    events.onStats?.({ islands: islands.filter(l => l.area > 0).length, open: open.size, lanterns: placed.length });
   }
   let islandCounts = new Map<number, number>();
 
@@ -1739,6 +1737,12 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   const onDown = (e: PointerEvent) => {
     downAt = { x: e.clientX, y: e.clientY, pointerId: e.pointerId, pointerType: e.pointerType };
   };
+  function enterSmallComforts() {
+    if (!ready || !suitcase || entering || activeIslandName !== "Hollywood") return;
+    entering = true;
+    events.onSuitcaseHover?.(null);
+    flyTo(suitcase.x, suitcase.z, 420, () => { entering = false; events.onSuitcase?.(); });
+  }
   const onUp = (e: PointerEvent) => {
     const down = downAt;
     downAt = null;
@@ -1761,9 +1765,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const suitcaseRadius = down.pointerType === "touch" ? 108 : down.pointerType === "pen" ? 84 : 64;
     const sc = suitcaseAt(e.clientX, e.clientY, suitcaseRadius);
     if (sc && !entering && activeIslandName === "Hollywood") {
-      entering = true;
-      events.onSuitcaseHover?.(null);
-      flyTo(sc.x, sc.z, 420, () => { entering = false; events.onSuitcase?.(); });
+      enterSmallComforts();
       return;
     }
     const r = renderer.domElement.getBoundingClientRect();
@@ -1877,6 +1879,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       fly = null;
       frame(x, z, dist, yaw, pitch);
     },
+    enterSmallComforts,
     board() { activeIslandName = null; frameBoard(); },
     /** the game sits on top: stop drawing the city underneath */
     setPaused(p: boolean) { paused = p; entering = false; },
