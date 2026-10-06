@@ -162,6 +162,63 @@ describe("Daphne Stage 3B Claire branch integration", () => {
     expect(result.operatorAdaptation).toBeUndefined();
   });
 
+  it("keeps a loaded turn snapshot stable across revoke while the next turn reloads null", async () => {
+    let revoked = false;
+    const write = vi.fn(async input =>
+      receipt({
+        conversationId: input.conversationId,
+        turnId: input.turnId,
+      })
+    );
+    const load = vi.fn(async () => {
+      if (revoked) return null;
+      const loaded = decision;
+      // Models a revoke that lands immediately after Turn A loaded its
+      // decision snapshot. Turn A keeps the snapshot; Turn B reloads state.
+      revoked = true;
+      return loaded;
+    });
+
+    const turnA = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "maybe",
+        state: state(),
+        conversationKey: "snapshot-a",
+      },
+      {
+        ...safeOverrides(),
+        loadOperatorAdaptationDecision: load,
+        recordOperatorAdaptationUse: write,
+      }
+    );
+    expect(turnA.operatorAdaptation?.branch).toBe("clarify");
+    expect(write).toHaveBeenCalledTimes(1);
+
+    const turnB = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "maybe",
+        state: state(),
+        conversationKey: "snapshot-b",
+      },
+      {
+        ...safeOverrides(),
+        loadOperatorAdaptationDecision: load,
+        recordOperatorAdaptationUse: write,
+      }
+    );
+    expect(turnB.operatorAdaptation).toBeUndefined();
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("a non-ambiguous pending confirmation is never redirected by Daphne", async () => {
     const write = vi.fn();
     const result = await runClaireTurn(
