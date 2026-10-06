@@ -49,6 +49,7 @@ export function daphneExecutingSha(explicit?: string | null): string {
     explicit?.trim() ||
     process.env.RAILWAY_GIT_COMMIT_SHA?.trim() ||
     process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.GITHUB_SHA?.trim() ||
     process.env.GIT_COMMIT_SHA?.trim() ||
     "unavailable";
   return value.slice(0, 64) || "unavailable";
