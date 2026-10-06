@@ -123,6 +123,7 @@ async function durablePresidentEvidence() {
 export async function queuePresidentRecommendationCycle(input: {
   tenantId: string;
   operatorEvidenceFile?: string;
+  cycleId?: string;
 }) {
   if (!input.tenantId.trim()) throw new Error("tenantId required");
   const [repoEvidence, durableEvidence] = await Promise.all([
@@ -140,6 +141,7 @@ export async function queuePresidentRecommendationCycle(input: {
   return createCycle(getPresidentCycleStore(), {
     tenantId: input.tenantId,
     evidence,
+    cycleId: input.cycleId,
   });
 }
 
@@ -213,6 +215,106 @@ export async function runPresidentApprovedCycle(cycleId: string) {
   );
 }
 
+function scheduledLocalParts(
+  now = new Date(),
+  env: NodeJS.ProcessEnv = process.env
+) {
+  const timeZone =
+    env.PRESIDENT_AUTO_CYCLE_TIME_ZONE?.trim() || "America/Los_Angeles";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: string) =>
+    parts.find(part => part.type === type)?.value ?? "";
+  return {
+    timeZone,
+    dateKey: `${value("year")}${value("month")}${value("day")}`,
+    hour: Number(value("hour")),
+  };
+}
+
+export async function ensureScheduledPresidentCycle(
+  env: NodeJS.ProcessEnv = process.env,
+  now = new Date()
+) {
+  if (env.PRESIDENT_AUTO_RECOMMENDATIONS_ENABLED !== "1") return null;
+  const hour = Number(env.PRESIDENT_AUTO_CYCLE_HOUR_LOCAL ?? "19");
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23)
+    throw new Error("PRESIDENT_AUTO_CYCLE_HOUR_LOCAL must be 0..23");
+  const local = scheduledLocalParts(now, env);
+  if (local.hour < hour) return null;
+
+  const store = getPresidentCycleStore();
+  const active = (await store.list()).find(
+    cycle => !["COMPLETE", "NO_APPROVAL"].includes(cycle.status)
+  );
+  if (active) return active;
+
+  const cycleId = `cyc_auto_${local.dateKey}`;
+  const existing = await store.get(cycleId);
+  if (existing) return existing;
+  try {
+    return await queuePresidentRecommendationCycle({
+      tenantId: env.PRESIDENT_AUTO_TENANT_ID?.trim() || "default",
+      cycleId,
+    });
+  } catch (error) {
+    // Two worker ticks may race. A duplicate durable id means the other one won.
+    const raced = await store.get(cycleId);
+    if (raced) return raced;
+    throw error;
+  }
+}
+
+async function sendPendingMorningReports(
+  store: CycleStore,
+  reviewBaseUrl = ENV.adminBaseUrl
+) {
+  const pending = (await store.list()).filter(
+    cycle =>
+      cycle.status === "COMPLETE" &&
+      cycle.morningReport &&
+      !cycle.notifications.some(n => n.channel === "morning_owner")
+  );
+  for (const cycle of pending) {
+    const report = cycle.morningReport!;
+    const ready = report.missions.filter(
+      m => m.status === "READY_FOR_HUMAN" || m.status === "COMPLETED"
+    ).length;
+    const blocked = report.missions.filter(m => m.status === "BLOCKED").length;
+    const link = `${reviewBaseUrl.replace(/\/$/, "")}/president?cycle=${encodeURIComponent(cycle.cycleId)}`;
+    const message =
+      `President finished the approved cycle: ${ready} mission(s) ready/completed` +
+      (blocked ? `, ${blocked} blocked` : "") +
+      ". Review the evidence-backed morning handback.";
+    try {
+      await notificationPort.notify({
+        title: "President: morning handback ready",
+        message,
+        link,
+      });
+      await store.update(cycle.cycleId, current => {
+        if (
+          !current.notifications.some(n => n.channel === "morning_owner")
+        )
+          current.notifications.push({
+            at: new Date().toISOString(),
+            channel: "morning_owner",
+            message,
+            link,
+          });
+      });
+    } catch (error) {
+      console.error("[PresidentCycle] morning handback notification failed", error);
+    }
+  }
+}
+
 export async function runPresidentCycleWorkerTick() {
   if (process.env.PRESIDENT_EXECUTION_ENABLED !== "1")
     return {
@@ -220,6 +322,7 @@ export async function runPresidentCycleWorkerTick() {
       results: [] as Array<{ cycleId: string; status: string }>,
     };
 
+  await ensureScheduledPresidentCycle();
   const store = getPresidentCycleStore();
   const roster = rosterFromEnv();
   const deliberationReady = Boolean(roster.chatgpt && roster.claude);
@@ -259,6 +362,7 @@ export async function runPresidentCycleWorkerTick() {
       });
     }
   }
+  await sendPendingMorningReports(store);
   return { attempted: cycles.length, results };
 }
 
