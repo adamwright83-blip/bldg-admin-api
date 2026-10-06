@@ -36,8 +36,10 @@ export type DaphneAdaptationApplicationResult = {
 
 export type DaphneAdaptationLifecycleState =
   | "unwired"
+  | "disabled"
   | "wired_unused"
   | "used"
+  | "revoked_unused"
   | "revoked_historical";
 
 export function buildDaphneClarificationApplicationResult(
