@@ -345,6 +345,25 @@ describe("resident-safe agent tools", () => {
       )
     ).rejects.toThrow("Order does not belong to tenant");
 
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 182,
+      tenantId: null,
+      bldgUserId: 42,
+      status: "new",
+    });
+
+    await expect(
+      createOrderFollowupTaskTool.execute(
+        {
+          orderId: 182,
+          followupType: "return_by_time",
+          requestText: "return at 6",
+          bldgUserId: 42,
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("Order does not belong to tenant");
+
     expect(opsTaskMocks.createOpsTask).not.toHaveBeenCalled();
   });
 
