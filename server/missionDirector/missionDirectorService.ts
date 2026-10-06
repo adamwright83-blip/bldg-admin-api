@@ -36,13 +36,14 @@ export function planningExecutionConstraint(command: {
   weeklyPrimaryExecutionType?: unknown;
   weeklyIntentOverride?: unknown;
 } | null | undefined): "mission" | "challenge" | null {
-  // Once an evidenced Daily Command override owns the day, the displaced
-  // WeeklyIntent primary is no longer truthful execution-class evidence.
-  if (!command || command.weeklyIntentOverride) return null;
-  return command.weeklyPrimaryExecutionType === "mission" ||
-    command.weeklyPrimaryExecutionType === "challenge"
-    ? command.weeklyPrimaryExecutionType
-    : null;
+  // A locked WeeklyIntent primary describes the assignment the operator agreed
+  // to; it does not prove today's physical execution availability. Daily
+  // Command currently has schedule/protection facts but no structured
+  // desk-only/field-available fact, so Planning must not manufacture one.
+  //
+  // Keep this seam explicit for a future authoritative availability reader.
+  void command;
+  return null;
 }
 
 function missionOperatorIds(input: {
