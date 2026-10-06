@@ -311,7 +311,9 @@ export function validateResearchArtifact(text: string, repoRoot: string): string
   for (const s of RESEARCH_SECTIONS)
     if (!text.includes(s)) problems.push(`missing section "${s}"`);
   const sources = text.split("## Sources")[1]?.split(/\n## /)[0] ?? "";
-  const refs = [...sources.matchAll(/`([^`\s:]+\.[A-Za-z0-9]+)(?::\d+(?:-\d+)?)?`/g)].map(m => m[1]);
+  const refs = [...sources.matchAll(/`([^`\s]+)`/g)]
+    .map(m => m[1].replace(/:\d+(?:-\d+)?$/, ""))
+    .filter(Boolean);
   if (refs.length === 0) problems.push("no sources cited");
   const root = resolve(repoRoot);
   for (const r of refs) {
