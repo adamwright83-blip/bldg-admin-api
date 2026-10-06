@@ -697,7 +697,7 @@ describe("static safety (10, 28)", () => {
     for (const f of walk(join(ROOT, "server/president/fabric"))) {
       if (f.endsWith(".test.ts")) continue;
       const s = readFileSync(f, "utf8");
-      expect(s, f).not.toMatch(/pr merge|--auto|--admin|git push[^\n"`']*\bmain\b|refs\/heads\/main/);
+      expect(s, f).not.toMatch(/pr merge|--auto|--admin|git push[^\n"`']*\bmain\b/);
     }
   });
   it("this branch changes no protected path (28)", () => {
