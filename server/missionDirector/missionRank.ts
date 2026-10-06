@@ -6,6 +6,7 @@ import type { GrowthCampaign, MissionCategory } from "../campaignLibrary/campaig
 import type { MissionRankEvidence, RankFactor, TimePocket } from "./missionDirectorTypes";
 
 export type RankingOpenTask = {
+  id?: string;
   taskType: string;
   status: string;
   priority: "emergency" | "high" | "normal" | "low";
