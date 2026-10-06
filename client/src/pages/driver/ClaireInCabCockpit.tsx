@@ -116,7 +116,7 @@ export default function ClaireInCabCockpit() {
     retry: false,
   });
 
-  // CANONICAL JOYSTICK DAY LINE COMPLETION MUTATION (handles all 3 lineages: objective, campaign, commitment)
+  // CANONICAL JOYSTICK DAY LINE COMPLETION MUTATION (objective, campaign, commitment, candidate)
   const completeDayLineItem = trpc.system.currentDayLine.completeItem.useMutation();
 
   const [trainingMode, setTrainingMode] = useState(false);
@@ -130,20 +130,33 @@ export default function ClaireInCabCockpit() {
 
   const recognitionRef = useRef<any>(null);
 
-  // Derive stops from canonical Day Line items and designated work
+  // Mission Director order is the authoritative Day Line. An operator
+  // designation may be exposed separately by the API, but it must not be
+  // prepended and thereby become a second ranker.
   const dayLineItems = currentDayLine.data?.items ?? [];
-  const designated = currentDayLine.data?.designated;
-  const allDayLineWork = designated ? [designated, ...dayLineItems] : dayLineItems;
-  const hasRealDayLineWork = allDayLineWork.length > 0;
+  const hasRealDayLineWork = dayLineItems.length > 0;
 
-  const realStops: CockpitStop[] = allDayLineWork.map((item, idx) => ({
+  const realStops: CockpitStop[] = dayLineItems.map(item => ({
     id: item.id,
     name: item.title,
-    address: "Active Corridor Route Stop",
-    distance: `${(idx + 1) * 0.4} mi`,
+    address:
+      item.executionType === "challenge"
+        ? "Remote / desk work"
+        : item.executionType === "mission"
+          ? "Field assignment"
+          : "Execution mode unspecified",
+    distance:
+      item.executionType === "challenge"
+        ? "Remote"
+        : item.executionType === "mission"
+          ? "Field"
+          : "Unspecified",
     corridor: "Canonical Day Line",
     units: 0,
-    objectiveType: item.lineage?.kind === "objective" ? "conquest_brief" : "commercial_drop",
+    objectiveType:
+      item.executionType === "challenge" || item.lineage?.kind === "objective"
+        ? "conquest_brief"
+        : "commercial_drop",
     primaryObjective: item.title,
     isRealDayLineWork: true,
     executionType: item.executionType,
@@ -152,6 +165,16 @@ export default function ClaireInCabCockpit() {
 
   const activeStops = hasRealDayLineWork && !trainingMode ? realStops : TRAINING_STOPS;
   const currentStop = activeStops[currentStopIndex] || activeStops[0];
+  const currentAssignmentLabel =
+    currentStop.executionType === "challenge"
+      ? "Challenge"
+      : currentStop.executionType === "mission"
+        ? "Mission"
+        : "Assignment";
+  const currentDirectiveLabel =
+    currentStop.isRealDayLineWork && currentStopIndex === 0
+      ? `Primary ${currentAssignmentLabel} Directive`
+      : `${currentAssignmentLabel} Directive`;
 
   // Synthesize Web Audio chime for acoustic HUD alerts
   const playTacticalChime = (type: "radar" | "success" | "alert") => {
@@ -406,7 +429,7 @@ export default function ClaireInCabCockpit() {
           <div className="cockpit-stop-header">
             <div>
               <span className="cockpit-sequence-pill">
-                Stop {currentStopIndex + 1} of {activeStops.length} · {currentStop.isRealDayLineWork ? "Authoritative Mission Director Day Line" : "Training Practice"}
+                {currentStop.isRealDayLineWork ? "Assignment" : "Stop"} {currentStopIndex + 1} of {activeStops.length} · {currentStop.isRealDayLineWork ? "Authoritative Mission Director Day Line" : "Training Practice"}
               </span>
               <h1 className="cockpit-stop-title">{currentStop.name}</h1>
               <div className="cockpit-stop-address">
@@ -416,14 +439,14 @@ export default function ClaireInCabCockpit() {
 
             <div className="cockpit-radar-distance">
               <span className="dist-num">{currentStop.distance}</span>
-              <span className="dist-unit">Proximity Radar</span>
+              <span className="dist-unit">{currentStop.isRealDayLineWork ? "Execution Mode" : "Proximity Radar"}</span>
             </div>
           </div>
 
           {/* Tactical Directive Panel */}
           <div className="cockpit-objective-box">
             <div className="cockpit-objective-label">
-              <Sparkles size={16} color="#fbbf24" /> Primary Mission Directive ({currentStop.executionType ?? "field"})
+              <Sparkles size={16} color="#fbbf24" /> {currentDirectiveLabel}
             </div>
             <div className="cockpit-objective-text">
               {currentStop.primaryObjective}
@@ -447,7 +470,7 @@ export default function ClaireInCabCockpit() {
 
             <button className="btn-cockpit-nav" onClick={handleNextStop}>
               <Navigation size={22} />
-              <span>Next Stop</span>
+              <span>{currentStop.isRealDayLineWork ? "Next Assignment" : "Next Stop"}</span>
             </button>
           </div>
         </div>
@@ -484,7 +507,7 @@ export default function ClaireInCabCockpit() {
           {/* Route Sequence Queue */}
           <div className="cockpit-queue-card">
             <div className="cockpit-queue-header">
-              <Radio size={16} color="#38bdf8" /> Mission Director Sequence Queue
+              <Radio size={16} color="#38bdf8" /> Mission Director Day Line
             </div>
 
             <div className="cockpit-queue-list">
