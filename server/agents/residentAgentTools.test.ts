@@ -285,8 +285,18 @@ describe("resident-safe agent tools", () => {
       status: "new",
     });
     await expect(
-      cancelResidentOrderTool.execute({ orderId: 174 }, residentCtx)
-    ).rejects.toThrow("requires bldgUserId authority");
+      cancelResidentOrderTool.execute(
+        { orderId: 174, bldgUserId: 42 },
+        { ...residentCtx, actorId: "bldg_user:99" }
+      )
+    ).rejects.toThrow("Resident actor identity does not match cancellation authority");
+
+    await expect(
+      cancelResidentOrderTool.execute(
+        { orderId: 174 },
+        { ...residentCtx, actorId: "resident-session-without-id" }
+      )
+    ).rejects.toThrow("requires resident identity authority");
 
     expect(dbMocks.updateOrderStatus).not.toHaveBeenCalled();
   });
