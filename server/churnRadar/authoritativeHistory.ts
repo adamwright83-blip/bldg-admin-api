@@ -1,4 +1,8 @@
-import type { Order, OperationsEvent } from "../../drizzle/schema";
+import type {
+  Order,
+  OperationsEvent,
+  orderPaymentProjections,
+} from "../../drizzle/schema";
 import type { CustomerHistoryObservation } from "../../shared/customerChurn";
 import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
 
@@ -21,6 +25,11 @@ export type ChurnDropoffEvidence = Pick<
   | "actualEventTimestamp"
   | "updatedAt"
   | "weightLbs"
+>;
+
+export type ChurnPaymentProjection = Pick<
+  typeof orderPaymentProjections.$inferSelect,
+  "orderId" | "state" | "netPaidCents"
 >;
 
 export type AuthoritativeChurnObservation = CustomerHistoryObservation & {
@@ -91,14 +100,68 @@ export function isActiveChurnOrder(
  * operations_events.dropoff_completed receipt exists, or when the existing
  * Goldline historical-order import explicitly marks the row cadenceEvidenceOnly
  * with its source identity. Ordinary delivered/paid flags are not evidence.
- * Monetary value is attached independently from the admitted native paid-order
- * ledger. Missing payment authority never erases a real completed service; it
- * leaves that observation's value unavailable.
+ * Monetary value is attached independently only when the admitted native
+ * paid-order ledger and the existing order_payment_projections net-payment
+ * state agree. Paid uses netPaidCents; partially_refunded uses the remaining
+ * net; refunded/cancelled/review-required/missing projections provide no
+ * realized value. Missing monetary authority never erases a real completed
+ * service; it leaves that observation's value unavailable.
  */
+export type AuthoritativeNativePayment = {
+  orderId: number;
+  occurredAt: Date;
+  netPaidCents: number;
+  authorityReceiptId: string;
+  state: "paid" | "partially_refunded";
+};
+
+export function buildAuthoritativeNativePayments(input: {
+  orders: readonly ChurnNativeOrder[];
+  paidEvents: readonly PaidOrderEvent[];
+  paymentProjections: readonly ChurnPaymentProjection[];
+}): AuthoritativeNativePayment[] {
+  const orderIds = new Set(input.orders.map(order => order.id));
+  const projections = new Map(
+    input.paymentProjections
+      .filter(row => orderIds.has(row.orderId))
+      .map(row => [row.orderId, row])
+  );
+  const out: AuthoritativeNativePayment[] = [];
+  for (const event of input.paidEvents) {
+    const orderId = nativePaidOrderId(event);
+    if (orderId == null || !orderIds.has(orderId)) continue;
+    const projection = projections.get(orderId);
+    const net = projection?.netPaidCents ?? null;
+    if (
+      !projection ||
+      (projection.state !== "paid" &&
+        projection.state !== "partially_refunded") ||
+      net === null ||
+      !Number.isSafeInteger(net) ||
+      net <= 0
+    ) {
+      continue;
+    }
+    out.push({
+      orderId,
+      occurredAt: event.occurredAt,
+      netPaidCents: net,
+      authorityReceiptId: event.authorityReceiptId!,
+      state: projection.state,
+    });
+  }
+  return out.sort(
+    (a, b) =>
+      a.occurredAt.getTime() - b.occurredAt.getTime() ||
+      a.orderId - b.orderId
+  );
+}
+
 export function buildAuthoritativeChurnHistory(input: {
   orders: readonly ChurnNativeOrder[];
   dropoffEvents: readonly ChurnDropoffEvidence[];
   paidEvents: readonly PaidOrderEvent[];
+  paymentProjections: readonly ChurnPaymentProjection[];
 }): AuthoritativeChurnObservation[] {
   const ordersById = new Map(input.orders.map(order => [order.id, order]));
   const completionByOrder = new Map<number, ChurnDropoffEvidence>();
@@ -117,18 +180,12 @@ export function buildAuthoritativeChurnHistory(input: {
     }
   }
 
-  const paymentByOrder = new Map<
-    number,
-    { cents: number; authorityReceiptId: string }
-  >();
-  for (const event of input.paidEvents) {
-    const orderId = nativePaidOrderId(event);
-    if (orderId == null || !ordersById.has(orderId)) continue;
-    paymentByOrder.set(orderId, {
-      cents: Math.round(event.cents),
-      authorityReceiptId: event.authorityReceiptId!,
-    });
-  }
+  const paymentByOrder = new Map(
+    buildAuthoritativeNativePayments(input).map(payment => [
+      payment.orderId,
+      payment,
+    ])
+  );
 
   const history: AuthoritativeChurnObservation[] = [];
   for (const order of input.orders) {
@@ -144,7 +201,7 @@ export function buildAuthoritativeChurnHistory(input: {
     history.push({
       orderId: order.id,
       serviceAt: completion?.actualEventTimestamp ?? importedServiceAt!,
-      valueCents: payment?.cents ?? null,
+      valueCents: payment?.netPaidCents ?? null,
       weightLbs:
         completion?.weightLbs == null ? null : Number(completion.weightLbs),
       serviceType: order.serviceType,
