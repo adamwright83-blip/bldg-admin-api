@@ -28,16 +28,23 @@ describe("Mission Director — legacy campaign compatibility", () => {
 });
 
 describe("Mission Director — execution constraint authority", () => {
-  it("uses the locked weekly primary execution type when it still owns the day", () => {
+  it("does not treat a locked weekly assignment type as physical availability", () => {
     expect(
       planningExecutionConstraint({
         weeklyPrimaryExecutionType: "challenge",
         weeklyIntentOverride: null,
       })
-    ).toBe("challenge");
+    ).toBeNull();
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "mission",
+        weeklyIntentOverride: null,
+      })
+    ).toBeNull();
   });
 
-  it("does not keep the displaced weekly execution class after an evidenced override", () => {
+  it("stays unknown when no authoritative availability fact exists", () => {
+    expect(planningExecutionConstraint(null)).toBeNull();
     expect(
       planningExecutionConstraint({
         weeklyPrimaryExecutionType: "challenge",
