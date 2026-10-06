@@ -1,4 +1,11 @@
+import { getOrderById } from "../../db";
 import { createOpsTask, mapLegacyLevelToOps } from "../../opsTasks";
+import {
+  assertResidentIdentityOrLineage,
+  assertResidentOwnedRecord,
+  assertTenantOwnedRecord,
+  resolveResidentActionId,
+} from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
 
 /**
@@ -42,7 +49,16 @@ type CreateOrderFollowupTaskInput = {
 function toNumberOrNull(value: unknown): number | null {
   if (value == null || value === "") return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+function optionalPositiveId(value: unknown, label: string): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return n;
 }
 
 function text(value: unknown): string | null {
@@ -79,7 +95,29 @@ export const createOrderFollowupTaskTool: AgentTool<CreateOrderFollowupTaskInput
       throw new Error("requestText is required");
     }
 
-    const orderId = toNumberOrNull(input.orderId);
+    const residentId = resolveResidentActionId(ctx, input.bldgUserId);
+    assertResidentIdentityOrLineage({
+      residentId,
+      conversationId: ctx.conversationId,
+      sessionId: ctx.sessionId,
+    });
+
+    const orderId = optionalPositiveId(input.orderId, "orderId");
+    if (orderId != null) {
+      const order = await getOrderById(orderId);
+      if (!order) throw new Error("Order not found");
+      assertTenantOwnedRecord({
+        ctx,
+        recordTenantId: order.tenantId,
+        label: "Order",
+      });
+      assertResidentOwnedRecord({
+        residentId,
+        storedResidentId: order.bldgUserId,
+        label: "Order",
+      });
+    }
+
     const serviceLabel = text(input.serviceLabel) ?? "Laundry";
     const requestedWindow = text(input.requestedWindow);
     const deadline = text(input.deadline);
@@ -124,7 +162,7 @@ export const createOrderFollowupTaskTool: AgentTool<CreateOrderFollowupTaskInput
         source: "resident_post_order_followup",
         orderId,
         clientRequestId: text(input.clientRequestId),
-        bldgUserId: toNumberOrNull(input.bldgUserId),
+        bldgUserId: residentId,
         requestedWindow,
         deadline,
         residentPhone: text(input.phone),

@@ -1,4 +1,10 @@
 import { getOrderById, updateOrderStatus } from "../../db";
+import {
+  assertResidentOwnedRecord,
+  assertTenantOwnedRecord,
+  positiveIntegerOrNull,
+  resolveResidentActionId,
+} from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
 
 type CancelResidentOrderInput = {
@@ -11,43 +17,36 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
   name: "cancelResidentOrderTool",
   description: "Cancel a resident-owned order directly without asking the vendor for permission.",
   async execute(input, ctx) {
-    if (ctx.agentType !== "resident_agent" || ctx.actorType !== "resident_chat") {
-      throw new Error("Resident cancellation requires the resident action authority");
-    }
-
-    const tenantId = ctx.tenantId.trim();
-    if (!tenantId) {
-      throw new Error("Resident cancellation requires tenant authority");
-    }
-
-    const residentUserId = Number(input.bldgUserId);
-    if (!Number.isSafeInteger(residentUserId) || residentUserId <= 0) {
+    if (positiveIntegerOrNull(input.bldgUserId) == null) {
       throw new Error("Resident cancellation requires the resident owner id");
     }
+
+    const residentUserId = resolveResidentActionId(ctx, input.bldgUserId, {
+      required: true,
+      principalError: "Resident cancellation requires the resident action authority",
+      tenantError: "Resident cancellation requires tenant authority",
+      requiredError: "Resident cancellation requires the resident owner id",
+      mismatchError:
+        "Resident actor identity does not match cancellation authority",
+    })!;
 
     const orderId = Number(input.orderId);
     if (!Number.isSafeInteger(orderId) || orderId <= 0) {
       throw new Error("orderId is required");
     }
 
-    const rawActorId = ctx.actorId?.trim() ?? "";
-    const actorMatch = rawActorId.match(/^(?:bldg_user:|resident:)?(\d+)$/i);
-    const actorResidentId = actorMatch ? Number(actorMatch[1]) : null;
-    if (actorResidentId != null && actorResidentId !== residentUserId) {
-      throw new Error("Resident actor identity does not match cancellation authority");
-    }
-
     const order = await getOrderById(orderId);
     if (!order) throw new Error("Order not found");
-    if (!order.tenantId || order.tenantId !== tenantId) {
-      throw new Error("Order does not belong to tenant");
-    }
-    if (
-      order.bldgUserId == null ||
-      Number(order.bldgUserId) !== residentUserId
-    ) {
-      throw new Error("Order does not belong to resident");
-    }
+    assertTenantOwnedRecord({
+      ctx,
+      recordTenantId: order.tenantId,
+      label: "Order",
+    });
+    assertResidentOwnedRecord({
+      residentId: residentUserId,
+      storedResidentId: order.bldgUserId,
+      label: "Order",
+    });
 
     if (order.status !== "cancelled") {
       await updateOrderStatus(orderId, "cancelled", {

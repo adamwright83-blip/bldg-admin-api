@@ -1,4 +1,10 @@
-import { createResidentCoordinatedRequest } from "../../db";
+import { createResidentCoordinatedRequest, getResidentAgentPlan } from "../../db";
+import {
+  assertResidentIdentityOrLineage,
+  assertResidentOwnedPlan,
+  resolveResidentActionId,
+  resolveResidentLineage,
+} from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
 
 type ServiceCategory =
@@ -35,10 +41,13 @@ function nullableString(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-function nullableNumber(value: unknown): number | null {
+function optionalPositiveId(value: unknown, label: string): number | null {
   if (value == null || value === "") return null;
   const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
+  if (!Number.isSafeInteger(numeric) || numeric <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return numeric;
 }
 
 function requireServiceCategory(value: unknown): ServiceCategory {
@@ -73,10 +82,37 @@ export const createResidentCoordinatedRequestTool: AgentTool<Record<string, any>
     }
 
     const status = defaultStatus(input);
-    const parentPlanId = nullableNumber(input.parentPlanId);
+    let residentId = resolveResidentActionId(ctx, input.bldgUserId);
+    const conversationId = resolveResidentLineage({
+      contextValue: ctx.conversationId,
+      suppliedValue: input.sourceConversationId,
+      label: "conversationId",
+    });
+    const sessionId = resolveResidentLineage({
+      contextValue: ctx.sessionId,
+      suppliedValue: input.sourceSessionId,
+      label: "sessionId",
+    });
+    assertResidentIdentityOrLineage({
+      residentId,
+      conversationId,
+      sessionId,
+    });
+
+    const parentPlanId = optionalPositiveId(input.parentPlanId, "parentPlanId");
+    if (parentPlanId != null) {
+      const parentPlan = await getResidentAgentPlan(ctx.tenantId, parentPlanId);
+      if (!parentPlan) throw new Error("Resident agent parent plan not found");
+      residentId = assertResidentOwnedPlan({
+        ctx: { ...ctx, conversationId, sessionId },
+        residentId,
+        plan: parentPlan,
+      });
+    }
+
     const requestId = await createResidentCoordinatedRequest({
       tenantId: ctx.tenantId,
-      bldgUserId: nullableNumber(input.bldgUserId),
+      bldgUserId: residentId,
       residentName: nullableString(input.residentName),
       residentPhone: nullableString(input.residentPhone),
       residentEmail: nullableString(input.residentEmail),
@@ -100,10 +136,10 @@ export const createResidentCoordinatedRequestTool: AgentTool<Record<string, any>
         : "Operator review required before provider confirmation.",
       requiresHumanApproval: true,
       customerCharged: false,
-      providerVendorId: nullableNumber(input.providerVendorId),
+      providerVendorId: optionalPositiveId(input.providerVendorId, "providerVendorId"),
       providerConfirmationStatus: null,
-      sourceConversationId: nullableString(input.sourceConversationId) ?? ctx.conversationId ?? null,
-      sourceSessionId: nullableString(input.sourceSessionId) ?? ctx.sessionId ?? null,
+      sourceConversationId: conversationId,
+      sourceSessionId: sessionId,
       parentPlanId,
       rawJson: {
         input,
