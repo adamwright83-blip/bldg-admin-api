@@ -178,10 +178,7 @@ describe("Daphne Stage 3B Claire branch integration", () => {
         ...safeOverrides(),
         loadOperatorAdaptationDecision: async () => decision,
         recordOperatorAdaptationUse: write,
-        commitment: async () => ({
-          kind: "not_applicable",
-          speak: "",
-        }),
+        commitment: async () => ({ kind: "not_applicable" as const }),
       }
     );
 
