@@ -83,6 +83,13 @@ jobs:
           pnpm vitest run
           server/commercialPipeline/commercialPaymentAuthorityReport.test.ts
 
+      - name: Prove churn and recovery planning-input truth
+        run: >-
+          pnpm vitest run
+          server/churnRadar/authoritativeHistory.test.ts
+          server/churnRadar/customerChurnContract.test.ts
+          shared/customerChurn.test.ts
+
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-
           pnpm vitest run

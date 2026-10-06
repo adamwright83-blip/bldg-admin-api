@@ -69,6 +69,23 @@ describe("customer churn scoring", () => {
     ).toThrow(/two completed orders/);
   });
 
+
+  it("infers cadence without inventing monetary value", () => {
+    const score = scoreCustomerChurn({
+      customerKey: "customer-1",
+      customerName: "Marisol Vega",
+      history: history([
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-15T00:00:00.000Z",
+        "2026-01-29T00:00:00.000Z",
+      ]).map(item => ({ ...item, valueCents: null })),
+      now: new Date("2026-03-20T00:00:00.000Z"),
+    });
+    expect(score.expectedCadenceDays).toBe(14);
+    expect(score.averageOrderValueCents).toBe(0);
+    expect(score.estimatedMonthlyImpactCents).toBe(0);
+  });
+
   it("drafts a grounded message without inventing a discount", () => {
     const score = scoreCustomerChurn({
       customerKey: "customer-1",

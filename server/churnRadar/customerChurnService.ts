@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ArsenalToolId } from "../../shared/rekindlingArsenal";
 import { arsenalOutreachEventFields } from "../../shared/rekindlingEvents";
-import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   customerChurnScans,
   customerChurnSnapshots,
@@ -12,6 +12,8 @@ import {
   customerRecoveryInterventions,
   opsTaskEvents,
   opsTasks,
+  operationsEvents,
+  orderPaymentProjections,
   orders,
   tenantCustomerRecoveryProfiles,
 } from "../../drizzle/schema";
@@ -21,14 +23,16 @@ import {
   scoreCustomerChurn,
   type ChurnEvidence,
   type CustomerChurnScore,
-  type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
-import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 import {
   loadBusinessSourceCoverage,
   type BusinessSourceCoverageSnapshot,
 } from "../analytics/sourceCoverage";
+import {
+  loadPaidOrderLedger,
+  type PaidOrderEvent,
+} from "../analytics/paidOrderLedger";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
@@ -37,6 +41,13 @@ import {
   groupCustomerRecords,
   customerIdentityHashes,
 } from "../customerAssets/customerIdentity";
+import {
+  buildAuthoritativeChurnHistory,
+  buildAuthoritativeNativePayments,
+  isActiveChurnOrder,
+  type AuthoritativeChurnObservation,
+  type AuthoritativeNativePayment,
+} from "./authoritativeHistory";
 
 type OrderRow = typeof orders.$inferSelect;
 type Transaction = Parameters<
@@ -53,11 +64,6 @@ function affectedRows(result: unknown): number {
   return Number(
     (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
   );
-}
-
-function cents(value: string | null): number {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
 }
 
 function recoveredRevenueBand(centsValue: number): string {
@@ -86,70 +92,114 @@ function displayName(row: OrderRow): string {
   return `${row.firstName} ${row.lastName}`.trim() || "Customer";
 }
 
-function completedServiceAt(row: OrderRow): Date {
-  return row.paidAt ?? row.updatedAt ?? row.createdAt;
-}
-
-function isCompletedHistory(row: OrderRow): boolean {
-  return row.paid || row.status === "delivered";
-}
-
-function isActiveOrder(row: OrderRow): boolean {
-  return !row.paid && !["delivered", "cancelled"].includes(row.status);
-}
-
 function serviceLabel(value: OrderRow["serviceType"]): string {
   return value === "wash_fold" ? "wash & fold" : "dry cleaning";
 }
 
+async function loadAdmittedNativePaymentEvents(input: {
+  tenantId: string;
+  orders: readonly OrderRow[];
+}): Promise<PaidOrderEvent[]> {
+  const paidTimes = input.orders
+    .map(order => order.paidAt)
+    .filter((value): value is Date => value instanceof Date);
+  if (paidTimes.length === 0) return [];
+
+  const first = Math.min(...paidTimes.map(value => value.getTime()));
+  const last = Math.max(...paidTimes.map(value => value.getTime()));
+  try {
+    const ledger = await loadPaidOrderLedger({
+      tenantId: input.tenantId,
+      startUtc: new Date(first - 1_000),
+      endExclusiveUtc: new Date(last + 1_000),
+      // The join below uses eventKey/order id, not business-date bucketing.
+      timeZone: "UTC",
+    });
+    return ledger.events.filter(event => event.source === "laundry_butler");
+  } catch (error) {
+    console.warn(
+      "[ChurnRadar] admitted native payment history unavailable",
+      error instanceof Error ? error.message : error
+    );
+    return [];
+  }
+}
+
 function evidenceForScore(
   score: CustomerChurnScore,
-  history: CustomerHistoryObservation[]
+  history: AuthoritativeChurnObservation[]
 ): ChurnEvidence[] {
   const ids = history.map(item => item.orderId);
   const withWeight = history.filter(item => item.weightLbs !== null);
+  const withAdmittedValue = history.filter(item => item.valueCents !== null);
+  const liveCount = history.filter(
+    item => item.serviceEvidenceKind === "dropoff_event"
+  ).length;
+  const importedCount = history.length - liveCount;
+  const serviceSource =
+    liveCount > 0 && importedCount > 0
+      ? "operations_events.dropoff_completed + goldline_customer_order_history cadence import"
+      : liveCount > 0
+        ? "operations_events.dropoff_completed"
+        : "goldline_customer_order_history cadence import";
+  const lastEvidence = history.at(-1)!;
+  const lastServiceSource =
+    lastEvidence.serviceEvidenceKind === "dropoff_event"
+      ? "operations_events.actualEventTimestamp"
+      : "goldline_customer_order_history source date";
   return [
     {
       kind: "sourced_fact",
       label: "Completed order history",
-      value: `${history.length} completed orders`,
-      source: "orders",
+      value: `${history.length} completed services`,
+      source: serviceSource,
       sourceIds: ids,
     },
     {
       kind: "sourced_fact",
       label: "Last completed service",
       value: new Date(score.lastServiceAt).toISOString(),
-      source: "orders.paidAt or orders.updatedAt",
-      sourceIds: [history.at(-1)!.orderId],
+      source: lastServiceSource,
+      sourceIds: [lastEvidence.orderId],
     },
     {
       kind: "calculation",
       label: "Expected cadence",
-      value: `${score.expectedCadenceDays} days (median completed-order interval)`,
-      source: "orders",
+      value: `${score.expectedCadenceDays} days (median completed-service interval)`,
+      source: serviceSource,
       sourceIds: ids,
     },
-    {
-      kind: "estimate",
-      label: "Monthly revenue impact",
-      value: `${score.estimatedMonthlyImpactCents} cents (average order value × inferred monthly cadence)`,
-      source: "orders.total and calculated cadence",
-      sourceIds: ids,
-    },
+    withAdmittedValue.length > 0
+      ? {
+          kind: "estimate",
+          label: "Monthly revenue impact",
+          value: `${score.estimatedMonthlyImpactCents} cents (average admitted paid value × inferred monthly cadence; ${withAdmittedValue.length}/${history.length} services have monetary authority)`,
+          source:
+            "authority_receipts + order_payment_projections.netPaidCents",
+          sourceIds: withAdmittedValue.map(item => item.orderId),
+        }
+      : {
+          kind: "unavailable",
+          label: "Monthly revenue impact",
+          value:
+            "Completed service history exists, but no admitted paid value is available for these services",
+          source:
+            "authority_receipts + order_payment_projections.netPaidCents",
+          sourceIds: [],
+        },
     withWeight.length >= 4
       ? {
           kind: "calculation",
           label: "Recent poundage change",
           value: `${score.recentVolumeChangePct ?? 0}%`,
-          source: "orders.weightLbs",
+          source: "operations_events.weightLbs",
           sourceIds: withWeight.map(item => item.orderId),
         }
       : {
           kind: "unavailable",
           label: "Recent poundage change",
-          value: "Fewer than four completed orders have weight data",
-          source: "orders.weightLbs",
+          value: "Fewer than four completed services have weight data",
+          source: "operations_events.weightLbs",
           sourceIds: withWeight.map(item => item.orderId),
         },
     {
@@ -413,6 +463,47 @@ export async function runCustomerChurnScan(input: {
       .from(orders)
       .where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`)
       .orderBy(orders.createdAt, orders.id);
+    const [dropoffEvents, paidEvents, paymentProjections] = await Promise.all([
+      db
+        .select({
+          id: operationsEvents.id,
+          orderId: operationsEvents.orderId,
+          sourceEventType: operationsEvents.sourceEventType,
+          eventStatus: operationsEvents.eventStatus,
+          actualEventTimestamp: operationsEvents.actualEventTimestamp,
+          updatedAt: operationsEvents.updatedAt,
+          weightLbs: operationsEvents.weightLbs,
+        })
+        .from(operationsEvents)
+        .where(
+          and(
+            eq(operationsEvents.tenantId, input.tenantId),
+            eq(operationsEvents.sourceEventType, "dropoff_completed")
+          )
+        )
+        .orderBy(operationsEvents.actualEventTimestamp, operationsEvents.id),
+      loadAdmittedNativePaymentEvents({
+        tenantId: input.tenantId,
+        orders: sourceRows,
+      }),
+      db
+        .select({
+          orderId: orderPaymentProjections.orderId,
+          state: orderPaymentProjections.state,
+          netPaidCents: orderPaymentProjections.netPaidCents,
+        })
+        .from(orderPaymentProjections)
+        .where(eq(orderPaymentProjections.tenantId, input.tenantId)),
+    ]);
+    const authoritativeHistory = buildAuthoritativeChurnHistory({
+      orders: sourceRows,
+      dropoffEvents,
+      paidEvents,
+      paymentProjections,
+    });
+    const historyByOrderId = new Map(
+      authoritativeHistory.map(observation => [observation.orderId, observation])
+    );
     const grouped = new Map(
       groupCustomerRecords(input.tenantId, sourceRows, row => row).map(
         group => [group.key, group.records]
@@ -422,25 +513,31 @@ export async function runCustomerChurnScan(input: {
     const snapshots: Array<typeof customerChurnSnapshots.$inferInsert> = [];
     for (const [keyHash, group] of Array.from(grouped.entries())) {
       const completed = group
-        .filter(isCompletedHistory)
+        .flatMap(row => {
+          const observation = historyByOrderId.get(row.id);
+          return observation ? [{ row, observation }] : [];
+        })
         .sort(
-          (a: OrderRow, b: OrderRow) =>
-            completedServiceAt(a).getTime() - completedServiceAt(b).getTime()
+          (a, b) => {
+            const leftAt =
+              a.observation.serviceAt instanceof Date
+                ? a.observation.serviceAt.getTime()
+                : new Date(a.observation.serviceAt).getTime();
+            const rightAt =
+              b.observation.serviceAt instanceof Date
+                ? b.observation.serviceAt.getTime()
+                : new Date(b.observation.serviceAt).getTime();
+            return leftAt - rightAt || a.row.id - b.row.id;
+          }
         );
       if (completed.length < 2) continue;
-      const latest = completed.at(-1)!;
-      const history: CustomerHistoryObservation[] = completed.map(row => ({
-        orderId: row.id,
-        serviceAt: completedServiceAt(row),
-        valueCents: cents(row.total),
-        weightLbs: row.weightLbs === null ? null : Number(row.weightLbs),
-        serviceType: row.serviceType,
-      }));
+      const latest = completed.at(-1)!.row;
+      const history = completed.map(item => item.observation);
       const score = scoreCustomerChurn({
         customerKey: keyHash,
         customerName: displayName(latest),
         history,
-        activeOrderCount: group.filter(isActiveOrder).length,
+        activeOrderCount: group.filter(isActiveChurnOrder).length,
         now: input.now,
       });
       snapshots.push({
@@ -1670,10 +1767,11 @@ async function markRecoveredWith(
     tenantId: string;
     intervention: typeof customerRecoveryInterventions.$inferSelect;
     order: OrderRow;
+    payment: AuthoritativeNativePayment;
   }
 ) {
-  const recoveredRevenueCents = cents(input.order.total);
-  const recoveredAt = input.order.paidAt ?? input.order.createdAt;
+  const recoveredRevenueCents = input.payment.netPaidCents;
+  const recoveredAt = input.payment.occurredAt;
   const result = await tx
     .update(customerRecoveryInterventions)
     .set({
@@ -1715,7 +1813,9 @@ async function markRecoveredWith(
     metadataJson: {
       orderId: input.order.id,
       recoveredRevenueCents,
-      paidAt: input.order.paidAt?.toISOString() ?? null,
+      paidAt: input.payment.occurredAt.toISOString(),
+      paymentAuthorityReceiptId: input.payment.authorityReceiptId,
+      paymentState: input.payment.state,
     },
   });
   const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
@@ -1784,42 +1884,100 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
       ...contacted.map(item => item.contactedAt?.getTime() ?? Date.now())
     )
   );
-  const paidOrders = (
-    await db
-      .select()
-      .from(orders)
-      .where(
-        and(
-          sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-          eq(orders.paid, true),
-          gt(orders.createdAt, earliest)
-        )
-      )
-      .orderBy(orders.createdAt, orders.id)
-  ).filter(hasNativePaymentAuthority);
+  const tenantOrders = await db
+    .select()
+    .from(orders)
+    .where(sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`)
+    .orderBy(orders.createdAt, orders.id);
+  const [paidEvents, paymentProjections] = await Promise.all([
+    loadAdmittedNativePaymentEvents({
+      tenantId,
+      orders: tenantOrders,
+    }),
+    db
+      .select({
+        orderId: orderPaymentProjections.orderId,
+        state: orderPaymentProjections.state,
+        netPaidCents: orderPaymentProjections.netPaidCents,
+      })
+      .from(orderPaymentProjections)
+      .where(eq(orderPaymentProjections.tenantId, tenantId)),
+  ]);
+  const admittedPayments = buildAuthoritativeNativePayments({
+    orders: tenantOrders,
+    paidEvents,
+    paymentProjections,
+  }).filter(
+    payment =>
+      payment.netPaidCents > 0 &&
+      (payment.state === "paid" || payment.state === "partially_refunded") &&
+      payment.occurredAt.getTime() > earliest.getTime()
+  );
+  const orderById = new Map(tenantOrders.map(order => [order.id, order]));
+  const paidOrders = admittedPayments
+    .flatMap(payment => {
+      const order = orderById.get(payment.orderId) ?? null;
+      return order && order.status !== "cancelled"
+        ? [{ order, payment }]
+        : [];
+    })
+    .sort(
+      (left, right) =>
+        left.payment.occurredAt.getTime() - right.payment.occurredAt.getTime() ||
+        left.order.id - right.order.id
+    );
   let recovered = 0;
   for (const intervention of contacted) {
     const match = paidOrders.find(
-      order =>
-        customerIdentityHashes(tenantId, order).includes(
+      item =>
+        customerIdentityHashes(tenantId, item.order).includes(
           intervention.customerKeyHash
         ) &&
-        order.createdAt.getTime() > (intervention.contactedAt?.getTime() ?? 0)
+        item.payment.occurredAt.getTime() >
+          (intervention.contactedAt?.getTime() ?? 0)
     );
     if (!match) continue;
     try {
       const transitioned = await db.transaction(tx =>
-        markRecoveredWith(tx, { tenantId, intervention, order: match })
+        markRecoveredWith(tx, {
+          tenantId,
+          intervention,
+          order: match.order,
+          payment: match.payment,
+        })
       );
       if (transitioned) {
         recovered += 1;
         await appendGoldlineWorldEvent({
           tenantId,
-          physicalEntityId: await findPhysicalEntityIdByAddress({ tenantId, address: match.address }),
-          eventType: "customer_recovered", classification: "outcome", actorType: "customer", actorId: null,
-          occurredAt: (match.paidAt ?? match.createdAt).toISOString(), observedAt: null, sourceType: "orders", sourceId: String(match.id), sourceEvidenceReference: `orders:${match.id}`,
-          provenanceClass: "existing_business_record", verificationClass: "VERIFIED", confidence: "high", idempotencyKey: `customer-recovered:${tenantId}:${intervention.id}:${match.id}`, correlationId: `recovery-intervention:${intervention.id}`,
-          metadata: { interventionId: intervention.id, orderId: match.id, recoveredRevenueCents: cents(match.total), authoritativePaidOrder: true },
+          physicalEntityId: await findPhysicalEntityIdByAddress({
+            tenantId,
+            address: match.order.address,
+          }),
+          eventType: "customer_recovered",
+          classification: "outcome",
+          actorType: "customer",
+          actorId: null,
+          occurredAt: match.payment.occurredAt.toISOString(),
+          observedAt: null,
+          sourceType: "orders",
+          sourceId: String(match.order.id),
+          sourceEvidenceReference: match.payment.authorityReceiptId
+            ? `authority_receipts:${match.payment.authorityReceiptId}`
+            : `orders:${match.order.id}`,
+          provenanceClass: "existing_business_record",
+          verificationClass: "VERIFIED",
+          confidence: "high",
+          idempotencyKey: `customer-recovered:${tenantId}:${intervention.id}:${match.order.id}`,
+          correlationId: `recovery-intervention:${intervention.id}`,
+          metadata: {
+            interventionId: intervention.id,
+            orderId: match.order.id,
+            recoveredRevenueCents: match.payment.netPaidCents,
+            paymentAuthorityReceiptId: match.payment.authorityReceiptId,
+            paymentState: match.payment.state,
+            authoritativePaidOrder: true,
+          },
         });
       }
     } catch (error) {
