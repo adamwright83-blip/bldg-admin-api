@@ -1306,7 +1306,7 @@ export async function startClairePreDriveCall(input: {
   openingOverride?: string;
   sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
   weeklyPlanningWeekStart?: string | null;
-}): Promise<{ callSid: string; brief: string }> {
+}): Promise<{ callSid: string; brief: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
     tenantId: input.tenantId,
@@ -1345,7 +1345,7 @@ export async function startClairePreDriveCall(input: {
       ...amdFields,
       ...claireVoiceCallCreateOptions(),
     });
-    await recordAuthorizedCallAttempted({
+    const attempted = await recordAuthorizedCallAttempted({
       tenantId: input.tenantId,
       operatorUserId: input.actorId,
       callSid: call.sid,
@@ -1365,7 +1365,11 @@ export async function startClairePreDriveCall(input: {
         turnKey: 0,
       });
     });
-    return { callSid: call.sid, brief };
+    return {
+      callSid: call.sid,
+      brief,
+      communicationReceiptId: attempted.communicationReceiptId,
+    };
   } catch (error) {
     await abandonAuthorizedAmdHandoff(token);
     await dropCall(conversationId);
@@ -1439,7 +1443,7 @@ export async function startClairePostStopCall(input: {
   missionId: number;
   missionAccess: ClaireMissionAccess;
   timeZone?: string;
-}): Promise<{ callSid: string }> {
+}): Promise<{ callSid: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const current = await getCommercialMissionFieldState({
     tenantId: input.tenantId,
@@ -1519,6 +1523,7 @@ export async function startClairePostStopCall(input: {
     decisionUrl: `${publicBaseUrl()}${CLAIRE_AMD_PATH}?token=${encodeURIComponent(token)}`,
   });
   let call: { sid: string };
+  let attempted: { communicationReceiptId: string };
   try {
     call = await client!.calls.create({
       to,
@@ -1526,17 +1531,17 @@ export async function startClairePostStopCall(input: {
       ...amdFields,
       ...claireVoiceCallCreateOptions(),
     });
+    attempted = await recordAuthorizedCallAttempted({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      callSid: call.sid,
+      from,
+      to,
+    });
   } catch (error) {
     await abandonAuthorizedAmdHandoff(token);
     throw error;
   }
-  await recordAuthorizedCallAttempted({
-    tenantId: input.tenantId,
-    operatorUserId: input.actorId,
-    callSid: call.sid,
-    from,
-    to,
-  });
   await safeClaireLedger(async () => {
     await attachCallSid({
       claireConversationId: conversationId,
@@ -1550,7 +1555,10 @@ export async function startClairePostStopCall(input: {
       turnKey: 0,
     });
   });
-  return { callSid: call.sid };
+  return {
+    callSid: call.sid,
+    communicationReceiptId: attempted.communicationReceiptId,
+  };
 }
 
 export async function loadClaireVoiceConversation(
