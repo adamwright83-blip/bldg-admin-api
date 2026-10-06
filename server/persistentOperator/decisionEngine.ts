@@ -14,7 +14,7 @@ import {
   targetWeekHorizon,
   type RemainingWeekHorizon,
 } from "../../shared/weeklyMissionReadiness";
-import { classifyObjectiveExecution } from "../../shared/objectiveExecution";
+import { classifyObjectiveExecution, type ObjectiveExecutionType } from "../../shared/objectiveExecution";
 import { businessToday } from "../analytics/businessPeriods";
 import { getDb } from "../db";
 import { selectExecutionIntelligence } from "../executionIntelligence/selectExecutionIntelligence";
@@ -57,6 +57,17 @@ export function inactiveGoalRunWaitReason(
 ): "GOAL_RUN_COMPLETED" | "GOAL_RUN_INACTIVE" | null {
   if (status === "active") return null;
   return status === "completed" ? "GOAL_RUN_COMPLETED" : "GOAL_RUN_INACTIVE";
+}
+
+export function materializedExecutionType(input: {
+  authoritative: "mission" | "challenge" | null;
+  obligation: ObjectiveExecutionType | null;
+  derived: ObjectiveExecutionType | null;
+}): ObjectiveExecutionType | null {
+  // Current Mission Director workPlan owns the execution classification.
+  // Obligation/derived values are compatibility fallbacks only when no
+  // authoritative workPlan classification exists.
+  return input.authoritative ?? input.obligation ?? input.derived ?? null;
 }
 
 function campaignIdFromPlan(
@@ -555,11 +566,11 @@ export async function decideGoalCycle(input: {
     choice.selectedCandidate?.id === plan.outcome.workPlan.primary.workId
       ? plan.outcome.workPlan.primary.executionType
       : null;
-  const selectedExecutionType =
-    choice.selectedObligation?.executionType ??
-    authoritativeExecutionType ??
-    execution?.executionType ??
-    null;
+  const selectedExecutionType = materializedExecutionType({
+    authoritative: authoritativeExecutionType,
+    obligation: choice.selectedObligation?.executionType ?? null,
+    derived: execution?.executionType ?? null,
+  });
 
   const loadout =
     choice.selectionKind === "candidate" && choice.selectedCandidate
