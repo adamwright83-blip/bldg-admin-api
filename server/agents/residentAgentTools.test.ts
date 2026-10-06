@@ -120,6 +120,9 @@ describe("resident-safe agent tools", () => {
     dbMocks.getResidentAgentPlan.mockResolvedValue({
       id: 901,
       tenantId: "default",
+      bldgUserId: 42,
+      conversationId: "conv_123",
+      sessionId: "sess_123",
       planStatus: "pending_confirmation",
       planJson: null,
     });
