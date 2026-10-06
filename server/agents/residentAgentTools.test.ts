@@ -252,6 +252,7 @@ describe("resident-safe agent tools", () => {
     const result = await cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx);
 
     expect(dbMocks.updateOrderStatus).toHaveBeenCalledWith(172, "cancelled", expect.objectContaining({
+      actorUserId: "bldg_user:42",
       actorDisplayName: "resident_chat",
     }));
     expect(result.output).toMatchObject({ orderCancelled: true, orderId: 172, status: "cancelled" });
@@ -278,12 +279,6 @@ describe("resident-safe agent tools", () => {
       cancelResidentOrderTool.execute({ orderId: 173, bldgUserId: 42 }, residentCtx)
     ).rejects.toThrow("Order does not belong to resident");
 
-    dbMocks.getOrderById.mockResolvedValue({
-      id: 174,
-      tenantId: "default",
-      bldgUserId: 42,
-      status: "new",
-    });
     await expect(
       cancelResidentOrderTool.execute(
         { orderId: 174, bldgUserId: 42 },
@@ -294,9 +289,16 @@ describe("resident-safe agent tools", () => {
     await expect(
       cancelResidentOrderTool.execute(
         { orderId: 174 },
-        { ...residentCtx, actorId: "resident-session-without-id" }
+        { ...residentCtx, actorId: "bldg_user:42" }
       )
-    ).rejects.toThrow("requires resident identity authority");
+    ).rejects.toThrow("requires the resident owner id");
+
+    await expect(
+      cancelResidentOrderTool.execute(
+        { orderId: 174, bldgUserId: 42 },
+        { ...residentCtx, actorType: "human" }
+      )
+    ).rejects.toThrow("requires the resident action authority");
 
     expect(dbMocks.updateOrderStatus).not.toHaveBeenCalled();
   });
