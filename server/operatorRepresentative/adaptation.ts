@@ -123,6 +123,7 @@ export async function loadOperatorAdaptationDecisionForUser(input: {
 
 export type DaphneAdaptationLifecycleEntry = {
   directiveId: string;
+  targetItemId: string;
   targetKey: string | null;
   directiveKind: OperatorRepresentativeDirectiveRecord["directiveKind"];
   directiveStatus: OperatorRepresentativeDirectiveRecord["status"];
@@ -169,6 +170,7 @@ export function buildDaphneAdaptationLifecycle(input: {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     return {
       directiveId: directive.id,
+      targetItemId: directive.targetItemId,
       targetKey: directive.targetKey,
       directiveKind: directive.directiveKind,
       directiveStatus: directive.status,
