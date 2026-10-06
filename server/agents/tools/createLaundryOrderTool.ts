@@ -1,10 +1,20 @@
 import { createOrReuseResidentLaundryOrder } from "../../db";
+import {
+  assertResidentIdentityOrLineage,
+  resolveResidentActionId,
+} from "../residentActionIdentity";
 import type { AgentTool } from "../toolRegistry";
 
 export const createLaundryOrderTool: AgentTool<Record<string, any>, { orderId: number; reused: boolean }> = {
   name: "createLaundryOrderTool",
   description: "Create a standard laundry order through the existing order creation helper.",
   async execute(input, ctx) {
+    const residentId = resolveResidentActionId(ctx, input.bldgUserId);
+    assertResidentIdentityOrLineage({
+      residentId,
+      conversationId: ctx.conversationId,
+      sessionId: ctx.sessionId,
+    });
     const pickupDate = String(input.pickupDate);
     // Route through the canonical idempotent helper (no direct createOrder).
     // The resident threads a clientRequestId per booking action; the helper
@@ -38,7 +48,7 @@ export const createLaundryOrderTool: AgentTool<Record<string, any>, { orderId: n
         email: input.email ?? null,
         stripeCustomerId: input.stripeCustomerId ?? null,
         stripePaymentMethodId: input.stripePaymentMethodId ?? null,
-        bldgUserId: input.bldgUserId ?? null,
+        bldgUserId: residentId,
         buildingSlug: input.buildingSlug ?? null,
         status: "new",
       },
