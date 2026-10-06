@@ -63,7 +63,9 @@ function matchingOpenTasks(
 ): RankingOpenTask[] {
   const ids = candidateSourceIds(candidate);
   return context.openTasks.filter(task => {
-    if (task.id && ids.has(task.id)) return true;
+    // Concrete task IDs are authoritative lineage. Only legacy/test contexts
+    // that truly lack an ID may fall back to the old campaign task-type seam.
+    if (task.id) return ids.has(task.id);
     return Boolean(campaign && task.taskType === campaign.opsTaskType);
   });
 }
