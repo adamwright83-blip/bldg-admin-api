@@ -7,6 +7,7 @@
  * never prep-completion evidence.
  */
 import { and, eq } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
 import { opsTaskEvents, opsTasks } from "../../drizzle/schema";
 import { getDb } from "../db";
 import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
@@ -32,7 +33,8 @@ export type PrepCompletionEvaluation = {
 
 export function evaluatePrepCompletionEvidence(
   row: PrepCompletionEvidence,
-  deadline: string
+  deadline: string,
+  timeZone: string
 ): PrepCompletionEvaluation {
   if (!row.completedAt) {
     return { ready: false, reason: "ops_tasks.completedAt missing" };
@@ -60,7 +62,7 @@ export function evaluatePrepCompletionEvidence(
       reason: "ops task completion actor does not match completion event actor",
     };
   }
-  if (row.completedAt.toISOString().slice(0, 10) > deadline) {
+  if (formatInTimeZone(row.completedAt, timeZone, "yyyy-MM-dd") > deadline) {
     return {
       ready: false,
       reason: "ops_tasks.completedAt is after the prep lead-time deadline",
@@ -73,6 +75,7 @@ export async function computePrepReadiness(input: {
   tenantId: string;
   businessDate: string;
   campaigns: readonly GrowthCampaign[];
+  timeZone: string;
 }): Promise<Record<string, boolean>> {
   const db = await getDb();
   const readiness: Record<string, boolean> = {};
@@ -110,7 +113,7 @@ export async function computePrepReadiness(input: {
         )
       );
     readiness[campaign.campaignId] = rows.some(
-      row => evaluatePrepCompletionEvidence(row, deadline).ready
+      row => evaluatePrepCompletionEvidence(row, deadline, input.timeZone).ready
     );
   }
   return readiness;
