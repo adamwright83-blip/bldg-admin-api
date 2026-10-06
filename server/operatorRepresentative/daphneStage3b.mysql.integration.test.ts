@@ -123,27 +123,6 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     return rows;
   }
 
-  async function latestClosedDecisionOutputs(conversationId: string) {
-    const [rows] = await db.execute<mysql.RowDataPacket[]>(
-      `SELECT decision_type, effective_output, branch_executed
-       FROM claire_decision_records
-       WHERE tenant_id = ?
-         AND turn_id LIKE ?
-       ORDER BY created_at DESC
-       LIMIT 3`,
-      [tenantA, `%${conversationId}%`]
-    );
-    return new Map(
-      rows.map(row => [
-        String(row.decision_type),
-        {
-          effectiveOutput: String(row.effective_output),
-          branchExecuted: Boolean(row.branch_executed),
-        },
-      ])
-    );
-  }
-
   beforeAll(async () => {
     db = await mysql.createConnection(DATABASE_URL!);
     [operatorAId, operatorA2Id] = await createTenant(tenantA, [
@@ -184,21 +163,11 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       utterance: "add a task to call Dana",
       conversationId: baselineConversation,
     });
-    await caller.claire.talk({
+    const baselineTurn = await caller.claire.talk({
       utterance: "maybe",
       conversationId: baselineConversation,
     });
-    const baselineDecisions = await latestClosedDecisionOutputs(
-      baselineConversation
-    );
-    expect(baselineDecisions.get("turn_readiness")).toEqual({
-      effectiveOutput: "ambiguous",
-      branchExecuted: true,
-    });
-    expect(baselineDecisions.get("pending_action_relationship")).toEqual({
-      effectiveOutput: "continues_pending",
-      branchExecuted: true,
-    });
+    expect(baselineTurn.operatorAdaptation).toBeNull();
     expect(await receiptRows()).toHaveLength(0);
 
     // Production Operator Representative read + authenticated directive write.
@@ -231,10 +200,11 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       utterance: "add a task to call Dana",
       conversationId: flagOffConversation,
     });
-    await caller.claire.talk({
+    const flagOffTurn = await caller.claire.talk({
       utterance: "maybe",
       conversationId: flagOffConversation,
     });
+    expect(flagOffTurn.operatorAdaptation).toBeNull();
     expect(await receiptRows()).toHaveLength(0);
 
     process.env.CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED = "*";
@@ -252,19 +222,18 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       utterance: "add a task to call Dana",
       conversationId: adaptedConversation,
     });
-    await caller.claire.talk({
+    const adaptedTurn = await caller.claire.talk({
       utterance: "maybe",
       conversationId: adaptedConversation,
     });
-    const adaptedDecisions = await latestClosedDecisionOutputs(
-      adaptedConversation
-    );
-    expect(adaptedDecisions.get("turn_readiness")?.effectiveOutput).toBe(
-      "ambiguous"
-    );
-    expect(
-      adaptedDecisions.get("pending_action_relationship")?.effectiveOutput
-    ).toBe("continues_pending");
+    expect(adaptedTurn.operatorAdaptation).toEqual({
+      directiveId: savedDirective.id,
+      targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+      behaviorClass: DAPHNE_STAGE3B_BEHAVIOR_CLASS,
+      structuralOutcome: "clarification_branch_selected",
+      branch: "clarify",
+      businessTruthMutation: false,
+    });
 
     const rows = await receiptRows();
     expect(rows).toHaveLength(1);
@@ -350,10 +319,11 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       utterance: "add a task to call Dana",
       conversationId: afterRevokeConversation,
     });
-    await caller.claire.talk({
+    const afterRevokeTurn = await caller.claire.talk({
       utterance: "maybe",
       conversationId: afterRevokeConversation,
     });
+    expect(afterRevokeTurn.operatorAdaptation).toBeNull();
     expect(await receiptRows()).toHaveLength(1);
   }, 120_000);
 
