@@ -17,7 +17,11 @@ import {
 import { buildOperatorRepresentativeSnapshot } from "./readModel";
 import { answerOperatorRepresentativeQuestion } from "./talk";
 import type { OperatorRepresentativeItemDetail } from "./types";
-import { buildOperatorRepresentativeAdaptationPolicy } from "./adaptation";
+import {
+  buildDaphneAdaptationLifecycle,
+  buildOperatorRepresentativeAdaptationPolicy,
+} from "./adaptation";
+import { listDaphneAdaptationReceipts } from "./adaptationReceipts";
 
 function identityFailure(error: unknown): never {
   if (error instanceof CanonicalOperatorIdentityError) {
@@ -155,14 +159,34 @@ export const operatorRepresentativeRouter = router({
           tenantId: ctx.tenantId,
           subsystem: "operator_representative.adaptation_status",
         });
-        const directives = await listActiveOperatorRepresentativeDirectives({
+        const [activeDirectives, directiveSnapshot, receipts] = await Promise.all([
+          listActiveOperatorRepresentativeDirectives({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+          }),
+          loadOperatorRepresentativeDirectiveSnapshot({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            recentHistoryLimit: 100,
+          }),
+          listDaphneAdaptationReceipts({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            limit: 250,
+          }),
+        ]);
+        const policy = buildOperatorRepresentativeAdaptationPolicy({
           tenantId: identity.tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
+          directives: activeDirectives,
         });
-        return buildOperatorRepresentativeAdaptationPolicy({
-          tenantId: identity.tenantId,
-          directives,
-        });
+        return {
+          ...policy,
+          lifecycle: buildDaphneAdaptationLifecycle({
+            enabled: policy.enabled,
+            directives: directiveSnapshot.directives,
+            receipts,
+          }),
+        };
       } catch (error) {
         identityFailure(error);
       }
@@ -246,12 +270,26 @@ export const operatorRepresentativeRouter = router({
           tenantId: ctx.tenantId,
           subsystem: "operator_representative.ask",
         });
-        const { snapshot } = await loadSnapshot({ identity });
+        const { snapshot, directives, activeDirectives } = await loadSnapshot({ identity });
+        const receipts = await listDaphneAdaptationReceipts({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          limit: 250,
+        });
+        const policy = buildOperatorRepresentativeAdaptationPolicy({
+          tenantId: identity.tenantId,
+          directives: activeDirectives,
+        });
         const answer = answerOperatorRepresentativeQuestion({
           question: input.question,
           snapshot,
           focusedItemId: input.focusedItemId,
           correctionValue: input.correctionValue,
+          adaptationLifecycle: buildDaphneAdaptationLifecycle({
+            enabled: policy.enabled,
+            directives,
+            receipts,
+          }),
         });
 
         if (!answer.directiveRequest) return answer;

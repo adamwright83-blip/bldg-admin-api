@@ -167,6 +167,10 @@ function DetailDrawer({
     { itemId },
     { retry: false }
   );
+  const adaptationStatus =
+    trpc.system.operatorRepresentative.adaptationStatus.useQuery(undefined, {
+      retry: false,
+    });
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correction, setCorrection] = useState("");
 
@@ -191,6 +195,22 @@ function DetailDrawer({
 
   const data = detail.data;
   const item = data?.item;
+  const adaptation = adaptationStatus.data?.lifecycle.find(
+    lifecycle => lifecycle.targetItemId === itemId
+  );
+  const adaptationCopy = adaptation
+    ? adaptation.lifecycle === "unwired"
+      ? "Not wired to Claire."
+      : adaptation.lifecycle === "disabled"
+        ? "Wired, but live adaptation is off."
+        : adaptation.lifecycle === "wired_unused"
+          ? "Wired to Claire. No receipt proves use yet."
+          : adaptation.lifecycle === "used"
+            ? `Claire has used this ${adaptation.useCount} time${adaptation.useCount === 1 ? "" : "s"}.`
+            : adaptation.lifecycle === "revoked_historical"
+              ? "Revoked for future turns. Past use remains in history."
+              : "Revoked before Claire used it."
+    : null;
 
   return (
     <div className="or-drawer-layer" role="presentation" onMouseDown={event => {
@@ -234,6 +254,22 @@ function DetailDrawer({
                 {item.confidence ? <span>{item.confidence}</span> : null}
               </div>
             </section>
+
+            {adaptation ? (
+              <section>
+                <h3>ADAPTATION USE</h3>
+                <p>{adaptationCopy}</p>
+                <div className="or-badges">
+                  <span>{adaptation.lifecycle.replaceAll("_", " ")}</span>
+                  {adaptation.behaviorClass ? (
+                    <span>asks before assuming pending work</span>
+                  ) : null}
+                  {adaptation.lastUsedAt ? (
+                    <span>last used {formatDate(adaptation.lastUsedAt)}</span>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
 
             <section>
               <h3>EVIDENCE</h3>

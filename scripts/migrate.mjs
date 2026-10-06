@@ -4627,6 +4627,65 @@ await ensureRequiredIndex(
   "ALTER TABLE operator_representative_directives ADD KEY idx_operator_rep_directive_operator_created (tenantId,canonicalOperatorId,createdAt)"
 );
 
+// Daphne Stage 3B — durable proof of bounded, non-business Claire adaptation.
+await applyIdempotentSqlFile(
+  "../drizzle/0121_daphne_adaptation_receipts.sql",
+  "Daphne causal adaptation receipts"
+);
+await assertRequiredColumns("operator_representative_adaptation_receipts", [
+  "id",
+  "tenantId",
+  "canonicalOperatorId",
+  "directiveId",
+  "targetKey",
+  "behaviorClass",
+  "conversationId",
+  "turnId",
+  "executingSha",
+  "receiptClass",
+  "structuralOutcome",
+  "firewallResult",
+  "createdAt",
+]);
+await assertEnumContainsValues(
+  "operator_representative_adaptation_receipts",
+  "behaviorClass",
+  ["ask_before_ambiguous_pending_continuation"]
+);
+await assertEnumContainsValues(
+  "operator_representative_adaptation_receipts",
+  "receiptClass",
+  ["non_business_claire_behavior"]
+);
+await assertEnumContainsValues(
+  "operator_representative_adaptation_receipts",
+  "structuralOutcome",
+  ["clarification_branch_selected"]
+);
+await assertEnumContainsValues(
+  "operator_representative_adaptation_receipts",
+  "firewallResult",
+  ["non_business_behavior_only"]
+);
+await ensureRequiredIndex(
+  "operator_representative_adaptation_receipts",
+  "uq_operator_rep_adaptation_turn",
+  ["tenantId", "canonicalOperatorId", "directiveId", "conversationId", "turnId"],
+  "ALTER TABLE operator_representative_adaptation_receipts ADD UNIQUE KEY uq_operator_rep_adaptation_turn (tenantId,canonicalOperatorId,directiveId,conversationId,turnId)"
+);
+await ensureRequiredIndex(
+  "operator_representative_adaptation_receipts",
+  "idx_operator_rep_adaptation_operator_created",
+  ["tenantId", "canonicalOperatorId", "createdAt"],
+  "ALTER TABLE operator_representative_adaptation_receipts ADD KEY idx_operator_rep_adaptation_operator_created (tenantId,canonicalOperatorId,createdAt)"
+);
+await ensureRequiredIndex(
+  "operator_representative_adaptation_receipts",
+  "idx_operator_rep_adaptation_directive",
+  ["tenantId", "canonicalOperatorId", "directiveId", "createdAt"],
+  "ALTER TABLE operator_representative_adaptation_receipts ADD KEY idx_operator_rep_adaptation_directive (tenantId,canonicalOperatorId,directiveId,createdAt)"
+);
+
 // Mitch v1 — Game Production Operating System tables
 await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",

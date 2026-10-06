@@ -5,6 +5,7 @@ import type {
   OperatorRepresentativeTalkResponse,
 } from "./types";
 import type { OperatorRepresentativeSnapshot } from "./readModel";
+import type { DaphneAdaptationLifecycleEntry } from "./adaptation";
 import type { OperatorRepresentativeDirectiveKind } from "./directives";
 
 export type OperatorRepresentativeDirectiveRequest = {
@@ -66,6 +67,7 @@ export function answerOperatorRepresentativeQuestion(input: {
   snapshot: OperatorRepresentativeSnapshot;
   focusedItemId?: string | null;
   correctionValue?: string | null;
+  adaptationLifecycle?: DaphneAdaptationLifecycleEntry[];
 }): OperatorRepresentativeTalkResult {
   const question = input.question.trim();
   const intent = classify(question);
@@ -173,13 +175,27 @@ export function answerOperatorRepresentativeQuestion(input: {
         needsClarification: true,
       };
     }
-    const using =
-      detail.item.adaptationState === "active"
+    const lifecycle = input.adaptationLifecycle?.find(
+      item => item.targetItemId === detail.item.id
+    );
+    const using = lifecycle
+      ? lifecycle.lifecycle === "used"
+        ? `Yes. A durable receipt proves Claire used this ${lifecycle.useCount} time${lifecycle.useCount === 1 ? "" : "s"}.`
+        : lifecycle.lifecycle === "wired_unused"
+          ? "It is wired to Claire, but no durable receipt proves Claire has used it yet."
+          : lifecycle.lifecycle === "disabled"
+            ? "It is wired, but live adaptation is off, so Claire is not using it."
+            : lifecycle.lifecycle === "revoked_historical"
+              ? `It is revoked now. Durable history shows ${lifecycle.useCount} past use${lifecycle.useCount === 1 ? "" : "s"}.`
+              : lifecycle.lifecycle === "revoked_unused"
+                ? "It was revoked before any durable use was recorded."
+                : "It is not wired into live Claire behavior."
+      : detail.item.adaptationState === "active"
         ? "It is active."
         : detail.item.adaptationState === "suppressed"
           ? "You told JOYSTICK not to use it."
           : detail.item.adaptationState === "ask_instead"
-            ? "You told JOYSTICK to ask you before relying on it."
+            ? "You told JOYSTICK to ask you before relying on it. I do not have receipt-backed use status in this view."
             : detail.item.adaptationState === "eligible_not_wired"
               ? "It is visible, but it is not wired into live Claire behavior."
               : "It is not eligible for live adaptation.";

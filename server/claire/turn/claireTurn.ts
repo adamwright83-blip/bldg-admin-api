@@ -140,6 +140,17 @@ import {
   type ClaireOperatorAdaptationContext,
   type ClaireOperatorContextShadowTelemetryEvent,
 } from "../operatorAdaptationContext";
+import { loadOperatorAdaptationDecisionForUser } from "../../operatorRepresentative/adaptation";
+import {
+  DAPHNE_STAGE3B_BEHAVIOR_CLASS,
+  buildDaphneClarificationApplicationResult,
+  type DaphneAdaptationApplicationResult,
+  type OperatorAdaptationDecision,
+} from "../../operatorRepresentative/adaptationContract";
+import {
+  recordDaphneAdaptationUse,
+  type DaphneAdaptationUseReceipt,
+} from "../../operatorRepresentative/adaptationReceipts";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -279,6 +290,8 @@ export type ClaireTurnResult = {
   /** True when this utterance entered prior-claim adjudication. */
   priorClaimRan?: boolean;
   answerPath?: string | null;
+  /** Receipt-backed proof that Daphne selected one approved non-business branch. */
+  operatorAdaptation?: DaphneAdaptationApplicationResult;
 };
 
 export type ClaireTurnDeps = {
@@ -333,6 +346,17 @@ export type ClaireTurnDeps = {
   onOperatorContextShadowTelemetry?: (
     event: ClaireOperatorContextShadowTelemetryEvent
   ) => void;
+  /** Stage 3B: one bounded Daphne decision; no raw Operator Context or prose. */
+  loadOperatorAdaptationDecision?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+  }) => Promise<OperatorAdaptationDecision | null>;
+  /** Durable proof writer. Failure must leave Claire on the baseline branch. */
+  recordOperatorAdaptationUse?: (input: {
+    decision: OperatorAdaptationDecision;
+    conversationId: string;
+    turnId: string;
+  }) => Promise<DaphneAdaptationUseReceipt>;
   /** Durable closed-decision records consumed by the live Brain V3 branch. */
   decisionStore: ClaireDecisionStore;
   /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
@@ -383,6 +407,8 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     operatorContextShadowEnabled: isClaireOperatorContextShadowEnabled,
     loadOperatorAdaptationContext: loadClaireOperatorAdaptationContext,
     onOperatorContextShadowTelemetry: defaultEmitClaireOperatorContextShadowTelemetry,
+    loadOperatorAdaptationDecision: loadOperatorAdaptationDecisionForUser,
+    recordOperatorAdaptationUse: recordDaphneAdaptationUse,
     decisionStore:
       process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
         ? createInMemoryClaireDecisionStore()
@@ -615,6 +641,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       },
     });
   }
+
+  // Stage 3B remains independent of Stage 3A shadow projection. The live
+  // decision is a closed typed object and the existing adaptation flag is
+  // checked inside the resolver. Failure means no injection.
+  const operatorAdaptationDecision = await (
+    deps.loadOperatorAdaptationDecision ?? loadOperatorAdaptationDecisionForUser
+  )({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  }).catch(() => null);
 
   const { state } = input;
   if (!state.sessionKind && input.context?.workday?.session) {
@@ -1019,7 +1055,33 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
   const effectivePendingRelationship =
     closedDecisions.pendingActionRelationship.effectiveOutput;
-  const closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
+  let closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
+  let operatorAdaptation: DaphneAdaptationApplicationResult | undefined;
+
+  const daphneMayAskInstead =
+    closedDecisionBranch === "continue" &&
+    hasPendingAction &&
+    closedDecisions.turnReadiness.effectiveOutput === "ambiguous" &&
+    effectivePendingRelationship === "continues_pending" &&
+    operatorAdaptationDecision?.behaviorClass === DAPHNE_STAGE3B_BEHAVIOR_CLASS;
+
+  if (daphneMayAskInstead && operatorAdaptationDecision) {
+    // Causal proof is fail-closed: Claire switches branch only after the
+    // idempotent use receipt is durable. A persistence failure leaves the
+    // exact parent-main behavior unchanged.
+    const receipt = await (
+      deps.recordOperatorAdaptationUse ?? recordDaphneAdaptationUse
+    )({
+      decision: operatorAdaptationDecision,
+      conversationId: input.conversationKey,
+      turnId: decisionTurnId,
+    }).catch(() => null);
+    if (receipt) {
+      operatorAdaptation =
+        buildDaphneClarificationApplicationResult(operatorAdaptationDecision);
+      closedDecisionBranch = "clarify";
+    }
+  }
 
   if (closedDecisionBranch === "incomplete") {
     branchResultProduced = true;
@@ -1034,14 +1096,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   if (closedDecisionBranch === "clarify") {
     mark("fallback", {
-      fallbackReason:
-        effectiveTurnType === "clarify"
+      fallbackReason: operatorAdaptation
+        ? "daphne_ask_instead_clarify"
+        : effectiveTurnType === "clarify"
           ? "closed_decision_abstained_clarify"
           : "closed_decision_provider_unknown",
     });
     return finish({
       speak: "Say that last part again.",
       kind: "answered",
+      ...(operatorAdaptation ? { operatorAdaptation } : {}),
     });
   }
 

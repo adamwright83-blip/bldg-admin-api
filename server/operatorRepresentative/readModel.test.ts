@@ -232,6 +232,82 @@ describe("Operator Representative grounded read model", () => {
     expect(detail?.evidence[0]?.sourceSystem).toBe("goldline_onboarding_sessions");
   });
 
+  it("keeps ask-first directives unwired for non-Stage-3B pattern targets", () => {
+    const base = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [],
+    });
+    const target = base.home.learning[0];
+
+    const askFirst = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [
+        directive({
+          id: "ask-first-unwired",
+          targetItemId: target.id,
+          targetKey: target.targetKey ?? null,
+          directiveKind: "ask_instead",
+        }),
+      ],
+    });
+
+    const item = askFirst.home.learning.find(candidate => candidate.id === target.id);
+    expect(item).toMatchObject({
+      adaptationState: "ask_instead",
+      canAffectAdaptation: false,
+      activeDirectiveId: "ask-first-unwired",
+    });
+    expect(askFirst.details.get(target.id)?.allowedUse).toMatch(
+      /does not automatically steer Claire/i
+    );
+  });
+
+  it("allows an explicit ask-first directive to affect only the wired Stage 3B target", () => {
+    const wiredPacket = packet();
+    wiredPacket.observedPatterns[0] = {
+      ...wiredPacket.observedPatterns[0],
+      kind: "explicit_deferral_dismissal",
+      scopeKey: "all_explicit_deferrals_dismissals",
+      summary:
+        "Observed 3 explicit DEFERRED event(s) and 0 explicit DISMISSED event(s) across distinct decision points.",
+      metrics: { deferredCount: 3, dismissedCount: 0 },
+    };
+    const base = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: wiredPacket,
+      directives: [],
+    });
+    const target = base.home.learning[0];
+    expect(target.targetKey).toBe("pattern:explicit_deferral_dismissal");
+    expect(target.canAffectAdaptation).toBe(false);
+
+    const askFirst = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: wiredPacket,
+      directives: [
+        directive({
+          id: "ask-first-wired",
+          targetItemId: target.id,
+          targetKey: target.targetKey ?? null,
+          directiveKind: "ask_instead",
+        }),
+      ],
+    });
+
+    const item = askFirst.home.learning.find(candidate => candidate.id === target.id);
+    expect(item).toMatchObject({
+      adaptationState: "ask_instead",
+      canAffectAdaptation: true,
+      activeDirectiveId: "ask-first-wired",
+    });
+    expect(askFirst.details.get(target.id)?.businessTruthSupport).toBe(false);
+    expect(askFirst.details.get(target.id)?.allowedUse).toMatch(
+      /constrain how JOYSTICK works with you/i
+    );
+  });
+
   it("a suppress directive makes the signal ineligible without deleting it", () => {
     const base = buildOperatorRepresentativeSnapshot({
       identity,
