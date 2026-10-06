@@ -39,6 +39,37 @@ export function validatedPersistentPolicyEventContext(
   };
 }
 
+export type ExternalCommunicationExecutionState =
+  | "proved"
+  | "not_sent"
+  | "indeterminate";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function classifyExternalCommunicationExecution(
+  output: unknown
+): ExternalCommunicationExecutionState {
+  if (!isRecord(output)) return "indeterminate";
+  if (output.sent === false || output.providerAccepted === false) return "not_sent";
+  if (output.sent === true) {
+    return nonEmptyString(output.communicationReceiptId) &&
+      nonEmptyString(output.authorityReceiptId)
+      ? "proved"
+      : "indeterminate";
+  }
+  if (output.providerAccepted === true) {
+    const receipt = isRecord(output.receipt) ? output.receipt : null;
+    return receipt && nonEmptyString(receipt.id) ? "proved" : "indeterminate";
+  }
+  return "indeterminate";
+}
+
 async function safeLogAgentEvent(
   event: AgentEventWrite
 ): Promise<number | null> {
@@ -166,6 +197,33 @@ export async function runAgentTool<TOutput = unknown>(
     }
 
     const result = await tool.execute(input, eventCtx);
+
+    if (toolPolicy.riskClass === "EXTERNAL_COMMUNICATION") {
+      const proofState = classifyExternalCommunicationExecution(result.output);
+      if (proofState !== "proved") {
+        await safeLogAgentEvent({
+          ctx: eventCtx,
+          toolName,
+          inputJson: input,
+          outputJson: result.output,
+          status: proofState === "not_sent" ? "failed" : "write_withheld",
+          operationStatus:
+            proofState === "not_sent"
+              ? "provider_rejected_or_not_sent"
+              : "external_effect_unpersisted",
+          errorMessage:
+            proofState === "not_sent"
+              ? "External communication was not accepted by the provider."
+              : "External communication may have been accepted, but durable receipt proof is missing.",
+          latencyMs: Date.now() - started,
+          entityType: result.entityType ?? null,
+          entityId: result.entityId ?? null,
+          requiresHumanApproval,
+        });
+        return result.output as TOutput;
+      }
+    }
+
     await safeLogAgentEvent({
       ctx: eventCtx,
       toolName,
