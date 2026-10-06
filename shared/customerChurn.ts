@@ -4,7 +4,7 @@ export type CustomerChurnConfidence = "low" | "medium" | "high";
 export type CustomerHistoryObservation = {
   orderId: number;
   serviceAt: string | Date;
-  valueCents: number;
+  valueCents: number | null;
   weightLbs: number | null;
   serviceType: "wash_fold" | "dry_cleaning";
 };
@@ -151,7 +151,10 @@ export function scoreCustomerChurn(
   const daysLate = Math.max(0, daysSinceLastOrder - expectedCadenceDays);
   const orderValues = history
     .map(item => item.valueCents)
-    .filter(value => Number.isFinite(value) && value >= 0);
+    .filter(
+      (value): value is number =>
+        value !== null && Number.isFinite(value) && value >= 0
+    );
   const averageOrderValueCents = Math.round(average(orderValues));
   const estimatedMonthlyImpactCents = Math.round(
     averageOrderValueCents * (30 / expectedCadenceDays)
