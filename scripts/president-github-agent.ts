@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Mission, ReviewVerdict } from "../shared/presidentCycle";
 import {
   assertSafeValidationCommand,
   runCommand,
-  type CommandResult,
 } from "../server/president/fabric/exec";
 import {
   protectedViolations,
@@ -162,13 +161,16 @@ async function checkoutMissionBranch(
     timeoutMs: 120_000,
   });
   if (r.exitCode !== 0) throw new Error(`git fetch main failed: ${r.stderr}`);
-  const baseSha = (await runCommand("git rev-parse origin/main", ROOT)).stdout.trim();
+  const currentMain = (
+    await runCommand("git rev-parse origin/main", ROOT)
+  ).stdout.trim();
 
   const remote = await runCommand(
     `git ls-remote --exit-code --heads origin ${shellQuote(branchName)}`,
     ROOT,
     { timeoutMs: 60_000 }
   );
+  let baseSha = currentMain;
   if (remote.exitCode === 0) {
     await runCommand(`git fetch origin ${shellQuote(branchName)}`, ROOT, {
       timeoutMs: 120_000,
@@ -177,6 +179,17 @@ async function checkoutMissionBranch(
       `git checkout -B ${shellQuote(branchName)} FETCH_HEAD`,
       ROOT
     );
+    if (r.exitCode === 0) {
+      const mergeBase = await runCommand(
+        "git merge-base HEAD origin/main",
+        ROOT
+      );
+      if (
+        mergeBase.exitCode === 0 &&
+        /^[a-f0-9]{40}$/i.test(mergeBase.stdout.trim())
+      )
+        baseSha = mergeBase.stdout.trim();
+    }
   } else {
     r = await runCommand(
       `git checkout -B ${shellQuote(branchName)} ${shellQuote(baseSha)}`,
