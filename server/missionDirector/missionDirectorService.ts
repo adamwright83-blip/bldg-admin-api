@@ -90,7 +90,7 @@ async function loadRankingContext(input: {
             ? metadata.dueDate
             : null;
       openTasks.push({
-        id: row.id,
+        id: String(row.id),
         taskType: row.taskType,
         status: row.status,
         priority: row.priority,
