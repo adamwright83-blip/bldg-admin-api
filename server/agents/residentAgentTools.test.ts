@@ -247,7 +247,7 @@ describe("resident-safe agent tools", () => {
   });
 
   it("cancels resident orders directly without vendor permission", async () => {
-    dbMocks.getOrderById.mockResolvedValue({ id: 172, bldgUserId: 42, status: "new" });
+    dbMocks.getOrderById.mockResolvedValue({ id: 172, tenantId: "default", bldgUserId: 42, status: "new" });
 
     const result = await cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx);
 
@@ -255,6 +255,40 @@ describe("resident-safe agent tools", () => {
       actorDisplayName: "resident_chat",
     }));
     expect(result.output).toMatchObject({ orderCancelled: true, orderId: 172, status: "cancelled" });
+  });
+
+  it("rejects resident cancellation across tenant or resident authority boundaries", async () => {
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 172,
+      tenantId: "other-tenant",
+      bldgUserId: 42,
+      status: "new",
+    });
+    await expect(
+      cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx)
+    ).rejects.toThrow("Order does not belong to tenant");
+
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 173,
+      tenantId: "default",
+      bldgUserId: 99,
+      status: "new",
+    });
+    await expect(
+      cancelResidentOrderTool.execute({ orderId: 173, bldgUserId: 42 }, residentCtx)
+    ).rejects.toThrow("Order does not belong to resident");
+
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 174,
+      tenantId: "default",
+      bldgUserId: 42,
+      status: "new",
+    });
+    await expect(
+      cancelResidentOrderTool.execute({ orderId: 174 }, residentCtx)
+    ).rejects.toThrow("requires bldgUserId authority");
+
+    expect(dbMocks.updateOrderStatus).not.toHaveBeenCalled();
   });
 
   it("includes a real migration for the new resident tables", () => {
