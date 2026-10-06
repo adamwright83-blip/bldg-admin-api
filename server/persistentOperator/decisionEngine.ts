@@ -72,10 +72,6 @@ function workPlanFromPlan(plan: MissionDirectorPlan | null) {
   return plan?.outcome.workPlan ?? null;
 }
 
-function selectedWorkIdFromPlan(plan: MissionDirectorPlan | null): string | null {
-  const workPlan = workPlanFromPlan(plan);
-  return workPlan?.status === "ranked" ? workPlan.primary.workId : null;
-}
 
 function obligationFromCandidate(
   candidate: WeeklyGrowthCandidate,
