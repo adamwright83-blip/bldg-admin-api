@@ -6,7 +6,6 @@ import {
 import { authorizePresidentCallback } from "./agentRuntime";
 import { getPresidentRuntime, presidentRuntimeConfig } from "./runtime";
 import { registerPresidentCycleHttpRoutes } from "./cycle/httpRuntime";
-import { registerPresidentGithubActionsBridge } from "./fabric/githubActionsBridge";
 import { registerPresidentGithubAgentRoutes } from "./fabric/agentHttp";
 
 function authorization(req: Request): string | undefined {
@@ -102,5 +101,4 @@ export function registerPresidentAgentRoutes(
   // /api/president/autonomous, while these routes use GitHub OIDC instead.
   registerPresidentGithubAgentRoutes(app);
   registerPresidentCycleHttpRoutes(app);
-  registerPresidentGithubActionsBridge(app);
 }
