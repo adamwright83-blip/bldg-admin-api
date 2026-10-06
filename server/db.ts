@@ -400,9 +400,11 @@ export function residentOrderReuseMatchesAuthority(
   incoming: Pick<InsertOrder, "tenantId" | "bldgUserId" | "phone">,
   existing: Pick<Order, "tenantId" | "bldgUserId" | "phone">
 ): boolean {
-  const incomingTenant = incoming.tenantId?.trim() || "default";
-  const existingTenant = existing.tenantId?.trim() || "default";
-  if (incomingTenant !== existingTenant) return false;
+  const incomingTenant = incoming.tenantId?.trim() ?? "";
+  const existingTenant = existing.tenantId?.trim() ?? "";
+  if (!incomingTenant || !existingTenant || incomingTenant !== existingTenant) {
+    return false;
+  }
 
   if (incoming.bldgUserId != null) {
     return (
@@ -462,6 +464,9 @@ export async function createOrReuseResidentLaundryOrder(
   order: InsertOrder,
   opts?: { clientRequestId?: string | null }
 ): Promise<{ orderId: number; reused: boolean }> {
+  if (!order.tenantId?.trim()) {
+    throw new Error("Resident order requires explicit tenant authority");
+  }
   // Debugging mirror only — the physical column / opts are authoritative.
   const metadataKey =
     order.heldMetadataJson &&
