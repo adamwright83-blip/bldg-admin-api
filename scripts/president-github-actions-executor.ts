@@ -10,6 +10,7 @@ import {
   protectedViolations,
   runBrowserCheck,
 } from "../server/president/fabric/engineering";
+import { validateResearchArtifact } from "../server/president/fabric/review";
 
 const API =
   process.env.PRESIDENT_EXECUTION_API?.trim() ||
@@ -117,6 +118,17 @@ type Claim = {
         startCommand?: string;
       } | null;
     };
+    handback?: {
+      prUrl?: string;
+      branch?: string;
+      baseSha?: string;
+      commitSha?: string;
+      changedFiles?: string[];
+      artifactText?: string;
+      artifactSha256?: string;
+      reviewVerdict?: string;
+      reviewReasons?: string[];
+    } | null;
   };
 };
 
@@ -451,10 +463,12 @@ async function review(claim: Claim, context: string) {
 async function execute(claim: Claim) {
   const mission = claim.mission!;
   if (claim.reviewOnly) {
+    if (mission.domain === "ENGINEERING") await checkoutMissionBranch(claim);
     const context = JSON.stringify(
       {
-        previousHandback:
-          "Review-only recovery. Inspect the mission branch/repository and durable evidence.",
+        previousHandback: mission.handback ?? null,
+        note:
+          "Review-only recovery after publication. Inspect the durable handback and repository evidence.",
       },
       null,
       2
@@ -521,6 +535,11 @@ async function execute(claim: Claim) {
     ].join("\n"),
     true
   );
+  const researchProblems = validateResearchArtifact(artifact, root);
+  if (researchProblems.length)
+    throw new Error(
+      "Research artifact validation failed: " + researchProblems.join("; ")
+    );
   const artifactSha256 = createHash("sha256").update(artifact).digest("hex");
   await api("/published", {
     cycleId: mission.cycleId,
