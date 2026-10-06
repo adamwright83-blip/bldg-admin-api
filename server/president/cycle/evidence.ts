@@ -142,7 +142,14 @@ export async function gatherCompanyEvidence(input: {
   // back to the repository's public GitHub API so nightly President cycles
   // still have current code/PR evidence in production.
   if (git.exitCode !== 0 || prs.exitCode !== 0) {
-    out.push(...(await publicGithubEvidence()));
+    const fallback = await publicGithubEvidence();
+    out.push(
+      ...fallback.filter(
+        evidence =>
+          (git.exitCode !== 0 && evidence.kind === "recent-commit") ||
+          (prs.exitCode !== 0 && evidence.kind === "open-pr")
+      )
+    );
   }
 
   let todo = await runCommand(
