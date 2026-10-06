@@ -94,6 +94,10 @@ jobs:
         run: >-
           pnpm vitest run
           server/missionDirector/rankableWork.test.ts
+          server/missionDirector/missionDirectorService.test.ts
+          server/missionDirector/planSelection.test.ts
+          server/missionDirector/missionRank.test.ts
+          server/missionDirector/pocketDetection.test.ts
           server/weeklyGrowthCandidates/weeklyGrowthCandidates.test.ts
           server/persistentOperator/decisionEngine.test.ts
           server/goldline/dayline/currentDayLineService.test.ts
