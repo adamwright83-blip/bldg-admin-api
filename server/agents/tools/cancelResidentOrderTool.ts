@@ -11,36 +11,48 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
   name: "cancelResidentOrderTool",
   description: "Cancel a resident-owned order directly without asking the vendor for permission.",
   async execute(input, ctx) {
-    const orderId = Number(input.orderId);
-    if (!Number.isFinite(orderId) || orderId <= 0) throw new Error("orderId is required");
+    if (ctx.agentType !== "resident_agent" || ctx.actorType !== "resident_chat") {
+      throw new Error("Resident cancellation requires the resident action authority");
+    }
 
-    const order = await getOrderById(orderId);
-    if (!order) throw new Error("Order not found");
-    if (!order.tenantId || order.tenantId !== ctx.tenantId) {
-      throw new Error("Order does not belong to tenant");
+    const tenantId = ctx.tenantId.trim();
+    if (!tenantId) {
+      throw new Error("Resident cancellation requires tenant authority");
+    }
+
+    const residentUserId = Number(input.bldgUserId);
+    if (!Number.isSafeInteger(residentUserId) || residentUserId <= 0) {
+      throw new Error("Resident cancellation requires the resident owner id");
+    }
+
+    const orderId = Number(input.orderId);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) {
+      throw new Error("orderId is required");
     }
 
     const rawActorId = ctx.actorId?.trim() ?? "";
     const actorMatch = rawActorId.match(/^(?:bldg_user:|resident:)?(\d+)$/i);
     const actorResidentId = actorMatch ? Number(actorMatch[1]) : null;
-    const inputResidentId = Number(input.bldgUserId);
-    const requestedResidentId =
-      Number.isInteger(inputResidentId) && inputResidentId > 0
-        ? inputResidentId
-        : actorResidentId;
-    if (requestedResidentId == null) {
-      throw new Error("Resident cancellation requires resident identity authority");
-    }
-    if (actorResidentId != null && actorResidentId !== requestedResidentId) {
+    if (actorResidentId != null && actorResidentId !== residentUserId) {
       throw new Error("Resident actor identity does not match cancellation authority");
     }
-    if (order.bldgUserId == null || Number(order.bldgUserId) !== requestedResidentId) {
+
+    const order = await getOrderById(orderId);
+    if (!order) throw new Error("Order not found");
+    if (!order.tenantId || order.tenantId !== tenantId) {
+      throw new Error("Order does not belong to tenant");
+    }
+    if (
+      order.bldgUserId == null ||
+      Number(order.bldgUserId) !== residentUserId
+    ) {
       throw new Error("Order does not belong to resident");
     }
 
     if (order.status !== "cancelled") {
       await updateOrderStatus(orderId, "cancelled", {
         source: "driver_app_bldg",
+        actorUserId: ctx.actorId ?? String(residentUserId),
         actorDisplayName: "resident_chat",
       });
     }
