@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { planForDate, planningExecutionConstraint } from "./missionDirectorService";
+import {
+  legacyCampaignCompatibilityCandidates,
+  planForDate,
+  planningExecutionConstraint,
+} from "./missionDirectorService";
 import { explainMissionPlan } from "./explainPlan";
 import { ENV } from "../_core/env";
+
+describe("Mission Director — legacy campaign compatibility", () => {
+  it("cannot introduce an alternate campaign outside the generic winner", () => {
+    expect(
+      legacyCampaignCompatibilityCandidates("campaign-b", [
+        { campaignId: "campaign-a" },
+        { campaignId: "campaign-b" },
+        { campaignId: "campaign-c" },
+      ])
+    ).toEqual([{ campaignId: "campaign-b" }]);
+  });
+
+  it("projects no campaign when authoritative work is non-campaign", () => {
+    expect(
+      legacyCampaignCompatibilityCandidates(null, [
+        { campaignId: "campaign-a" },
+      ])
+    ).toEqual([]);
+  });
+});
 
 describe("Mission Director — execution constraint authority", () => {
   it("uses the locked weekly primary execution type when it still owns the day", () => {
