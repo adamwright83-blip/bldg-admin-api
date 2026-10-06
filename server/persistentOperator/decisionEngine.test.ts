@@ -3,6 +3,7 @@ import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates"
 import type { PersistentObligation } from "./obligationStore";
 import {
   inactiveGoalRunWaitReason,
+  materializedExecutionType,
   selectDeterministicCycleChoice,
 } from "./decisionEngine";
 
@@ -168,6 +169,28 @@ describe("PR4 inactive goal-run gating", () => {
     expect(inactiveGoalRunWaitReason("paused")).toBe("GOAL_RUN_INACTIVE");
     expect(inactiveGoalRunWaitReason("superseded")).toBe("GOAL_RUN_INACTIVE");
     expect(inactiveGoalRunWaitReason("cancelled")).toBe("GOAL_RUN_INACTIVE");
+  });
+});
+
+describe("PR4 execution materialization", () => {
+  it("does not let an obligation reclassify Mission Director-selected work", () => {
+    expect(
+      materializedExecutionType({
+        authoritative: "challenge",
+        obligation: "mission",
+        derived: "mission",
+      })
+    ).toBe("challenge");
+  });
+
+  it("keeps compatibility fallbacks when no authoritative workPlan type exists", () => {
+    expect(
+      materializedExecutionType({
+        authoritative: null,
+        obligation: "mission",
+        derived: "challenge",
+      })
+    ).toBe("mission");
   });
 });
 
