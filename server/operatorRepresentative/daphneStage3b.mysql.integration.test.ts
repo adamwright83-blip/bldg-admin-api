@@ -122,6 +122,29 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     return rows;
   }
 
+  async function latestClosedDecisionOutputs(conversationId: string) {
+    const turnPrefix =
+      `claire-desk:${tenantA}:${operatorAId}:${conversationId}:`;
+    const [rows] = await db.execute<mysql.RowDataPacket[]>(
+      `SELECT decision_type, effective_output, branch_executed
+       FROM claire_decision_records
+       WHERE tenant_id = ?
+         AND turn_id LIKE ?
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [tenantA, `${turnPrefix}%`]
+    );
+    return new Map(
+      rows.map(row => [
+        String(row.decision_type),
+        {
+          effectiveOutput: String(row.effective_output),
+          branchExecuted: Boolean(row.branch_executed),
+        },
+      ])
+    );
+  }
+
   beforeAll(async () => {
     db = await mysql.createConnection(DATABASE_URL!);
     [operatorAId, operatorA2Id] = await createTenant(tenantA, [
@@ -165,6 +188,17 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     await caller.claire.talk({
       utterance: "maybe",
       conversationId: baselineConversation,
+    });
+    const baselineDecisions = await latestClosedDecisionOutputs(
+      baselineConversation
+    );
+    expect(baselineDecisions.get("turn_readiness")).toEqual({
+      effectiveOutput: "ambiguous",
+      branchExecuted: true,
+    });
+    expect(baselineDecisions.get("pending_action_relationship")).toEqual({
+      effectiveOutput: "continues_pending",
+      branchExecuted: true,
     });
     expect(await receiptRows()).toHaveLength(0);
 
@@ -223,6 +257,15 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       utterance: "maybe",
       conversationId: adaptedConversation,
     });
+    const adaptedDecisions = await latestClosedDecisionOutputs(
+      adaptedConversation
+    );
+    expect(adaptedDecisions.get("turn_readiness")?.effectiveOutput).toBe(
+      "ambiguous"
+    );
+    expect(
+      adaptedDecisions.get("pending_action_relationship")?.effectiveOutput
+    ).toBe("continues_pending");
 
     const rows = await receiptRows();
     expect(rows).toHaveLength(1);
