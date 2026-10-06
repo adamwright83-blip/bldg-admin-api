@@ -97,12 +97,12 @@ async function claude(
     : "Read,Edit,Write,Glob,Grep,Bash(npx vitest:*),Bash(pnpm check:*),Bash(pnpm test:*),Bash(pnpm run:*),Bash(ls:*),Bash(cat:*)";
   const args = [
     "-y",
-    "@anthropic-ai/claude-code@latest",
+    "@anthropic-ai/claude-code@2.1.114",
     "--print",
     "--output-format",
     "json",
     "--model",
-    process.env.PRESIDENT_AGENT_MODEL || "sonnet",
+    process.env.PRESIDENT_AGENT_MODEL || "claude-opus-5-5",
     "--allowedTools",
     allowed,
   ];
