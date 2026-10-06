@@ -32,6 +32,12 @@ import {
   type GitHost,
 } from "./engineering";
 import { generateMorningReport } from "./morningReport";
+import {
+  claimExternalExecution,
+  claimExternalReview,
+  reportExternalExecution,
+  reportExternalReview,
+} from "./externalTransport";
 
 const ROOT = resolve(__dirname, "../../..");
 const IDENT = { identity: "adam@test", mechanism: "test-session", sessionRef: "sess-1" };
@@ -514,6 +520,140 @@ describe("execution fabric (real git worktrees, fake agent/host)", () => {
     const cyc = (await store.get(c.cycleId))!;
     cyc.missions[0].candidateId = "not-approved";
     expect(() => generateMorningReport(cyc)).toThrow(/Unapproved/);
+  });
+});
+
+describe("GitHub Actions external President fabric", () => {
+  it("cannot claim anything before Adam approval", async () => {
+    const store = new FileCycleStore(tmp());
+    const c = await awaitingCycle(store);
+    expect(await claimExternalExecution(store)).toBeNull();
+    expect((await store.get(c.cycleId))!.missions).toHaveLength(0);
+  });
+
+  it("claims exactly approved engineering work once, then independent review PASS stops at human merge", async () => {
+    const store = new FileCycleStore(tmp());
+    const c = await awaitingCycle(store);
+    await approveFinalSet(store, {
+      tenantId: "t1",
+      cycleId: c.cycleId,
+      approvedCandidateIds: [c.presidentProposedIds[0]],
+      approvedBy: IDENT,
+    });
+    await createApprovedMissions(store, c.cycleId, POLICY);
+
+    const claim = await claimExternalExecution(store);
+    expect(claim?.route).toBe("ENGINEERING");
+    expect(claim?.mission.candidateId).toBe(c.presidentProposedIds[0]);
+    expect(await claimExternalExecution(store)).toBeNull();
+
+    await reportExternalExecution(store, {
+      cycleId: c.cycleId,
+      missionId: claim!.mission.missionId,
+      leaseToken: claim!.leaseToken,
+      result: {
+        ok: true,
+        route: "ENGINEERING",
+        baseSha: "1".repeat(40),
+        branch: `president/${claim!.mission.missionId}`,
+        commitSha: "2".repeat(40),
+        prUrl: "https://github.com/adamwright83-blip/bldg-admin-api/pull/999",
+        changedFiles: ["server/president/example.ts"],
+        checks: [{ command: "node check.mjs", exitCode: 0, ok: true }],
+        summary: "fixture execution",
+      },
+    });
+
+    const review = await claimExternalReview(store);
+    expect(review).not.toBeNull();
+    expect(review!.mission.executorActorId).toBe(
+      "president-github-actions-executor"
+    );
+    expect(review!.mission.reviewerActorId).toBe(
+      "president-github-actions-reviewer"
+    );
+    expect(review!.mission.executorActorId).not.toBe(
+      review!.mission.reviewerActorId
+    );
+
+    await reportExternalReview(store, {
+      cycleId: c.cycleId,
+      missionId: review!.mission.missionId,
+      leaseToken: review!.leaseToken,
+      verdict: "PASS",
+      reasons: ["independent fixture review"],
+      checks: [{ command: "node check.mjs", exitCode: 0, ok: true }],
+    });
+
+    const final = (await store.get(c.cycleId))!;
+    expect(final.missions[0].status).toBe("READY_FOR_HUMAN");
+    expect(final.status).toBe("COMPLETE");
+    expect(final.morningReport?.unapprovedMissionsExecuted).toBe(0);
+    expect(final.missions[0].handback?.reviewVerdict).toBe("PASS");
+  });
+
+  it("unsupported approved domains block rather than fake execution", async () => {
+    const store = new FileCycleStore(tmp());
+    const c = await awaitingCycle(store, ["PRODUCT_DESIGN"]);
+    await approveFinalSet(store, {
+      tenantId: "t1",
+      cycleId: c.cycleId,
+      approvedCandidateIds: [c.presidentProposedIds[0]],
+      approvedBy: IDENT,
+    });
+    await createApprovedMissions(store, c.cycleId, POLICY);
+    expect(await claimExternalExecution(store)).toBeNull();
+    const final = (await store.get(c.cycleId))!;
+    expect(final.missions[0].status).toBe("BLOCKED");
+    expect(final.missions[0].blocker).toMatch(
+      /BLOCKED_UNSUPPORTED_EXECUTION_DOMAIN/
+    );
+    expect(final.status).toBe("COMPLETE");
+  });
+
+  it("rejects tampered research artifacts before review", async () => {
+    const store = new FileCycleStore(tmp());
+    const c = await awaitingCycle(store, ["RESEARCH"]);
+    await approveFinalSet(store, {
+      tenantId: "t1",
+      cycleId: c.cycleId,
+      approvedCandidateIds: [c.presidentProposedIds[0]],
+      approvedBy: IDENT,
+    });
+    await createApprovedMissions(store, c.cycleId, POLICY);
+    const claim = await claimExternalExecution(store);
+    expect(claim?.route).toBe("RESEARCH");
+    await expect(
+      reportExternalExecution(store, {
+        cycleId: c.cycleId,
+        missionId: claim!.mission.missionId,
+        leaseToken: claim!.leaseToken,
+        result: {
+          ok: true,
+          route: "RESEARCH",
+          artifactText: "real artifact",
+          artifactSha256: "0".repeat(64),
+          summary: "fixture",
+        },
+      })
+    ).rejects.toThrow(/hash mismatch/);
+  });
+
+  it("scheduled agent is OIDC-scoped, human-merge-only, and has no peer-seat route", () => {
+    const workflow = readFileSync(
+      join(ROOT, ".github/workflows/president-autonomous-agent.yml"),
+      "utf8"
+    );
+    const agent = readFileSync(
+      join(ROOT, "scripts/president-github-agent.ts"),
+      "utf8"
+    );
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("pull-requests: write");
+    expect(workflow).not.toMatch(/auto-merge|gh pr merge/i);
+    expect(agent).not.toMatch(/gh pr merge|--auto|mitch/i);
+    expect(agent).toContain("GITHUB_TOKEN");
+    expect(agent).toContain("githubOidc");
   });
 });
 
