@@ -130,6 +130,10 @@ export type WeeklyGrowthCandidate = {
   observedSignals: WeeklyGrowthObservedSignal[];
   assumptions: WeeklyGrowthAssumption[];
   confidence: "low" | "medium" | "high";
+  /**
+   * Legacy descriptive tags retained for compatibility. They are not ordering
+   * authority; Mission Director owns all priority effects.
+   */
   rankReasons: WeeklyGrowthRankReason[];
 };
 
