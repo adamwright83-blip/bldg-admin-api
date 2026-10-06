@@ -1,0 +1,65 @@
+.president-cycle-review {
+  margin: 24px 0 36px;
+  padding: 24px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 18px;
+  background: rgba(255,255,255,.035);
+}
+.president-cycle-heading,
+.president-cycle-card-head,
+.president-cycle-approval,
+.president-cycle-missions article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.president-cycle-heading h2 { margin: 4px 0 0; }
+.president-cycle-status,
+.president-cycle-card-head span {
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .68;
+}
+.president-cycle-intro { max-width: 780px; opacity: .82; }
+.president-cycle-list { display: grid; gap: 12px; margin: 20px 0; }
+.president-cycle-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0,1fr) auto;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+}
+.president-cycle-card.selected {
+  border-color: rgba(255,255,255,.42);
+  background: rgba(255,255,255,.055);
+}
+.president-cycle-rank { font-size: 18px; font-weight: 700; opacity: .72; }
+.president-cycle-card h3 { margin: 0; }
+.president-cycle-card p { margin: 8px 0; }
+.president-cycle-card details { margin-top: 8px; }
+.president-cycle-select { align-self: start; white-space: nowrap; }
+.president-cycle-select input { margin-right: 7px; }
+.president-cycle-secondary { margin-bottom: 18px; }
+.president-cycle-approval {
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+.president-cycle-approved { font-weight: 600; }
+.president-cycle-missions { display: grid; gap: 8px; margin-top: 18px; }
+.president-cycle-missions article {
+  padding: 12px 0;
+  border-top: 1px solid rgba(255,255,255,.09);
+}
+.president-cycle-missions small { opacity: .72; }
+.president-cycle-error { color: #b42318; }
+@media (max-width: 720px) {
+  .president-cycle-review { padding: 16px; }
+  .president-cycle-card { grid-template-columns: 36px minmax(0,1fr); }
+  .president-cycle-select { grid-column: 2; }
+  .president-cycle-heading,
+  .president-cycle-approval,
+  .president-cycle-missions article { align-items: flex-start; flex-direction: column; }
+}

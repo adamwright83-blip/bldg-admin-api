@@ -2,6 +2,7 @@ import "dotenv/config";
 import http from "node:http";
 import { AppPresidentJudgmentProvider } from "./appProvider";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
+import { runPresidentCycleWorkerTick } from "./cycle/runtime";
 
 function numberEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -12,13 +13,6 @@ function numberEnv(name: string, fallback: number): number {
   return value;
 }
 
-const status = presidentRuntimeStatus();
-if (status.executionState !== "CONFIGURED")
-  throw new Error(
-    "President worker requires configured agent targets, callback URL, and callback tokens"
-  );
-
-const runtime = getPresidentRuntime();
 const pollMs = numberEnv("PRESIDENT_WORKER_POLL_MS", 15_000);
 const port = numberEnv("PORT", 8083);
 let inFlight = false;
@@ -26,15 +20,37 @@ let stopped = false;
 let lastRunAt: string | null = null;
 let lastSuccessAt: string | null = null;
 let lastError: string | null = null;
+let lastCycleTick: Awaited<ReturnType<typeof runPresidentCycleWorkerTick>> | null =
+  null;
+
+async function runLegacyTick() {
+  if (process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED !== "1") return false;
+  const status = presidentRuntimeStatus();
+  if (status.executionState !== "CONFIGURED") return false;
+  const runtime = getPresidentRuntime();
+  await runtime.coordinator.recover();
+  await runtime.service.finalizeVerifiedMeasurements();
+  await runtime.service.advanceObjectives(new AppPresidentJudgmentProvider());
+  return true;
+}
 
 async function tick() {
   if (stopped || inFlight) return;
   inFlight = true;
   lastRunAt = new Date().toISOString();
   try {
-    await runtime.coordinator.recover();
-    await runtime.service.finalizeVerifiedMeasurements();
-    await runtime.service.advanceObjectives(new AppPresidentJudgmentProvider());
+    const legacyRan = await runLegacyTick();
+    let cycleRan = false;
+    if (process.env.PRESIDENT_EXECUTION_ENABLED === "1") {
+      lastCycleTick = await runPresidentCycleWorkerTick();
+      cycleRan = true;
+    } else {
+      lastCycleTick = null;
+    }
+    if (!legacyRan && !cycleRan)
+      throw new Error(
+        "No President execution path is enabled: legacy agent targets are not configured and PRESIDENT_EXECUTION_ENABLED is not 1"
+      );
     lastSuccessAt = new Date().toISOString();
     lastError = null;
   } catch (error) {
@@ -50,13 +66,40 @@ const server = http.createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
-  const ok = lastError === null && lastSuccessAt !== null;
+  const legacyRuntimeEnabled =
+    process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED === "1";
+  let legacyRuntime: ReturnType<typeof presidentRuntimeStatus> | null = null;
+  let legacyRuntimeError: string | null = null;
+  if (legacyRuntimeEnabled) {
+    try {
+      legacyRuntime = presidentRuntimeStatus();
+    } catch (error) {
+      legacyRuntimeError =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+  // This is a liveness endpoint, not a model/provider readiness probe.
+  // A slow deliberation or transient provider failure must not make Railway
+  // kill a healthy durable worker and strand its mission state.
+  const ok = !legacyRuntimeEnabled || legacyRuntimeError === null;
   response.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
   response.end(
     JSON.stringify({
       ok,
-      runtime: presidentRuntimeStatus(),
-      worker: { inFlight, lastRunAt, lastSuccessAt, lastError },
+      runtime: legacyRuntime,
+      legacyRuntimeError,
+      autonomousCycleExecutionEnabled:
+        process.env.PRESIDENT_EXECUTION_ENABLED === "1",
+      autonomousExecutionMode:
+        process.env.PRESIDENT_EXECUTION_MODE || "github_actions",
+      legacyRuntimeEnabled,
+      worker: {
+        inFlight,
+        lastRunAt,
+        lastSuccessAt,
+        lastError,
+        lastCycleTick,
+      },
     })
   );
 });
