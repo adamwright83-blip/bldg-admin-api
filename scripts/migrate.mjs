@@ -3464,6 +3464,23 @@ await assertRequiredColumns("open_channel_task_events", [
   "requestId",
 ]);
 
+// President autonomous cycle durability. This table stores only President
+// deliberation/approval/mission/review receipts; it does not write commercial
+// or customer revenue truth.
+await applyIdempotentSqlFile(
+  "../drizzle/0120_president_autonomous_cycles.sql",
+  "President autonomous cycle store"
+);
+await assertRequiredColumns("president_autonomous_cycles", [
+  "cycleId",
+  "tenantId",
+  "version",
+  "status",
+  "payloadJson",
+  "createdAt",
+  "updatedAt",
+]);
+
 // drizzle/0076_claire_conversation_ledger.sql — Claire reads and writes
 // these tables with no runtime CREATE. The file is already IF NOT EXISTS
 // and contains no row changes.
