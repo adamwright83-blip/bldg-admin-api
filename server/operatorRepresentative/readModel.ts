@@ -10,6 +10,7 @@ import type {
   OperatorContextUncertainty,
 } from "../persistentOperator/operatorContext";
 import type { OperatorRepresentativeDirectiveRecord } from "./directives";
+import { DAPHNE_STAGE3B_TARGET_KEY } from "./adaptationContract";
 import {
   isClaireOperatorContextAdaptationEnabled,
   isClaireOperatorContextShadowEnabled,
@@ -340,10 +341,11 @@ export function buildOperatorRepresentativeSnapshot(input: {
         internal.item.canAffectAdaptation = false;
       } else {
         internal.item.adaptationState = "ask_instead";
-        // The raw observed signal still has no live authority. The explicit
-        // authenticated ask-first directive is the only thing permitted to
-        // affect the one wired Stage 3B behavior.
-        internal.item.canAffectAdaptation = true;
+        // Raw observed patterns never gain authority merely because the operator
+        // asked first. Stage 3B wires exactly one explicit target; every other
+        // ask-first directive remains visible but unwired.
+        internal.item.canAffectAdaptation =
+          internal.item.targetKey === DAPHNE_STAGE3B_TARGET_KEY;
       }
     }
   }
