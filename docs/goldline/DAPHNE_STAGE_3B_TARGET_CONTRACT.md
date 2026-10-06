@@ -27,15 +27,21 @@ This contract is recorded before any Claire production edit.
 
 Behavior class: `ask_before_ambiguous_pending_continuation`
 
+Production reachability proof:
+- with an existing pending action, the parent `safeClaireBrainV3Fallback` already maps an ambiguous reply such as "maybe" to `target: pending_action` and `act: unclear`;
+- the parent closed-decision projection already maps that to `turnReadiness: ambiguous` and `pendingActionRelationship: continues_pending`;
+- the parent branch selector otherwise returns `continue`.
+
 Baseline:
-- a pending-action-relationship decision abstains;
-- its existing fallback is `continues_pending`;
+- pending action exists;
+- `turnReadiness` is the already-existing `ambiguous`;
+- `pendingActionRelationship` is the already-existing `continues_pending`;
 - Claire follows its existing continue path.
 
 Adapted:
 - the existing `CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED` flag permits live adaptation;
 - an active Daphne `ask_instead` directive exists for `pattern:explicit_deferral_dismissal`;
-- the pending-action relationship decision abstains and would otherwise fall back to `continues_pending`;
+- the same parent-main ambiguous pending-action condition occurs;
 - Daphne selects Claire's already-existing `clarify` branch.
 
 The Stage 3B PR may switch this existing branch. It may not invent a new Claire conversational behavior.
