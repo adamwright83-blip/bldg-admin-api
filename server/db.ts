@@ -396,12 +396,42 @@ function isDuplicateKeyError(err: unknown): boolean {
   );
 }
 
+export function residentOrderReuseMatchesAuthority(
+  incoming: Pick<InsertOrder, "tenantId" | "bldgUserId" | "phone">,
+  existing: Pick<Order, "tenantId" | "bldgUserId" | "phone">
+): boolean {
+  const incomingTenant = incoming.tenantId?.trim() ?? "";
+  const existingTenant = existing.tenantId?.trim() ?? "";
+  if (!incomingTenant || !existingTenant || incomingTenant !== existingTenant) {
+    return false;
+  }
+
+  if (incoming.bldgUserId != null) {
+    return (
+      existing.bldgUserId != null &&
+      Number(existing.bldgUserId) === Number(incoming.bldgUserId)
+    );
+  }
+
+  const leftPhone = phoneDigits(incoming.phone);
+  const rightPhone = phoneDigits(existing.phone);
+  if (!leftPhone || !rightPhone) return false;
+  const normalizedLeft =
+    leftPhone.length === 11 && leftPhone.startsWith("1")
+      ? leftPhone.slice(1)
+      : leftPhone;
+  const normalizedRight =
+    rightPhone.length === 11 && rightPhone.startsWith("1")
+      ? rightPhone.slice(1)
+      : rightPhone;
+  return normalizedLeft === normalizedRight;
+}
+
 /**
  * Resident-laundry idempotency lookup, keyed on the physical, UNIQUE-indexed
  * orders.residentClientRequestId column (NOT the heldMetadataJson mirror). The
- * resident app stamps one clientRequestId per "set it in motion" tap; a retry
- * carries the same key, so we resolve it back to the order already created.
- * The key is globally unique by construction, so no tenant scoping is needed.
+ * key is globally unique, so lookup is global; callers must still prove that
+ * the found row belongs to the same tenant/resident before reusing it.
  */
 export async function findResidentOrderByClientRequestId(
   clientRequestId: string | null | undefined
@@ -434,6 +464,9 @@ export async function createOrReuseResidentLaundryOrder(
   order: InsertOrder,
   opts?: { clientRequestId?: string | null }
 ): Promise<{ orderId: number; reused: boolean }> {
+  if (!order.tenantId?.trim()) {
+    throw new Error("Resident order requires explicit tenant authority");
+  }
   // Debugging mirror only — the physical column / opts are authoritative.
   const metadataKey =
     order.heldMetadataJson &&
@@ -452,7 +485,14 @@ export async function createOrReuseResidentLaundryOrder(
   // 1) Fast path: this key already produced an order.
   if (clientRequestId) {
     const existing = await findResidentOrderByClientRequestId(clientRequestId);
-    if (existing) return { orderId: existing.id, reused: true };
+    if (existing) {
+      if (!residentOrderReuseMatchesAuthority(order, existing)) {
+        throw new Error(
+          "Resident idempotency key belongs to a different tenant or resident"
+        );
+      }
+      return { orderId: existing.id, reused: true };
+    }
   }
 
   // 2) Fallback duplicate guard (keyless paths, or a re-send that lost the key).
@@ -486,7 +526,14 @@ export async function createOrReuseResidentLaundryOrder(
   } catch (err) {
     if (clientRequestId && isDuplicateKeyError(err)) {
       const raced = await findResidentOrderByClientRequestId(clientRequestId);
-      if (raced) return { orderId: raced.id, reused: true };
+      if (raced) {
+        if (!residentOrderReuseMatchesAuthority(order, raced)) {
+          throw new Error(
+            "Resident idempotency key belongs to a different tenant or resident"
+          );
+        }
+        return { orderId: raced.id, reused: true };
+      }
     }
     throw err;
   }
