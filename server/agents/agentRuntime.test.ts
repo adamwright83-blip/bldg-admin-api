@@ -102,6 +102,18 @@ describe("classifyExternalCommunicationExecution", () => {
     expect(
       classifyExternalCommunicationExecution({ providerAccepted: false })
     ).toBe("not_sent");
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: false,
+        sendOutcome: "unknown",
+      })
+    ).toBe("indeterminate");
+    expect(
+      classifyExternalCommunicationExecution({
+        providerAccepted: false,
+        sendOutcome: "rejected",
+      })
+    ).toBe("not_sent");
   });
 });
 
