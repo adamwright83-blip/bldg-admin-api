@@ -52,6 +52,15 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain("churnScanBookCoverage");
     expect(service).toContain('scanSource: "native_orders_only"');
     expect(service).toContain("loadBusinessSourceCoverage");
+    expect(service).toContain("operationsEvents");
+    expect(service).toContain('eq(operationsEvents.sourceEventType, "dropoff_completed")');
+    expect(service).toContain('eq(operationsEvents.eventStatus, "completed")');
+    expect(service).toContain("operationsEvents.actualEventTimestamp");
+    expect(service).not.toContain('row.paid || row.status === "delivered"');
+    expect(service).not.toContain("row.paidAt ?? row.updatedAt ?? row.createdAt");
+    expect(service).toContain("readPaymentAuthorityReceipts");
+    expect(service).toContain("paymentAuthorityReceiptMatches");
+    expect(service).not.toContain("valueCents: cents(row.total)");
   });
 
   it("creates an existing stale-customer ops mission rather than a detached alert", () => {
@@ -88,7 +97,9 @@ describe("Churn Radar production contract", () => {
   it("attributes only a later processor-backed paid order as recovered revenue", () => {
     expect(service).toContain("refreshCustomerRecoveryAttribution");
     expect(service).toContain("eq(orders.paid, true)");
-    expect(service).toContain("filter(hasNativePaymentAuthority)");
+    expect(service).toContain("paymentAuthorityReceiptId");
+    expect(service).toContain('sourceEvidenceReference: `authority_receipts:${receipt.id}`');
+    expect(service).not.toContain("hasNativePaymentAuthority");
     expect(service).toContain('eventName: "revenue_recovered"');
     expect(service).toContain("recoveredRevenueCents");
   });
