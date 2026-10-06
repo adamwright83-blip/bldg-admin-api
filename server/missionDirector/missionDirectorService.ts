@@ -32,6 +32,19 @@ function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
+export function planningExecutionConstraint(command: {
+  weeklyPrimaryExecutionType?: unknown;
+  weeklyIntentOverride?: unknown;
+} | null | undefined): "mission" | "challenge" | null {
+  // Once an evidenced Daily Command override owns the day, the displaced
+  // WeeklyIntent primary is no longer truthful execution-class evidence.
+  if (!command || command.weeklyIntentOverride) return null;
+  return command.weeklyPrimaryExecutionType === "mission" ||
+    command.weeklyPrimaryExecutionType === "challenge"
+    ? command.weeklyPrimaryExecutionType
+    : null;
+}
+
 function missionOperatorIds(input: {
   operatorId: string;
   operatorIds?: readonly string[];
@@ -332,11 +345,7 @@ export async function computeMissionPlan(input: {
     rawPockets,
     Boolean(command?.constraints.protectDiscretionary)
   );
-  const weeklyExecution =
-    command?.weeklyPrimaryExecutionType === "mission" ||
-    command?.weeklyPrimaryExecutionType === "challenge"
-      ? command.weeklyPrimaryExecutionType
-      : null;
+  const weeklyExecution = planningExecutionConstraint(command);
   const protectedSourceIds = [
     ...(command?.primary?.provenance.sourceIds ?? []),
     ...(command?.primary?.id ? [command.primary.id] : []),
