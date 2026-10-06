@@ -124,6 +124,7 @@ export function operatorArtifactIdempotencyKey(input: {
 
 export type SendOperatorArtifactResult = {
   providerAccepted: boolean;
+  sendOutcome?: "accepted" | "rejected" | "unknown";
   delivered: false;
   resolvedTo: string;
   messageSid: string | null;
@@ -479,6 +480,35 @@ export function createTwilioOperatorSmsPort(
   };
 }
 
+function providerFailureOutcome(
+  error: unknown
+): "rejected" | "unknown" {
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!candidate || typeof candidate !== "object") break;
+    const record = candidate as {
+      status?: unknown;
+      statusCode?: unknown;
+      cause?: unknown;
+    };
+    for (const value of [record.status, record.statusCode]) {
+      const status = typeof value === "string" ? Number(value) : value;
+      if (
+        typeof status === "number" &&
+        Number.isInteger(status) &&
+        status >= 400
+      ) {
+        if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          return "rejected";
+        }
+        return "unknown";
+      }
+    }
+    candidate = record.cause;
+  }
+  return "unknown";
+}
+
 function acceptanceEvent(
   status: string
 ): "MESSAGE_SENT" | "MESSAGE_FAILED" | null {
@@ -499,9 +529,13 @@ function evidenceFor(
   return receipt ? toCommunicationCandidateEvidence(receipt) : [];
 }
 
-function failureResult(resolvedTo: string): SendOperatorArtifactResult {
+function failureResult(
+  resolvedTo: string,
+  sendOutcome: "rejected" | "unknown" = "rejected"
+): SendOperatorArtifactResult {
   return {
     providerAccepted: false,
+    sendOutcome,
     delivered: false,
     resolvedTo,
     messageSid: null,
@@ -595,16 +629,22 @@ export async function sendOperatorArtifact(
     ) {
       throw error;
     }
-    console.error("[operator-artifact] provider did not accept SMS", {
-      to: redactEndpointForLog(resolvedTo),
-      errorName: error instanceof Error ? error.name : "unknown",
-    });
-    return failureResult(resolvedTo);
+    const sendOutcome = providerFailureOutcome(error);
+    console.error(
+      sendOutcome === "rejected"
+        ? "[operator-artifact] provider rejected SMS"
+        : "[operator-artifact] provider send outcome is unknown",
+      {
+        to: redactEndpointForLog(resolvedTo),
+        errorName: error instanceof Error ? error.name : "unknown",
+      }
+    );
+    return failureResult(resolvedTo, sendOutcome);
   }
 
   if (!sent.messageSid) {
     return {
-      ...failureResult(resolvedTo),
+      ...failureResult(resolvedTo, "unknown"),
       providerStatus: sent.status || null,
     };
   }
@@ -627,6 +667,7 @@ export async function sendOperatorArtifact(
         : null;
     return {
       providerAccepted: false,
+      sendOutcome: "rejected",
       delivered: false,
       resolvedTo,
       messageSid: sent.messageSid,
@@ -651,33 +692,30 @@ export async function sendOperatorArtifact(
       decisionId: input.decisionId,
     });
   } catch (error) {
-    if (
-      error instanceof TwilioCommunicationReceiptError &&
-      error.code === "persistence_unconfigured"
-    ) {
-      console.warn(
-        "[operator-artifact] provider accepted SMS but the receipt store is not configured",
-        {
-          messageSid: sent.messageSid,
-          to: redactEndpointForLog(resolvedTo),
-        }
-      );
-      return {
-        providerAccepted: true,
-        delivered: false,
-        resolvedTo,
+    console.warn(
+      "[operator-artifact] provider accepted SMS but durable receipt persistence failed",
+      {
         messageSid: sent.messageSid,
-        providerStatus: sent.status || null,
-        receipt: null,
-        receiptDuplicate: false,
-        evidence: [],
-      };
-    }
-    throw error;
+        to: redactEndpointForLog(resolvedTo),
+        errorName: error instanceof Error ? error.name : "unknown",
+      }
+    );
+    return {
+      providerAccepted: true,
+      sendOutcome: "accepted",
+      delivered: false,
+      resolvedTo,
+      messageSid: sent.messageSid,
+      providerStatus: sent.status || null,
+      receipt: null,
+      receiptDuplicate: false,
+      evidence: [],
+    };
   }
 
   return {
     providerAccepted: true,
+    sendOutcome: "accepted",
     delivered: false,
     resolvedTo,
     messageSid: sent.messageSid,
