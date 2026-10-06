@@ -136,9 +136,7 @@ export function buildAuthoritativeNativePayments(input: {
     if (!projection) continue;
 
     const reversed =
-      order.status === "cancelled" ||
-      projection.state === "cancelled" ||
-      projection.state === "refunded";
+      projection.state === "cancelled" || projection.state === "refunded";
     const rawNet = projection.netPaidCents;
     const validNet =
       rawNet !== null && Number.isSafeInteger(rawNet) && rawNet >= 0;
@@ -158,7 +156,7 @@ export function buildAuthoritativeNativePayments(input: {
       continue;
     }
     const state: AuthoritativeNativePayment["state"] =
-      order.status === "cancelled" || projection.state === "cancelled"
+      projection.state === "cancelled"
         ? "cancelled"
         : projection.state === "refunded"
           ? "refunded"
@@ -212,6 +210,9 @@ export function buildAuthoritativeChurnHistory(input: {
 
   const history: AuthoritativeChurnObservation[] = [];
   for (const order of input.orders) {
+    // A cancelled Laundry order is not completed-service history. Payment truth
+    // remains a separate Money-domain claim and cannot resurrect service cadence.
+    if (order.status === "cancelled") continue;
     const completion = completionByOrder.get(order.id);
     if (completion?.eventStatus === "voided") continue;
 
