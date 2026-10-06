@@ -243,6 +243,11 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       lifecycle: "used",
       useCount: 1,
     });
+    const usedTalk = await caller.operatorRepresentative.ask({
+      question: "Are you using this?",
+      focusedItemId: target!.id,
+    });
+    expect(usedTalk.reply).toMatch(/durable receipt proves Claire used this 1 time/i);
 
     // Replay proof reuses the exact durable conversation + turn identity.
     const decision = await loadOperatorAdaptationDecisionForUser({
@@ -291,6 +296,12 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       lifecycle: "revoked_historical",
       useCount: 1,
     });
+    const revokedTalk = await caller.operatorRepresentative.ask({
+      question: "Are you using this?",
+      focusedItemId: target!.id,
+    });
+    expect(revokedTalk.reply).toMatch(/revoked now/i);
+    expect(revokedTalk.reply).toMatch(/1 past use/i);
 
     const afterRevokeConversation = `after-revoke-${suffix}`;
     await caller.claire.talk({
