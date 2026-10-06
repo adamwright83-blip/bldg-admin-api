@@ -34,7 +34,9 @@ export async function loadWeeklyGrowthCandidates(
   input: LoadWeeklyGrowthCandidatesInput,
   deps: WeeklyGrowthCandidateDeps = productionDeps
 ): Promise<WeeklyGrowthCandidateFeed> {
-  const today = (deps.today ?? businessToday)(input.now, input.timeZone);
+  const today =
+    input.businessDate?.trim() ||
+    (deps.today ?? businessToday)(input.now, input.timeZone);
   const bundle = await deps.readSources({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
