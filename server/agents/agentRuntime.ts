@@ -56,6 +56,8 @@ export function classifyExternalCommunicationExecution(
   output: unknown
 ): ExternalCommunicationExecutionState {
   if (!isRecord(output)) return "indeterminate";
+  if (output.sendOutcome === "unknown") return "indeterminate";
+  if (output.sendOutcome === "rejected") return "not_sent";
   if (output.sent === false || output.providerAccepted === false) return "not_sent";
   if (output.sent === true) {
     return nonEmptyString(output.communicationReceiptId) &&
