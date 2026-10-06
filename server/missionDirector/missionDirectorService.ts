@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { missionDirectorPlans, opsTasks } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { getDashboardTimeZone } from "../dashboardZoned";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
@@ -273,7 +274,7 @@ export async function computeMissionPlan(input: {
     tenantId: input.tenantId,
     businessDate: input.businessDate,
     campaigns: enabledCampaigns,
-    timeZone: input.timeZone ?? "America/Los_Angeles",
+    timeZone: input.timeZone?.trim() || getDashboardTimeZone(),
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
