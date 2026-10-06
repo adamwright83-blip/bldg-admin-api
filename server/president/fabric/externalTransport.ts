@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type {
-  Cycle,
-  Mission,
-  MissionStatus,
-  ReviewVerdict,
+import {
+  MISSION_TRANSITIONS,
+  type Cycle,
+  type Mission,
+  type MissionStatus,
+  type ReviewVerdict,
 } from "../../../shared/presidentCycle";
 import type { CycleStore } from "../cycle/cycleStore";
 import { verifyReceipt, setStatus } from "../cycle/cycleService";
@@ -19,7 +20,7 @@ import {
 const TERMINAL: MissionStatus[] = ["BLOCKED", "READY_FOR_HUMAN", "COMPLETED"];
 
 function transition(m: Mission, to: MissionStatus, actorId: string) {
-  const allowed = (awaitImportTransitions as any)[m.status] as MissionStatus[] | undefined;
+  const allowed = MISSION_TRANSITIONS[m.status] as readonly MissionStatus[] | undefined;
   if (!allowed?.includes(to))
     throw new Error(`Illegal mission transition ${m.status} -> ${to}`);
   m.transitions.push({
@@ -31,8 +32,6 @@ function transition(m: Mission, to: MissionStatus, actorId: string) {
   m.status = to;
 }
 
-// Initialized without a circular import from runner.
-import { MISSION_TRANSITIONS as awaitImportTransitions } from "../../../shared/presidentCycle";
 
 function addReceipt(
   m: Mission,
@@ -72,12 +71,35 @@ function leaseFor(actorId: string, attempt: number) {
   };
 }
 
+function normalizeBlockedMissions(c: Cycle, actorId: string) {
+  for (const m of c.missions) {
+    if (TERMINAL.includes(m.status) || ["READY_FOR_REVIEW", "REVIEWING"].includes(m.status))
+      continue;
+    const unsupported = routeMission(m.domain) === BLOCKED_UNSUPPORTED;
+    const dependencyBlocked = depsReady(c, m) === "BLOCKED";
+    if (!unsupported && !dependencyBlocked) continue;
+    if (m.status === "ADAM_APPROVED") transition(m, "QUEUED", actorId);
+    if (m.status === "PREPARING" || m.status === "EXECUTING" || m.status === "VALIDATING" || m.status === "REPAIR_REQUIRED" || m.status === "QUEUED") {
+      transition(m, "BLOCKED", actorId);
+      m.blocker = unsupported
+        ? `${BLOCKED_UNSUPPORTED}: ${m.domain}`
+        : "Dependency mission is BLOCKED";
+      addReceipt(m, "BLOCKED", actorId, { reason: m.blocker });
+      m.lease = null;
+    }
+  }
+}
+
 function nextExecutionMission(c: Cycle): Mission | null {
   for (const m of c.missions) {
-    if (TERMINAL.includes(m.status) || m.status === "READY_FOR_REVIEW") continue;
+    if (
+      TERMINAL.includes(m.status) ||
+      ["READY_FOR_REVIEW", "REVIEWING"].includes(m.status)
+    )
+      continue;
+    if (m.lease && !leaseExpired(m)) continue;
     if (routeMission(m.domain) === BLOCKED_UNSUPPORTED) continue;
-    const dep = depsReady(c, m);
-    if (dep === "READY") return m;
+    if (depsReady(c, m) === "READY") return m;
   }
   return null;
 }
@@ -113,6 +135,9 @@ export async function claimExternalExecution(
     const result = await store.update(snapshot.cycleId, c => {
       if (c.status !== "EXECUTING" || !c.approval || !verifyReceipt(c.approval))
         return null;
+      normalizeBlockedMissions(c, actorId);
+      maybeCompleteCycle(c);
+      if (c.status !== "EXECUTING") return null;
       const m = nextExecutionMission(c);
       if (!m) return null;
 
@@ -271,7 +296,7 @@ export async function reportExternalExecution(
         changedFiles: input.result.changedFiles,
         checks: input.result.checks,
         evidenceIds: [],
-      } as Mission["handback"] & { baseSha: string };
+      };
     } else {
       if (!input.result.artifactText.trim())
         throw new Error("Research artifact is empty");
@@ -300,10 +325,22 @@ export async function claimExternalReview(
   const cycles = (await store.list()).filter(c => c.status === "EXECUTING");
   for (const snapshot of cycles) {
     const result = await store.update(snapshot.cycleId, c => {
-      const m = c.missions.find(x => x.status === "READY_FOR_REVIEW");
+      const m = c.missions.find(
+        x =>
+          x.status === "READY_FOR_REVIEW" ||
+          (x.status === "REVIEWING" && leaseExpired(x))
+      );
       if (!m) return null;
       if (!m.executorActorId) throw new Error("Mission has no executor actor");
       assertIndependentReviewer(m.executorActorId, actorId);
+      if (m.status === "REVIEWING") {
+        addReceipt(m, "LEASE_RECOVERED", actorId, {
+          previousActor: m.lease?.actorId ?? null,
+          status: m.status,
+        });
+        m.lease = null;
+        transition(m, "READY_FOR_REVIEW", actorId);
+      }
       if (m.lease && !leaseExpired(m)) return null;
       m.reviewerActorId = actorId;
       transition(m, "REVIEWING", actorId);
