@@ -213,6 +213,17 @@ describe("weekly growth candidates", () => {
     expect(isDealable(lever(thin))).toBe(false);
     const feed = await load(bundle({ recovery: available([eligible, below, active, thin]) }));
     expect(feed.candidates.map(item => item.title)).toEqual(["cust-ok"]);
+    expect(feed.candidates[0]?.observedSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "days_since_last_completed_service",
+          value: "40",
+        }),
+      ])
+    );
+    expect(feed.candidates[0]?.observedSignals.map(signal => signal.label)).not.toContain(
+      "days_since_last_paid_order"
+    );
     expect(feed.sources.customer_recovery).toMatchObject({ status: "available", observedCount: 4, eligibleCount: 1, shownCount: 1 });
     const assembleSource = readFileSync(path.join(dir(), "assemble.ts"), "utf8");
     expect(assembleSource).toContain("hustlerLeverSelection");
@@ -220,7 +231,7 @@ describe("weekly growth candidates", () => {
     expect(assembleSource).not.toContain("score >=");
   });
 
-  it("caps recovery at three using the warm lever order", async () => {
+  it("returns the full dealable recovery universe without a discovery cap", async () => {
     const rows = [
       recovery("a", { historyOrderCount: 10, daysSinceLastOrder: 30, existingScore: 50 }),
       recovery("b", { historyOrderCount: 10, daysSinceLastOrder: 10, existingScore: 90 }),
@@ -229,11 +240,9 @@ describe("weekly growth candidates", () => {
       recovery("d", { historyOrderCount: 2, daysSinceLastOrder: 5, existingScore: 40, churnGrade: "medium", recommendedAction: "prepare_win_back" }),
     ];
     const feed = await load(bundle({ recovery: available(rows) }));
-    expect(feed.candidates.map(item => item.title)).toEqual(["a", "b", "c"]);
-    expect(feed.sources.customer_recovery).toMatchObject({ eligibleCount: 5, rankedCount: 5, shownCount: 3 });
-    expect(feed.candidates[0]?.observedSignals.map(signal => signal.label)).toEqual(
-      expect.arrayContaining(["churn_score", "history_order_count", "days_since_last_paid_order", "warm_lever_rank", "big_swing_lever_rank"])
-    );
+    expect(feed.candidates.map(item => item.title)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(feed.sources.customer_recovery).toMatchObject({ eligibleCount: 5, rankedCount: 5, shownCount: 5 });
+    expect(feed.capsApplied).toBe(false);
     expect(JSON.stringify(feed.candidates)).not.toMatch(/estimatedMonthly|conversion|projected|likelyCustomers|"roi"/i);
   });
 
@@ -270,7 +279,7 @@ describe("weekly growth candidates", () => {
     expect(candidate.rankReasons).toContain("LOW_CONFIDENCE_ASSUMPTION");
   });
 
-  it("caps campaigns at 8, follow-ups at 5, and the feed at 15", async () => {
+  it("does not hide rankable work behind presentation caps", async () => {
     const campaigns = Array.from({ length: 10 }, (_, index) => campaign(`c-${String(index).padStart(2, "0")}`, `Template ${index}`));
     const followUps = [
       followUp("fu-o1", "Overdue one", "open", "2026-09-18"),
@@ -284,14 +293,16 @@ describe("weekly growth candidates", () => {
     ];
     const unfinished = Array.from({ length: 20 }, (_, index) => growth(`g-${String(index).padStart(2, "0")}`, `Growth ${index}`));
     const campaignFeed = await load(bundle({ campaigns: available(campaigns) }));
-    expect(campaignFeed.candidates).toHaveLength(8);
-    expect(campaignFeed.sources.campaign_library).toMatchObject({ observedCount: 10, eligibleCount: 10, rankedCount: 10, shownCount: 8 });
+    expect(campaignFeed.candidates).toHaveLength(10);
+    expect(campaignFeed.sources.campaign_library).toMatchObject({ observedCount: 10, eligibleCount: 10, rankedCount: 10, shownCount: 10 });
     const followFeed = await load(bundle({ commercialFollowUps: available(followUps) }));
-    expect(followFeed.candidates.map(item => item.sourceRefs[0]?.sourceId)).toEqual(["fu-o1", "fu-o2", "fu-o3", "fu-d1", "fu-d2"]);
-    expect(followFeed.sources.commercial_follow_up).toMatchObject({ eligibleCount: 8, rankedCount: 8, shownCount: 5 });
+    expect(followFeed.candidates).toHaveLength(8);
+    expect(new Set(followFeed.candidates.map(item => item.sourceRefs[0]?.sourceId))).toEqual(new Set(followUps.map(item => item.sourceId)));
+    expect(followFeed.sources.commercial_follow_up).toMatchObject({ eligibleCount: 8, rankedCount: 8, shownCount: 8 });
     const totalFeed = await load(bundle({ unfinished: available(unfinished) }));
-    expect(totalFeed.candidates).toHaveLength(15);
-    expect(totalFeed.sources.unfinished_growth_work).toMatchObject({ eligibleCount: 20, rankedCount: 20, shownCount: 15 });
+    expect(totalFeed.candidates).toHaveLength(20);
+    expect(totalFeed.sources.unfinished_growth_work).toMatchObject({ eligibleCount: 20, rankedCount: 20, shownCount: 20 });
+    expect(totalFeed.capsApplied).toBe(false);
   });
 
   it("lets a macro goal change relevance and never mint a candidate", async () => {
@@ -409,13 +420,18 @@ describe("weekly growth candidates", () => {
     expect(feed.candidates.filter(item => item.title === "Call Louise about the towel account" || item.title === "Follow up: Louise").length).toBeGreaterThan(1);
   });
 
-  it("ranks unfinished growth ahead of a merely enabled template", async () => {
+  it("uses stable technical order rather than source class as business priority", async () => {
     const feed = await load(bundle({
       unfinished: available([growth("louise", "Louise follow-up")]),
       campaigns: available([campaign("greystar-koreatown-colosseum", "Greystar Hunt")]),
     }));
-    expect(feed.candidates.map(item => item.sourceKind)).toEqual(["unfinished_growth_work", "campaign_library"]);
-    expect(feed.candidates[1]?.alreadyInFlight).toBe(false);
+    expect(feed.candidates.map(item => item.id)).toEqual(
+      [...feed.candidates.map(item => item.id)].sort()
+    );
+    expect(new Set(feed.candidates.map(item => item.sourceKind))).toEqual(
+      new Set(["unfinished_growth_work", "campaign_library"])
+    );
+    expect(feed.capsApplied).toBe(false);
   });
 
   it("does not treat an unavailable source as an observed empty result", async () => {

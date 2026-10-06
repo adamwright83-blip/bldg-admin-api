@@ -1,4 +1,4 @@
-import { isDealable, rankCandidates, type LeverCandidate } from "../churnRadar/hustlerLeverSelection";
+import { isDealable, type LeverCandidate } from "../churnRadar/hustlerLeverSelection";
 import {
   WEEKLY_GROWTH_CAPS,
   WEEKLY_GROWTH_RANK_REASONS,
@@ -104,13 +104,6 @@ const READER_NAME: Record<WeeklyGrowthRawOrigin, string> = {
   mission_sequencer: "missionSequencer",
 };
 
-const SOURCE_CLASS: Record<WeeklyGrowthSourceKind, number> = {
-  unfinished_growth_work: 1,
-  commercial_follow_up: 2,
-  proactive_obligation: 3,
-  customer_recovery: 4,
-  campaign_library: 5,
-};
 
 export type AssembleWeeklyGrowthCandidatesInput = {
   tenantId: string;
@@ -122,15 +115,8 @@ export type AssembleWeeklyGrowthCandidatesInput = {
   bundle: WeeklyGrowthSourceBundle;
 };
 
-type Ranked = {
+type Discovered = {
   candidate: WeeklyGrowthCandidate;
-  sourceClass: number;
-  inFlight: number;
-  due: number;
-  score: number | null;
-  prep: number;
-  macro: number;
-  stableId: string;
 };
 
 export function assembleWeeklyGrowthCandidates(
@@ -171,35 +157,17 @@ export function assembleWeeklyGrowthCandidates(
   const dealable = recoveryPool.filter(record => isDealable(toLever(record)));
   eligibleBySource.set("customer_recovery", dealable);
 
-  const warmOrder = rankCandidates(dealable.map(toLever), "warm");
-  const swingOrder = rankCandidates(dealable.map(toLever), "big_swing");
-  const warmRank = new Map(warmOrder.map((item, index) => [item.id, index]));
-  const swingRank = new Map(swingOrder.map((item, index) => [item.id, index]));
-
   const eligible = WEEKLY_GROWTH_SOURCE_KINDS.flatMap(kind => eligibleBySource.get(kind) ?? []);
   const groups = resolveUntitledRuns(dedupe(eligible), libraryTitleDonors(input.bundle, input.tenantId));
-  const ranked: Ranked[] = groups
-    .map(group => toRanked(group, input, macro, warmRank, swingRank, warmOrder.length))
+  const ranked: Discovered[] = groups
+    .map(group => toCandidate(group, input, macro))
     .filter(item => item.candidate.title.trim().length > 0 && item.candidate.objective.trim().length > 0);
-  ranked.sort(compareRanked);
-
-  const shown: WeeklyGrowthCandidate[] = [];
-  let followUps = 0;
-  let recoveries = 0;
-  let campaigns = 0;
-  for (const item of ranked) {
-    if (shown.length >= WEEKLY_GROWTH_CAPS.total) break;
-    const kind = item.candidate.sourceKind;
-    if ((kind === "commercial_follow_up" || kind === "proactive_obligation") && followUps >= WEEKLY_GROWTH_CAPS.followUp) {
-      continue;
-    }
-    if (kind === "customer_recovery" && recoveries >= WEEKLY_GROWTH_CAPS.recovery) continue;
-    if (kind === "campaign_library" && campaigns >= WEEKLY_GROWTH_CAPS.campaign) continue;
-    shown.push(item.candidate);
-    if (kind === "commercial_follow_up" || kind === "proactive_obligation") followUps += 1;
-    if (kind === "customer_recovery") recoveries += 1;
-    if (kind === "campaign_library") campaigns += 1;
-  }
+  // Discovery returns the entire eligible universe in a stable technical order.
+  // Business-priority signals remain attached as facts, but discovery neither
+  // chooses a winner nor hides rankable work behind presentation caps.
+  const shown: WeeklyGrowthCandidate[] = ranked
+    .map(item => item.candidate)
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   const sources = {} as Record<WeeklyGrowthSourceReportKey, WeeklyGrowthSourceReport>;
   for (const key of WEEKLY_GROWTH_SOURCE_REPORT_KEYS) {
@@ -213,6 +181,7 @@ export function assembleWeeklyGrowthCandidates(
     candidates: shown,
     sources,
     caps: WEEKLY_GROWTH_CAPS,
+    capsApplied: false,
   };
 }
 
@@ -221,7 +190,7 @@ function reportFor(
   bundle: WeeklyGrowthSourceBundle,
   observed: Map<WeeklyGrowthSourceKind, number>,
   eligibleBySource: Map<WeeklyGrowthSourceKind, WeeklyGrowthRawRecord[]>,
-  ranked: Ranked[],
+  ranked: Discovered[],
   shown: WeeklyGrowthCandidate[]
 ): WeeklyGrowthSourceReport {
   if (key === "macro_goal") {
@@ -446,14 +415,11 @@ function dedupeKeys(record: WeeklyGrowthRawRecord): string[] {
   return keys;
 }
 
-function toRanked(
+function toCandidate(
   group: WeeklyGrowthRawRecord[],
   input: AssembleWeeklyGrowthCandidatesInput,
-  macro: WeeklyGrowthMacroSnapshot | null,
-  warmRank: Map<string, number>,
-  swingRank: Map<string, number>,
-  warmCount: number
-): Ranked {
+  macro: WeeklyGrowthMacroSnapshot | null
+): Discovered {
   const authority = [...group].sort((a, b) => {
     const rank = AUTHORITY[a.origin] - AUTHORITY[b.origin];
     if (rank !== 0) return rank;
@@ -517,22 +483,12 @@ function toRanked(
       pocketKind: prepSource.pocketKind,
       minimumMinutes: prepSource.minimumMinutes,
     },
-    observedSignals: signals(group, warmRank, swingRank),
+    observedSignals: signals(group),
     assumptions,
     confidence,
     rankReasons: reasons,
   };
-  const score = recovery ? warmCount - (warmRank.get(recovery.sourceId) ?? 0) : null;
-  return {
-    candidate,
-    sourceClass: SOURCE_CLASS[sourceKind],
-    inFlight: alreadyInFlight ? 1 : 0,
-    due,
-    score,
-    prep: feasible ? 1 : 0,
-    macro: aligned ? 1 : 0,
-    stableId: id,
-  };
+  return { candidate };
 }
 
 function motionOf(group: WeeklyGrowthRawRecord[], sourceKind: WeeklyGrowthSourceKind): WeeklyGrowthMotion {
@@ -622,9 +578,7 @@ function sourceRefs(group: WeeklyGrowthRawRecord[]): WeeklyGrowthSourceRef[] {
 }
 
 function signals(
-  group: WeeklyGrowthRawRecord[],
-  warmRank: Map<string, number>,
-  swingRank: Map<string, number>
+  group: WeeklyGrowthRawRecord[]
 ): WeeklyGrowthCandidate["observedSignals"] {
   const signalsOut: WeeklyGrowthCandidate["observedSignals"] = [];
   for (const record of group) {
@@ -639,29 +593,11 @@ function signals(
     };
     if (record.existingScore != null) push("churn_score", String(record.existingScore));
     if (record.historyOrderCount != null) push("history_order_count", String(record.historyOrderCount));
-    if (record.daysSinceLastOrder != null) push("days_since_last_paid_order", String(record.daysSinceLastOrder));
+    if (record.daysSinceLastOrder != null) push("days_since_last_completed_service", String(record.daysSinceLastOrder));
     if (record.averageOrderValueCents != null) push("average_order_value_cents", String(record.averageOrderValueCents));
-    const warm = warmRank.get(record.sourceId);
-    const swing = swingRank.get(record.sourceId);
-    if (warm != null) push("warm_lever_rank", String(warm));
-    if (swing != null) push("big_swing_lever_rank", String(swing));
   }
   signalsOut.sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value));
   return signalsOut;
-}
-
-function compareRanked(a: Ranked, b: Ranked): number {
-  if (a.sourceClass !== b.sourceClass) return a.sourceClass - b.sourceClass;
-  if (a.inFlight !== b.inFlight) return b.inFlight - a.inFlight;
-  if (a.due !== b.due) return b.due - a.due;
-  if (a.score !== b.score) {
-    if (a.score == null) return 1;
-    if (b.score == null) return -1;
-    return b.score - a.score;
-  }
-  if (a.prep !== b.prep) return b.prep - a.prep;
-  if (a.macro !== b.macro) return b.macro - a.macro;
-  return a.stableId < b.stableId ? -1 : a.stableId > b.stableId ? 1 : 0;
 }
 
 function macroMetric(source: SourceAvailability<WeeklyGrowthMacroSnapshot>): WeeklyGrowthMacroSnapshot | null {

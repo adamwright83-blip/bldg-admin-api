@@ -1,3 +1,6 @@
+import type { ObjectiveExecutionType } from "./objectiveExecution";
+import type { WeeklyGrowthSourceKind, WeeklyGrowthSourceRef } from "./weeklyGrowthCandidates";
+
 /**
  * Slice 4 — Mission Director types shared between server and client.
  * See docs/goldline/SLICE_4_MISSION_DIRECTOR.md.
@@ -37,6 +40,53 @@ export type MissionRankEvidence = {
   warnings: string[];
 };
 
+export type MissionWorkRankEvidence = {
+  workId: string;
+  title: string;
+  objective: string;
+  completionCondition: string | null;
+  sourceKind: WeeklyGrowthSourceKind;
+  sourceRefs: WeeklyGrowthSourceRef[];
+  score: number;
+  confidence: "high" | "low";
+  executionType: ObjectiveExecutionType | null;
+  eligible: boolean;
+  blockedReasons: string[];
+  factors: RankFactor[];
+  warnings: string[];
+};
+
+export type MissionWorkSelection = {
+  workId: string;
+  title: string;
+  objective: string;
+  completionCondition: string | null;
+  sourceKind: WeeklyGrowthSourceKind;
+  sourceRefs: WeeklyGrowthSourceRef[];
+  executionType: "mission" | "challenge";
+  rankEvidence: MissionWorkRankEvidence;
+};
+
+export type MissionAuthoritativeWorkPlan =
+  | {
+      status: "ranked";
+      primary: MissionWorkSelection;
+      ranking: MissionWorkRankEvidence[];
+      reason: null;
+    }
+  | {
+      status: "no_eligible_work";
+      primary: null;
+      ranking: MissionWorkRankEvidence[];
+      reason: string;
+    }
+  | {
+      status: "unavailable";
+      primary: null;
+      ranking: MissionWorkRankEvidence[];
+      reason: string;
+    };
+
 export const FALLBACK_ONLY_REASONS = [
   "NO_QUALIFYING_POCKET",
   "PREP_NOT_READY",
@@ -52,6 +102,9 @@ export const NO_PLAN_REASONS = [
   "NO_PREPARED_FALLBACK",
   "DAY_FULLY_COMMITTED",
   "SCHEDULE_DATA_INSUFFICIENT",
+  "AUTHORITATIVE_WORK_NOT_CAMPAIGN",
+  "NO_ELIGIBLE_RANKED_WORK",
+  "RANKABLE_WORK_UNAVAILABLE",
 ] as const;
 export type NoPlanReason = (typeof NO_PLAN_REASONS)[number];
 
@@ -73,6 +126,7 @@ export type MissionPlanOutcome =
       explanation: string;
       intelligence: "deterministic" | "anthropic" | "deterministic_fallback";
       ranking: MissionRankEvidence[];
+      workPlan?: MissionAuthoritativeWorkPlan;
     }
   | {
       status: "fallback_only";
@@ -80,12 +134,14 @@ export type MissionPlanOutcome =
       reason: FallbackOnlyReason;
       explanation: string;
       ranking: MissionRankEvidence[];
+      workPlan?: MissionAuthoritativeWorkPlan;
     }
   | {
       status: "no_plan";
       reason: NoPlanReason;
       remedy: string;
       ranking?: MissionRankEvidence[];
+      workPlan?: MissionAuthoritativeWorkPlan;
     };
 
 export type MissionDirectorPlan = {

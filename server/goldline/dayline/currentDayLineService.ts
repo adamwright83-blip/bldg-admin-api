@@ -14,7 +14,6 @@ import { getDashboardTimeZone } from "../../dashboardZoned";
 import { planForDate } from "../../missionDirector/missionDirectorService";
 import {
   listGoalCycleObjectives,
-  projectToRankedDayWork,
   type PersistentGrowthObjective,
 } from "../../persistentOperator/objectiveStore";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
@@ -37,6 +36,40 @@ function rankingOf(outcome: MissionPlanOutcome): Array<{ campaignId: string }> {
   return outcome.ranking;
 }
 
+function authoritativeWorkRanking(outcome: MissionPlanOutcome): RankedDayWork[] | null {
+  const workPlan = outcome.workPlan;
+  if (!workPlan) return null;
+  if (workPlan.status !== "ranked") return [];
+  return workPlan.ranking
+    .filter(item => item.eligible)
+    .map(item => ({
+      id: item.workId,
+      title: item.title,
+      objective: item.objective,
+      completionCondition: item.completionCondition,
+      executionType:
+        item.executionType === "mission" || item.executionType === "challenge"
+          ? item.executionType
+          : null,
+      lineage: {
+        kind: "candidate" as const,
+        sourceReference: `weekly_growth_candidate:${item.workId}`,
+        candidateId: item.workId,
+      },
+    }));
+}
+
+function authoritativeRankingStatus(
+  outcome: MissionPlanOutcome,
+  rankedWorks: readonly RankedDayWork[]
+): CurrentDayLine["rankingStatus"] | null {
+  const workPlan = outcome.workPlan;
+  if (!workPlan) return null;
+  if (workPlan.status === "unavailable") return "unavailable";
+  if (workPlan.status === "no_eligible_work") return "no_plan";
+  return rankedWorks.length > 0 ? "ranked" : "unavailable";
+}
+
 function rankingStatusFor(
   outcome: MissionPlanOutcome,
   rankedCount: number
@@ -46,7 +79,11 @@ function rankingStatusFor(
   return "ranked";
 }
 
-function operatorDesignation(state: DayState | null): RankedDayWork & {
+function operatorDesignation(
+  state: DayState | null,
+  outcome?: MissionPlanOutcome,
+  rankedWorks: readonly RankedDayWork[] = []
+): RankedDayWork & {
   compatibilityPhrase: "todays_mission";
 } | null {
   if (!state) return null;
@@ -59,6 +96,29 @@ function operatorDesignation(state: DayState | null): RankedDayWork & {
     if (!chosen || nextAt > chosenAt) chosen = commitment;
   }
   if (!chosen?.operatorMission) return null;
+
+  // A Mission Director candidate may be the same underlying Day Director
+  // commitment under a stable candidate id. Treat source lineage as identity
+  // for presentation so the operator does not see the same work twice.
+  const workPlan = outcome?.workPlan;
+  if (workPlan?.status === "ranked") {
+    const rankedCandidate = workPlan.ranking.find(
+      item =>
+        item.eligible &&
+        item.sourceRefs.some(
+          ref =>
+            ref.sourceType === "day_director_commitment" &&
+            ref.sourceId === chosen!.id
+        )
+    );
+    const ranked = rankedCandidate
+      ? rankedWorks.find(work => work.id === rankedCandidate.workId) ?? null
+      : null;
+    if (ranked) {
+      return { ...ranked, compatibilityPhrase: "todays_mission" };
+    }
+  }
+
   return {
     id: chosen.id,
     title: chosen.title,
@@ -179,11 +239,23 @@ export async function readCurrentDayLine(
         error instanceof Error ? error.message : error
       );
     }
+    const authoritativeWorks = authoritativeWorkRanking(plan.outcome);
+    if (authoritativeWorks !== null) {
+      return projectCurrentDayLine({
+        businessDate,
+        rankingStatus:
+          authoritativeRankingStatus(plan.outcome, authoritativeWorks) ??
+          "unavailable",
+        rankedWorks: authoritativeWorks,
+        designated: operatorDesignation(state, plan.outcome, authoritativeWorks),
+      });
+    }
+
     const byCampaign = new Map(campaigns.map(campaign => [campaign.campaignId, campaign]));
     const seen = new Set<string>();
     const rankedWorks: RankedDayWork[] = [];
 
-    // 1. Mission Plan Campaign Ranking — the sole business ordering authority.
+    // Compatibility projection for persisted pre-convergence plans only.
     if (plan.outcome.status !== "no_plan") {
       for (const evidence of rankingOf(plan.outcome)) {
         const id = evidence.campaignId.trim();
@@ -204,53 +276,18 @@ export async function readCurrentDayLine(
       }
     }
 
-    // 2. Persistent Growth Objectives stay visible, but cannot outrank the
-    // Mission Director list merely because they were loaded first.
-    for (const obj of objectives) {
-      if (
-        obj.status !== "presented" &&
-        obj.status !== "accepted" &&
-        obj.status !== "in_progress"
-      ) {
-        continue;
-      }
-      const work = projectToRankedDayWork(obj);
-      if (!work.id || seen.has(work.id)) continue;
-      seen.add(work.id);
-      work.lineage = {
-        kind: "objective",
-        sourceReference: `goal_cycle_objectives:${obj.id}`,
-        objectiveId: obj.id,
-      };
-      rankedWorks.push(work);
-    }
-
-    // 3. Day Director Commitments
-    if (state?.commitments) {
-      for (const commitment of state.commitments) {
-        if (commitment.status !== "open") continue;
-        if (seen.has(commitment.id)) continue;
-        if (commitment.command?.role === "primary" && commitment.operatorMission) continue;
-        seen.add(commitment.id);
-        rankedWorks.push({
-          id: commitment.id,
-          title: commitment.title,
-          objective: commitment.sourceText ?? commitment.title,
-          completionCondition: commitment.operatorMission?.completionCondition ?? "Day Director commitment",
-          lineage: {
-            kind: "commitment",
-            sourceReference: `day_director_commitments:${commitment.id}`,
-            commitmentId: commitment.id,
-          },
-        });
-      }
-    }
+    // Persistent objectives and Day Director commitments are not appended to
+    // a ranked list unless Mission Director ranked their candidate lineage.
+    // New plans carry that lineage in workPlan. Old campaign-only plans remain
+    // campaign-only; operator designation stays separate below.
+    void objectives;
+    void state?.commitments;
 
     return projectCurrentDayLine({
       businessDate,
       rankingStatus: rankingStatusFor(plan.outcome, rankedWorks.length),
       rankedWorks,
-      designated: operatorDesignation(state),
+      designated: operatorDesignation(state, plan.outcome, rankedWorks),
     });
   } catch (error) {
     console.warn(

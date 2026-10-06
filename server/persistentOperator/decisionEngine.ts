@@ -14,7 +14,7 @@ import {
   targetWeekHorizon,
   type RemainingWeekHorizon,
 } from "../../shared/weeklyMissionReadiness";
-import { classifyObjectiveExecution } from "../../shared/objectiveExecution";
+import { classifyObjectiveExecution, type ObjectiveExecutionType } from "../../shared/objectiveExecution";
 import { businessToday } from "../analytics/businessPeriods";
 import { getDb } from "../db";
 import { selectExecutionIntelligence } from "../executionIntelligence/selectExecutionIntelligence";
@@ -59,6 +59,17 @@ export function inactiveGoalRunWaitReason(
   return status === "completed" ? "GOAL_RUN_COMPLETED" : "GOAL_RUN_INACTIVE";
 }
 
+export function materializedExecutionType(input: {
+  authoritative: "mission" | "challenge" | null;
+  obligation: ObjectiveExecutionType | null;
+  derived: ObjectiveExecutionType | null;
+}): ObjectiveExecutionType | null {
+  // Current Mission Director workPlan owns the execution classification.
+  // Obligation/derived values are compatibility fallbacks only when no
+  // authoritative workPlan classification exists.
+  return input.authoritative ?? input.obligation ?? input.derived ?? null;
+}
+
 function campaignIdFromPlan(
   plan: MissionDirectorPlan | null
 ): string | null {
@@ -67,6 +78,11 @@ function campaignIdFromPlan(
   if (plan.outcome.status === "fallback_only") return plan.outcome.fallback.campaignId;
   return null;
 }
+
+function workPlanFromPlan(plan: MissionDirectorPlan | null) {
+  return plan?.outcome.workPlan ?? null;
+}
+
 
 function obligationFromCandidate(
   candidate: WeeklyGrowthCandidate,
@@ -102,50 +118,95 @@ export function selectDeterministicCycleChoice(input: {
   dueObligations?: readonly PersistentObligation[];
   missionDirectorPlan: MissionDirectorPlan | null;
 }): CycleChoice {
-  const prepBlocked = input.candidates
-    .filter(candidate => !candidate.prep.feasibleWithinHorizon)
-    .map(candidate => ({ id: candidate.id, reasons: ["INSUFFICIENT_PREP"] }));
-  const eligible = input.candidates.filter(
-    candidate => candidate.prep.feasibleWithinHorizon
-  );
-  const dueObligations = input.dueObligations ?? input.obligations;
+  const workPlan = workPlanFromPlan(input.missionDirectorPlan);
+  const blockedCandidates: BlockedCycleCandidate[] = workPlan
+    ? workPlan.ranking
+        .filter(item => !item.eligible)
+        .map(item => ({
+          id: item.workId,
+          reasons: item.blockedReasons.length
+            ? [...item.blockedReasons]
+            : ["MISSION_DIRECTOR_BLOCKED"],
+        }))
+    : input.candidates
+        .filter(candidate => !candidate.prep.feasibleWithinHorizon)
+        .map(candidate => ({
+          id: candidate.id,
+          reasons: ["INSUFFICIENT_PREP"],
+        }));
 
-  if (!input.weeklyIntentLocked) {
-    const blockedCandidates = input.candidates.map(candidate => ({
-      id: candidate.id,
-      reasons: ["WEEK_UNPLANNED_NEW_OBJECTIVE_WITHHELD"],
-    }));
-    const unassigned = dueObligations.filter(ob => !ob.decisionId && !ob.objectiveRef);
-    const obligation =
-      unassigned.find(ob => ob.kind === "sales_follow_up") ??
-      unassigned[0] ??
-      dueObligations[0] ??
-      null;
-    if (obligation) {
+  if (workPlan) {
+    if (workPlan.status === "unavailable") {
       return {
-        selectionKind: "obligation",
-        selectedRef: obligation.id,
+        selectionKind: "wait",
+        selectedRef: null,
         selectedCandidate: null,
-        selectedObligation: obligation,
-        selectedReasonCode: "EXISTING_DUE_OBLIGATION_UNPLANNED_WEEK",
+        selectedObligation: null,
+        selectedReasonCode: "MISSION_DIRECTOR_UNAVAILABLE",
         blockedCandidates,
       };
     }
+    if (workPlan.status === "no_eligible_work") {
+      return {
+        selectionKind: "wait",
+        selectedRef: null,
+        selectedCandidate: null,
+        selectedObligation: null,
+        selectedReasonCode: "MISSION_DIRECTOR_NO_ELIGIBLE_WORK",
+        blockedCandidates,
+      };
+    }
+
+    const selected = input.candidates.find(
+      candidate => candidate.id === workPlan.primary.workId
+    ) ?? null;
+    if (!selected) {
+      return {
+        selectionKind: "wait",
+        selectedRef: null,
+        selectedCandidate: null,
+        selectedObligation: null,
+        selectedReasonCode: "MISSION_DIRECTOR_PRIMARY_NOT_IN_FEED",
+        blockedCandidates,
+      };
+    }
+    const obligation = obligationFromCandidate(selected, input.obligations);
+    return {
+      selectionKind: obligation ? "obligation" : "candidate",
+      selectedRef: obligation?.id ?? selected.id,
+      selectedCandidate: selected,
+      selectedObligation: obligation,
+      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
+      blockedCandidates,
+    };
+  }
+
+  // Compatibility for persisted pre-convergence plans only. New plans always
+  // carry workPlan. WeeklyIntent may withhold old candidate plans, but it does
+  // not rank or select current work.
+  if (!input.weeklyIntentLocked) {
     return {
       selectionKind: "wait",
       selectedRef: null,
       selectedCandidate: null,
       selectedObligation: null,
       selectedReasonCode: "WEEKLY_INTENT_UNPLANNED",
-      blockedCandidates,
+      blockedCandidates: input.candidates.map(candidate => ({
+        id: candidate.id,
+        reasons: ["WEEK_UNPLANNED_NEW_OBJECTIVE_WITHHELD"],
+      })),
     };
   }
 
+  const eligible = input.candidates.filter(
+    candidate => candidate.prep.feasibleWithinHorizon
+  );
   const campaignId = campaignIdFromPlan(input.missionDirectorPlan);
   const selected = campaignId
-    ? eligible.find(candidate => candidateMatchesCampaign(candidate, campaignId)) ?? null
+    ? eligible.find(candidate =>
+        candidateMatchesCampaign(candidate, campaignId)
+      ) ?? null
     : null;
-
   if (selected) {
     const obligation = obligationFromCandidate(selected, input.obligations);
     return {
@@ -154,24 +215,7 @@ export function selectDeterministicCycleChoice(input: {
       selectedCandidate: selected,
       selectedObligation: obligation,
       selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
-      blockedCandidates: prepBlocked,
-    };
-  }
-
-  const unassigned = dueObligations.filter(ob => !ob.decisionId && !ob.objectiveRef);
-  const obligation =
-    unassigned.find(ob => ob.kind === "sales_follow_up") ??
-    unassigned[0] ??
-    dueObligations[0] ??
-    null;
-  if (obligation) {
-    return {
-      selectionKind: "obligation",
-      selectedRef: obligation.id,
-      selectedCandidate: null,
-      selectedObligation: obligation,
-      selectedReasonCode: "EXISTING_DUE_OBLIGATION",
-      blockedCandidates: prepBlocked,
+      blockedCandidates,
     };
   }
 
@@ -180,8 +224,8 @@ export function selectDeterministicCycleChoice(input: {
     selectedRef: null,
     selectedCandidate: null,
     selectedObligation: null,
-    selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
-    blockedCandidates: prepBlocked,
+    selectedReasonCode: "NO_AUTHORITATIVE_PLAN",
+    blockedCandidates,
   };
 }
 
@@ -517,10 +561,16 @@ export async function decideGoalCycle(input: {
           title: choice.selectedCandidate.title,
         })
       : null;
-  const selectedExecutionType =
-    choice.selectedObligation?.executionType ??
-    execution?.executionType ??
-    null;
+  const authoritativeExecutionType =
+    plan?.outcome.workPlan?.status === "ranked" &&
+    choice.selectedCandidate?.id === plan.outcome.workPlan.primary.workId
+      ? plan.outcome.workPlan.primary.executionType
+      : null;
+  const selectedExecutionType = materializedExecutionType({
+    authoritative: authoritativeExecutionType,
+    obligation: choice.selectedObligation?.executionType ?? null,
+    derived: execution?.executionType ?? null,
+  });
 
   const loadout =
     choice.selectionKind === "candidate" && choice.selectedCandidate

@@ -27,7 +27,11 @@ export type ExecutionContract = {
   eitherAcceptable: boolean;
 };
 
-export type DayLineItemLineageKind = "objective" | "campaign" | "commitment";
+export type DayLineItemLineageKind =
+  | "objective"
+  | "campaign"
+  | "commitment"
+  | "candidate";
 
 export type DayLineItemLineage = {
   kind: DayLineItemLineageKind;
@@ -35,6 +39,7 @@ export type DayLineItemLineage = {
   objectiveId?: string;
   campaignId?: string;
   commitmentId?: string;
+  candidateId?: string;
 };
 
 export type CurrentDayLineItem = {

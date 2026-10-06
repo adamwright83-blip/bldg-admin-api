@@ -8,6 +8,8 @@ import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
 import { bridgeDriverAction } from "../../persistentOperator/fieldEventBridge";
 import { completeDayDirectorCommitment } from "../../dayDirector/dayDirectorService";
+import { getLatestPlan } from "../../missionDirector/missionDirectorService";
+import { resolveCandidateCompletionLineage } from "./candidateCompletionLineage";
 import { readCurrentDayLine } from "./currentDayLineService";
 
 export function surfacedObjectiveIds(
@@ -95,11 +97,12 @@ export const currentDayLineRouter = router({
         itemId: z.string().trim().min(1),
         lineage: z
           .object({
-            kind: z.enum(["objective", "campaign", "commitment"]),
+            kind: z.enum(["objective", "campaign", "commitment", "candidate"]),
             sourceReference: z.string().optional(),
             objectiveId: z.string().optional(),
             campaignId: z.string().optional(),
             commitmentId: z.string().optional(),
+            candidateId: z.string().optional(),
           })
           .optional(),
         evidenceReference: z.string().trim().min(1),
@@ -152,11 +155,51 @@ export const currentDayLineRouter = router({
         });
       }
 
-      // 5. Execute completion contract strictly using server-derived lineage
+      // 5. Candidate is Planning lineage, not completion authority. Resolve it
+      // only through source-specific completion contracts we already trust.
+      let completionLineage = serverLineage;
+      if (serverLineage.kind === "candidate") {
+        const candidateId = serverLineage.candidateId || lineItem.id;
+        const plan = await getLatestPlan({
+          tenantId,
+          operatorId: identity.dayDirectorActorId,
+          operatorIds: identity.dayDirectorActorIds,
+          businessDate: dayLine.businessDate,
+        });
+        const candidateEvidence =
+          plan?.outcome.workPlan?.ranking.find(
+            item => item.workId === candidateId && item.eligible
+          ) ?? null;
+        if (!candidateEvidence) {
+          return {
+            success: false,
+            lineageKind: "candidate" as const,
+            itemId: lineItem.id,
+            reason: "candidate_plan_evidence_unavailable" as const,
+            message: `Candidate '${candidateId}' has no current authoritative Mission Director evidence. It was not marked complete.`,
+          };
+        }
+
+        const resolved = resolveCandidateCompletionLineage(
+          candidateEvidence.sourceRefs
+        );
+        if (!resolved) {
+          return {
+            success: false,
+            lineageKind: "candidate" as const,
+            itemId: lineItem.id,
+            reason: "candidate_requires_source_specific_evidence" as const,
+            message: `Candidate '${candidateId}' cannot complete through a generic Day Line assertion. Its source must produce authoritative completion evidence.`,
+          };
+        }
+        completionLineage = resolved;
+      }
+
+      // 6. Execute completion contract strictly using authoritative lineage.
 
       // (a) Lineage: Persistent Growth Objective
-      if (serverLineage.kind === "objective") {
-        const objectiveId = serverLineage.objectiveId || lineItem.id;
+      if (completionLineage.kind === "objective") {
+        const objectiveId = completionLineage.objectiveId || lineItem.id;
         const bridged = await bridgeDriverAction({
           tenantId,
           actorId: identity.canonicalOpenId,
@@ -186,8 +229,8 @@ export const currentDayLineRouter = router({
       }
 
       // (b) Lineage: Day Director Designated Commitment
-      if (serverLineage.kind === "commitment") {
-        const commitmentId = serverLineage.commitmentId || lineItem.id;
+      if (completionLineage.kind === "commitment") {
+        const commitmentId = completionLineage.commitmentId || lineItem.id;
         const commitmentResult = await completeDayDirectorCommitment({
           tenantId,
           actorId: identity.dayDirectorActorId,
@@ -222,8 +265,8 @@ export const currentDayLineRouter = router({
       }
 
       // (c) Lineage: Campaign
-      if (serverLineage.kind === "campaign") {
-        const campaignId = serverLineage.campaignId || lineItem.id;
+      if (completionLineage.kind === "campaign") {
+        const campaignId = completionLineage.campaignId || lineItem.id;
         const numericMissionId = Number.parseInt(campaignId, 10);
         const bridged = await bridgeDriverAction({
           tenantId,
@@ -266,7 +309,7 @@ export const currentDayLineRouter = router({
 
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
-        message: `Unsupported Day Line lineage kind '${(serverLineage as any).kind}'`,
+        message: `Unsupported Day Line lineage kind '${(completionLineage as any).kind}'`,
       });
     }),
 });

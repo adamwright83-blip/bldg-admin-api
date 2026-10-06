@@ -55,7 +55,7 @@ export const WEEKLY_GROWTH_POCKET_KINDS = [
 ] as const;
 export type WeeklyGrowthPocketKind = (typeof WEEKLY_GROWTH_POCKET_KINDS)[number];
 
-/** Hard caps. Unfinished growth has no source cap other than the total. */
+/** Legacy presentation-cap values. Discovery does not apply them to the rankable universe. */
 export const WEEKLY_GROWTH_CAPS = {
   total: 15,
   followUp: 5,
@@ -130,6 +130,10 @@ export type WeeklyGrowthCandidate = {
   observedSignals: WeeklyGrowthObservedSignal[];
   assumptions: WeeklyGrowthAssumption[];
   confidence: "low" | "medium" | "high";
+  /**
+   * Legacy descriptive tags retained for compatibility. They are not ordering
+   * authority; Mission Director owns all priority effects.
+   */
   rankReasons: WeeklyGrowthRankReason[];
 };
 
@@ -159,7 +163,12 @@ export type WeeklyGrowthCandidateFeed = {
   fingerprint: string;
   candidates: WeeklyGrowthCandidate[];
   sources: Record<WeeklyGrowthSourceReportKey, WeeklyGrowthSourceReport>;
+  /**
+   * Legacy presentation caps are retained as metadata only. Candidate discovery
+   * never hides rankable work before Mission Director.
+   */
   caps: typeof WEEKLY_GROWTH_CAPS;
+  capsApplied: false;
 };
 
 export type LoadWeeklyGrowthCandidatesInput = {
@@ -170,6 +179,8 @@ export type LoadWeeklyGrowthCandidatesInput = {
   dayDirectorActorIds?: readonly string[];
   /** Remaining business dates. Used only to judge prep feasibility. */
   remainingDates: readonly string[];
+  /** Planning-date override. Prevents future-date planning from borrowing the wall clock date. */
+  businessDate?: string;
   now: Date;
   timeZone: string;
 };

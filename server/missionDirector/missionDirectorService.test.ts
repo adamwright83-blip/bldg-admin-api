@@ -1,7 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { planForDate } from "./missionDirectorService";
+import {
+  legacyCampaignCompatibilityCandidates,
+  planForDate,
+  planningExecutionConstraint,
+} from "./missionDirectorService";
 import { explainMissionPlan } from "./explainPlan";
 import { ENV } from "../_core/env";
+
+describe("Mission Director — legacy campaign compatibility", () => {
+  it("cannot introduce an alternate campaign outside the generic winner", () => {
+    expect(
+      legacyCampaignCompatibilityCandidates("campaign-b", [
+        { campaignId: "campaign-a" },
+        { campaignId: "campaign-b" },
+        { campaignId: "campaign-c" },
+      ])
+    ).toEqual([{ campaignId: "campaign-b" }]);
+  });
+
+  it("projects no campaign when authoritative work is non-campaign", () => {
+    expect(
+      legacyCampaignCompatibilityCandidates(null, [
+        { campaignId: "campaign-a" },
+      ])
+    ).toEqual([]);
+  });
+});
+
+describe("Mission Director — execution constraint authority", () => {
+  it("does not treat a locked weekly assignment type as physical availability", () => {
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "challenge",
+        weeklyIntentOverride: null,
+      })
+    ).toBeNull();
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "mission",
+        weeklyIntentOverride: null,
+      })
+    ).toBeNull();
+  });
+
+  it("stays unknown when no authoritative availability fact exists", () => {
+    expect(planningExecutionConstraint(null)).toBeNull();
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "challenge",
+        weeklyIntentOverride: { code: "operator_replaced_weekly_primary" },
+      })
+    ).toBeNull();
+  });
+});
 
 describe("Mission Director — fails closed without a database", () => {
   it("returns a no_plan outcome instead of throwing when the database is unavailable", async () => {

@@ -3,6 +3,7 @@ import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates"
 import type { PersistentObligation } from "./obligationStore";
 import {
   inactiveGoalRunWaitReason,
+  materializedExecutionType,
   selectDeterministicCycleChoice,
 } from "./decisionEngine";
 
@@ -63,6 +64,71 @@ function missionPlan(campaignId: string) {
   } as any;
 }
 
+function workPlan(workId: string, executionType: "mission" | "challenge" = "challenge") {
+  const selected = candidate(workId);
+  return {
+    id: "plan-work",
+    tenantId: "tenant-a",
+    operatorId: "operator-a",
+    businessDate: "2026-09-29",
+    stableKey: "mission-director:tenant-a:operator-a:2026-09-29",
+    revision: 2,
+    inputFingerprint: "work-fp",
+    outcome: {
+      status: "no_plan",
+      reason: "NO_PREPARED_FALLBACK",
+      remedy: "Legacy campaign projection only.",
+      workPlan: {
+        status: "ranked",
+        primary: {
+          workId,
+          title: selected.title,
+          objective: selected.objective,
+          completionCondition: null,
+          sourceKind: selected.sourceKind,
+          sourceRefs: selected.sourceRefs,
+          executionType,
+          rankEvidence: {
+            workId,
+            title: selected.title,
+            objective: selected.objective,
+            completionCondition: null,
+            sourceKind: selected.sourceKind,
+            sourceRefs: selected.sourceRefs,
+            score: 100,
+            confidence: "high",
+            executionType,
+            eligible: true,
+            blockedReasons: [],
+            factors: [],
+            warnings: [],
+          },
+        },
+        ranking: [
+          {
+            workId,
+            title: selected.title,
+            objective: selected.objective,
+            completionCondition: null,
+            sourceKind: selected.sourceKind,
+            sourceRefs: selected.sourceRefs,
+            score: 100,
+            confidence: "high",
+            executionType,
+            eligible: true,
+            blockedReasons: [],
+            factors: [],
+            warnings: [],
+          },
+        ],
+        reason: null,
+      },
+    },
+    usageOutcome: null,
+    createdAt: "2026-09-29T00:00:00.000Z",
+  } as any;
+}
+
 function obligation(id: string): PersistentObligation {
   return {
     id,
@@ -106,7 +172,45 @@ describe("PR4 inactive goal-run gating", () => {
   });
 });
 
+describe("PR4 execution materialization", () => {
+  it("does not let an obligation reclassify Mission Director-selected work", () => {
+    expect(
+      materializedExecutionType({
+        authoritative: "challenge",
+        obligation: "mission",
+        derived: "mission",
+      })
+    ).toBe("challenge");
+  });
+
+  it("keeps compatibility fallbacks when no authoritative workPlan type exists", () => {
+    expect(
+      materializedExecutionType({
+        authoritative: null,
+        obligation: "mission",
+        derived: "challenge",
+      })
+    ).toBe("mission");
+  });
+});
+
 describe("PR4 deterministic goal-cycle selection", () => {
+  it("materializes Mission Director work even when WeeklyIntent is not the ranker", () => {
+    const chosen = candidate("director-work");
+    const result = selectDeterministicCycleChoice({
+      weeklyIntentLocked: false,
+      candidates: [candidate("feed-first"), chosen],
+      obligations: [],
+      missionDirectorPlan: workPlan("director-work", "challenge"),
+    });
+    expect(result).toMatchObject({
+      selectionKind: "candidate",
+      selectedRef: "director-work",
+      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
+    });
+  });
+
+
   it("does not manufacture a new candidate objective when the week is unplanned", () => {
     const result = selectDeterministicCycleChoice({
       weeklyIntentLocked: false,
@@ -127,7 +231,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
     ]);
   });
 
-  it("lets an existing due obligation continue during an unplanned week", () => {
+  it("does not let a due obligation self-promote during an unplanned week", () => {
     const due = obligation("obligation-a");
     const result = selectDeterministicCycleChoice({
       weeklyIntentLocked: false,
@@ -136,19 +240,17 @@ describe("PR4 deterministic goal-cycle selection", () => {
       missionDirectorPlan: null,
     });
     expect(result).toMatchObject({
-      selectionKind: "obligation",
-      selectedRef: "obligation-a",
-      selectedReasonCode: "EXISTING_DUE_OBLIGATION_UNPLANNED_WEEK",
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedReasonCode: "WEEKLY_INTENT_UNPLANNED",
     });
   });
 
-  it("prioritizes an unclaimed due obligation over an already-claimed obligation", () => {
+  it("does not rank competing obligations outside Mission Director", () => {
     const claimed = obligation("obligation-claimed");
     claimed.decisionId = "decision-prior";
     claimed.objectiveRef = "objective-prior";
-
     const unclaimed = obligation("obligation-unclaimed");
-
     const result = selectDeterministicCycleChoice({
       weeklyIntentLocked: false,
       candidates: [candidate("campaign-a")],
@@ -156,9 +258,9 @@ describe("PR4 deterministic goal-cycle selection", () => {
       missionDirectorPlan: null,
     });
     expect(result).toMatchObject({
-      selectionKind: "obligation",
-      selectedRef: "obligation-unclaimed",
-      selectedReasonCode: "EXISTING_DUE_OBLIGATION_UNPLANNED_WEEK",
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedReasonCode: "WEEKLY_INTENT_UNPLANNED",
     });
   });
 
@@ -180,7 +282,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
     expect(result).toMatchObject({
       selectionKind: "wait",
       selectedRef: null,
-      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
+      selectedReasonCode: "NO_AUTHORITATIVE_PLAN",
     });
     expect(result.blockedCandidates).toEqual([
       { id: "not-ready", reasons: ["INSUFFICIENT_PREP"] },
@@ -226,7 +328,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
       selectionKind: "wait",
       selectedRef: null,
       selectedObligation: null,
-      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
+      selectedReasonCode: "NO_AUTHORITATIVE_PLAN",
     });
   });
 
@@ -260,7 +362,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
     expect(result).toMatchObject({
       selectionKind: "wait",
       selectedRef: null,
-      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
+      selectedReasonCode: "NO_AUTHORITATIVE_PLAN",
     });
   });
 

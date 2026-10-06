@@ -580,7 +580,7 @@ describe("readCurrentDayLine", () => {
     );
   });
 
-  it("surfaces active Persistent Growth Objectives on today's Day Line with execution contract", async () => {
+  it("does not append an unranked Persistent Growth Objective to a legacy ranked list", async () => {
     const mockObjective = {
       id: "obj-growth-1001",
       tenantId: "tenant-a",
@@ -601,31 +601,22 @@ describe("readCurrentDayLine", () => {
       businessDate: "2026-09-23",
       windowStart: null,
       windowEnd: null,
-      loadout: [{ key: "doctrine:field_first", doctrineWeight: 1.2 }],
+      loadout: [],
       evidenceRefs: [],
       completedAt: null,
       createdAt: "2026-09-23T08:00:00.000Z",
       updatedAt: "2026-09-23T08:00:00.000Z",
     };
-
     const line = await readCurrentDayLine(readerInput, {
       planForDate: async () => storedPlan,
       listCampaigns: async () => campaigns,
       getDayDirectorState: async () => ({ ...directorState, commitments: [] }),
       listObjectives: async () => [mockObjective],
     });
-
-    expect(line.rankingStatus).toBe("ranked");
-    expect(line.items.map(item => item.id)).toEqual([
-      "later-id",
-      "earlier-id",
-      "obj-growth-1001",
-    ]);
-    const surfacedGrowthItem = line.items.find(item => item.id === "obj-growth-1001");
-    expect(surfacedGrowthItem).toBeDefined();
-    expect(surfacedGrowthItem?.title).toBe("Commercial Acquisition: Tower Alpha");
-    expect(surfacedGrowthItem?.executionType).toBe("mission");
-    expect(surfacedGrowthItem?.executionContract.fieldRequired).toBe(true);
+    expect(line.items.map(item => item.id)).toEqual(["later-id", "earlier-id"]);
+    expect(line.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "obj-growth-1001" })])
+    );
   });
 
   it("returns unavailable for a zone that is not a real time zone", async () => {
@@ -638,5 +629,153 @@ describe("readCurrentDayLine", () => {
     expect(line.items).toEqual([]);
     expect(planForDate).not.toHaveBeenCalled();
   });
+
+  it("dedupes an operator designation already ranked through the same commitment lineage", async () => {
+    const candidateId = "wgc:tenant-a:day_director_commitment:commit-1";
+    const genericPlan = {
+      ...storedPlan,
+      outcome: {
+        status: "no_plan" as const,
+        reason: "AUTHORITATIVE_WORK_NOT_CAMPAIGN" as const,
+        remedy: "Read the authoritative work plan.",
+        workPlan: {
+          status: "ranked" as const,
+          primary: {
+            workId: candidateId,
+            title: "Call Dana",
+            objective: "Call Dana",
+            completionCondition: "Operator reports completion of: Call Dana",
+            sourceKind: "unfinished_growth_work" as const,
+            sourceRefs: [
+              {
+                sourceKind: "unfinished_growth_work" as const,
+                sourceType: "day_director_commitment",
+                sourceId: "commit-1",
+              },
+            ],
+            executionType: "challenge" as const,
+            rankEvidence: {} as any,
+          },
+          ranking: [
+            {
+              workId: candidateId,
+              title: "Call Dana",
+              objective: "Call Dana",
+              completionCondition: "Operator reports completion of: Call Dana",
+              sourceKind: "unfinished_growth_work" as const,
+              sourceRefs: [
+                {
+                  sourceKind: "unfinished_growth_work" as const,
+                  sourceType: "day_director_commitment",
+                  sourceId: "commit-1",
+                },
+              ],
+              score: 400,
+              confidence: "high" as const,
+              executionType: "challenge" as const,
+              eligible: true,
+              blockedReasons: [],
+              factors: [],
+              warnings: [],
+            },
+          ],
+          reason: null,
+        },
+      },
+    };
+    const line = await readCurrentDayLine(readerInput, {
+      planForDate: async () => genericPlan as any,
+      listCampaigns: async () => campaigns,
+      getDayDirectorState: async () => directorState,
+      listObjectives: async () => [],
+    });
+
+    expect(line.items).toHaveLength(1);
+    expect(line.items[0]?.id).toBe(candidateId);
+    expect(line.items[0]?.compatibilityPhrase).toBe("todays_mission");
+    expect(line.designated?.id).toBe(candidateId);
+    expect(line.designated?.position).toBe(0);
+    expect(line.designated?.lineage?.kind).toBe("candidate");
+  });
+
+  it("projects generic Mission Director work in authoritative order with Mission or Challenge type", async () => {
+    const genericPlan = {
+      ...storedPlan,
+      outcome: {
+        status: "no_plan" as const,
+        reason: "NO_PREPARED_FALLBACK" as const,
+        remedy: "Legacy campaign projection only.",
+        workPlan: {
+          status: "ranked" as const,
+          primary: {
+            workId: "wgc:tenant-a:followup:fu-1",
+            title: "Call Dana",
+            objective: "Call Dana about the property proposal",
+            completionCondition: null,
+            sourceKind: "commercial_follow_up" as const,
+            sourceRefs: [
+              {
+                sourceKind: "commercial_follow_up" as const,
+                sourceType: "commercial_follow_up",
+                sourceId: "fu-1",
+              },
+            ],
+            executionType: "challenge" as const,
+            rankEvidence: {} as any,
+          },
+          ranking: [
+            {
+              workId: "wgc:tenant-a:followup:fu-1",
+              title: "Call Dana",
+              objective: "Call Dana about the property proposal",
+              completionCondition: null,
+              sourceKind: "commercial_follow_up" as const,
+              sourceRefs: [],
+              score: 300,
+              confidence: "high" as const,
+              executionType: "challenge" as const,
+              eligible: true,
+              blockedReasons: [],
+              factors: [],
+              warnings: [],
+            },
+            {
+              workId: "wgc:tenant-a:campaign:field-1",
+              title: "Visit Tower Alpha",
+              objective: "Visit Tower Alpha in person",
+              completionCondition: "Visit Tower Alpha in person.",
+              sourceKind: "campaign_library" as const,
+              sourceRefs: [],
+              score: 200,
+              confidence: "high" as const,
+              executionType: "mission" as const,
+              eligible: true,
+              blockedReasons: [],
+              factors: [],
+              warnings: [],
+            },
+          ],
+          reason: null,
+        },
+      },
+    };
+    const line = await readCurrentDayLine(readerInput, {
+      planForDate: async () => genericPlan as any,
+      listCampaigns: async () => campaigns,
+      getDayDirectorState: async () => ({ ...directorState, commitments: [] }),
+      listObjectives: async () => [],
+    });
+    expect(line.rankingStatus).toBe("ranked");
+    expect(line.items.map(item => item.id)).toEqual([
+      "wgc:tenant-a:followup:fu-1",
+      "wgc:tenant-a:campaign:field-1",
+    ]);
+    expect(line.items.map(item => item.executionType)).toEqual([
+      "challenge",
+      "mission",
+    ]);
+    expect(line.items.every(item => item.lineage?.kind === "candidate")).toBe(true);
+  });
+
 });
 
