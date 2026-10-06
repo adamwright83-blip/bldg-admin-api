@@ -97,6 +97,7 @@ jobs:
           server/weeklyGrowthCandidates/weeklyGrowthCandidates.test.ts
           server/persistentOperator/decisionEngine.test.ts
           server/goldline/dayline/currentDayLineService.test.ts
+          server/goldline/dayline/candidateCompletionLineage.test.ts
 
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-
