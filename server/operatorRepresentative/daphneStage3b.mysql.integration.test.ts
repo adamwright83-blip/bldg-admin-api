@@ -124,8 +124,6 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
   }
 
   async function latestClosedDecisionOutputs(conversationId: string) {
-    const turnPrefix =
-      `claire-desk:${tenantA}:${operatorAId}:${conversationId}:`;
     const [rows] = await db.execute<mysql.RowDataPacket[]>(
       `SELECT decision_type, effective_output, branch_executed
        FROM claire_decision_records
@@ -133,7 +131,7 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
          AND turn_id LIKE ?
        ORDER BY created_at DESC
        LIMIT 3`,
-      [tenantA, `${turnPrefix}%`]
+      [tenantA, `%${conversationId}%`]
     );
     return new Map(
       rows.map(row => [
