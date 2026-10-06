@@ -593,7 +593,7 @@ function signals(
     };
     if (record.existingScore != null) push("churn_score", String(record.existingScore));
     if (record.historyOrderCount != null) push("history_order_count", String(record.historyOrderCount));
-    if (record.daysSinceLastOrder != null) push("days_since_last_paid_order", String(record.daysSinceLastOrder));
+    if (record.daysSinceLastOrder != null) push("days_since_last_completed_service", String(record.daysSinceLastOrder));
     if (record.averageOrderValueCents != null) push("average_order_value_cents", String(record.averageOrderValueCents));
   }
   signalsOut.sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value));
