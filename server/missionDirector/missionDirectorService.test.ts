@@ -1,7 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { planForDate } from "./missionDirectorService";
+import { planForDate, planningExecutionConstraint } from "./missionDirectorService";
 import { explainMissionPlan } from "./explainPlan";
 import { ENV } from "../_core/env";
+
+describe("Mission Director — execution constraint authority", () => {
+  it("uses the locked weekly primary execution type when it still owns the day", () => {
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "challenge",
+        weeklyIntentOverride: null,
+      })
+    ).toBe("challenge");
+  });
+
+  it("does not keep the displaced weekly execution class after an evidenced override", () => {
+    expect(
+      planningExecutionConstraint({
+        weeklyPrimaryExecutionType: "challenge",
+        weeklyIntentOverride: { code: "operator_replaced_weekly_primary" },
+      })
+    ).toBeNull();
+  });
+});
 
 describe("Mission Director — fails closed without a database", () => {
   it("returns a no_plan outcome instead of throwing when the database is unavailable", async () => {
