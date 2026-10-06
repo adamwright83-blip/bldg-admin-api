@@ -185,6 +185,26 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       status: "active",
     });
 
+    process.env.CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED = "false";
+    const disabled = await caller.operatorRepresentative.adaptationStatus();
+    expect(
+      disabled.lifecycle.find(
+        item => item.directiveId === savedDirective.id
+      )?.lifecycle
+    ).toBe("disabled");
+
+    const flagOffConversation = `flag-off-${suffix}`;
+    await caller.claire.talk({
+      utterance: "add a task to call Dana",
+      conversationId: flagOffConversation,
+    });
+    await caller.claire.talk({
+      utterance: "maybe",
+      conversationId: flagOffConversation,
+    });
+    expect(await receiptRows()).toHaveLength(0);
+
+    process.env.CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED = "*";
     const beforeUse = await caller.operatorRepresentative.adaptationStatus();
     expect(
       beforeUse.lifecycle.find(
