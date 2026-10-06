@@ -232,6 +232,37 @@ describe("Operator Representative grounded read model", () => {
     expect(detail?.evidence[0]?.sourceSystem).toBe("goldline_onboarding_sessions");
   });
 
+  it("an explicit ask-first directive may affect only the wired interaction policy", () => {
+    const base = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [],
+    });
+    const target = base.home.learning[0];
+
+    const askFirst = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [
+        directive({
+          id: "ask-first-1",
+          targetItemId: target.id,
+          targetKey: target.targetKey ?? null,
+          directiveKind: "ask_instead",
+        }),
+      ],
+    });
+
+    const item = askFirst.home.learning.find(candidate => candidate.id === target.id);
+    expect(item).toMatchObject({
+      adaptationState: "ask_instead",
+      canAffectAdaptation: true,
+      activeDirectiveId: "ask-first-1",
+    });
+    expect(askFirst.details.get(target.id)?.businessTruthSupport).toBe(false);
+    expect(askFirst.details.get(target.id)?.allowedUse).toMatch(/constrain how JOYSTICK works with you/i);
+  });
+
   it("a suppress directive makes the signal ineligible without deleting it", () => {
     const base = buildOperatorRepresentativeSnapshot({
       identity,
