@@ -96,6 +96,9 @@ export function registerPresidentAgentRoutes(
 
   // Autonomous improvement-cycle surface. This does not depend on the legacy
   // external-agent transport being configured; it has its own readiness gate.
-  registerPresidentCycleHttpRoutes(app);
+  // Machine-agent routes must be registered before the founder router:
+  // the founder router applies browser-origin CSRF checks to every POST under
+  // /api/president/autonomous, while these routes use GitHub OIDC instead.
   registerPresidentGithubAgentRoutes(app);
+  registerPresidentCycleHttpRoutes(app);
 }
