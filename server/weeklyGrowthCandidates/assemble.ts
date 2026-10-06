@@ -1,4 +1,4 @@
-import { isDealable, rankCandidates, type LeverCandidate } from "../churnRadar/hustlerLeverSelection";
+import { isDealable, type LeverCandidate } from "../churnRadar/hustlerLeverSelection";
 import {
   WEEKLY_GROWTH_CAPS,
   WEEKLY_GROWTH_RANK_REASONS,
@@ -104,13 +104,6 @@ const READER_NAME: Record<WeeklyGrowthRawOrigin, string> = {
   mission_sequencer: "missionSequencer",
 };
 
-const SOURCE_CLASS: Record<WeeklyGrowthSourceKind, number> = {
-  unfinished_growth_work: 1,
-  commercial_follow_up: 2,
-  proactive_obligation: 3,
-  customer_recovery: 4,
-  campaign_library: 5,
-};
 
 export type AssembleWeeklyGrowthCandidatesInput = {
   tenantId: string;
@@ -122,15 +115,8 @@ export type AssembleWeeklyGrowthCandidatesInput = {
   bundle: WeeklyGrowthSourceBundle;
 };
 
-type Ranked = {
+type Discovered = {
   candidate: WeeklyGrowthCandidate;
-  sourceClass: number;
-  inFlight: number;
-  due: number;
-  score: number | null;
-  prep: number;
-  macro: number;
-  stableId: string;
 };
 
 export function assembleWeeklyGrowthCandidates(
@@ -171,15 +157,10 @@ export function assembleWeeklyGrowthCandidates(
   const dealable = recoveryPool.filter(record => isDealable(toLever(record)));
   eligibleBySource.set("customer_recovery", dealable);
 
-  const warmOrder = rankCandidates(dealable.map(toLever), "warm");
-  const swingOrder = rankCandidates(dealable.map(toLever), "big_swing");
-  const warmRank = new Map(warmOrder.map((item, index) => [item.id, index]));
-  const swingRank = new Map(swingOrder.map((item, index) => [item.id, index]));
-
   const eligible = WEEKLY_GROWTH_SOURCE_KINDS.flatMap(kind => eligibleBySource.get(kind) ?? []);
   const groups = resolveUntitledRuns(dedupe(eligible), libraryTitleDonors(input.bundle, input.tenantId));
-  const ranked: Ranked[] = groups
-    .map(group => toRanked(group, input, macro, warmRank, swingRank, warmOrder.length))
+  const ranked: Discovered[] = groups
+    .map(group => toCandidate(group, input, macro))
     .filter(item => item.candidate.title.trim().length > 0 && item.candidate.objective.trim().length > 0);
   // Discovery returns the entire eligible universe in a stable technical order.
   // Business-priority signals remain attached as facts, but discovery neither
@@ -209,7 +190,7 @@ function reportFor(
   bundle: WeeklyGrowthSourceBundle,
   observed: Map<WeeklyGrowthSourceKind, number>,
   eligibleBySource: Map<WeeklyGrowthSourceKind, WeeklyGrowthRawRecord[]>,
-  ranked: Ranked[],
+  ranked: Discovered[],
   shown: WeeklyGrowthCandidate[]
 ): WeeklyGrowthSourceReport {
   if (key === "macro_goal") {
@@ -434,14 +415,11 @@ function dedupeKeys(record: WeeklyGrowthRawRecord): string[] {
   return keys;
 }
 
-function toRanked(
+function toCandidate(
   group: WeeklyGrowthRawRecord[],
   input: AssembleWeeklyGrowthCandidatesInput,
-  macro: WeeklyGrowthMacroSnapshot | null,
-  warmRank: Map<string, number>,
-  swingRank: Map<string, number>,
-  warmCount: number
-): Ranked {
+  macro: WeeklyGrowthMacroSnapshot | null
+): Discovered {
   const authority = [...group].sort((a, b) => {
     const rank = AUTHORITY[a.origin] - AUTHORITY[b.origin];
     if (rank !== 0) return rank;
@@ -505,22 +483,12 @@ function toRanked(
       pocketKind: prepSource.pocketKind,
       minimumMinutes: prepSource.minimumMinutes,
     },
-    observedSignals: signals(group, warmRank, swingRank),
+    observedSignals: signals(group),
     assumptions,
     confidence,
     rankReasons: reasons,
   };
-  const score = recovery ? warmCount - (warmRank.get(recovery.sourceId) ?? 0) : null;
-  return {
-    candidate,
-    sourceClass: SOURCE_CLASS[sourceKind],
-    inFlight: alreadyInFlight ? 1 : 0,
-    due,
-    score,
-    prep: feasible ? 1 : 0,
-    macro: aligned ? 1 : 0,
-    stableId: id,
-  };
+  return { candidate };
 }
 
 function motionOf(group: WeeklyGrowthRawRecord[], sourceKind: WeeklyGrowthSourceKind): WeeklyGrowthMotion {
@@ -610,9 +578,7 @@ function sourceRefs(group: WeeklyGrowthRawRecord[]): WeeklyGrowthSourceRef[] {
 }
 
 function signals(
-  group: WeeklyGrowthRawRecord[],
-  warmRank: Map<string, number>,
-  swingRank: Map<string, number>
+  group: WeeklyGrowthRawRecord[]
 ): WeeklyGrowthCandidate["observedSignals"] {
   const signalsOut: WeeklyGrowthCandidate["observedSignals"] = [];
   for (const record of group) {
@@ -629,10 +595,6 @@ function signals(
     if (record.historyOrderCount != null) push("history_order_count", String(record.historyOrderCount));
     if (record.daysSinceLastOrder != null) push("days_since_last_paid_order", String(record.daysSinceLastOrder));
     if (record.averageOrderValueCents != null) push("average_order_value_cents", String(record.averageOrderValueCents));
-    const warm = warmRank.get(record.sourceId);
-    const swing = swingRank.get(record.sourceId);
-    if (warm != null) push("warm_lever_rank", String(warm));
-    if (swing != null) push("big_swing_lever_rank", String(swing));
   }
   signalsOut.sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value));
   return signalsOut;
