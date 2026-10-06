@@ -109,6 +109,7 @@ export type ExternalMissionClaim = {
   mission: Mission;
   leaseToken: string;
   route: "ENGINEERING" | "RESEARCH";
+  baseSha: string | null;
   feedback: string | null;
 };
 
@@ -127,9 +128,12 @@ function lastFeedback(m: Mission): string | null {
 
 export async function claimExternalExecution(
   store: CycleStore,
-  actorId = "president-github-actions-executor"
+  actorId = "president-github-actions-executor",
+  requestedBaseSha?: string
 ): Promise<ExternalMissionClaim | null> {
   assertPresidentActor(actorId);
+  if (requestedBaseSha && !/^[a-f0-9]{40}$/i.test(requestedBaseSha))
+    throw new Error("Execution base SHA is invalid");
   const cycles = (await store.list()).filter(c => c.status === "EXECUTING");
   for (const snapshot of cycles) {
     const result = await store.update(snapshot.cycleId, c => {
@@ -184,13 +188,27 @@ export async function claimExternalExecution(
 
       const route = routeMission(m.domain);
       if (route === BLOCKED_UNSUPPORTED) return null;
+      const existingBase = m.receipts
+        .find(r => r.kind === "EXECUTION_BASE_PINNED")
+        ?.data.baseSha;
+      const baseSha =
+        typeof existingBase === "string" ? existingBase : requestedBaseSha ?? null;
+      if (!baseSha)
+        throw new Error("Execution claim requires a pinned base SHA");
+      if (
+        !m.receipts.some(
+          r => r.kind === "EXECUTION_BASE_PINNED" && r.data.baseSha === baseSha
+        )
+      )
+        addReceipt(m, "EXECUTION_BASE_PINNED", actorId, { baseSha });
       m.lease = leaseFor(actorId, m.attempt);
-      addReceipt(m, "EXTERNAL_EXECUTION_CLAIMED", actorId, { route });
+      addReceipt(m, "EXTERNAL_EXECUTION_CLAIMED", actorId, { route, baseSha });
       return {
         cycleId: c.cycleId,
         mission: structuredClone(m),
         leaseToken: m.lease.token,
         route,
+        baseSha,
         feedback: lastFeedback(m),
       } satisfies ExternalMissionClaim;
     });
@@ -282,6 +300,11 @@ export async function reportExternalExecution(
     if (input.result.route === "ENGINEERING") {
       if (!/^[a-f0-9]{40}$/i.test(input.result.baseSha))
         throw new Error("Invalid base SHA");
+      const pinnedBase = m.receipts.find(
+        r => r.kind === "EXECUTION_BASE_PINNED"
+      )?.data.baseSha;
+      if (pinnedBase !== input.result.baseSha)
+        throw new Error("Execution report base SHA does not match pinned mission base");
       if (!/^[a-f0-9]{40}$/i.test(input.result.commitSha))
         throw new Error("Invalid commit SHA");
       if (!/^president\//.test(input.result.branch))
