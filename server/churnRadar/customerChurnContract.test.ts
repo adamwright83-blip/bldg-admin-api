@@ -39,11 +39,18 @@ describe("Churn Radar production contract", () => {
     );
   });
 
-  it("scores tenant order history and labels unavailable evidence", () => {
+  it("scores authoritative native service history and labels unavailable evidence", () => {
     expect(service).toContain(".from(orders)");
-    expect(service).toContain(
-      "COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}"
-    );
+    expect(service).toContain(".from(operationsEvents)");
+    expect(service).toContain('"dropoff_completed"');
+    expect(service).toContain("buildAuthoritativeChurnHistory");
+    expect(service).toContain("goldline_customer_order_history");
+    expect(service).toContain("loadPaidOrderLedger");
+    expect(service).toContain("canonical paid-order ledger / authority_receipts");
+    expect(service).not.toContain("function completedServiceAt");
+    expect(service).not.toContain("function isCompletedHistory");
+    expect(service).not.toContain("orders.paidAt or orders.updatedAt");
+    expect(service).not.toContain("orders.total and calculated cadence");
     expect(service).toContain("evidenceForScore");
     expect(service).toContain(
       "No structured unresolved-issue source is configured"
@@ -85,10 +92,14 @@ describe("Churn Radar production contract", () => {
     expect(client).toContain("Known native-order signals only.");
   });
 
-  it("attributes only a later processor-backed paid order as recovered revenue", () => {
+  it("attributes recovery only from a later admitted paid-ledger event", () => {
     expect(service).toContain("refreshCustomerRecoveryAttribution");
-    expect(service).toContain("eq(orders.paid, true)");
-    expect(service).toContain("filter(hasNativePaymentAuthority)");
+    expect(service).toContain("loadAdmittedNativePaymentEvents");
+    expect(service).toContain("payment.authorityReceiptId");
+    expect(service).toContain("payment.occurredAt.getTime()");
+    expect(service).toContain('order.status !== "cancelled"');
+    expect(service).not.toContain("filter(hasNativePaymentAuthority)");
+    expect(service).not.toContain("const recoveredRevenueCents = cents(input.order.total)");
     expect(service).toContain('eventName: "revenue_recovered"');
     expect(service).toContain("recoveredRevenueCents");
   });
