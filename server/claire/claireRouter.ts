@@ -406,6 +406,9 @@ export const claireRouter = router({
         workday: preview.workday,
         relationshipDimensions: preview.relationshipDimensions,
         disclosureTier: preview.disclosureTier,
+        // Stage 3B structural proof. This is bounded interaction metadata only;
+        // it is never business truth or Action / Execution authority.
+        operatorAdaptation: result.operatorAdaptation ?? null,
       };
     }),
 
