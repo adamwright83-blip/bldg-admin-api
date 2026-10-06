@@ -45,7 +45,22 @@ describe("resident order idempotency authority", () => {
     ).toBe(false);
   });
 
-  it("preserves legacy phone reuse only when the incoming order has no resident id", () => {
+  it("uses phone fallback only with explicit matching tenant authority", () => {
+    expect(
+      residentOrderReuseMatchesAuthority(
+        {
+          tenantId: "default",
+          bldgUserId: null,
+          phone: "(323) 555-0123",
+        } as never,
+        {
+          tenantId: "default",
+          bldgUserId: null,
+          phone: "+1 323 555 0123",
+        } as never
+      )
+    ).toBe(true);
+
     expect(
       residentOrderReuseMatchesAuthority(
         {
@@ -59,7 +74,22 @@ describe("resident order idempotency authority", () => {
           phone: "+1 323 555 0123",
         } as never
       )
-    ).toBe(true);
+    ).toBe(false);
+
+    expect(
+      residentOrderReuseMatchesAuthority(
+        {
+          tenantId: "",
+          bldgUserId: null,
+          phone: "(323) 555-0123",
+        } as never,
+        {
+          tenantId: "default",
+          bldgUserId: null,
+          phone: "+1 323 555 0123",
+        } as never
+      )
+    ).toBe(false);
   });
 
   it("guards both the fast-path reuse and duplicate-key race recovery", () => {
