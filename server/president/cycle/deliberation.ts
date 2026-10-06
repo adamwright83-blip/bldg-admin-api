@@ -165,6 +165,10 @@ export async function runDeliberation(
   opts: DeliberationOptions = {}
 ): Promise<Cycle> {
   const block = async (reason: string) => {
+    console.error(
+      "[PresidentCycle] deliberation blocked",
+      JSON.stringify({ cycleId, reason: redactSecrets(reason) })
+    );
     await store.update(cycleId, c => {
       c.blockedReason = reason;
       if (c.status !== "DELIBERATION_BLOCKED") setStatus(c, "DELIBERATION_BLOCKED", reason);
