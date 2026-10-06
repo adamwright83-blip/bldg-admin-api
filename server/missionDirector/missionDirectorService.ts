@@ -114,6 +114,14 @@ async function loadRankingContext(input: {
   return { businessDate: input.businessDate, macroGoal, openTasks };
 }
 
+export function legacyCampaignCompatibilityCandidates<T extends { campaignId: string }>(
+  primaryCampaignId: string | null,
+  eligible: readonly T[]
+): T[] {
+  if (!primaryCampaignId) return [];
+  return eligible.filter(campaign => campaign.campaignId === primaryCampaignId);
+}
+
 export function planningCampaignFingerprint(campaign: {
   campaignId: string;
   enabled: boolean;
@@ -380,26 +388,15 @@ export async function computeMissionPlan(input: {
           ref => ref.sourceKind === "campaign_library"
         )?.sourceId ?? null
       : null;
-  const campaignPriorityById: Record<string, number> = {};
-  workPlan.ranking.forEach((work, index) => {
-    for (const ref of work.sourceRefs) {
-      if (ref.sourceKind !== "campaign_library") continue;
-      campaignPriorityById[ref.sourceId] = 1_000_000 - index * 10_000;
-    }
-  });
-  const legacyEligible = primaryCampaignId
-    ? eligible.filter(campaign =>
-        workPlan.ranking.some(
-          work =>
-            work.eligible &&
-            work.sourceRefs.some(
-              ref =>
-                ref.sourceKind === "campaign_library" &&
-                ref.sourceId === campaign.campaignId
-            )
-        )
-      )
-    : [];
+  // Compatibility may format the authoritative generic winner, but it may not
+  // introduce a second campaign choice or alternate-campaign fallback.
+  const campaignPriorityById: Record<string, number> = primaryCampaignId
+    ? { [primaryCampaignId]: 1_000_000 }
+    : {};
+  const legacyEligible = legacyCampaignCompatibilityCandidates(
+    primaryCampaignId,
+    eligible
+  );
   const bare: MissionPlanOutcome =
     workPlan.status === "ranked" && !primaryCampaignId
       ? {
