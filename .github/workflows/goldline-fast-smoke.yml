@@ -78,6 +78,7 @@ jobs:
           pnpm vitest run
           server/agents/agentRuntime.test.ts
           server/agents/residentAgentTools.test.ts
+          server/residentOrderIdempotencyAuthority.test.ts
           server/agents/tools/updateResidentAgentPlanTool.test.ts
           server/agents/tools/updateOrderStatusTool.test.ts
           server/agents/tools/dryCleaningActionAuthority.test.ts
