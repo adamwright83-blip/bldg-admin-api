@@ -20,19 +20,22 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
       throw new Error("Order does not belong to tenant");
     }
 
-    const requestedResidentId = Number(input.bldgUserId);
-    if (!Number.isInteger(requestedResidentId) || requestedResidentId <= 0) {
-      throw new Error("Resident cancellation requires bldgUserId authority");
+    const rawActorId = ctx.actorId?.trim() ?? "";
+    const actorMatch = rawActorId.match(/^(?:bldg_user:|resident:)?(\d+)$/i);
+    const actorResidentId = actorMatch ? Number(actorMatch[1]) : null;
+    const inputResidentId = Number(input.bldgUserId);
+    const requestedResidentId =
+      Number.isInteger(inputResidentId) && inputResidentId > 0
+        ? inputResidentId
+        : actorResidentId;
+    if (requestedResidentId == null) {
+      throw new Error("Resident cancellation requires resident identity authority");
+    }
+    if (actorResidentId != null && actorResidentId !== requestedResidentId) {
+      throw new Error("Resident actor identity does not match cancellation authority");
     }
     if (order.bldgUserId == null || Number(order.bldgUserId) !== requestedResidentId) {
       throw new Error("Order does not belong to resident");
-    }
-
-    const rawActorId = ctx.actorId?.trim() ?? "";
-    const actorMatch = rawActorId.match(/^(?:bldg_user:|resident:)?(\\d+)$/i);
-    const actorResidentId = actorMatch ? Number(actorMatch[1]) : null;
-    if (actorResidentId != null && actorResidentId !== requestedResidentId) {
-      throw new Error("Resident actor identity does not match cancellation authority");
     }
 
     if (order.status !== "cancelled") {
