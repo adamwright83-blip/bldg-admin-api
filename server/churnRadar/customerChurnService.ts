@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ArsenalToolId } from "../../shared/rekindlingArsenal";
 import { arsenalOutreachEventFields } from "../../shared/rekindlingEvents";
-import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   customerChurnScans,
   customerChurnSnapshots,
@@ -1907,7 +1907,12 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
     orders: tenantOrders,
     paidEvents,
     paymentProjections,
-  }).filter(payment => payment.occurredAt.getTime() > earliest.getTime());
+  }).filter(
+    payment =>
+      payment.netPaidCents > 0 &&
+      (payment.state === "paid" || payment.state === "partially_refunded") &&
+      payment.occurredAt.getTime() > earliest.getTime()
+  );
   const orderById = new Map(tenantOrders.map(order => [order.id, order]));
   const paidOrders = admittedPayments
     .flatMap(payment => {
