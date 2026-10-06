@@ -2,6 +2,7 @@ import { getOrderById, updateOrderStatus } from "../../db";
 import {
   assertResidentOwnedRecord,
   assertTenantOwnedRecord,
+  positiveIntegerOrNull,
   resolveResidentActionId,
 } from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
@@ -16,6 +17,10 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
   name: "cancelResidentOrderTool",
   description: "Cancel a resident-owned order directly without asking the vendor for permission.",
   async execute(input, ctx) {
+    if (positiveIntegerOrNull(input.bldgUserId) == null) {
+      throw new Error("Resident cancellation requires the resident owner id");
+    }
+
     const residentUserId = resolveResidentActionId(ctx, input.bldgUserId, {
       required: true,
       principalError: "Resident cancellation requires the resident action authority",
