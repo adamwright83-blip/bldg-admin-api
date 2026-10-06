@@ -26,6 +26,7 @@ type ExecutionClaim = {
   mission: Mission;
   leaseToken: string;
   route: "ENGINEERING" | "RESEARCH";
+  baseSha: string;
   feedback: string | null;
 };
 
@@ -154,23 +155,35 @@ async function validation(mission: Mission, cwd: string) {
 }
 
 async function checkoutMissionBranch(
-  mission: Mission
+  mission: Mission,
+  pinnedBaseSha: string
 ): Promise<{ branch: string; baseSha: string }> {
+  if (!/^[a-f0-9]{40}$/i.test(pinnedBaseSha))
+    throw new Error("Mission has no valid pinned execution base");
   const branchName = `president/${mission.missionId}`;
   let r = await runCommand("git fetch --prune origin main", ROOT, {
     timeoutMs: 120_000,
   });
   if (r.exitCode !== 0) throw new Error(`git fetch main failed: ${r.stderr}`);
-  const currentMain = (
-    await runCommand("git rev-parse origin/main", ROOT)
-  ).stdout.trim();
+  r = await runCommand(
+    `git cat-file -e ${shellQuote(pinnedBaseSha + "^{commit}")}`,
+    ROOT
+  );
+  if (r.exitCode !== 0) {
+    r = await runCommand(
+      `git fetch origin ${shellQuote(pinnedBaseSha)}`,
+      ROOT,
+      { timeoutMs: 120_000 }
+    );
+    if (r.exitCode !== 0)
+      throw new Error("Pinned execution base is no longer fetchable");
+  }
 
   const remote = await runCommand(
     `git ls-remote --exit-code --heads origin ${shellQuote(branchName)}`,
     ROOT,
     { timeoutMs: 60_000 }
   );
-  let baseSha = currentMain;
   if (remote.exitCode === 0) {
     await runCommand(`git fetch origin ${shellQuote(branchName)}`, ROOT, {
       timeoutMs: 120_000,
@@ -179,26 +192,15 @@ async function checkoutMissionBranch(
       `git checkout -B ${shellQuote(branchName)} FETCH_HEAD`,
       ROOT
     );
-    if (r.exitCode === 0) {
-      const mergeBase = await runCommand(
-        "git merge-base HEAD origin/main",
-        ROOT
-      );
-      if (
-        mergeBase.exitCode === 0 &&
-        /^[a-f0-9]{40}$/i.test(mergeBase.stdout.trim())
-      )
-        baseSha = mergeBase.stdout.trim();
-    }
   } else {
     r = await runCommand(
-      `git checkout -B ${shellQuote(branchName)} ${shellQuote(baseSha)}`,
+      `git checkout -B ${shellQuote(branchName)} ${shellQuote(pinnedBaseSha)}`,
       ROOT
     );
   }
   if (r.exitCode !== 0)
     throw new Error(`mission checkout failed: ${r.stderr.slice(0, 800)}`);
-  return { branch: branchName, baseSha };
+  return { branch: branchName, baseSha: pinnedBaseSha };
 }
 
 function engineeringPrompt(m: Mission, feedback: string | null) {
@@ -250,7 +252,10 @@ function researchPrompt(m: Mission, feedback: string | null) {
 async function executeEngineering(claim: ExecutionClaim, token: string) {
   const { mission } = claim;
   try {
-    const { branch, baseSha } = await checkoutMissionBranch(mission);
+    const { branch, baseSha } = await checkoutMissionBranch(
+      mission,
+      claim.baseSha
+    );
     await claude(engineeringPrompt(mission, claim.feedback), token);
 
     const changed = (
@@ -666,9 +671,15 @@ async function main() {
   let didWork = false;
 
   for (let i = 0; i < MAX_MISSIONS; i++) {
+    const baseSha = (
+      await runCommand("git rev-parse origin/main", ROOT)
+    ).stdout.trim();
+    if (!/^[a-f0-9]{40}$/i.test(baseSha))
+      throw new Error("GitHub Actions checkout has no valid origin/main SHA");
     const execution = await post<ExecutionClaim>(
       "/api/president/autonomous/agent/claim-execution",
-      token
+      token,
+      { baseSha }
     );
     if (execution) {
       didWork = true;
