@@ -78,10 +78,10 @@ const server = http.createServer((request, response) => {
         error instanceof Error ? error.message : String(error);
     }
   }
-  const ok =
-    lastError === null &&
-    lastSuccessAt !== null &&
-    (!legacyRuntimeEnabled || legacyRuntimeError === null);
+  // This is a liveness endpoint, not a model/provider readiness probe.
+  // A slow deliberation or transient provider failure must not make Railway
+  // kill a healthy durable worker and strand its mission state.
+  const ok = !legacyRuntimeEnabled || legacyRuntimeError === null;
   response.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
   response.end(
     JSON.stringify({
