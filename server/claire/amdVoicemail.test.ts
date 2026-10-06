@@ -357,6 +357,32 @@ describe("authorized outbound calls", () => {
     expect(hoisted.create).not.toHaveBeenCalled();
   });
 
+  it("fails closed after provider acceptance when the call receipt cannot persist", async () => {
+    process.env.CLAIRE_TWILIO_AMD = "true";
+    setCommunicationReceiptStoreForTests({
+      async insertOrGet() {
+        throw new Error("receipt database unavailable");
+      },
+    });
+
+    await expect(
+      startClairePreDriveCall({ tenantId: "tenant-1", actorId: "operator-1" })
+    ).rejects.toThrow("receipt database unavailable");
+
+    expect(hoisted.create).toHaveBeenCalledTimes(1);
+    const params = hoisted.create.mock.calls[0]?.[0] as { url?: string };
+    const token = new URL(
+      params.url ?? "https://api.example.test/missing"
+    ).searchParams.get("token") ?? "";
+    const after = await amdDetectionTwiml({
+      token,
+      answeredBy: "machine_end_beep",
+      callSid: "CA_receipt_failed",
+    });
+    expect(after.status).toBe(403);
+    expect(receiptEvents()).not.toContain("CALL_ATTEMPTED");
+  });
+
   it("drops the handoff when the authorized create fails, so AMD cannot speak", async () => {
     process.env.CLAIRE_TWILIO_AMD = "true";
     hoisted.create.mockRejectedValueOnce(new Error("twilio down"));
