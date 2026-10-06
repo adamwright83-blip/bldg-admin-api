@@ -121,35 +121,53 @@ export function buildAuthoritativeNativePayments(input: {
   paidEvents: readonly PaidOrderEvent[];
   paymentProjections: readonly ChurnPaymentProjection[];
 }): AuthoritativeNativePayment[] {
-  const orderIds = new Set(input.orders.map(order => order.id));
+  const ordersById = new Map(input.orders.map(order => [order.id, order]));
   const projections = new Map(
     input.paymentProjections
-      .filter(row => orderIds.has(row.orderId))
+      .filter(row => ordersById.has(row.orderId))
       .map(row => [row.orderId, row])
   );
   const out: AuthoritativeNativePayment[] = [];
   for (const event of input.paidEvents) {
     const orderId = nativePaidOrderId(event);
-    if (orderId == null || !orderIds.has(orderId)) continue;
+    const order = orderId == null ? null : ordersById.get(orderId);
+    if (orderId == null || !order) continue;
     const projection = projections.get(orderId);
-    const net = projection?.netPaidCents ?? null;
+    if (!projection) continue;
+
+    const reversed =
+      order.status === "cancelled" ||
+      projection.state === "cancelled" ||
+      projection.state === "refunded";
+    const rawNet = projection.netPaidCents;
+    const validNet =
+      rawNet !== null && Number.isSafeInteger(rawNet) && rawNet >= 0;
     if (
-      !projection ||
-      !["paid", "partially_refunded", "refunded", "cancelled"].includes(
-        projection.state
-      ) ||
-      net === null ||
-      !Number.isSafeInteger(net) ||
-      net < 0
+      !reversed &&
+      (projection.state === "review_required" ||
+        projection.state === "unpaid" ||
+        !validNet)
+    ) {
+      continue;
+    }
+    if (
+      !reversed &&
+      projection.state !== "paid" &&
+      projection.state !== "partially_refunded"
     ) {
       continue;
     }
     out.push({
       orderId,
       occurredAt: event.occurredAt,
-      netPaidCents: net,
+      netPaidCents: reversed ? 0 : rawNet!,
       authorityReceiptId: event.authorityReceiptId!,
-      state: projection.state,
+      state:
+        order.status === "cancelled"
+          ? "cancelled"
+          : projection.state === "refunded" || projection.state === "cancelled"
+            ? projection.state
+            : projection.state,
     });
   }
   return out.sort(
