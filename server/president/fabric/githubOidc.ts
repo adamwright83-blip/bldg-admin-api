@@ -50,8 +50,20 @@ export async function verifyPresidentGithubOidcToken(
     throw new Error("GitHub OIDC workflow is not authorized");
 
   const ref = claimString(payload, "ref");
-  if (!ref.startsWith("refs/heads/"))
-    throw new Error("GitHub OIDC ref must be a branch");
+  if (ref !== "refs/heads/main")
+    throw new Error("President GitHub agent must run from main");
+
+  const workflowRef =
+    claimString(payload, "workflow_ref") ||
+    claimString(payload, "job_workflow_ref");
+  if (
+    workflowRef &&
+    !workflowRef.startsWith(
+      REPOSITORY +
+        "/.github/workflows/president-autonomous-agent.yml@refs/heads/main"
+    )
+  )
+    throw new Error("GitHub OIDC workflow file is not authorized");
 
   return {
     actorId: "president-github-actions-agent",
