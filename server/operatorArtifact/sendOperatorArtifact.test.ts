@@ -331,9 +331,16 @@ describe("sendOperatorArtifact", () => {
     );
     const refused = await sendOperatorArtifact(plain());
     expect(refused.providerAccepted).toBe(false);
+    expect(refused.sendOutcome).toBe("rejected");
     expect(refused.delivered).toBe(false);
     expect(refused.receipt).toBeNull();
     expect(refused.evidence).toEqual([]);
+
+    hoisted.messagesCreate.mockRejectedValue(new Error("socket timeout"));
+    const unknown = await sendOperatorArtifact(plain("uncertain"));
+    expect(unknown.providerAccepted).toBe(false);
+    expect(unknown.sendOutcome).toBe("unknown");
+    expect(unknown.receipt).toBeNull();
 
     hoisted.messagesCreate.mockResolvedValue({
       sid: "SM_failed",
@@ -361,6 +368,22 @@ describe("sendOperatorArtifact", () => {
     expect(
       seen.some(receipt => receipt.eventType === "MESSAGE_DELIVERED")
     ).toBe(false);
+  });
+
+  it("keeps provider acceptance separate from missing durable receipt proof", async () => {
+    setCommunicationReceiptStoreForTests({
+      async insertOrGet() {
+        throw new Error("receipt database unavailable");
+      },
+    });
+
+    const result = await sendOperatorArtifact(plain("receipt down"));
+
+    expect(result.providerAccepted).toBe(true);
+    expect(result.sendOutcome).toBe("accepted");
+    expect(result.messageSid).toBe("SM_accepted");
+    expect(result.receipt).toBeNull();
+    expect(result.evidence).toEqual([]);
   });
 
   it("does not duplicate the receipt when the same provider message is retried", async () => {
