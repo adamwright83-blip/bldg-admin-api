@@ -83,6 +83,7 @@ jobs:
           server/agents/tools/dryCleaningActionAuthority.test.ts
           server/agents/tools/exportVendorDataTool.test.ts
           server/agents/tools/sendOperatorArtifactTool.test.ts
+          server/residentOrderIdempotencyAuthority.test.ts
           server/claire/brain/tests/authority.test.ts
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
           server/operatorArtifact/sendOperatorArtifact.test.ts
