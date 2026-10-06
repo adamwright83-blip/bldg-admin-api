@@ -16,7 +16,7 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
 
     const order = await getOrderById(orderId);
     if (!order) throw new Error("Order not found");
-    if ((order.tenantId ?? "default") !== ctx.tenantId) {
+    if (!order.tenantId || order.tenantId !== ctx.tenantId) {
       throw new Error("Order does not belong to tenant");
     }
 
