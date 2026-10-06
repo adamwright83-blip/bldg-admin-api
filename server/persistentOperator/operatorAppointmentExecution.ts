@@ -220,13 +220,26 @@ export async function executeOperatorAppointment(
     return { skipped: result.reason };
   }
 
-  const call = result.result as { callSid?: unknown };
+  const call = result.result as {
+    callSid?: unknown;
+    communicationReceiptId?: unknown;
+  };
   const callSid =
     typeof call.callSid === "string" && call.callSid.trim()
       ? call.callSid.trim()
       : null;
+  const communicationReceiptId =
+    typeof call.communicationReceiptId === "string" &&
+    call.communicationReceiptId.trim()
+      ? call.communicationReceiptId.trim()
+      : null;
   if (!callSid) {
     throw new Error("Claire weekly planning call returned no call SID");
+  }
+  if (!communicationReceiptId) {
+    throw new Error(
+      "Claire weekly planning call returned no durable communication receipt"
+    );
   }
   await logAgentEvent({
     ctx: {
@@ -245,14 +258,15 @@ export async function executeOperatorAppointment(
       weekStart: step.weekStart,
       source: step.source,
     },
-    outputJson: { callSid: callSid },
+    outputJson: { callSid, communicationReceiptId },
     status: "success",
     entityType: "operator_appointment",
     entityId: step.id,
   }).catch(() => undefined);
 
   return {
-    callSid: callSid,
+    callSid,
+    communicationReceiptId,
     appointmentId: step.id,
     appointmentKind: step.appointmentKind,
     weekStart: step.weekStart,
