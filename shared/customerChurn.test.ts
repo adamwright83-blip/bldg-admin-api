@@ -105,3 +105,18 @@ describe("customer churn scoring", () => {
     ).not.toThrow();
   });
 });
+
+
+describe("churn monetary evidence", () => {
+  it("does not turn unavailable paid value into a zero-dollar order", () => {
+    const score = scoreCustomerChurn({
+      customerKey: "customer-1", customerName: "A Customer", now: new Date("2026-10-01T00:00:00.000Z"),
+      history: [
+        { orderId: 1, serviceAt: new Date("2026-08-01T00:00:00.000Z"), valueCents: null, weightLbs: 10, serviceType: "wash_fold" },
+        { orderId: 2, serviceAt: new Date("2026-09-01T00:00:00.000Z"), valueCents: 6000, weightLbs: 10, serviceType: "wash_fold" },
+      ],
+    });
+    expect(score.averageOrderValueCents).toBe(6000);
+    expect(score.estimatedMonthlyImpactCents).toBeGreaterThan(0);
+  });
+});
