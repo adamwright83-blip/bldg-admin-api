@@ -55,7 +55,7 @@ export const WEEKLY_GROWTH_POCKET_KINDS = [
 ] as const;
 export type WeeklyGrowthPocketKind = (typeof WEEKLY_GROWTH_POCKET_KINDS)[number];
 
-/** Hard caps. Unfinished growth has no source cap other than the total. */
+/** Legacy presentation-cap values. Discovery does not apply them to the rankable universe. */
 export const WEEKLY_GROWTH_CAPS = {
   total: 15,
   followUp: 5,
@@ -159,7 +159,12 @@ export type WeeklyGrowthCandidateFeed = {
   fingerprint: string;
   candidates: WeeklyGrowthCandidate[];
   sources: Record<WeeklyGrowthSourceReportKey, WeeklyGrowthSourceReport>;
+  /**
+   * Legacy presentation caps are retained as metadata only. Candidate discovery
+   * never hides rankable work before Mission Director.
+   */
   caps: typeof WEEKLY_GROWTH_CAPS;
+  capsApplied: false;
 };
 
 export type LoadWeeklyGrowthCandidatesInput = {
