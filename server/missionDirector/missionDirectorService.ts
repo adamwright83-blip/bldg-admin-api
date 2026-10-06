@@ -23,6 +23,8 @@ import { eligibleCampaigns } from "./eligibility";
 import { selectMissionPlan } from "./planSelection";
 import { explainMissionPlan } from "./explainPlan";
 import { computePrepReadiness } from "./prepReadiness";
+import { rankMissionDirectorWork } from "./rankableWork";
+import { loadWeeklyGrowthCandidates } from "../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import type { RankingContext, RankingOpenTask } from "./missionRank";
 import type { MissionDirectorPlan, MissionPlanOutcome } from "./missionDirectorTypes";
 
@@ -63,6 +65,7 @@ async function loadRankingContext(input: {
   if (db) {
     const rows = await db
       .select({
+        id: opsTasks.id,
         taskType: opsTasks.taskType,
         status: opsTasks.status,
         priority: opsTasks.priority,
@@ -87,6 +90,7 @@ async function loadRankingContext(input: {
             ? metadata.dueDate
             : null;
       openTasks.push({
+        id: row.id,
         taskType: row.taskType,
         status: row.status,
         priority: row.priority,
@@ -135,6 +139,8 @@ export function computePlanningFingerprint(input: {
   prepReady: Record<string, boolean>;
   rankingContext: RankingContext;
   commandFingerprint?: string | null;
+  candidateFingerprint?: string | null;
+  executionConstraint?: "mission" | "challenge" | null;
 }): string {
   return fingerprint({
     businessDate: input.businessDate,
@@ -156,6 +162,8 @@ export function computePlanningFingerprint(input: {
     travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
     unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,
     commandFingerprint: input.commandFingerprint ?? null,
+    candidateFingerprint: input.candidateFingerprint ?? null,
+    executionConstraint: input.executionConstraint ?? null,
   });
 }
 
@@ -282,6 +290,26 @@ export async function computeMissionPlan(input: {
     operatorUserIds,
     businessDate: input.businessDate,
   });
+  let candidateFeed: Awaited<ReturnType<typeof loadWeeklyGrowthCandidates>> | null = null;
+  let candidateFeedFailure: string | null = null;
+  try {
+    candidateFeed = await loadWeeklyGrowthCandidates({
+      tenantId: input.tenantId,
+      operatorUserId,
+      operatorUserIds,
+      dayDirectorActorId: input.operatorId,
+      ...(input.operatorIds?.length
+        ? { dayDirectorActorIds: input.operatorIds }
+        : {}),
+      remainingDates: [input.businessDate],
+      businessDate: input.businessDate,
+      now: new Date(),
+      timeZone,
+    });
+  } catch (error) {
+    candidateFeedFailure =
+      error instanceof Error ? error.message : String(error);
+  }
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
   const timeline = [
     ...fieldToday.timeline.map(item => ({
@@ -298,16 +326,79 @@ export async function computeMissionPlan(input: {
       durationMinutes: occupancy.durationMinutes,
     })),
   ];
+  const rawPockets = detectTimePockets({ timeline });
   const pockets = applyCommandProtection(
-    detectTimePockets({ timeline }),
+    rawPockets,
     Boolean(command?.constraints.protectDiscretionary)
   );
+  const weeklyExecution =
+    command?.weeklyPrimaryExecutionType === "mission" ||
+    command?.weeklyPrimaryExecutionType === "challenge"
+      ? command.weeklyPrimaryExecutionType
+      : null;
+  const protectedSourceIds = [
+    ...(command?.primary?.provenance.sourceIds ?? []),
+    ...(command?.primary?.id ? [command.primary.id] : []),
+  ];
+  const workPlan = candidateFeed
+    ? rankMissionDirectorWork({
+        candidates: candidateFeed.candidates,
+        campaigns: allCampaigns,
+        campaignPrepReady: prepReady,
+        context: rankingContext,
+        // Execution compatibility belongs to Mission Director. The protected
+        // command itself is matched by lineage; other discretionary work cannot
+        // steal the day merely because it scores well.
+        pockets: rawPockets,
+        executionConstraint: weeklyExecution,
+        protectDiscretionary: Boolean(command?.constraints.protectDiscretionary),
+        protectedSourceIds,
+      })
+    : {
+        status: "unavailable" as const,
+        primary: null,
+        ranking: [],
+        reason: candidateFeedFailure ?? "candidate_feed_unavailable",
+      };
+
+  // Legacy campaign outcome remains a compatibility projection only. When the
+  // authoritative winner is not a campaign, do not manufacture a competing
+  // campaign primary for older readers.
+  const primaryCampaignId =
+    workPlan.status === "ranked"
+      ? workPlan.primary.sourceRefs.find(
+          ref => ref.sourceKind === "campaign_library"
+        )?.sourceId ?? null
+      : null;
+  const campaignPriorityById: Record<string, number> = {};
+  workPlan.ranking.forEach((work, index) => {
+    for (const ref of work.sourceRefs) {
+      if (ref.sourceKind !== "campaign_library") continue;
+      campaignPriorityById[ref.sourceId] = 1_000_000 - index * 10_000;
+    }
+  });
+  const legacyEligible = primaryCampaignId
+    ? eligible.filter(campaign =>
+        workPlan.ranking.some(
+          work =>
+            work.eligible &&
+            work.sourceRefs.some(
+              ref =>
+                ref.sourceKind === "campaign_library" &&
+                ref.sourceId === campaign.campaignId
+            )
+        )
+      )
+    : [];
   const bare = selectMissionPlan({
-    eligible,
+    eligible: legacyEligible,
     pockets,
     libraryTotalCount: allCampaigns.length,
-    libraryEnabledCount: enabledCampaigns.length,
-    rankingContext,
+    libraryEnabledCount: primaryCampaignId ? enabledCampaigns.length : 0,
+    rankingContext: {
+      ...rankingContext,
+      campaignPriorityById,
+    },
   });
   const { explanation, intelligence } = await explainMissionPlan({
     tenantId: input.tenantId,
@@ -315,10 +406,10 @@ export async function computeMissionPlan(input: {
   });
   const outcome: MissionPlanOutcome =
     bare.status === "no_plan"
-      ? bare
+      ? { ...bare, workPlan }
       : bare.status === "fallback_only"
-        ? { ...bare, explanation }
-        : { ...bare, explanation, intelligence };
+        ? { ...bare, explanation, workPlan }
+        : { ...bare, explanation, intelligence, workPlan };
 
   const inputFingerprint = computePlanningFingerprint({
     businessDate: input.businessDate,
@@ -328,6 +419,8 @@ export async function computeMissionPlan(input: {
     prepReady,
     rankingContext,
     commandFingerprint: command?.constraints.fingerprint ?? null,
+    candidateFingerprint: candidateFeed?.fingerprint ?? null,
+    executionConstraint: weeklyExecution,
   });
   return { outcome, inputFingerprint };
 }
@@ -383,6 +476,12 @@ async function planForDateInner(input: {
         status: "no_plan",
         reason: "SCHEDULE_DATA_INSUFFICIENT",
         remedy: "Database is unavailable — Goldline cannot read tomorrow's schedule right now.",
+        workPlan: {
+          status: "unavailable",
+          primary: null,
+          ranking: [],
+          reason: "database_unavailable",
+        },
       },
       usageOutcome: null,
       createdAt: new Date().toISOString(),
