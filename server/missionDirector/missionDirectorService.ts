@@ -152,6 +152,7 @@ export function computePlanningFingerprint(input: {
       businessDate: input.rankingContext.businessDate,
       macroGoal: input.rankingContext.macroGoal,
       openTasks: input.rankingContext.openTasks.map(task => ({
+        id: task.id ?? null,
         taskType: task.taskType,
         status: task.status,
         priority: task.priority,
@@ -390,16 +391,38 @@ export async function computeMissionPlan(input: {
         )
       )
     : [];
-  const bare = selectMissionPlan({
-    eligible: legacyEligible,
-    pockets,
-    libraryTotalCount: allCampaigns.length,
-    libraryEnabledCount: primaryCampaignId ? enabledCampaigns.length : 0,
-    rankingContext: {
-      ...rankingContext,
-      campaignPriorityById,
-    },
-  });
+  const bare: MissionPlanOutcome =
+    workPlan.status === "ranked" && !primaryCampaignId
+      ? {
+          status: "no_plan",
+          reason: "AUTHORITATIVE_WORK_NOT_CAMPAIGN",
+          remedy: "Read outcome.workPlan for today's authoritative Mission or Challenge.",
+          ranking: [],
+        }
+      : workPlan.status === "no_eligible_work"
+        ? {
+            status: "no_plan",
+            reason: "NO_ELIGIBLE_RANKED_WORK",
+            remedy: "All discovered discretionary work is blocked by current evidence or execution constraints.",
+            ranking: [],
+          }
+        : workPlan.status === "unavailable"
+          ? {
+              status: "no_plan",
+              reason: "RANKABLE_WORK_UNAVAILABLE",
+              remedy: "Candidate discovery is unavailable; no discretionary winner was manufactured.",
+              ranking: [],
+            }
+          : selectMissionPlan({
+              eligible: legacyEligible,
+              pockets,
+              libraryTotalCount: allCampaigns.length,
+              libraryEnabledCount: enabledCampaigns.length,
+              rankingContext: {
+                ...rankingContext,
+                campaignPriorityById,
+              },
+            });
   const { explanation, intelligence } = await explainMissionPlan({
     tenantId: input.tenantId,
     outcome: bare,
