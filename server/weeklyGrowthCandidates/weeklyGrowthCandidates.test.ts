@@ -213,6 +213,17 @@ describe("weekly growth candidates", () => {
     expect(isDealable(lever(thin))).toBe(false);
     const feed = await load(bundle({ recovery: available([eligible, below, active, thin]) }));
     expect(feed.candidates.map(item => item.title)).toEqual(["cust-ok"]);
+    expect(feed.candidates[0]?.observedSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "days_since_last_completed_service",
+          value: "40",
+        }),
+      ])
+    );
+    expect(feed.candidates[0]?.observedSignals.map(signal => signal.label)).not.toContain(
+      "days_since_last_paid_order"
+    );
     expect(feed.sources.customer_recovery).toMatchObject({ status: "available", observedCount: 4, eligibleCount: 1, shownCount: 1 });
     const assembleSource = readFileSync(path.join(dir(), "assemble.ts"), "utf8");
     expect(assembleSource).toContain("hustlerLeverSelection");
