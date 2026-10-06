@@ -66,18 +66,33 @@ const server = http.createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
-  const ok = lastError === null && lastSuccessAt !== null;
+  const legacyRuntimeEnabled =
+    process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED === "1";
+  let legacyRuntime: ReturnType<typeof presidentRuntimeStatus> | null = null;
+  let legacyRuntimeError: string | null = null;
+  if (legacyRuntimeEnabled) {
+    try {
+      legacyRuntime = presidentRuntimeStatus();
+    } catch (error) {
+      legacyRuntimeError =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+  const ok =
+    lastError === null &&
+    lastSuccessAt !== null &&
+    (!legacyRuntimeEnabled || legacyRuntimeError === null);
   response.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
   response.end(
     JSON.stringify({
       ok,
-      runtime: presidentRuntimeStatus(),
+      runtime: legacyRuntime,
+      legacyRuntimeError,
       autonomousCycleExecutionEnabled:
         process.env.PRESIDENT_EXECUTION_ENABLED === "1",
       autonomousExecutionMode:
         process.env.PRESIDENT_EXECUTION_MODE || "github_actions",
-      legacyRuntimeEnabled:
-        process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED === "1",
+      legacyRuntimeEnabled,
       worker: {
         inFlight,
         lastRunAt,
