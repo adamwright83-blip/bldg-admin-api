@@ -5,6 +5,7 @@ import type { AgentContext } from "./permissions";
 
 const dbMocks = vi.hoisted(() => ({
   createOrder: vi.fn(),
+  createOrReuseResidentLaundryOrder: vi.fn(),
   getOrderById: vi.fn(),
   updateOrderStatus: vi.fn(),
   createResidentAgentPlan: vi.fn(),
@@ -53,6 +54,10 @@ describe("resident-safe agent tools", () => {
       title: "task",
       status: "open",
       priority: "high",
+    });
+    dbMocks.createOrReuseResidentLaundryOrder.mockResolvedValue({
+      orderId: 172,
+      reused: false,
     });
   });
 
@@ -145,6 +150,15 @@ describe("resident-safe agent tools", () => {
 
   it("creates durable coordinated requests without charging or confirming", async () => {
     dbMocks.createResidentCoordinatedRequest.mockResolvedValue(701);
+    dbMocks.getResidentAgentPlan.mockResolvedValue({
+      id: 901,
+      tenantId: "default",
+      bldgUserId: 42,
+      conversationId: "conv_123",
+      sessionId: "sess_123",
+      planStatus: "pending_confirmation",
+      planJson: null,
+    });
 
     const result = await createResidentCoordinatedRequestTool.execute({
       bldgUserId: 42,
@@ -237,7 +251,137 @@ describe("resident-safe agent tools", () => {
     expect(createLaundryOrderTool.description).toContain("existing order creation helper");
   });
 
+  it("binds resident laundry creation to authenticated resident identity", async () => {
+    const result = await createLaundryOrderTool.execute(
+      {
+        bldgUserId: 42,
+        clientRequestId: "resident-42-request-1",
+        serviceType: "wash_fold",
+        pickupDate: "2026-10-06",
+        pickupTimeWindow: "9-11 AM",
+        address: "100 Main St",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        phone: "+13235550123",
+      },
+      residentCtx
+    );
+
+    expect(result.output).toEqual({ orderId: 172, reused: false });
+    expect(dbMocks.createOrReuseResidentLaundryOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "default", bldgUserId: 42 }),
+      { clientRequestId: "resident-42-request-1" }
+    );
+
+    dbMocks.createOrReuseResidentLaundryOrder.mockClear();
+    await expect(
+      createLaundryOrderTool.execute(
+        {
+          bldgUserId: 99,
+          pickupDate: "2026-10-06",
+          pickupTimeWindow: "9-11 AM",
+          address: "100 Main St",
+          firstName: "Ada",
+          lastName: "Lovelace",
+          phone: "+13235550123",
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("Resident actor identity does not match resident authority");
+    expect(dbMocks.createOrReuseResidentLaundryOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged resident plan lineage at creation", async () => {
+    await expect(
+      createResidentAgentPlanTool.execute(
+        {
+          bldgUserId: 42,
+          sourceConversationId: "other-conversation",
+          originalMessage: "book services",
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("conversationId does not match authenticated context");
+
+    expect(dbMocks.createResidentAgentPlan).not.toHaveBeenCalled();
+  });
+
+  it("rejects resident follow-up tasks for foreign orders", async () => {
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 180,
+      tenantId: "default",
+      bldgUserId: 99,
+      status: "new",
+    });
+
+    await expect(
+      createOrderFollowupTaskTool.execute(
+        {
+          orderId: 180,
+          followupType: "cancel_request",
+          requestText: "cancel it",
+          bldgUserId: 42,
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("Order does not belong to resident");
+
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 181,
+      tenantId: "other-tenant",
+      bldgUserId: 42,
+      status: "new",
+    });
+
+    await expect(
+      createOrderFollowupTaskTool.execute(
+        {
+          orderId: 181,
+          followupType: "return_by_time",
+          requestText: "return at 5",
+          bldgUserId: 42,
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("Order does not belong to tenant");
+
+    expect(opsTaskMocks.createOpsTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects coordinated requests linked to another resident's parent plan", async () => {
+    dbMocks.getResidentAgentPlan.mockResolvedValue({
+      id: 903,
+      tenantId: "default",
+      bldgUserId: 99,
+      conversationId: "conv_other",
+      sessionId: "sess_other",
+      planStatus: "pending_confirmation",
+      planJson: null,
+    });
+
+    await expect(
+      createResidentCoordinatedRequestTool.execute(
+        {
+          bldgUserId: 42,
+          parentPlanId: 903,
+          serviceCategory: "dog_grooming",
+          serviceRequested: "Dog groomer",
+        },
+        residentCtx
+      )
+    ).rejects.toThrow("Resident agent plan does not belong to resident");
+
+    expect(dbMocks.createResidentCoordinatedRequest).not.toHaveBeenCalled();
+  });
+
   it("creates resident follow-up ops tasks for existing orders", async () => {
+    dbMocks.getOrderById.mockResolvedValue({
+      id: 172,
+      tenantId: "default",
+      bldgUserId: 42,
+      status: "new",
+    });
+
     const result = await createOrderFollowupTaskTool.execute({
       orderId: 172,
       followupType: "return_by_time",
