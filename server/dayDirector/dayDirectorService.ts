@@ -1,5 +1,5 @@
 import { enforceTitleContract } from "../claire/briefing/titleContract";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
   dayDirectorCommitments,
@@ -669,3 +669,99 @@ export async function designateDayDirectorPrimary(input: {
   return { commitmentId: target.id };
 }
 
+
+
+export type DayDirectorActionEvidence = {
+  id: string;
+  title: string;
+  status: string;
+  detailState: "COMPLETE" | "NEEDS_DETAILS";
+  missingDetails: string[];
+};
+
+export async function readDayDirectorActionEvidence(input: {
+  tenantId: string;
+  actionIds: readonly string[];
+}): Promise<DayDirectorActionEvidence[]> {
+  const tenantId = input.tenantId.trim();
+  const actionIds = [...new Set(input.actionIds.map(id => id.trim()).filter(Boolean))];
+  if (!tenantId) throw new Error("Day Director action read requires tenant authority");
+  if (!actionIds.length) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: dayDirectorCommitments.id,
+      title: dayDirectorCommitments.title,
+      status: dayDirectorCommitments.status,
+      metadataJson: dayDirectorCommitments.metadataJson,
+    })
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, tenantId),
+        inArray(dayDirectorCommitments.id, actionIds)
+      )
+    );
+  return rows.map(row => {
+    const metadata =
+      row.metadataJson && typeof row.metadataJson === "object"
+        ? (row.metadataJson as Record<string, unknown>)
+        : {};
+    return {
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      detailState:
+        metadata.detailState === "NEEDS_DETAILS" ? "NEEDS_DETAILS" : "COMPLETE",
+      missingDetails: Array.isArray(metadata.missingDetails)
+        ? metadata.missingDetails.map(String)
+        : [],
+    };
+  });
+}
+
+
+export async function searchDayDirectorCommitmentsByTitle(input: {
+  tenantId: string;
+  titleTerm: string;
+  limit?: number;
+}): Promise<Array<{ title: string; businessDate: string; status: string }>> {
+  const tenantId = input.tenantId.trim();
+  const titleTerm = input.titleTerm.trim().toLowerCase();
+  if (!tenantId) throw new Error("Day Director title search requires tenant authority");
+  if (!titleTerm) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      title: dayDirectorCommitments.title,
+      businessDate: dayDirectorCommitments.businessDate,
+      status: dayDirectorCommitments.status,
+    })
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, tenantId),
+        sql`LOWER(${dayDirectorCommitments.title}) LIKE ${`%${titleTerm}%`}`
+      )
+    )
+    .orderBy(desc(dayDirectorCommitments.createdAt))
+    .limit(Math.max(1, Math.min(input.limit ?? 8, 50)));
+}
+
+
+export async function listDayDirectorProcessingLocationNames(
+  tenantIdInput: string
+): Promise<string[]> {
+  const tenantId = tenantIdInput.trim();
+  if (!tenantId) throw new Error("Processing-location read requires tenant authority");
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ name: dayDirectorProcessingLocations.name })
+    .from(dayDirectorProcessingLocations)
+    .where(eq(dayDirectorProcessingLocations.tenantId, tenantId))
+    .limit(20);
+  return rows.flatMap(row => row.name?.trim() ? [row.name.trim()] : []);
+}

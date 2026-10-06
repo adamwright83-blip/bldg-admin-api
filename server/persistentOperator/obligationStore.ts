@@ -3,7 +3,10 @@ import { claireProactiveObligations } from "../../drizzle/schema";
 import type { ProactiveObligation } from "../../shared/claireProactive";
 import type { ObjectiveExecutionType } from "../../shared/objectiveExecution";
 import { getDb } from "../db";
+import { queryOptionalMysqlTable } from "../mysqlErrors";
 import type { VerticalRegistry } from "../strategy/verticalTemplates/registry";
+
+export { claireProactiveObligations };
 
 const OPEN_STATUSES = ["scheduled", "draft_prepared", "awaiting_result"] as const;
 const CORE_OBLIGATION_KINDS = new Set([
@@ -156,4 +159,104 @@ export async function attachObligationDecisionLineage(input: {
       )
     );
   return Number(result[0]?.affectedRows ?? 0) === 1;
+}
+
+
+/**
+ * Persistent Operator-owned read port for the full proactive obligation board.
+ * Claire may consume these payloads, but does not own their persistence.
+ */
+export async function listPersistentOperatorObligationPayloads(input: {
+  tenantId: string;
+  operatorUserId: string;
+}): Promise<ProactiveObligation[]> {
+  const tenantId = input.tenantId.trim();
+  const operatorUserId = input.operatorUserId.trim();
+  if (!tenantId) throw new Error("tenantId is required");
+  if (!operatorUserId) throw new Error("operator identity is required");
+
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  const rows = await queryOptionalMysqlTable(async () =>
+    db
+      .select({ payloadJson: claireProactiveObligations.payloadJson })
+      .from(claireProactiveObligations)
+      .where(
+        and(
+          eq(claireProactiveObligations.tenantId, tenantId),
+          eq(claireProactiveObligations.operatorUserId, operatorUserId)
+        )
+      )
+  );
+
+  return rows.map(row => {
+    const payload = row.payloadJson as ProactiveObligation;
+    assertDraftInvariant(payload);
+    return payload;
+  });
+}
+
+export async function upsertPersistentOperatorObligation(input: {
+  tenantId: string;
+  operatorUserId: string;
+  obligation: ProactiveObligation;
+  commercialFollowUpRef?: string | null;
+}): Promise<void> {
+  const tenantId = input.tenantId.trim();
+  const operatorUserId = input.operatorUserId.trim();
+  if (!tenantId) throw new Error("tenantId is required");
+  if (!operatorUserId) throw new Error("operator identity is required");
+  assertDraftInvariant(input.obligation);
+
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  await db
+    .insert(claireProactiveObligations)
+    .values({
+      id: input.obligation.id,
+      tenantId,
+      operatorUserId,
+      kind: input.obligation.kind,
+      subjectKey: input.obligation.subjectKey,
+      payloadJson: input.obligation,
+      status: input.obligation.status,
+      dueDate: input.obligation.dueDate,
+      commercialFollowUpRef: input.commercialFollowUpRef ?? null,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        payloadJson: input.obligation,
+        status: input.obligation.status,
+        dueDate: input.obligation.dueDate,
+        commercialFollowUpRef: input.commercialFollowUpRef ?? null,
+      },
+    });
+}
+
+export async function backfillPersistentOperatorCommercialFollowUpRef(input: {
+  tenantId: string;
+  operatorUserId: string;
+  obligationId: string;
+  commercialFollowUpRef: string;
+}): Promise<void> {
+  const tenantId = input.tenantId.trim();
+  const operatorUserId = input.operatorUserId.trim();
+  if (!tenantId) throw new Error("tenantId is required");
+  if (!operatorUserId) throw new Error("operator identity is required");
+
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  await db
+    .update(claireProactiveObligations)
+    .set({ commercialFollowUpRef: input.commercialFollowUpRef })
+    .where(
+      and(
+        eq(claireProactiveObligations.tenantId, tenantId),
+        eq(claireProactiveObligations.operatorUserId, operatorUserId),
+        eq(claireProactiveObligations.id, input.obligationId)
+      )
+    );
 }

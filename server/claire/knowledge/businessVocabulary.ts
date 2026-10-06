@@ -1,6 +1,6 @@
-import { desc, eq, sql } from "drizzle-orm";
-import { cleancloudPaidOrders, dayDirectorProcessingLocations, orders } from "../../../drizzle/schema";
-import { getDb } from "../../db";
+import { listRecentCleanCloudCustomerNames } from "../../analytics/cleancloudCustomerReadService";
+import { listDayDirectorProcessingLocationNames } from "../../dayDirector/dayDirectorService";
+import { listRecentTenantOrderCustomerNames } from "../../orders/unpaidOrderReadService";
 import { listAccountRefs } from "./accountKnowledge";
 
 /**
@@ -35,39 +35,18 @@ export async function loadBusinessVocabulary(tenantId: string, now = Date.now())
   if (cached && now - cached.at < TTL_MS) return cached.words;
   const words = new Set<string>(STATIC_VOCABULARY);
   try {
-    const db = await getDb();
-    if (db) {
-      const [accounts, locations, nativeNames, cloudNames] = await Promise.all([
-        listAccountRefs(tenantId).catch(() => []),
-        db
-          .select({ name: dayDirectorProcessingLocations.name })
-          .from(dayDirectorProcessingLocations)
-          .where(eq(dayDirectorProcessingLocations.tenantId, tenantId))
-          .limit(20)
-          .catch(() => []),
-        db
-          .select({ first: orders.firstName, last: orders.lastName })
-          .from(orders)
-          .where(sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`)
-          .orderBy(desc(orders.id))
-          .limit(300)
-          .catch(() => []),
-        db
-          .select({ name: cleancloudPaidOrders.customerName })
-          .from(cleancloudPaidOrders)
-          .where(eq(cleancloudPaidOrders.tenantId, tenantId))
-          .orderBy(desc(cleancloudPaidOrders.id))
-          .limit(300)
-          .catch(() => []),
-      ]);
-      accounts.forEach(account => words.add(account.name));
-      locations.forEach(location => location.name && words.add(location.name));
-      nativeNames.forEach(row => {
-        const name = `${row.first ?? ""} ${row.last ?? ""}`.trim();
-        if (name && !/test|proxy/i.test(name)) words.add(name);
-      });
-      cloudNames.forEach(row => row.name && words.add(row.name.trim()));
-    }
+    const [accounts, locations, nativeNames, cloudNames] = await Promise.all([
+      listAccountRefs(tenantId).catch(() => []),
+      listDayDirectorProcessingLocationNames(tenantId).catch(() => []),
+      listRecentTenantOrderCustomerNames(tenantId).catch(() => []),
+      listRecentCleanCloudCustomerNames(tenantId).catch(() => []),
+    ]);
+    accounts.forEach(account => words.add(account.name));
+    locations.forEach(name => name && words.add(name));
+    nativeNames.forEach(name => {
+      if (name && !/test|proxy/i.test(name)) words.add(name);
+    });
+    cloudNames.forEach(name => name && words.add(name));
   } catch (error) {
     console.warn("[Claire] business vocabulary unavailable", error instanceof Error ? error.message : error);
   }

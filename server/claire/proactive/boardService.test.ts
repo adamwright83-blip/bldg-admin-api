@@ -1,51 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../db", () => ({
-  getDb: vi.fn(),
+const obligationMocks = vi.hoisted(() => ({
+  listPersistentOperatorObligationPayloads: vi.fn(),
+  upsertPersistentOperatorObligation: vi.fn(),
+  backfillPersistentOperatorCommercialFollowUpRef: vi.fn(),
 }));
 
-import { getDb } from "../../db";
+vi.mock("../../persistentOperator/obligationStore", () => ({
+  claireProactiveObligations: {},
+  ...obligationMocks,
+}));
+
 import { loadObligations } from "./boardService";
 
-describe("loadObligations persistence error safety", () => {
-  it("propagates transient database query errors so callers do not assume zero obligations", async () => {
-    const queryError = Object.assign(new Error("Connection lost during query"), {
-      code: "PROTOCOL_CONNECTION_LOST",
-      errno: 1047,
-    });
-
-    vi.mocked(getDb).mockResolvedValueOnce({
-      select: () => ({
-        from: () => ({
-          where: () => Promise.reject(queryError),
-        }),
-      }),
-    } as never);
-
-    await expect(loadObligations("tenant-1", "operator-1")).rejects.toThrow(
-      "Connection lost during query"
-    );
+describe("Claire proactive board domain port", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("returns empty array when the optional table has not been migrated yet", async () => {
-    const missingTableError = Object.assign(new Error("Table doesn't exist"), {
-      code: "ER_NO_SUCH_TABLE",
-      errno: 1146,
-    });
-
-    vi.mocked(getDb).mockResolvedValueOnce({
-      select: () => ({
-        from: () => ({
-          where: () => Promise.reject(missingTableError),
-        }),
-      }),
-    } as never);
-
-    const rows = await loadObligations("tenant-1", "operator-1");
-    expect(rows).toEqual([]);
-  });
-
-  it("returns mapped proactive obligations on successful read", async () => {
+  it("delegates obligation reads to Persistent Operator", async () => {
     const fixtureObligation = {
       id: "ob-1",
       kind: "sales_follow_up" as const,
@@ -59,15 +32,28 @@ describe("loadObligations persistence error safety", () => {
       moveCount: 0,
     };
 
-    vi.mocked(getDb).mockResolvedValueOnce({
-      select: () => ({
-        from: () => ({
-          where: () => Promise.resolve([{ payloadJson: fixtureObligation }]),
-        }),
-      }),
-    } as never);
+    obligationMocks.listPersistentOperatorObligationPayloads.mockResolvedValueOnce([
+      fixtureObligation,
+    ]);
 
-    const rows = await loadObligations("tenant-1", "operator-1");
-    expect(rows).toEqual([fixtureObligation]);
+    await expect(loadObligations("tenant-1", "operator-1")).resolves.toEqual([
+      fixtureObligation,
+    ]);
+    expect(
+      obligationMocks.listPersistentOperatorObligationPayloads
+    ).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      operatorUserId: "operator-1",
+    });
+  });
+
+  it("does not reinterpret a domain-port failure as an empty board", async () => {
+    obligationMocks.listPersistentOperatorObligationPayloads.mockRejectedValueOnce(
+      new Error("Connection lost during query")
+    );
+
+    await expect(loadObligations("tenant-1", "operator-1")).rejects.toThrow(
+      "Connection lost during query"
+    );
   });
 });

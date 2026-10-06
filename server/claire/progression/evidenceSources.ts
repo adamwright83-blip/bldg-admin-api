@@ -1,7 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
-import { commercialFollowUps } from "../../../drizzle/schema";
-import { getDb } from "../../db";
-import { isMysqlMissingTableError } from "../../mysqlErrors";
+import { listCompletedCommercialFollowUpsForOperator } from "../../commercialPipeline/commercialFollowUpReadService";
 import { groupCustomerOrderTruth, loadCustomerOrderTruth, type CustomerOrderTruthRecord } from "../../geography/customerOrderTruth";
 import { listClaireRelationshipEvents } from "../character/relationshipEvents";
 import { evaluateDisclosureSafetyOk } from "../character/tierEngine";
@@ -73,25 +70,10 @@ export type CompletedFollowUp = { id: string; completedAt: Date };
  * completion time, and the operator who completed them. Nothing a model or a chat said can appear here.
  */
 export async function loadCompletedFollowUps(scope: OperatorScope): Promise<CompletedFollowUp[]> {
-  const db = await getDb();
-  if (!db) return [];
-  try {
-    const rows = await db
-      .select({ id: commercialFollowUps.id, completedAt: commercialFollowUps.completedAt })
-      .from(commercialFollowUps)
-      .where(
-        and(
-          eq(commercialFollowUps.tenantId, scope.tenantId),
-          eq(commercialFollowUps.status, "completed"),
-          eq(commercialFollowUps.completedBy, scope.operatorUserId),
-          isNotNull(commercialFollowUps.completedAt)
-        )
-      );
-    return rows.flatMap(row => (row.completedAt ? [{ id: row.id, completedAt: row.completedAt }] : []));
-  } catch (error) {
-    if (isMysqlMissingTableError(error)) return [];
-    throw error;
-  }
+  return listCompletedCommercialFollowUpsForOperator({
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+  });
 }
 
 const lastSync = new Map<string, number>();

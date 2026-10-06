@@ -1,8 +1,5 @@
-import { inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { dayDirectorCommitments } from "../../../drizzle/schema";
-import { getDb } from "../../db";
-import { isMysqlMissingTableError } from "../../mysqlErrors";
+import { readDayDirectorActionEvidence } from "../../dayDirector/dayDirectorService";
 import { ENV } from "../../_core/env";
 import {
   ANALYSIS_NOTIFICATION_KIND,
@@ -20,14 +17,17 @@ import { evaluateConversationQualitative, formatLiveTranscript, MalformedConvers
 import { recordEvaluatorAttempt, recordEvaluatorFailure, recordEvaluatorSuccess } from "./evaluatorStats";
 import { researchFlagFor, type QualitativeEvaluation } from "./conversationAnalysisSchema";
 
-export async function readLinkedActionStats(actionIds: string[]): Promise<{
+export async function readLinkedActionStats(
+  actionIds: string[],
+  tenantId?: string
+): Promise<{
   acceptedActionCount: number;
   completedActionCount: number;
   outcomeCount: number;
   needsDetails: string[];
   titles: string[];
 }> {
-  if (!actionIds.length) {
+  if (!actionIds.length || !tenantId?.trim()) {
     return {
       acceptedActionCount: 0,
       completedActionCount: 0,
@@ -36,56 +36,22 @@ export async function readLinkedActionStats(actionIds: string[]): Promise<{
       titles: [],
     };
   }
-  const db = await getDb();
-  if (!db) {
-    return {
-      acceptedActionCount: actionIds.length,
-      completedActionCount: 0,
-      outcomeCount: 0,
-      needsDetails: [],
-      titles: actionIds,
-    };
-  }
-  try {
-    const rows = await db
-      .select()
-      .from(dayDirectorCommitments)
-      .where(inArray(dayDirectorCommitments.id, actionIds));
-    const needsDetails: string[] = [];
-    for (const row of rows) {
-      const metadata =
-        row.metadataJson && typeof row.metadataJson === "object"
-          ? (row.metadataJson as Record<string, unknown>)
-          : {};
-      if (metadata.detailState === "NEEDS_DETAILS") {
-        const missing = Array.isArray(metadata.missingDetails)
-          ? metadata.missingDetails.map(String)
-          : [];
-        needsDetails.push(
-          missing.length ? `${row.title}: ${missing.join(", ")}` : row.title
-        );
-      }
-    }
-    const completed = rows.filter(row => row.status === "completed");
-    return {
-      acceptedActionCount: rows.length || actionIds.length,
-      completedActionCount: completed.length,
-      outcomeCount: completed.length,
-      needsDetails,
-      titles: rows.map(row => row.title),
-    };
-  } catch (error) {
-    if (isMysqlMissingTableError(error)) {
-      return {
-        acceptedActionCount: actionIds.length,
-        completedActionCount: 0,
-        outcomeCount: 0,
-        needsDetails: [],
-        titles: actionIds,
-      };
-    }
-    throw error;
-  }
+  const rows = await readDayDirectorActionEvidence({ tenantId, actionIds });
+  const needsDetails = rows
+    .filter(row => row.detailState === "NEEDS_DETAILS")
+    .map(row =>
+      row.missingDetails.length
+        ? `${row.title}: ${row.missingDetails.join(", ")}`
+        : row.title
+    );
+  const completed = rows.filter(row => row.status === "completed");
+  return {
+    acceptedActionCount: rows.length,
+    completedActionCount: completed.length,
+    outcomeCount: completed.length,
+    needsDetails,
+    titles: rows.map(row => row.title),
+  };
 }
 
 export async function runConversationAnalysis(
@@ -105,7 +71,7 @@ export async function runConversationAnalysis(
 
   const turns = await store.listTurns(sessionId);
   const postCall = await store.getTranscript(sessionId, POST_CALL_TRANSCRIPT_SOURCE);
-  const stats = await readLinkedActionStats(session.relatedActionIds);
+  const stats = await readLinkedActionStats(session.relatedActionIds, session.tenantId);
   const evaluate = dependencies.evaluate ?? evaluateConversationQualitative;
 
   let evaluation: QualitativeEvaluation;
@@ -208,7 +174,7 @@ export async function enrichAnalysisCounts(sessionId: string): Promise<void> {
   const session = await store.getSession(sessionId);
   const analysis = await store.getAnalysis(sessionId);
   if (!session || !analysis) return;
-  const stats = await readLinkedActionStats(session.relatedActionIds);
+  const stats = await readLinkedActionStats(session.relatedActionIds, session.tenantId);
   await store.upsertAnalysis({
     ...analysis,
     acceptedActionCount: stats.acceptedActionCount,

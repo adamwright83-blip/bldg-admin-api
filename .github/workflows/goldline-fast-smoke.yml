@@ -90,6 +90,24 @@ jobs:
           server/persistentOperator/operationReceipt.test.ts
           server/persistentOperator/operatorAppointmentExecution.test.ts
 
+      - name: Prove Claire domain-port convergence
+        run: >-
+          pnpm vitest run
+          server/claire/domainPortArchitecture.test.ts
+          server/claire/domainPortAvailability.test.ts
+          server/claire/knowledge/accountActions.domainPort.test.ts
+          server/claire/proactive/boardService.test.ts
+          server/persistentOperator/obligationStore.boardPort.test.ts
+          server/persistentOperator/operatorDoctrineStore.test.ts
+          server/claire/brain/tests/grantBoundLegacyAdapter.test.ts
+          server/claire/brain/tests/liveCutover.test.ts
+          server/claire/identityTruth.test.ts
+          server/claire/claireTwilio.test.ts
+          server/claire/macroGoalService.test.ts
+          server/claire/workdayPlanService.test.ts
+          server/claire/workdayRecurrenceService.test.ts
+          server/claire/weeklyMission/dossier.test.ts
+
       - name: Prove Daphne causal adaptation kernel
         run: >-
           pnpm vitest run

@@ -1,5 +1,6 @@
 import { storageGet, storagePut } from "../../storage";
 import { transcribeAudio } from "../../_core/voiceTranscription";
+import { fetchTwilioRecordingMp3 } from "../../twilioPlatform/recordingProvider";
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
 import {
   completeConversationSession,
@@ -14,15 +15,12 @@ async function archiveTwilioRecording(input: {
   recordingSid: string;
   sessionId: string;
 }): Promise<{ key: string; bytes: number } | null> {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${input.accountSid}/Recordings/${input.recordingSid}.mp3`;
-  const response = await fetch(url, {
-    headers: {
-      Authorization:
-        "Basic " + Buffer.from(`${input.accountSid}:${input.authToken}`).toString("base64"),
-    },
+  const bytes = await fetchTwilioRecordingMp3({
+    accountSid: input.accountSid,
+    authToken: input.authToken,
+    recordingSid: input.recordingSid,
   });
-  if (!response.ok) return null;
-  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes) return null;
   const key = `claire-calls/${input.sessionId}/${input.recordingSid}.mp3`;
   await storagePut(key, bytes, "audio/mpeg");
   return { key, bytes: bytes.length };
