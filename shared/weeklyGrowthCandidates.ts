@@ -175,6 +175,8 @@ export type LoadWeeklyGrowthCandidatesInput = {
   dayDirectorActorIds?: readonly string[];
   /** Remaining business dates. Used only to judge prep feasibility. */
   remainingDates: readonly string[];
+  /** Planning-date override. Prevents future-date planning from borrowing the wall clock date. */
+  businessDate?: string;
   now: Date;
   timeZone: string;
 };
