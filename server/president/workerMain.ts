@@ -24,6 +24,7 @@ let lastCycleTick: Awaited<ReturnType<typeof runPresidentCycleWorkerTick>> | nul
   null;
 
 async function runLegacyTick() {
+  if (process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED !== "1") return false;
   const status = presidentRuntimeStatus();
   if (status.executionState !== "CONFIGURED") return false;
   const runtime = getPresidentRuntime();
@@ -73,6 +74,10 @@ const server = http.createServer((request, response) => {
       runtime: presidentRuntimeStatus(),
       autonomousCycleExecutionEnabled:
         process.env.PRESIDENT_EXECUTION_ENABLED === "1",
+      autonomousExecutionMode:
+        process.env.PRESIDENT_EXECUTION_MODE || "github_actions",
+      legacyRuntimeEnabled:
+        process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED === "1",
       worker: {
         inFlight,
         lastRunAt,
