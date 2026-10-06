@@ -98,7 +98,9 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain("loadAdmittedNativePaymentEvents");
     expect(service).toContain("buildAuthoritativeNativePayments");
     expect(service).toContain("payment.authorityReceiptId");
-    expect(service).toContain("payment.netPaidCents");
+    expect(service).toContain("payment.netPaidCents > 0");
+    expect(service).toContain('payment.state === "paid"');
+    expect(service).toContain('payment.state === "partially_refunded"');
     expect(service).toContain("payment.occurredAt.getTime()");
     expect(service).toContain('order.status !== "cancelled"');
     expect(service).not.toContain("filter(hasNativePaymentAuthority)");
