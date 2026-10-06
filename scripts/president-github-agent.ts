@@ -10,6 +10,7 @@ import {
 } from "../server/president/fabric/exec";
 import {
   protectedViolations,
+  runBrowserCheck,
 } from "../server/president/fabric/engineering";
 import { validateResearchArtifact } from "../server/president/fabric/review";
 
@@ -253,6 +254,48 @@ async function executeEngineering(claim: ExecutionClaim, token: string) {
       throw new Error(`Protected files changed: ${protectedHits.join(", ")}`);
 
     const checks = await validation(mission, ROOT);
+    let browserEvidence:
+      | {
+          ok: boolean;
+          consoleErrors: string[];
+          screenshotPath?: string;
+          detail: string;
+          workflowRunId?: string;
+        }
+      | undefined;
+    if (mission.requiredValidation.browser) {
+      const install = await runCommand(
+        "pnpm exec playwright install --with-deps chromium",
+        ROOT,
+        { timeoutMs: 15 * 60_000 }
+      );
+      if (install.exitCode !== 0) {
+        checks.push({
+          command: "playwright-install-chromium",
+          exitCode: install.exitCode,
+          ok: false,
+        });
+      } else {
+        const shotDir = join(
+          process.env.RUNNER_TEMP || "/tmp",
+          "president-browser"
+        );
+        mkdirSync(shotDir, { recursive: true });
+        browserEvidence = {
+          ...(await runBrowserCheck(
+            mission.requiredValidation.browser,
+            ROOT,
+            join(shotDir, `${mission.missionId}-executor.png`)
+          )),
+          workflowRunId: process.env.GITHUB_RUN_ID,
+        };
+        checks.push({
+          command: "browser-validation",
+          exitCode: browserEvidence.ok ? 0 : 1,
+          ok: browserEvidence.ok,
+        });
+      }
+    }
     if (checks.some(x => !x.ok)) {
       await post(
         "/api/president/autonomous/agent/report-execution",
@@ -343,6 +386,7 @@ async function executeEngineering(claim: ExecutionClaim, token: string) {
           prUrl,
           changedFiles: files,
           checks,
+          browserEvidence,
           summary: `Implemented and published ${files.length} changed file(s)`,
         },
       }
@@ -466,6 +510,40 @@ async function reviewMission(claim: ReviewClaim, token: string) {
       });
       await runCommand(`git checkout --detach ${shellQuote(commitSha)}`, ROOT);
       checks = await validation(m, ROOT);
+      if (m.requiredValidation.browser) {
+        const install = await runCommand(
+          "pnpm exec playwright install --with-deps chromium",
+          ROOT,
+          { timeoutMs: 15 * 60_000 }
+        );
+        if (install.exitCode !== 0) {
+          checks.push({
+            command: "reviewer-playwright-install-chromium",
+            exitCode: install.exitCode,
+            ok: false,
+          });
+        } else {
+          const shotDir = join(
+            process.env.RUNNER_TEMP || "/tmp",
+            "president-browser"
+          );
+          mkdirSync(shotDir, { recursive: true });
+          const browser = await runBrowserCheck(
+            m.requiredValidation.browser,
+            ROOT,
+            join(shotDir, `${m.missionId}-reviewer.png`)
+          );
+          checks.push({
+            command: "reviewer-browser-validation",
+            exitCode: browser.ok ? 0 : 1,
+            ok: browser.ok,
+          });
+          if (!browser.ok)
+            reasons.push(
+              `Browser validation failed: ${browser.detail}; ${browser.consoleErrors.join(" | ")}`
+            );
+        }
+      }
 
       const files = (
         await runCommand(
