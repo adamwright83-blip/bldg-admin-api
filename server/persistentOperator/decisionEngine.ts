@@ -91,8 +91,9 @@ function candidateMatchesCampaign(
 
 /**
  * Pure PR4 selection. It does not invent ranking. Mission Director's persisted
- * primary is honored when it maps to an eligible feed candidate; otherwise the
- * canonical candidate feed order is used unchanged.
+ * primary is the only source that may turn an eligible feed candidate into a
+ * selected candidate here. Candidate-feed array order carries no business
+ * priority.
  */
 export function selectDeterministicCycleChoice(input: {
   weeklyIntentLocked: boolean;
@@ -141,12 +142,9 @@ export function selectDeterministicCycleChoice(input: {
   }
 
   const campaignId = campaignIdFromPlan(input.missionDirectorPlan);
-  const selected =
-    (campaignId
-      ? eligible.find(candidate => candidateMatchesCampaign(candidate, campaignId))
-      : null) ??
-    eligible[0] ??
-    null;
+  const selected = campaignId
+    ? eligible.find(candidate => candidateMatchesCampaign(candidate, campaignId)) ?? null
+    : null;
 
   if (selected) {
     const obligation = obligationFromCandidate(selected, input.obligations);
@@ -155,12 +153,7 @@ export function selectDeterministicCycleChoice(input: {
       selectedRef: obligation?.id ?? selected.id,
       selectedCandidate: selected,
       selectedObligation: obligation,
-      selectedReasonCode:
-        campaignId && candidateMatchesCampaign(selected, campaignId)
-          ? "MISSION_DIRECTOR_PRIMARY"
-          : obligation
-            ? "CANONICAL_FEED_EXISTING_OBLIGATION"
-            : "CANONICAL_FEED_FIRST_ELIGIBLE",
+      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
       blockedCandidates: prepBlocked,
     };
   }
