@@ -7959,6 +7959,68 @@ export type OperatorRepresentativeDirective =
 export type InsertOperatorRepresentativeDirective =
   typeof operatorRepresentativeDirectives.$inferInsert;
 
+
+/**
+ * Durable proof that a bounded Daphne directive actually changed one
+ * non-business Claire interaction branch. These rows are not business
+ * Authority Receipts and cannot certify commercial or operational truth.
+ */
+export const operatorRepresentativeAdaptationReceipts = mysqlTable(
+  "operator_representative_adaptation_receipts",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    directiveId: varchar("directiveId", { length: 36 }).notNull(),
+    targetKey: varchar("targetKey", { length: 191 }).notNull(),
+    behaviorClass: mysqlEnum("behaviorClass", [
+      "ask_before_ambiguous_pending_continuation",
+    ]).notNull(),
+    conversationId: varchar("conversationId", { length: 191 }).notNull(),
+    turnId: varchar("turnId", { length: 191 }).notNull(),
+    executingSha: varchar("executingSha", { length: 64 }).notNull(),
+    receiptClass: mysqlEnum("receiptClass", [
+      "non_business_claire_behavior",
+    ])
+      .notNull()
+      .default("non_business_claire_behavior"),
+    structuralOutcome: mysqlEnum("structuralOutcome", [
+      "clarification_branch_selected",
+    ]).notNull(),
+    firewallResult: mysqlEnum("firewallResult", [
+      "non_business_behavior_only",
+    ])
+      .notNull()
+      .default("non_business_behavior_only"),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    turnUnique: uniqueIndex("uq_operator_rep_adaptation_turn").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.directiveId,
+      table.conversationId,
+      table.turnId
+    ),
+    operatorCreatedIdx: index("idx_operator_rep_adaptation_operator_created").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.createdAt
+    ),
+    directiveIdx: index("idx_operator_rep_adaptation_directive").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.directiveId,
+      table.createdAt
+    ),
+  })
+);
+
+export type OperatorRepresentativeAdaptationReceipt =
+  typeof operatorRepresentativeAdaptationReceipts.$inferSelect;
+export type InsertOperatorRepresentativeAdaptationReceipt =
+  typeof operatorRepresentativeAdaptationReceipts.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {
