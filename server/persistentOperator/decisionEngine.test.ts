@@ -203,7 +203,7 @@ describe("PR4 deterministic goal-cycle selection", () => {
     });
   });
 
-  it("matches an open obligation due later in the horizon to a feed candidate", () => {
+  it("does not elevate a future obligation-only candidate from feed order", () => {
     const future = obligation("obligation-future");
     future.dueDate = "2026-10-02";
     const candidateMatchingFuture = candidate("candidate-future", {
@@ -220,13 +220,13 @@ describe("PR4 deterministic goal-cycle selection", () => {
       candidates: [candidateMatchingFuture],
       obligations: [future],
       dueObligations: [],
-      missionDirectorPlan: missionPlan("candidate-future"),
+      missionDirectorPlan: null,
     });
     expect(result).toMatchObject({
-      selectionKind: "obligation",
-      selectedRef: "obligation-future",
-      selectedObligation: future,
-      selectedReasonCode: "MISSION_DIRECTOR_PRIMARY",
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedObligation: null,
+      selectedReasonCode: "NO_ELIGIBLE_CANDIDATE",
     });
   });
 
