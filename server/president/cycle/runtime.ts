@@ -32,6 +32,20 @@ export function presidentCycleRepoRoot(env = process.env): string {
   return resolve(env.PRESIDENT_REPO_ROOT?.trim() || process.cwd());
 }
 
+export type PresidentExecutionMode = "github_actions" | "local_cli";
+
+export function presidentExecutionMode(
+  env: NodeJS.ProcessEnv = process.env
+): PresidentExecutionMode {
+  const raw = env.PRESIDENT_EXECUTION_MODE?.trim();
+  if (!raw) return env.NODE_ENV === "production" ? "github_actions" : "local_cli";
+  if (raw !== "github_actions" && raw !== "local_cli")
+    throw new Error(
+      "PRESIDENT_EXECUTION_MODE must be github_actions or local_cli"
+    );
+  return raw;
+}
+
 function runtimeRoot(env = process.env): string {
   return resolve(
     env.PRESIDENT_RUNTIME_DIR?.trim() ||
@@ -172,6 +186,10 @@ export async function startPresidentRecommendationCycle(input: {
 export async function runPresidentApprovedCycle(cycleId: string) {
   if (process.env.PRESIDENT_EXECUTION_ENABLED !== "1")
     throw new Error("PRESIDENT_EXECUTION_ENABLED is not 1");
+  if (presidentExecutionMode() !== "local_cli")
+    throw new Error(
+      "Local President execution is disabled; GitHub Actions owns approved mission execution"
+    );
   const repoRoot = presidentCycleRepoRoot();
   const root = runtimeRoot();
   const gh = new GhCliGitHost(repoRoot);
@@ -218,9 +236,17 @@ export async function runPresidentCycleWorkerTick() {
     ].includes(c.status);
   });
   const results: Array<{ cycleId: string; status: string }> = [];
+  const mode = presidentExecutionMode();
 
   for (const cycle of cycles) {
     try {
+      if (cycle.status === "EXECUTING" && mode === "github_actions") {
+        results.push({
+          cycleId: cycle.cycleId,
+          status: "AWAITING_GITHUB_ACTIONS",
+        });
+        continue;
+      }
       const out =
         cycle.status === "EXECUTING"
           ? await runPresidentApprovedCycle(cycle.cycleId)
@@ -254,6 +280,7 @@ export async function presidentCycleReadiness() {
     roster: rosterFromEnv(),
     repoRoot,
     notificationConfigured: Boolean(ENV.forgeApiUrl && ENV.forgeApiKey),
+    executionMode: presidentExecutionMode(),
   });
   base.capabilities.durableCycleStoreReady = {
     ready: durableStoreReady,
