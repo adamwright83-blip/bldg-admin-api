@@ -90,6 +90,14 @@ jobs:
           server/churnRadar/customerChurnContract.test.ts
           shared/customerChurn.test.ts
 
+      - name: Prove Planning authority convergence
+        run: >-
+          pnpm vitest run
+          server/missionDirector/rankableWork.test.ts
+          server/weeklyGrowthCandidates/weeklyGrowthCandidates.test.ts
+          server/persistentOperator/decisionEngine.test.ts
+          server/goldline/dayline/currentDayLineService.test.ts
+
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-
           pnpm vitest run
