@@ -108,8 +108,19 @@ export type OperatorSmsPort = {
     to: string;
     body: string;
     statusCallback?: string;
+    idempotencyKey?: string;
   }): Promise<{ messageSid: string; status: string }>;
 };
+
+export function operatorArtifactIdempotencyKey(input: {
+  tenantId: string;
+  decisionId?: string | null;
+}): string | null {
+  const tenantId = input.tenantId.trim();
+  const decisionId = input.decisionId?.trim() ?? "";
+  if (!tenantId || !decisionId) return null;
+  return `operator-artifact:${tenantId}:${decisionId}`;
+}
 
 export type SendOperatorArtifactResult = {
   providerAccepted: boolean;
@@ -425,14 +436,41 @@ export function createTwilioOperatorSmsPort(
         );
       }
       const client = getTwilioPlatformClient(env);
-      const created = await client.messages.create({
-        to: input.to,
-        from,
-        body: input.body,
-        ...(input.statusCallback
-          ? { statusCallback: input.statusCallback }
-          : {}),
-      });
+      let created: { sid?: string; status?: string };
+      if (input.idempotencyKey) {
+        const credentials = readTwilioRestCredentials(env);
+        if (!credentials) {
+          throw new OperatorArtifactRequestError(
+            "invalid_payload",
+            "Twilio REST credentials are not configured"
+          );
+        }
+        const response = await client.request({
+          method: "post",
+          uri: `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,
+          headers: { "Idempotency-Key": input.idempotencyKey },
+          data: {
+            To: input.to,
+            From: from,
+            Body: input.body,
+            ...(input.statusCallback
+              ? { StatusCallback: input.statusCallback }
+              : {}),
+          },
+        });
+        const responseBody =
+          (response as { body?: { sid?: string; status?: string } }).body ?? {};
+        created = responseBody;
+      } else {
+        created = await client.messages.create({
+          to: input.to,
+          from,
+          body: input.body,
+          ...(input.statusCallback
+            ? { statusCallback: input.statusCallback }
+            : {}),
+        });
+      }
       const messageSid =
         typeof created.sid === "string" ? created.sid.trim() : "";
       const status = typeof created.status === "string" ? created.status : "";
@@ -531,6 +569,11 @@ export async function sendOperatorArtifact(
   const env = options?.env ?? process.env;
   const from = readTwilioPlatformConfig(env).smsFromNumber;
   const port = options?.port ?? createTwilioOperatorSmsPort(env);
+  const idempotencyKey =
+    operatorArtifactIdempotencyKey({
+      tenantId,
+      decisionId: input.decisionId,
+    }) ?? undefined;
 
   let sent: { messageSid: string; status: string };
   try {
@@ -543,6 +586,7 @@ export async function sendOperatorArtifact(
         agentEventId: input.agentEventId,
         decisionId: input.decisionId,
       }),
+      idempotencyKey,
     });
   } catch (error) {
     if (
