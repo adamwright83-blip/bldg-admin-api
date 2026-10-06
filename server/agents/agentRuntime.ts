@@ -72,6 +72,17 @@ export function classifyExternalCommunicationExecution(
   return "indeterminate";
 }
 
+export function requirePersistentExecutionEventId(
+  eventId: number | null
+): number {
+  if (!Number.isSafeInteger(eventId) || (eventId ?? 0) <= 0) {
+    throw new Error(
+      "Persistent execution refused: durable execution-start authority event was not persisted"
+    );
+  }
+  return eventId as number;
+}
+
 async function safeLogAgentEvent(
   event: AgentEventWrite
 ): Promise<number | null> {
@@ -186,15 +197,17 @@ export async function runAgentTool<TOutput = unknown>(
     }
 
     if (ctx.agentType === "goal_cycle_agent") {
-      const executionEventId = await safeLogAgentEvent({
-        ctx: eventCtx,
-        toolName,
-        inputJson: input,
-        status: "execution_started",
-        operationStatus: "execution_started",
-        latencyMs: Date.now() - started,
-        requiresHumanApproval,
-      });
+      const executionEventId = requirePersistentExecutionEventId(
+        await safeLogAgentEvent({
+          ctx: eventCtx,
+          toolName,
+          inputJson: input,
+          status: "execution_started",
+          operationStatus: "execution_started",
+          latencyMs: Date.now() - started,
+          requiresHumanApproval,
+        })
+      );
       eventCtx = { ...eventCtx, agentEventId: executionEventId };
     }
 
