@@ -237,6 +237,7 @@ export async function computeMissionPlan(input: {
   businessDate: string;
   timeZone?: string;
 }): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+  const timeZone = input.timeZone?.trim() || getDashboardTimeZone();
   const operatorUserId = input.operatorUserId?.trim() || input.operatorId;
   const operatorUserIds = [...new Set(
     [operatorUserId, ...(input.operatorUserIds ?? [])].map(id => id.trim()).filter(Boolean)
@@ -248,7 +249,7 @@ export async function computeMissionPlan(input: {
       userId: operatorUserId,
       includeAllAssignees: true,
       businessDate: input.businessDate,
-      timeZone: input.timeZone,
+      timeZone,
     }),
   ]);
   const loaded = await loadDailyCommand({
@@ -258,7 +259,7 @@ export async function computeMissionPlan(input: {
     dayDirectorActorIds: input.operatorIds ? [...input.operatorIds] : undefined,
     operatorUserId,
     businessDate: input.businessDate,
-    timeZone: input.timeZone,
+    timeZone,
   }).catch(() => null);
   const weeklyIntent = loaded
     ? await latestWeeklyIntentForOperators({
@@ -274,7 +275,7 @@ export async function computeMissionPlan(input: {
     tenantId: input.tenantId,
     businessDate: input.businessDate,
     campaigns: enabledCampaigns,
-    timeZone: input.timeZone?.trim() || getDashboardTimeZone(),
+    timeZone,
   });
   const rankingContext = await loadRankingContext({
     tenantId: input.tenantId,
