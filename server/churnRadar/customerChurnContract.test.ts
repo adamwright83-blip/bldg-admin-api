@@ -46,7 +46,8 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain("buildAuthoritativeChurnHistory");
     expect(service).toContain("goldline_customer_order_history");
     expect(service).toContain("loadPaidOrderLedger");
-    expect(service).toContain("canonical paid-order ledger / authority_receipts");
+    expect(service).toContain("orderPaymentProjections");
+    expect(service).toContain("order_payment_projections.netPaidCents");
     expect(service).not.toContain("function completedServiceAt");
     expect(service).not.toContain("function isCompletedHistory");
     expect(service).not.toContain("orders.paidAt or orders.updatedAt");
@@ -95,7 +96,9 @@ describe("Churn Radar production contract", () => {
   it("attributes recovery only from a later admitted paid-ledger event", () => {
     expect(service).toContain("refreshCustomerRecoveryAttribution");
     expect(service).toContain("loadAdmittedNativePaymentEvents");
+    expect(service).toContain("buildAuthoritativeNativePayments");
     expect(service).toContain("payment.authorityReceiptId");
+    expect(service).toContain("payment.netPaidCents");
     expect(service).toContain("payment.occurredAt.getTime()");
     expect(service).toContain('order.status !== "cancelled"');
     expect(service).not.toContain("filter(hasNativePaymentAuthority)");
