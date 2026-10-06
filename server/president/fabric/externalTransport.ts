@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   MISSION_TRANSITIONS,
   type Cycle,
@@ -313,9 +313,17 @@ export async function reportExternalExecution(
     } else {
       if (!input.result.artifactText.trim())
         throw new Error("Research artifact is empty");
+      const actualSha256 = createHash("sha256")
+        .update(input.result.artifactText)
+        .digest("hex");
+      if (
+        !/^[a-f0-9]{64}$/i.test(input.result.artifactSha256) ||
+        input.result.artifactSha256 !== actualSha256
+      )
+        throw new Error("Research artifact hash mismatch");
       m.handback = {
         artifactText: input.result.artifactText,
-        artifactSha256: input.result.artifactSha256,
+        artifactSha256: actualSha256,
         checks: [],
         evidenceIds: [],
       };
