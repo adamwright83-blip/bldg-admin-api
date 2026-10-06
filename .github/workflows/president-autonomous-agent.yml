@@ -2,7 +2,8 @@ name: President autonomous agent
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # 18:00–10:59 Los Angeles across PST/PDT; three slots run in parallel.
+    - cron: "*/15 2-17 * * *"
   workflow_dispatch:
 
 permissions:
