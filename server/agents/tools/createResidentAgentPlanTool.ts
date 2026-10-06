@@ -1,4 +1,9 @@
 import { createResidentAgentPlan } from "../../db";
+import {
+  assertResidentIdentityOrLineage,
+  resolveResidentActionId,
+  resolveResidentLineage,
+} from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
 
 type PlanStatus =
@@ -16,12 +21,6 @@ function nullableString(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-function nullableNumber(value: unknown): number | null {
-  if (value == null || value === "") return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
 export const createResidentAgentPlanTool: AgentTool<Record<string, any>, {
   planId: number;
   planStatus: PlanStatus;
@@ -35,16 +34,33 @@ export const createResidentAgentPlanTool: AgentTool<Record<string, any>, {
       throw new Error("originalMessage is required");
     }
 
+    const residentId = resolveResidentActionId(ctx, input.bldgUserId);
+    const conversationId = resolveResidentLineage({
+      contextValue: ctx.conversationId,
+      suppliedValue: input.sourceConversationId,
+      label: "conversationId",
+    });
+    const sessionId = resolveResidentLineage({
+      contextValue: ctx.sessionId,
+      suppliedValue: input.sourceSessionId,
+      label: "sessionId",
+    });
+    assertResidentIdentityOrLineage({
+      residentId,
+      conversationId,
+      sessionId,
+    });
+
     const planStatus = defaultPlanStatus;
     const planId = await createResidentAgentPlan({
       tenantId: ctx.tenantId,
-      bldgUserId: nullableNumber(input.bldgUserId),
+      bldgUserId: residentId,
       residentName: nullableString(input.residentName),
       buildingSlug: nullableString(input.buildingSlug),
       buildingName: nullableString(input.buildingName),
       unit: nullableString(input.unit),
-      conversationId: nullableString(input.sourceConversationId) ?? ctx.conversationId ?? null,
-      sessionId: nullableString(input.sourceSessionId) ?? ctx.sessionId ?? null,
+      conversationId,
+      sessionId,
       originalMessage,
       planStatus,
       planJson: input.planJson ?? null,
