@@ -1,4 +1,9 @@
-import { createVendorDataExport, listVendorServices, getOrdersByVendorId } from "../../db";
+import {
+  createVendorDataExport,
+  getOrdersByVendorId,
+  getVendorProfileByVendorId,
+  listVendorServices,
+} from "../../db";
 import type { AgentTool } from "../toolRegistry";
 
 function csvEscape(value: unknown): string {
@@ -11,10 +16,20 @@ export const exportVendorDataTool: AgentTool<Record<string, any>> = {
   description: "Create an immediate CSV export scoped to one vendor's clients, bookings, or services.",
   async execute(input, ctx) {
     const vendorId = Number(input.vendorId);
+    if (!Number.isSafeInteger(vendorId) || vendorId <= 0) {
+      throw new Error("Valid vendorId is required");
+    }
+    const profile = await getVendorProfileByVendorId(ctx.tenantId, vendorId);
+    if (!profile) {
+      throw new Error("Vendor does not belong to tenant");
+    }
+
     const exportType = input.exportType ?? "services";
     let csv = "";
     if (exportType === "bookings" || exportType === "clients") {
-      const rows = await getOrdersByVendorId(vendorId);
+      const rows = (await getOrdersByVendorId(vendorId)).filter(
+        row => row.tenantId === ctx.tenantId
+      );
       const filtered = exportType === "clients"
         ? rows.map((row) => ({ firstName: row.firstName, lastName: row.lastName, phone: row.phone, email: row.email }))
         : rows.map((row) => ({ id: row.id, status: row.status, pickupDate: row.pickupDate, total: row.total }));
