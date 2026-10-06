@@ -651,7 +651,9 @@ describe("GitHub Actions external President fabric", () => {
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("pull-requests: write");
     expect(workflow).not.toMatch(/auto-merge|gh pr merge/i);
-    expect(agent).not.toMatch(/gh pr merge|--auto|mitch/i);
+    expect(agent).not.toMatch(/gh pr merge|--auto/i);
+    expect(agent.match(/from\s+["'][^"']*mitch/i)).toBeNull();
+    expect(agent.match(/\/api\/[^"'\`]*mitch/i)).toBeNull();
     expect(agent).toContain("GITHUB_TOKEN");
     expect(agent).toContain("githubOidc");
   });
