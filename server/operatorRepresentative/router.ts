@@ -270,12 +270,26 @@ export const operatorRepresentativeRouter = router({
           tenantId: ctx.tenantId,
           subsystem: "operator_representative.ask",
         });
-        const { snapshot } = await loadSnapshot({ identity });
+        const { snapshot, directives, activeDirectives } = await loadSnapshot({ identity });
+        const receipts = await listDaphneAdaptationReceipts({
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          limit: 250,
+        });
+        const policy = buildOperatorRepresentativeAdaptationPolicy({
+          tenantId: identity.tenantId,
+          directives: activeDirectives,
+        });
         const answer = answerOperatorRepresentativeQuestion({
           question: input.question,
           snapshot,
           focusedItemId: input.focusedItemId,
           correctionValue: input.correctionValue,
+          adaptationLifecycle: buildDaphneAdaptationLifecycle({
+            enabled: policy.enabled,
+            directives,
+            receipts,
+          }),
         });
 
         if (!answer.directiveRequest) return answer;
