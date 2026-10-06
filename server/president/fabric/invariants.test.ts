@@ -542,8 +542,9 @@ describe("GitHub Actions external President fabric", () => {
     });
     await createApprovedMissions(store, c.cycleId, POLICY);
 
-    const claim = await claimExternalExecution(store);
+    const claim = await claimExternalExecution(store, "president-github-actions-executor", "1".repeat(40));
     expect(claim?.route).toBe("ENGINEERING");
+    expect(claim?.baseSha).toBe("1".repeat(40));
     expect(claim?.mission.candidateId).toBe(c.presidentProposedIds[0]);
     expect(await claimExternalExecution(store)).toBeNull();
 
@@ -621,8 +622,9 @@ describe("GitHub Actions external President fabric", () => {
       approvedBy: IDENT,
     });
     await createApprovedMissions(store, c.cycleId, POLICY);
-    const claim = await claimExternalExecution(store);
+    const claim = await claimExternalExecution(store, "president-github-actions-executor", "3".repeat(40));
     expect(claim?.route).toBe("RESEARCH");
+    expect(claim?.baseSha).toBe("3".repeat(40));
     await expect(
       reportExternalExecution(store, {
         cycleId: c.cycleId,
