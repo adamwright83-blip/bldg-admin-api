@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
 import {
   buildAuthoritativeChurnHistory,
+  buildAuthoritativeNativePayments,
   isActiveChurnOrder,
   type ChurnDropoffEvidence,
   type ChurnNativeOrder,
@@ -199,15 +200,31 @@ describe("authoritative churn history", () => {
     }
   });
 
-  it("records zero realized value when the order itself was cancelled after completed service", () => {
+  it("does not let cancelled orders become completed service history", () => {
     const history = buildAuthoritativeChurnHistory({
       orders,
       dropoffEvents: [dropoff(3)],
       paidEvents: [paid(3, 5000)],
       paymentProjections: [projection(3, "paid", 5000)],
     });
-    expect(history[0]?.valueCents).toBe(0);
-    expect(history[0]?.paymentAuthorityReceiptId).toBe("receipt-3");
+    expect(history).toEqual([]);
+    expect(isActiveChurnOrder(orders[2]!)).toBe(false);
+  });
+
+  it("does not let Laundry cancellation rewrite canonical payment state", () => {
+    const payments = buildAuthoritativeNativePayments({
+      orders,
+      paidEvents: [paid(3, 5000)],
+      paymentProjections: [projection(3, "paid", 5000)],
+    });
+    expect(payments).toMatchObject([
+      {
+        orderId: 3,
+        netPaidCents: 5000,
+        state: "paid",
+        authorityReceiptId: "receipt-3",
+      },
+    ]);
   });
 
   it("withholds monetary value for review-required or missing net projections", () => {
@@ -241,18 +258,7 @@ describe("authoritative churn history", () => {
       paidEvents: [],
       paymentProjections: [],
     });
-    expect(history.map(item => item.orderId)).toEqual([3]);
-  });
-
-  it("does not erase a completed service merely because the order was later cancelled", () => {
-    const history = buildAuthoritativeChurnHistory({
-      orders,
-      dropoffEvents: [dropoff(3)],
-      paidEvents: [],
-      paymentProjections: [],
-    });
-    expect(history.map(item => item.orderId)).toEqual([3]);
-    expect(isActiveChurnOrder(orders[2]!)).toBe(false);
+    expect(history.map(item => item.orderId)).toEqual([]);
   });
 
   it("prefers the latest corrected evidence for the same order", () => {
