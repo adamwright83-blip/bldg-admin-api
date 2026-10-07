@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const API = (process.env.MITCH_PRODUCER_BASE_URL || "").replace(/\/$/, "");
 const ROLE = process.env.MITCH_AGENT_ROLE;
 const REPO = process.env.MITCH_GITHUB_REPO || "adamwright83-blip/bldg-admin-api";
