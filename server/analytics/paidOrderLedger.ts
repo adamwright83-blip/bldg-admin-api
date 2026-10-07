@@ -5,6 +5,11 @@ import {
   type PaymentAuthorityExpectation,
 } from "../authority/authorityReceipt";
 import {
+  cleanCloudPaidObservationReceiptMatches,
+  readCleanCloudPaidObservationReceipts,
+  type CleanCloudPaidObservationExpectation,
+} from "../cleancloudPaidEvidence";
+import {
   loadSalesReconciliationEvidence,
   type SalesReconciliationEvidence,
 } from "./salesReconciliationStore";
@@ -31,8 +36,11 @@ import { identityKeysFor, type IdentityEvidence } from "./customerIdentityResolu
  * The single read path for paid-order revenue in Goldline analytics.
  *
  * Source rules (shared with Tower Wars' economic-event loader):
- * - Both sources require an admitted, tenant/subject/source/ref-matching
- *   payment_verified Authority Receipt before entering the shared ledger.
+ * - Native rows require a tenant/subject/source/ref-matching
+ *   payment_verified Authority Receipt backed by Stripe.
+ * - CleanCloud rows require a separate tenant/subject/source/ref-matching
+ *   cleancloud_paid_observed receipt. This is external historical evidence,
+ *   not native payment authority.
  * - Native candidates need Stripe payment evidence. Migration 0011
  *   backfilled `paidAt` from `updatedAt` for older paid rows, and manual
  *   "mark paid" writes carry no processor record, so those are held out and
@@ -56,6 +64,7 @@ export type ServiceType = "wash_fold" | "dry_cleaning";
 
 export type PaidOrderEvent = {
   paymentEvidence?: Omit<PaymentAuthorityExpectation, "tenantId">;
+  cleancloudEvidence?: Omit<CleanCloudPaidObservationExpectation, "tenantId">;
   authorityReceiptId?: string;
   company?: "laundry_farm" | null;
   serviceLine?: import("./businessLineage").ServiceLine;
@@ -178,6 +187,7 @@ export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: 
 
 export type LedgerLoaders = {
   paymentAuthority?: typeof readPaymentAuthorityReceipts;
+  cleancloudAuthority?: typeof readCleanCloudPaidObservationReceipts;
   reconciliation?: (tenantId: string) => Promise<SalesReconciliationEvidence>;
   laundry_butler: (window: LedgerWindow) => Promise<NativeOrderRow[]>;
   cleancloud: (window: LedgerWindow) => Promise<CleanCloudOrderRow[]>;
@@ -289,7 +299,7 @@ export function partitionCleanCloudOrders(
     const serviceClass = classifyCleanCloudService({ summaryText: preferred.summaryText ?? null });
     events.push({
       source: "cleancloud",
-      paymentEvidence: { subjectType: "cleancloud_order", subjectId: cleancloudOrderId, sourceType: "cleancloud_paid_order", sourceRef: preferred.importBatchId == null ? null : `cleancloud-import:${preferred.importBatchId}:${cleancloudOrderId}` },
+      cleancloudEvidence: { subjectType: "cleancloud_order", subjectId: cleancloudOrderId, sourceType: "cleancloud_paid_order", sourceRef: preferred.importBatchId == null ? null : `cleancloud-import:${preferred.importBatchId}:${cleancloudOrderId}` },
       eventKey: keptEventKey,
       occurredAt,
       businessDate: businessDateOf(occurredAt, timeZone),
@@ -517,29 +527,75 @@ export async function loadPaidOrderLedger(
   if (events.length) {
     const candidates = [...events];
     try {
-      const expectations = candidates.map(event => ({
-        tenantId: input.tenantId,
-        ...event.paymentEvidence!,
-      }));
-      const receipts = await (
-        loaders.paymentAuthority ?? readPaymentAuthorityReceipts
-      )({ tenantId: input.tenantId, expectations });
-      const bySubject = new Map<string, AuthorityReceipt[]>();
-      for (const receipt of receipts) {
-        const key = `${receipt.subjectType}:${receipt.subjectId}`;
-        bySubject.set(key, [...(bySubject.get(key) ?? []), receipt]);
-      }
-      events.length = 0;
-      for (const event of candidates) {
-        const expected = {
+      const nativeExpectations = candidates
+        .filter(event => event.source === "laundry_butler")
+        .map(event => ({
           tenantId: input.tenantId,
           ...event.paymentEvidence!,
-        };
-        const receipt = (
-          bySubject.get(`${expected.subjectType}:${expected.subjectId}`) ?? []
-        ).find(receipt => paymentAuthorityReceiptMatches(receipt, expected));
-        if (receipt) events.push({ ...event, authorityReceiptId: receipt.id });
-        else {
+        }));
+      const cleanCloudExpectations = candidates
+        .filter(event => event.source === "cleancloud")
+        .map(event => ({
+          tenantId: input.tenantId,
+          ...event.cleancloudEvidence!,
+        }));
+      const [nativeReceipts, cleanCloudReceipts] = await Promise.all([
+        (loaders.paymentAuthority ?? readPaymentAuthorityReceipts)({
+          tenantId: input.tenantId,
+          expectations: nativeExpectations,
+        }),
+        (loaders.cleancloudAuthority ?? readCleanCloudPaidObservationReceipts)({
+          tenantId: input.tenantId,
+          expectations: cleanCloudExpectations,
+        }),
+      ]);
+      const nativeBySubject = new Map<string, AuthorityReceipt[]>();
+      for (const receipt of nativeReceipts) {
+        const key = `${receipt.subjectType}:${receipt.subjectId}`;
+        nativeBySubject.set(key, [
+          ...(nativeBySubject.get(key) ?? []),
+          receipt,
+        ]);
+      }
+      const cleanCloudBySubject = new Map<string, AuthorityReceipt[]>();
+      for (const receipt of cleanCloudReceipts) {
+        const key = `${receipt.subjectType}:${receipt.subjectId}`;
+        cleanCloudBySubject.set(key, [
+          ...(cleanCloudBySubject.get(key) ?? []),
+          receipt,
+        ]);
+      }
+
+      events.length = 0;
+      for (const event of candidates) {
+        let receipt: AuthorityReceipt | undefined;
+        if (event.source === "laundry_butler") {
+          const expected = {
+            tenantId: input.tenantId,
+            ...event.paymentEvidence!,
+          };
+          receipt = (
+            nativeBySubject.get(
+              `${expected.subjectType}:${expected.subjectId}`
+            ) ?? []
+          ).find(item => paymentAuthorityReceiptMatches(item, expected));
+        } else {
+          const expected = {
+            tenantId: input.tenantId,
+            ...event.cleancloudEvidence!,
+          };
+          receipt = (
+            cleanCloudBySubject.get(
+              `${expected.subjectType}:${expected.subjectId}`
+            ) ?? []
+          ).find(item =>
+            cleanCloudPaidObservationReceiptMatches(item, expected)
+          );
+        }
+
+        if (receipt) {
+          events.push({ ...event, authorityReceiptId: receipt.id });
+        } else {
           unverifiedPaymentAuthority.push({
             eventKey: event.eventKey,
             businessDate: event.businessDate,

@@ -12,6 +12,7 @@ import { getDb } from "../db";
 import { admitCompletedCommercialVisit } from "../authority/actionCompletionAdmission";
 import { admitCommercialFieldObservation } from "../authority/fieldObservationAdmission";
 import { findAuthorityReceiptForSubject } from "../authority/authorityReceipt";
+import { findCleanCloudPaidObservationReceipt } from "../cleancloudPaidEvidence";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,
@@ -575,17 +576,15 @@ export async function bridgeCleanCloudPaidOrder(
         ? new Date(input.paidDateUtc)
         : new Date();
 
-  const paymentAuthority = await findAuthorityReceiptForSubject({
+  const cleanCloudEvidence = await findCleanCloudPaidObservationReceipt({
     tenantId: input.tenantId,
-    claimType: "payment_verified",
-    subjectType: "cleancloud_order",
-    subjectId: input.cleancloudOrderId.trim(),
+    cleancloudOrderId: input.cleancloudOrderId.trim(),
   });
-  if (!paymentAuthority) {
+  if (!cleanCloudEvidence) {
     return {
       bridged: false,
       reason: "payment_authority_missing",
-      message: `CleanCloud order #${input.cleancloudOrderId} has no payment_verified Authority Receipt`,
+      message: `CleanCloud order #${input.cleancloudOrderId} has no admitted CleanCloud paid observation`,
     };
   }
 
@@ -607,7 +606,7 @@ export async function bridgeCleanCloudPaidOrder(
       cleancloudCustomerId: input.cleancloudCustomerId ?? null,
       sourceFileName: input.sourceFileName ?? null,
       ...input.metadata,
-      authorityReceiptId: paymentAuthority.id,
+      authorityReceiptId: cleanCloudEvidence.id,
     },
   });
 
