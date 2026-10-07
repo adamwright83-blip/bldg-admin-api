@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { int, json, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 import type { InsertCleancloudPaidOrder } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -17,8 +17,13 @@ export const economicHeads = mysqlTable("goldline_cleancloud_economic_heads", {
 });
 export const economicOutbox = mysqlTable("goldline_cleancloud_outbox", {
   id: varchar("id", { length: 80 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
   payload: json("payload").$type<AppendGoldlineWorldEvent>().notNull(),
-  publishedAt: timestamp("publishedAt"),
+  leaseOwner: varchar("leaseOwner", { length: 128 }),
+  leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+  attemptCount: int("attemptCount").default(0).notNull(),
+  lastError: varchar("lastError", { length: 512 }),
+  publishedAt: timestamp("publishedAt", { fsp: 3 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
