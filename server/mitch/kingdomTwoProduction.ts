@@ -21,7 +21,10 @@
  * 6. IMPLEMENTED ≠ VERIFIED ≠ CREATIVE-ACCEPTED ≠ RELEASED.
  * 7. Mitch never manufactures business evidence. The authoritative real-business
  *    growth campaign binding for minigame.boreslay_duel has not been authored in code.
- *    Therefore Mitch stops at HUMAN CREATIVE DECISION REQUIRED.
+ *    That missing creative decision must not block the independent technical task of
+ *    installing the already-authored duel into canonical Kingdom Two progression.
+ *    Mitch may complete and verify that bounded installation, then stops at a separate
+ *    HUMAN CREATIVE DECISION REQUIRED milestone before any business binding is authored.
  * 8. Real Kingdom Two available and verified build pointers remain null:
  *    currentAvailableBuildId = null
  *    lastVerifiedBuildId = null
@@ -159,16 +162,33 @@ export const KINGDOM_TWO_MILESTONE_INSTALL_DUEL = {
   ],
 };
 
+export const KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING = {
+  milestoneKey: "k2_author_real_business_binding",
+  sequence: 2,
+  title: "Author Kingdom Two Real-Business Binding",
+  desiredPlayerVisibleResult:
+    "Kingdom Two has an explicit, human-authored kingdom_binding connecting authoritative real work to the already-installed Boreslay fiction without fabricating business evidence.",
+  acceptanceCriteria: [
+    "Adam explicitly chooses the real-world growth motion or Objective family bound to kingdom.boreslay",
+    "The binding uses authoritative real evidence and never infers a sale, visit, call, or commitment from gameplay",
+    "The binding does not reuse The Last Valet chapter campaign as though it were Boreslay's campaign",
+  ],
+} as const;
+
+const LEGACY_INSTALL_BLOCKER =
+  "HUMAN CREATIVE DECISION REQUIRED: Real-business growth campaign binding for kingdom.boreslay / minigame.boreslay_duel must be decided by human creative authority (Adam).";
+
 /**
  * Seeds Mitch durable production state for Kingdom Two from canonical repository truth.
  *
  * INVARIANTS ENFORCED:
  * 1. Attaches to canonical gameId "kingdom.boreslay" with title "Boreslay".
  * 2. Leaves currentAvailableBuildId = null and lastVerifiedBuildId = null.
- * 3. Registers milestone with isHumanCreativeBlocker = true and blockedReason
- *    stating that the authoritative real-business binding must be decided by human
- *    creative authority (Adam).
- * 4. Mitch does NOT claim an autonomous execution or verified build has happened.
+ * 3. Registers the technical installation milestone as independently executable.
+ * 4. Registers a separate human-creative blocker for the real-business binding.
+ * 5. Reclassifies the exact legacy blocker shape if it already exists durably,
+ *    preserving the creative boundary while unblocking only the technical install.
+ * 6. Mitch does NOT claim an autonomous execution or verified build has happened.
  */
 export async function seedKingdomTwoProductionState(input: {
   tenantId: string;
@@ -194,7 +214,6 @@ export async function seedKingdomTwoProductionState(input: {
     ],
   });
 
-  // Register milestone 1 with explicit human creative blocker
   await input.service.registerMilestone({
     tenantId: input.tenantId,
     gameId: characterization.canonicalGameId,
@@ -203,8 +222,56 @@ export async function seedKingdomTwoProductionState(input: {
     title: KINGDOM_TWO_MILESTONE_INSTALL_DUEL.title,
     desiredPlayerVisibleResult: KINGDOM_TWO_MILESTONE_INSTALL_DUEL.desiredPlayerVisibleResult,
     acceptanceCriteria: KINGDOM_TWO_MILESTONE_INSTALL_DUEL.acceptanceCriteria,
+  });
+
+  // Production may already contain the legacy row that incorrectly attached the
+  // missing business-binding decision to the technical installation milestone.
+  // Reclassify only that exact historical shape. This does not choose a binding,
+  // create business evidence, or weaken the later human-creative stop.
+  const installMilestone = await input.store.getMilestone(
+    input.tenantId,
+    characterization.canonicalGameId,
+    KINGDOM_TWO_MILESTONE_INSTALL_DUEL.milestoneKey
+  );
+  if (
+    installMilestone?.isHumanCreativeBlocker &&
+    installMilestone.status === "blocked" &&
+    installMilestone.blockedReason === LEGACY_INSTALL_BLOCKER
+  ) {
+    await input.store.saveMilestone({
+      ...installMilestone,
+      status: "pending",
+      isHumanCreativeBlocker: false,
+      blockedReason: null,
+    });
+    await input.store.recordAuditEvent({
+      tenantId: input.tenantId,
+      gameId: characterization.canonicalGameId,
+      eventType: "mitch_legacy_blocker_reclassified",
+      actorId: "mitch_system",
+      details: {
+        milestoneKey: installMilestone.milestoneKey,
+        from: LEGACY_INSTALL_BLOCKER,
+        toMilestoneKey: KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.milestoneKey,
+        reason:
+          "Technical Kingdom Two installation is independent from the later human-authored real-business binding.",
+      },
+    });
+  }
+
+  await input.service.registerMilestone({
+    tenantId: input.tenantId,
+    gameId: characterization.canonicalGameId,
+    milestoneKey: KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.milestoneKey,
+    sequence: KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.sequence,
+    title: KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.title,
+    desiredPlayerVisibleResult:
+      KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.desiredPlayerVisibleResult,
+    acceptanceCriteria: [
+      ...KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.acceptanceCriteria,
+    ],
     blockedReason:
-      "HUMAN CREATIVE DECISION REQUIRED: Real-business growth campaign binding for kingdom.boreslay / minigame.boreslay_duel must be decided by human creative authority (Adam).",
+      "HUMAN CREATIVE DECISION REQUIRED: Adam must author the real-business binding for kingdom.boreslay before business-driven Kingdom Two progression is wired.",
     isHumanCreativeBlocker: true,
   });
 
