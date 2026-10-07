@@ -46,6 +46,7 @@ type OperatorRepresentativeItem = {
   adaptationState: "active" | "suppressed" | "ask_instead" | "eligible_not_wired" | "not_eligible";
   canAffectAdaptation: boolean;
   activeDirectiveId?: string;
+  pendingReview?: boolean;
 };
 import "./OperatorRepresentative.css";
 
@@ -133,6 +134,9 @@ function CategoryCard({
                           ? item.summary
                           : item.summary}
                 </small>
+                {item.pendingReview ? (
+                  <em className="or-review-badge">Needs review</em>
+                ) : null}
               </span>
               <ChevronRight aria-hidden />
             </button>
@@ -198,28 +202,53 @@ function DetailDrawer({
   const adaptation = adaptationStatus.data?.lifecycle.find(
     lifecycle => lifecycle.targetItemId === itemId
   );
+  const permissionLabel = item?.pendingReview
+    ? "Unresolved — needs review"
+    : item?.adaptationState === "suppressed"
+      ? "Suppressed"
+      : item?.adaptationState === "ask_instead"
+        ? "Ask-instead"
+        : item?.adaptationState === "eligible_not_wired" && item.activeDirectiveId
+          ? "Approved"
+          : item?.provenanceClass === "operator_directive" && item.activeDirectiveId
+            ? "Corrected"
+            : "No active operator control";
+  const permissionCopy =
+    permissionLabel === "Approved"
+      ? "Approved for possible future supported use. Approval alone does not wire or use this item."
+      : permissionLabel === "Suppressed"
+        ? "You told JOYSTICK not to use this signal for adaptation."
+        : permissionLabel === "Ask-instead"
+          ? "You told JOYSTICK to ask you instead of silently relying on this signal."
+          : permissionLabel === "Corrected"
+            ? "You supplied an explicit correction. The original evidence remains available."
+            : permissionLabel === "Unresolved — needs review"
+              ? "Daphne is still learning this. No operator control has resolved it yet."
+              : "No active operator control is attached to this item.";
   const adaptationCopy = adaptation
     ? adaptation.lifecycle === "unwired"
-      ? "Not wired to Claire."
+      ? item?.adaptationState === "eligible_not_wired" && item.activeDirectiveId
+        ? "Not used. Eligible for possible future wiring; not currently used."
+        : "Not used. This control is not wired into live Claire behavior."
       : adaptation.lifecycle === "disabled"
         ? "Wired, but live adaptation is off."
         : adaptation.lifecycle === "wired_unused"
-          ? "Wired to Claire. No receipt proves use yet."
+          ? "Wired to Claire. No durable receipt proves use yet."
           : adaptation.lifecycle === "used"
-            ? `Claire has used this ${adaptation.useCount} time${adaptation.useCount === 1 ? "" : "s"}.`
+            ? `Used ${adaptation.useCount} time${adaptation.useCount === 1 ? "" : "s"}. Durable receipts prove this use.`
             : adaptation.lifecycle === "revoked_historical"
-              ? "Revoked for future turns. Past use remains in history."
-              : "Revoked before Claire used it."
-    : null;
+              ? "Revoked for future turns. Past receipt-backed use remains in history."
+              : "Revoked before any durable use was recorded."
+    : "Not used. No durable adaptation receipt is associated with this item.";
 
   return (
     <div className="or-drawer-layer" role="presentation" onMouseDown={event => {
       if (event.currentTarget === event.target) onClose();
     }}>
-      <aside className="or-drawer" role="dialog" aria-modal="true" aria-label="Operator evidence">
+      <aside className="or-drawer" role="dialog" aria-modal="true" aria-label="Daphne evidence">
         <header className="or-drawer__head">
           <div>
-            <span>OPERATOR EVIDENCE</span>
+            <span>DAPHNE EVIDENCE</span>
             <h2>{item?.title ?? "Tracing the evidence…"}</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close evidence" autoFocus>
@@ -246,19 +275,29 @@ function DetailDrawer({
             </section>
 
             <section>
-              <h3>WHY IT APPEARS HERE</h3>
-              <p>{data.provenance}</p>
+              <h3>REPRESENTATION</h3>
+              <p>
+                {CATEGORY_META[item.category].label}: {item.summary}
+              </p>
               <div className="or-badges">
                 <span>{CATEGORY_META[item.category].label}</span>
-                <span>{item.adaptationState.replaceAll("_", " ")}</span>
                 {item.confidence ? <span>{item.confidence}</span> : null}
+                {item.pendingReview ? <span>needs review</span> : null}
               </div>
             </section>
 
-            {adaptation ? (
-              <section>
-                <h3>ADAPTATION USE</h3>
-                <p>{adaptationCopy}</p>
+            <section>
+              <h3>PERMISSION</h3>
+              <p>{permissionCopy}</p>
+              <div className="or-badges">
+                <span>{permissionLabel}</span>
+              </div>
+            </section>
+
+            <section>
+              <h3>USAGE</h3>
+              <p>{adaptationCopy}</p>
+              {adaptation ? (
                 <div className="or-badges">
                   <span>{adaptation.lifecycle.replaceAll("_", " ")}</span>
                   {adaptation.behaviorClass ? (
@@ -268,8 +307,13 @@ function DetailDrawer({
                     <span>last used {formatDate(adaptation.lastUsedAt)}</span>
                   ) : null}
                 </div>
-              </section>
-            ) : null}
+              ) : null}
+            </section>
+
+            <section>
+              <h3>WHY IT APPEARS HERE</h3>
+              <p>{data.provenance}</p>
+            </section>
 
             <section>
               <h3>EVIDENCE</h3>
@@ -315,6 +359,17 @@ function DetailDrawer({
             <section>
               <h3>YOUR CONTROLS</h3>
               <div className="or-controls">
+                {data.canApprove ? (
+                  <button
+                    type="button"
+                    disabled={directive.isPending}
+                    onClick={() =>
+                      directive.mutate({ itemId, kind: "approve" })
+                    }
+                  >
+                    Approve for future use
+                  </button>
+                ) : null}
                 {data.canCorrect ? (
                   <button type="button" onClick={() => setCorrectionOpen(open => !open)}>
                     That isn’t true
