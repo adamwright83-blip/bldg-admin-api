@@ -424,11 +424,13 @@ async function execute(wake: Wake): Promise<void> {
   });
 }
 
-function parseReviewerModel(text: string): {
+type ReviewerDecision = {
   verdict: "fix_needed" | "no_blocking_issue" | "human_play_required";
   observedBehavior: string;
   recommendedNextProof: string;
-} {
+};
+
+function parseReviewerModel(text: string): ReviewerDecision {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match)
     return {
@@ -478,8 +480,8 @@ async function review(wake: Wake): Promise<void> {
   const browserCheck = checks.find(check => /playwright|browser|e2e/i.test(check.command));
   const gameActuallyExercised = Boolean(browserCheck?.ok);
 
-  let model = {
-    verdict: "human_play_required" as const,
+  let model: ReviewerDecision = {
+    verdict: "human_play_required",
     observedBehavior: "Independent harness checks passed, but the exact game build was not exercised in a browser.",
     recommendedNextProof: "Play the exact commit-backed build and verify the player-visible mechanic.",
   };
@@ -517,7 +519,7 @@ async function review(wake: Wake): Promise<void> {
       ].join("\n"),
       true
     );
-    model = parseReviewerModel(response) as typeof model;
+    model = parseReviewerModel(response);
   }
 
   if (model.verdict === "no_blocking_issue" && !gameActuallyExercised) {
