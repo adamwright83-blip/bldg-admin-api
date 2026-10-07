@@ -395,7 +395,7 @@ function DetailDrawer({
 
             <button type="button" className="or-ask-why" onClick={onTalk}>
               <MessageCircle aria-hidden />
-              Ask my Operator about this
+              Ask Daphne about this
               <ArrowRight aria-hidden />
             </button>
           </div>
@@ -472,14 +472,14 @@ function TalkPanel({
     <div className="or-talk-layer" role="presentation" onMouseDown={event => {
       if (event.currentTarget === event.target) onClose();
     }}>
-      <section className="or-talk" role="dialog" aria-modal="true" aria-label="Talk to my Operator">
+      <section className="or-talk" role="dialog" aria-modal="true" aria-label="Talk to Daphne">
         <header>
           <div className="or-talk__identity">
             <span className="or-talk__avatar">
               <img src={operatorPortrait} alt="" />
             </span>
             <span>
-              <strong>YOUR OPERATOR</strong>
+              <strong>DAPHNE</strong>
               <small>Grounded in Operator Context</small>
             </span>
           </div>
@@ -507,7 +507,7 @@ function TalkPanel({
           ) : (
             messages.map((message, index) => (
               <article key={index} className={`or-talk__message or-talk__message--${message.role}`}>
-                <span>{message.role === "you" ? "YOU" : "OPERATOR"}</span>
+                <span>{message.role === "you" ? "YOU" : "DAPHNE"}</span>
                 <p>{message.text}</p>
                 {message.itemRefs?.length ? (
                   <div className="or-talk__refs">
@@ -540,7 +540,7 @@ function TalkPanel({
             value={question}
             onChange={event => setQuestion(event.target.value)}
             placeholder="Ask what I know, why, or what changed…"
-            aria-label="Ask your Operator"
+            aria-label="Ask Daphne"
             autoFocus
           />
           <button
@@ -625,16 +625,14 @@ export default function OperatorRepresentative() {
       <section className="or-stage">
         <div className="or-stage__city" aria-hidden />
         <div className="or-stage__glow" aria-hidden />
-        <img className="or-operator-art" src={operatorPortrait} alt="Your Operator Representative" />
+        <img className="or-operator-art" src={operatorPortrait} alt="Daphne" />
 
         <div className="or-hero-label" aria-hidden>
-          <span>Your</span>
-          <span>Operator</span>
-          <span>Representative</span>
+          <span>Daphne</span>
         </div>
 
         <section className="or-conversation-card">
-          <span>OPERATOR REPRESENTATIVE</span>
+          <span>DAPHNE</span>
           <h1>What’s on your mind?</h1>
           <p>
             I can explain what I know, what I’ve learned, what I’m unsure about,
@@ -642,7 +640,7 @@ export default function OperatorRepresentative() {
           </p>
           <button type="button" onClick={() => openTalk()}>
             <MessageCircle aria-hidden />
-            TALK TO MY OPERATOR
+            TALK TO DAPHNE
           </button>
         </section>
 
