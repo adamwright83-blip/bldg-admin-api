@@ -110,6 +110,12 @@ export type OperatorRepresentativeTalkIntent =
   | "correct"
   | "suppress"
   | "ask_instead"
+  | "review_status"
+  | "approved"
+  | "suppressed_status"
+  | "ask_first_status"
+  | "ever_used"
+  | "revoked"
   | "general";
 
 export type OperatorRepresentativeTalkResponse = {
