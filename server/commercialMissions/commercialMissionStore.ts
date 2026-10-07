@@ -34,6 +34,7 @@ import {
   createCommercialPipelineForMissionWith,
   normalizeCommercialContactEmail,
   normalizeCommercialContactPhone,
+  reconcileWonCommercialDownstreamEffects,
   syncCommercialPipelineForMissionTransitionWith,
 } from "../commercialPipeline/commercialPipelineCore";
 import {
@@ -804,6 +805,23 @@ export async function getCommercialMissionByIdempotencyKey(input: {
   return getCommercialMission({ tenantId: input.tenantId, missionId: events[0].missionId });
 }
 
+export async function reconcileCommercialMissionWonDownstream(input: {
+  tenantId: string;
+  missionId: number;
+  assignedTo?: string | null;
+  actorId?: string | null;
+  correlationId: string;
+}): Promise<void> {
+  try {
+    await reconcileWonCommercialDownstreamEffects(input);
+  } catch (error) {
+    console.warn(
+      "[CommercialPipeline] won downstream reconciliation deferred",
+      error
+    );
+  }
+}
+
 export async function transitionCommercialMission(input: {
   tenantId: string;
   missionId: number;
@@ -827,6 +845,16 @@ export async function transitionCommercialMission(input: {
     });
     if (!replay || replay.id !== input.missionId) throw error;
     mission = replay;
+  }
+
+  if (input.toStatus === "won") {
+    await reconcileCommercialMissionWonDownstream({
+      tenantId: input.tenantId,
+      missionId: input.missionId,
+      assignedTo: mission.assignedTo,
+      actorId: input.actor.id,
+      correlationId: input.idempotencyKey,
+    });
   }
 
   // POST-COMMIT: Run bridge when transaction has committed durably to the database

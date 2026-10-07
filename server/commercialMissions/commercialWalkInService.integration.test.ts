@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  commercialAgreements,
+  commercialCustomers,
   commercialFollowUps,
   commercialMissions,
   commercialPipelineRecords,
@@ -96,5 +98,52 @@ describe.runIf(runDatabaseGate)("commercial walk-in service (MySQL)", () => {
       .from(commercialFollowUps)
       .where(eq(commercialFollowUps.missionId, first.missionId));
     expect(followUps).toHaveLength(1);
+  });
+
+  it("routes a won walk-in through canonical commercial conversion without payment evidence", async () => {
+    const db = await getDb();
+    expect(db, "DATABASE_URL must connect to the release MySQL service").not.toBeNull();
+
+    const tenantId = `walkin-won-${randomUUID().slice(0, 8)}`;
+    const requestId = randomUUID();
+    const result = await logCommercialWalkIn({
+      tenantId,
+      actorId: "operator-1",
+      idempotencyKey: `walk-in:${requestId}`,
+      requestId,
+      businessName: "Won Walk-In Hotel",
+      businessType: "hotel",
+      address: "3 Won Way, Los Angeles, CA",
+      contactName: "Morgan",
+      contactTitle: "General Manager",
+      conversationNotes: "Manager verbally agreed to start service.",
+      visitResult: "won",
+      nextAction: "Coordinate first service",
+      estimatedAnnualValueCents: 1200000,
+    });
+
+    const [pipeline] = await db!
+      .select({
+        stage: commercialPipelineRecords.stage,
+        commercialCustomerId: commercialPipelineRecords.commercialCustomerId,
+      })
+      .from(commercialPipelineRecords)
+      .where(eq(commercialPipelineRecords.missionId, result.missionId));
+    expect(pipeline?.stage).toBe("won");
+    expect(pipeline?.commercialCustomerId).toBeTruthy();
+
+    const customers = await db!
+      .select({ id: commercialCustomers.id, status: commercialCustomers.status })
+      .from(commercialCustomers)
+      .where(eq(commercialCustomers.sourceMissionId, result.missionId));
+    expect(customers).toHaveLength(1);
+    expect(customers[0]?.status).toBe("active");
+
+    const agreements = await db!
+      .select({ status: commercialAgreements.status })
+      .from(commercialAgreements)
+      .where(eq(commercialAgreements.missionId, result.missionId));
+    expect(agreements).toHaveLength(1);
+    expect(agreements[0]?.status).toBe("verbal_yes");
   });
 });

@@ -289,11 +289,7 @@ async function convertWonAccountWith(
     estimatedAnnualValueCents !== null
       ? Math.max(
           1,
-          Math.round(
-            estimatedAnnualValueCents /
-              pricePerPoundCents /
-              52
-          )
+          Math.round(estimatedAnnualValueCents / pricePerPoundCents / 52)
         )
       : null;
   const expectationInsert = await tx
@@ -354,28 +350,6 @@ async function convertWonAccountWith(
       set: { recordedBy: input.actor.id ?? "legacy-dayforge-pipeline" },
     });
 
-  for (const location of locations) {
-    await tx
-      .insert(commercialRouteAssignments)
-      .values({
-        tenantId: input.tenantId,
-        commercialCustomerId: customer.id,
-        locationId: location.id,
-        serviceExpectationId,
-        status: "planned",
-        routeLabel: `Planned commercial route · ${location.label ?? "Primary"}`,
-        routeWindowLabel: snapshot?.store.pickupScheduleLabel ?? null,
-        capacityReservedPoundsPerWeek: expectedWeeklyPounds ?? 0,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          serviceExpectationId,
-          routeWindowLabel: snapshot?.store.pickupScheduleLabel ?? null,
-          capacityReservedPoundsPerWeek: expectedWeeklyPounds ?? 0,
-        },
-      });
-  }
-
   await tx
     .update(commercialPipelineRecords)
     .set({ commercialCustomerId: customer.id })
@@ -385,33 +359,137 @@ async function convertWonAccountWith(
         eq(commercialPipelineRecords.id, input.pipelineId)
       )
     );
-  const existingRewards = await tx
-    .select({ id: commercialMissionFinalRewards.id })
-    .from(commercialMissionFinalRewards)
-    .where(
-      and(
-        eq(commercialMissionFinalRewards.tenantId, input.tenantId),
-        eq(commercialMissionFinalRewards.missionId, input.mission.id)
-      )
-    )
-    .for("update")
-    .limit(1);
-  if (!existingRewards[0])
-    await tx.insert(commercialMissionFinalRewards).values({
-      tenantId: input.tenantId,
-      missionId: input.mission.id,
-      commercialCustomerId: customer.id,
-      playerId:
-        input.mission.assignedTo ??
-        input.actor.id ??
-        "unassigned-commercial-operator",
-      xpAwarded: 250,
-      idempotencyKey: pipelineEventKey(
-        "account-won-reward",
-        input.correlationId
-      ),
-    });
+
+  // The won conversion is authoritative once customer activation, service
+  // expectation, verbal-yes agreement, and pipeline binding persist. Route
+  // planning and XP are downstream effects reconciled only after commit.
   return customer.id;
+}
+
+export async function reconcileWonCommercialDownstreamEffects(input: {
+  tenantId: string;
+  missionId: number;
+  assignedTo?: string | null;
+  actorId?: string | null;
+  correlationId: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.transaction(async tx => {
+    const pipelineRows = await tx
+      .select({
+        id: commercialPipelineRecords.id,
+        accountId: commercialPipelineRecords.accountId,
+        stage: commercialPipelineRecords.stage,
+        commercialCustomerId: commercialPipelineRecords.commercialCustomerId,
+      })
+      .from(commercialPipelineRecords)
+      .where(
+        and(
+          eq(commercialPipelineRecords.tenantId, input.tenantId),
+          eq(commercialPipelineRecords.missionId, input.missionId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    const pipeline = pipelineRows[0];
+    if (
+      !pipeline ||
+      pipeline.stage !== "won" ||
+      !pipeline.commercialCustomerId
+    ) {
+      throw new Error("Won commercial conversion is not durably available");
+    }
+
+    const expectationRows = await tx
+      .select({
+        id: commercialServiceExpectations.id,
+        pickupScheduleLabel: commercialServiceExpectations.pickupScheduleLabel,
+        capacityReservedPoundsPerWeek:
+          commercialServiceExpectations.capacityReservedPoundsPerWeek,
+      })
+      .from(commercialServiceExpectations)
+      .where(
+        and(
+          eq(commercialServiceExpectations.tenantId, input.tenantId),
+          eq(
+            commercialServiceExpectations.commercialCustomerId,
+            pipeline.commercialCustomerId
+          ),
+          eq(commercialServiceExpectations.sourceMissionId, input.missionId)
+        )
+      )
+      .limit(1);
+    const expectation = expectationRows[0];
+    if (!expectation) {
+      throw new Error(
+        "Won commercial service expectation is not durably available"
+      );
+    }
+
+    const locations = await tx
+      .select()
+      .from(commercialAccountLocations)
+      .where(
+        and(
+          eq(commercialAccountLocations.tenantId, input.tenantId),
+          eq(commercialAccountLocations.accountId, pipeline.accountId)
+        )
+      );
+
+    for (const location of locations) {
+      await tx
+        .insert(commercialRouteAssignments)
+        .values({
+          tenantId: input.tenantId,
+          commercialCustomerId: pipeline.commercialCustomerId,
+          locationId: location.id,
+          serviceExpectationId: expectation.id,
+          status: "planned",
+          routeLabel: `Planned commercial route · ${location.label ?? "Primary"}`,
+          routeWindowLabel: expectation.pickupScheduleLabel,
+          capacityReservedPoundsPerWeek:
+            expectation.capacityReservedPoundsPerWeek ?? 0,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            serviceExpectationId: expectation.id,
+            routeWindowLabel: expectation.pickupScheduleLabel,
+            capacityReservedPoundsPerWeek:
+              expectation.capacityReservedPoundsPerWeek ?? 0,
+          },
+        });
+    }
+
+    const existingRewards = await tx
+      .select({ id: commercialMissionFinalRewards.id })
+      .from(commercialMissionFinalRewards)
+      .where(
+        and(
+          eq(commercialMissionFinalRewards.tenantId, input.tenantId),
+          eq(commercialMissionFinalRewards.missionId, input.missionId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!existingRewards[0]) {
+      await tx.insert(commercialMissionFinalRewards).values({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        commercialCustomerId: pipeline.commercialCustomerId,
+        playerId:
+          input.assignedTo ??
+          input.actorId ??
+          "unassigned-commercial-operator",
+        xpAwarded: 250,
+        idempotencyKey: pipelineEventKey(
+          "account-won-reward",
+          input.correlationId
+        ),
+      });
+    }
+  });
 }
 
 export async function syncCommercialPipelineForMissionTransitionWith(
