@@ -310,6 +310,11 @@ export async function answerClairePreDriveFollowUp(
      * Not added to the business fact inventory.
      */
     rookContactResidueSection?: string | null;
+    /**
+     * Daphne V2 compiled user-adaptation guidance. Style/interaction only;
+     * never business truth, Narrative OS authority, or Claire disclosure permission.
+     */
+    daphnePromptSection?: string | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -468,6 +473,9 @@ export async function answerClairePreDriveFollowUp(
         label: "mission_sales_brief",
         text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
       },
+      ...(input.daphnePromptSection
+        ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]
+        : []),
       ...(input.narratorPromptSection
         ? [{ label: "authored_narrative", text: input.narratorPromptSection }]
         : []),
