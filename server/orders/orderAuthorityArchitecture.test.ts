@@ -93,4 +93,26 @@ describe("Order Authority Architecture Guard", () => {
 
     expect(violations).toEqual([]);
   });
+
+  it("prohibits callers outside driverOrderService from calling raw transitionDriverOrder directly", () => {
+    const serverFiles = productionFiles(join(repoRoot, "server"));
+    const allowed = new Set([
+      "server/joystick/driverOrderStore.ts",
+      "server/joystick/driverOrderService.ts",
+    ]);
+    const violations: string[] = [];
+
+    for (const file of serverFiles) {
+      const relPath = rel(file);
+      if (allowed.has(relPath)) continue;
+
+      const source = readFileSync(file, "utf8");
+      if (/\btransitionDriverOrder\s*\(/.test(source)) {
+        violations.push(relPath);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
 });
+
