@@ -7,7 +7,11 @@ on:
       - "shared/mitch*.ts"
       - "drizzle/0111_mitch_producer_events.sql"
       - "scripts/migrate.mjs"
+      - "scripts/mitch-github-agent.ts"
+      - "tsconfig.mitch-agent.json"
       - ".github/workflows/mitch-event-driven.yml"
+      - ".github/workflows/mitch-claude-executor.yml"
+      - ".github/workflows/mitch-independent-reviewer.yml"
   workflow_dispatch:
 
 permissions:
@@ -49,6 +53,8 @@ jobs:
         run: pnpm vitest run server/mitch
       - name: Mitch typecheck
         run: pnpm exec tsc --noEmit --incremental false
+      - name: Mitch autonomous agent typecheck
+        run: pnpm exec tsc --project tsconfig.mitch-agent.json --noEmit
       - name: Durable inbox against disposable MySQL
         env:
           MITCH_EVENT_TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3414/mitch_test
