@@ -8213,6 +8213,228 @@ export const daphneEpistemicClaims = mysqlTable(
 export type DaphneEpistemicClaim = typeof daphneEpistemicClaims.$inferSelect;
 export type InsertDaphneEpistemicClaim = typeof daphneEpistemicClaims.$inferInsert;
 
+
+/** Daphne V2 explicit goals. Goal truth is user/system-declared; inference lives elsewhere. */
+export const daphneGoals = mysqlTable(
+  "daphne_goals",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    goalKey: varchar("goalKey", { length: 191 }).notNull(),
+    horizon: mysqlEnum("horizon", ["current", "near", "long"]).notNull(),
+    statement: text("statement").notNull(),
+    priority: int("priority").notNull().default(0),
+    constraintsJson: json("constraintsJson"),
+    status: mysqlEnum("status", ["active", "completed", "abandoned", "superseded"])
+      .notNull()
+      .default("active"),
+    sourceObservationId: varchar("sourceObservationId", { length: 64 }).notNull(),
+    supersedesGoalId: varchar("supersedesGoalId", { length: 64 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    closedAt: timestamp("closedAt", { fsp: 3 }),
+  },
+  table => ({
+    operatorGoalIdx: index("idx_daphne_goals_operator_goal").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.goalKey,
+      table.createdAt
+    ),
+    operatorStatusIdx: index("idx_daphne_goals_operator_status").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.priority
+    ),
+  })
+);
+
+export type DaphneGoal = typeof daphneGoals.$inferSelect;
+export type InsertDaphneGoal = typeof daphneGoals.$inferInsert;
+
+/**
+ * Daphne V2 user-governed adaptation controls. Versioned, append-only declarations;
+ * the newest row for a preference key is authoritative.
+ */
+export const daphneMetaPreferences = mysqlTable(
+  "daphne_meta_preferences",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    preferenceKey: varchar("preferenceKey", { length: 96 }).notNull(),
+    valueJson: json("valueJson").notNull(),
+    version: int("version").notNull(),
+    sourceObservationId: varchar("sourceObservationId", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["active", "revoked"]).notNull().default("active"),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_daphne_meta_pref_version").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.preferenceKey,
+      table.version
+    ),
+    operatorPreferenceIdx: index("idx_daphne_meta_pref_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.preferenceKey,
+      table.createdAt
+    ),
+  })
+);
+
+export type DaphneMetaPreference = typeof daphneMetaPreferences.$inferSelect;
+export type InsertDaphneMetaPreference = typeof daphneMetaPreferences.$inferInsert;
+
+/** Complete treatment/behavior-selection record for Daphne learning. */
+export const daphneInterventions = mysqlTable(
+  "daphne_interventions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    agentId: varchar("agentId", { length: 128 }).notNull(),
+    decisionPointId: varchar("decisionPointId", { length: 128 }).notNull(),
+    contextKey: varchar("contextKey", { length: 191 }).notNull(),
+    acceptableActionsJson: json("acceptableActionsJson").notNull(),
+    chosenAction: varchar("chosenAction", { length: 128 }).notNull(),
+    selectionMode: mysqlEnum("selectionMode", [
+      "deterministic",
+      "randomized",
+      "propensity",
+      "manual",
+      "abstain",
+    ]).notNull(),
+    selectionProbability: decimal("selectionProbability", { precision: 8, scale: 7 }),
+    propensityJson: json("propensityJson"),
+    policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+    policyReceiptJson: json("policyReceiptJson"),
+    interventionDefinitionVersion: int("interventionDefinitionVersion"),
+    proximalOutcomeWindowMinutes: int("proximalOutcomeWindowMinutes"),
+    sourceObservationIdsJson: json("sourceObservationIdsJson").notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_daphne_interventions_idempotency").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.idempotencyKey
+    ),
+    operatorDecisionIdx: index("idx_daphne_interventions_operator_decision").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.decisionPointId
+    ),
+    contextIdx: index("idx_daphne_interventions_context").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.contextKey,
+      table.createdAt
+    ),
+  })
+);
+
+export type DaphneIntervention = typeof daphneInterventions.$inferSelect;
+export type InsertDaphneIntervention = typeof daphneInterventions.$inferInsert;
+
+/** Proximal/distal/burden/relationship outcomes linked to interventions. */
+export const daphneOutcomes = mysqlTable(
+  "daphne_outcomes",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    interventionId: varchar("interventionId", { length: 64 }),
+    outcomeClass: mysqlEnum("outcomeClass", [
+      "proximal",
+      "distal",
+      "burden",
+      "relationship",
+    ]).notNull(),
+    measureKey: varchar("measureKey", { length: 128 }).notNull(),
+    valueJson: json("valueJson").notNull(),
+    evidenceClass: mysqlEnum("evidenceClass", [
+      "authoritative_external",
+      "system_record",
+      "operator_attested",
+    ]).notNull(),
+    verificationStatus: mysqlEnum("verificationStatus", [
+      "verified",
+      "attested",
+      "disputed",
+      "rejected",
+    ]).notNull(),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    windowStart: timestamp("windowStart", { fsp: 3 }),
+    windowEnd: timestamp("windowEnd", { fsp: 3 }),
+    observedAt: timestamp("observedAt", { fsp: 3 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_daphne_outcomes_idempotency").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.idempotencyKey
+    ),
+    interventionIdx: index("idx_daphne_outcomes_intervention").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.interventionId,
+      table.observedAt
+    ),
+    measureIdx: index("idx_daphne_outcomes_measure").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.measureKey,
+      table.observedAt
+    ),
+  })
+);
+
+export type DaphneOutcome = typeof daphneOutcomes.$inferSelect;
+export type InsertDaphneOutcome = typeof daphneOutcomes.$inferInsert;
+
+/** Durable product/science instrumentation without becoming business truth. */
+export const daphneMetricEvents = mysqlTable(
+  "daphne_metric_events",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
+    agentId: varchar("agentId", { length: 128 }),
+    eventName: varchar("eventName", { length: 128 }).notNull(),
+    propertiesJson: json("propertiesJson"),
+    sourceReference: varchar("sourceReference", { length: 191 }),
+    occurredAt: timestamp("occurredAt", { fsp: 3 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_daphne_metric_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    eventIdx: index("idx_daphne_metric_event").on(
+      table.tenantId,
+      table.eventName,
+      table.occurredAt
+    ),
+    operatorIdx: index("idx_daphne_metric_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.occurredAt
+    ),
+  })
+);
+
+export type DaphneMetricEvent = typeof daphneMetricEvents.$inferSelect;
+export type InsertDaphneMetricEvent = typeof daphneMetricEvents.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {
