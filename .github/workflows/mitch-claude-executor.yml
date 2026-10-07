@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: mitch-executor-${{ github.event.inputs.wake }}
+  group: mitch-executor-${{ fromJSON(inputs.wake).wakeId }}
   cancel-in-progress: false
 
 jobs:
