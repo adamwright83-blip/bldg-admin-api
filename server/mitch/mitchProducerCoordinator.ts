@@ -13,11 +13,6 @@ import { MitchProductionService } from "./mitchService";
 import { MitchQaService } from "./mitchQaService";
 import type { IMitchProductionStore } from "./mitchStore";
 import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
-import {
-  SMALL_COMFORTS_GAME_ID,
-  SMALL_COMFORTS_PROPRIETOR_MILESTONE,
-  seedSmallComfortsProducerWork,
-} from "./smallComfortsProduction";
 
 export type MitchProducerCoordinatorResult =
   | { action: "dispatch_sent"; workOrderId: string }
@@ -44,28 +39,23 @@ export class MitchProducerCoordinator {
       wakeProvider?: IMitchAgentWakeProvider;
       eventDriven?: boolean;
       reviewerId?: string;
-      initialBaseBranch?: string;
-      initialBaseSha?: string;
+      gameId: string;
+      gameTitle: string;
+      seedProductionWork: () => Promise<{ state: { lifecycleState: string } }>;
     }
   ) {}
 
   async runOnce(): Promise<MitchProducerCoordinatorResult> {
-    const seeded = await seedSmallComfortsProducerWork({
-      tenantId: this.deps.tenantId,
-      store: this.deps.store,
-      service: this.deps.service,
-      baseBranch: this.deps.initialBaseBranch,
-      baseSha: this.deps.initialBaseSha,
-    });
+    const seeded = await this.deps.seedProductionWork();
 
     await this.reconcileReturnedFixes();
 
-    const orders = await this.deps.store.listWorkOrders(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    const orders = await this.deps.store.listWorkOrders(this.deps.tenantId, this.deps.gameId);
     const pending = orders
       .filter(order => order.status === "pending")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
 
-    const beforeDispatch = await this.deps.reasoning.inspectProductionState(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    const beforeDispatch = await this.deps.reasoning.inspectProductionState(this.deps.tenantId, this.deps.gameId);
     if (beforeDispatch.blockers.isHumanCreativeBlocker) return { action: "idle", reason: "HUMAN CREATIVE DECISION REQUIRED" };
     if (pending) {
       if (this.deps.eventDriven) {
@@ -85,7 +75,7 @@ export class MitchProducerCoordinator {
 
     const inspection = await this.deps.reasoning.inspectProductionState(
       this.deps.tenantId,
-      SMALL_COMFORTS_GAME_ID
+      this.deps.gameId
     );
 
     if (inspection.nextBoundedOutcome.recommendedAction === "dispatch_fix") {
@@ -95,7 +85,7 @@ export class MitchProducerCoordinator {
       if (existingActive) {
         return { action: "idle", reason: "Fix work is already in flight." };
       }
-      const issue = (await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID, "open"))
+      const issue = (await this.deps.store.listIssues(this.deps.tenantId, this.deps.gameId, "open"))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
       if (!issue) return { action: "idle", reason: "Reasoner requested a fix but no open issue exists." };
       const order = await this.createFixOrder(issue);
@@ -165,7 +155,7 @@ export class MitchProducerCoordinator {
     const build = await this.deps.store.getBuild(this.deps.tenantId, buildId);
     const reviewerId = suppliedReview
       ? suppliedReviewerId
-      : (this.deps.reviewerId ?? "chatgpt_design_review");
+      : (this.deps.reviewerId ?? "claude_independent_review");
     if (!reviewerId) throw new Error("Authenticated reviewer identity is required");
     if (!build) return { action: "idle", reason: `Build ${buildId} is not durable in Mitch store.` };
 
@@ -173,7 +163,7 @@ export class MitchProducerCoordinator {
       .filter(a => a.eventType === "mitch_review_reopened" && a.details.buildId === buildId).length;
     const requestMarker = designReviewRequestMarker(milestone.id, buildId) + (reopenCount ? ":reopen:" + reopenCount : "");
     const responseMarker = designReviewResponseMarker(milestone.id, buildId);
-    const fixIssue = (await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID))
+    const fixIssue = (await this.deps.store.listIssues(this.deps.tenantId, this.deps.gameId))
       .find(issue => issue.status === "fix_submitted" && issue.fixBuildId === buildId);
     const response = suppliedReview ? { review: suppliedReview, comment: { html_url: suppliedReview.evidenceArtifact } } :
       this.deps.eventDriven ? null : await this.deps.bus.readDesignReview({ marker: responseMarker });
@@ -189,7 +179,7 @@ export class MitchProducerCoordinator {
           "",
           "**Independent design/QA review requested.**",
           "",
-          "**Game:** Small Comforts",
+          "**Game:** " + this.deps.gameTitle,
           "**Milestone:** " + milestone.title,
           "**Exact build:** " + build.id,
           "**Branch:** " + build.branch,
@@ -250,11 +240,11 @@ export class MitchProducerCoordinator {
       const qa = await this.deps.qa.recordGameplayQaRun({
         ...retest,
         tenantId: this.deps.tenantId,
-        gameId: SMALL_COMFORTS_GAME_ID,
+        gameId: this.deps.gameId,
         milestoneId: milestone.id,
         buildId,
         testerId: reviewerId,
-        scenario: "Independent producer-bus review of the proprietor fun proof",
+        scenario: "Independent producer-bus review of " + milestone.title,
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
         gameActuallyExercised: review.gameActuallyExercised,
@@ -277,11 +267,11 @@ export class MitchProducerCoordinator {
       await this.deps.qa.recordGameplayQaRun({
         ...retest,
         tenantId: this.deps.tenantId,
-        gameId: SMALL_COMFORTS_GAME_ID,
+        gameId: this.deps.gameId,
         milestoneId: milestone.id,
         buildId,
         testerId: reviewerId,
-        scenario: "Independent producer-bus gameplay QA of the proprietor fun proof",
+        scenario: "Independent producer-bus gameplay QA of " + milestone.title,
         expectedBehavior: milestone.desiredPlayerVisibleResult,
         observedBehavior: review.observedBehavior,
         gameActuallyExercised: true,
@@ -299,7 +289,7 @@ export class MitchProducerCoordinator {
     await this.deps.store.saveMilestone({ ...milestone, isHumanCreativeBlocker: true, status: "blocked", blockedReason: "HUMAN CREATIVE DECISION REQUIRED" });
     await this.requestAdamDecision(
       buildId,
-      "The implementation/design review found no automatic blocking decision it can truthfully close. Please play the exact build and decide whether controlling the proprietor is actually fun."
+      "The implementation/design review found no automatic blocking decision it can truthfully close. Please play the exact build and decide whether the player-visible result is creatively acceptable."
     );
     return { action: "human_play_requested", buildId };
   }
@@ -329,17 +319,24 @@ export class MitchProducerCoordinator {
   }
 
   private async createFixOrder(issue: MitchIssue): Promise<MitchWorkOrder> {
-    const milestone = (await this.deps.store.listMilestones(this.deps.tenantId, SMALL_COMFORTS_GAME_ID))
+    const milestone = (await this.deps.store.listMilestones(this.deps.tenantId, this.deps.gameId))
       .find(item => item.id === issue.milestoneId);
     if (!milestone) throw new Error(`Milestone ${issue.milestoneId} for issue ${issue.id} was not found.`);
 
-    const builds = await this.deps.store.listBuilds(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    const builds = await this.deps.store.listBuilds(this.deps.tenantId, this.deps.gameId);
     const base = builds.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     if (!base) throw new Error("Cannot create fix work order without an exact prior build.");
 
+    const prior = await this.deps.store.getWorkOrder(
+      this.deps.tenantId,
+      base.workOrderId
+    );
+    if (!prior)
+      throw new Error("Cannot create fix work order without the originating work-order contract.");
+
     const order = await this.deps.service.createWorkOrder({
       tenantId: this.deps.tenantId,
-      gameId: SMALL_COMFORTS_GAME_ID,
+      gameId: this.deps.gameId,
       milestoneKey: milestone.milestoneKey,
       title: "Fix producer-review issue: " + issue.title,
       desiredPlayerVisibleResult: milestone.desiredPlayerVisibleResult,
@@ -347,16 +344,14 @@ export class MitchProducerCoordinator {
         ...milestone.acceptanceCriteria,
         "Resolve the specific observed issue: " + issue.description,
       ],
-      canonConstraints: [...SMALL_COMFORTS_PROPRIETOR_MILESTONE.canonConstraints],
-      relevantDependencies: [...SMALL_COMFORTS_PROPRIETOR_MILESTONE.relevantDependencies],
-      realBusinessEvidenceConstraints: [
-        "Game-development work only; never manufacture or mutate real business evidence.",
-      ],
+      canonConstraints: prior.canonConstraints,
+      relevantDependencies: prior.relevantDependencies,
+      realBusinessEvidenceConstraints: prior.realBusinessEvidenceConstraints,
       baseBranch: base.branch,
       baseSha: base.commitSha,
-      requiredArtifact: "client/src/components/admin/control-room/SmallComforts/game/game.ts",
-      requiredTests: [...SMALL_COMFORTS_PROPRIETOR_MILESTONE.requiredTests],
-      requiredEvidence: [...SMALL_COMFORTS_PROPRIETOR_MILESTONE.requiredEvidence],
+      requiredArtifact: prior.requiredArtifact,
+      requiredTests: prior.requiredTests,
+      requiredEvidence: prior.requiredEvidence,
     });
 
     await this.deps.store.updateIssue({ ...issue, fixWorkOrderId: order.id });
@@ -383,12 +378,12 @@ export class MitchProducerCoordinator {
   }
 
   private async reconcileReturnedFixes(): Promise<void> {
-    const issues = await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    const issues = await this.deps.store.listIssues(this.deps.tenantId, this.deps.gameId);
     for (const issue of issues) {
       if (issue.status !== "open" || !issue.fixWorkOrderId) continue;
       const order = await this.deps.store.getWorkOrder(this.deps.tenantId, issue.fixWorkOrderId);
       if (!order || order.status !== "implementation_returned") continue;
-      const builds = await this.deps.store.listBuilds(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+      const builds = await this.deps.store.listBuilds(this.deps.tenantId, this.deps.gameId);
       const build = builds.find(item => item.workOrderId === order.id);
       if (!build) continue;
       await this.deps.qa.submitCodeFix({
@@ -401,7 +396,7 @@ export class MitchProducerCoordinator {
   }
 
   private async latestFixBuildId(): Promise<string | null> {
-    const issues = await this.deps.store.listIssues(this.deps.tenantId, SMALL_COMFORTS_GAME_ID);
+    const issues = await this.deps.store.listIssues(this.deps.tenantId, this.deps.gameId);
     const fix = issues
       .filter(issue => issue.status === "fix_submitted" && issue.fixBuildId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
