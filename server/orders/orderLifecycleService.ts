@@ -9,6 +9,11 @@ import {
   updateOrderStatus,
 } from "../db";
 import type { OperationsEventActorContext } from "../operationsEvents";
+import {
+  assertOrderTenantAuthority,
+  assertOrderVendorAuthority,
+  OrderOwnershipError,
+} from "./orderOwnership";
 
 export type OrderStatus = Order["status"];
 
@@ -22,6 +27,7 @@ export type TransitionOrderInput = {
   tenantId?: string | null;
   actor?: OperationsEventActorContext;
   vendorId?: number | null;
+  allowCrossTenant?: boolean;
 };
 
 export type TransitionOrderResult = {
@@ -90,8 +96,18 @@ export async function attemptOrderDeliveryTransition(
     throw new OrderTransitionError("NOT_FOUND", "Order not found");
   }
 
-  if (expectedTenantId && order.tenantId && order.tenantId.trim() !== expectedTenantId.trim()) {
-    throw new OrderTransitionError("UNAUTHORIZED", "Order does not belong to tenant");
+  if (expectedTenantId) {
+    try {
+      assertOrderTenantAuthority({
+        order,
+        tenantId: expectedTenantId,
+      });
+    } catch (error) {
+      if (error instanceof OrderOwnershipError) {
+        throw new OrderTransitionError("UNAUTHORIZED", error.message);
+      }
+      throw error;
+    }
   }
 
   // Idempotency: already delivered
@@ -157,14 +173,39 @@ export async function transitionNativeOrderStatus(
 
   const requestedTenant = input.tenantId?.trim();
   if (requestedTenant) {
-    const orderTenant = order.tenantId?.trim() || "default";
-    if (orderTenant !== requestedTenant && requestedTenant !== "default") {
-      throw new OrderTransitionError("UNAUTHORIZED", "Order does not belong to tenant");
+    try {
+      assertOrderTenantAuthority({
+        order,
+        tenantId: requestedTenant,
+        allowCrossTenant: input.allowCrossTenant,
+        // Preserve the existing vendor-status behavior: a vendor session on
+        // the legacy default host was not tenant-restricted here. Vendor
+        // assignment remains the authority for that path.
+        allowLegacyDefaultWildcard: input.vendorId != null,
+      });
+    } catch (error) {
+      if (error instanceof OrderOwnershipError) {
+        throw new OrderTransitionError("UNAUTHORIZED", error.message);
+      }
+      throw error;
     }
   }
 
-  if (input.vendorId != null && order.vendorId != null && order.vendorId !== input.vendorId) {
-    throw new OrderTransitionError("UNAUTHORIZED", "Unauthorized");
+  if (input.vendorId != null) {
+    try {
+      assertOrderVendorAuthority({
+        order,
+        vendorId: input.vendorId,
+        // Existing updateStatus behavior allowed a vendor to transition an
+        // unassigned order. Preserve it; do not invent assignment policy here.
+        allowUnassigned: true,
+      });
+    } catch (error) {
+      if (error instanceof OrderOwnershipError) {
+        throw new OrderTransitionError("UNAUTHORIZED", error.message);
+      }
+      throw error;
+    }
   }
 
   // 1. Pickup transition
