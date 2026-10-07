@@ -1,8 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
-import {
-  executeClairePersistentOperatorAction,
-  startClairePreDriveCall,
-} from "../claire/claireTwilio";
+import { startClairePreDriveCall } from "../claire/claireTwilio";
+import { executePersistentOperatorAction } from "./actionExecution";
 import { beginWeeklyMission } from "../claire/weeklyMission/driver";
 import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
 import { logAgentEvent } from "../agents/agentEvents";
@@ -185,7 +183,7 @@ export async function executeOperatorAppointment(
     context.actor.kind === "user_delegation"
       ? identity.canonicalOpenId
       : null;
-  const result = await executeClairePersistentOperatorAction({
+  const result = await executePersistentOperatorAction({
     identity,
     actionClass: "place_weekly_planning_call",
     authorityBasis: "scheduled_operator_appointment",
@@ -199,10 +197,11 @@ export async function executeOperatorAppointment(
     },
     riskClass: "EXTERNAL_COMMUNICATION",
     exactAction: SUNDAY_WEEKLY_PLANNING_ACTION,
+    sourceReference: context.source.sourceReference,
+    idempotencyKey: context.idempotencyKey,
     standingAuthorizationId: context.actor.standingAuthorizationId,
     approvedByUserId,
     expiresAtMs: Date.now() + 5 * 60_000,
-    scope: { identity: identity.canonicalOpenId },
     execute: async () => {
       let opening: string;
       let sessionKind: "weekly_planning_invite" | "weekly_planning";
