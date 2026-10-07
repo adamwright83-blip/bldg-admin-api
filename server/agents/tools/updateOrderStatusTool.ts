@@ -2,6 +2,7 @@ import { getOrderById } from "../../db";
 import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
 import { isTrustedOrderStateActor } from "../permissions";
 import type { AgentTool } from "../toolRegistry";
+import { assertOrderTenantAuthority } from "../../orders/orderOwnership";
 
 export const updateOrderStatusTool: AgentTool<Record<string, any>> = {
   name: "updateOrderStatusTool",
@@ -13,10 +14,10 @@ export const updateOrderStatusTool: AgentTool<Record<string, any>> = {
     const orderId = Number(input.orderId);
     const order = await getOrderById(orderId);
     if (!order) throw new Error("Order not found");
-    const tenantId = ctx.tenantId.trim();
-    if (!tenantId || !order.tenantId || order.tenantId !== tenantId) {
-      throw new Error("Order does not belong to tenant");
-    }
+    const tenantId = assertOrderTenantAuthority({
+      order,
+      tenantId: ctx.tenantId,
+    });
     const status = input.status;
     if (!["new", "intake-pending", "collected", "processing", "ready", "delivered"].includes(status)) {
       throw new Error("Invalid order status");

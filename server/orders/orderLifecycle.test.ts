@@ -122,6 +122,70 @@ describe("orderLifecycleService canonical authority", () => {
       ).rejects.toThrow("Order does not belong to tenant");
     });
 
+    it("does not treat the default tenant as a wildcard", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 11,
+        tenantId: "tenant-other",
+        status: "new",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 11,
+          status: "processing",
+          tenantId: "default",
+        })
+      ).rejects.toThrow("Order does not belong to tenant");
+    });
+
+    it("preserves explicit platform cross-tenant authority when supplied", async () => {
+      db.getOrderById
+        .mockResolvedValueOnce({
+          id: 12,
+          tenantId: "tenant-other",
+          status: "new",
+        })
+        .mockResolvedValueOnce({
+          id: 12,
+          tenantId: "tenant-other",
+          status: "processing",
+        });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 12,
+          status: "processing",
+          tenantId: "default",
+          allowCrossTenant: true,
+        })
+      ).resolves.toMatchObject({ success: true, alreadyCompleted: false });
+    });
+
+    it("preserves the existing vendor default-host unassigned transition behavior", async () => {
+      db.getOrderById
+        .mockResolvedValueOnce({
+          id: 13,
+          tenantId: "tenant-other",
+          vendorId: null,
+          status: "new",
+        })
+        .mockResolvedValueOnce({
+          id: 13,
+          tenantId: "tenant-other",
+          vendorId: null,
+          status: "processing",
+        });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 13,
+          status: "processing",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).resolves.toMatchObject({ success: true, alreadyCompleted: false });
+    });
+
     it("routes pickup through atomic attemptOrderPickupCollection", async () => {
       db.getOrderById.mockResolvedValue({
         id: 10,
