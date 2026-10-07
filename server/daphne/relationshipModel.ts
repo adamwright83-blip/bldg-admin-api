@@ -1,5 +1,6 @@
 import type { DaphneObservationRecord } from "./observationStore";
 import { recordDaphneEpistemicClaim } from "./epistemicStore";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export const DAPHNE_RELATIONSHIP_EVENT_KINDS = [
   "expectation_set",
@@ -114,7 +115,7 @@ export async function persistDaphneRelationshipHypothesis(input: {
   modelVersion: string;
 }): Promise<void> {
   if (!input.relationship.sourceObservationIds.length) return;
-  await recordDaphneEpistemicClaim({
+  const claim = await recordDaphneEpistemicClaim({
     tenantId: input.tenantId,
     canonicalOperatorId: input.canonicalOperatorId,
     agentId: input.relationship.agentId,
@@ -131,4 +132,23 @@ export async function persistDaphneRelationshipHypothesis(input: {
     modelVersion: input.modelVersion,
     idempotencyKey: `relationship:${input.relationship.agentId}:${input.relationship.generatedAt}`,
   });
+  const eventName = input.relationship.unresolvedRuptures.length
+    ? "rupture_detected"
+    : input.relationship.repairs.length
+      ? "repair_recorded"
+      : null;
+  if (eventName) {
+    await recordDaphneMetricEvent({
+      tenantId: input.tenantId,
+      canonicalOperatorId: input.canonicalOperatorId,
+      agentId: input.relationship.agentId,
+      eventName,
+      properties: {
+        unresolvedRuptureCount: input.relationship.unresolvedRuptures.length,
+        repairCount: input.relationship.repairs.length,
+      },
+      sourceReference: claim.id,
+      idempotencyKey: `relationship-metric:${claim.id}:${eventName}`,
+    }).catch(() => undefined);
+  }
 }
