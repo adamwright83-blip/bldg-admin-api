@@ -12,6 +12,7 @@ import {
 } from "./mitchEventIngress";
 import {
   HttpMitchAgentWakeProvider,
+  type IMitchAgentWakeProvider,
   type MitchAgentWakeTarget,
 } from "./mitchAgentWake";
 import { GitHubActionsMitchWakeProvider } from "./githubActionsWakeProvider";
@@ -65,6 +66,12 @@ const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RUL
 const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
 const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
 const gameId = process.env.MITCH_GAME_ID?.trim() || "kingdom.boreslay";
+const disabledWakeProvider: IMitchAgentWakeProvider = {
+  hasTarget: () => false,
+  wake: async () => {
+    throw new Error("Mitch executor wake is disabled until MITCH_GITHUB_TOKEN is configured");
+  },
+};
 const wakeProvider =
   wakeMode === "github_actions"
     ? token
@@ -78,7 +85,7 @@ const wakeProvider =
               ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN.trim()
               : undefined),
         })
-      : new HttpMitchAgentWakeProvider({})
+      : disabledWakeProvider
     : new HttpMitchAgentWakeProvider(
         jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS")
       );
