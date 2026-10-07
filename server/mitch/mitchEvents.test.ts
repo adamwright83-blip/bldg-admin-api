@@ -12,6 +12,7 @@ import {
 import { MitchQaService } from "./mitchQaService";
 import { MitchProductionReasoningService } from "./mitchReasoningService";
 import { MitchProducerCoordinator } from "./mitchProducerCoordinator";
+import { createMitchProducerPlan } from "./mitchProducerPlans";
 import { MemoryMitchEventInbox } from "./mitchEventInbox";
 import { MitchEventService } from "./mitchEventService";
 import {
@@ -61,6 +62,14 @@ async function fixture(provider = true, reviewerId = "chatgpt_design_review") {
         wakeProvider,
       })
     );
+  const plan = createMitchProducerPlan({
+    gameId: "game.small_comforts",
+    tenantId: "test",
+    store,
+    service,
+    baseBranch: "feat/small-comforts-proprietor-spike",
+    baseSha: "f4d2f81036fdc1b348bd679fb58eb63059efde42",
+  });
   const coordinator = new MitchProducerCoordinator({
     tenantId: "test",
     store,
@@ -72,6 +81,9 @@ async function fixture(provider = true, reviewerId = "chatgpt_design_review") {
     wakeProvider,
     reviewerId,
     eventDriven: true,
+    gameId: plan.gameId,
+    gameTitle: plan.gameTitle,
+    seedProductionWork: plan.seed,
   });
   const inbox = new MemoryMitchEventInbox();
   const events = new MitchEventService({
