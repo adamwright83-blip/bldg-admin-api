@@ -35,6 +35,17 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Pin upstream game-dev skills
+        env:
+          MITCH_GAME_SKILLS_PIN: d4b0e35550c55ae70bdfcab4ef5a0e94610438a9
+        run: |
+          rm -rf "$RUNNER_TEMP/mitch-gamedev-skills"
+          git init "$RUNNER_TEMP/mitch-gamedev-skills"
+          git -C "$RUNNER_TEMP/mitch-gamedev-skills" remote add origin https://github.com/gamedev-skills/awesome-gamedev-agent-skills.git
+          git -C "$RUNNER_TEMP/mitch-gamedev-skills" fetch --depth=1 origin "$MITCH_GAME_SKILLS_PIN"
+          git -C "$RUNNER_TEMP/mitch-gamedev-skills" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/mitch-gamedev-skills" rev-parse HEAD)" = "$MITCH_GAME_SKILLS_PIN"
+
       - run: pnpm install --frozen-lockfile
 
       - name: Review exact Mitch build
@@ -46,4 +57,6 @@ jobs:
           MITCH_GITHUB_ISSUE_NUMBER: "370"
           MITCH_PRODUCER_BASE_URL: ${{ fromJSON(inputs.wake).controlPlaneBaseUrl }}
           MITCH_CLAUDE_MODEL: claude-sonnet-4-6
+          MITCH_GAME_SKILLS_DIR: ${{ runner.temp }}/mitch-gamedev-skills
+          MITCH_GAME_SKILLS_PIN: d4b0e35550c55ae70bdfcab4ef5a0e94610438a9
         run: pnpm exec tsx scripts/mitch-github-agent.ts
