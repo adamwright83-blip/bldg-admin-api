@@ -62,6 +62,44 @@ describe("authority receipt policy", () => {
     ).toThrow(/operator attestation/);
   });
 
+  it("reserves payment_verified for native Stripe evidence and gives CleanCloud its own claim", () => {
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "payment_verified",
+        subjectType: "cleancloud_order",
+        sourceType: "cleancloud_paid_order",
+        sourceRef: "cleancloud-import:7:603",
+        evidenceClass: "authoritative_external",
+        verificationClass: "VERIFIED",
+      })
+    ).toThrow(/Stripe PaymentIntent/);
+
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "cleancloud_paid_observed",
+        subjectType: "cleancloud_order",
+        sourceType: "cleancloud_paid_order",
+        sourceRef: "cleancloud-import:7:603",
+        evidenceClass: "authoritative_external",
+        verificationClass: "VERIFIED",
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertAuthorityClaimPolicy({
+        ...base,
+        claimType: "cleancloud_paid_observed",
+        subjectType: "cleancloud_order",
+        sourceType: "stripe_payment_intent",
+        sourceRef: "pi_not_cleancloud",
+        evidenceClass: "authoritative_external",
+        verificationClass: "VERIFIED",
+      })
+    ).toThrow(/CleanCloud external evidence/);
+  });
+
   it("requires Twilio VERIFIED provider evidence for message_sent", () => {
     expect(() =>
       assertAuthorityClaimPolicy({
