@@ -232,4 +232,79 @@ describe("Daphne Stage 3B adaptation policy", () => {
       })[0]?.lifecycle
     ).toBe("revoked_unused");
   });
+
+  describe("Daphne V2 Slice 2 — Adaptation Boundaries & Zero New Targets", () => {
+    it("confirms WIRED_EXPLICIT_TARGETS contains exactly the single V1 Stage 3B target and zero new targets", () => {
+      expect(Array.from(WIRED_EXPLICIT_TARGETS)).toEqual([DAPHNE_STAGE3B_TARGET_KEY]);
+      expect(WIRED_EXPLICIT_TARGETS.size).toBe(1);
+    });
+
+    it("unresolved LEARNING (no active directive) produces no adaptation decision", () => {
+      const decision = buildOperatorAdaptationDecision({
+        tenantId: "tenant-a",
+        canonicalOperatorId: "tenant:tenant-a:operator:adam",
+        enabled: true,
+        directives: [], // No directives
+      });
+      expect(decision).toBeNull();
+    });
+
+    it("suppression explicitly prevents adaptation decision even on the wired Stage 3B target", () => {
+      const suppressedDirective = directive({
+        directiveKind: "suppress",
+        targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+        status: "active",
+      });
+      const decision = buildOperatorAdaptationDecision({
+        tenantId: suppressedDirective.tenantId,
+        canonicalOperatorId: suppressedDirective.canonicalOperatorId,
+        enabled: true,
+        directives: [suppressedDirective],
+      });
+      expect(decision).toBeNull();
+    });
+
+    it("enforces tenant boundary on adaptation decision", () => {
+      const activeDirective = directive({
+        tenantId: "tenant-a",
+        directiveKind: "ask_instead",
+        targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+        status: "active",
+      });
+      // Caller requests tenant-b with directive from tenant-a
+      const decision = buildOperatorAdaptationDecision({
+        tenantId: "tenant-b",
+        canonicalOperatorId: activeDirective.canonicalOperatorId,
+        enabled: true,
+        directives: [activeDirective],
+      });
+      expect(decision?.tenantId).toBe("tenant-b");
+    });
+
+    it("preserves V1 typed decision structure without prose or raw context leak", () => {
+      const activeDirective = directive({
+        directiveKind: "ask_instead",
+        targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+        status: "active",
+      });
+      const decision = buildOperatorAdaptationDecision({
+        tenantId: activeDirective.tenantId,
+        canonicalOperatorId: activeDirective.canonicalOperatorId,
+        enabled: true,
+        directives: [activeDirective],
+      });
+      expect(decision).toEqual({
+        tenantId: activeDirective.tenantId,
+        canonicalOperatorId: activeDirective.canonicalOperatorId,
+        directiveId: activeDirective.id,
+        targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+        behaviorClass: DAPHNE_STAGE3B_BEHAVIOR_CLASS,
+        status: "applicable",
+      });
+      // Ensure no prompt, prose, or context fields exist
+      expect(decision).not.toHaveProperty("prose");
+      expect(decision).not.toHaveProperty("prompt");
+      expect(decision).not.toHaveProperty("operatorContext");
+    });
+  });
 });
