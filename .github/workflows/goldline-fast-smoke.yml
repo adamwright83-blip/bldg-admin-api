@@ -119,6 +119,7 @@ jobs:
       - name: Prove Daphne causal adaptation kernel
         run: >-
           pnpm vitest run
+          server/daphne
           server/operatorRepresentative/adaptation.test.ts
           server/operatorRepresentative/adaptationReceipts.test.ts
           server/claire/turn/daphneAdaptation.test.ts
