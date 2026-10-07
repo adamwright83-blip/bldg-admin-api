@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { daphneEpistemicClaims } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export const DAPHNE_CLAIM_TYPES = [
   "direct_fact",
@@ -326,6 +327,15 @@ export async function recordDaphneEpistemicClaim(
     .limit(1);
 
   if (!row) throw new Error("Daphne epistemic claim did not persist");
+  await recordDaphneMetricEvent({
+    tenantId: normalized.tenantId,
+    canonicalOperatorId: normalized.canonicalOperatorId,
+    agentId: normalized.agentId,
+    eventName: "claim_created",
+    properties: { claimType: normalized.claimType, epistemicStatus: normalized.epistemicStatus, causalEvidenceStatus: normalized.causalEvidenceStatus },
+    sourceReference: row.id,
+    idempotencyKey: `claim:${row.id}`,
+  }).catch(() => undefined);
   return toRecord(row);
 }
 
