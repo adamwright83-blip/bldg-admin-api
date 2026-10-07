@@ -117,7 +117,11 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     );
     const claimed = claims.filter(Boolean);
     expect(claimed).toHaveLength(1);
-    expect(claimed[0]).toMatchObject({ id: scheduled.id });
+    expect(claimed[0]).toMatchObject({
+      id: scheduled.id,
+      tenantId: "tenant-a",
+      idempotencyKey: "sunday:2026-10-05",
+    });
   });
 
   it("survives worker restart and reclaims an expired callback lease", async () => {
