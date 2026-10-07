@@ -248,6 +248,40 @@ describe("ProcurementWorker — leases and heartbeats", () => {
     );
   });
 
+  it("never completes partial work when a heartbeat persistence error aborts a resolving handler", async () => {
+    const store = fakeStore({
+      steps: [step("heartbeat-error")],
+      heartbeat: async () => {
+        throw new Error("heartbeat database unavailable");
+      },
+    });
+    let observedSignal: AbortSignal | null = null;
+    const worker = startWorker(
+      store,
+      {
+        "test.step": async ({ signal }) => {
+          observedSignal = signal;
+          await new Promise<void>(resolve => {
+            if (signal.aborted) return resolve();
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+          return "partial-result-must-not-complete";
+        },
+      },
+      { leaseMs: 300, concurrency: 1 }
+    );
+
+    await until(() => observedSignal?.aborted === true, 3_000);
+    await until(() => store.calls.fail.length === 1, 3_000);
+
+    expect(store.calls.complete).toEqual([]);
+    expect(store.calls.fail[0]).toMatchObject({
+      id: "heartbeat-error",
+      message: "heartbeat database unavailable",
+    });
+    expect(worker.health.degraded).toBe(false);
+  });
+
   it("aborts the handler and refuses stale acknowledgement when a heartbeat loses the lease", async () => {
     const store = fakeStore({
       steps: [step("lost")],

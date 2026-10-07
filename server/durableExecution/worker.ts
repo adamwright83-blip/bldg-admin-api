@@ -141,6 +141,7 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
 
     let executionFinished = false;
     let leaseLost = false;
+    let heartbeatError: unknown = null;
 
     const recordLeaseLoss = (reason: string) => {
       if (executionFinished || leaseLost) return;
@@ -168,8 +169,12 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         .catch(error => {
           const message = errorMessage(error);
           // A heartbeat persistence failure is not proof that the lease has
-          // already been lost. Signal the handler to stop doing new work;
-          // the store's completion/failure fence remains authoritative.
+          // already been lost. Signal the handler to stop doing new work, then
+          // route through failStep so the store's lease fence decides whether
+          // this execution may be retried. Never complete after this abort.
+          if (!executionFinished) {
+            heartbeatError = error;
+          }
           if (!executionFinished && !executionController.signal.aborted) {
             executionController.abort(error);
           }
@@ -192,12 +197,14 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         return;
       }
       if (leaseLost) return;
+      if (heartbeatError) throw heartbeatError;
       if (!handler) {
         throw new Error(`No handler registered for step type ${handlerKey}`);
       }
       const result = await handler({ step, signal: executionController.signal });
 
       if (leaseLost) return;
+      if (heartbeatError) throw heartbeatError;
 
       const completed = await this.store.completeStep(step, result);
       if (!completed) {
