@@ -73,44 +73,74 @@ export async function upsertCleanCloudPaidOrderWith(
     ...input.values,
     tenantId,
   };
-  const [existing] = await tx
-    .select()
-    .from(cleancloudPaidOrders)
-    .where(
-      and(
-        eq(cleancloudPaidOrders.tenantId, tenantId),
-        eq(
-          cleancloudPaidOrders.cleancloudOrderId,
-          String(values.cleancloudOrderId)
-        ),
-        eq(
-          cleancloudPaidOrders.sourceReportType,
-          values.sourceReportType
+  const lookup = (locking: boolean) => {
+    const query = tx
+      .select()
+      .from(cleancloudPaidOrders)
+      .where(
+        and(
+          eq(cleancloudPaidOrders.tenantId, tenantId),
+          eq(
+            cleancloudPaidOrders.cleancloudOrderId,
+            String(values.cleancloudOrderId)
+          ),
+          eq(
+            cleancloudPaidOrders.sourceReportType,
+            values.sourceReportType
+          )
         )
-      )
-    )
-    .for("update")
-    .limit(1);
+      );
+    return locking ? query.for("update").limit(1) : query.limit(1);
+  };
 
-  if (
-    existing &&
-    input.existingMode === "skip_unchanged" &&
-    cleanCloudPaidOrderBusinessFields(existing as Record<string, unknown>) ===
-      cleanCloudPaidOrderBusinessFields(values as Record<string, unknown>)
-  ) {
-    return "unchanged";
-  }
-
-  if (existing) {
+  const writeExisting = async (
+    existing: typeof cleancloudPaidOrders.$inferSelect
+  ): Promise<"updated" | "unchanged"> => {
+    if (
+      input.existingMode === "skip_unchanged" &&
+      cleanCloudPaidOrderBusinessFields(
+        existing as Record<string, unknown>
+      ) === cleanCloudPaidOrderBusinessFields(values as Record<string, unknown>)
+    ) {
+      return "unchanged";
+    }
     await tx
       .update(cleancloudPaidOrders)
       .set({ ...values, updatedAt: new Date() })
       .where(eq(cleancloudPaidOrders.id, existing.id));
     return "updated";
-  }
+  };
 
-  await tx.insert(cleancloudPaidOrders).values(values);
-  return "inserted";
+  const [existing] = await lookup(false);
+  if (existing) return writeExisting(existing);
+
+  try {
+    await tx.insert(cleancloudPaidOrders).values(values);
+    return "inserted";
+  } catch (error) {
+    // Two independent tenants can legitimately import the same provider order
+    // id at the same time. Do not gap-lock the missing unique-key range before
+    // insert; only serialize after a real same-key duplicate race.
+    let current: unknown = error;
+    let duplicate = false;
+    while (current && typeof current === "object") {
+      const record = current as {
+        code?: unknown;
+        errno?: unknown;
+        cause?: unknown;
+      };
+      if (record.code === "ER_DUP_ENTRY" || record.errno === 1062) {
+        duplicate = true;
+        break;
+      }
+      current = record.cause;
+    }
+    if (!duplicate) throw error;
+
+    const [raced] = await lookup(true);
+    if (!raced) throw error;
+    return writeExisting(raced);
+  }
 }
 
 export async function admitCleanCloudPaidObservationWith(
