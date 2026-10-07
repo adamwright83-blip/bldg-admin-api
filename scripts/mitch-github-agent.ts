@@ -282,6 +282,12 @@ function validationCommand(item: string): string {
   if (item === "pnpm check") return item;
   if (/^pnpm exec vitest run [A-Za-z0-9_./*:-]+$/.test(item)) return item;
   if (/^npx vitest run [A-Za-z0-9_./*:-]+$/.test(item)) return item;
+  if (
+    /^pnpm exec playwright test --config e2e\/[A-Za-z0-9_./-]+\.ts(?: [A-Za-z0-9_./*:-]+)?$/.test(
+      item
+    )
+  )
+    return item;
   if (/^[A-Za-z0-9_./-]+\.test\.[cm]?[jt]sx?$/.test(item))
     return `pnpm exec vitest run ${item}`;
   throw new Error(`Unsupported Mitch validation instruction: ${item}`);
@@ -290,8 +296,24 @@ function validationCommand(item: string): string {
 async function runValidation(brief: string): Promise<Check[]> {
   const commands = requiredTestItems(brief).map(validationCommand);
   if (!commands.includes("pnpm check")) commands.push("pnpm check");
+  const uniqueCommands = [...new Set(commands)];
   const checks: Check[] = [];
-  for (const command of [...new Set(commands)]) {
+
+  if (uniqueCommands.some(command => /\bplaywright\b/.test(command))) {
+    const install = await runCommand(
+      "pnpm exec playwright install --with-deps chromium",
+      ROOT,
+      { timeoutMs: 15 * 60_000 }
+    );
+    checks.push({
+      command: "pnpm exec playwright install --with-deps chromium",
+      exitCode: install.exitCode,
+      ok: install.exitCode === 0,
+    });
+    if (install.exitCode !== 0) return checks;
+  }
+
+  for (const command of uniqueCommands) {
     const result = await runCommand(command, ROOT, { timeoutMs: 15 * 60_000 });
     checks.push({ command, exitCode: result.exitCode, ok: result.exitCode === 0 });
     if (result.exitCode !== 0) break;
