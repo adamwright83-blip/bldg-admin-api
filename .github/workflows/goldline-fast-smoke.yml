@@ -52,6 +52,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Type-check
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm check
       - name: Enforce Phase 0 architecture guards
         run: |
