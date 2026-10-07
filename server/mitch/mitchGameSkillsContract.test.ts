@@ -21,6 +21,7 @@ describe("Mitch upstream game-skill capability contract", () => {
     expect(workflow).toContain(PIN);
     expect(workflow).toContain("MITCH_GAME_SKILLS_DIR");
     expect(workflow).toContain("MITCH_GAME_SKILLS_PIN");
+    expect(workflow).toContain("fromJSON(inputs.wake).wakeId");
   });
 
   it("installs the router plus the full specialist catalog into Claude's skill directory", () => {
