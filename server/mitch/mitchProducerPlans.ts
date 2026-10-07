@@ -115,12 +115,13 @@ export function createMitchProducerPlan(input: {
           KINGDOM_TWO_MILESTONE_INSTALL_DUEL.requiredArtifact,
         requiredTests: [
           ...KINGDOM_TWO_MILESTONE_INSTALL_DUEL.requiredTests,
+          "pnpm exec playwright test --config e2e/boreslay/playwright.config.ts",
           "pnpm check",
         ],
         requiredEvidence: [
           "Exact implementation branch and 40-character commit SHA",
           "Exact playable build or preview identity",
-          "Independent gameplay exercise of the installed Kingdom Two path",
+          "Independent Playwright gameplay exercise of the installed Kingdom Two path on the exact commit",
           "Evidence that match completion does not unlock Kingdom Three",
           "Known gameplay, UX, or integration limitations",
         ],
