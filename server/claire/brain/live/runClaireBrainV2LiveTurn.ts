@@ -63,6 +63,7 @@ export type ClaireBrainV2LiveResult =
         | "disabled"
         | "operator_not_authorized"
         | "error"
+        | "execution_error"
         | "outside_live_scope";
     }
   | {
@@ -76,6 +77,13 @@ export type ClaireBrainV2LiveResult =
        */
       handled: true;
     };
+
+export function shouldFallbackToClaireLegacy(
+  result: ClaireBrainV2LiveResult
+): boolean {
+  if (result.active) return false;
+  return result.reason !== "execution_error";
+}
 
 const UNPROVEN_DAY_LINE_WRITE_SPEECH =
   "I understood the Day Line request, but I don't have a write receipt yet, so I can't confirm a change. I'm keeping those items in mind.";
@@ -141,13 +149,17 @@ export async function runClaireBrainV2LiveTurn(
 
   let adapterResult: ClaireTurnResult | null = null;
   let adapterPromise: Promise<ClaireTurnResult> | null = null;
+  let adapterExecutionStarted = false;
 
   const execute = async (
     grant: ExecutiveActionGrant
   ): Promise<ClaireTurnResult> => {
     // One semantic operator turn can mint more than one grant. The underlying
-    // legacy adapter must still run at most once.
-    adapterPromise ??= input.executeLegacyAdapter(grant);
+    // grant-bound adapter must still run at most once.
+    if (!adapterPromise) {
+      adapterExecutionStarted = true;
+      adapterPromise = input.executeLegacyAdapter(grant);
+    }
     const rawAdapterResult = await adapterPromise;
     adapterResult = guardCommittedDayLineResult(grant, rawAdapterResult);
     return adapterResult;
@@ -201,7 +213,10 @@ export async function runClaireBrainV2LiveTurn(
       surface: input.surface,
       reason: error instanceof Error ? error.message : "unknown",
     });
-    return { active: false, reason: "error" };
+    return {
+      active: false,
+      reason: adapterExecutionStarted ? "execution_error" : "error",
+    };
   }
 }
 

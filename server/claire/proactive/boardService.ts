@@ -1,20 +1,12 @@
 import { loadSalesInsight, type SalesInsightArtifact } from "./salesInsights";
 import { reconcileLedgerSpan } from "../../analytics/canonicalRevenue";
-import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { json, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import {
-  claireProactiveObligations,
-  commercialFollowUps,
-  dayDirectorCommitments,
-} from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
-import { getDb } from "../../db";
-import { queryOptionalMysqlTable } from "../../mysqlErrors";
+import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService";
+import { listOpenCommercialFollowUps } from "../../commercialPipeline/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -39,22 +31,20 @@ import {
   durableTriggerShadowEnabled,
   enqueueDurableTriggerForOperator,
 } from "../../persistentOperator/goalCycleService";
+import {
+  backfillPersistentOperatorCommercialFollowUpRef,
+  claireProactiveObligations,
+  listPersistentOperatorObligationPayloads,
+  upsertPersistentOperatorObligation,
+} from "../../persistentOperator/obligationStore";
+import {
+  loadOperatorDoctrine,
+  saveOperatorDoctrine,
+} from "../../persistentOperator/operatorDoctrineStore";
 
-export const claireOperatorDoctrine = mysqlTable(
-  "claire_operator_doctrine",
-  {
-    tenantId: varchar("tenantId", { length: 64 }).notNull(),
-    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
-    rulesJson: json("rulesJson").notNull(),
-    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
-  },
-  table => ({
-    pk: uniqueIndex("uq_claire_operator_doctrine").on(table.tenantId, table.operatorUserId),
-  })
-);
-
-// Compatibility export: persistent-operator core owns the centralized table shape.
+// Compatibility export: persistent-operator core owns the durable obligation table.
 export { claireProactiveObligations };
+
 
 const lastSweepAtByOperator = new Map<string, number>();
 const SWEEP_MS = 60_000;
@@ -64,28 +54,19 @@ function daysBetween(later: string, earlier: string): number {
   return Math.round((Date.parse(`${later}T00:00:00Z`) - Date.parse(`${earlier}T00:00:00Z`)) / 86_400_000);
 }
 
-export async function loadDoctrine(tenantId: string, operatorUserId: string): Promise<DoctrineRules> {
-  const db = await getDb();
-  if (!db) return DEFAULT_DOCTRINE;
-  try {
-    const [row] = await db
-      .select()
-      .from(claireOperatorDoctrine)
-      .where(and(eq(claireOperatorDoctrine.tenantId, tenantId), eq(claireOperatorDoctrine.operatorUserId, operatorUserId)))
-      .limit(1);
-    return row?.rulesJson ? { ...DEFAULT_DOCTRINE, ...(row.rulesJson as DoctrineRules) } : DEFAULT_DOCTRINE;
-  } catch {
-    return DEFAULT_DOCTRINE;
-  }
+export async function loadDoctrine(
+  tenantId: string,
+  operatorUserId: string
+): Promise<DoctrineRules> {
+  return loadOperatorDoctrine({ tenantId, operatorUserId });
 }
 
-export async function saveDoctrine(tenantId: string, operatorUserId: string, rules: DoctrineRules): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .insert(claireOperatorDoctrine)
-    .values({ tenantId, operatorUserId, rulesJson: rules })
-    .onDuplicateKeyUpdate({ set: { rulesJson: rules } });
+export async function saveDoctrine(
+  tenantId: string,
+  operatorUserId: string,
+  rules: DoctrineRules
+): Promise<void> {
+  await saveOperatorDoctrine({ tenantId, operatorUserId, rules });
 }
 
 /**
@@ -94,16 +75,11 @@ export async function saveDoctrine(tenantId: string, operatorUserId: string, rul
  * `ensureOperatorBoard` is the sweep that WRITES obligations; an observer must never call
  * it. This is the read-only view of what the board already holds.
  */
-export async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return queryOptionalMysqlTable(async () => {
-    const rows = await db
-      .select()
-      .from(claireProactiveObligations)
-      .where(and(eq(claireProactiveObligations.tenantId, tenantId), eq(claireProactiveObligations.operatorUserId, operatorUserId)));
-    return rows.map(row => row.payloadJson as ProactiveObligation);
-  });
+export async function loadObligations(
+  tenantId: string,
+  operatorUserId: string
+): Promise<ProactiveObligation[]> {
+  return listPersistentOperatorObligationPayloads({ tenantId, operatorUserId });
 }
 
 async function upsertObligation(
@@ -112,29 +88,12 @@ async function upsertObligation(
   obligation: ProactiveObligation,
   lineage?: { commercialFollowUpRef?: string | null }
 ): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .insert(claireProactiveObligations)
-    .values({
-      id: obligation.id,
-      tenantId,
-      operatorUserId,
-      kind: obligation.kind,
-      subjectKey: obligation.subjectKey,
-      payloadJson: obligation,
-      status: obligation.status,
-      dueDate: obligation.dueDate,
-      commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
-    })
-    .onDuplicateKeyUpdate({
-      set: {
-        payloadJson: obligation,
-        status: obligation.status,
-        dueDate: obligation.dueDate,
-        commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
-      },
-    });
+  await upsertPersistentOperatorObligation({
+    tenantId,
+    operatorUserId,
+    obligation,
+    commercialFollowUpRef: lineage?.commercialFollowUpRef ?? null,
+  });
 }
 
 async function backfillObligationCommercialFollowUpRef(input: {
@@ -143,18 +102,7 @@ async function backfillObligationCommercialFollowUpRef(input: {
   obligationId: string;
   commercialFollowUpRef: string;
 }): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .update(claireProactiveObligations)
-    .set({ commercialFollowUpRef: input.commercialFollowUpRef })
-    .where(
-      and(
-        eq(claireProactiveObligations.tenantId, input.tenantId),
-        eq(claireProactiveObligations.operatorUserId, input.operatorUserId),
-        eq(claireProactiveObligations.id, input.obligationId)
-      )
-    );
+  await backfillPersistentOperatorCommercialFollowUpRef(input);
 }
 
 async function placeOnDayLine(input: {
@@ -165,22 +113,27 @@ async function placeOnDayLine(input: {
   idempotencyKey: string;
   sourceText: string;
 }): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  const row = {
-    id: randomUUID(),
+  const result = await acceptProposalWithReceipt({
     tenantId: input.tenantId,
     actorId: input.actorId,
     businessDate: input.dueDate,
-    idempotencyKey: input.idempotencyKey.slice(0, 191),
-    title: input.title.slice(0, 255),
-    kind: "growth" as const,
-    quantity: null,
-    provenance: "manual" as const,
-    sourceText: input.sourceText,
-    metadataJson: { claireProactive: true, detailState: "COMPLETE", missingDetails: [] },
-  };
-  await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
+    proposal: {
+      promptKey: input.idempotencyKey.slice(0, 191),
+      title: input.title.slice(0, 255),
+      kind: "growth",
+      quantity: null,
+      sourceText: input.sourceText,
+      prerequisites: [],
+      question: null,
+      intelligence: "manual_fallback",
+      detailState: "COMPLETE",
+      missingDetails: [],
+      targetBusinessDate: input.dueDate,
+    },
+  });
+  if (!result.stored?.id) {
+    throw new Error("Proactive Day Line item was not persisted");
+  }
 }
 
 export async function ensureOperatorBoard(input: {
@@ -205,8 +158,6 @@ export async function ensureOperatorBoard(input: {
     return { brief: "", created: 0 };
   }
   lastSweepAtByOperator.set(sweepKey, now);
-  const db = await getDb();
-  if (!db) return { brief: "", created: 0 };
   const timeZone = input.timeZone;
   const today = businessToday(new Date(), timeZone);
   if (durableTriggerShadowEnabled()) {
@@ -319,10 +270,7 @@ export async function ensureOperatorBoard(input: {
 
   if (!skipSales) {
     try {
-      const due = await db
-        .select()
-        .from(commercialFollowUps)
-        .where(and(eq(commercialFollowUps.tenantId, input.tenantId), eq(commercialFollowUps.status, "open")));
+      const due = await listOpenCommercialFollowUps(input.tenantId);
       const already = await loadObligations(input.tenantId, input.operatorUserId);
       for (const follow of due.slice(0, 5)) {
         const dueDate = follow.dueAt.toISOString().slice(0, 10);

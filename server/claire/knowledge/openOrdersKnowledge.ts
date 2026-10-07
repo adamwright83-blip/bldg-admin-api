@@ -1,6 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { orders } from "../../../drizzle/schema";
-import { getDb } from "../../db";
+import { listTenantUnpaidOrders } from "../../orders/unpaidOrderReadService";
 import { buildingFor, BUILDING_LABEL } from "../../analytics/businessLineage";
 import { formatMoney, joinList, plural } from "../business/businessSpeech";
 
@@ -25,30 +23,7 @@ export function isUnpaidQuestion(lower: string): boolean {
 }
 
 export async function loadUnpaidOrders(tenantId: string): Promise<UnpaidOrder[]> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const rows = await db
-    .select({
-      id: orders.id,
-      firstName: orders.firstName,
-      lastName: orders.lastName,
-      status: orders.status,
-      total: orders.total,
-      pickupDate: orders.pickupDate,
-      deliveryDate: orders.deliveryDate,
-      buildingSlug: orders.buildingSlug,
-      address: orders.address,
-    })
-    .from(orders)
-    .where(
-      and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-        eq(orders.paid, false),
-        inArray(orders.status, ["collected", "processing", "ready"])
-      )
-    )
-    .orderBy(asc(orders.pickupDate), asc(orders.id))
-    .limit(100);
+  const rows = await listTenantUnpaidOrders(tenantId);
   return rows.map(row => {
     const building = buildingFor({ buildingSlug: row.buildingSlug, address: row.address });
     return {

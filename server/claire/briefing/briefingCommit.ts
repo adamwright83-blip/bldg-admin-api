@@ -46,7 +46,11 @@ export async function loadExistingWork(
   const dates = Array.from(new Set(input.dates));
   const states = await Promise.all(
     dates.map(businessDate =>
-      getState({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate }).catch(() => null)
+      getState({
+        tenantId: input.tenantId,
+        actorId: input.dayDirectorActorId,
+        businessDate,
+      })
     )
   );
   return states.flatMap((state, index) =>

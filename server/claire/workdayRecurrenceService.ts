@@ -10,28 +10,19 @@
  * path that persists the day's plan — never from the persistence-free compute.
  */
 
-import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { dayDirectorRecurrenceRules } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { createHash } from "node:crypto";
+import {
+  cancelDayDirectorRecurrenceRule,
+  listActiveDayDirectorRecurrenceRules,
+  persistDayDirectorRecurrenceRule,
+  type DayDirectorRecurrenceRule,
+} from "../dayDirector/workdayRecurrenceStore";
 import { weekdayOf } from "./briefing/briefingTiming";
 import { acceptProposal } from "../dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import type { DayDirectorKind } from "../../shared/claireWorkdayCommand";
 
-export type RecurrenceRule = {
-  id: string;
-  tenantId: string;
-  actorId: string;
-  sourceIdentity: string;
-  title: string;
-  kind: DayDirectorKind;
-  weekday: string;
-  windowStart: string | null;
-  windowEnd: string | null;
-  sourceText: string | null;
-  status: "active" | "cancelled";
-};
+export type RecurrenceRule = DayDirectorRecurrenceRule;
 
 export function recurrenceSourceIdentity(input: { actorId: string; title: string; weekday: string }): string {
   return createHash("sha256")
@@ -58,62 +49,10 @@ export async function confirmRecurrenceRule(input: {
   windowEnd?: string | null;
   sourceText: string;
 }): Promise<RecurrenceRule> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const sourceIdentity = recurrenceSourceIdentity(input);
-  const id = randomUUID();
-  const weekday = input.weekday.toLowerCase();
-  await db
-    .insert(dayDirectorRecurrenceRules)
-    .values({
-      id,
-      tenantId: input.tenantId,
-      actorId: input.actorId,
-      sourceIdentity,
-      title: input.title.trim().slice(0, 255),
-      kind: input.kind,
-      weekday,
-      windowStart: input.windowStart ?? null,
-      windowEnd: input.windowEnd ?? null,
-      sourceText: input.sourceText,
-      status: "active",
-    })
-    .onDuplicateKeyUpdate({
-      set: {
-        title: input.title.trim().slice(0, 255),
-        kind: input.kind,
-        weekday,
-        windowStart: input.windowStart ?? null,
-        windowEnd: input.windowEnd ?? null,
-        sourceText: input.sourceText,
-        status: "active",
-      },
-    });
-  const [stored] = await db
-    .select()
-    .from(dayDirectorRecurrenceRules)
-    .where(
-      and(
-        eq(dayDirectorRecurrenceRules.tenantId, input.tenantId),
-        eq(dayDirectorRecurrenceRules.actorId, input.actorId),
-        eq(dayDirectorRecurrenceRules.sourceIdentity, sourceIdentity)
-      )
-    )
-    .limit(1);
-  if (!stored) throw new Error("Recurrence rule was not persisted");
-  return {
-    id: stored.id,
-    tenantId: stored.tenantId,
-    actorId: stored.actorId,
-    sourceIdentity: stored.sourceIdentity,
-    title: stored.title,
-    kind: stored.kind,
-    weekday: stored.weekday,
-    windowStart: stored.windowStart,
-    windowEnd: stored.windowEnd,
-    sourceText: stored.sourceText,
-    status: stored.status,
-  };
+  return persistDayDirectorRecurrenceRule({
+    ...input,
+    sourceIdentity: recurrenceSourceIdentity(input),
+  });
 }
 
 export async function cancelRecurrenceRule(input: {
@@ -121,50 +60,14 @@ export async function cancelRecurrenceRule(input: {
   actorId: string;
   ruleId: string;
 }): Promise<{ ok: true }> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db
-    .update(dayDirectorRecurrenceRules)
-    .set({ status: "cancelled" })
-    .where(
-      and(
-        eq(dayDirectorRecurrenceRules.tenantId, input.tenantId),
-        eq(dayDirectorRecurrenceRules.actorId, input.actorId),
-        eq(dayDirectorRecurrenceRules.id, input.ruleId)
-      )
-    );
-  return { ok: true };
+  return cancelDayDirectorRecurrenceRule(input);
 }
 
 export async function listActiveRecurrenceRules(input: {
   tenantId: string;
   actorId: string;
 }): Promise<RecurrenceRule[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db
-    .select()
-    .from(dayDirectorRecurrenceRules)
-    .where(
-      and(
-        eq(dayDirectorRecurrenceRules.tenantId, input.tenantId),
-        eq(dayDirectorRecurrenceRules.actorId, input.actorId),
-        eq(dayDirectorRecurrenceRules.status, "active")
-      )
-    );
-  return rows.map(stored => ({
-    id: stored.id,
-    tenantId: stored.tenantId,
-    actorId: stored.actorId,
-    sourceIdentity: stored.sourceIdentity,
-    title: stored.title,
-    kind: stored.kind,
-    weekday: stored.weekday,
-    windowStart: stored.windowStart,
-    windowEnd: stored.windowEnd,
-    sourceText: stored.sourceText,
-    status: stored.status,
-  }));
+  return listActiveDayDirectorRecurrenceRules(input);
 }
 
 export async function projectRecurrenceForDate(

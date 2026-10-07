@@ -58,11 +58,19 @@ describe("Brain V2 production isolation", () => {
 
     for (const source of [twilio, router]) {
       const brainImports = source.match(/from "\.\/brain\/[^"]+"/g) ?? [];
-      expect(brainImports.sort()).toEqual([
-        'from "./brain/live/runClaireBrainV2LiveTurn"',
-        'from "./brain/shadow/observeShadowTurn"',
-        'from "./brain/shadow/v1Snapshot"',
-      ]);
+      const expected = source === twilio
+        ? [
+            'from "./brain/live/grantBoundLegacyAdapter"',
+            'from "./brain/live/runClaireBrainV2LiveTurn"',
+            'from "./brain/shadow/observeShadowTurn"',
+            'from "./brain/shadow/v1Snapshot"',
+          ]
+        : [
+            'from "./brain/live/runClaireBrainV2LiveTurn"',
+            'from "./brain/shadow/observeShadowTurn"',
+            'from "./brain/shadow/v1Snapshot"',
+          ];
+      expect(brainImports.sort()).toEqual(expected.sort());
       expect(source).not.toMatch(/from "\.\/brain\/executive\//);
       expect(source).not.toMatch(/from "\.\/brain\/contracts\/grants"/);
       expect(source).not.toMatch(/mintActionGrant|assertGovernedDecision/);
@@ -77,6 +85,7 @@ describe("Brain V2 production isolation", () => {
       .split("\n")
       .map(line => line.trim())
       .filter(line => line.length > 0)
+      .filter(line => !line.endsWith(".test.ts"))
       .filter(line => !line.startsWith("server/claire/brain/"))
       .filter(line => line !== "server/claire/claireTwilio.ts" && line !== "server/claire/claireRouter.ts");
     expect(offenders).toEqual([]);

@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => {
       },
     })),
     getUserByOpenId: vi.fn(async (openId: string) => ({
+      id: 1,
       tenantId: "goldline",
       openId,
     })),
@@ -114,6 +115,7 @@ beforeEach(() => {
   });
   hoisted.getUserByOpenId.mockReset();
   hoisted.getUserByOpenId.mockImplementation(async (openId: string) => ({
+    id: 1,
     tenantId: "goldline",
     openId,
   }));
@@ -144,6 +146,7 @@ describe("sendOperatorArtifact", () => {
 
   it("fails a cross-tenant send before any provider call", async () => {
     hoisted.getUserByOpenId.mockResolvedValue({
+      id: 1,
       tenantId: "goldline",
       openId: "adam-admin",
     });

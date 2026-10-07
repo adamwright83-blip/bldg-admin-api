@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { legacyDayforgeSaasTenants } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { loadTenantBusinessIdentity } from "../saas/tenantIdentityService";
 
 /**
  * Claire Identity + Truth Kernel.
@@ -95,8 +93,8 @@ function clean(value: string | null | undefined): string | null {
 }
 
 function dedupeBusinessNames(
-  businessName: string,
-  brandName: string
+  businessName: string | null | undefined,
+  brandName: string | null | undefined
 ): ClaireBusinessIdentity[] {
   const registered = clean(businessName);
   const brand = clean(brandName);
@@ -129,25 +127,8 @@ export async function loadClaireIdentityTruth(
   }
 
   let businesses: ClaireBusinessIdentity[] = [];
-  try {
-    const db = await getDb();
-    if (db) {
-      const [row] = await db
-        .select({
-          businessName: legacyDayforgeSaasTenants.businessName,
-          brandName: legacyDayforgeSaasTenants.brandName,
-        })
-        .from(legacyDayforgeSaasTenants)
-        .where(eq(legacyDayforgeSaasTenants.id, tenantId))
-        .limit(1);
-      if (row) businesses = dedupeBusinessNames(row.businessName, row.brandName);
-    }
-  } catch (error) {
-    console.warn("[Claire] tenant identity unavailable", {
-      tenantId,
-      reason: error instanceof Error ? error.message : "identity_read_failed",
-    });
-  }
+  const row = await loadTenantBusinessIdentity(tenantId);
+  if (row) businesses = dedupeBusinessNames(row.businessName, row.brandName);
 
   return {
     authorityVersion: "claire-identity-2026-10-01.1",

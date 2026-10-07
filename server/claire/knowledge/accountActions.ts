@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
-import { acceptProposal } from "../../dayDirector/dayDirectorService";
+import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService";
 import {
   rescheduleCommercialFollowUp,
   scheduleCommercialFollowUp,
@@ -100,12 +100,12 @@ export async function commitAccountFollowUp(
   deps: {
     reschedule?: typeof rescheduleCommercialFollowUp;
     schedule?: typeof scheduleCommercialFollowUp;
-    accept?: typeof acceptProposal;
+    accept?: typeof acceptProposalWithReceipt;
   } = {}
 ): Promise<AccountFollowUpCommit> {
   const reschedule = deps.reschedule ?? rescheduleCommercialFollowUp;
   const schedule = deps.schedule ?? scheduleCommercialFollowUp;
-  const accept = deps.accept ?? acceptProposal;
+  const accept = deps.accept ?? acceptProposalWithReceipt;
   const dueAt = fromZonedTime(`${pending.dueDate}T10:00:00`, input.timeZone);
   const result: AccountFollowUpCommit = {
     pipelineSaved: false,
@@ -140,7 +140,7 @@ export async function commitAccountFollowUp(
     }
   }
   try {
-    const stored = await accept({
+    const accepted = await accept({
       tenantId: input.tenantId,
       actorId: input.dayDirectorActorId,
       businessDate: pending.dueDate,
@@ -159,8 +159,8 @@ export async function commitAccountFollowUp(
       },
     });
     const storedId =
-      stored && typeof stored === "object" && "id" in stored
-        ? String((stored as { id?: unknown }).id ?? "")
+      accepted.stored && typeof accepted.stored === "object" && "id" in accepted.stored
+        ? String((accepted.stored as { id?: unknown }).id ?? "")
         : "";
     result.dayLineCommitmentId = storedId || null;
     result.dayLineSaved = Boolean(storedId);

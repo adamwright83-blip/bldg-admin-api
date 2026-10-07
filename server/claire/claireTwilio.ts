@@ -77,12 +77,17 @@ import {
   executePersistentOperatorAction,
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
+  shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import {
+  brainV2CallControlResult,
+  brainV2ExecutionFailureResult,
+  executeGrantBoundLegacyAdapter,
+} from "./brain/live/grantBoundLegacyAdapter";
 import { runWithLlmObservability } from "../_core/llmObservability";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
-import { getUserByOpenId } from "../db";
-import { dayDirectorActorId as dayDirectorActorIdFromUser } from "../dayDirector/dayDirectorActor";
+import { loadPersistedOperatorIdentity } from "../identity/operatorIdentityReadService";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
 import {
@@ -98,6 +103,7 @@ import {
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
 import { getDefaultGoalCyclePool } from "../persistentOperator/goalCycleStore";
 import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
+import { placeClaireOutboundCall } from "../twilioPlatform/claireCallProvider";
 import {
   abandonAuthorizedAmdHandoff,
   amdDetectionTwiml,
@@ -127,7 +133,6 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
 const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
 const fromNumber = process.env.CLAIRE_TWILIO_FROM_NUMBER?.trim() ?? "";
 const operatorNumber = process.env.CLAIRE_OPERATOR_PHONE?.trim() ?? "";
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
 const DEFAULT_HINTS = "got it, I'm good, that's enough, end call, hang up, goodbye";
 
@@ -234,7 +239,7 @@ function operatorPhoneMap(): Record<string, string> | null {
 }
 
 function assertTwilioConfigured(): void {
-  if (!client || !fromNumber || (!operatorNumber && !process.env.CLAIRE_OPERATOR_PHONES?.trim())) {
+  if (!accountSid || !authToken || !fromNumber || (!operatorNumber && !process.env.CLAIRE_OPERATOR_PHONES?.trim())) {
     throw new Error(
       "Claire calling is not configured (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CLAIRE_TWILIO_FROM_NUMBER, and CLAIRE_OPERATOR_PHONE or CLAIRE_OPERATOR_PHONES are required)"
     );
@@ -297,13 +302,13 @@ export function operatorPhoneFor(actorId: string): string {
  */
 export async function authorizedOperatorPhone(input: { tenantId: string; actorId: string }): Promise<string> {
   const phone = operatorPhoneFor(input.actorId);
-  const user = await getUserByOpenId(input.actorId);
-  if (!user) {
+  const identity = await loadPersistedOperatorIdentity(input.actorId);
+  if (!identity) {
     throw new Error(
       `Claire will not place a call for "${input.actorId}": no such operator exists. A real phone is never dialed for an unpersisted or synthetic identity.`
     );
   }
-  const userTenant = user.tenantId?.trim() || "default";
+  const userTenant = identity.tenantId;
   if (userTenant !== input.tenantId) {
     throw new Error(
       `Claire will not place a call: operator "${input.actorId}" belongs to tenant "${userTenant}", but the call was started as "${input.tenantId}".`
@@ -363,18 +368,13 @@ export async function authorizedInboundOperator(from: string): Promise<{
   tenantId: string;
 }> {
   const operatorUserId = resolveClaireOperatorIdForPhone(from);
-  const user = await getUserByOpenId(operatorUserId);
-  if (!user) {
+  const identity = await loadPersistedOperatorIdentity(operatorUserId);
+  if (!identity) {
     throw new Error(
       `Claire will not answer for "${operatorUserId}": no such operator exists. An inbound call is never opened for an unpersisted or synthetic identity.`
     );
   }
-  if (user.id == null) {
-    throw new Error(
-      `Claire will not answer for "${operatorUserId}": the persisted operator has no Day Director identity.`
-    );
-  }
-  const directorId = dayDirectorActorIdFromUser({ user });
+  const directorId = String(identity.userId);
   if (!directorId || directorId === "unknown") {
     throw new Error(
       `Claire will not answer for "${operatorUserId}": the persisted operator has no Day Director identity.`
@@ -383,7 +383,7 @@ export async function authorizedInboundOperator(from: string): Promise<{
   return {
     operatorUserId,
     dayDirectorActorId: directorId,
-    tenantId: user.tenantId?.trim() || "default",
+    tenantId: identity.tenantId,
   };
 }
 
@@ -981,11 +981,12 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             surface: "voice",
           },
           async () => {
+        const liveAssembledUtterance = conversation.pendingFragment
+          ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
+          : turnUtterance;
         const liveV2 = await runClaireBrainV2LiveTurn({
           rawText: turnUtterance,
-          assembledText: conversation.pendingFragment
-            ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
-            : turnUtterance,
+          assembledText: liveAssembledUtterance,
           state: readOnlyWorkingMemorySource(
             conversation as unknown as Parameters<
               typeof readOnlyWorkingMemorySource
@@ -1007,19 +1008,37 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             surface: "voice",
             priorClaimReceipts: conversation.claimReceipts ?? [],
           },
-          executeLegacyAdapter: async () => runLegacyAdapter(),
+          executeLegacyAdapter: async grant =>
+            executeGrantBoundLegacyAdapter({
+              grant,
+              state: conversation,
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              conversationKey: callStateKey(conversationId),
+              timeZone:
+                conversation.appointmentTimeZone || getDashboardTimeZone(),
+              surface: "voice",
+            }),
         });
 
         if (liveV2.active) {
           brainV2LiveHandled = true;
-          // Call-control authority does not itself write business state. Keep
-          // the existing character/ledger adapter for the spoken close, but V2
-          // is the authority deciding that the call ends.
+          // V2-owned action grants execute only their typed Day Line lane.
+          // V2-owned call control uses V2's rendered response and never reruns
+          // V1's semantic/mutation router.
           const turnResult = liveV2.adapterResult
             ? liveV2.adapterResult
-            : await runLegacyAdapter().then(adapted =>
-                liveV2.result.candidateEndCall ? { ...adapted, endCall: true } : adapted
-              );
+            : liveV2.result.candidateEndCall
+              ? brainV2CallControlResult({
+                  candidateSpeak: liveV2.result.candidateSpeak,
+                  assembledUtterance: liveAssembledUtterance,
+                })
+              : (() => {
+                  throw new Error(
+                    "Brain V2 live action returned without a grant-bound adapter result"
+                  );
+                })();
           console.info("[ClaireBrainV2]", {
             event: "claire_brain_v2_live",
             surface: "voice",
@@ -1032,6 +1051,12 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
           });
           return turnResult;
+        }
+        if (!shouldFallbackToClaireLegacy(liveV2)) {
+          brainV2LiveHandled = true;
+          return brainV2ExecutionFailureResult({
+            assembledUtterance: liveAssembledUtterance,
+          });
         }
         return await runLegacyAdapter();
           }
@@ -1339,12 +1364,18 @@ export async function startClairePreDriveCall(input: {
       interactiveTwiml,
       decisionUrl: `${publicBaseUrl()}${CLAIRE_AMD_PATH}?token=${encodeURIComponent(token)}`,
     });
-    const call = await client!.calls.create({
-      to,
-      from,
-      ...amdFields,
-      ...claireVoiceCallCreateOptions(),
-    });
+    const call = {
+      sid: (
+        await placeClaireOutboundCall({
+          to,
+          from,
+          createOptions: {
+            ...amdFields,
+            ...claireVoiceCallCreateOptions(),
+          },
+        })
+      ).callSid,
+    };
     const attempted = await recordAuthorizedCallAttempted({
       tenantId: input.tenantId,
       operatorUserId: input.actorId,
@@ -1525,12 +1556,18 @@ export async function startClairePostStopCall(input: {
   let call: { sid: string };
   let attempted: { communicationReceiptId: string };
   try {
-    call = await client!.calls.create({
-      to,
-      from,
-      ...amdFields,
-      ...claireVoiceCallCreateOptions(),
-    });
+    call = {
+      sid: (
+        await placeClaireOutboundCall({
+          to,
+          from,
+          createOptions: {
+            ...amdFields,
+            ...claireVoiceCallCreateOptions(),
+          },
+        })
+      ).callSid,
+    };
     attempted = await recordAuthorizedCallAttempted({
       tenantId: input.tenantId,
       operatorUserId: input.actorId,

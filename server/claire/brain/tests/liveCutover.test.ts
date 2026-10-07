@@ -4,6 +4,7 @@ import type { BusinessMemoryDeps } from "../businessMemory/adapter";
 import {
   runClaireBrainV2LiveTurn,
   isClaireBrainV2LiveEnabled,
+  shouldFallbackToClaireLegacy,
   type ClaireBrainV2LiveInput,
 } from "../live/runClaireBrainV2LiveTurn";
 
@@ -289,6 +290,24 @@ describe("Brain V2 live cutover", () => {
     expect(executeLegacyAdapter).not.toHaveBeenCalled();
   });
 
+  it("fails closed when a grant-bound domain execution errors instead of broadening through V1", async () => {
+    const executeLegacyAdapter = vi.fn(async () => {
+      throw new Error("authoritative Day Line port unavailable");
+    });
+    const result = await runClaireBrainV2LiveTurn(
+      input({
+        rawText: "Add call Dana Tuesday to the Day Line.",
+        assembledText: "Add call Dana Tuesday to the Day Line.",
+        executeLegacyAdapter,
+      }),
+      { env: ON }
+    );
+
+    expect(executeLegacyAdapter).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ active: false, reason: "execution_error" });
+    expect(shouldFallbackToClaireLegacy(result)).toBe(false);
+  });
+
   it("falls back outside the first live scope instead of pretending V2 owns every organ", async () => {
     const executeLegacyAdapter = vi.fn(async () => adapterResult("answered"));
     const result = await runClaireBrainV2LiveTurn(
@@ -301,6 +320,7 @@ describe("Brain V2 live cutover", () => {
     );
 
     expect(result).toEqual({ active: false, reason: "outside_live_scope" });
+    expect(shouldFallbackToClaireLegacy(result)).toBe(true);
     expect(executeLegacyAdapter).not.toHaveBeenCalled();
   });
 });

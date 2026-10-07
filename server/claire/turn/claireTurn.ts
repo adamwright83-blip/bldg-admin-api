@@ -1885,7 +1885,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (explicitCommitNow) {
     const dates = Array.from(new Set(parsed.items.map(item => item.businessDate)));
     const [existing] = await Promise.all([
-      deps.loadExisting({ tenantId: input.tenantId, dayDirectorActorId: input.dayDirectorActorId, dates }).catch(() => []),
+      deps.loadExisting({ tenantId: input.tenantId, dayDirectorActorId: input.dayDirectorActorId, dates }),
     ]);
     const reconciled = reconcileBriefing(parsed, existing, null);
     const openItems = reconciled.items.filter(item => item.kind === "new_work");
@@ -2001,7 +2001,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     const dates = Array.from(new Set(combinedItems.map(item => item.businessDate)));
     const [existing, campaign] = await Promise.all([
-      deps.loadExisting({ tenantId: input.tenantId, dayDirectorActorId: input.dayDirectorActorId, dates }).catch(() => []),
+      deps.loadExisting({ tenantId: input.tenantId, dayDirectorActorId: input.dayDirectorActorId, dates }),
       deps.campaign({ tenantId: input.tenantId, actorId: input.dayDirectorActorId }).catch(() => null),
     ]);
     const reconciled = reconcileBriefing({ ...parsed, items: combinedItems }, existing, campaign);

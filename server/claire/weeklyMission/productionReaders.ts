@@ -10,7 +10,6 @@ import { getClaireCampaignSummary } from "../campaignAwareness";
 import { getActiveMacroGoalForOperators } from "../macroGoalService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { listActiveRecurrenceRules } from "../workdayRecurrenceService";
-import { getDb } from "../../db";
 import { getFieldToday } from "../../field/fieldTodayService";
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import type { FieldTodayItem } from "../../field/types";
@@ -46,7 +45,6 @@ export async function readWeeklyDossierFacts(input: {
   timeZone: string;
 }): Promise<WeeklyDossierFact[]> {
   const facts: WeeklyDossierFact[] = [];
-  const db = await getDb();
   for (const businessDate of input.dates) {
     const state = await getDayDirectorState({
       tenantId: input.tenantId,
@@ -79,7 +77,6 @@ export async function readWeeklyDossierFacts(input: {
       });
     }
 
-    if (!db) continue;
     const field = await getFieldToday({
       tenantId: input.tenantId,
       userId: input.operatorId,
@@ -207,8 +204,6 @@ export async function readWeeklyGrowthCandidatesForDossier(input: {
   now: Date;
   timeZone: string;
 }): Promise<WeeklyGrowthCandidate[]> {
-  const db = await getDb();
-  if (!db) return [];
   const feed = await loadWeeklyGrowthCandidates({
     tenantId: input.tenantId,
     operatorUserId: input.operatorId,

@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { dayDirectorCommitments } from "../../drizzle/schema";
-import { getDb } from "../db";
+import {
+  loadWorkdayPlanSnapshot,
+  upsertWorkdayPlanSnapshot,
+} from "../dayDirector/workdayPlanSnapshotStore";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import {
@@ -60,26 +60,10 @@ export async function loadConfirmedWorkdayPlan(input: {
   actorId: string;
   businessDate: string;
 }): Promise<ConfirmedWorkdayPlan | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const [row] = await db
-      .select()
-      .from(dayDirectorCommitments)
-      .where(
-        and(
-          eq(dayDirectorCommitments.tenantId, input.tenantId),
-          eq(dayDirectorCommitments.actorId, input.actorId),
-          eq(dayDirectorCommitments.businessDate, input.businessDate),
-          eq(dayDirectorCommitments.idempotencyKey, planIdempotencyKey(input.businessDate))
-        )
-      )
-      .limit(1);
-    const snapshot = (row?.metadataJson as { snapshot?: ConfirmedWorkdayPlan } | null)?.snapshot;
-    return snapshot && Array.isArray(snapshot.items) ? snapshot : null;
-  } catch {
-    return null;
-  }
+  return loadWorkdayPlanSnapshot({
+    ...input,
+    idempotencyKey: planIdempotencyKey(input.businessDate),
+  });
 }
 
 export async function confirmWorkdayPlan(input: {
@@ -90,8 +74,6 @@ export async function confirmWorkdayPlan(input: {
   missingQuestion?: string | null;
   reconciliation?: WorkdayReconciliationState;
 }): Promise<ConfirmedWorkdayPlan> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
   const existing = await loadConfirmedWorkdayPlan(input);
   const snapshot: ConfirmedWorkdayPlan = {
     businessDate: input.businessDate,
@@ -101,33 +83,14 @@ export async function confirmWorkdayPlan(input: {
     missingQuestion: input.missingQuestion ?? null,
     reconciliation: input.reconciliation ?? existing?.reconciliation ?? emptyWorkdayReconciliation(),
   };
-  const row = {
-    id: randomUUID(),
+  return upsertWorkdayPlanSnapshot({
     tenantId: input.tenantId,
     actorId: input.actorId,
     businessDate: input.businessDate,
     idempotencyKey: planIdempotencyKey(input.businessDate),
-    title: "Claire confirmed workday plan",
-    kind: "operations" as const,
-    quantity: null,
-    provenance: "manual" as const,
+    snapshot,
     sourceText: `confirmed ${input.items.length} workday items`,
-    metadataJson: {
-      hiddenFromDayPlan: true,
-      snapshot,
-    },
-  };
-  await db
-    .insert(dayDirectorCommitments)
-    .values(row)
-    .onDuplicateKeyUpdate({
-      set: {
-        metadataJson: row.metadataJson,
-        sourceText: row.sourceText,
-        title: row.title,
-      },
-    });
-  return snapshot;
+  });
 }
 
 export async function markWorkdayReconciliation(input: {

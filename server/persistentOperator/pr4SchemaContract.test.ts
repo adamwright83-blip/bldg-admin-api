@@ -55,10 +55,16 @@ describe("Persistent Growth Operator PR4 schema and authority contracts", () => 
     );
   });
 
-  it("propagates database errors when reading obligations to prevent corrupting state", () => {
+  it("keeps obligation reads behind the Persistent Operator port and propagates database errors", () => {
     const board = repoFile("server/claire/proactive/boardService.ts");
+    const obligations = repoFile("server/persistentOperator/obligationStore.ts");
     const engine = repoFile("server/persistentOperator/decisionEngine.ts");
-    expect(board).toContain("queryOptionalMysqlTable");
+
+    expect(board).toContain("listPersistentOperatorObligationPayloads");
+    expect(board).not.toContain("queryOptionalMysqlTable");
+    expect(obligations).toContain("listPersistentOperatorObligationPayloads");
+    expect(obligations).toContain('if (!db) throw new Error("Database unavailable")');
+    expect(obligations).toContain("queryOptionalMysqlTable");
     expect(board).not.toMatch(/loadObligations[\s\S]*?catch\s*\{\s*return\s*\[\];\s*\}/);
     expect(engine).not.toMatch(/try\s*\{\s*obligations\s*=\s*await\s*listOpenPersistentObligations/);
   });
