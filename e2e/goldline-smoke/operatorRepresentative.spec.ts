@@ -54,7 +54,7 @@ test.describe("Operator Representative V1", () => {
     const firstItem = page.locator(".or-item").first();
     if ((await firstItem.count()) > 0) {
       await firstItem.click();
-      await expect(page.getByRole("dialog", { name: "Operator evidence" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Daphne evidence" })).toBeVisible();
       await expect(page.getByText("WHAT THIS MEANS", { exact: true })).toBeVisible();
       await expect(page.getByText("WHAT JOYSTICK IS NOT ALLOWED TO CLAIM", { exact: true })).toBeVisible();
       await capture(page, `${testInfo.project.name}-detail-${page.viewportSize()?.width ?? "unknown"}`);
