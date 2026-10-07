@@ -62,9 +62,15 @@ export function buildDaphneHypothesisSet(input: {
 }): DaphneHypothesisSet {
   const claimKey = input.claimKey.trim();
   if (!claimKey) throw new Error("Daphne HypothesisSet requires claimKey");
+  const supersededIds = new Set(
+    input.claims
+      .filter(item => item.claimType === "supersession" && item.supersedesClaimId)
+      .map(item => item.supersedesClaimId!)
+  );
   const candidates = input.claims
     .filter(item =>
       item.claimKey === claimKey &&
+      !supersededIds.has(item.id) &&
       !["rejected", "superseded"].includes(item.epistemicStatus) &&
       item.claimType !== "supersession"
     )
