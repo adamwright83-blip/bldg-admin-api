@@ -7,6 +7,7 @@ export type GitHubActionsMitchWakeProviderOptions = {
   token: string;
   repoFullName: string;
   ref?: string;
+  controlPlaneBaseUrl?: string;
 };
 
 const ACTOR_WORKFLOWS: Record<string, string> = {
@@ -30,11 +31,16 @@ export class GitHubActionsMitchWakeProvider
   }
 
   hasTarget(actorId: string): boolean {
-    return Boolean(ACTOR_WORKFLOWS[actorId]);
+    return Boolean(
+      ACTOR_WORKFLOWS[actorId] && this.options.controlPlaneBaseUrl?.trim()
+    );
   }
 
   async wake(input: MitchAgentWake): Promise<void> {
     const workflow = ACTOR_WORKFLOWS[input.actorId];
+    const controlPlaneBaseUrl = this.options.controlPlaneBaseUrl?.trim();
+    if (!controlPlaneBaseUrl)
+      throw new Error("Mitch GitHub Actions wake requires a public control-plane URL");
     if (!workflow)
       throw new Error(
         `No GitHub Actions Mitch workflow is configured for actor "${input.actorId}"`
@@ -53,7 +59,12 @@ export class GitHubActionsMitchWakeProvider
         },
         body: JSON.stringify({
           ref: this.ref,
-          inputs: { wake: JSON.stringify(input) },
+          inputs: {
+            wake: JSON.stringify({
+              ...input,
+              controlPlaneBaseUrl: controlPlaneBaseUrl.replace(/\/$/, ""),
+            }),
+          },
         }),
       }
     );
