@@ -122,6 +122,20 @@ describe("operator appointment worker admission context", () => {
     ).toThrow("does not match durable job identity");
   });
 
+  it("rejects actor provenance that does not match the durable job", () => {
+    const step = durableAppointment();
+    const context = admitOperatorAppointmentExecution(step);
+    expect(() =>
+      assertOperatorAppointmentExecutionContext(step, {
+        ...context,
+        actor: {
+          ...context.actor,
+          operatorUserId: "other-operator",
+        },
+      })
+    ).toThrow("does not match durable job identity");
+  });
+
   it("rejects invalid tenant scope before persistence can create a worker job", async () => {
     const store = new OperatorAppointmentStore({} as never);
     await expect(
