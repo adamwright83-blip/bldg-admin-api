@@ -33,6 +33,7 @@ describe("Mitch upstream game-skill capability contract", () => {
     expect(harness).toContain("Use the router first");
     expect(harness).toContain("Read,Glob,Grep,Skill");
     expect(harness).toContain("Read,Edit,Write,Glob,Grep,Skill");
+    expect(harness).toContain('path.startsWith("e2e/boreslay/")');
     expect(harness).toContain(UPSTREAM);
     expect(harness).toContain(PIN);
   });
