@@ -31,7 +31,13 @@ function productionFiles(dir: string): string[] {
       files.push(...productionFiles(full));
       continue;
     }
-    if (!/\.(?:ts|tsx)$/.test(entry) || /\.test\.|\.spec\./.test(entry)) continue;
+    if (
+      !/\.(?:ts|tsx)$/.test(entry) ||
+      /\.test\.|\.spec\./.test(entry) ||
+      /fixture/i.test(entry)
+    ) {
+      continue;
+    }
     files.push(full);
   }
   return files;
@@ -114,5 +120,29 @@ describe("Order Authority Architecture Guard", () => {
 
     expect(violations).toEqual([]);
   });
+
+  it("prohibits production callers outside canonical payment admission from mutating orders with paid: true", () => {
+    const serverFiles = productionFiles(join(repoRoot, "server"));
+    const allowed = new Set([
+      "server/authority/paymentAdmission.ts",
+      // CleanCloud import stores separate historical POS records in cleancloud_paid_orders table
+      "server/cleancloudPaidOrders.ts",
+      "server/cleancloudBrowserSync/ingestion.ts",
+    ]);
+    const violations: string[] = [];
+
+    for (const file of serverFiles) {
+      const relPath = rel(file);
+      if (allowed.has(relPath)) continue;
+
+      const source = readFileSync(file, "utf8");
+      if (/\bpaid\s*:\s*true\b/.test(source)) {
+        violations.push(relPath);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
 });
+
 
