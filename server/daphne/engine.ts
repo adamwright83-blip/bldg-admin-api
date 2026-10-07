@@ -10,6 +10,7 @@ import { listDaphneInterventions } from "./interventionLedger";
 import { listDaphneOutcomes } from "./outcomeLedger";
 import { buildDaphneResponseModel } from "./responseModel";
 import type { DaphnePersonDistribution } from "./personModel";
+import { recordDaphneMetricEvent } from "./metrics";
 
 function asPersonDistribution(claim: DaphneEpistemicClaimRecord): DaphnePersonDistribution | null {
   if (claim.claimType !== "person_distribution_estimate") return null;
@@ -46,10 +47,16 @@ export async function buildDaphneV2OperatorCard(input:{
  const responseModel=buildDaphneResponseModel({
   interventions,outcomes,successMeasureKey:"started",burdenMeasureKey:"burden"
  });
- return compileDaphneOperatorCard({
+ const card=compileDaphneOperatorCard({
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,generatedAt:asOf,
   person,state,context,goals,relationship,metaPreferences,hypotheses,responseModel
  });
+ await recordDaphneMetricEvent({
+   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,eventName:"card_compiled",
+   properties:{evidenceCount:card.evidenceRefs.length,hypothesisCount:card.hypotheses.length,personDimensionCount:card.person.length},
+   sourceReference:`card:${card.generatedAt}`,idempotencyKey:`card:${input.agentId}:${card.generatedAt}`
+ }).catch(()=>undefined);
+ return card;
 }
 
 export async function loadDaphneEvidenceBundle(input:{
