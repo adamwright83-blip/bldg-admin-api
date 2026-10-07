@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { daphneOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export type DaphneOutcomeClass = "proximal" | "distal" | "burden" | "relationship";
 export type DaphneOutcomeRecord = {
@@ -62,7 +63,13 @@ export async function recordDaphneOutcome(input:RecordDaphneOutcomeInput):Promis
     idempotencyKey:req(input.idempotencyKey,"idempotencyKey",191)
   }).onDuplicateKeyUpdate({set:{id:rowId}});
   const [row]=await db.select().from(daphneOutcomes).where(eq(daphneOutcomes.id,rowId)).limit(1);
-  if(!row) throw new Error("Daphne outcome did not persist"); return record(row);
+  if(!row) throw new Error("Daphne outcome did not persist");
+  await recordDaphneMetricEvent({
+    tenantId:row.tenantId,canonicalOperatorId:row.canonicalOperatorId,eventName:"outcome_linked",
+    properties:{outcomeClass:row.outcomeClass,measureKey:row.measureKey,verificationStatus:row.verificationStatus},
+    sourceReference:row.id,occurredAt:row.observedAt,idempotencyKey:`outcome:${row.id}`
+  }).catch(()=>undefined);
+  return record(row);
 }
 export async function listDaphneOutcomes(input:{tenantId:string;canonicalOperatorId:string;limit?:number}):Promise<DaphneOutcomeRecord[]>{
   const db=await getDb(); if(!db) throw new Error("Database unavailable");
