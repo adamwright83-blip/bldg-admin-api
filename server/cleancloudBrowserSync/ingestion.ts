@@ -7,10 +7,11 @@ import { getDb } from "../db";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { validatePayload, validateHistoricalPayload } from "./validation";
+import { cleancloudImportBatches } from "../../drizzle/schema";
 import {
-  cleancloudPaidOrders,
-  cleancloudImportBatches,
-} from "../../drizzle/schema";
+  cleanCloudPaidOrderBusinessFields,
+  upsertCleanCloudPaidOrderWith,
+} from "../cleancloudPaidEvidence";
 import {
   browserSyncBindings,
   browserSyncReceipts,
@@ -52,34 +53,6 @@ export type CleanCloudIngestionResult = Record<string, unknown> & {
   totalRows: number;
   importCommitted: boolean;
 };
-
-function businessFields(row: Record<string, unknown>): string {
-  const {
-    id,
-    importBatchId,
-    sourceFileName,
-    createdAt,
-    updatedAt,
-    ...business
-  } = row;
-  // MySQL DECIMAL returns fixed-scale strings; exports may omit trailing zeros.
-  if (business.totalWeightLbs != null)
-    business.totalWeightLbs = Number(
-      Number(business.totalWeightLbs).toFixed(2)
-    );
-  const canonical = (value: unknown): unknown => {
-    if (value instanceof Date) return value.toISOString();
-    if (Array.isArray(value)) return value.map(canonical);
-    if (value && typeof value === "object")
-      return Object.fromEntries(
-        Object.entries(value)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, item]) => [key, canonical(item)])
-      );
-    return value;
-  };
-  return JSON.stringify(canonical(business));
-}
 
 function summarizeOrders(
   rows: Array<{
@@ -296,7 +269,7 @@ export async function executeCleanCloudIngestion(
     for (const row of normalized) {
       const values = { ...row, importBatchId: batch.id, sourceFileName };
       const fingerprint = createHash("sha256")
-        .update(businessFields(row))
+        .update(cleanCloudPaidOrderBusinessFields(row))
         .digest("hex");
       await tx
         .insert(salesSourceRevisions)
@@ -346,33 +319,13 @@ export async function executeCleanCloudIngestion(
         });
       }
 
-      const [existing] = await tx
-        .select()
-        .from(cleancloudPaidOrders)
-        .where(
-          and(
-            eq(cleancloudPaidOrders.tenantId, input.tenantId),
-            eq(cleancloudPaidOrders.cleancloudOrderId, row.cleancloudOrderId),
-            eq(cleancloudPaidOrders.sourceReportType, reportType)
-          )
-        )
-        .for("update");
-
-      if (existing && businessFields(existing) === businessFields(row)) {
-        unchanged++;
-        continue;
-      }
-
-      if (existing) {
-        await tx
-          .update(cleancloudPaidOrders)
-          .set(values)
-          .where(eq(cleancloudPaidOrders.id, existing.id));
-        updated++;
-      } else {
-        await tx.insert(cleancloudPaidOrders).values(values);
-        inserted++;
-      }
+      const write = await upsertCleanCloudPaidOrderWith(tx, {
+        values,
+        existingMode: "skip_unchanged",
+      });
+      if (write === "inserted") inserted++;
+      else if (write === "updated") updated++;
+      else unchanged++;
     }
 
     const completedAt = new Date();

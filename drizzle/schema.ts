@@ -9661,6 +9661,7 @@ export const authorityReceipts = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     claimType: mysqlEnum("claimType", [
       "payment_verified",
+      "cleancloud_paid_observed",
       "account_won",
       "message_sent",
       "action_completed",

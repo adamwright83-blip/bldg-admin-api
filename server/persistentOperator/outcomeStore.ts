@@ -267,7 +267,7 @@ async function assertConsequentialOutcomeAuthority(
 ): Promise<void> {
   const requirements: Record<
     string,
-    { claimType: "action_completed" | "account_won" | "payment_verified" | "field_observation_attested"; subjectType: string; subjectIdKey: string }
+    { claimType: "action_completed" | "account_won" | "payment_verified" | "cleancloud_paid_observed" | "field_observation_attested"; subjectType: string; subjectIdKey: string }
   > = {
     visit_completed: {
       claimType: "action_completed",
@@ -280,7 +280,7 @@ async function assertConsequentialOutcomeAuthority(
       subjectIdKey: "missionId",
     },
     cleancloud_order_paid: {
-      claimType: "payment_verified",
+      claimType: "cleancloud_paid_observed",
       subjectType: "cleancloud_order",
       subjectIdKey: "cleancloudOrderId",
     },
@@ -349,7 +349,7 @@ async function assertConsequentialOutcomeAuthority(
       input.monetaryValueCents <= 0
     ) {
       throw new Error(
-        "cleancloud_order_paid requires verified CleanCloud payment evidence and a positive amount"
+        "cleancloud_order_paid requires verified CleanCloud paid observation evidence and a positive amount"
       );
     }
     const db = await getDb();

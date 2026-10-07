@@ -21,7 +21,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(store).toContain('account_won: {');
     expect(store).toContain('claimType: "account_won"');
     expect(store).toContain('cleancloud_order_paid: {');
-    expect(store).toContain('claimType: "payment_verified"');
+    expect(store).toContain('claimType: "cleancloud_paid_observed"');
     expect(store).toContain('field_debrief_analyzed: {');
     expect(store).toContain('claimType: "field_observation_attested"');
     expect(store).toContain("cleancloud_order_paid amount does not match persisted paid-order evidence");
@@ -34,7 +34,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(bridge).toContain("Account win event is not bound to its Authority Receipt");
     expect(bridge).toContain("payment_evidence_mismatch");
     expect(bridge).toContain("payment_authority_missing");
-    expect(bridge).toContain("authorityReceiptId: paymentAuthority.id");
+    expect(bridge).toContain("authorityReceiptId: cleanCloudEvidence.id");
     expect(bridge).toContain("admitCommercialFieldObservation");
     expect(bridge).toContain("admitted.observationText");
     expect(bridge).toContain("authorityReceiptId: admitted.receipt.id");
@@ -55,7 +55,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
     expect(migrate).toContain("legacy_commercial_visit_completion_backfill_v1");
     expect(migrate).toContain("attach action authority to historical Persistent Operator visit outcomes");
     expect(migrate).toContain("attach win authority to historical Persistent Operator outcomes");
-    expect(migrate).toContain("attach payment authority to historical Persistent Operator revenue outcomes");
+    expect(migrate).toContain("attach CleanCloud evidence authority to historical Persistent Operator revenue outcomes");
     expect(migrate).toContain("remove learning derived from unreceipted consequential outcomes");
     expect(migrate).toContain("downgrade unreceipted consequential Persistent Operator outcomes");
     expect(migrate).toContain("legacy_field_observation_backfill_v1");

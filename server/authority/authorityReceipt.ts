@@ -5,6 +5,7 @@ import { getDb } from "../db";
 
 export const AUTHORITY_CLAIM_TYPES = [
   "payment_verified",
+  "cleancloud_paid_observed",
   "account_won",
   "message_sent",
   "action_completed",
@@ -91,12 +92,20 @@ export function assertAuthorityClaimPolicy(
       throw new Error(
         "payment_verified requires authoritative_external VERIFIED evidence"
       );
+    if (input.sourceType !== "stripe_payment_intent")
+      throw new Error(
+        "payment_verified requires Stripe PaymentIntent evidence"
+      );
+  }
+
+  if (input.claimType === "cleancloud_paid_observed") {
     if (
-      input.sourceType !== "stripe_payment_intent" &&
+      input.evidenceClass !== "authoritative_external" ||
+      input.verificationClass !== "VERIFIED" ||
       input.sourceType !== "cleancloud_paid_order"
     )
       throw new Error(
-        "payment_verified requires a supported payment source"
+        "cleancloud_paid_observed requires VERIFIED CleanCloud external evidence"
       );
   }
 
@@ -318,9 +327,9 @@ export async function getAuthorityReceiptById(input: {
 
 export type PaymentAuthorityExpectation = {
   tenantId: string;
-  subjectType: "order" | "cleancloud_order";
+  subjectType: "order";
   subjectId: string;
-  sourceType: "stripe_payment_intent" | "cleancloud_paid_order";
+  sourceType: "stripe_payment_intent";
   sourceRef: string | null;
 };
 
@@ -359,28 +368,20 @@ export async function readPaymentAuthorityReceipts(input: {
   const db = await getDb();
   if (!db) throw new Error("Authority receipts unavailable");
   const receipts: AuthorityReceipt[] = [];
-  for (const subjectType of ["order", "cleancloud_order"] as const) {
-    const ids = [
-      ...new Set(
-        input.expectations
-          .filter(e => e.subjectType === subjectType)
-          .map(e => e.subjectId)
-      ),
-    ];
-    for (let i = 0; i < ids.length; i += 200) {
-      const rows = await db
-        .select()
-        .from(authorityReceipts)
-        .where(
-          and(
-            eq(authorityReceipts.tenantId, tenantId),
-            eq(authorityReceipts.claimType, "payment_verified"),
-            eq(authorityReceipts.subjectType, subjectType),
-            inArray(authorityReceipts.subjectId, ids.slice(i, i + 200))
-          )
-        );
-      receipts.push(...rows.map(toReceipt));
-    }
+  const ids = [...new Set(input.expectations.map(e => e.subjectId))];
+  for (let i = 0; i < ids.length; i += 200) {
+    const rows = await db
+      .select()
+      .from(authorityReceipts)
+      .where(
+        and(
+          eq(authorityReceipts.tenantId, tenantId),
+          eq(authorityReceipts.claimType, "payment_verified"),
+          eq(authorityReceipts.subjectType, "order"),
+          inArray(authorityReceipts.subjectId, ids.slice(i, i + 200))
+        )
+      );
+    receipts.push(...rows.map(toReceipt));
   }
   return receipts;
 }

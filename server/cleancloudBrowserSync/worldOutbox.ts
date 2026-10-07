@@ -5,7 +5,10 @@ import type { InsertCleancloudPaidOrder } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { customerIdentityHash } from "../customerAssets/customerIdentity";
 import { appendGoldlineWorldEvent, type AppendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
-import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
+import {
+  admitCleanCloudPaidObservationWith,
+  requireCleanCloudTenantId,
+} from "../cleancloudPaidEvidence";
 
 export const economicHeads = mysqlTable("goldline_cleancloud_economic_heads", {
   economicKey: varchar("economicKey", { length: 64 }).primaryKey(),
@@ -57,7 +60,7 @@ export function economicRevisionFields(
   row: InsertCleancloudPaidOrder,
   physicalEntityId: string | null = null
 ): EconomicRevisionFields {
-  const tenantId = row.tenantId ?? "default";
+  const tenantId = requireCleanCloudTenantId(row.tenantId);
   const paymentDate = row.paymentDateUtc ?? row.paidDateUtc;
   return {
     economicKey: hash(JSON.stringify([tenantId, "cleancloud", row.cleancloudOrderId])),
@@ -84,7 +87,7 @@ export function economicRevisionFingerprint(
  * is excluded from the economic key: Sales and Revenue describe one order.
  * Customer identity is metadata only and must not gate economic revisions. */
 export function economicSnapshot(row: InsertCleancloudPaidOrder) {
-  const tenantId = row.tenantId ?? "default";
+  const tenantId = requireCleanCloudTenantId(row.tenantId);
   const { physicalEntityId: _physicalEntityId, ...revision } =
     economicRevisionFields(row);
   return {
@@ -105,24 +108,13 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
   if (head.revision === 0 && (!snapshot.paid || !snapshot.paymentAt)) return;
   const revision = head.revision + 1;
   const id = `${snapshot.economicKey}:${revision}`;
-  const authorityTenantId = row.tenantId?.trim();
-  if (snapshot.paid && snapshot.paymentAt && !authorityTenantId) {
-    throw new Error("CleanCloud payment authority requires explicit tenantId");
-  }
-  const paymentAuthority =
+  const tenantId = requireCleanCloudTenantId(row.tenantId);
+  const cleanCloudEvidence =
     snapshot.paid && snapshot.paymentAt
-      ? await admitAuthorityClaimWith(tx, {
-          tenantId: authorityTenantId!,
-          claimType: "payment_verified",
-          subjectType: "cleancloud_order",
-          subjectId: String(row.cleancloudOrderId),
-          sourceType: "cleancloud_paid_order",
+      ? await admitCleanCloudPaidObservationWith(tx, {
+          tenantId,
+          cleancloudOrderId: String(row.cleancloudOrderId),
           sourceRef: `cleancloud-import:${row.importBatchId}:${row.cleancloudOrderId}`,
-          actorType: "system",
-          actorId: null,
-          evidenceClass: "authoritative_external",
-          verificationClass: "VERIFIED",
-          admissionPolicy: "cleancloud_paid_order_v1",
           occurredAt: snapshot.paymentAt,
           metadata: {
             importBatchId: row.importBatchId,
@@ -131,7 +123,7 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
         })
       : null;
   const payload: AppendGoldlineWorldEvent = {
-    tenantId: row.tenantId ?? "default", physicalEntityId,
+    tenantId, physicalEntityId,
     eventType: revision === 1 ? "order_paid" : "order_payment_corrected",
     classification: "outcome", actorType: "system", actorId: null,
     // A correction with no payment date occurs when observed; paymentAt stays
@@ -143,7 +135,7 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
     idempotencyKey: `gumball:${id}`, correlationId: `cleancloud-import:${row.importBatchId}`,
     metadata: { ...snapshot, revision, supersedesRevision: revision > 1 ? revision - 1 : null,
       sourceReportType: row.sourceReportType, projectionMode: "replace",
-      authorityReceiptId: paymentAuthority?.id ?? null },
+      authorityReceiptId: cleanCloudEvidence?.id ?? null },
   };
   // Resolve before entering the import transaction at the caller where possible;
   // an unresolved binding is explicitly null, never a guessed physical ID.

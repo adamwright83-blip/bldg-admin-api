@@ -4753,12 +4753,12 @@ await assertRequiredColumns("authority_receipts", [
 ]);
 await runRequired(
   `ALTER TABLE authority_receipts
-   MODIFY COLUMN claimType enum('payment_verified','account_won','message_sent','action_completed','field_observation_attested') NOT NULL`,
-  "extend authority receipts with action_completed and field_observation_attested"
+   MODIFY COLUMN claimType enum('payment_verified','cleancloud_paid_observed','account_won','message_sent','action_completed','field_observation_attested') NOT NULL`,
+  "extend authority receipts with CleanCloud paid observation and field/action claims"
 );
 await assertEnumContainsValues("authority_receipts", "claimType", [
-  "payment_verified", "account_won", "message_sent", "action_completed",
-  "field_observation_attested",
+  "payment_verified", "cleancloud_paid_observed", "account_won", "message_sent",
+  "action_completed", "field_observation_attested",
 ]);
 await assertEnumContainsValues("authority_receipts", "evidenceClass", [
   "authoritative_external", "operator_attested",
@@ -4805,28 +4805,30 @@ await runRequired(
 );
 
 
-// Backfill CleanCloud-authoritative paid orders. Sales/Revenue report twins for
-// the same imported observation collapse by the authority idempotency key.
+// Backfill CleanCloud external paid observations without rewriting historical
+// source rows or deleting legacy payment_verified receipts. New runtime code
+// and source-aware readers use this CleanCloud-specific claim.
 await runRequired(
   `INSERT IGNORE INTO authority_receipts
     (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
      actorType, actorId, evidenceClass, verificationClass, admissionPolicy,
      occurredAt, admittedAt, metadataJson, idempotencyKey)
    SELECT
-     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':cleancloud-payment:', cleancloudOrderId, ':', importBatchId), 256), 1, 40)),
+     CONCAT('auth-', SUBSTRING(SHA2(CONCAT(tenantId, ':cleancloud-paid-observed:', cleancloudOrderId, ':', importBatchId), 256), 1, 40)),
      tenantId,
-     'payment_verified', 'cleancloud_order', cleancloudOrderId,
+     'cleancloud_paid_observed', 'cleancloud_order', cleancloudOrderId,
      'cleancloud_paid_order',
      CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId),
      'system', NULL, 'authoritative_external', 'VERIFIED',
-     'legacy_cleancloud_payment_backfill_v1',
+     'legacy_cleancloud_paid_observation_backfill_v1',
      COALESCE(paymentDateUtc, paidDateUtc, placedAtUtc, createdAt),
      createdAt,
      JSON_OBJECT('backfilled', TRUE, 'sourceReportType', sourceReportType),
-     CONCAT('authority:payment_verified:', SHA2(CONCAT('payment_verified', CHAR(0), 'cleancloud_order', CHAR(0), cleancloudOrderId, CHAR(0), 'cleancloud_paid_order', CHAR(0), CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId)), 256))
+     CONCAT('authority:cleancloud_paid_observed:', SHA2(CONCAT('cleancloud_paid_observed', CHAR(0), 'cleancloud_order', CHAR(0), cleancloudOrderId, CHAR(0), 'cleancloud_paid_order', CHAR(0), CONCAT('cleancloud-import:', importBatchId, ':', cleancloudOrderId)), 256))
    FROM cleancloud_paid_orders
-   WHERE paid = 1 AND COALESCE(totalCents, 0) > 0`,
-  "backfill CleanCloud payment authority receipts"
+   WHERE paid = 1 AND COALESCE(totalCents, 0) > 0
+     AND tenantId IS NOT NULL AND TRIM(tenantId) <> ''`,
+  "backfill CleanCloud paid observation authority receipts"
 );
 
 // Repair any receipts created by the first 0113 run from post-win bookkeeping
@@ -5025,7 +5027,7 @@ await runRequired(
   `UPDATE goal_cycle_outcomes o
    JOIN authority_receipts a
      ON BINARY a.tenantId = BINARY o.tenantId
-    AND a.claimType = 'payment_verified'
+    AND a.claimType = 'cleancloud_paid_observed'
     AND a.subjectType = 'cleancloud_order'
     AND BINARY a.subjectId = BINARY JSON_UNQUOTE(JSON_EXTRACT(o.metadataJson, '$.cleancloudOrderId'))
    JOIN cleancloud_paid_orders p
@@ -5038,8 +5040,9 @@ await runRequired(
      COALESCE(o.metadataJson, JSON_OBJECT()),
      '$.authorityReceiptId', a.id
    )
-   WHERE o.outcomeKind = 'cleancloud_order_paid'`,
-  "attach payment authority to historical Persistent Operator revenue outcomes"
+   WHERE o.outcomeKind = 'cleancloud_order_paid'
+     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(o.metadataJson, '$.authorityReceiptId')), '') IS NULL`,
+  "attach CleanCloud evidence authority to historical Persistent Operator revenue outcomes"
 );
 
 // Previously verified consequential outcomes that cannot be re-proven no longer
