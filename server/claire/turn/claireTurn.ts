@@ -151,6 +151,10 @@ import {
   recordDaphneAdaptationUse,
   type DaphneAdaptationUseReceipt,
 } from "../../operatorRepresentative/adaptationReceipts";
+import {
+  loadDaphneClaireGuidance,
+  type DaphneClaireGuidance,
+} from "../../daphne/claireAdapter";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -357,6 +361,11 @@ export type ClaireTurnDeps = {
     conversationId: string;
     turnId: string;
   }) => Promise<DaphneAdaptationUseReceipt>;
+  /** Daphne V2 compiled user-adaptation guidance; fails closed to null. */
+  loadDaphneV2Guidance?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+  }) => Promise<DaphneClaireGuidance | null>;
   /** Durable closed-decision records consumed by the live Brain V3 branch. */
   decisionStore: ClaireDecisionStore;
   /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
@@ -409,6 +418,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     onOperatorContextShadowTelemetry: defaultEmitClaireOperatorContextShadowTelemetry,
     loadOperatorAdaptationDecision: loadOperatorAdaptationDecisionForUser,
     recordOperatorAdaptationUse: recordDaphneAdaptationUse,
+    loadDaphneV2Guidance: loadDaphneClaireGuidance,
     decisionStore:
       process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
         ? createInMemoryClaireDecisionStore()
@@ -647,6 +657,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // checked inside the resolver. Failure means no injection.
   const operatorAdaptationDecision = await (
     deps.loadOperatorAdaptationDecision ?? loadOperatorAdaptationDecisionForUser
+  )({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  }).catch(() => null);
+
+  // Daphne V2 is an optional, fail-closed interaction-style input. It cannot
+  // change business truth, Brain V3 meaning, progression, or Narrator authority.
+  const daphneV2Guidance = await (
+    deps.loadDaphneV2Guidance ?? loadDaphneClaireGuidance
   )({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -2181,6 +2200,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       priorClaimNotes: priorClaimNotes(),
       narratorPromptSection,
       rookContactResidueSection,
+      daphnePromptSection: daphneV2Guidance?.promptSection ?? null,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -2366,6 +2386,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       priorClaimNotes: priorClaimNotes(),
       narratorPromptSection,
       rookContactResidueSection,
+      daphnePromptSection: daphneV2Guidance?.promptSection ?? null,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },

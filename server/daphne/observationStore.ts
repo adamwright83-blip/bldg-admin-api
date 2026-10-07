@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { daphneObservations } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export const DAPHNE_OBSERVATION_KINDS = [
   "user_statement",
@@ -208,6 +209,16 @@ export async function recordDaphneObservation(
     .limit(1);
 
   if (!row) throw new Error("Daphne observation did not persist");
+  await recordDaphneMetricEvent({
+    tenantId: normalized.tenantId,
+    canonicalOperatorId: normalized.canonicalOperatorId,
+    agentId: normalized.agentId,
+    eventName: "observation_ingested",
+    properties: { observationKind: normalized.observationKind, evidenceChannel: normalized.evidenceChannel },
+    sourceReference: normalized.sourceReference,
+    occurredAt: normalized.occurredAt,
+    idempotencyKey: `observation:${row.id}`,
+  }).catch(() => undefined);
   return toRecord(row);
 }
 

@@ -52,6 +52,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Type-check
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm check
       - name: Enforce Phase 0 architecture guards
         run: |
@@ -120,6 +122,7 @@ jobs:
         run: >-
           pnpm vitest run
           server/daphne
+          server/narratorOs/daphneRelationshipContext.test.ts
           server/operatorRepresentative/adaptation.test.ts
           server/operatorRepresentative/adaptationReceipts.test.ts
           server/claire/turn/daphneAdaptation.test.ts
