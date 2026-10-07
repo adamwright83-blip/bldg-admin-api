@@ -8022,6 +8022,96 @@ export type OperatorRepresentativeAdaptationReceipt =
 export type InsertOperatorRepresentativeAdaptationReceipt =
   typeof operatorRepresentativeAdaptationReceipts.$inferInsert;
 
+
+/**
+ * Daphne V2 immutable observation ledger.
+ *
+ * These rows record what was observed or declared and where it came from.
+ * They are not business truth, diagnoses, personality traits, or causal
+ * conclusions. Derived Daphne state must reference these rows rather than
+ * rewriting them.
+ */
+export const daphneObservations = mysqlTable(
+  "daphne_observations",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }),
+    sessionId: varchar("sessionId", { length: 191 }),
+    actorType: mysqlEnum("actorType", [
+      "user",
+      "agent",
+      "system",
+      "tool",
+      "external",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 191 }),
+    agentId: varchar("agentId", { length: 128 }),
+    observationKind: mysqlEnum("observationKind", [
+      "user_statement",
+      "agent_message",
+      "user_action",
+      "agent_action",
+      "tool_event",
+      "correction",
+      "preference_declaration",
+      "verified_operational_outcome",
+      "verified_business_outcome",
+      "relationship_event",
+      "system_context_event",
+    ]).notNull(),
+    evidenceChannel: mysqlEnum("evidenceChannel", [
+      "stated",
+      "revealed",
+      "system_record",
+      "authoritative_external",
+    ]).notNull(),
+    verificationStatus: mysqlEnum("verificationStatus", [
+      "unverified",
+      "attested",
+      "verified",
+      "rejected",
+      "disputed",
+    ])
+      .notNull()
+      .default("unverified"),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    sourceReference: varchar("sourceReference", { length: 191 }).notNull(),
+    occurredAt: timestamp("occurredAt", { fsp: 3 }).notNull(),
+    contextJson: json("contextJson"),
+    payloadJson: json("payloadJson"),
+    metadataJson: json("metadataJson"),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_daphne_observations_idempotency").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.idempotencyKey
+    ),
+    operatorOccurredIdx: index("idx_daphne_observations_operator_occurred").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.occurredAt
+    ),
+    sessionOccurredIdx: index("idx_daphne_observations_session_occurred").on(
+      table.tenantId,
+      table.sessionId,
+      table.occurredAt
+    ),
+    sourceIdx: index("idx_daphne_observations_source").on(
+      table.tenantId,
+      table.sourceType,
+      table.sourceReference
+    ),
+  })
+);
+
+export type DaphneObservation = typeof daphneObservations.$inferSelect;
+export type InsertDaphneObservation = typeof daphneObservations.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {
