@@ -50,7 +50,10 @@ function jsonEnv<T>(name: string): T {
 }
 
 const tenantId = required("MITCH_TENANT_ID");
-const token = required("MITCH_GITHUB_TOKEN");
+const executorEnabled = process.env.MITCH_EXECUTOR_ENABLED === "true";
+const token = process.env.MITCH_GITHUB_TOKEN?.trim() || "";
+if (executorEnabled && !token)
+  throw new Error("MITCH_GITHUB_TOKEN is required when MITCH_EXECUTOR_ENABLED=true");
 const repoFullName = process.env.MITCH_GITHUB_REPO?.trim() || "adamwright83-blip/bldg-admin-api";
 const issueNumber = numberEnv("MITCH_GITHUB_ISSUE_NUMBER", 370);
 const recoveryMs = numberEnv("MITCH_PRODUCER_RECOVERY_MS", 60 * 60 * 1000);
@@ -63,7 +66,7 @@ const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTO
 const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
 const gameId = process.env.MITCH_GAME_ID?.trim() || "kingdom.boreslay";
 const wakeProvider =
-  wakeMode === "github_actions"
+  wakeMode === "github_actions" && token
     ? new GitHubActionsMitchWakeProvider({
         token,
         repoFullName,
@@ -83,14 +86,29 @@ const service = new MitchProductionService(store);
 const dispatcher = new MitchGameDispatcher(store);
 const reasoning = new MitchProductionReasoningService(store);
 const qa = new MitchQaService(store);
-const bus = new GitHubProducerBus({ token, repoFullName, issueNumber });
-const provider = new GitHubProducerExecutionProvider(bus, {
-  pollMs: handbackPollMs,
-  timeoutMs: handbackTimeoutMs,
-  wakeProvider,
-});
-// GitHub access alone does not prove a coding executor is running.
-if (process.env.MITCH_EXECUTOR_ENABLED === "true") dispatcher.registerExecutionProvider(provider);
+const unavailableBus = {
+  listComments: async () => [],
+  hasMarker: async () => false,
+  postComment: async () => {
+    throw new Error("MITCH_GITHUB_TOKEN is required for producer-bus writes");
+  },
+  readDesignReview: async () => null,
+  verifyImplementationIdentity: async () => {
+    throw new Error("MITCH_GITHUB_TOKEN is required to verify implementation identity");
+  },
+} as unknown as GitHubProducerBus;
+const bus = token
+  ? new GitHubProducerBus({ token, repoFullName, issueNumber })
+  : unavailableBus;
+
+if (executorEnabled) {
+  const provider = new GitHubProducerExecutionProvider(bus, {
+    pollMs: handbackPollMs,
+    timeoutMs: handbackTimeoutMs,
+    wakeProvider,
+  });
+  dispatcher.registerExecutionProvider(provider);
+}
 
 const plan = createMitchProducerPlan({
   gameId,
@@ -136,7 +154,8 @@ async function tick(): Promise<void> {
   lastRunAt = new Date().toISOString();
   try {
     // Recovery only: recover structured comments whose webhook never reached the inbox.
-    for (const comment of await bus.listComments()) {
+    // A disabled/bootstrap service may intentionally have no GitHub credential yet.
+    for (const comment of token ? await bus.listComments() : []) {
       if (!comment.body.includes(MITCH_EVENT_MARKER)) continue;
       let event;
       try { event = parseMitchComment(comment.body); } catch { continue; }
@@ -180,7 +199,8 @@ const app = createMitchEventIngress({
 registerMitchGithubAgentRoutes(app, { events });
 app.get("/healthz", (_request, response) => {
   response.status(lastError ? 503 : 200).json({ ok: !lastError, producer: {
-    tenantId, gameId: plan.gameId, gameTitle: plan.gameTitle, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
+    tenantId, gameId: plan.gameId, gameTitle: plan.gameTitle, repoFullName, issueNumber,
+    executorEnabled, githubAuthenticated: Boolean(token), inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
     mode: "event_driven", wakeMode, recoveryMs,
   } });
 });
