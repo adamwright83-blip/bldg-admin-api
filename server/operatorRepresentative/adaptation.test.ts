@@ -99,6 +99,7 @@ describe("Daphne Stage 3B adaptation policy", () => {
     for (const changed of [
       directive({ status: "revoked", revokedAt: new Date() }),
       directive({ directiveKind: "suppress" }),
+      directive({ directiveKind: "approve" }),
       directive({ targetKey: "pattern:some_other_pattern" }),
     ]) {
       expect(
@@ -110,6 +111,28 @@ describe("Daphne Stage 3B adaptation policy", () => {
         })
       ).toBeNull();
     }
+  });
+
+  it("approve directive alone remains unwired and cannot produce an adaptation decision", () => {
+    const row = directive({
+      directiveKind: "approve",
+      targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+    });
+    const decision = buildOperatorAdaptationDecision({
+      tenantId: row.tenantId,
+      canonicalOperatorId: row.canonicalOperatorId,
+      enabled: true,
+      directives: [row],
+    });
+    expect(decision).toBeNull();
+
+    const lifecycle = buildDaphneAdaptationLifecycle({
+      enabled: true,
+      directives: [row],
+      receipts: [],
+    });
+    expect(lifecycle[0].lifecycle).toBe("unwired");
+    expect(lifecycle[0].useCount).toBe(0);
   });
 
   it("snapshots a loaded decision across revoke while new resolution sees the revoke", () => {

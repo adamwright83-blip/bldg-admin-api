@@ -7929,6 +7929,7 @@ export const operatorRepresentativeDirectives = mysqlTable(
       "correction",
       "suppress",
       "ask_instead",
+      "approve",
     ]).notNull(),
     operatorDeclaredValueJson: json("operatorDeclaredValueJson"),
     status: mysqlEnum("status", ["active", "revoked"])

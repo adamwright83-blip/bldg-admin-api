@@ -31,6 +31,7 @@ type InternalItem = {
   canCorrect: boolean;
   canSuppress: boolean;
   canAskInstead: boolean;
+  canApprove?: boolean;
 };
 
 export type OperatorRepresentativeSnapshot = {
@@ -155,6 +156,7 @@ function observedPatternItem(pattern: OperatorObservedPattern): InternalItem {
     canCorrect: false,
     canSuppress: true,
     canAskInstead: true,
+    canApprove: true,
   };
 }
 
@@ -222,13 +224,17 @@ function directiveItem(directive: OperatorRepresentativeDirectiveRecord): Intern
       ? "Your correction"
       : directive.directiveKind === "suppress"
         ? "You told JOYSTICK not to use this"
-        : "You told JOYSTICK to ask first";
+        : directive.directiveKind === "ask_instead"
+          ? "You told JOYSTICK to ask first"
+          : "You approved this for future use";
   const summary =
     directive.directiveKind === "correction"
       ? value || "An explicit correction is recorded."
       : directive.directiveKind === "suppress"
         ? "This signal is suppressed from Operator adaptation."
-        : "JOYSTICK must ask before relying on this signal.";
+        : directive.directiveKind === "ask_instead"
+          ? "JOYSTICK must ask before relying on this signal."
+          : "You explicitly approved this item. It remains unwired until explicitly supported.";
   return {
     item: {
       id: stableItemId("directive", directive.id),
@@ -315,7 +321,10 @@ export function buildOperatorRepresentativeSnapshot(input: {
     const directivesForItem = activeByTarget.get(internal.item.id) ?? [];
     const correction = directivesForItem.find(item => item.directiveKind === "correction");
     const control = directivesForItem.find(
-      item => item.directiveKind === "suppress" || item.directiveKind === "ask_instead"
+      item =>
+        item.directiveKind === "suppress" ||
+        item.directiveKind === "ask_instead" ||
+        item.directiveKind === "approve"
     );
 
     if (correction) {
@@ -339,14 +348,22 @@ export function buildOperatorRepresentativeSnapshot(input: {
       if (control.directiveKind === "suppress") {
         internal.item.adaptationState = "suppressed";
         internal.item.canAffectAdaptation = false;
-      } else {
+      } else if (control.directiveKind === "ask_instead") {
         internal.item.adaptationState = "ask_instead";
         // Raw observed patterns never gain authority merely because the operator
         // asked first. Stage 3B wires exactly one explicit target; every other
         // ask-first directive remains visible but unwired.
         internal.item.canAffectAdaptation =
           internal.item.targetKey === DAPHNE_STAGE3B_TARGET_KEY;
+      } else {
+        // Explicit approval: eligible for future supported adaptation, but unwired.
+        internal.item.adaptationState = "eligible_not_wired";
+        internal.item.canAffectAdaptation = false;
       }
+    }
+
+    if (internal.item.category === "learning") {
+      internal.item.pendingReview = !internal.item.activeDirectiveId;
     }
   }
 
@@ -367,6 +384,7 @@ export function buildOperatorRepresentativeSnapshot(input: {
       canCorrect: internal.canCorrect,
       canSuppress: internal.canSuppress,
       canAskInstead: internal.canAskInstead,
+      canApprove: internal.canApprove,
       businessTruthSupport: false,
     });
   }

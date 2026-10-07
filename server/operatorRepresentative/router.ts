@@ -107,10 +107,16 @@ function validateDirectiveTarget(input: {
       message: "This item is not eligible for an ask-first directive",
     });
   }
+  if (input.kind === "approve" && !detail.canApprove) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "This item cannot be approved",
+    });
+  }
   return detail;
 }
 
-const directiveKindSchema = z.enum(["correction", "suppress", "ask_instead"]);
+const directiveKindSchema = z.enum(["correction", "suppress", "ask_instead", "approve"]);
 
 export const operatorRepresentativeRouter = router({
   home: legacyDayforgeTenantMemberProcedure
