@@ -50,6 +50,13 @@ function jsonEnv<T>(name: string): T {
 }
 
 const tenantId = required("MITCH_TENANT_ID");
+const gameId = process.env.MITCH_GAME_ID?.trim() || "kingdom.boreslay";
+const gameTitle =
+  gameId === "kingdom.boreslay"
+    ? "Boreslay"
+    : gameId === SMALL_COMFORTS_GAME_ID
+      ? "Small Comforts"
+      : gameId;
 const executorEnabled = process.env.MITCH_EXECUTOR_ENABLED === "true";
 const token = process.env.MITCH_GITHUB_TOKEN?.trim() || "";
 if (executorEnabled && !token)
