@@ -19,9 +19,12 @@ describe("SaaS Slice 5 billing and entitlement certification", () => {
 
   it("admits billing webhooks only after Stripe signature verification", () => {
     const billing = source("./saasBilling.ts");
-    expect(billing).toContain("stripe.webhooks.constructEvent");
-    expect(billing.indexOf("stripe.webhooks.constructEvent")).toBeLessThan(
-      billing.indexOf("reserveBillingEvent")
+    const webhook = billing.slice(
+      billing.indexOf("export async function processLegacyDayforgeBillingWebhook")
+    );
+    expect(webhook).toContain("stripe.webhooks.constructEvent");
+    expect(webhook.indexOf("stripe.webhooks.constructEvent")).toBeLessThan(
+      webhook.indexOf("const isNew = await reserveBillingEvent")
     );
   });
 
