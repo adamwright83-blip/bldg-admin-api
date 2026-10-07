@@ -12,6 +12,7 @@ const suite = enabled ? describe : describe.skip;
 
 suite("JOYSTICK tenant lifecycle", () => {
   const tenantId = `lifecycle-${Date.now().toString(36)}`;
+  const tenantB = `${tenantId}-b`;
   let db: Connection;
 
   beforeAll(async () => {
@@ -50,6 +51,29 @@ suite("JOYSTICK tenant lifecycle", () => {
        VALUES (?,1,'csv','cust-1','Customer One','{}',NOW(),'run-1')`,
       [tenantId]
     );
+    await db.execute(
+      `INSERT INTO dayforge_saas_tenants
+        (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status)
+       VALUES (?,?,?,?,?,?,?,?, 'active')`,
+      [tenantB, tenantB, "Other Tenant Laundry", "Other Tenant Laundry", "#222222", "Other Owner", "other@example.invalid", "America/Los_Angeles"]
+    );
+    await db.execute(
+      `INSERT INTO users (tenantId,openId,name,email,loginMethod,role)
+       VALUES (?,?,?,?, 'dayforge_password','user')`,
+      [tenantB, `dayforge:${tenantB}`, "Other Owner", "other@example.invalid"]
+    );
+    await db.execute(
+      `INSERT INTO dayforge_saas_user_credentials
+       (tenantId,userOpenId,emailNormalized,passwordHash)
+       VALUES (?,?,?,?)`,
+      [tenantB, `dayforge:${tenantB}`, "other@example.invalid", "OTHER_TENANT_SECRET"]
+    );
+    await db.execute(
+      `INSERT INTO dayforge_saas_external_customers
+       (tenantId,connectionId,providerKey,externalId,name,factsJson,sourceCapturedAt,importRunId)
+       VALUES (?,1,'csv','cust-1','Other Tenant Customer','{}',NOW(),'run-b')`,
+      [tenantB]
+    );
   });
 
   afterAll(async () => {
@@ -60,9 +84,9 @@ suite("JOYSTICK tenant lifecycle", () => {
       "dayforge_saas_external_customers",
       "users",
     ]) {
-      await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [tenantId]);
+      await db.execute(`DELETE FROM \`${table}\` WHERE tenantId IN (?,?)`, [tenantId, tenantB]);
     }
-    await db.execute("DELETE FROM dayforge_saas_tenants WHERE id = ?", [tenantId]);
+    await db.execute("DELETE FROM dayforge_saas_tenants WHERE id IN (?,?)", [tenantId, tenantB]);
     await db.end();
   });
 
@@ -73,6 +97,9 @@ suite("JOYSTICK tenant lifecycle", () => {
     expect(exported.tables.dayforge_saas_external_customers).toHaveLength(1);
     expect(exported.tables.dayforge_saas_user_credentials?.[0]?.passwordHash).toBe("[REDACTED]");
     expect(JSON.stringify(exported)).not.toContain("SHOULD_NOT_EXPORT");
+    expect(JSON.stringify(exported)).not.toContain("Other Tenant Laundry");
+    expect(JSON.stringify(exported)).not.toContain("Other Tenant Customer");
+    expect(JSON.stringify(exported)).not.toContain("OTHER_TENANT_SECRET");
   });
 
   it("requires a fresh dry-run count and exact tenant confirmation before deletion", async () => {
@@ -104,6 +131,16 @@ suite("JOYSTICK tenant lifecycle", () => {
       [tenantId]
     );
     expect(Number(rows[0]?.count ?? 0)).toBe(0);
+    const [otherRows] = await db.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) AS count FROM dayforge_saas_tenants WHERE id = ?",
+      [tenantB]
+    );
+    expect(Number(otherRows[0]?.count ?? 0)).toBe(1);
+    const [otherCustomers] = await db.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) AS count FROM dayforge_saas_external_customers WHERE tenantId = ? AND name = ?",
+      [tenantB, "Other Tenant Customer"]
+    );
+    expect(Number(otherCustomers[0]?.count ?? 0)).toBe(1);
   });
 
   it("protects Adam's legacy tenant ids from generic deletion", async () => {
