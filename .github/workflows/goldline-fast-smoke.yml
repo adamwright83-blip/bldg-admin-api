@@ -70,6 +70,8 @@ jobs:
         run: >-
           pnpm vitest run
           server/authority/authorityReceipt.test.ts
+          server/authority/paymentAdmission.test.ts
+          server/paymentAdmissionFailure.integration.test.ts
           server/authority/authoritySliceContract.test.ts
           server/authority/authorityPersistentOutcomeContract.test.ts
           shared/goldlineWorld.authority.test.ts
