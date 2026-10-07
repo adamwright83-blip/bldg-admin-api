@@ -21,7 +21,7 @@ test("Boreslay Duel accepts real mobile input on the exact browser build", async
       status: engine.state.status as string,
     };
   });
-  expect(start.status).toBe("active");
+  expect(start.status).toBe("playing");
 
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(220);
