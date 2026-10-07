@@ -62,6 +62,8 @@ const handbackPollMs = numberEnv("MITCH_HANDBACK_POLL_MS", 15_000);
 const handbackTimeoutMs = numberEnv("MITCH_HANDBACK_TIMEOUT_MS", 45 * 60 * 1000);
 const port = numberEnv("PORT", 8082);
 const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "claude_independent_review";
+const explicitRecoveryWorkOrderId =
+  process.env.MITCH_RECOVER_FAILED_WORK_ORDER_ID?.trim() || null;
 const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RULES");
 const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
 const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
@@ -150,6 +152,46 @@ const coordinator = new MitchProducerCoordinator({
   seedProductionWork: plan.seed,
 });
 
+async function recoverExplicitFailedWorkOrder(): Promise<void> {
+  if (!explicitRecoveryWorkOrderId) return;
+  const order = await store.getWorkOrder(tenantId, explicitRecoveryWorkOrderId);
+  if (!order)
+    throw new Error(
+      `Explicit Mitch recovery work order not found: ${explicitRecoveryWorkOrderId}`
+    );
+  if (order.gameId !== plan.gameId)
+    throw new Error("Explicit Mitch recovery work order belongs to another game");
+  if (!["claimed", "executing"].includes(order.status)) return;
+  if (order.claimedBy !== "github-producer-bus:claude")
+    throw new Error(
+      `Refusing Mitch recovery for work order claimed by ${order.claimedBy ?? "nobody"}`
+    );
+
+  await store.failWorkOrder({
+    tenantId,
+    workOrderId: order.id,
+    error:
+      "Explicit recovery after GitHub Actions executor terminated before returning a structured handback.",
+  });
+  await store.recordAuditEvent({
+    tenantId,
+    gameId: order.gameId,
+    eventType: "mitch_explicit_failed_wake_recovery",
+    actorId: "mitch_system",
+    details: {
+      workOrderId: order.id,
+      priorStatus: order.status,
+      priorClaimedBy: order.claimedBy,
+      recoveryReason:
+        "GitHub Actions executor terminated before structured callback.",
+    },
+  });
+  console.warn(
+    "[MitchProducer] explicitly recovered stranded executor work order",
+    order.id
+  );
+}
+
 let stopped = false;
 let inFlight = false;
 let lastRunAt: string | null = null;
@@ -162,6 +204,7 @@ async function tick(): Promise<void> {
   inFlight = true;
   lastRunAt = new Date().toISOString();
   try {
+    await recoverExplicitFailedWorkOrder();
     // Recovery only: recover structured comments whose webhook never reached the inbox.
     // A disabled/bootstrap service may intentionally have no GitHub credential yet.
     for (const comment of token ? await bus.listComments() : []) {

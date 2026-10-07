@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["scripts/mitch-github-agent.ts"],
+  "include": ["scripts/mitch-github-agent.ts", "scripts/mitch-github-agent-failure.ts"],
   "exclude": ["node_modules", "build", "dist"],
   "compilerOptions": {
     "incremental": false,
