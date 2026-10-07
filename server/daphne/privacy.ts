@@ -11,6 +11,7 @@ import {
 import { getDb } from "../db";
 import { loadDaphneEvidenceBundle } from "./engine";
 import { listActiveDaphneGoals, loadDaphneMetaPreferences } from "./goalsPreferences";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export async function exportDaphneV2UserData(input:{tenantId:string;canonicalOperatorId:string}){
  const [evidence,goals,metaPreferences]=await Promise.all([
@@ -18,8 +19,14 @@ export async function exportDaphneV2UserData(input:{tenantId:string;canonicalOpe
   listActiveDaphneGoals(input),
   loadDaphneMetaPreferences(input),
  ]);
+ const exportedAt=new Date().toISOString();
+ await recordDaphneMetricEvent({
+  tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,eventName:"privacy_export",
+  properties:{format:"daphne-v2-user-export"},sourceReference:"user_export",
+  idempotencyKey:`privacy-export:${exportedAt}`
+ }).catch(()=>undefined);
  return {
-  format:"daphne-v2-user-export",exportedAt:new Date().toISOString(),
+  format:"daphne-v2-user-export",exportedAt,
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,
   observations:evidence.observations,epistemicClaims:evidence.claims,interventions:evidence.interventions,outcomes:evidence.outcomes,
   goals,metaPreferences,
@@ -46,6 +53,12 @@ export async function deleteDaphneV2UserData(input:{tenantId:string;canonicalOpe
   eq(daphneMetricEvents.tenantId,input.tenantId),
   eq(daphneMetricEvents.canonicalOperatorId,input.canonicalOperatorId)
  ));
+ const erasedAt=new Date();
+ await recordDaphneMetricEvent({
+   tenantId:input.tenantId,canonicalOperatorId:null,eventName:"privacy_erasure",
+   properties:{scope:"daphne_owned_only"},sourceReference:null,occurredAt:erasedAt,
+   idempotencyKey:`privacy-erasure:${erasedAt.toISOString()}`
+ }).catch(()=>undefined);
  return {deleted:true,scope:"daphne_owned_only"};
 }
 
