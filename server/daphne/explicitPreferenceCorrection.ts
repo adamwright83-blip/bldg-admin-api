@@ -193,8 +193,17 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
   utterance: string;
   conversationId: string;
   turnId: string;
-}): Promise<DaphneExplicitPreferenceCaptureResult> {
-  if (!isDaphneV2ClaireEnabled(input.tenantId)) {
+}, dependencies: {
+  enabled?: (tenantId: string) => boolean;
+  resolveIdentity?: typeof resolveCanonicalOperatorIdentity;
+  recordObservation?: typeof recordDaphneObservation;
+  setPreference?: typeof setDaphneMetaPreference;
+} = {}): Promise<DaphneExplicitPreferenceCaptureResult> {
+  const enabled = dependencies.enabled ?? isDaphneV2ClaireEnabled;
+  const resolveIdentity = dependencies.resolveIdentity ?? resolveCanonicalOperatorIdentity;
+  const recordObservation = dependencies.recordObservation ?? recordDaphneObservation;
+  const setPreference = dependencies.setPreference ?? setDaphneMetaPreference;
+  if (!enabled(input.tenantId)) {
     return { status: "disabled", corrections: [], observationIds: [] };
   }
 
@@ -207,7 +216,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
   const source = /^\d+$/.test(raw)
     ? { type: "user_id" as const, value: Number(raw) }
     : { type: "open_id" as const, value: raw };
-  const resolution = await resolveCanonicalOperatorIdentity({
+  const resolution = await resolveIdentity({
     tenantId: input.tenantId,
     source,
     subsystem: "daphne_v2_explicit_preference_correction",
@@ -224,7 +233,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       preferenceKey: correction.preferenceKey,
       value: correction.value,
     })}`;
-    const observed = await recordDaphneObservation({
+    const observed = await recordObservation({
       tenantId: input.tenantId,
       canonicalOperatorId: resolution.identity.canonicalOperatorId,
       operatorUserId: raw,
@@ -247,7 +256,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       idempotencyKey,
     });
     observationIds.push(observed.id);
-    await setDaphneMetaPreference({
+    await setPreference({
       tenantId: input.tenantId,
       canonicalOperatorId: resolution.identity.canonicalOperatorId,
       preferenceKey: correction.preferenceKey,
