@@ -44,6 +44,6 @@ jobs:
           MITCH_WAKE: ${{ inputs.wake }}
           MITCH_GITHUB_REPO: adamwright83-blip/bldg-admin-api
           MITCH_GITHUB_ISSUE_NUMBER: "370"
-          MITCH_PRODUCER_BASE_URL: "__MITCH_PRODUCER_BASE_URL__"
+          MITCH_PRODUCER_BASE_URL: ${{ fromJSON(inputs.wake).controlPlaneBaseUrl }}
           MITCH_CLAUDE_MODEL: claude-sonnet-4-6
         run: pnpm exec tsx scripts/mitch-github-agent.ts
