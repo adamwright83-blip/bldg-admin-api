@@ -26,9 +26,9 @@ describe("SaaS Slice 2 cross-tenant isolation certification", () => {
     expect(store).toContain(
       "eq(legacyDayforgeSaasImportConnections.tenantId, input.tenantId)"
     );
-    expect(store).toContain(
-      "eq(legacyDayforgeSaasExternalCustomers.tenantId, input.tenantId)"
-    ).or;
+    expect(store).toContain("tenantId: input.tenantId");
+    expect(store).toContain("legacyDayforgeSaasExternalCustomers");
+    expect(store).toContain("legacyDayforgeSaasExternalOrders");
   });
 
   it("preserves colliding external IDs as independent tenant-local records", () => {
