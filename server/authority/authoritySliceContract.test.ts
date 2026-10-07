@@ -75,6 +75,9 @@ describe("three-fact authority slice", () => {
 
   it("ships a migration and legacy backfill for all three fact classes", () => {
     const migration = source("drizzle/0113_authority_receipts.sql");
+    const cleanCloudMigration = source(
+      "drizzle/0123_cleancloud_external_evidence_claim.sql"
+    );
     const migrate = source("scripts/migrate.mjs");
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `authority_receipts`");
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
@@ -84,7 +87,10 @@ describe("three-fact authority slice", () => {
     expect(migrate).toContain(
       "WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'"
     );
-    expect(migrate).toContain("legacy_cleancloud_payment_backfill_v1");
+    expect(cleanCloudMigration).toContain("cleancloud_paid_observed");
+    expect(migrate).toContain(
+      "legacy_cleancloud_paid_observation_backfill_v1"
+    );
     expect(migrate).toContain("legacy_commercial_win_backfill_v1");
     expect(migrate).toContain("e.eventName = 'account_won'");
     expect(migrate).toContain(
