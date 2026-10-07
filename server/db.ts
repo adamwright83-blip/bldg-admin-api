@@ -593,17 +593,24 @@ export async function updateOrderBuildingSlugForCustomer(input: {
   buildingSlug: string;
   scope: "latest" | "all";
   latestOrderId?: number;
+  tenantId?: string;
 }): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const where =
+  const tenantCondition = input.tenantId
+    ? sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${input.tenantId.trim()}`
+    : undefined;
+  const phoneCondition =
     input.scope === "latest"
       ? and(
           eq(orders.phone, input.phone),
           eq(orders.id, input.latestOrderId ?? 0)
         )
       : eq(orders.phone, input.phone);
+  const where = tenantCondition
+    ? and(phoneCondition, tenantCondition)
+    : phoneCondition;
 
   const result = await db
     .update(orders)
@@ -922,16 +929,24 @@ export async function getAdminDashboardSummary(input: {
 
 export async function getOrdersByStatus(
   status: Order["status"],
-  vendorId?: number
+  vendorId?: number,
+  tenantId?: string
 ): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
 
-  const where =
-    vendorId != null
-      ? and(eq(orders.status, status), eq(orders.vendorId, vendorId))
-      : eq(orders.status, status);
-  return db.select().from(orders).where(where).orderBy(desc(orders.createdAt));
+  const conditions = [eq(orders.status, status)];
+  if (vendorId != null) conditions.push(eq(orders.vendorId, vendorId));
+  if (tenantId) {
+    conditions.push(
+      sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${tenantId.trim()}`
+    );
+  }
+  return db
+    .select()
+    .from(orders)
+    .where(and(...conditions))
+    .orderBy(desc(orders.createdAt));
 }
 
 export async function getOrdersByVendorId(
@@ -952,7 +967,8 @@ export async function getOrdersByDateAndStatus(
   date: string,
   status: Order["status"],
   dateField: "pickupDate" | "deliveryDate" = "pickupDate",
-  vendorId?: number
+  vendorId?: number,
+  tenantId?: string
 ): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
@@ -961,6 +977,11 @@ export async function getOrdersByDateAndStatus(
     dateField === "deliveryDate" ? orders.deliveryDate : orders.pickupDate;
   const conditions = [eq(col, date), eq(orders.status, status)];
   if (vendorId != null) conditions.push(eq(orders.vendorId, vendorId));
+  if (tenantId) {
+    conditions.push(
+      sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${tenantId.trim()}`
+    );
+  }
   return db
     .select()
     .from(orders)
@@ -1408,7 +1429,8 @@ export type OrderSearchHit = {
 };
 
 export async function searchOrdersForReceipt(
-  q: string
+  q: string,
+  tenantId?: string
 ): Promise<OrderSearchHit[]> {
   const db = await getDb();
   if (!db) return [];
@@ -1442,7 +1464,14 @@ export async function searchOrdersForReceipt(
       paid: orders.paid,
     })
     .from(orders)
-    .where(or(...conditions))
+    .where(
+      tenantId
+        ? and(
+            or(...conditions),
+            sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${tenantId.trim()}`
+          )
+        : or(...conditions)
+    )
     .orderBy(desc(orders.createdAt))
     .limit(80);
 

@@ -34,11 +34,17 @@ import {
   router,
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { isPlatformAdministrator } from "./joystick/tenantIdentity";
 import {
   createNativeOrder,
   transitionNativeOrderStatus,
   OrderTransitionError,
 } from "./orders/orderLifecycleService";
+import {
+  assertOrderTenantAuthority,
+  assertOrderVendorAuthority,
+  OrderOwnershipError,
+} from "./orders/orderOwnership";
 import {
   findResidentOrderByClientRequestId,
   updateOrderStripe,
@@ -376,6 +382,30 @@ function localYmd(offsetDays = 0): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function assertPlatformOrVendorOrderAuthority(
+  ctx: {
+    tenantId: string;
+    user: { openId: string; role: "admin" | "driver" | "user" } | null;
+    vendorSession: { vendorId: number } | null;
+  },
+  order: { tenantId?: string | null; vendorId?: number | null },
+  options: { vendorAllowUnassigned: boolean }
+): void {
+  if (ctx.vendorSession) {
+    assertOrderVendorAuthority({
+      order,
+      vendorId: ctx.vendorSession.vendorId,
+      allowUnassigned: options.vendorAllowUnassigned,
+    });
+    return;
+  }
+  assertOrderTenantAuthority({
+    order,
+    tenantId: ctx.tenantId,
+    allowCrossTenant: isPlatformAdministrator(ctx.user),
+  });
+}
+
 export const appRouter = router({
   president: presidentRouter,
   system: systemRouter,
@@ -554,7 +584,7 @@ export const appRouter = router({
         const deliveryDate = pickupDateObj.toISOString().split("T")[0];
 
         const orderId = await createNativeOrder({
-          tenantId: ctx.tenantId ?? "default",
+          tenantId: ctx.tenantId,
           serviceType: input.serviceType,
           pickupDate: input.pickupDate,
           pickupTimeWindow: input.pickupTimeWindow,
@@ -704,9 +734,14 @@ export const appRouter = router({
      */
     generatePortalToken: legacyAdminRoleProcedure
       .input(z.object({ orderId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
+        assertOrderTenantAuthority({
+          order,
+          tenantId: ctx.tenantId,
+          allowCrossTenant: isPlatformAdministrator(ctx.user),
+        });
 
         return { portalWelcomeUrl: await createPortalWelcomeUrl(order) };
       }),
@@ -965,7 +1000,11 @@ export const appRouter = router({
       )
       .query(async ({ ctx, input }) => {
         const vendorId = ctx.vendorSession?.vendorId;
-        return getOrdersByStatus(input.status, vendorId);
+        const tenantId =
+          ctx.vendorSession || isPlatformAdministrator(ctx.user)
+            ? undefined
+            : ctx.tenantId;
+        return getOrdersByStatus(input.status, vendorId, tenantId);
       }),
 
     /** List orders by date + status — platform or vendor */
@@ -988,11 +1027,16 @@ export const appRouter = router({
       )
       .query(async ({ ctx, input }) => {
         const vendorId = ctx.vendorSession?.vendorId;
+        const tenantId =
+          ctx.vendorSession || isPlatformAdministrator(ctx.user)
+            ? undefined
+            : ctx.tenantId;
         return getOrdersByDateAndStatus(
           input.date,
           input.status,
           input.dateField,
-          vendorId
+          vendorId,
+          tenantId
         );
       }),
 
@@ -1002,11 +1046,13 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const order = await getOrderById(input.id);
         if (!order) return null;
-        if (
-          ctx.vendorSession &&
-          order.vendorId !== ctx.vendorSession.vendorId
-        ) {
-          return null; // vendor cannot see other vendor's orders
+        try {
+          assertPlatformOrVendorOrderAuthority(ctx, order, {
+            vendorAllowUnassigned: false,
+          });
+        } catch (error) {
+          if (error instanceof OrderOwnershipError) return null;
+          throw error;
         }
         return order;
       }),
@@ -1014,7 +1060,12 @@ export const appRouter = router({
     /** Search orders by customer name or phone — platform only (find receipt) */
     searchOrdersForReceipt: protectedProcedure
       .input(z.object({ q: z.string().min(2).max(100) }))
-      .query(async ({ input }) => searchOrdersForReceipt(input.q)),
+      .query(async ({ ctx, input }) =>
+        searchOrdersForReceipt(
+          input.q,
+          isPlatformAdministrator(ctx.user) ? undefined : ctx.tenantId
+        )
+      ),
 
     /** Home command center — canonical combined revenue plus separately labeled processor totals. */
     dashboardSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -2724,7 +2775,7 @@ export const appRouter = router({
 
         try {
           const orderId = await createNativeOrder({
-            tenantId: ctx.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             serviceType: input.serviceType,
             pickupDate: input.pickupDate,
             pickupTimeWindow: input.pickupTimeWindow,
@@ -2785,6 +2836,7 @@ export const appRouter = router({
             status: input.status,
             tenantId: ctx.tenantId,
             vendorId: ctx.vendorSession?.vendorId ?? null,
+            allowCrossTenant: isPlatformAdministrator(ctx.user),
             actor,
           });
 
@@ -2804,7 +2856,7 @@ export const appRouter = router({
               });
 
               recordWarActionSafe({
-                tenantId: ctx.tenantId ?? "default",
+                tenantId: ctx.tenantId,
                 kind: "stage_advance",
                 dedupeKey: `stage:${input.orderId}:collected`,
                 meta: { orderId: input.orderId, status: "collected" },
@@ -2820,7 +2872,7 @@ export const appRouter = router({
           }
 
           recordWarActionSafe({
-            tenantId: ctx.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             kind: "stage_advance",
             dedupeKey: `stage:${input.orderId}:${input.status}`,
             meta: { orderId: input.orderId, status: input.status },
@@ -2865,6 +2917,13 @@ export const appRouter = router({
           customerPhone = lead?.phone ?? null;
         } else if (input.orderId != null) {
           const order = await getOrderById(input.orderId);
+          if (order) {
+            assertOrderTenantAuthority({
+              order,
+              tenantId: ctx.tenantId,
+              allowCrossTenant: isPlatformAdministrator(ctx.user),
+            });
+          }
           customerPhone = order?.phone ?? null;
         }
         if (!customerPhone) {
@@ -2883,7 +2942,7 @@ export const appRouter = router({
         }
         try {
           const { attemptId } = await startBoldPitchCall({
-            tenantId: ctx.tenantId ?? "default",
+            tenantId: ctx.tenantId,
             leadId: input.leadId ?? null,
             orderId: input.orderId ?? null,
             repPhone,
@@ -2924,12 +2983,9 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
-        if (
-          ctx.vendorSession &&
-          order.vendorId !== ctx.vendorSession.vendorId
-        ) {
-          throw new Error("Unauthorized");
-        }
+        assertPlatformOrVendorOrderAuthority(ctx, order, {
+          vendorAllowUnassigned: false,
+        });
         await updateOrderIntake(input.orderId, {
           status: "ready",
           bagCount: input.bagCount,
@@ -2958,7 +3014,7 @@ export const appRouter = router({
           latestOrderId: z.number().int().positive().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const building = BUILDINGS.find(b => b.slug === input.buildingSlug);
         if (!building) {
           throw new TRPCError({
@@ -2978,6 +3034,9 @@ export const appRouter = router({
           buildingSlug: building.slug,
           scope: input.scope,
           latestOrderId: input.latestOrderId,
+          tenantId: isPlatformAdministrator(ctx.user)
+            ? undefined
+            : ctx.tenantId,
         });
 
         return {
@@ -3004,12 +3063,9 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
-        if (
-          ctx.vendorSession &&
-          order.vendorId !== ctx.vendorSession.vendorId
-        ) {
-          throw new Error("Unauthorized");
-        }
+        assertPlatformOrVendorOrderAuthority(ctx, order, {
+          vendorAllowUnassigned: false,
+        });
         await updateOrderIntake(input.orderId, {
           weightLbs: input.weightLbs?.toString() ?? null,
           subtotal: input.subtotal,
@@ -3395,7 +3451,7 @@ export const appRouter = router({
      */
     resendToSheets: legacyAdminRoleProcedure
       .input(z.object({ orderId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         console.log(
           `[Sheets:Manual] Resending order #${input.orderId} to Sheets`
         );
@@ -3407,6 +3463,11 @@ export const appRouter = router({
             );
             return { success: false as const, error: "Order not found" };
           }
+          assertOrderTenantAuthority({
+            order,
+            tenantId: ctx.tenantId,
+            allowCrossTenant: isPlatformAdministrator(ctx.user),
+          });
           if (!order.paid) {
             console.warn(
               `[Sheets:Manual] Failed: order #${input.orderId} — Order not charged yet`
@@ -3541,7 +3602,12 @@ export const appRouter = router({
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
-        if (order)
+        if (order) {
+          assertOrderTenantAuthority({
+            order,
+            tenantId: ctx.tenantId,
+            allowCrossTenant: isPlatformAdministrator(ctx.user),
+          });
           await reverseCommercialOrderAttribution({
             tenantId: order.tenantId ?? "default",
             orderId: input.orderId,
@@ -3549,6 +3615,7 @@ export const appRouter = router({
             requestId: crypto.randomUUID(),
             reason: "Order deleted by an authorized operator",
           });
+        }
         await deleteOrder(input.orderId);
         return { success: true };
       }),
@@ -3696,7 +3763,7 @@ export const appRouter = router({
           const orderId =
             existingOrderId ??
             (await createNativeOrder({
-              tenantId: ctx.tenantId ?? "default",
+              tenantId: ctx.tenantId,
               serviceType: "dry_cleaning",
               pickupDate: localYmd(0),
               pickupTimeWindow: "Dry clean receipt intake",

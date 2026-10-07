@@ -83,6 +83,10 @@ jobs:
           server/residentOrderIdempotencyAuthority.test.ts
           server/agents/tools/updateResidentAgentPlanTool.test.ts
           server/agents/tools/updateOrderStatusTool.test.ts
+          server/orders/orderOwnership.test.ts
+          server/orders/orderOwnershipArchitecture.test.ts
+          server/orders/orderOwnershipRouter.test.ts
+          server/orders/orderLifecycle.test.ts
           server/agents/tools/dryCleaningActionAuthority.test.ts
           server/agents/tools/exportVendorDataTool.test.ts
           server/agents/tools/sendOperatorArtifactTool.test.ts

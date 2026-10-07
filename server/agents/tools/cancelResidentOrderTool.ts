@@ -1,12 +1,14 @@
 import { getOrderById } from "../../db";
 import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
 import {
-  assertResidentOwnedRecord,
-  assertTenantOwnedRecord,
   positiveIntegerOrNull,
   resolveResidentActionId,
 } from "../residentActionAuthority";
 import type { AgentTool } from "../toolRegistry";
+import {
+  assertOrderResidentAuthority,
+  assertOrderTenantAuthority,
+} from "../../orders/orderOwnership";
 
 type CancelResidentOrderInput = {
   orderId?: number | string | null;
@@ -38,15 +40,13 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
 
     const order = await getOrderById(orderId);
     if (!order) throw new Error("Order not found");
-    assertTenantOwnedRecord({
-      ctx,
-      recordTenantId: order.tenantId,
-      label: "Order",
+    assertOrderTenantAuthority({
+      order,
+      tenantId: ctx.tenantId,
     });
-    assertResidentOwnedRecord({
+    assertOrderResidentAuthority({
+      order,
       residentId: residentUserId,
-      storedResidentId: order.bldgUserId,
-      label: "Order",
     });
 
     if (order.status !== "cancelled") {
