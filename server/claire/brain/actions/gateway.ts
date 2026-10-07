@@ -1,9 +1,9 @@
 /**
  * Brain V2 action gateway.
  *
- * The executive grants authority. The gateway executes that grant through an
- * injected production adapter; it never interprets speech and never invents
- * scope. Shadow grants remain inert.
+ * The executive grants authority. The gateway verifies the Brain-specific
+ * brand, then delegates the final mutation fence to the domain-neutral action
+ * execution gate shared with persistent background work.
  */
 
 import {
@@ -11,6 +11,10 @@ import {
   type ExecutiveActionGrant,
 } from "../contracts/grants";
 import { isExecutiveActionGrant } from "../executive/grants";
+import {
+  ActionExecutionGateError,
+  executeAdmittedAction,
+} from "../../../authority/actionExecutionGate";
 
 export class ActionGatewayError extends Error {
   constructor(message: string) {
@@ -47,46 +51,49 @@ export async function executeGrantedAction<T = unknown>(
   }
 
   const typed: ExecutiveActionGrant = grant;
+  const background =
+    typed.source && actionGrantSourceIsBackground(typed.source)
+      ? typed.source
+      : null;
 
-  if (typed.expiresAtMs <= Date.now()) {
-    throw new ActionGatewayError("ExecutiveActionGrant expired before execution");
-  }
-
-  if (
-    typed.source &&
-    actionGrantSourceIsBackground(typed.source) &&
-    (
-      !typed.tenantId?.trim() ||
-      !typed.canonicalOperatorId?.trim() ||
-      typed.tenantId !== typed.source.tenantId ||
-      typed.canonicalOperatorId !== typed.source.canonicalOperatorId
-    )
-  ) {
-    throw new ActionGatewayError(
-      "background ExecutiveActionGrant is missing tenant/canonical operator authority"
+  try {
+    const execution = await executeAdmittedAction(
+      {
+        actionName: typed.actionClass,
+        tenantId: typed.tenantId ?? null,
+        canonicalOperatorId: typed.canonicalOperatorId ?? null,
+        authorityBasis: typed.authorityBasis,
+        source: background
+          ? {
+              kind: "background_grant",
+              tenantId: background.tenantId,
+              canonicalOperatorId: background.canonicalOperatorId,
+            }
+          : { kind: "conversation" },
+        expiresAtMs: typed.expiresAtMs,
+        constraints: typed.constraints,
+      },
+      {
+        execute: options.execute
+          ? () => options.execute!(typed)
+          : undefined,
+        executorRequiredMessage:
+          "Action Gateway refuses live mutations: live Brain V2 action grant requires an injected production executor",
+      }
     );
-  }
 
-  if (typed.constraints.shadowOnly) {
-    if (typed.constraints.mutationAllowed) {
-      throw new ActionGatewayError("shadow grant may not carry mutation authority");
+    if (!execution.executed) {
+      return execution;
     }
-    return { executed: false, reason: "shadow_only" };
+    return {
+      executed: true,
+      actionClass: typed.actionClass,
+      result: execution.result,
+    };
+  } catch (error) {
+    if (error instanceof ActionExecutionGateError) {
+      throw new ActionGatewayError(error.message);
+    }
+    throw error;
   }
-
-  if (!typed.constraints.mutationAllowed) {
-    throw new ActionGatewayError("live grant is missing mutation authority");
-  }
-
-  if (!options.execute) {
-    throw new ActionGatewayError(
-      "Action Gateway refuses live mutations: live Brain V2 action grant requires an injected production executor"
-    );
-  }
-
-  return {
-    executed: true,
-    actionClass: typed.actionClass,
-    result: await options.execute(typed),
-  };
 }

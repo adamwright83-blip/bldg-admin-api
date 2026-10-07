@@ -74,11 +74,11 @@ import {
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
-  executePersistentOperatorAction,
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import { executePersistentOperatorAction } from "../persistentOperator/actionExecution";
 import {
   brainV2CallControlResult,
   brainV2ExecutionFailureResult,
