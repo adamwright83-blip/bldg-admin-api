@@ -641,3 +641,21 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+.or-review-badge {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(85,182,255,.45);
+  color: #7cc6ff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.or-drawer, .or-drawer__body {
+  max-width: 100vw;
+  overflow-wrap: anywhere;
+}

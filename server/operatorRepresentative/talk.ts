@@ -30,6 +30,12 @@ function classify(question: string): OperatorRepresentativeTalkIntent {
   if (/\b(what.*know|known about me|know about me)\b/.test(q)) return "known";
   if (/\b(learned|learning|pattern)\b/.test(q)) return "learning";
   if (/\b(uncertain|unsure|not sure|don't know|do not know)\b/.test(q)) return "uncertain";
+  if (/\b(waiting for review|needs review|pending review|unresolved)\b/.test(q)) return "review_status";
+  if (/\b(approved|approval)\b/.test(q)) return "approved";
+  if (/\b(suppressed|what.*not use|not using)\b/.test(q)) return "suppressed_status";
+  if (/\b(ask[- ]?first|ask me about|asking me about)\b/.test(q)) return "ask_first_status";
+  if (/\b(ever used|used before|historically used|past use)\b/.test(q)) return "ever_used";
+  if (/\b(revoked|revocation|undo history)\b/.test(q)) return "revoked";
   if (/\b(changed|change recently|different now|adapted)\b/.test(q)) return "changed";
   return "general";
 }
@@ -214,6 +220,121 @@ export function answerOperatorRepresentativeQuestion(input: {
         ...(detail.canSuppress ? (["suppress_item"] as const) : []),
         ...(detail.canAskInstead ? (["ask_instead"] as const) : []),
       ],
+    };
+  }
+
+  if (intent === "review_status") {
+    const items = input.snapshot.home.learning.filter(item => item.pendingReview);
+    return {
+      ...base,
+      reply: items.length
+        ? `Waiting for your review: ${sentenceList(take(items))}.`
+        : "No LEARNING items are currently waiting for your review.",
+      itemRefs: take(items).map(item => item.id),
+      suggestedActions: items.length ? ["view_evidence"] : [],
+    };
+  }
+
+  if (intent === "approved") {
+    const allItems = [
+      ...input.snapshot.home.known,
+      ...input.snapshot.home.learning,
+      ...input.snapshot.home.uncertain,
+      ...input.snapshot.home.changed,
+    ];
+    const items = allItems.filter(
+      item =>
+        item.activeDirectiveId &&
+        item.adaptationState === "eligible_not_wired"
+    );
+    return {
+      ...base,
+      reply: items.length
+        ? `Approved for possible future supported use, but not thereby used: ${sentenceList(take(items))}.`
+        : "No items are currently approved for possible future supported use.",
+      itemRefs: take(items).map(item => item.id),
+      suggestedActions: items.length ? ["view_evidence", "undo_directive"] : [],
+    };
+  }
+
+  if (intent === "suppressed_status") {
+    const allItems = [
+      ...input.snapshot.home.known,
+      ...input.snapshot.home.learning,
+      ...input.snapshot.home.uncertain,
+      ...input.snapshot.home.changed,
+    ];
+    const items = allItems.filter(item => item.adaptationState === "suppressed");
+    return {
+      ...base,
+      reply: items.length
+        ? `You told JOYSTICK not to use: ${sentenceList(take(items))}.`
+        : "No Daphne items are currently suppressed.",
+      itemRefs: take(items).map(item => item.id),
+      suggestedActions: items.length ? ["view_evidence", "undo_directive"] : [],
+    };
+  }
+
+  if (intent === "ask_first_status") {
+    const allItems = [
+      ...input.snapshot.home.known,
+      ...input.snapshot.home.learning,
+      ...input.snapshot.home.uncertain,
+      ...input.snapshot.home.changed,
+    ];
+    const items = allItems.filter(item => item.adaptationState === "ask_instead");
+    return {
+      ...base,
+      reply: items.length
+        ? `You told JOYSTICK to ask you first about: ${sentenceList(take(items))}.`
+        : "No Daphne items currently have an ask-first directive.",
+      itemRefs: take(items).map(item => item.id),
+      suggestedActions: items.length ? ["view_evidence", "undo_directive"] : [],
+    };
+  }
+
+  if (intent === "ever_used") {
+    const used = (input.adaptationLifecycle ?? []).filter(item => item.useCount > 0);
+    return {
+      ...base,
+      reply: used.length
+        ? `Durable receipts show ${used.length} Daphne adaptation ${used.length === 1 ? "directive has" : "directives have"} been used historically, across ${used.reduce((sum, item) => sum + item.useCount, 0)} recorded use${used.reduce((sum, item) => sum + item.useCount, 0) === 1 ? "" : "s"}.`
+        : "I do not have a durable receipt proving any Daphne adaptation has been used.",
+      itemRefs: take(used.map(item => {
+        const allItems = [
+          ...input.snapshot.home.known,
+          ...input.snapshot.home.learning,
+          ...input.snapshot.home.uncertain,
+          ...input.snapshot.home.changed,
+        ];
+        return allItems.find(candidate => candidate.id === item.targetItemId);
+      }).filter((item): item is OperatorRepresentativeItem => Boolean(item))).map(item => item.id),
+    };
+  }
+
+  if (intent === "revoked") {
+    const revoked = (input.adaptationLifecycle ?? []).filter(
+      item => item.lifecycle === "revoked_historical" || item.lifecycle === "revoked_unused"
+    );
+    const historicalUse = revoked.reduce((sum, item) => sum + item.useCount, 0);
+    return {
+      ...base,
+      reply: revoked.length
+        ? historicalUse
+          ? `Revoked directives are inactive for future turns. Durable receipts preserve ${historicalUse} historical use${historicalUse === 1 ? "" : "s"}.`
+          : "Revoked directives are inactive for future turns, and no durable receipt shows historical use."
+        : "No revoked Daphne directives are present in the available history.",
+      itemRefs: revoked
+        .slice(0, 3)
+        .map(item => item.targetItemId)
+        .filter(itemId =>
+          [
+            ...input.snapshot.home.known,
+            ...input.snapshot.home.learning,
+            ...input.snapshot.home.uncertain,
+            ...input.snapshot.home.changed,
+          ].some(item => item.id === itemId)
+        ),
     };
   }
 
