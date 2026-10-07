@@ -267,8 +267,9 @@ export async function seedKingdomTwoProductionState(input: {
     title: KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.title,
     desiredPlayerVisibleResult:
       KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.desiredPlayerVisibleResult,
-    acceptanceCriteria:
-      KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.acceptanceCriteria,
+    acceptanceCriteria: [
+      ...KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.acceptanceCriteria,
+    ],
     blockedReason:
       "HUMAN CREATIVE DECISION REQUIRED: Adam must author the real-business binding for kingdom.boreslay before business-driven Kingdom Two progression is wired.",
     isHumanCreativeBlocker: true,
