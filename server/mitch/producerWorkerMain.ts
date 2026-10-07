@@ -17,7 +17,7 @@ import {
 import { GitHubActionsMitchWakeProvider } from "./githubActionsWakeProvider";
 import { registerMitchGithubAgentRoutes } from "./mitchGithubAgentRoutes";
 import { parseMitchComment, MITCH_EVENT_MARKER } from "../../shared/mitchEvents";
-import { SMALL_COMFORTS_GAME_ID } from "./smallComfortsProduction";
+import { createMitchProducerPlan } from "./mitchProducerPlans";
 import { GitHubProducerBus } from "./githubProducerBus";
 import { GitHubProducerExecutionProvider } from "./githubProducerExecutionProvider";
 import { MitchGameDispatcher } from "./mitchDispatcher";
@@ -61,6 +61,7 @@ const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "claude_indepe
 const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RULES");
 const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
 const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
+const gameId = process.env.MITCH_GAME_ID?.trim() || "kingdom.boreslay";
 const wakeProvider =
   wakeMode === "github_actions"
     ? new GitHubActionsMitchWakeProvider({
@@ -91,6 +92,21 @@ const provider = new GitHubProducerExecutionProvider(bus, {
 // GitHub access alone does not prove a coding executor is running.
 if (process.env.MITCH_EXECUTOR_ENABLED === "true") dispatcher.registerExecutionProvider(provider);
 
+const plan = createMitchProducerPlan({
+  gameId,
+  tenantId,
+  store,
+  service,
+  baseBranch:
+    process.env.MITCH_GAME_BASE_BRANCH?.trim() ||
+    process.env.MITCH_SMALL_COMFORTS_BASE_BRANCH?.trim() ||
+    undefined,
+  baseSha:
+    process.env.MITCH_GAME_BASE_SHA?.trim() ||
+    process.env.MITCH_SMALL_COMFORTS_BASE_SHA?.trim() ||
+    undefined,
+});
+
 const coordinator = new MitchProducerCoordinator({
   tenantId,
   eventDriven: true,
@@ -102,8 +118,9 @@ const coordinator = new MitchProducerCoordinator({
   bus,
   wakeProvider,
   reviewerId,
-  initialBaseBranch: process.env.MITCH_SMALL_COMFORTS_BASE_BRANCH?.trim() || undefined,
-  initialBaseSha: process.env.MITCH_SMALL_COMFORTS_BASE_SHA?.trim() || undefined,
+  gameId: plan.gameId,
+  gameTitle: plan.gameTitle,
+  seedProductionWork: plan.seed,
 });
 
 let stopped = false;
@@ -125,7 +142,7 @@ async function tick(): Promise<void> {
       try { event = parseMitchComment(comment.body); } catch { continue; }
       if (
         event.tenantId !== tenantId ||
-        event.gameId !== SMALL_COMFORTS_GAME_ID ||
+        event.gameId !== plan.gameId ||
         !isGithubActorAuthorized(githubActorRules, {
           login: comment.user?.login ?? "",
           app: comment.performed_via_github_app ?? null,
@@ -149,7 +166,7 @@ async function tick(): Promise<void> {
 }
 
 const pool = mysql.createPool(required("DATABASE_URL"));
-const events = new MitchEventService({ tenantId, gameId: SMALL_COMFORTS_GAME_ID, humanActorId: "adam",
+const events = new MitchEventService({ tenantId, gameId: plan.gameId, humanActorId: "adam",
   inbox: new MysqlMitchEventInbox(pool), store, dispatcher, coordinator, service,
   verifyImplementation: (branch, commitSha) => bus.verifyImplementationIdentity(branch, commitSha) });
 const app = createMitchEventIngress({
@@ -163,7 +180,7 @@ const app = createMitchEventIngress({
 registerMitchGithubAgentRoutes(app, { events });
 app.get("/healthz", (_request, response) => {
   response.status(lastError ? 503 : 200).json({ ok: !lastError, producer: {
-    tenantId, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
+    tenantId, gameId: plan.gameId, gameTitle: plan.gameTitle, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
     mode: "event_driven", wakeMode, recoveryMs,
   } });
 });
