@@ -220,6 +220,34 @@ describe("ProcurementWorker — step lifecycle", () => {
 });
 
 describe("ProcurementWorker — leases and heartbeats", () => {
+  it("never enters the handler if the lease is lost while markRunning is still in flight", async () => {
+    const store = fakeStore({
+      steps: [step("pre-start-loss")],
+      markRunning: async () => {
+        await wait(180);
+        return true;
+      },
+      heartbeat: async () => false,
+    });
+    const handler = vi.fn(async () => "must-not-run");
+    const worker = startWorker(
+      store,
+      { "test.step": handler },
+      { leaseMs: 300, concurrency: 1 }
+    );
+
+    await until(() => store.calls.heartbeat.length >= 1, 3_000);
+    await until(() => store.calls.markRunning.length === 1, 3_000);
+    await wait(220);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(store.calls.complete).toEqual([]);
+    expect(store.calls.fail).toEqual([]);
+    expect(worker.health.lastError).toBe(
+      "Lease lost during execution for step pre-start-loss"
+    );
+  });
+
   it("aborts the handler and refuses stale acknowledgement when a heartbeat loses the lease", async () => {
     const store = fakeStore({
       steps: [step("lost")],
