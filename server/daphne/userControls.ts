@@ -5,6 +5,7 @@ import {
   type DaphneEpistemicClaimRecord,
 } from "./epistemicStore";
 import { listDaphneObservations } from "./observationStore";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export type DaphneClaimInspection = {
   claim: DaphneEpistemicClaimRecord;
@@ -55,7 +56,7 @@ async function userDisposition(input:{
    payload:{claimId:old.id,disposition:input.kind,correctedClaim:input.correctedClaim??null},
    idempotencyKey:`claim-disposition:${old.id}:${input.kind}:${now.toISOString()}`
  });
- return recordDaphneEpistemicClaim({
+ const result=await recordDaphneEpistemicClaim({
    tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:old.agentId,
    claimType:"supersession",claimKey:old.claimKey,
    claim:input.kind==="reject"?{userDisposition:"rejected"}:{userDisposition:"corrected",value:input.correctedClaim??{}},
@@ -65,6 +66,13 @@ async function userDisposition(input:{
    humanPinned:true,correctedByObservationId:observation.id,supersedesClaimId:old.id,
    idempotencyKey:`user-${input.kind}:${old.id}:${observation.id}`
  });
+ await recordDaphneMetricEvent({
+   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:old.agentId,
+   eventName:input.kind==="correct"?"claim_corrected":"claim_rejected",
+   properties:{claimId:old.id,claimKey:old.claimKey},sourceReference:result.id,
+   idempotencyKey:`user-disposition:${result.id}`
+ }).catch(()=>undefined);
+ return result;
 }
 
 export function correctDaphneClaim(input:{
