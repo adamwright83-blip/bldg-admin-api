@@ -135,8 +135,8 @@ export function normalizeDaphneObservationInput(input: RecordDaphneObservationIn
 
   return {
     id: daphneObservationId({ tenantId, canonicalOperatorId, idempotencyKey }),
-    tenantId,
-    canonicalOperatorId,
+    tenantId: normalized.tenantId,
+    canonicalOperatorId: normalized.canonicalOperatorId,
     operatorUserId: optional(input.operatorUserId, 128),
     sessionId: optional(input.sessionId, 191),
     actorType: input.actorType,
