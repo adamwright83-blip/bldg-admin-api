@@ -135,8 +135,8 @@ export function normalizeDaphneObservationInput(input: RecordDaphneObservationIn
 
   return {
     id: daphneObservationId({ tenantId, canonicalOperatorId, idempotencyKey }),
-    tenantId: normalized.tenantId,
-    canonicalOperatorId: normalized.canonicalOperatorId,
+    tenantId,
+    canonicalOperatorId,
     operatorUserId: optional(input.operatorUserId, 128),
     sessionId: optional(input.sessionId, 191),
     actorType: input.actorType,
@@ -210,8 +210,8 @@ export async function recordDaphneObservation(
 
   if (!row) throw new Error("Daphne observation did not persist");
   await recordDaphneMetricEvent({
-    tenantId,
-    canonicalOperatorId,
+    tenantId: normalized.tenantId,
+    canonicalOperatorId: normalized.canonicalOperatorId,
     agentId: normalized.agentId,
     eventName: "observation_ingested",
     properties: { observationKind: normalized.observationKind, evidenceChannel: normalized.evidenceChannel },
