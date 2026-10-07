@@ -1,4 +1,5 @@
 import { recordDaphneEpistemicClaim } from "./epistemicStore";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export type DaphneCausalSample = {
   observationId: string;
@@ -90,7 +91,7 @@ export async function persistDaphneTreatmentEffect(input:{
  tenantId:string;canonicalOperatorId:string;contextKey:string;measureKey:string;
  estimate:DaphneTreatmentEffectEstimate;modelVersion:string;
 }):Promise<void>{
- await recordDaphneEpistemicClaim({
+ const claim=await recordDaphneEpistemicClaim({
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,
   claimType:"treatment_effect_estimate",
   claimKey:`effect:${input.estimate.treatmentAction}:vs:${input.estimate.controlAction}:${input.measureKey}:${input.contextKey}`,
@@ -102,4 +103,9 @@ export async function persistDaphneTreatmentEffect(input:{
   modelVersion:input.modelVersion,
   idempotencyKey:`effect:${input.contextKey}:${input.measureKey}:${input.estimate.sourceObservationIds.join(",")}`
  });
+ await recordDaphneMetricEvent({
+   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,eventName:"causal_estimate_created",
+   properties:{contextKey:input.contextKey,measureKey:input.measureKey,causalEvidenceStatus:input.estimate.causalEvidenceStatus,effect:input.estimate.effect},
+   sourceReference:claim.id,idempotencyKey:`causal:${claim.id}`
+ }).catch(()=>undefined);
 }
