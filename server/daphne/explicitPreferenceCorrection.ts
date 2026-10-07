@@ -38,11 +38,20 @@ export function detectExplicitDaphnePreferenceCorrections(
   const lower = text.toLowerCase();
   if (!text) return [];
 
+  // Avoid treating a hypothetical question as a durable instruction.
+  if (
+    lower.endsWith("?") &&
+    /\b(?:should|would|could)\b/.test(lower) &&
+    !/\b(?:please|i want|i need|from now on)\b/.test(lower)
+  ) {
+    return [];
+  }
+
   const out: DaphneExplicitPreferenceCorrection[] = [];
 
   if (
-    /(?:stop|don't|do not)s+(?:repeating|repeat)s+(?:yourself|things|questions?|advice)?/i.test(text) ||
-    /(?:don't|do not)s+keeps+(?:asking|telling)s+mes+thes+same/i.test(text)
+    /\b(?:stop|don't|do not)\s+(?:repeating|repeat)\s+(?:yourself|things|questions?|advice)?\b/i.test(text) ||
+    /\b(?:don't|do not)\s+keep\s+(?:asking|telling)\s+me\s+the\s+same\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "avoid_repetition",
@@ -52,9 +61,9 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:keep|make)s+(?:yours+)?(?:answers?|responses?)s+(?:shorter|briefer|more concise)/i.test(text) ||
-    /(?:give me|be)s+(?:mores+)?(?:concise|brief|short)/i.test(text) ||
-    /(?:less detail|fewer details)/i.test(text)
+    /\b(?:keep|make)\s+(?:your\s+)?(?:answers?|responses?)\s+(?:shorter|briefer|more concise)\b/i.test(text) ||
+    /\b(?:give me|be)\s+(?:more\s+)?(?:concise|brief|short)\b/i.test(text) ||
+    /\b(?:less detail|fewer details)\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "response_detail",
@@ -64,9 +73,9 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:give me|add|include)s+mores+detail/i.test(text) ||
-    /(?:be|make (?:your )?(?:answers?|responses?))s+mores+detailed/i.test(text) ||
-    /explains+(?:its+)?more/i.test(text)
+    /\b(?:give me|add|include)\s+more\s+detail\b/i.test(text) ||
+    /\b(?:be|make (?:your )?(?:answers?|responses?))\s+more\s+detailed\b/i.test(text) ||
+    /\bexplain\s+(?:it\s+)?more\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "response_detail",
@@ -76,8 +85,8 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:be|sound)s+mores+direct/i.test(text) ||
-    /(?:tell me straight|be blunt(?:er)?|get to the point)/i.test(text)
+    /\b(?:be|sound)\s+more\s+direct\b/i.test(text) ||
+    /\b(?:tell me straight|be blunt(?:er)?|get to the point)\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "response_directness",
@@ -87,8 +96,8 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:be|sound)s+lesss+direct/i.test(text) ||
-    /(?:be softer|less blunt)/i.test(text)
+    /\b(?:be|sound)\s+less\s+direct\b/i.test(text) ||
+    /\b(?:be softer|less blunt)\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "response_directness",
@@ -98,8 +107,8 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:challenge|push)s+mes+more/i.test(text) ||
-    /holds+mes+(?:mores+)?accountable/i.test(text)
+    /\b(?:challenge|push)\s+me\s+more\b/i.test(text) ||
+    /\bhold\s+me\s+(?:more\s+)?accountable\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "challenge_level",
@@ -109,8 +118,8 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:challenge|push)s+mes+less/i.test(text) ||
-    /(?:don't|do not)s+pushs+mes+(?:sos+)?hard/i.test(text)
+    /\b(?:challenge|push)\s+me\s+less\b/i.test(text) ||
+    /\b(?:don't|do not)\s+push\s+me\s+(?:so\s+)?hard\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "challenge_level",
@@ -119,9 +128,7 @@ export function detectExplicitDaphnePreferenceCorrections(
     });
   }
 
-  if (
-    /(?:be more proactive|take more initiative)/i.test(text)
-  ) {
+  if (/\b(?:be more proactive|take more initiative)\b/i.test(text)) {
     pushUnique(out, {
       preferenceKey: "proactive_initiative",
       value: "high",
@@ -130,7 +137,7 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:be less proactive|take less initiative|ask me before you take initiative)/i.test(text)
+    /\b(?:be less proactive|take less initiative|ask me before you take initiative)\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "proactive_initiative",
@@ -140,7 +147,7 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:don't|do not|stop)s+(?:personaliz(?:e|ing)|adapt(?:ing)?)/i.test(text)
+    /\b(?:don't|do not|stop)\s+(?:personaliz(?:e|ing)|adapt(?:ing)?)\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "adaptation_enabled",
@@ -150,22 +157,13 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   if (
-    /(?:don't|do not|stop)s+experiment(?:ing)?s+(?:on|with)s+me/i.test(text)
+    /\b(?:don't|do not|stop)\s+experiment(?:ing)?\s+(?:on|with)\s+me\b/i.test(text)
   ) {
     pushUnique(out, {
       preferenceKey: "safe_experimentation",
       value: false,
       evidenceText: text,
     });
-  }
-
-  // Avoid treating a quoted hypothetical/question as an instruction.
-  if (
-    lower.endsWith("?") &&
-    /(?:should|would|could)/.test(lower) &&
-    !/(?:please|i want|i need|from now on)/.test(lower)
-  ) {
-    return [];
   }
 
   return out;
@@ -220,12 +218,12 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
 
   const observationIds: string[] = [];
   for (const correction of corrections) {
-    const idempotencyKey = `explicit-correction:${stableObservationKey({
+    const idempotencyKey = \`explicit-correction:\${stableObservationKey({
       conversationId: input.conversationId,
       turnId: input.turnId,
       preferenceKey: correction.preferenceKey,
       value: correction.value,
-    })}`;
+    })}\`;
     const observed = await recordDaphneObservation({
       tenantId: input.tenantId,
       canonicalOperatorId: resolution.identity.canonicalOperatorId,
@@ -238,7 +236,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       evidenceChannel: "stated",
       verificationStatus: "attested",
       sourceType: "claire_explicit_preference_correction",
-      sourceReference: `turn:${input.turnId}`.slice(0, 191),
+      sourceReference: \`turn:\${input.turnId}\`.slice(0, 191),
       occurredAt: new Date(),
       payload: {
         preferenceKey: correction.preferenceKey,
