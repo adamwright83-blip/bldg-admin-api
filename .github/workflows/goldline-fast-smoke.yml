@@ -260,6 +260,7 @@ jobs:
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
           server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
           server/cleancloudBrowserSync/gumballCustomerTruth.mysql.integration.test.ts
+          server/cleancloudBrowserSync/worldOutbox.mysql.integration.test.ts
       - name: Prove StrategyEngine live snapshot sections
         run: >-
           pnpm vitest run

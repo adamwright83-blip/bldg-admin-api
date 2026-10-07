@@ -1357,6 +1357,76 @@ for (const statement of gumballSql
   .filter(Boolean)) {
   await runRequired(statement, "Gumballpals schema");
 }
+
+// Program A / Slice 2: old deployments already have the economic outbox.
+// Add durable tenant scope and publication leases without manufacturing a
+// fallback tenant. Historical scope must come from the persisted payload.
+await ensureRequiredColumn(
+  "goldline_cleancloud_outbox",
+  "tenantId",
+  "ALTER TABLE goldline_cleancloud_outbox ADD COLUMN tenantId VARCHAR(64) NULL AFTER id"
+);
+await ensureRequiredColumn(
+  "goldline_cleancloud_outbox",
+  "leaseOwner",
+  "ALTER TABLE goldline_cleancloud_outbox ADD COLUMN leaseOwner VARCHAR(128) NULL AFTER payload"
+);
+await ensureRequiredColumn(
+  "goldline_cleancloud_outbox",
+  "leaseExpiresAt",
+  "ALTER TABLE goldline_cleancloud_outbox ADD COLUMN leaseExpiresAt TIMESTAMP(3) NULL AFTER leaseOwner"
+);
+await ensureRequiredColumn(
+  "goldline_cleancloud_outbox",
+  "attemptCount",
+  "ALTER TABLE goldline_cleancloud_outbox ADD COLUMN attemptCount INT NOT NULL DEFAULT 0 AFTER leaseExpiresAt"
+);
+await ensureRequiredColumn(
+  "goldline_cleancloud_outbox",
+  "lastError",
+  "ALTER TABLE goldline_cleancloud_outbox ADD COLUMN lastError VARCHAR(512) NULL AFTER attemptCount"
+);
+await runRequired(
+  `UPDATE goldline_cleancloud_outbox
+      SET tenantId = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.tenantId')), '')
+    WHERE tenantId IS NULL OR tenantId = ''`,
+  "backfill economic outbox tenant from durable payload"
+);
+const [unscopedEconomicOutboxRows] = await conn.execute(
+  `SELECT id
+     FROM goldline_cleancloud_outbox
+    WHERE tenantId IS NULL OR tenantId = ''
+    LIMIT 5`
+);
+if (unscopedEconomicOutboxRows.length) {
+  throw new Error(
+    "Economic outbox contains rows without durable tenant scope: " +
+      unscopedEconomicOutboxRows.map(row => row.id).join(", ")
+  );
+}
+await runRequired(
+  "ALTER TABLE goldline_cleancloud_outbox MODIFY COLUMN tenantId VARCHAR(64) NOT NULL",
+  "require economic outbox tenant scope"
+);
+await ensureRequiredIndex(
+  "goldline_cleancloud_outbox",
+  "idx_goldline_cleancloud_outbox_claim",
+  ["publishedAt", "leaseExpiresAt", "createdAt"],
+  `ALTER TABLE goldline_cleancloud_outbox
+     ADD KEY idx_goldline_cleancloud_outbox_claim
+       (publishedAt, leaseExpiresAt, createdAt)`
+);
+await assertRequiredColumns("goldline_cleancloud_outbox", [
+  "id",
+  "tenantId",
+  "payload",
+  "leaseOwner",
+  "leaseExpiresAt",
+  "attemptCount",
+  "lastError",
+  "publishedAt",
+  "createdAt",
+]);
 await assertRequiredColumns("cleancloud_browser_sync_bindings", [
   "tenantId",
   "id",

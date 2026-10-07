@@ -6,9 +6,15 @@ CREATE TABLE IF NOT EXISTS goldline_cleancloud_economic_heads (
 );
 CREATE TABLE IF NOT EXISTS goldline_cleancloud_outbox (
   id VARCHAR(80) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
   payload JSON NOT NULL,
-  publishedAt TIMESTAMP NULL,
-  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  leaseOwner VARCHAR(128) NULL,
+  leaseExpiresAt TIMESTAMP(3) NULL,
+  attemptCount INT NOT NULL DEFAULT 0,
+  lastError VARCHAR(512) NULL,
+  publishedAt TIMESTAMP(3) NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_goldline_cleancloud_outbox_claim (publishedAt, leaseExpiresAt, createdAt)
 );
 CREATE TABLE IF NOT EXISTS cleancloud_browser_sync_bindings (
   tenantId VARCHAR(64) PRIMARY KEY,
