@@ -49,6 +49,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Execute bounded Mitch work order
+        id: execute
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
           MITCH_AGENT_ROLE: executor
@@ -60,3 +62,15 @@ jobs:
           MITCH_GAME_SKILLS_DIR: ${{ runner.temp }}/mitch-gamedev-skills
           MITCH_GAME_SKILLS_PIN: d4b0e35550c55ae70bdfcab4ef5a0e94610438a9
         run: pnpm exec tsx scripts/mitch-github-agent.ts
+
+      - name: Report executor failure to Mitch
+        if: steps.execute.outcome == 'failure'
+        env:
+          MITCH_WAKE: ${{ inputs.wake }}
+          MITCH_PRODUCER_BASE_URL: ${{ fromJSON(inputs.wake).controlPlaneBaseUrl }}
+          MITCH_EXECUTOR_FAILURE_MESSAGE: GitHub Actions executor step failed before a successful structured handback.
+        run: pnpm exec tsx scripts/mitch-github-agent-failure.ts
+
+      - name: Preserve executor failure status
+        if: steps.execute.outcome == 'failure'
+        run: exit 1
