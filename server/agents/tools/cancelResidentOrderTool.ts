@@ -1,4 +1,5 @@
-import { getOrderById, updateOrderStatus } from "../../db";
+import { getOrderById } from "../../db";
+import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
 import {
   assertResidentOwnedRecord,
   assertTenantOwnedRecord,
@@ -49,10 +50,15 @@ export const cancelResidentOrderTool: AgentTool<CancelResidentOrderInput> = {
     });
 
     if (order.status !== "cancelled") {
-      await updateOrderStatus(orderId, "cancelled", {
-        source: "driver_app_bldg",
-        actorUserId: ctx.actorId ?? String(residentUserId),
-        actorDisplayName: "resident_chat",
+      await transitionNativeOrderStatus({
+        orderId,
+        status: "cancelled",
+        tenantId: ctx.tenantId,
+        actor: {
+          source: "driver_app_bldg",
+          actorUserId: ctx.actorId ?? String(residentUserId),
+          actorDisplayName: "resident_chat",
+        },
       });
     }
 

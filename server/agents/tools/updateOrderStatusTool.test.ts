@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   getOrderById: vi.fn(),
   updateOrderStatus: vi.fn(),
+  attemptOrderPickupCollection: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
   getOrderById: db.getOrderById,
   updateOrderStatus: db.updateOrderStatus,
+  attemptOrderPickupCollection: db.attemptOrderPickupCollection,
 }));
 
 import { updateOrderStatusTool } from "./updateOrderStatusTool";
@@ -23,30 +25,35 @@ describe("updateOrderStatusTool tenant authority", () => {
   beforeEach(() => {
     db.getOrderById.mockReset();
     db.updateOrderStatus.mockReset();
+    db.attemptOrderPickupCollection.mockReset();
     db.updateOrderStatus.mockResolvedValue(undefined);
+    db.attemptOrderPickupCollection.mockResolvedValue({
+      transitioned: true,
+      order: { id: 41, tenantId: "tenant-a", status: "collected" },
+    });
   });
 
   it("updates only an order owned by the execution tenant", async () => {
     db.getOrderById.mockResolvedValue({
       id: 41,
       tenantId: "tenant-a",
-      status: "new",
+      status: "collected",
     });
 
     const result = await updateOrderStatusTool.execute(
-      { orderId: 41, status: "collected" },
+      { orderId: 41, status: "processing" },
       driverCtx
     );
 
     expect(db.updateOrderStatus).toHaveBeenCalledWith(
       41,
-      "collected",
+      "processing",
       expect.objectContaining({
         actorUserId: "driver-1",
         actorDisplayName: "driver",
       })
     );
-    expect(result.output).toEqual({ orderId: 41, status: "collected" });
+    expect(result.output).toEqual({ orderId: 41, status: "processing" });
   });
 
   it("fails closed for cross-tenant or missing tenant ownership", async () => {
