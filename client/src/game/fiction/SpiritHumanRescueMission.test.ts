@@ -25,7 +25,14 @@ describe("Spirit Human rescue overlay wiring", () => {
     expect(source).toContain("player_prepare");
     expect(source).toContain("isDriving");
     expect(source).toContain("NOT NOW");
-    expect(source).toContain("Provisional");
+    expect(source).toContain("@/assets/spirit-human/core/environment.webp");
+    expect(source).toContain("@/assets/spirit-human/core/threat.png");
+    expect(source).toContain("@/assets/spirit-human/core/captive.png");
+    expect(source).toContain("@/assets/spirit-human/core/playerMark.png");
+    expect(source).toContain('data-testid="spirit-human-threat"');
+    expect(source).toContain('data-testid="spirit-human-captive"');
+    expect(source).toContain('data-testid="spirit-human-player-marker"');
+    expect(source).not.toContain("@/assets/l4/");
     expect(source).toContain('type: "restore"');
     expect(source).toContain("shouldPersistPressureAnchor");
     expect(source).toContain("Draft outreach");

@@ -53,4 +53,10 @@ describe("Goldline Day Plan mobile readability", () => {
     expect(css).toMatch(/\.gdp-shell--forced-mobile \.gdp-overland-tool\s*\{[^}]*width:\s*28vw/);
     expect(css).toContain("width: 72vw");
   });
+
+  it("keeps campaign and rescue cards tappable inside the decorative header", () => {
+    expect(css).toMatch(
+      /\.gdp-shell \.gdp-campaign-run-card\s*\{[^}]*pointer-events:\s*auto/
+    );
+  });
 });
