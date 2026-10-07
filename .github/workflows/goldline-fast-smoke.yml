@@ -126,6 +126,7 @@ jobs:
           server/operatorRepresentative/adaptation.test.ts
           server/operatorRepresentative/adaptationReceipts.test.ts
           server/claire/turn/daphneAdaptation.test.ts
+          server/claire/turn/daphneV2RuntimeCorrection.test.ts
           server/operatorRepresentative/readModel.test.ts
           server/operatorRepresentative/talk.test.ts
           server/claire/operatorAdaptationContext.test.ts
