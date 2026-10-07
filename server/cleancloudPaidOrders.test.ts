@@ -69,6 +69,7 @@ describe("CleanCloud paid order imports", () => {
       sourceReportType: "orders_sales",
       sourceFileName: "CC-Orders.csv",
       importBatchId: 1,
+      tenantId: "tenant-a",
     });
 
     expect(result.candidateForClearent).toBe(true);
