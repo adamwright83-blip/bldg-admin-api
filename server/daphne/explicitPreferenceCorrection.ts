@@ -218,12 +218,12 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
 
   const observationIds: string[] = [];
   for (const correction of corrections) {
-    const idempotencyKey = \`explicit-correction:\${stableObservationKey({
+    const idempotencyKey = `explicit-correction:${stableObservationKey({
       conversationId: input.conversationId,
       turnId: input.turnId,
       preferenceKey: correction.preferenceKey,
       value: correction.value,
-    })}\`;
+    })}`;
     const observed = await recordDaphneObservation({
       tenantId: input.tenantId,
       canonicalOperatorId: resolution.identity.canonicalOperatorId,
@@ -236,7 +236,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       evidenceChannel: "stated",
       verificationStatus: "attested",
       sourceType: "claire_explicit_preference_correction",
-      sourceReference: \`turn:\${input.turnId}\`.slice(0, 191),
+      sourceReference: `turn:${input.turnId}`.slice(0, 191),
       occurredAt: new Date(),
       payload: {
         preferenceKey: correction.preferenceKey,
