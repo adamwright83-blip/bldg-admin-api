@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MitchExecutionHandback, MitchWorkOrder } from "../../shared/mitchContracts";
 import { MitchGameDispatcher, type IMitchExecutionProvider } from "./mitchDispatcher";
 import { MitchProducerCoordinator } from "./mitchProducerCoordinator";
+import { createMitchProducerPlan } from "./mitchProducerPlans";
 import { MitchProductionReasoningService } from "./mitchReasoningService";
 import { MitchQaService } from "./mitchQaService";
 import { MitchProductionService } from "./mitchService";
@@ -62,6 +63,14 @@ describe("Mitch native Small Comforts producer coordination", () => {
     const qa = new MitchQaService(store);
     const bus = new FakeBus();
 
+    const plan = createMitchProducerPlan({
+      gameId: "game.small_comforts",
+      tenantId: "tenant-small-comforts-test",
+      store,
+      service,
+      baseBranch: "feat/small-comforts-proprietor-spike",
+      baseSha: "f4d2f81036fdc1b348bd679fb58eb63059efde42",
+    });
     const coordinator = new MitchProducerCoordinator({
       tenantId: "tenant-small-comforts-test",
       store,
@@ -70,6 +79,9 @@ describe("Mitch native Small Comforts producer coordination", () => {
       reasoning,
       qa,
       bus: bus as unknown as GitHubProducerBus,
+      gameId: plan.gameId,
+      gameTitle: plan.gameTitle,
+      seedProductionWork: plan.seed,
     });
 
     const first = await coordinator.runOnce();
