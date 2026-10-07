@@ -485,4 +485,144 @@ describe("Operator Representative grounded read model", () => {
       })
     ).toThrow(/tenant mismatch/i);
   });
+
+  describe("Daphne V2 Consent Loop — Slice 1 invariants", () => {
+    it("LEARNING item with no directive is pending review, cannot adapt on its own, and offers canApprove", () => {
+      const snapshot = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: packet(),
+        directives: [],
+      });
+
+      const item = snapshot.home.learning[0];
+      expect(item).toBeDefined();
+      expect(item.pendingReview).toBe(true);
+      expect(item.adaptationState).toBe("not_eligible");
+      expect(item.canAffectAdaptation).toBe(false);
+      expect(item.activeDirectiveId).toBeUndefined();
+
+      const detail = snapshot.details.get(item.id);
+      expect(detail).toBeDefined();
+      expect(detail?.canApprove).toBe(true);
+      expect(detail?.canSuppress).toBe(true);
+      expect(detail?.canAskInstead).toBe(true);
+      expect(detail?.canCorrect).toBe(false);
+    });
+
+    it("attaches approval directive to existing stable targetItemId, clearing pendingReview while remaining unwired", () => {
+      const base = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: packet(),
+        directives: [],
+      });
+      const target = base.home.learning[0];
+
+      const approveDirective = directive({
+        id: "approve-directive-1",
+        targetItemId: target.id,
+        targetKey: target.targetKey ?? null,
+        directiveKind: "approve",
+        status: "active",
+      });
+
+      const snapshot = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: packet(),
+        directives: [approveDirective],
+      });
+
+      const item = snapshot.home.learning.find(candidate => candidate.id === target.id);
+      expect(item).toBeDefined();
+      expect(item?.id).toBe(target.id); // Same stable item ID!
+      expect(item?.pendingReview).toBe(false);
+      expect(item?.activeDirectiveId).toBe(approveDirective.id);
+      expect(item?.adaptationState).toBe("eligible_not_wired");
+      expect(item?.canAffectAdaptation).toBe(false); // Unwired! Cannot adapt on its own.
+    });
+
+    it("preserves V1 Stage 3B ask_instead on explicit deferral dismissal without requiring approval", () => {
+      const customPacket = packet();
+      customPacket.observedPatterns = [
+        {
+          kind: "explicit_deferral_dismissal",
+          scopeKey: "all_qualifying_actions",
+          observationCount: 3,
+          distinctDecisionPointCount: 3,
+          distinctCorrelationCount: 3,
+          summary: "Explicit deferral dismissal pattern observed.",
+          confidence: "descriptive",
+          evidenceRefs: ["ref-ledger"],
+        },
+      ];
+
+      const base = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: customPacket,
+        directives: [],
+      });
+      const target = base.home.learning[0];
+      expect(target.targetKey).toBe("pattern:explicit_deferral_dismissal");
+
+      // V1 ask_instead directive attached directly, without an 'approve' directive
+      const askInsteadDirective = directive({
+        id: "ask-instead-directive-1",
+        targetItemId: target.id,
+        targetKey: target.targetKey ?? null,
+        directiveKind: "ask_instead",
+        status: "active",
+      });
+
+      const snapshot = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: customPacket,
+        directives: [askInsteadDirective],
+      });
+
+      const item = snapshot.home.learning.find(candidate => candidate.id === target.id);
+      expect(item).toBeDefined();
+      expect(item?.adaptationState).toBe("ask_instead");
+      expect(item?.canAffectAdaptation).toBe(true); // V1 Stage 3B wired behavior intact!
+      expect(item?.pendingReview).toBe(false);
+    });
+
+    it("evidence window changes do not detach approval, suppress, ask_instead, or revoke from stable item ID", () => {
+      const packet1 = packet();
+      const base = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: packet1,
+        directives: [],
+      });
+      const originalItemId = base.home.learning[0].id;
+
+      const approveDirective = directive({
+        id: "stable-approve-directive",
+        targetItemId: originalItemId,
+        targetKey: base.home.learning[0].targetKey ?? null,
+        directiveKind: "approve",
+        status: "active",
+      });
+
+      // Packet 2: observationCount changes from 4 to 12, different timestamp
+      const packet2 = packet();
+      packet2.observedPatterns[0] = {
+        ...packet2.observedPatterns[0],
+        observationCount: 12,
+        distinctDecisionPointCount: 12,
+        distinctCorrelationCount: 12,
+        summary: "12 completed actions observed across 12 qualifying decision points.",
+      };
+
+      const rebuilt = buildOperatorRepresentativeSnapshot({
+        identity,
+        packet: packet2,
+        directives: [approveDirective],
+      });
+
+      const rebuiltItem = rebuilt.home.learning[0];
+      expect(rebuiltItem.id).toBe(originalItemId); // Item ID stays identical
+      expect(rebuiltItem.activeDirectiveId).toBe(approveDirective.id);
+      expect(rebuiltItem.adaptationState).toBe("eligible_not_wired");
+      expect(rebuiltItem.pendingReview).toBe(false);
+    });
+  });
 });

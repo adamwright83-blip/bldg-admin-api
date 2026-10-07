@@ -4590,7 +4590,7 @@ await runRequired(
     canonicalOperatorId varchar(191) NOT NULL,
     targetItemId varchar(191) NOT NULL,
     targetKey varchar(191) NULL,
-    directiveKind enum('correction','suppress','ask_instead') NOT NULL,
+    directiveKind enum('correction','suppress','ask_instead','approve') NOT NULL,
     operatorDeclaredValueJson json NULL,
     status enum('active','revoked') NOT NULL DEFAULT 'active',
     createdByOpenId varchar(191) NOT NULL,
@@ -4608,8 +4608,12 @@ await assertRequiredColumns("operator_representative_directives", [
   "directiveKind", "operatorDeclaredValueJson", "status", "createdByOpenId",
   "createdAt", "updatedAt", "revokedAt",
 ]);
+await applyIdempotentSqlFile(
+  "../drizzle/0122_daphne_directive_approval.sql",
+  "Daphne V2 directive approval enum"
+);
 await assertEnumContainsValues("operator_representative_directives", "directiveKind", [
-  "correction", "suppress", "ask_instead",
+  "correction", "suppress", "ask_instead", "approve",
 ]);
 await assertEnumContainsValues("operator_representative_directives", "status", [
   "active", "revoked",

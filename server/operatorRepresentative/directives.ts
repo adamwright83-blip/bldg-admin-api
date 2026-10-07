@@ -6,7 +6,8 @@ import { getDb } from "../db";
 export type OperatorRepresentativeDirectiveKind =
   | "correction"
   | "suppress"
-  | "ask_instead";
+  | "ask_instead"
+  | "approve";
 
 export type OperatorRepresentativeDirectiveRecord = {
   id: string;
@@ -186,7 +187,11 @@ export async function setOperatorRepresentativeDirective(input: {
     const supersededIds = activeForTarget
       .filter(existing => {
         if (input.directiveKind === "correction") return existing.directiveKind === "correction";
-        return existing.directiveKind === "suppress" || existing.directiveKind === "ask_instead";
+        return (
+          existing.directiveKind === "suppress" ||
+          existing.directiveKind === "ask_instead" ||
+          existing.directiveKind === "approve"
+        );
       })
       .map(existing => existing.id);
 

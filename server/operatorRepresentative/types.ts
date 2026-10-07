@@ -42,6 +42,7 @@ export type OperatorRepresentativeItem = {
   adaptationState: OperatorRepresentativeAdaptationState;
   canAffectAdaptation: boolean;
   activeDirectiveId?: string;
+  pendingReview?: boolean;
 };
 
 export type OperatorRepresentativeHome = {
@@ -93,6 +94,7 @@ export type OperatorRepresentativeItemDetail = {
   canCorrect: boolean;
   canSuppress: boolean;
   canAskInstead: boolean;
+  canApprove?: boolean;
   businessTruthSupport: false;
 };
 
