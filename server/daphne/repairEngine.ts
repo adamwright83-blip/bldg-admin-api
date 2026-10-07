@@ -12,7 +12,7 @@ export function recommendDaphneRelationshipRepair(
 ):DaphneRepairRecommendation{
   const rupture=relationship.unresolvedRuptures[0]??null;
   if(!rupture) return {action:"no_repair_needed",target:null,rationale:"no_unresolved_rupture",forbiddenMoves:[]};
-  const boundary=relationship.boundaries.find(v=>v===rupture)||relationship.boundaries.at(-1)??null;
+  const boundary=relationship.boundaries.find(v=>v===rupture) || (relationship.boundaries.at(-1) ?? null);
   if(boundary){
     return {
       action:"clarify_boundary",target:rupture,
