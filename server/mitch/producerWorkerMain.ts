@@ -67,6 +67,11 @@ const wakeProvider =
         token,
         repoFullName,
         ref: process.env.MITCH_GITHUB_ACTIONS_REF?.trim() || "main",
+        controlPlaneBaseUrl:
+          process.env.MITCH_PRODUCER_PUBLIC_BASE_URL?.trim() ||
+          (process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+            ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN.trim()
+            : undefined),
       })
     : new HttpMitchAgentWakeProvider(
         jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS")
