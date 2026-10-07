@@ -73,6 +73,7 @@ describe("CleanCloud paid order imports", () => {
 
     expect(result.candidateForClearent).toBe(true);
     expect(result.normalized).toMatchObject({
+      tenantId: "tenant-a",
       cleancloudOrderId: "437",
       cleancloudCustomerId: "71",
       customerName: "Amina Ford",
@@ -104,6 +105,7 @@ describe("CleanCloud paid order imports", () => {
         sourceReportType: "orders_revenue",
         sourceFileName: "CC-Revenue.csv",
         importBatchId: 2,
+        tenantId: "tenant-a",
       }
     );
 
@@ -128,6 +130,7 @@ describe("CleanCloud paid order imports", () => {
         sourceReportType: "orders_sales",
         sourceFileName: "CC-Orders.csv",
         importBatchId: 1,
+        tenantId: "tenant-a",
       }).normalized!
     );
 

@@ -13,6 +13,10 @@ import {
   type AuthorityReceipt,
   type PaymentAuthorityExpectation,
 } from "../authority/authorityReceipt";
+import {
+  readCleanCloudPaidObservationReceipts,
+  type CleanCloudPaidObservationExpectation,
+} from "../cleancloudPaidEvidence";
 import { resetDbForTesting, setDbForTesting } from "../db";
 import { getRevenueSummary } from "./analyticsQueries";
 
@@ -46,23 +50,29 @@ const cloud: CleanCloudOrderRow = {
   customerPhone: null,
   customerEmail: null,
 };
+type EvidenceExpectation =
+  | PaymentAuthorityExpectation
+  | CleanCloudPaidObservationExpectation;
+
 function receipt(
-  expected: PaymentAuthorityExpectation,
+  expected: EvidenceExpectation,
   extra: Partial<AuthorityReceipt> = {}
 ): AuthorityReceipt {
+  const isCleanCloud = expected.sourceType === "cleancloud_paid_order";
   return {
     ...expected,
     sourceRef: expected.sourceRef!,
     id: `auth-${expected.subjectId}`,
-    claimType: "payment_verified",
+    claimType: isCleanCloud
+      ? "cleancloud_paid_observed"
+      : "payment_verified",
     actorType: "system",
     actorId: null,
     evidenceClass: "authoritative_external",
     verificationClass: "VERIFIED",
-    admissionPolicy:
-      expected.sourceType === "stripe_payment_intent"
-        ? "native_stripe_payment_v1"
-        : "cleancloud_paid_order_v1",
+    admissionPolicy: isCleanCloud
+      ? "cleancloud_paid_observation_v1"
+      : "native_stripe_payment_v1",
     occurredAt: now.toISOString(),
     admittedAt: now.toISOString(),
     metadata: null,
@@ -73,13 +83,15 @@ function receipt(
 function loaders(
   n: NativeOrderRow[],
   c: CleanCloudOrderRow[],
-  proof: (e: PaymentAuthorityExpectation) => AuthorityReceipt | null = () =>
-    null
+  proof: (e: EvidenceExpectation) => AuthorityReceipt | null = () => null
 ): LedgerLoaders {
   return {
     laundry_butler: async () => n,
     cleancloud: async () => c,
     paymentAuthority: vi.fn(async ({ expectations }) =>
+      expectations.map(proof).filter((r): r is AuthorityReceipt => r !== null)
+    ),
+    cleancloudAuthority: vi.fn(async ({ expectations }) =>
       expectations.map(proof).filter((r): r is AuthorityReceipt => r !== null)
     ),
   };
@@ -172,7 +184,7 @@ describe("canonical payment Authority Receipt admission", () => {
       includedEvents: [
         {
           authorityReceiptId: "auth-603",
-          paymentEvidence: {
+          cleancloudEvidence: {
             subjectType: "cleancloud_order",
             sourceType: "cleancloud_paid_order",
             sourceRef: "cleancloud-import:7:603",
@@ -180,7 +192,7 @@ describe("canonical payment Authority Receipt admission", () => {
         },
       ],
     });
-    expect(source.paymentAuthority).toHaveBeenCalledTimes(1);
+    expect(source.cleancloudAuthority).toHaveBeenCalledTimes(1);
   });
   it.each([
     { sourceType: "stripe_payment_intent" },
@@ -281,29 +293,44 @@ describe("bounded existing authority read path", () => {
         }),
       }),
     });
-    const expectations: PaymentAuthorityExpectation[] = [
-      ...Array.from({ length: 401 }, (_, i) => ({
+    const paymentExpectations: PaymentAuthorityExpectation[] =
+      Array.from({ length: 401 }, (_, i) => ({
         tenantId,
         subjectType: "order" as const,
         subjectId: String(i),
         sourceType: "stripe_payment_intent" as const,
         sourceRef: `pi_${i}`,
-      })),
-      ...Array.from({ length: 201 }, (_, i) => ({
+      }));
+    const cleanCloudExpectations: CleanCloudPaidObservationExpectation[] =
+      Array.from({ length: 201 }, (_, i) => ({
         tenantId,
         subjectType: "cleancloud_order" as const,
         subjectId: String(i),
         sourceType: "cleancloud_paid_order" as const,
         sourceRef: `cleancloud-import:7:${i}`,
-      })),
-    ];
+      }));
+
     expect(
-      await readPaymentAuthorityReceipts({ tenantId, expectations })
+      await readPaymentAuthorityReceipts({
+        tenantId,
+        expectations: paymentExpectations,
+      })
+    ).toEqual([]);
+    expect(
+      await readCleanCloudPaidObservationReceipts({
+        tenantId,
+        expectations: cleanCloudExpectations,
+      })
     ).toEqual([]);
     expect(filters).toHaveLength(5);
+    expect(filters.slice(0, 3).every(filter =>
+      filter.params.includes("payment_verified")
+    )).toBe(true);
+    expect(filters.slice(3).every(filter =>
+      filter.params.includes("cleancloud_paid_observed")
+    )).toBe(true);
     for (const filter of filters) {
       expect(filter.params).toContain(tenantId);
-      expect(filter.params).toContain("payment_verified");
       expect(filter.params.length).toBeLessThanOrEqual(203);
     }
   });
@@ -325,5 +352,11 @@ describe("bounded existing authority read path", () => {
     await expect(
       readPaymentAuthorityReceipts({ tenantId: "", expectations: [] })
     ).rejects.toThrow("requires tenantId");
+    await expect(
+      readCleanCloudPaidObservationReceipts({
+        tenantId: "",
+        expectations: [],
+      })
+    ).rejects.toThrow("requires explicit tenantId");
   });
 });

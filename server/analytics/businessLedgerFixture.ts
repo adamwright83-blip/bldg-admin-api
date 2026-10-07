@@ -188,13 +188,46 @@ export const fixtureCompleteness: DataCompleteness = {
 export function withFixturePaymentAuthority(loaders: LedgerLoaders): LedgerLoaders {
   return {
     ...loaders,
-    cleancloud: async window => (await loaders.cleancloud(window)).map(row => ({ ...row, importBatchId: row.importBatchId ?? 1 })),
-    paymentAuthority: loaders.paymentAuthority ?? (async ({ expectations }) => expectations.map((expected, index) => ({
-      ...expected, sourceRef: expected.sourceRef ?? "fixture-missing-ref", id: `auth-fixture-${index}`,
-      claimType: "payment_verified" as const, actorType: "system", actorId: null,
-      evidenceClass: "authoritative_external" as const, verificationClass: "VERIFIED" as const,
-      admissionPolicy: expected.sourceType === "stripe_payment_intent" ? "native_stripe_payment_v1" : "cleancloud_paid_order_v1",
-      occurredAt: null, admittedAt: FIXTURE_NOW.toISOString(), metadata: null, idempotencyKey: `fixture:${index}`,
-    }))),
+    cleancloud: async window =>
+      (await loaders.cleancloud(window)).map(row => ({
+        ...row,
+        importBatchId: row.importBatchId ?? 1,
+      })),
+    paymentAuthority:
+      loaders.paymentAuthority ??
+      (async ({ expectations }) =>
+        expectations.map((expected, index) => ({
+          ...expected,
+          sourceRef: expected.sourceRef ?? "fixture-missing-ref",
+          id: `auth-fixture-native-${index}`,
+          claimType: "payment_verified" as const,
+          actorType: "system",
+          actorId: null,
+          evidenceClass: "authoritative_external" as const,
+          verificationClass: "VERIFIED" as const,
+          admissionPolicy: "native_stripe_payment_v1",
+          occurredAt: null,
+          admittedAt: FIXTURE_NOW.toISOString(),
+          metadata: null,
+          idempotencyKey: `fixture:native:${index}`,
+        }))),
+    cleancloudAuthority:
+      loaders.cleancloudAuthority ??
+      (async ({ expectations }) =>
+        expectations.map((expected, index) => ({
+          ...expected,
+          sourceRef: expected.sourceRef ?? "fixture-missing-ref",
+          id: `auth-fixture-cleancloud-${index}`,
+          claimType: "cleancloud_paid_observed" as const,
+          actorType: "system",
+          actorId: null,
+          evidenceClass: "authoritative_external" as const,
+          verificationClass: "VERIFIED" as const,
+          admissionPolicy: "cleancloud_paid_observation_v1",
+          occurredAt: null,
+          admittedAt: FIXTURE_NOW.toISOString(),
+          metadata: null,
+          idempotencyKey: `fixture:cleancloud:${index}`,
+        }))),
   };
 }
