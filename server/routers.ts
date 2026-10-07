@@ -1,5 +1,6 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
+import { daphneRouter } from "./daphne/router";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,
@@ -408,6 +409,7 @@ function assertPlatformOrVendorOrderAuthority(
 
 export const appRouter = router({
   president: presidentRouter,
+  daphne: daphneRouter,
   system: systemRouter,
   strategy: strategyRouter,
   auth: router({
