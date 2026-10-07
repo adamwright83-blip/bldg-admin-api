@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
-import { getOrderById, updateOrderStatus } from "../db";
+import { getOrderById } from "../db";
+import { transitionNativeOrderStatus } from "../orders/orderLifecycleService";
 import {
   type CustodyLocationKey,
   custodyLocationFromEvidence,
@@ -749,9 +750,14 @@ export async function deliverCustodyToCustomer(input: {
     const customerDisplayName =
       `${order.firstName} ${order.lastName}`.trim() || `Order #${order.id}`;
 
-    await updateOrderStatus(input.orderId, "delivered", {
-      source: "custody_board_deliver",
-      actorUserId: input.actorId,
+    await transitionNativeOrderStatus({
+      orderId: input.orderId,
+      status: "delivered",
+      tenantId: input.tenantId,
+      actor: {
+        source: "custody_board_deliver",
+        actorUserId: input.actorId,
+      },
     });
 
     const id = randomUUID();

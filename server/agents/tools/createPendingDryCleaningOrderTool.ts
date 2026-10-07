@@ -1,4 +1,4 @@
-import { createOrder } from "../../db";
+import { createNativeOrder } from "../../orders/orderLifecycleService";
 import type { AgentTool } from "../toolRegistry";
 
 export const createPendingDryCleaningOrderTool: AgentTool<Record<string, any>, { orderId: number; status: "intake-pending" }> = {
@@ -8,7 +8,7 @@ export const createPendingDryCleaningOrderTool: AgentTool<Record<string, any>, {
     const pickupDate = String(input.pickupDate);
     const pickupDateObj = new Date(`${pickupDate}T00:00:00`);
     pickupDateObj.setDate(pickupDateObj.getDate() + 1);
-    const orderId = await createOrder({
+    const orderId = await createNativeOrder({
       tenantId: ctx.tenantId,
       serviceType: "dry_cleaning",
       pickupDate,

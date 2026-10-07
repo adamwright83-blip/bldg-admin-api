@@ -35,14 +35,16 @@ import {
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
-  createOrder,
+  createNativeOrder,
+  transitionNativeOrderStatus,
+  OrderTransitionError,
+} from "./orders/orderLifecycleService";
+import {
   findResidentOrderByClientRequestId,
   updateOrderStripe,
   getOrderById,
   getOrdersByStatus,
   getOrdersByDateAndStatus,
-  updateOrderStatus,
-  attemptOrderPickupCollection,
   updateOrderBuildingSlugForCustomer,
   updateOrderIntake,
   searchCustomerByPhone,
@@ -551,8 +553,8 @@ export const appRouter = router({
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
         const deliveryDate = pickupDateObj.toISOString().split("T")[0];
 
-        const orderId = await createOrder({
-          tenantId: ctx.tenantId,
+        const orderId = await createNativeOrder({
+          tenantId: ctx.tenantId ?? "default",
           serviceType: input.serviceType,
           pickupDate: input.pickupDate,
           pickupTimeWindow: input.pickupTimeWindow,
@@ -2689,7 +2691,7 @@ export const appRouter = router({
             { message: "Either address or buildingSlug is required" }
           )
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const idempotencyKey = adminOrderIdempotencyKey(input.clientRequestId);
         if (idempotencyKey) {
           const existing =
@@ -2721,8 +2723,8 @@ export const appRouter = router({
         }
 
         try {
-          const orderId = await createOrder({
-            tenantId: "default",
+          const orderId = await createNativeOrder({
+            tenantId: ctx.tenantId ?? "default",
             serviceType: input.serviceType,
             pickupDate: input.pickupDate,
             pickupTimeWindow: input.pickupTimeWindow,
@@ -2771,78 +2773,75 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const order = await getOrderById(input.orderId);
-        if (!order) throw new Error("Order not found");
-        if (
-          ctx.vendorSession &&
-          order.vendorId !== ctx.vendorSession.vendorId
-        ) {
-          throw new Error("Unauthorized");
-        }
-        if (input.status === "delivered" && !order.paid) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Charge the order before marking it delivered.",
-          });
-        }
+        const actor = {
+          source: "driver_app_bldg" as const,
+          actorUserId: ctx.user?.id ?? null,
+          actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+        };
 
-        if (input.status === "collected") {
-          // Durable, atomic guard (server-side, not browser state): only
-          // the ONE request that actually flips new|intake-pending ->
-          // collected records the war event or sends the pickup SMS.
-          // Repeated requests, network retries, duplicate tabs, or two
-          // staff members racing all resolve to the same idempotent
-          // "already completed" result and never double-send.
-          const { transitioned, order: collectedOrder } =
-            await attemptOrderPickupCollection(input.orderId);
-          if (!collectedOrder) throw new Error("Order not found");
-          if (!transitioned) {
-            return { success: true, alreadyCompleted: true };
+        try {
+          const transitionResult = await transitionNativeOrderStatus({
+            orderId: input.orderId,
+            status: input.status,
+            tenantId: ctx.tenantId,
+            vendorId: ctx.vendorSession?.vendorId ?? null,
+            actor,
+          });
+
+          const result = {
+            success: true as const,
+            alreadyCompleted: transitionResult.alreadyCompleted,
+          };
+
+          if (input.status === "collected") {
+            if (!transitionResult.alreadyCompleted) {
+              await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
+                source: "driver_app_bldg",
+                actorUserId: ctx.user?.id ?? null,
+                actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+                actualEventTimestamp: new Date(),
+                reason: "driver_pickup_completed",
+              });
+
+              recordWarActionSafe({
+                tenantId: ctx.tenantId ?? "default",
+                kind: "stage_advance",
+                dedupeKey: `stage:${input.orderId}:collected`,
+                meta: { orderId: input.orderId, status: "collected" },
+              });
+
+              try {
+                await notifyPickupEnRoute(transitionResult.order.phone);
+              } catch (err) {
+                console.warn("[SMS] Failed to send pickup notification:", err);
+              }
+            }
+            return result;
           }
-
-          await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
-            source: "driver_app_bldg",
-            actorUserId: ctx.user?.id ?? null,
-            actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
-            actualEventTimestamp: new Date(),
-            reason: "driver_pickup_completed",
-          });
 
           recordWarActionSafe({
             tenantId: ctx.tenantId ?? "default",
             kind: "stage_advance",
-            dedupeKey: `stage:${input.orderId}:collected`,
-            meta: { orderId: input.orderId, status: "collected" },
+            dedupeKey: `stage:${input.orderId}:${input.status}`,
+            meta: { orderId: input.orderId, status: input.status },
           });
 
-          try {
-            await notifyPickupEnRoute(collectedOrder.phone);
-          } catch (err) {
-            console.warn("[SMS] Failed to send pickup notification:", err);
+          return result;
+        } catch (err) {
+          if (err instanceof OrderTransitionError) {
+            if (err.code === "NOT_FOUND") {
+              throw new TRPCError({ code: "NOT_FOUND", message: err.message });
+            }
+            if (err.code === "UNAUTHORIZED") {
+              throw new TRPCError({ code: "UNAUTHORIZED", message: err.message });
+            }
+            if (err.code === "PAYMENT_REQUIRED") {
+              throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
+            }
+            throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
           }
-
-          return { success: true, alreadyCompleted: false };
+          throw err;
         }
-
-        // All other transitions: unchanged existing behavior — this
-        // hardening pass only touches the collected/pickup-completion path.
-        await updateOrderStatus(input.orderId, input.status, {
-          source: "driver_app_bldg",
-          actorUserId: ctx.user?.id ?? null,
-          actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
-        });
-
-        // War: a real pipeline advance — same event no matter which surface
-        // (LIVE board, stage page, driver app) fired it. Idempotent per
-        // order+status, so re-clicks cannot double-shove the front line.
-        recordWarActionSafe({
-          tenantId: ctx.tenantId ?? "default",
-          kind: "stage_advance",
-          dedupeKey: `stage:${input.orderId}:${input.status}`,
-          meta: { orderId: input.orderId, status: input.status },
-        });
-
-        return { success: true };
       }),
 
     /** Bold Pitch (Saleslay "call" weapon) — starts a real bridge-through-
@@ -3696,8 +3695,8 @@ export const appRouter = router({
               : null;
           const orderId =
             existingOrderId ??
-            (await createOrder({
-              tenantId: ctx.tenantId,
+            (await createNativeOrder({
+              tenantId: ctx.tenantId ?? "default",
               serviceType: "dry_cleaning",
               pickupDate: localYmd(0),
               pickupTimeWindow: "Dry clean receipt intake",

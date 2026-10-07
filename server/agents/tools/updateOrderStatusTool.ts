@@ -1,4 +1,5 @@
-import { getOrderById, updateOrderStatus } from "../../db";
+import { getOrderById } from "../../db";
+import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
 import { isTrustedOrderStateActor } from "../permissions";
 import type { AgentTool } from "../toolRegistry";
 
@@ -20,10 +21,15 @@ export const updateOrderStatusTool: AgentTool<Record<string, any>> = {
     if (!["new", "intake-pending", "collected", "processing", "ready", "delivered"].includes(status)) {
       throw new Error("Invalid order status");
     }
-    await updateOrderStatus(orderId, status, {
-      source: "driver_app_bldg",
-      actorUserId: ctx.actorId ?? null,
-      actorDisplayName: ctx.actorType,
+    await transitionNativeOrderStatus({
+      orderId,
+      status,
+      tenantId,
+      actor: {
+        source: "driver_app_bldg",
+        actorUserId: ctx.actorId ?? null,
+        actorDisplayName: ctx.actorType,
+      },
     });
     return { entityType: "order", entityId: orderId, output: { orderId, status } };
   },
