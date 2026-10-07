@@ -56,6 +56,9 @@ export function buildDaphneClairePromptSection(card:DaphneOperatorCard):string|n
   }
   const initiative=card.metaPreferences.proactive_initiative;
   if(typeof initiative==="string") lines.push(`Declared proactive initiative: ${initiative}.`);
+  if(card.metaPreferences.avoid_repetition===true) {
+    lines.push("Explicit correction: do not repeat the same question, recommendation, or explanation when the operator has already answered or corrected it. Acknowledge the correction once, then change the next response pattern.");
+  }
   if(card.state?.receptivity&&card.state.receptivity!=="unknown") lines.push(`Current operational receptivity estimate: ${card.state.receptivity}; it expires at ${card.state.validUntil}.`);
   if(card.state?.interactionLoad&&card.state.interactionLoad!=="unknown") lines.push(`Current interaction load: ${card.state.interactionLoad}.`);
   if(card.context?.taskMode&&card.context.taskMode!=="unknown") lines.push(`Current task mode: ${card.context.taskMode}.`);
