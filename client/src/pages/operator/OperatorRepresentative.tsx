@@ -202,9 +202,11 @@ function DetailDrawer({
   const adaptation = adaptationStatus.data?.lifecycle.find(
     lifecycle => lifecycle.targetItemId === itemId
   );
-  const permissionLabel = item?.pendingReview
-    ? "Unresolved — needs review"
-    : item?.adaptationState === "suppressed"
+  const permissionLabel = adaptation?.directiveStatus === "revoked"
+    ? "Revoked"
+    : item?.pendingReview
+      ? "Unresolved — needs review"
+      : item?.adaptationState === "suppressed"
       ? "Suppressed"
       : item?.adaptationState === "ask_instead"
         ? "Ask-instead"
@@ -216,8 +218,10 @@ function DetailDrawer({
   const permissionCopy =
     permissionLabel === "Approved"
       ? "Approved for possible future supported use. Approval alone does not wire or use this item."
-      : permissionLabel === "Suppressed"
-        ? "You told JOYSTICK not to use this signal for adaptation."
+      : permissionLabel === "Revoked"
+        ? "This directive is revoked for future turns. Any prior receipt-backed use remains historical."
+        : permissionLabel === "Suppressed"
+          ? "You told JOYSTICK not to use this signal for adaptation."
         : permissionLabel === "Ask-instead"
           ? "You told JOYSTICK to ask you instead of silently relying on this signal."
           : permissionLabel === "Corrected"
