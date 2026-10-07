@@ -25,6 +25,10 @@ export {
   presentationIdForOccurrence,
 } from "./presentationPlan";
 export { playerPresentationPayload } from "./playerPresentation";
+export {
+  daphneRelationshipContextForNarrator,
+  type DaphneNarrativeRelationshipContext,
+} from "./daphneRelationshipContext";
 export { narrativePresentationMemory } from "./presentationMemory";
 export {
   createInMemoryNarratorPresentationStore,
