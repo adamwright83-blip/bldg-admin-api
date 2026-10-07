@@ -63,6 +63,7 @@ jobs:
           pnpm vitest run
           server/joystick/tenantIdentity.test.ts
           server/saas/tenantAdmissionCertification.test.ts
+          server/saas/tenantIsolationCertification.test.ts
           server/saas/saasCustomerBoundary.test.ts
           server/saas/hostileTenant.integration.test.ts
           server/claire/conversation/transcriptLog.test.ts
