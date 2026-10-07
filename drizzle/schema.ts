@@ -8112,6 +8112,107 @@ export const daphneObservations = mysqlTable(
 export type DaphneObservation = typeof daphneObservations.$inferSelect;
 export type InsertDaphneObservation = typeof daphneObservations.$inferInsert;
 
+
+/**
+ * Daphne V2 typed epistemic ledger.
+ *
+ * Derived interpretations live here and remain distinct from immutable
+ * observations. A claim's type is part of its truth contract: an association
+ * cannot silently become a treatment effect, and a transient state estimate
+ * cannot silently become a person-level distribution.
+ */
+export const daphneEpistemicClaims = mysqlTable(
+  "daphne_epistemic_claims",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    agentId: varchar("agentId", { length: 128 }),
+    claimType: mysqlEnum("claimType", [
+      "direct_fact",
+      "statistical_regularity",
+      "prediction",
+      "latent_state_estimate",
+      "person_distribution_estimate",
+      "if_then_hypothesis",
+      "relationship_hypothesis",
+      "association_estimate",
+      "treatment_effect_estimate",
+      "contradiction",
+      "supersession",
+    ]).notNull(),
+    claimKey: varchar("claimKey", { length: 191 }).notNull(),
+    claimJson: json("claimJson").notNull(),
+    sourceObservationIdsJson: json("sourceObservationIdsJson").notNull(),
+    supportingEvidenceJson: json("supportingEvidenceJson"),
+    counterEvidenceJson: json("counterEvidenceJson"),
+    scopeJson: json("scopeJson"),
+    contextApplicabilityJson: json("contextApplicabilityJson"),
+    uncertaintyJson: json("uncertaintyJson"),
+    epistemicStatus: mysqlEnum("epistemicStatus", [
+      "unknown",
+      "insufficient_evidence",
+      "association_only",
+      "suggestive",
+      "experimentally_supported",
+      "context_specific",
+      "possible_regime_change",
+      "active",
+      "contradicted",
+      "superseded",
+      "rejected",
+    ])
+      .notNull()
+      .default("active"),
+    causalEvidenceStatus: mysqlEnum("causalEvidenceStatus", [
+      "none",
+      "observational",
+      "propensity_supported",
+      "randomized",
+    ])
+      .notNull()
+      .default("none"),
+    validFrom: timestamp("validFrom", { fsp: 3 }),
+    validUntil: timestamp("validUntil", { fsp: 3 }),
+    lastReinforcedAt: timestamp("lastReinforcedAt", { fsp: 3 }),
+    modelVersion: varchar("modelVersion", { length: 64 }).notNull(),
+    humanPinned: boolean("humanPinned").notNull().default(false),
+    correctedByObservationId: varchar("correctedByObservationId", { length: 64 }),
+    supersedesClaimId: varchar("supersedesClaimId", { length: 64 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_daphne_epistemic_claim_idempotency").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.idempotencyKey
+    ),
+    operatorClaimIdx: index("idx_daphne_epistemic_operator_claim").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.claimType,
+      table.claimKey,
+      table.createdAt
+    ),
+    agentClaimIdx: index("idx_daphne_epistemic_agent_claim").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.agentId,
+      table.claimType,
+      table.createdAt
+    ),
+    supersedesIdx: index("idx_daphne_epistemic_supersedes").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.supersedesClaimId
+    ),
+  })
+);
+
+export type DaphneEpistemicClaim = typeof daphneEpistemicClaims.$inferSelect;
+export type InsertDaphneEpistemicClaim = typeof daphneEpistemicClaims.$inferInsert;
+
 export const goalCycleHistory = mysqlTable(
   "goal_cycle_history",
   {
