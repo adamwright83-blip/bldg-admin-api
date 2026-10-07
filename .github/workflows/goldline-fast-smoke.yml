@@ -120,6 +120,7 @@ jobs:
         run: >-
           pnpm vitest run
           server/daphne
+          server/narratorOs/daphneRelationshipContext.test.ts
           server/operatorRepresentative/adaptation.test.ts
           server/operatorRepresentative/adaptationReceipts.test.ts
           server/claire/turn/daphneAdaptation.test.ts
