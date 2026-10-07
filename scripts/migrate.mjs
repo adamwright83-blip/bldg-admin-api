@@ -4753,12 +4753,12 @@ await assertRequiredColumns("authority_receipts", [
 ]);
 await runRequired(
   `ALTER TABLE authority_receipts
-   MODIFY COLUMN claimType enum('payment_verified','account_won','message_sent','action_completed','field_observation_attested') NOT NULL`,
-  "extend authority receipts with action_completed and field_observation_attested"
+   MODIFY COLUMN claimType enum('payment_verified','cleancloud_paid_observed','account_won','message_sent','action_completed','field_observation_attested') NOT NULL`,
+  "extend authority receipts with CleanCloud paid observation and field/action claims"
 );
 await assertEnumContainsValues("authority_receipts", "claimType", [
-  "payment_verified", "account_won", "message_sent", "action_completed",
-  "field_observation_attested",
+  "payment_verified", "cleancloud_paid_observed", "account_won", "message_sent",
+  "action_completed", "field_observation_attested",
 ]);
 await assertEnumContainsValues("authority_receipts", "evidenceClass", [
   "authoritative_external", "operator_attested",
