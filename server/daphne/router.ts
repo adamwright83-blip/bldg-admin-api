@@ -14,6 +14,8 @@ import {
 } from "./goalsPreferences";
 import { recordDaphneObservation } from "./observationStore";
 import { chooseDaphnePolicyAction } from "./policyEngine";
+import { correctDaphneClaim, inspectDaphneClaim, rejectDaphneClaim } from "./userControls";
+import { deleteDaphneV2UserData, exportDaphneV2UserData } from "./privacy";
 
 function identityFailure(error:unknown):never{
  if(error instanceof CanonicalOperatorIdentityError) throw new TRPCError({code:"PRECONDITION_FAILED",message:error.reason});
@@ -53,7 +55,7 @@ export const daphneRouter=router({
     const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.set_control"});
     const observed=await recordDaphneObservation({
      tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,
-     operatorUserId:String(ctx.user.id),actorType:"user",actorId:ctx.user.openId,
+     operatorUserId:ctx.user.openId,actorType:"user",actorId:ctx.user.openId,
      observationKind:"preference_declaration",evidenceChannel:"stated",verificationStatus:"attested",
      sourceType:"daphne_control_api",sourceReference:`control:${input.key}`,occurredAt:new Date(),
      payload:{preferenceKey:input.key,value:input.value},idempotencyKey:`control:${input.key}:${Date.now()}`
@@ -62,6 +64,44 @@ export const daphneRouter=router({
      tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,
      preferenceKey:input.key,value:input.value,sourceObservationId:observed.id
     });
+   }catch(e){identityFailure(e);}
+  }),
+ inspectClaim:legacyDayforgeTenantMemberProcedure
+  .input(z.object({claimId:z.string().trim().min(1).max(64)}))
+  .query(async({ctx,input})=>{
+   try{
+    const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.inspect_claim"});
+    return await inspectDaphneClaim({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,claimId:input.claimId});
+   }catch(e){identityFailure(e);}
+  }),
+ correctClaim:legacyDayforgeTenantMemberProcedure
+  .input(z.object({claimId:z.string().trim().min(1).max(64),correctedClaim:z.record(z.string(),z.unknown())}))
+  .mutation(async({ctx,input})=>{
+   try{
+    const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.correct_claim"});
+    return await correctDaphneClaim({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,operatorUserId:ctx.user.openId,actorId:ctx.user.openId,claimId:input.claimId,correctedClaim:input.correctedClaim});
+   }catch(e){identityFailure(e);}
+  }),
+ rejectClaim:legacyDayforgeTenantMemberProcedure
+  .input(z.object({claimId:z.string().trim().min(1).max(64)}))
+  .mutation(async({ctx,input})=>{
+   try{
+    const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.reject_claim"});
+    return await rejectDaphneClaim({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,operatorUserId:ctx.user.openId,actorId:ctx.user.openId,claimId:input.claimId});
+   }catch(e){identityFailure(e);}
+  }),
+ exportData:legacyDayforgeTenantMemberProcedure.query(async({ctx})=>{
+  try{
+   const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.export"});
+   return await exportDaphneV2UserData({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId});
+  }catch(e){identityFailure(e);}
+ }),
+ deleteData:legacyDayforgeTenantMemberProcedure
+  .input(z.object({confirmation:z.literal("DELETE_DAPHNE_DATA")}))
+  .mutation(async({ctx})=>{
+   try{
+    const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.delete"});
+    return await deleteDaphneV2UserData({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId});
    }catch(e){identityFailure(e);}
   }),
  policyPreview:legacyDayforgeTenantMemberProcedure
