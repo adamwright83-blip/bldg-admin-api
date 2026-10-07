@@ -75,7 +75,7 @@ describe("admin native order ownership", () => {
     await expect(
       caller({
         tenantId: "tenant-a",
-        openId: "dayforge:tenant-a-admin",
+        openId: "admin-owner",
         role: "admin",
       }).admin.saveIntake({
         orderId: 22,
