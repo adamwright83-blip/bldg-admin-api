@@ -25,7 +25,7 @@ export function canonicalOrderTenantId(
 }
 
 export function hasOrderTenantAuthority(input: {
-  order: Pick<OrderOwnershipRecord, "tenantId">;
+  order: { tenantId?: string | null };
   tenantId: string | null | undefined;
   allowCrossTenant?: boolean;
   allowLegacyDefaultWildcard?: boolean;
@@ -45,7 +45,7 @@ export function hasOrderTenantAuthority(input: {
 }
 
 export function assertOrderTenantAuthority(input: {
-  order: Pick<OrderOwnershipRecord, "tenantId">;
+  order: { tenantId?: string | null };
   tenantId: string | null | undefined;
   allowCrossTenant?: boolean;
   allowLegacyDefaultWildcard?: boolean;
@@ -71,7 +71,7 @@ export function assertOrderTenantAuthority(input: {
  * state which already-established behavior they are preserving.
  */
 export function assertOrderVendorAuthority(input: {
-  order: Pick<OrderOwnershipRecord, "vendorId">;
+  order: { vendorId?: number | null };
   vendorId: number;
   allowUnassigned: boolean;
   label?: string;
@@ -91,7 +91,7 @@ export function assertOrderVendorAuthority(input: {
 }
 
 export function assertOrderResidentAuthority(input: {
-  order: Pick<OrderOwnershipRecord, "bldgUserId">;
+  order: { bldgUserId?: number | null };
   residentId: number | null | undefined;
   label?: string;
 }): number {
