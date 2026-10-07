@@ -29,6 +29,7 @@ import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors"
 import {
   getCommercialMission,
   getCommercialMissionByIdempotencyKey,
+  reconcileCommercialMissionWonDownstream,
   transitionCommercialMission,
   transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
@@ -972,13 +973,24 @@ export async function completeCommercialFollowUp(input: {
     pipelineId: input.pipelineId,
     idempotencyKey: `pipeline-follow-up-completed:${input.requestId}`,
   });
-  const detail = await getCommercialPipelineDetail(input);
+  let detail = await getCommercialPipelineDetail(input);
   if (
     !detail?.followUps.some(
       item => item.id === input.followUpId && item.status === "completed"
     )
   )
     throw new Error("Commercial follow-up completion was not persisted");
+
+  if (terminalStatus === "won" && detail) {
+    await reconcileCommercialMissionWonDownstream({
+      tenantId: input.tenantId,
+      missionId: detail.mission.id,
+      assignedTo: detail.mission.assignedTo,
+      actorId: input.actorId,
+      correlationId: `pipeline-follow-up-outcome:${input.requestId}`,
+    });
+    detail = (await getCommercialPipelineDetail(input)) ?? detail;
+  }
   if (
     input.nextFollowUpAt &&
     !detail.followUps.some(

@@ -129,6 +129,9 @@ jobs:
           pnpm vitest run
           server/commercialPipeline/commercialRevenueAuthorityShadow.test.ts
           server/commercialPipeline/commercialPipelineContract.test.ts
+          server/commercialPipeline/commercialLifecycleAuthority.test.ts
+          server/commercialMissions/commercialWalkInService.test.ts
+          server/commercialMissions/commercialWalkInService.integration.test.ts
       - name: Prove read-only commercial payment mismatch report
         run: >-
           pnpm vitest run

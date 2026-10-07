@@ -22,6 +22,7 @@ import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors"
 import {
   getCommercialMission,
   readCommercialMissionWith,
+  reconcileCommercialMissionWonDownstream,
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
@@ -970,6 +971,16 @@ export async function recordCommercialMissionVisitOutcome(input: {
     missionId: input.missionId,
   });
   if (!persisted?.visitOutcome) throw new Error("Visit outcome was not persisted");
+
+  if (input.outcome === "won") {
+    await reconcileCommercialMissionWonDownstream({
+      tenantId: input.tenantId,
+      missionId: input.missionId,
+      assignedTo: persisted.mission.assignedTo,
+      actorId: input.actorId,
+      correlationId: `field-outcome:${input.requestId}`,
+    });
+  }
 
   // Admins may record an outcome for an assigned field mission. The durable
   // visit credit belongs to the assigned operator, not whichever authorized
