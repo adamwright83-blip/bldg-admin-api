@@ -13,6 +13,7 @@ import { MitchProductionService } from "./mitchService";
 import { MitchQaService } from "./mitchQaService";
 import type { IMitchProductionStore } from "./mitchStore";
 import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
+import { buildMitchGameDirectorBrief } from "./mitchGameDirector";
 
 export type MitchProducerCoordinatorResult =
   | { action: "dispatch_sent"; workOrderId: string }
@@ -196,6 +197,8 @@ export class MitchProducerCoordinator {
           "",
           "### Known limitations",
           run?.knownLimitations ?? "None recorded.",
+          "",
+          buildMitchGameDirectorBrief({ milestone, order }),
           "",
           "Review the exact branch/SHA and available evidence. Do not invent hands-on play.",
           "If a concrete design/UX defect is visible from code/captures, use verdict fix_needed.",
