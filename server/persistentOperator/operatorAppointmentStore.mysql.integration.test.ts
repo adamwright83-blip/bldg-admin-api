@@ -117,7 +117,39 @@ describe.skipIf(!DATABASE_URL)("operator appointment store — real MySQL", () =
     );
     const claimed = claims.filter(Boolean);
     expect(claimed).toHaveLength(1);
-    expect(claimed[0]).toMatchObject({ id: scheduled.id });
+    expect(claimed[0]).toMatchObject({
+      id: scheduled.id,
+      tenantId: "tenant-a",
+      idempotencyKey: "sunday:2026-10-05",
+    });
+  });
+
+  it("scopes the same durable idempotency key independently per tenant", async () => {
+    const store = new OperatorAppointmentStore(pool);
+    const sharedKey = "callback:shared-source";
+    const tenantA = await store.enqueue(
+      appointment({ idempotencyKey: sharedKey })
+    );
+    const tenantB = await store.enqueue(
+      appointment({
+        tenantId: "tenant-b",
+        canonicalOperatorId: "tenant:tenant-b:operator:adam",
+        idempotencyKey: sharedKey,
+      })
+    );
+
+    expect(tenantA.created).toBe(true);
+    expect(tenantB.created).toBe(true);
+    expect(tenantB.id).not.toBe(tenantA.id);
+
+    const rowsForKey = await rows<RowDataPacket>(
+      "SELECT tenantId, idempotencyKey FROM operator_appointments WHERE idempotencyKey = ? ORDER BY tenantId",
+      [sharedKey]
+    );
+    expect(rowsForKey).toMatchObject([
+      { tenantId: "tenant-a", idempotencyKey: sharedKey },
+      { tenantId: "tenant-b", idempotencyKey: sharedKey },
+    ]);
   });
 
   it("survives worker restart and reclaims an expired callback lease", async () => {

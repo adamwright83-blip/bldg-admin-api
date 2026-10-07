@@ -9,6 +9,10 @@ import {
   type ClaimedOperatorAppointment,
 } from "./operatorAppointmentStore";
 import { executeOperatorAppointment } from "./operatorAppointmentExecution";
+import {
+  admitOperatorAppointmentExecution,
+  type OperatorAppointmentExecutionContext,
+} from "./operatorAppointmentExecutionContext";
 
 export type OperatorAppointmentWorkerOptions = {
   leaseOwner: string;
@@ -70,15 +74,23 @@ export class OperatorAppointmentWorker {
   constructor(
     store: OperatorAppointmentStore,
     options: OperatorAppointmentWorkerOptions,
-    executor?: (step: ClaimedOperatorAppointment) => Promise<unknown>
+    executor?: (
+      step: ClaimedOperatorAppointment,
+      context: OperatorAppointmentExecutionContext
+    ) => Promise<unknown>
   ) {
     const run =
       executor ??
-      ((step: ClaimedOperatorAppointment) =>
-        executeOperatorAppointment(step, new Date(), store));
+      ((
+        step: ClaimedOperatorAppointment,
+        context: OperatorAppointmentExecutionContext
+      ) => executeOperatorAppointment(step, new Date(), store, context));
     const handler: DurableStepHandler<ClaimedOperatorAppointment> = async ({
       step,
-    }) => run(step);
+    }) => {
+      const context = admitOperatorAppointmentExecution(step);
+      return run(step, context);
+    };
     this.worker = new DurableWorker(
       new ScheduledAppointmentExecutionStore(store),
       new Map([["operator_appointment.execute", handler]]),

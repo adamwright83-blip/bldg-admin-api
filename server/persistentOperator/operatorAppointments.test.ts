@@ -3,6 +3,11 @@ import { targetWeekHorizon } from "../../shared/weeklyMissionReadiness";
 import { getAgentToolPolicy } from "../agents/toolRegistry";
 import { parseWeeklyPlanningCallbackRequest } from "./operatorAppointmentPolicy";
 import { insideSundayStandingWindow } from "./operatorAppointmentExecution";
+import {
+  admitOperatorAppointmentExecution,
+  assertOperatorAppointmentExecutionContext,
+} from "./operatorAppointmentExecutionContext";
+import type { ClaimedOperatorAppointment } from "./operatorAppointmentStore";
 
 describe("Persistent Growth PR3 authority and appointment contracts", () => {
   it("allows an unprompted planning call only on Sunday inside the standing window", () => {
@@ -59,6 +64,90 @@ describe("Persistent Growth PR3 authority and appointment contracts", () => {
     expect(parsed.inferredMeridiem).toBe(false);
     expect(parsed.readback).toBe("9:00 PM");
     expect(parsed.scheduledFor.toISOString()).toBe("2026-10-05T04:00:00.000Z");
+  });
+
+
+  it("admits worker execution only from the durable tenant, actor, source, and idempotency identity", () => {
+    const step: ClaimedOperatorAppointment = {
+      id: "appointment-a",
+      tenantId: "tenant-a",
+      canonicalOperatorId: "tenant:tenant-a:operator:adam",
+      operatorUserId: "adam",
+      appointmentKind: "weekly_planning_callback",
+      weekStart: "2026-10-05",
+      scheduledFor: new Date("2026-10-07T20:00:00.000Z"),
+      timeZone: "America/Los_Angeles",
+      source: "explicit_operator_request",
+      sourceReference: "conversation:123",
+      idempotencyKey: "callback:tenant-a:123",
+      standingAuthorizationId: null,
+      unprompted: false,
+      attemptCount: 1,
+      maxAttempts: 3,
+      leaseOwner: "worker-a",
+    };
+    const context = admitOperatorAppointmentExecution(step);
+    expect(context).toMatchObject({
+      jobId: "appointment-a",
+      scope: { kind: "tenant", tenantId: "tenant-a" },
+      actor: {
+        kind: "user_delegation",
+        operatorUserId: "adam",
+        canonicalOperatorId: "tenant:tenant-a:operator:adam",
+      },
+      source: {
+        kind: "operator_appointment",
+        appointmentKind: "weekly_planning_callback",
+        sourceReference: "conversation:123",
+      },
+      idempotencyKey: "callback:tenant-a:123",
+    });
+    expect(() =>
+      assertOperatorAppointmentExecutionContext(step, {
+        ...context,
+        scope: { kind: "tenant", tenantId: "tenant-b" },
+      })
+    ).toThrow("does not match durable job identity");
+    expect(() =>
+      assertOperatorAppointmentExecutionContext(step, {
+        ...context,
+        actor: { ...context.actor, operatorUserId: "other-operator" },
+      })
+    ).toThrow("does not match durable job identity");
+  });
+
+  it("refuses missing durable tenant/idempotency instead of manufacturing worker authority", () => {
+    const base: ClaimedOperatorAppointment = {
+      id: "appointment-a",
+      tenantId: "tenant-a",
+      canonicalOperatorId: "tenant:tenant-a:operator:adam",
+      operatorUserId: "adam",
+      appointmentKind: "weekly_planning_callback",
+      weekStart: "2026-10-05",
+      scheduledFor: new Date("2026-10-07T20:00:00.000Z"),
+      timeZone: "America/Los_Angeles",
+      source: "explicit_operator_request",
+      sourceReference: "conversation:123",
+      idempotencyKey: "callback:tenant-a:123",
+      standingAuthorizationId: null,
+      unprompted: false,
+      attemptCount: 1,
+      maxAttempts: 3,
+      leaseOwner: "worker-a",
+    };
+    expect(() =>
+      admitOperatorAppointmentExecution({ ...base, tenantId: "" })
+    ).toThrow("durable tenantId");
+    expect(() =>
+      admitOperatorAppointmentExecution({ ...base, idempotencyKey: "" })
+    ).toThrow("durable idempotencyKey");
+    expect(
+      admitOperatorAppointmentExecution({
+        ...base,
+        source: "standing_weekly_authorization",
+        standingAuthorizationId: "standing-auth-a",
+      }).actor.kind
+    ).toBe("standing_authorization");
   });
 
   it("assigns server-owned tool risk classes and fails unclassified tools closed", () => {

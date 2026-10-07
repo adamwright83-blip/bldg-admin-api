@@ -24,6 +24,7 @@ export type ClaimedOperatorAppointment = DurableLeasedStep & {
   timeZone: string;
   source: "standing_weekly_authorization" | "explicit_operator_request";
   sourceReference: string;
+  idempotencyKey: string;
   standingAuthorizationId: string | null;
   unprompted: boolean;
   maxAttempts: number;
@@ -69,6 +70,7 @@ function claimed(row: AppointmentRow, leaseOwner: string): ClaimedOperatorAppoin
     timeZone: row.timeZone,
     source: row.source,
     sourceReference: row.sourceReference,
+    idempotencyKey: row.idempotencyKey,
     standingAuthorizationId: row.standingAuthorizationId,
     unprompted: Boolean(row.unprompted),
     attemptCount: Number(row.attemptCount),
@@ -97,6 +99,22 @@ export class OperatorAppointmentStore
     idempotencyKey: string;
     maxAttempts?: number;
   }): Promise<{ id: string; created: boolean }> {
+    if (!input.tenantId.trim()) {
+      throw new Error("Operator appointment tenantId is required");
+    }
+    if (!input.canonicalOperatorId.trim()) {
+      throw new Error("Operator appointment canonicalOperatorId is required");
+    }
+    if (!input.operatorUserId.trim()) {
+      throw new Error("Operator appointment operatorUserId is required");
+    }
+    if (!input.sourceReference.trim()) {
+      throw new Error("Operator appointment sourceReference is required");
+    }
+    if (!input.idempotencyKey.trim()) {
+      throw new Error("Operator appointment idempotencyKey is required");
+    }
+
     const connection = await this.pool.getConnection();
     const id = randomUUID();
     try {

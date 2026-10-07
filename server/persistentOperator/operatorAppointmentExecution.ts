@@ -19,6 +19,11 @@ import {
   OperatorAppointmentStore,
   type ClaimedOperatorAppointment,
 } from "./operatorAppointmentStore";
+import {
+  admitOperatorAppointmentExecution,
+  assertOperatorAppointmentExecutionContext,
+  type OperatorAppointmentExecutionContext,
+} from "./operatorAppointmentExecutionContext";
 
 function numberLabel(value: number): string {
   return Number.isInteger(value)
@@ -84,16 +89,20 @@ async function macroGoalPaceLine(input: {
   }
 }
 
-async function resolveAppointmentIdentity(step: ClaimedOperatorAppointment) {
+async function resolveAppointmentIdentity(
+  context: OperatorAppointmentExecutionContext
+) {
   const resolution = await resolveCanonicalOperatorIdentity({
-    tenantId: step.tenantId,
-    source: { type: "open_id", value: step.operatorUserId },
+    tenantId: context.scope.tenantId,
+    source: { type: "open_id", value: context.actor.operatorUserId },
     subsystem: "persistent_operator.operator_appointment",
   });
   if (!resolution.ok) {
     throw new Error(`Operator appointment identity unresolved: ${resolution.reason}`);
   }
-  if (resolution.identity.canonicalOperatorId !== step.canonicalOperatorId) {
+  if (
+    resolution.identity.canonicalOperatorId !== context.actor.canonicalOperatorId
+  ) {
     throw new Error("Operator appointment canonical identity changed");
   }
   return resolution.identity;
@@ -143,15 +152,18 @@ export function insideSundayStandingWindow(
 export async function executeOperatorAppointment(
   step: ClaimedOperatorAppointment,
   now = new Date(),
-  store?: OperatorAppointmentStore
+  store?: OperatorAppointmentStore,
+  context: OperatorAppointmentExecutionContext =
+    admitOperatorAppointmentExecution(step)
 ): Promise<Record<string, unknown>> {
-  const identity = await resolveAppointmentIdentity(step);
+  assertOperatorAppointmentExecutionContext(step, context);
+  const identity = await resolveAppointmentIdentity(context);
   const operatorIds = [
     identity.canonicalOpenId,
     ...identity.aliases.map(alias => alias.openId),
   ];
   const locked = await latestWeeklyIntentForOperators({
-    tenantId: step.tenantId,
+    tenantId: context.scope.tenantId,
     operatorIds,
     weekStart: step.weekStart,
   });
@@ -170,7 +182,7 @@ export async function executeOperatorAppointment(
   }
 
   const approvedByUserId =
-    step.source === "explicit_operator_request"
+    context.actor.kind === "user_delegation"
       ? identity.canonicalOpenId
       : null;
   const result = await executeClairePersistentOperatorAction({
@@ -179,15 +191,15 @@ export async function executeOperatorAppointment(
     authorityBasis: "scheduled_operator_appointment",
     source: {
       type: "scheduled_operator_appointment",
-      tenantId: step.tenantId,
+      tenantId: context.scope.tenantId,
       canonicalOperatorId: identity.canonicalOperatorId,
-      appointmentId: step.id,
-      appointmentKind: step.appointmentKind,
-      standingAuthorizationId: step.standingAuthorizationId,
+      appointmentId: context.jobId,
+      appointmentKind: context.source.appointmentKind,
+      standingAuthorizationId: context.actor.standingAuthorizationId,
     },
     riskClass: "EXTERNAL_COMMUNICATION",
     exactAction: SUNDAY_WEEKLY_PLANNING_ACTION,
-    standingAuthorizationId: step.standingAuthorizationId,
+    standingAuthorizationId: context.actor.standingAuthorizationId,
     approvedByUserId,
     expiresAtMs: Date.now() + 5 * 60_000,
     scope: { identity: identity.canonicalOpenId },
@@ -196,7 +208,7 @@ export async function executeOperatorAppointment(
       let sessionKind: "weekly_planning_invite" | "weekly_planning";
       if (step.appointmentKind === "weekly_planning_callback") {
         const weekly = await beginWeeklyMission({
-          tenantId: step.tenantId,
+          tenantId: context.scope.tenantId,
           operatorId: identity.weeklyOperatorId,
           operatorIdentities: identity.aliases.map(alias => ({
             operatorId: alias.openId,
@@ -212,7 +224,7 @@ export async function executeOperatorAppointment(
         sessionKind = "weekly_planning";
       } else {
         const pace = await macroGoalPaceLine({
-          tenantId: step.tenantId,
+          tenantId: context.scope.tenantId,
           canonicalOperatorId: identity.canonicalOperatorId,
           now,
         });
@@ -234,7 +246,7 @@ export async function executeOperatorAppointment(
         throw new Error("Operator appointment call dispatch already attempted");
       }
       return startClairePreDriveCall({
-        tenantId: step.tenantId,
+        tenantId: context.scope.tenantId,
         actorId: identity.communicationOperatorUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
         timeZone: step.timeZone,
@@ -252,32 +264,34 @@ export async function executeOperatorAppointment(
     requireClaireCallExecutionProof(result.result);
   await logAgentEvent({
     ctx: {
-      tenantId: step.tenantId,
+      tenantId: context.scope.tenantId,
       agentType: "goal_cycle_agent",
       actorType: "system",
       actorId: identity.canonicalOpenId,
       canonicalOperatorId: identity.canonicalOperatorId,
-      standingAuthorizationId: step.standingAuthorizationId,
+      standingAuthorizationId: context.actor.standingAuthorizationId,
       approvedByUserId,
     },
     toolName: "placeClaireWeeklyPlanningCall",
     inputJson: {
-      appointmentId: step.id,
-      appointmentKind: step.appointmentKind,
+      appointmentId: context.jobId,
+      appointmentKind: context.source.appointmentKind,
       weekStart: step.weekStart,
       source: step.source,
+      sourceReference: context.source.sourceReference,
+      idempotencyKey: context.idempotencyKey,
     },
     outputJson: { callSid, communicationReceiptId },
     status: "success",
     entityType: "operator_appointment",
-    entityId: step.id,
+    entityId: context.jobId,
   }).catch(() => undefined);
 
   return {
     callSid,
     communicationReceiptId,
-    appointmentId: step.id,
-    appointmentKind: step.appointmentKind,
+    appointmentId: context.jobId,
+    appointmentKind: context.source.appointmentKind,
     weekStart: step.weekStart,
   };
 }
