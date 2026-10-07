@@ -827,6 +827,7 @@ export async function completeCommercialFollowUp(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const terminalStatus = missionStatusForFollowUpOutcome(input.outcome);
   try {
     await db.transaction(async tx => {
       const pipeline = await readPipelineWith(tx, input);
@@ -850,7 +851,6 @@ export async function completeCommercialFollowUp(input: {
         return;
       }
 
-      const terminalStatus = missionStatusForFollowUpOutcome(input.outcome);
       if (terminalStatus && input.nextFollowUpAt) {
         throw new Error("Terminal follow-up outcomes cannot schedule another follow-up");
       }
