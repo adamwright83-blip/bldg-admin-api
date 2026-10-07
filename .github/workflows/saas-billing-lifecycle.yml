@@ -58,5 +58,6 @@ jobs:
       - name: Run billing boundary and full lifecycle exams
         run: >
           pnpm vitest run
+          server/saas/billingEntitlementCertification.test.ts
           server/saas/saasBilling.test.ts
           server/saas/saasBilling.lifecycle.integration.test.ts
