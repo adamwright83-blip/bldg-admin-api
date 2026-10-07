@@ -3,6 +3,7 @@ import type { CanonicalOperatorIdentity } from "../persistentOperator/identity";
 import type { OperatorContextPacket } from "../persistentOperator/operatorContext";
 import { buildOperatorRepresentativeSnapshot } from "./readModel";
 import { answerOperatorRepresentativeQuestion } from "./talk";
+import type { OperatorRepresentativeDirectiveRecord } from "./directives";
 
 const identity: CanonicalOperatorIdentity = {
   tenantId: "t",
@@ -213,5 +214,91 @@ describe("Operator Representative grounded Talk", () => {
     });
     expect(answer.reply).not.toMatch(/yes[, .]|it was paid|invoice was paid/i);
     expect(answer.reply).toMatch(/explain what you explicitly told me/i);
+  });
+
+  it("reports unresolved LEARNING items as waiting for review", () => {
+    const current = snapshot();
+    const answer = answerOperatorRepresentativeQuestion({
+      question: "What's waiting for review?",
+      snapshot: current,
+    });
+    expect(answer.intent).toBe("review_status");
+    expect(answer.itemRefs).toEqual([current.home.learning[0].id]);
+    expect(answer.reply).toMatch(/waiting for your review/i);
+  });
+
+  it("reports approval as future eligibility, not actual use", () => {
+    const base = snapshot();
+    const target = base.home.learning[0];
+    const directive: OperatorRepresentativeDirectiveRecord = {
+      id: "11111111-1111-4111-8111-111111111111",
+      tenantId: identity.tenantId,
+      canonicalOperatorId: identity.canonicalOperatorId,
+      targetItemId: target.id,
+      targetKey: target.targetKey ?? null,
+      directiveKind: "approve",
+      operatorDeclaredValue: null,
+      status: "active",
+      createdByOpenId: "op",
+      createdAt: new Date("2026-10-06T16:00:00.000Z"),
+      updatedAt: new Date("2026-10-06T16:00:00.000Z"),
+      revokedAt: null,
+    };
+    const approved = buildOperatorRepresentativeSnapshot({
+      identity,
+      packet: packet(),
+      directives: [directive],
+    });
+    const answer = answerOperatorRepresentativeQuestion({
+      question: "What's approved?",
+      snapshot: approved,
+      adaptationLifecycle: [{
+        directiveId: directive.id,
+        targetItemId: target.id,
+        targetKey: target.targetKey ?? null,
+        directiveKind: "approve",
+        directiveStatus: "active",
+        lifecycle: "unwired",
+        behaviorClass: null,
+        useCount: 0,
+        lastUsedAt: null,
+      }],
+    });
+    expect(answer.intent).toBe("approved");
+    expect(answer.reply).toMatch(/possible future supported use/i);
+    expect(answer.reply).toMatch(/not thereby used/i);
+  });
+
+  it("reports historical receipt-backed use separately from current revocation", () => {
+    const current = snapshot();
+    const item = current.home.learning[0];
+    const lifecycle = [{
+      directiveId: "11111111-1111-4111-8111-111111111111",
+      targetItemId: item.id,
+      targetKey: item.targetKey ?? null,
+      directiveKind: "ask_instead" as const,
+      directiveStatus: "revoked" as const,
+      lifecycle: "revoked_historical" as const,
+      behaviorClass: "ask_before_ambiguous_pending_continuation" as const,
+      useCount: 2,
+      lastUsedAt: "2026-10-06T17:00:00.000Z",
+    }];
+    const revoked = answerOperatorRepresentativeQuestion({
+      question: "What was revoked?",
+      snapshot: current,
+      adaptationLifecycle: lifecycle,
+    });
+    expect(revoked.intent).toBe("revoked");
+    expect(revoked.reply).toMatch(/inactive for future turns/i);
+    expect(revoked.reply).toMatch(/2 historical uses/i);
+
+    const everUsed = answerOperatorRepresentativeQuestion({
+      question: "Have you ever used anything?",
+      snapshot: current,
+      adaptationLifecycle: lifecycle,
+    });
+    expect(everUsed.intent).toBe("ever_used");
+    expect(everUsed.reply).toMatch(/durable receipts/i);
+    expect(everUsed.reply).toMatch(/2 recorded uses/i);
   });
 });
