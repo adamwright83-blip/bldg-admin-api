@@ -14,6 +14,8 @@ import {
   HttpMitchAgentWakeProvider,
   type MitchAgentWakeTarget,
 } from "./mitchAgentWake";
+import { GitHubActionsMitchWakeProvider } from "./githubActionsWakeProvider";
+import { registerMitchGithubAgentRoutes } from "./mitchGithubAgentRoutes";
 import { parseMitchComment, MITCH_EVENT_MARKER } from "../../shared/mitchEvents";
 import { SMALL_COMFORTS_GAME_ID } from "./smallComfortsProduction";
 import { GitHubProducerBus } from "./githubProducerBus";
@@ -55,11 +57,20 @@ const recoveryMs = numberEnv("MITCH_PRODUCER_RECOVERY_MS", 60 * 60 * 1000);
 const handbackPollMs = numberEnv("MITCH_HANDBACK_POLL_MS", 15_000);
 const handbackTimeoutMs = numberEnv("MITCH_HANDBACK_TIMEOUT_MS", 45 * 60 * 1000);
 const port = numberEnv("PORT", 8082);
-const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "chatgpt_design_review";
+const reviewerId = process.env.MITCH_REVIEWER_ACTOR_ID?.trim() || "claude_independent_review";
 const githubActorRules = jsonEnv<MitchGithubActorRule[]>("MITCH_GITHUB_ACTOR_RULES");
 const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTOR_TOKENS");
-const wakeTargets = jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS");
-const wakeProvider = new HttpMitchAgentWakeProvider(wakeTargets);
+const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
+const wakeProvider =
+  wakeMode === "github_actions"
+    ? new GitHubActionsMitchWakeProvider({
+        token,
+        repoFullName,
+        ref: process.env.MITCH_GITHUB_ACTIONS_REF?.trim() || "main",
+      })
+    : new HttpMitchAgentWakeProvider(
+        jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS")
+      );
 
 const store = new MitchProductionStore(false, true);
 const service = new MitchProductionService(store);
@@ -144,10 +155,11 @@ const app = createMitchEventIngress({
   callbackActorTokens,
   webhookSecret: required("MITCH_GITHUB_WEBHOOK_SECRET"),
 });
+registerMitchGithubAgentRoutes(app, { events });
 app.get("/healthz", (_request, response) => {
   response.status(lastError ? 503 : 200).json({ ok: !lastError, producer: {
     tenantId, repoFullName, issueNumber, inFlight, lastRunAt, lastSuccessAt, lastError, lastResult,
-    mode: "event_driven", recoveryMs,
+    mode: "event_driven", wakeMode, recoveryMs,
   } });
 });
 const server = http.createServer(app);
