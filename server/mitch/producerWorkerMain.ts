@@ -66,17 +66,19 @@ const callbackActorTokens = jsonEnv<Record<string, string>>("MITCH_CALLBACK_ACTO
 const wakeMode = process.env.MITCH_AGENT_WAKE_MODE?.trim() || "github_actions";
 const gameId = process.env.MITCH_GAME_ID?.trim() || "kingdom.boreslay";
 const wakeProvider =
-  wakeMode === "github_actions" && token
-    ? new GitHubActionsMitchWakeProvider({
-        token,
-        repoFullName,
-        ref: process.env.MITCH_GITHUB_ACTIONS_REF?.trim() || "main",
-        controlPlaneBaseUrl:
-          process.env.MITCH_PRODUCER_PUBLIC_BASE_URL?.trim() ||
-          (process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
-            ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN.trim()
-            : undefined),
-      })
+  wakeMode === "github_actions"
+    ? token
+      ? new GitHubActionsMitchWakeProvider({
+          token,
+          repoFullName,
+          ref: process.env.MITCH_GITHUB_ACTIONS_REF?.trim() || "main",
+          controlPlaneBaseUrl:
+            process.env.MITCH_PRODUCER_PUBLIC_BASE_URL?.trim() ||
+            (process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+              ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN.trim()
+              : undefined),
+        })
+      : new HttpMitchAgentWakeProvider({})
     : new HttpMitchAgentWakeProvider(
         jsonEnv<Record<string, MitchAgentWakeTarget>>("MITCH_AGENT_WAKE_ENDPOINTS")
       );
