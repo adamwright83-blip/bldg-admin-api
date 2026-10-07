@@ -324,7 +324,17 @@ export function answerOperatorRepresentativeQuestion(input: {
           ? `Revoked directives are inactive for future turns. Durable receipts preserve ${historicalUse} historical use${historicalUse === 1 ? "" : "s"}.`
           : "Revoked directives are inactive for future turns, and no durable receipt shows historical use."
         : "No revoked Daphne directives are present in the available history.",
-      itemRefs: revoked.slice(0, 3).map(item => item.targetItemId),
+      itemRefs: revoked
+        .slice(0, 3)
+        .map(item => item.targetItemId)
+        .filter(itemId =>
+          [
+            ...input.snapshot.home.known,
+            ...input.snapshot.home.learning,
+            ...input.snapshot.home.uncertain,
+            ...input.snapshot.home.changed,
+          ].some(item => item.id === itemId)
+        ),
     };
   }
 
