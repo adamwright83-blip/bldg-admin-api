@@ -390,6 +390,7 @@ async function runValidation(brief: string): Promise<Check[]> {
 
 function protectedFiles(files: string[]): string[] {
   return files.filter(path => {
+    if (path.startsWith("e2e/boreslay/")) return true;
     if (path.startsWith("client/src/")) return false;
     if (path.startsWith("client/public/assets/")) return false;
     if (path.startsWith("e2e/")) return false;
@@ -422,7 +423,7 @@ function executionPrompt(brief: string): string {
     "- The pinned gamedev-skills router and 74 specialist skills are installed for this Claude session. Use the router first, then load only the minimum relevant specialist skills. Mitch owns diagnosis and scope; the external skills supply craft technique.",
     "- Do not merge, deploy, commit, push, or change branches. The harness owns git publication.",
     "- Do not touch server/claire/**, server/president/**, server/mitch/**, shared/**, drizzle/**, scripts/**, .github/**, package.json, or lockfiles.",
-    "- Game implementation may change only client/src/**, client/public/assets/**, and focused e2e/** evidence/tests.",
+    "- Game implementation may change only client/src/**, client/public/assets/**, and focused non-authoritative e2e/** evidence. The e2e/boreslay/** acceptance harness is immutable to the executor.",
     "- Do not alter business truth, customer data, revenue, orders, tenancy, identity, payment, or architecture.",
     "- Do not broaden the creative scope beyond the work order.",
     "- Do not claim tests or gameplay evidence you did not actually produce.",
