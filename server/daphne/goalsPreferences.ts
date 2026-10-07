@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { daphneGoals, daphneMetaPreferences } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export const DAPHNE_META_PREFERENCE_KEYS = [
   "adaptation_enabled",
@@ -193,6 +194,14 @@ export async function setDaphneMetaPreference(input: {
   });
   const [row] = await db.select().from(daphneMetaPreferences).where(eq(daphneMetaPreferences.id, rowId)).limit(1);
   if (!row) throw new Error("Daphne meta-preference did not persist");
+  await recordDaphneMetricEvent({
+    tenantId,
+    canonicalOperatorId,
+    eventName: "control_changed",
+    properties: { preferenceKey: input.preferenceKey, version, status: row.status },
+    sourceReference: row.id,
+    idempotencyKey: `control:${row.id}`,
+  }).catch(() => undefined);
   return prefRecord(row);
 }
 
