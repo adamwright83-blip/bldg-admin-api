@@ -16,7 +16,7 @@ async function openOperator(page: Page) {
   page.on("pageerror", error => errors.push(String(error)));
   await page.goto("/operator");
   await expect(page.getByText("JOYSTICK", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "TALK TO MY OPERATOR" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "TALK TO DAPHNE" })).toBeVisible({
     timeout: 30_000,
   });
   expect(errors).toEqual([]);
@@ -45,8 +45,8 @@ test.describe("Operator Representative V1", () => {
 
     await capture(page, `${testInfo.project.name}-default-${page.viewportSize()?.width ?? "unknown"}`);
 
-    await page.getByRole("button", { name: "TALK TO MY OPERATOR" }).click();
-    await expect(page.getByRole("dialog", { name: "Talk to my Operator" })).toBeVisible();
+    await page.getByRole("button", { name: "TALK TO DAPHNE" }).click();
+    await expect(page.getByRole("dialog", { name: "Talk to Daphne" })).toBeVisible();
     await expect(page.getByPlaceholder(/Ask what I know/i)).toBeVisible();
     await capture(page, `${testInfo.project.name}-talk-${page.viewportSize()?.width ?? "unknown"}`);
 
@@ -88,11 +88,11 @@ test.describe("Operator Representative V1", () => {
 
   test("keyboard Escape closes Talk and evidence", async ({ page }) => {
     await openOperator(page);
-    await page.getByRole("button", { name: "TALK TO MY OPERATOR" }).click();
-    await expect(page.getByRole("dialog", { name: "Talk to my Operator" })).toBeVisible();
+    await page.getByRole("button", { name: "TALK TO DAPHNE" }).click();
+    await expect(page.getByRole("dialog", { name: "Talk to Daphne" })).toBeVisible();
 
     // Escape support is part of the V1 accessibility contract.
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Talk to my Operator" })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Talk to Daphne" })).toHaveCount(0);
   });
 });
