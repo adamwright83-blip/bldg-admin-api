@@ -57,5 +57,7 @@ jobs:
         run: node scripts/migrate.mjs
       - name: Prove tenant lifecycle admission and provisioning contract
         run: pnpm vitest run server/saas/tenantLifecycleCertification.test.ts
+      - name: Prove privacy and connected-channel contract
+        run: pnpm vitest run server/saas/privacyChannelCertification.test.ts
       - name: Prove export delete and protected-tenant safeguards
         run: pnpm vitest run --config vitest.integration.config.ts server/saas/tenantLifecycle.integration.test.ts
