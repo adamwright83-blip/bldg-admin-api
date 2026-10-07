@@ -191,4 +191,37 @@ describe("paymentAdmission authority", () => {
       stripePaymentIntentId: "pi_real_123",
     });
   });
+  it("does not project paid state when authority receipt persistence fails", async () => {
+    const mockTx = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      for: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: 101, tenantId: "tenant-a" }]),
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockReturnThis(),
+      onDuplicateKeyUpdate: vi.fn(async () => {
+        throw new Error("receipt persistence failed");
+      }),
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+    };
+    vi.mocked(getDb).mockResolvedValueOnce({
+      transaction: vi.fn((cb: any) => cb(mockTx)),
+    } as any);
+
+    await expect(
+      admitNativeStripePayment({
+        tenantId: "tenant-a",
+        orderId: 101,
+        paymentIntentId: "pi_provider_succeeded",
+        paidAt: new Date("2026-10-07T02:40:00.000Z"),
+        orderPatch: { total: "45.00", status: "processing" },
+      })
+    ).rejects.toThrow("receipt persistence failed");
+
+    expect(mockTx.update).not.toHaveBeenCalled();
+    expect(mockTx.set).not.toHaveBeenCalled();
+  });
+
 });
