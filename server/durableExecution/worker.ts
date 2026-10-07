@@ -191,6 +191,7 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         this.lastExecutionError = null;
         return;
       }
+      if (leaseLost) return;
       if (!handler) {
         throw new Error(`No handler registered for step type ${handlerKey}`);
       }
