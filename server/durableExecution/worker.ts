@@ -128,15 +128,62 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
     const handlerKey = this.options.getHandlerKey(step);
     const handler = this.handlers.get(handlerKey);
     const prefix = this.options.logPrefix ?? "DurableWorker";
-    const heartbeat = setInterval(() => {
-      void this.store.heartbeat(step, this.options.leaseMs).catch(error => {
-        console.error(`[${prefix}] heartbeat failed for step ${step.id}`, error);
-        emitServerLog("error", "Durable worker heartbeat failed", {
-          worker: prefix,
-          step_id: step.id,
-          error_message: errorMessage(error).slice(0, 500),
-        });
+    const executionController = new AbortController();
+    const propagateWorkerAbort = () =>
+      executionController.abort(this.controller.signal.reason);
+    if (this.controller.signal.aborted) {
+      propagateWorkerAbort();
+    } else {
+      this.controller.signal.addEventListener("abort", propagateWorkerAbort, {
+        once: true,
       });
+    }
+
+    let executionFinished = false;
+    let leaseLost = false;
+
+    const recordLeaseLoss = (reason: string) => {
+      if (executionFinished || leaseLost) return;
+      leaseLost = true;
+      this.lastExecutionError = reason;
+      executionController.abort(new Error(reason));
+      emitServerLog("error", "Durable worker execution lease lost", {
+        worker: prefix,
+        step_id: step.id,
+        handler: handlerKey,
+        error_message: reason.slice(0, 500),
+      });
+    };
+
+    const heartbeat = setInterval(() => {
+      void this.store
+        .heartbeat(step, this.options.leaseMs)
+        .then(held => {
+          if (!held) {
+            recordLeaseLoss(
+              `Lease lost during execution for step ${step.id}`
+            );
+          }
+        })
+        .catch(error => {
+          const message = errorMessage(error);
+          // A heartbeat persistence failure is not proof that the lease has
+          // already been lost. Signal the handler to stop doing new work;
+          // the store's completion/failure fence remains authoritative.
+          if (!executionFinished && !executionController.signal.aborted) {
+            executionController.abort(error);
+          }
+          console.error(
+            `[${prefix}] heartbeat failed for step ${step.id}`,
+            error
+          );
+          emitServerLog("error", "Durable worker heartbeat failed", {
+            worker: prefix,
+            step_id: step.id,
+            handler: handlerKey,
+            error_message: message.slice(0, 500),
+          });
+        });
     }, Math.max(100, Math.floor(this.options.leaseMs / 3)));
 
     try {
@@ -144,12 +191,26 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         this.lastExecutionError = null;
         return;
       }
-      if (!handler) throw new Error(`No handler registered for step type ${handlerKey}`);
-      const result = await handler({ step, signal: this.controller.signal });
-      await this.store.completeStep(step, result);
+      if (!handler) {
+        throw new Error(`No handler registered for step type ${handlerKey}`);
+      }
+      const result = await handler({ step, signal: executionController.signal });
+
+      if (leaseLost) return;
+
+      const completed = await this.store.completeStep(step, result);
+      if (!completed) {
+        recordLeaseLoss(
+          `Lease lost before durable completion for step ${step.id}`
+        );
+        return;
+      }
       this.lastExecutionError = null;
     } catch (error) {
-      const retryDelay = this.options.retryBaseMs * 2 ** Math.max(0, step.attemptCount - 1);
+      if (leaseLost) return;
+
+      const retryDelay =
+        this.options.retryBaseMs * 2 ** Math.max(0, step.attemptCount - 1);
       emitServerLog("error", "Durable worker step failed", {
         worker: prefix,
         step_id: step.id,
@@ -157,13 +218,26 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         error_message: errorMessage(error).slice(0, 500),
       });
       try {
-        await this.store.failStep(step, error, retryDelay);
+        const failureState = await this.store.failStep(
+          step,
+          error,
+          retryDelay
+        );
+        if (failureState === "lease_lost") {
+          recordLeaseLoss(
+            `Lease lost before failure acknowledgement for step ${step.id}`
+          );
+          return;
+        }
         this.lastExecutionError = null;
       } catch (failure) {
         // A failure while durably recording failure must never reject the
         // in-flight promise. The lease remains recoverable by the store.
         this.lastExecutionError = errorMessage(failure);
-        console.error(`[${prefix}] failed to record step ${step.id} failure`, failure);
+        console.error(
+          `[${prefix}] failed to record step ${step.id} failure`,
+          failure
+        );
         emitServerLog("error", "Durable worker failed to record step failure", {
           worker: prefix,
           step_id: step.id,
@@ -172,7 +246,9 @@ export class DurableWorker<TStep extends DurableLeasedStep> {
         });
       }
     } finally {
+      executionFinished = true;
       clearInterval(heartbeat);
+      this.controller.signal.removeEventListener("abort", propagateWorkerAbort);
     }
   }
 }

@@ -53,6 +53,7 @@ function fakeStore(over: {
   steps?: ClaimedWorkflowStep[];
   markRunning?: (s: ClaimedWorkflowStep) => Promise<boolean>;
   claimNextStep?: () => Promise<ClaimedWorkflowStep | null>;
+  heartbeat?: (s: ClaimedWorkflowStep, leaseMs: number) => Promise<boolean>;
   completeStep?: (s: ClaimedWorkflowStep, result: unknown) => Promise<boolean>;
   failStep?: (s: ClaimedWorkflowStep, error: unknown, retryDelayMs: number) => Promise<unknown>;
 } = {}): FakeStore {
@@ -83,7 +84,7 @@ function fakeStore(over: {
     },
     async heartbeat(s: ClaimedWorkflowStep, leaseMs: number) {
       calls.heartbeat.push({ id: s.id, leaseMs });
-      return true;
+      return over.heartbeat ? over.heartbeat(s, leaseMs) : true;
     },
     async completeStep(s: ClaimedWorkflowStep, result: unknown) {
       if (over.completeStep) return over.completeStep(s, result);
@@ -219,6 +220,60 @@ describe("ProcurementWorker — step lifecycle", () => {
 });
 
 describe("ProcurementWorker — leases and heartbeats", () => {
+  it("aborts the handler and refuses stale acknowledgement when a heartbeat loses the lease", async () => {
+    const store = fakeStore({
+      steps: [step("lost")],
+      heartbeat: async () => false,
+    });
+    let observedSignal: AbortSignal | null = null;
+    const worker = startWorker(
+      store,
+      {
+        "test.step": async ({ signal }) => {
+          observedSignal = signal;
+          await new Promise<void>(resolve => {
+            if (signal.aborted) return resolve();
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+          return "must-not-ack";
+        },
+      },
+      { leaseMs: 300, concurrency: 1 }
+    );
+
+    await until(() => observedSignal?.aborted === true, 3_000);
+    await until(() => worker.health.degraded, 3_000);
+
+    expect(store.calls.heartbeat.length).toBeGreaterThanOrEqual(1);
+    expect(store.calls.complete).toEqual([]);
+    expect(store.calls.fail).toEqual([]);
+    expect(worker.health.lastError).toBe(
+      "Lease lost during execution for step lost"
+    );
+  });
+
+  it("treats a rejected completion fence as lease loss instead of success or retry", async () => {
+    let completionAttempts = 0;
+    const store = fakeStore({
+      steps: [step("completion-fence")],
+      completeStep: async () => {
+        completionAttempts += 1;
+        return false;
+      },
+    });
+    const worker = startWorker(store, {
+      "test.step": async () => "done",
+    });
+
+    await until(() => completionAttempts === 1);
+    await until(() => worker.health.degraded);
+
+    expect(store.calls.fail).toEqual([]);
+    expect(worker.health.lastError).toBe(
+      "Lease lost before durable completion for step completion-fence"
+    );
+  });
+
   it("heartbeats a long-running step about every leaseMs / 3 and stops once it finishes", async () => {
     const store = fakeStore({ steps: [step("1")] });
     let release!: () => void;
