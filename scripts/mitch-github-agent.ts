@@ -253,7 +253,7 @@ async function claude(prompt: string, readonly: boolean): Promise<string> {
     "--model",
     MODEL,
     "--allowedTools",
-    readonly ? "Read,Glob,Grep" : "Read,Edit,Write,Glob,Grep",
+    readonly ? "Read,Glob,Grep,Skill" : "Read,Edit,Write,Glob,Grep,Skill",
   ];
   if (readonly) args.push("--disallowedTools", "Edit,Write,Bash,NotebookEdit");
   else args.push("--disallowedTools", "Bash,NotebookEdit", "--permission-mode", "acceptEdits");
