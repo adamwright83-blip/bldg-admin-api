@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { daphneInterventions } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { recordDaphneMetricEvent } from "./metrics";
 
 export type DaphneSelectionMode =
   | "deterministic"
@@ -152,6 +153,15 @@ export async function recordDaphneIntervention(input: RecordDaphneInterventionIn
 
   const [row] = await db.select().from(daphneInterventions).where(eq(daphneInterventions.id, rowId)).limit(1);
   if (!row) throw new Error("Daphne intervention did not persist");
+  await recordDaphneMetricEvent({
+    tenantId: row.tenantId,
+    canonicalOperatorId: row.canonicalOperatorId,
+    agentId: row.agentId,
+    eventName: row.selectionMode === "randomized" ? "experiment_assignment" : "intervention_selected",
+    properties: { chosenAction: row.chosenAction, selectionMode: row.selectionMode, contextKey: row.contextKey },
+    sourceReference: row.id,
+    idempotencyKey: `intervention:${row.id}`,
+  }).catch(() => undefined);
   return toRecord(row);
 }
 
