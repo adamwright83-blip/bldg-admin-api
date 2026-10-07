@@ -6,6 +6,7 @@ on:
       - "server/mitch/**"
       - "shared/mitch*.ts"
       - "drizzle/0111_mitch_producer_events.sql"
+      - "e2e/boreslay/**"
       - "scripts/migrate.mjs"
       - "scripts/mitch-github-agent.ts"
       - "tsconfig.mitch-agent.json"
@@ -61,3 +62,7 @@ jobs:
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/mitch/mitchEventInbox.mysql.integration.test.ts
+      - name: Install Chromium for Kingdom Two proof
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Kingdom Two mobile gameplay proof
+        run: pnpm exec playwright test --config e2e/boreslay/playwright.config.ts
