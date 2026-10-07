@@ -1,9 +1,8 @@
 import { normalizePropertyTower } from "@shared/propertyTowers";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { fromZonedTime } from "date-fns-tz";
 import {
   cleancloudImportBatches,
-  cleancloudPaidOrders,
   type CleancloudPaidOrder,
   type InsertCleancloudPaidOrder,
 } from "../drizzle/schema";
@@ -11,6 +10,10 @@ import { getDb } from "./db";
 import { parseCsv, type CsvRecord } from "./externalSystems/csvIngestion";
 import { enqueueEconomicSnapshot } from "./cleancloudBrowserSync/worldOutbox";
 import { findPhysicalEntityIdByAddress } from "./goldlineWorld/entityLookup";
+import {
+  requireCleanCloudTenantId,
+  upsertCleanCloudPaidOrderWith,
+} from "./cleancloudPaidEvidence";
 
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
@@ -236,7 +239,7 @@ export function normalizeCleanCloudPaidOrderRow(
     sourceReportType: CleanCloudPaidReportType;
     sourceFileName: string;
     importBatchId: number;
-    tenantId?: string;
+    tenantId: string;
   }
 ): {
   normalized: InsertCleancloudPaidOrder | null;
@@ -279,7 +282,7 @@ export function normalizeCleanCloudPaidOrderRow(
       : (parseCleanCloudMoneyCents(pick(row, ["Total"])) ?? 0);
 
   const normalized: InsertCleancloudPaidOrder = {
-    tenantId: input.tenantId ?? "default",
+    tenantId: requireCleanCloudTenantId(input.tenantId),
     sourceReportType: input.sourceReportType,
     sourceFileName: input.sourceFileName,
     importBatchId: input.importBatchId,
@@ -344,10 +347,11 @@ export async function importCleanCloudPaidOrders(input: {
   csvText: string;
   sourceFileName?: string;
   sourceReportType: CleanCloudPaidReportType;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<CleanCloudPaidOrderImportSummary> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const tenantId = requireCleanCloudTenantId(input.tenantId);
 
   const sourceFileName =
     input.sourceFileName?.trim() || `cleancloud-${input.sourceReportType}.csv`;
@@ -355,7 +359,7 @@ export async function importCleanCloudPaidOrders(input: {
   const [batch] = await db
     .insert(cleancloudImportBatches)
     .values({
-      tenantId: input.tenantId ?? "default",
+      tenantId,
       source: `cleancloud_${input.sourceReportType}`,
       sourceFileName,
       importedRowCount: 0,
@@ -387,7 +391,7 @@ export async function importCleanCloudPaidOrders(input: {
       sourceReportType: input.sourceReportType,
       sourceFileName,
       importBatchId,
-      tenantId: input.tenantId,
+      tenantId,
     });
 
     if (!normalized.normalized) {
@@ -419,38 +423,16 @@ export async function importCleanCloudPaidOrders(input: {
       });
     }
     const physicalEntityId = values.buildingResolutionStatus === "resolved"
-      ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId ?? "default", address: values.address }) : null;
+      ? await findPhysicalEntityIdByAddress({ tenantId, address: values.address }) : null;
     await db.transaction(async tx => {
-    // Serialize economic identity before the report-specific persistence write.
-    await enqueueEconomicSnapshot(tx, values, physicalEntityId);
-    const existing = await tx
-      .select({ id: cleancloudPaidOrders.id })
-      .from(cleancloudPaidOrders)
-      .where(
-        and(
-          eq(cleancloudPaidOrders.tenantId, input.tenantId ?? "default"),
-          eq(
-            cleancloudPaidOrders.cleancloudOrderId,
-            values.cleancloudOrderId
-          ),
-          eq(
-            cleancloudPaidOrders.sourceReportType,
-            values.sourceReportType
-          )
-        )
-      )
-      .limit(1);
-
-    if (existing[0]) {
-      await tx
-        .update(cleancloudPaidOrders)
-        .set({ ...values, updatedAt: new Date() })
-        .where(eq(cleancloudPaidOrders.id, existing[0].id));
-      updatedRowCount += 1;
-    } else {
-      await tx.insert(cleancloudPaidOrders).values(values);
-      importedRowCount += 1;
-    }
+      // Serialize economic identity and the source row in one transaction.
+      await enqueueEconomicSnapshot(tx, values, physicalEntityId);
+      const write = await upsertCleanCloudPaidOrderWith(tx, {
+        values,
+        existingMode: "update",
+      });
+      if (write === "inserted") importedRowCount += 1;
+      else if (write === "updated") updatedRowCount += 1;
     });
   }
 
@@ -467,12 +449,12 @@ export async function importCleanCloudPaidOrders(input: {
     .where(eq(cleancloudImportBatches.id, importBatchId));
 
   // Post-import: Bridge paid orders to Persistent Growth Operator ledger
-  if (paidOrdersToBridge.length > 0 && input.tenantId) {
+  if (paidOrdersToBridge.length > 0) {
     try {
       const { bridgeCleanCloudPaidOrder } = await import("./persistentOperator/fieldEventBridge");
       for (const order of paidOrdersToBridge) {
         await bridgeCleanCloudPaidOrder({
-          tenantId: input.tenantId,
+          tenantId,
           cleancloudOrderId: String(order.cleancloudOrderId),
           cleancloudCustomerId: order.cleancloudCustomerId != null ? String(order.cleancloudCustomerId) : undefined,
           customerEmail: order.customerEmail ?? undefined,
