@@ -343,6 +343,90 @@ try {
     ]
   );
 
+  const tenantB = `schema-exam-b-${suffix}`;
+  const openIdB = `schema-exam-user-b-${suffix}`;
+  await conn.execute(
+    `INSERT INTO dayforge_saas_tenants
+      (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      tenantB,
+      tenantB,
+      "Schema Release Laundry B",
+      "Schema Release Laundry B",
+      "#000000",
+      "Schema Owner B",
+      `owner-b-${suffix}@example.invalid`,
+      "America/Los_Angeles",
+      "active",
+    ]
+  );
+  await conn.execute(
+    `INSERT INTO users (tenantId,openId,name,email,role)
+     VALUES (?,?,?,?,?)`,
+    [
+      tenantB,
+      openIdB,
+      "Schema Owner B",
+      `owner-b-${suffix}@example.invalid`,
+      "user",
+    ]
+  );
+  const [connectionResultB] = await conn.execute(
+    `INSERT INTO dayforge_saas_import_connections
+      (tenantId,providerKey,status,configurationJson)
+     VALUES (?,?,?,?)`,
+    [tenantB, "schema_exam", "connected", "{}"]
+  );
+  const connectionIdB = connectionResultB.insertId;
+  await conn.execute(
+    `INSERT INTO dayforge_saas_external_customers
+      (tenantId,connectionId,providerKey,externalId,name,factsJson,sourceCapturedAt,importRunId)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [
+      tenantB,
+      connectionIdB,
+      "schema_exam",
+      `customer-${suffix}`,
+      "Synthetic Customer B",
+      "{}",
+      now,
+      randomUUID(),
+    ]
+  );
+  await conn.execute(
+    `INSERT INTO dayforge_saas_external_orders
+      (tenantId,connectionId,providerKey,externalId,externalCustomerId,totalCents,paid,factsJson,sourceCapturedAt,importRunId)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [
+      tenantB,
+      connectionIdB,
+      "schema_exam",
+      `order-${suffix}`,
+      `customer-${suffix}`,
+      5678,
+      true,
+      "{}",
+      now,
+      randomUUID(),
+    ]
+  );
+  const [collisionRows] = await conn.execute(
+    `SELECT tenantId, externalId
+       FROM dayforge_saas_external_orders
+      WHERE providerKey = 'schema_exam'
+        AND externalId = ?
+      ORDER BY tenantId`,
+    [`order-${suffix}`]
+  );
+  if (
+    collisionRows.length !== 2 ||
+    !collisionRows.some(row => row.tenantId === tenantId) ||
+    !collisionRows.some(row => row.tenantId === tenantB)
+  ) {
+    throw new Error("Two-tenant external-id isolation failed in schema release exam");
+  }
+
   await conn.execute(
     `INSERT INTO impact_signals
       (id,tenantId,businessDate,signalKey,label,value,confirmedAt)
