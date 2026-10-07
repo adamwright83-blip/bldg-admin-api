@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -27,6 +27,71 @@ type Wake = {
 };
 
 type Check = { command: string; exitCode: number; ok: boolean };
+
+const GAME_SKILLS_UPSTREAM =
+  "gamedev-skills/awesome-gamedev-agent-skills";
+const GAME_SKILLS_PIN =
+  process.env.MITCH_GAME_SKILLS_PIN ||
+  "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9";
+
+function collectSkillDirs(root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    if (existsSync(join(dir, "SKILL.md"))) out.push(dir);
+    for (const entry of readdirSync(dir)) {
+      const child = join(dir, entry);
+      if (statSync(child).isDirectory()) walk(child);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+function installGameSkills(claudeDir: string): { count: number; names: string[] } {
+  const source = required("MITCH_GAME_SKILLS_DIR");
+  if (!existsSync(source))
+    throw new Error("Pinned Mitch game-skills checkout is missing");
+  const skillsRoot = join(claudeDir, "skills");
+  mkdirSync(skillsRoot, { recursive: true });
+
+  const sourceRoots = [join(source, "router"), join(source, "skills")];
+  const seen = new Set<string>();
+  for (const sourceRoot of sourceRoots) {
+    if (!existsSync(sourceRoot))
+      throw new Error("Mitch game-skills checkout is incomplete: " + sourceRoot);
+    for (const skillDir of collectSkillDirs(sourceRoot)) {
+      const name = skillDir.split(/[\\/]/).filter(Boolean).pop();
+      if (!name) continue;
+      if (seen.has(name))
+        throw new Error("Duplicate game skill name in pinned catalog: " + name);
+      seen.add(name);
+      cpSync(skillDir, join(skillsRoot, name), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+
+  const names = [...seen].sort();
+  if (!names.includes("router") || names.length < 75)
+    throw new Error(
+      `Expected router + 74 game-dev skills from ${GAME_SKILLS_UPSTREAM}; found ${names.length}`
+    );
+  writeFileSync(
+    join(claudeDir, "mitch-game-skills.json"),
+    JSON.stringify(
+      {
+        upstream: GAME_SKILLS_UPSTREAM,
+        pin: GAME_SKILLS_PIN,
+        installedAt: new Date().toISOString(),
+        names,
+      },
+      null,
+      2
+    )
+  );
+  return { count: names.length, names };
+}
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -174,6 +239,7 @@ async function startRefreshingModelProxy() {
 async function claude(prompt: string, readonly: boolean): Promise<string> {
   const claudeDir = join(homedir(), readonly ? ".claude-mitch-review" : ".claude-mitch-exec");
   mkdirSync(claudeDir, { recursive: true });
+  const gameSkills = installGameSkills(claudeDir);
   const onboarding = join(homedir(), ".claude.json");
   if (!existsSync(onboarding))
     writeFileSync(onboarding, JSON.stringify({ hasCompletedOnboarding: true }));
@@ -200,6 +266,7 @@ async function claude(prompt: string, readonly: boolean): Promise<string> {
   writeFileSync(promptFile, prompt);
   const env = {
     ...process.env,
+    MITCH_GAME_SKILLS_INSTALLED: String(gameSkills.count),
     ANTHROPIC_BASE_URL: proxy.baseUrl,
     ANTHROPIC_API_KEY: "mitch-github-oidc-proxy",
     CLAUDE_CONFIG_DIR: claudeDir,
@@ -352,6 +419,7 @@ function executionPrompt(brief: string): string {
     "The repository checkout is pinned by the harness to the work order's exact base SHA.",
     "",
     "Hard rules:",
+    "- The pinned gamedev-skills router and 74 specialist skills are installed for this Claude session. Use the router first, then load only the minimum relevant specialist skills. Mitch owns diagnosis and scope; the external skills supply craft technique.",
     "- Do not merge, deploy, commit, push, or change branches. The harness owns git publication.",
     "- Do not touch server/claire/**, server/president/**, server/mitch/**, shared/**, drizzle/**, scripts/**, .github/**, package.json, or lockfiles.",
     "- Game implementation may change only client/src/**, client/public/assets/**, and focused e2e/** evidence/tests.",
@@ -521,6 +589,7 @@ async function review(wake: Wake): Promise<void> {
     const response = await claude(
       [
         "You are Mitch's independent game-code reviewer.",
+        "The pinned gamedev-skills router and 74 specialist skills are installed for this Claude session. Use the router first, then load only the minimum relevant specialist skills for this review.",
         "You did not write this implementation. You are read-only and must not fix it.",
         "Review correctness, scope, regressions, evidence honesty, and whether the acceptance criteria are actually supported.",
         "Do not claim you played the game unless the harness explicitly reports a passing browser/e2e command.",
