@@ -1,7 +1,7 @@
 import {
   DurableWorker,
   type DurableStepHandler,
-} from "../durableExecution/worker";
+} from "../platform/execution/worker";
 import type { ClaimedWorkflowStep, ProcurementWorkflowStore } from "./workflowStore";
 
 export type ProcurementStepHandler = DurableStepHandler<ClaimedWorkflowStep>;

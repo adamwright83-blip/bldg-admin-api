@@ -21,7 +21,7 @@ Platform-level shared infrastructure for durable authority receipts, action exec
 - `admitActionCompletion` (`server/platform/authority/actionCompletionAdmission.ts`)
 
 ## DOWNSTREAM CONSUMERS
-- Durable execution workers (`server/durableExecution/`)
+- Durable execution workers (`server/platform/execution/`)
 - Persistent Operator action runs (`server/persistentOperator/`)
 
 ## MUST NEVER OWN

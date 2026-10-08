@@ -10,7 +10,7 @@ import { getDb } from "../db";
 import {
   isLegacySharedPasswordOpenId,
   isPlatformAdministrator,
-} from "../joystick/tenantIdentity";
+} from "../platform/tenancy/tenantIdentity";
 import {
   isLegacyDayforgeTenant,
   resolveLegacyDayforgeMembership,

@@ -8,7 +8,7 @@ import mysql, {
 import type {
   DurableExecutionStore,
   DurableLeasedStep,
-} from "../durableExecution/worker";
+} from "../platform/execution/worker";
 
 export const GOAL_CYCLE_TRIGGERS = [
   "goal_activated",

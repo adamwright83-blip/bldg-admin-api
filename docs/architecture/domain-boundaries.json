@@ -6,6 +6,7 @@
       "domain": "platform",
       "paths": [
         "server/_core",
+        "server/platform/execution",
         "server/durableExecution",
         "server/db"
       ]
@@ -95,6 +96,7 @@
       "domain": "saas",
       "paths": [
         "server/saas",
+        "server/platform/tenancy",
         "server/joystick/tenantIdentity.ts"
       ]
     },
@@ -200,6 +202,7 @@
         "server/driverGameWorld",
         "server/goldlineWorld",
         "server/lanternCity",
+        "server/platform/execution",
         "server/durableExecution"
       ],
       "legacyCompatibilityExceptions": "Legacy tenantless order imports and raw seed fixtures are quarantined."
@@ -280,7 +283,7 @@
       "concept": "Tenant Identity and Isolation",
       "owner": "Platform Tenancy",
       "legalWriteEntrypoint": "server/saas/tenantLifecycle.ts",
-      "canonicalReadEntrypoint": "server/joystick/tenantIdentity.ts (requireTenantId, getTenantScope)",
+      "canonicalReadEntrypoint": "server/platform/tenancy/tenantIdentity.ts (requireTenantId, getTenantScope)",
       "evidenceAdmissionSource": "Validated user session, API key, or tenant token",
       "downstreamConsumers": [
         "All domain, planning, platform, and agent services"

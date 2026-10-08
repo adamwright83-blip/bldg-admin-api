@@ -65,7 +65,7 @@ jobs:
           pnpm vitest run
           server/_core/platformAuthority.test.ts
           server/goldlineOnboarding/demoAccess.test.ts
-          server/joystick/tenantIdentity.test.ts
+          server/platform/tenancy/tenantIdentity.test.ts
           server/persistentOperator/identity.test.ts
 
       - name: Prove Authority Receipt contracts

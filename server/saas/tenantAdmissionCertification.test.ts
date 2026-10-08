@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPlatformAdministrator,
   tenantForAuthenticatedUser,
-} from "../joystick/tenantIdentity";
+} from "../platform/tenancy/tenantIdentity";
 
 function source(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), "utf8");

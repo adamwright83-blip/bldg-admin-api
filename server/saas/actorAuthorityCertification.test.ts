@@ -5,7 +5,7 @@ import {
   isLegacySharedPasswordOpenId,
   isPlatformAdministrator,
   tenantForAuthenticatedUser,
-} from "../joystick/tenantIdentity";
+} from "../platform/tenancy/tenantIdentity";
 import { roleAllows } from "./tenantAccess";
 
 function source(relative: string): string {

@@ -61,7 +61,7 @@ jobs:
       - name: Run tenant identity, customer-surface, hostile-router, and transcript privacy gates
         run: >
           pnpm vitest run
-          server/joystick/tenantIdentity.test.ts
+          server/platform/tenancy/tenantIdentity.test.ts
           server/saas/tenantAdmissionCertification.test.ts
           server/saas/tenantIsolationCertification.test.ts
           server/saas/actorAuthorityCertification.test.ts

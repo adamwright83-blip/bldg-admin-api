@@ -1,4 +1,4 @@
-import { emitServerLog } from "../_core/posthogLogs";
+import { emitServerLog } from "../../_core/posthogLogs";
 
 export type DurableLeasedStep = {
   id: string;

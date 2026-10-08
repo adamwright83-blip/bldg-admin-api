@@ -8,7 +8,7 @@ import type {
 import type {
   DurableExecutionStore,
   DurableLeasedStep,
-} from "../durableExecution/worker";
+} from "../platform/execution/worker";
 
 export type OperatorAppointmentKind =
   | "sunday_weekly_planning"

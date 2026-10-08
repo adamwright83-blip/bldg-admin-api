@@ -19,7 +19,7 @@ import {
   router,
 } from "../_core/trpc";
 import { runWithLlmObservability } from "../_core/llmObservability";
-import { claireOperatorScope } from "../joystick/tenantIdentity";
+import { claireOperatorScope } from "../platform/tenancy/tenantIdentity";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
 import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";

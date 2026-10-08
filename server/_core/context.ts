@@ -3,7 +3,7 @@ import type { CreateExpressContextOptions } from "@trpc/server/adapters/express"
 import type { User } from "../../drizzle/schema";
 import type { VendorSession } from "./vendorAuth";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
-import { tenantForAuthenticatedUser } from "../joystick/tenantIdentity";
+import { tenantForAuthenticatedUser } from "../platform/tenancy/tenantIdentity";
 import { sdk } from "./sdk";
 import { parseVendorCookie, verifyVendorSession } from "./vendorAuth";
 import { authenticateGoldlineDemoRequest } from "../goldlineOnboarding/demoAccess";

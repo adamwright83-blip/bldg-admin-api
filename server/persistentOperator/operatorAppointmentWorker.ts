@@ -2,7 +2,7 @@ import {
   DurableWorker,
   type DurableExecutionStore,
   type DurableStepHandler,
-} from "../durableExecution/worker";
+} from "../platform/execution/worker";
 import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
 import {
   OperatorAppointmentStore,

@@ -6,7 +6,7 @@ import { resolveTenantIdFromHeaders } from "../../../shared/tenantConfig";
 import {
   isPlatformAdministrator,
   tenantForAuthenticatedUser,
-} from "../../joystick/tenantIdentity";
+} from "../../platform/tenancy/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../../legacyDayforgeSecurity/legacyDayforgeSecurity";
 import { createPresidentCycleRouter } from "./api";
 import type { CycleStore } from "./cycleStore";

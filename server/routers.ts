@@ -40,7 +40,7 @@ import {
   router,
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { isPlatformAdministrator } from "./joystick/tenantIdentity";
+import { isPlatformAdministrator } from "./platform/tenancy/tenantIdentity";
 import {
   createNativeOrder,
   reviseNativeOrder,

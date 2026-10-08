@@ -17,7 +17,7 @@ import { upsertUser } from "../db";
 import { readNativePaymentFacts, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import { createOrReuseResidentOrder } from "../domains/orders/orderLifecycleService";
 import { getSessionCookieOptions } from "./cookies";
-import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
+import { sharedPasswordLoginSelection } from "../platform/tenancy/tenantIdentity";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
