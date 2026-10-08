@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import {
   cleancloudImportBatches,
   cleancloudPaidOrders,
@@ -10,6 +10,7 @@ import {
 import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "../cleancloudBrowserSync/schema";
 import { getDb } from "../db";
 import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
+import { readNativePaymentFacts } from "../authority/nativePaymentReadService";
 
 /**
  * Is the business data current? This separates EVENT time (when a sale
@@ -22,7 +23,7 @@ import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
 export type LatestSale = {
   orderNumber: string;
   customerName: string | null;
-  cents: number;
+  cents: number | null;
   /** Payment (sale) time. */
   paidAt: string | null;
   placedAt: string | null;
@@ -116,7 +117,7 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
   const startOfToday = zonedDayStartUtc(today, input.timeZone);
 
   const saleTime = sql<Date>`COALESCE(${cleancloudPaidOrders.paymentDateUtc}, ${cleancloudPaidOrders.paidDateUtc})`;
-  const [ccLatest, ccIngested, ccToday, ccIngestedToday, batches, binding, receipts, attempts, nativeLatest, clearentTx, clearentDaily, clearentBatch] =
+  const [ccLatest, ccIngested, ccToday, ccIngestedToday, batches, binding, receipts, attempts, nativeCandidates, clearentTx, clearentDaily, clearentBatch] =
     await Promise.all([
       db
         .select({
@@ -178,23 +179,20 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
       db
         .select({
           id: orders.id,
+          tenantId: orders.tenantId,
           firstName: orders.firstName,
           lastName: orders.lastName,
-          total: orders.total,
-          paidAt: orders.paidAt,
+          paid: orders.paid,
+          stripePaymentIntentId: orders.stripePaymentIntentId,
           createdAt: orders.createdAt,
         })
         .from(orders)
         .where(
           and(
-            sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`,
-            eq(orders.paid, true),
-            sql`${orders.stripePaymentIntentId} IS NOT NULL`,
-            sql`${orders.paidAt} IS NOT NULL`
+            eq(orders.tenantId, input.tenantId),
+            isNotNull(orders.stripePaymentIntentId)
           )
-        )
-        .orderBy(desc(orders.paidAt))
-        .limit(1),
+        ),
       input.tenantId === "default"
         ? optional(() => db.select({ n: sql<number>`COUNT(*)` }).from(clearentTransactions), [{ n: 0 }])
         : Promise.resolve([{ n: 0 }]),
@@ -240,7 +238,17 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
     });
   }
   const bound = binding[0] ?? null;
-  const native = nativeLatest[0];
+  const nativePaymentFacts = await readNativePaymentFacts(nativeCandidates);
+  const native = nativeCandidates
+    .map(order => ({ order, fact: nativePaymentFacts.get(order.id) }))
+    .filter(
+      (candidate): candidate is typeof candidate & { fact: NonNullable<typeof candidate.fact> } =>
+        Boolean(candidate.fact?.occurredAt)
+    )
+    .sort(
+      (a, b) =>
+        Date.parse(b.fact.occurredAt!) - Date.parse(a.fact.occurredAt!)
+    )[0];
   const dateOnly = (value: Date | string | null | undefined, timeZone: string) => {
     const at = iso(value);
     return at ? zonedYmd(new Date(at), timeZone) : null;
@@ -302,11 +310,13 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
     native: {
       latestSale: native
         ? {
-            orderNumber: String(native.id),
-            customerName: `${native.firstName ?? ""} ${native.lastName ?? ""}`.trim() || null,
-            cents: Math.round(Number(native.total ?? 0) * 100),
-            paidAt: iso(native.paidAt),
-            placedAt: iso(native.createdAt),
+            orderNumber: String(native.order.id),
+            customerName:
+              `${native.order.firstName ?? ""} ${native.order.lastName ?? ""}`.trim() ||
+              null,
+            cents: native.fact.capturedAmountCents,
+            paidAt: native.fact.occurredAt,
+            placedAt: iso(native.order.createdAt),
             ingestedAt: null,
             paymentType: "Stripe",
             cardPaymentType: null,
