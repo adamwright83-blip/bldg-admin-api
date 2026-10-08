@@ -117,3 +117,18 @@ reader change and are retained as proven baseline failures.
 The adapter also composes canonical revenue reconciliation before projecting game
 candidates: proven links and unresolved suspected copies retain the owning ledger's
 withholding policy, including customer identity keys beyond phone numbers.
+
+## B6: Command Sky first-payment wins require business evidence
+
+Command Sky auto-detection previously read raw paid flags without a tenant fence,
+and manual first-order wins required no Orders/Payment evidence. Both now resolve
+the first admitted payment per tenant-owned customer phone through owning readers.
+Manual first-order claims require an order number; labels and dedupe keys come from
+the durable source. Unsupported legacy/manual first-order rows contribute neither
+customer campaign counts nor payment-based hope. Verbal commitments remain explicit
+operator observations with their existing timing. No new reward/art mechanic.
+
+Real MySQL proves weak-flag exclusion, foreign-tenant isolation, amount-unknown
+admission eligibility, canonical labels, shared manual/automatic dedupe and exclusion
+of an invented legacy win. Ten authority contracts, TypeScript and four architecture
+gates pass. The UI adds only the order evidence field needed for the existing action.
