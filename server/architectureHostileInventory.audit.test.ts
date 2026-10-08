@@ -4,8 +4,7 @@ import { describe, it } from "vitest";
 
 type Hit = { file: string; line: number; text: string; tags: string[] };
 
-const ROOT = resolve(import.meta.dirname, "..");
-const REPO = resolve(ROOT, "..");
+const REPO = resolve(import.meta.dirname, "..");
 const roots = ["server", "shared", "client/src"];
 const skip = /(\.test\.|\.spec\.|testSupport|fixtures|__tests__|node_modules|dist|archive\/)/;
 
