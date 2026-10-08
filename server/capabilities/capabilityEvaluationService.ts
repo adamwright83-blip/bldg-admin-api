@@ -15,7 +15,7 @@ export type FirstHireInputs = {
   reserveMonths: number | null;
   recurringWorkloadPct: number | null;
   scheduleSaturationPct: number | null;
-  trailingDemandRevenueCents: number | null;
+  trailingDemandQuotedCents: number | null;
 };
 
 const POLICY = {
@@ -45,7 +45,7 @@ export function evaluateFirstHireReadiness(input: FirstHireInputs, now = new Dat
     evidence: checks.map(([metric, actual, threshold, label]) => ({ metric, actual: actual == null ? unknownValue(`${metric} unavailable`) : deterministicEstimate(actual, "capability input adapter", "high"), policyThreshold: label, passes: actual == null ? null : actual >= threshold })),
     blockingConditions: status === "ACTIVE" ? [] : blockingConditions,
     supportingMetrics: { ...input },
-    assumptions: ["Readiness policy v1 is conservative and auditable", "A READY result requires every listed business condition; motivational score is excluded", "Approved proposals and estimated pipeline value do not count as reserve or realized demand"],
+    assumptions: ["Readiness policy v1 is conservative and auditable", "A READY result requires every listed business condition; motivational score is excluded", "Approved proposals and estimated pipeline value do not count as reserve or realized demand", "Trailing order quote value is demand context only; it is not paid revenue"],
     nextReevaluationConditions: missing.map(metric => `Configure or capture ${metric}`),
     dataQuality: { status: missing.length ? "insufficient" : "trusted", warnings: missing.map(metric => `Missing ${metric}`), sources: ["orders", "dayforge_saas_tenant_locations", "customer_assets", "true_pnl", "dayforge_saas_memberships"] },
   };
@@ -56,7 +56,7 @@ export async function getCapabilityEvaluations(input: { tenantId: string }): Pro
   if (!db) throw new Error("Database not available");
   const since = new Date(Date.now() - 30 * 86_400_000);
   const [orderMetrics, locations, members, assets, pnl] = await Promise.all([
-    db.select({ count: sql<number>`count(*)`, revenue: sql<number>`coalesce(sum(${orders.total}),0)`, weight: sql<number>`sum(${orders.weightLbs})`, weightedCount: sql<number>`sum(case when ${orders.weightLbs} is not null then 1 else 0 end)` }).from(orders).where(and(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`, gte(orders.createdAt, since))),
+    db.select({ count: sql<number>`count(*)`, quotedDemand: sql<number>`coalesce(sum(${orders.total}),0)`, weight: sql<number>`sum(${orders.weightLbs})`, weightedCount: sql<number>`sum(case when ${orders.weightLbs} is not null then 1 else 0 end)` }).from(orders).where(and(eq(orders.tenantId, input.tenantId), gte(orders.createdAt, since))),
     db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
     db.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true))),
     listCustomerAssets({ tenantId: input.tenantId }),
@@ -77,6 +77,6 @@ export async function getCapabilityEvaluations(input: { tenantId: string }): Pro
     reserveMonths: null,
     recurringWorkloadPct: customerCount ? Math.round((recurringCount / customerCount) * 100) : null,
     scheduleSaturationPct: null,
-    trailingDemandRevenueCents: metric?.revenue == null ? null : Math.round(Number(metric.revenue) * 100),
+    trailingDemandQuotedCents: metric?.quotedDemand == null ? null : Math.round(Number(metric.quotedDemand) * 100),
   })];
 }
