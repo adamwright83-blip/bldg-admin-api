@@ -9,14 +9,14 @@ import {
   attributeCommercialOrder,
   reconcileCommercialPipelineRevenue,
 } from "./commercialPipelineService";
-import { attributeOrderFromCampaign } from "../commercialCampaigns/commercialAttributionService";
+import { attributeOrderFromCampaign } from "../../commercialCampaigns/commercialAttributionService";
 
 const mocks = vi.hoisted(() => ({ db: null as any }));
-vi.mock("../db", () => ({ getDb: async () => mocks.db }));
-vi.mock("../commercialMissions/commercialMissionStore", () => ({
+vi.mock("../../db", () => ({ getDb: async () => mocks.db }));
+vi.mock("../../commercialMissions/commercialMissionStore", () => ({
   getCommercialMission: async () => ({ id: 3 }),
 }));
-vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
+vi.mock("../../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
   writeLegacyDayforgeEventWith: async () => {},
 }));
 const date = new Date("2026-10-05T00:00:00Z");

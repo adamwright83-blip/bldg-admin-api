@@ -9,8 +9,8 @@ import {
   commercialOpportunities,
   commercialPipelineRecords,
   commercialVisitOutcomes,
-} from "../../drizzle/schema";
-import { getDb } from "../db";
+} from "../../../drizzle/schema";
+import { getDb } from "../../db";
 
 export type CommercialAccountRef = {
   id: number;

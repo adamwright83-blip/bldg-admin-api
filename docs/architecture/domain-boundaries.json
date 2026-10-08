@@ -40,6 +40,7 @@
     {
       "domain": "commercial",
       "paths": [
+        "server/domains/commercial",
         "server/commercialMissions",
         "server/commercialPipeline",
         "server/commercialProposals",
@@ -116,6 +117,7 @@
     {
       "id": "commercial-does-not-push-operator-or-game",
       "from": [
+        "server/domains/commercial",
         "server/commercialMissions",
         "server/commercialPipeline",
         "server/commercialProposals",
@@ -234,6 +236,7 @@
       ],
       "forbiddenMutationSources": [
         "server/domains/orders (orders.total is mutable quote, not captured dollars)",
+        "server/domains/commercial",
         "server/commercialPipeline",
         "server/money/scenarioService.ts"
       ],
@@ -242,8 +245,8 @@
     {
       "concept": "Commercial Conversion (Won)",
       "owner": "Commercial",
-      "legalWriteEntrypoint": "server/commercialPipeline/commercialPipelineService.ts",
-      "canonicalReadEntrypoint": "server/commercialPipeline/commercialAccountReadService.ts, server/commercialPipeline/commercialFollowUpReadService.ts",
+      "legalWriteEntrypoint": "server/domains/commercial/commercialPipelineService.ts",
+      "canonicalReadEntrypoint": "server/domains/commercial/commercialAccountReadService.ts, server/domains/commercial/commercialFollowUpReadService.ts",
       "evidenceAdmissionSource": "Operator-attested verbal agreement or commercial contract",
       "downstreamConsumers": [
         "server/dayDirector/dayDirectorService.ts",

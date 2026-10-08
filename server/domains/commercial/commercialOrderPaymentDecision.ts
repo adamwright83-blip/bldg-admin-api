@@ -1,11 +1,11 @@
-import { nativeCapturedAmountCents } from "../domains/payment/nativePaymentReadService";
+import { nativeCapturedAmountCents } from "../payment/nativePaymentReadService";
 import { and, eq, isNull, or } from "drizzle-orm";
-import { orderPaymentProjections, orders } from "../../drizzle/schema";
+import { orderPaymentProjections, orders } from "../../../drizzle/schema";
 import {
   findAuthorityReceiptForSubjectWith,
   paymentAuthorityReceiptMatches,
   type AuthorityReceipt,
-} from "../platform/authority/authorityReceipt";
+} from "../../platform/authority/authorityReceipt";
 
 type PaymentReader = Parameters<typeof findAuthorityReceiptForSubjectWith>[0];
 type NativeOrder = Pick<

@@ -41,7 +41,7 @@ import {
   getCommercialPipelineDetail,
   listCommercialPipeline,
   resolveCommercialPipelineMission,
-} from "../commercialPipeline/commercialPipelineService";
+} from "../domains/commercial/commercialPipelineService";
 import {
   approveCustomerRecoveryDraft,
   createCustomerRecoveryIntervention,

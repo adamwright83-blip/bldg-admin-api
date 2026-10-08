@@ -30,7 +30,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 |---|---|---|
 | **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/domains/orders/`, `server/residentIntake.ts`, `server/joystick/driverOrder*` |
 | **Payment** | Native payment admission, durable Stripe capture evidence, receipt verification, and canonical revenue reads. | `server/domains/payment/`, `server/analytics/canonicalRevenue.ts` |
-| **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/commercialPipeline/`, `server/commercialMissions/`, `server/commercialProposals/` |
+| **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/domains/commercial/`, `server/commercialMissions/`, `server/commercialProposals/` |
 | **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/joystick/tenantIdentity.ts`, `server/saas/` |
 | **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/actionExecutionGate.ts`, `server/platform/authority/authorityReceipt.ts`, `server/durableExecution/` |
 | **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/cleancloudBrowserSync/`, `server/twilioPlatform/` |
@@ -54,7 +54,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Order Lifecycle** | Orders | `transitionNativeOrderStatus`, `createOrReuseResidentOrder` | `server/domains/orders/orderHistoryReadService.ts`, `unpaidOrderReadService.ts` | Driver UI, Admin UI, Day Line, Lantern City | Driver, Game, Workers, Lantern City |
 | **Payment Admission** | Payment | `admitNativePayment`, `recordAuthorityReceipt` | `server/domains/payment/nativePaymentReadService.ts`, `canonicalRevenue.ts` | Orders delivery fence, Revenue charts, Tower Wars | Orders status, Stripe webhook without receipt, UI checkmarks |
 | **Captured Dollars** | Payment | Durable Stripe `amount_received` + receipt persistence | `server/domains/payment/nativePaymentReadService.ts`, `loadPaidOrderLedger` | Financial summaries, Tower Wars bank, True PnL | Mutable order price (`orders.total`), intake quotes |
-| **Commercial Conversion** | Commercial | `commercialPipelineService.ts` (`won` status) | `commercialAccountReadService.ts`, `commercialFollowUpReadService.ts` | Day Line, Claire briefing, Lantern City unlocks | Payment, Orders, Game actions |
+| **Commercial Conversion** | Commercial | `server/domains/commercial/commercialPipelineService.ts` (`won` status) | `server/domains/commercial/commercialAccountReadService.ts`, `commercialFollowUpReadService.ts` | Day Line, Claire briefing, Lantern City unlocks | Payment, Orders, Game actions |
 | **CleanCloud Evidence** | CleanCloud Integration | `assimilateCustomerTruth.ts`, `cleancloudPaidEvidence.ts` | `cleancloudPaidOrders.ts` | Order correlation, External reconciliation | Native Payment, Native Orders |
 | **Tenant Identity** | Platform Tenancy | Explicit tenant resolver (`tenantIdentity.ts`) | `requireTenantId`, `getTenantScope` | All domain services | `COALESCE(..., 'default')` fallbacks |
 | **Operator Preferences** | Daphne | `explicitPreferenceCorrection.ts` | `claireAdapter.ts`, `operatorCard.ts` | Claire prompt assembler | Direct unconsented profile edits |
@@ -96,7 +96,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Canonical revenue calculations or dollar reporting | `server/domains/payment/nativePaymentReadService.ts`, `server/analytics/canonicalRevenue.ts` | Use immutable captured cents; do not borrow editable `orders.total`. |
 | Stripe webhook ingestion | `server/intake-stripe.ts` | Provider transport only; domain admission must cross Payment boundary. |
 | CleanCloud sync or customer assimilation | `server/cleancloudBrowserSync/` | CleanCloud is external evidence; do not treat as native payment. |
-| Commercial account conversion or pipeline stages | `server/commercialPipeline/` | Commercial `won` is NOT paid revenue. |
+| Commercial account conversion or pipeline stages | `server/domains/commercial/` | Commercial `won` is NOT paid revenue. |
 | Deterministic daily mission ranking | `server/missionDirector/` | Sole deterministic ranker; Persistent Operator proposes, Mission Director ranks. |
 | Claire conversation rules or prompts | `server/claire/turn/`, `server/claire/proactive/` | Check PR #495 holds before modifying active files! Claire must not bypass domain ports. |
 | Daphne preference learning or correction store | `server/daphne/` | Check PR #495 holds before modifying active files! Daphne cannot fabricate business truth. |

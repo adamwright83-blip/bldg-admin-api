@@ -1,4 +1,4 @@
-import { listCompletedCommercialFollowUpsForOperator } from "../../commercialPipeline/commercialFollowUpReadService";
+import { listCompletedCommercialFollowUpsForOperator } from "../../domains/commercial/commercialFollowUpReadService";
 import { groupCustomerOrderTruth, loadCustomerOrderTruth, type CustomerOrderTruthRecord } from "../../geography/customerOrderTruth";
 import { listClaireRelationshipEvents } from "../character/relationshipEvents";
 import { evaluateDisclosureSafetyOk } from "../character/tierEngine";

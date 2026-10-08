@@ -22,7 +22,7 @@ const proposals = readFileSync(
 );
 const pipeline = readFileSync(
   new URL(
-    "../commercialPipeline/commercialPipelineService.ts",
+    "../domains/commercial/commercialPipelineService.ts",
     import.meta.url
   ),
   "utf8"

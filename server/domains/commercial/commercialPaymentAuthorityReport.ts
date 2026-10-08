@@ -2,12 +2,12 @@ import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   commercialOrderAttributions,
   orders,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 import {
   findAuthorityReceiptForSubject,
   type AuthorityReceipt,
-} from "../platform/authority/authorityReceipt";
-import { getDb } from "../db";
+} from "../../platform/authority/authorityReceipt";
+import { getDb } from "../../db";
 import {
   legacyCommercialPaidCents,
   verifiedCommercialPaidCents,

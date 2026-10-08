@@ -4,7 +4,7 @@ import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService"
 import {
   rescheduleCommercialFollowUp,
   scheduleCommercialFollowUp,
-} from "../../commercialPipeline/commercialPipelineService";
+} from "../../domains/commercial/commercialPipelineService";
 import { dayMention, spokenDay } from "../briefing/briefingTiming";
 import type { AccountHistory } from "./accountKnowledge";
 

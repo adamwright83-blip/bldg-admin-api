@@ -17,31 +17,31 @@ import {
   commercialRouteAssignments,
   commercialServiceExpectations,
   orders,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 import {
   canAdvanceRelationshipStage,
   missionStatusForFollowUpOutcome,
   type CommercialFollowUpOutcome,
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
-import { getDb } from "../db";
-import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
+import { getDb } from "../../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../../mysqlErrors";
 import {
   getCommercialMission,
   getCommercialMissionByIdempotencyKey,
   reconcileCommercialMissionWonDownstream,
   transitionCommercialMission,
   transitionCommercialMissionWith,
-} from "../commercialMissions/commercialMissionStore";
-import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
-import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
-import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
-import type { AuthorityReceipt } from "../platform/authority/authorityReceipt";
+} from "../../commercialMissions/commercialMissionStore";
+import { associateArmoryOutcome } from "../../armory/armoryEvidenceService";
+import { writeLegacyDayforgeEventWith } from "../../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { getDashboardTimeZone, zonedYmd } from "../../dashboardZoned";
+import type { AuthorityReceipt } from "../../platform/authority/authorityReceipt";
 import {
   commercialOrderTenantPredicate,
   readCommercialOrderPaymentDecisionWith,
 } from "./commercialOrderPaymentDecision";
-import { hasNativePaymentEvidence } from "../domains/payment/nativePaymentReadService";
+import { hasNativePaymentEvidence } from "../payment/nativePaymentReadService";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -724,7 +724,7 @@ export async function resolveCommercialPipelineMission(input: {
 
     // Bridge to Persistent Growth Operator ledger as operational_result if this mission has deterministic lineage to an objective
     try {
-      const { bridgeCommercialResolution } = await import("../persistentOperator/fieldEventBridge");
+      const { bridgeCommercialResolution } = await import("../../persistentOperator/fieldEventBridge");
       await bridgeCommercialResolution({
         tenantId: input.tenantId,
         actorId: mission.assignedTo ?? input.actorId,

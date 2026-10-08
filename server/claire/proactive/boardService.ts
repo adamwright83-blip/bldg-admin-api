@@ -6,7 +6,7 @@ import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService";
-import { listOpenCommercialFollowUps } from "../../commercialPipeline/commercialFollowUpReadService";
+import { listOpenCommercialFollowUps } from "../../domains/commercial/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,

@@ -12,7 +12,7 @@ import {
   opsTasks,
 } from "../../drizzle/schema";
 import type { CommercialMissionStep } from "@shared/commercialMission";
-import { commercialContactIdentityKey } from "../commercialPipeline/commercialPipelineCore";
+import { commercialContactIdentityKey } from "../domains/commercial/commercialPipelineCore";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -22,8 +22,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
-vi.mock("../commercialPipeline/commercialPipelineCore", async importOriginal => ({
-  ...(await importOriginal<typeof import("../commercialPipeline/commercialPipelineCore")>()),
+vi.mock("../domains/commercial/commercialPipelineCore", async importOriginal => ({
+  ...(await importOriginal<typeof import("../domains/commercial/commercialPipelineCore")>()),
   createCommercialPipelineForMissionWith: mocks.createCommercialPipelineForMissionWith,
   syncCommercialPipelineForMissionTransitionWith: mocks.syncCommercialPipelineForMissionTransitionWith,
 }));

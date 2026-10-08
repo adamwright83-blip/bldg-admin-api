@@ -9,7 +9,7 @@ import {
   createCommercialMission,
   reconcileCommercialMissionWonDownstream,
 } from "./commercialMissionStore";
-import { syncCommercialPipelineForMissionTransitionWith } from "../commercialPipeline/commercialPipelineCore";
+import { syncCommercialPipelineForMissionTransitionWith } from "../domains/commercial/commercialPipelineCore";
 
 export type CommercialWalkInInput = {
   tenantId: string;

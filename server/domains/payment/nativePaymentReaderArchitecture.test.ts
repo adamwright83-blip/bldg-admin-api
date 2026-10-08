@@ -13,9 +13,9 @@ describe("native payment read authority architecture", () => {
     expect(reader).not.toMatch(/\?\?\s*["']default["']/);
   });
   it("does not reintroduce the geography payment predicate into consumers", () => {
-    for (const path of ["../../analytics/analyticsQueries.ts", "../../customerAssets/customerAssetProjection.ts", "../../commercialPipeline/commercialPipelineService.ts"]) {
+    for (const path of ["../../analytics/analyticsQueries.ts", "../../customerAssets/customerAssetProjection.ts", "../commercial/commercialPipelineService.ts"]) {
       expect(source(path)).not.toContain('from "../geography/customerOrderTruth"');
-      expect(source(path)).toContain('from "../domains/payment/nativePaymentReadService"');
+      expect(source(path)).toMatch(/from "\.\.(?:\/domains)?\/payment\/nativePaymentReadService"/);
     }
   });
 });

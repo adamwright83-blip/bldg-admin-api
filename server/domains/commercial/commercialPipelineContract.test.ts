@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
   new URL(
-    "../../drizzle/0041_commercial_pipeline_conversion.sql",
+    "../../../drizzle/0041_commercial_pipeline_conversion.sql",
     import.meta.url
   ),
   "utf8"
@@ -22,15 +22,15 @@ const router = readFileSync(
   "utf8"
 );
 const missionStore = readFileSync(
-  new URL("../commercialMissions/commercialMissionStore.ts", import.meta.url),
+  new URL("../../commercialMissions/commercialMissionStore.ts", import.meta.url),
   "utf8"
 );
 const client = readFileSync(
-  new URL("../../client/src/pages/CommercialPipelinePage.tsx", import.meta.url),
+  new URL("../../../client/src/pages/CommercialPipelinePage.tsx", import.meta.url),
   "utf8"
 );
 const app = readFileSync(
-  new URL("../../client/src/App.tsx", import.meta.url),
+  new URL("../../../client/src/App.tsx", import.meta.url),
   "utf8"
 );
 

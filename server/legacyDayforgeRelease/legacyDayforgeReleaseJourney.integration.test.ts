@@ -56,7 +56,7 @@ import {
   listCommercialPipeline,
   resolveCommercialPipelineMission,
   scheduleCommercialFollowUp,
-} from "../commercialPipeline/commercialPipelineService";
+} from "../domains/commercial/commercialPipelineService";
 import { getDb } from "../db";
 import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
 import {
