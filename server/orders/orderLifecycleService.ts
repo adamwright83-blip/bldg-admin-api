@@ -1,3 +1,4 @@
+import { readNativePaymentAuthorityReceipts, hasNativePaymentAuthority } from "../authority/nativePaymentReadService";
 import * as persistence from "../db";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { orders, type InsertOrder, type Order } from "../../drizzle/schema";
@@ -95,7 +96,7 @@ export async function createOrReuseResidentOrder(
 
 /**
  * Authoritatively executes an atomic delivery transition if conditions are met.
- * Condition: Delivery rejects when order.paid is false.
+ * Condition: Delivery requires matching Payment admission, regardless of capture amount availability.
  * Idempotency: If already delivered, returns alreadyCompleted: true without duplicating effects.
  */
 export async function attemptOrderDeliveryTransition(
@@ -132,6 +133,10 @@ export async function attemptOrderDeliveryTransition(
       "Charge the order before marking it delivered."
     );
   }
+  const paymentReceipts = await readNativePaymentAuthorityReceipts([order]);
+  if (!hasNativePaymentAuthority(order, paymentReceipts.get(order.id))) {
+    throw new OrderTransitionError("PAYMENT_REQUIRED", "Matching Payment admission is required before delivery.");
+  }
   if (order.status === "delivered") {
     return { transitioned: false, alreadyCompleted: true, order };
   }
@@ -139,6 +144,8 @@ export async function attemptOrderDeliveryTransition(
   const conditions = [
     eq(orders.id, orderId),
     eq(orders.paid, true),
+    eq(orders.tenantId, order.tenantId!),
+    eq(orders.stripePaymentIntentId, order.stripePaymentIntentId!),
     ne(orders.status, "delivered"),
   ];
   if (expectedTenantId) {

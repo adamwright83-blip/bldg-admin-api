@@ -196,3 +196,14 @@ comes from the receipt occurrence rather than the mutable Orders projection.
 
 Validation: 57 focused contracts and the real-MySQL release journey pass. The journey
 failed at the same $240 assertion on starting main dfe02b9c before this change.
+
+## C12: Delivery eligibility reads Payment admission
+
+A real-MySQL hostile witness delivered a ready order with only a legacy paid flag
+and PaymentIntent string. Orders now requires an exactly matching Payment receipt
+before delivery, including replay, while preserving amount-unknown admissions.
+The compare-and-swap also fences persisted tenant and PaymentIntent against changes
+between admission read and transition. No payment is manufactured by delivery.
+
+Validation: 44 lifecycle/ownership/Driver contracts and four MySQL convergence
+proofs pass, including concurrent one-time effects and the formerly bypassing flag.
