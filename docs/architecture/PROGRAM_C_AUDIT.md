@@ -105,3 +105,25 @@ The pre-existing tenantless `bldg_users` shared registration census remains an
 explicit legacy observation (signups, not tenant-owned paying customers). No row
 gets assigned a tenant. Tenant-bound paid residents require owned Orders lineage
 and Payment admission. The separate `cleancloud_legacy_orders` exception is untouched.
+
+
+## C5: Staff receipt and operations dashboard use admitted Payment facts
+
+The staff digital receipt previously presented the mutable current order total as
+the Payment amount and used `orders.updatedAt` as payment time. Order detail now
+includes a Payment-owned read projection based on exact tenant/order/PaymentIntent
+receipt matching. The receipt keeps the current order total as order/intake state
+and renders payment occurrence/captured dollars separately. An admitted occurrence
+with no durable capture amount remains amount-unknown; unavailable or unverified
+Payment evidence is not silently converted into Pending/paid dollars.
+
+The operations-events dashboard/CSV previously joined `orders.total`,
+`orders.paid`, and `orders.paidAt` directly and labeled them charged amount,
+paid, and paid time. Orders now supply only candidate identity/evidence fields;
+canonical Payment facts supply admitted occurrence, provider occurrence time, and
+immutable captured dollars. If Payment proof cannot be read, the operations event
+remains valid operational evidence while its economic fields remain unknown.
+
+The Payment fact projection intentionally preserves historical admitted occurrence
+after current paid/refund state changes. Current paid-state authority remains a
+separate question from whether the provider-backed payment occurred.

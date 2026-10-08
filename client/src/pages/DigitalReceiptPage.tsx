@@ -89,7 +89,22 @@ export default function DigitalReceiptPage() {
 
   /** Customer’s original order placement time (`orders.createdAt`), not charge time. */
   const orderPlaced = order.createdAt ? new Date(order.createdAt) : new Date();
-  const paidAt = order.paid && order.updatedAt ? new Date(order.updatedAt) : null;
+  const paymentFact = order.paymentFact;
+  const paymentOccurredAt =
+    paymentFact.status === "verified" && paymentFact.occurredAt
+      ? new Date(paymentFact.occurredAt)
+      : null;
+  const capturedPayment =
+    paymentFact.status === "verified" &&
+    paymentFact.capturedAmountCents != null
+      ? paymentFact.capturedAmountCents / 100
+      : null;
+  const paymentLabel =
+    paymentFact.status === "verified"
+      ? `${paymentOccurredAt ? `${formatReceiptDate(paymentOccurredAt)}, ` : ""}Card`
+      : paymentFact.status === "unavailable"
+        ? "Evidence unavailable"
+        : "Not verified";
   const dueStr =
     order.deliveryDate
       ? (() => {
@@ -138,7 +153,7 @@ export default function DigitalReceiptPage() {
           </div>
           <div className="text-right text-black/80 leading-relaxed text-sm">
             <p>
-              <span className="text-black/50">Total: </span>
+              <span className="text-black/50">Order total: </span>
               <span className="font-semibold text-black">
                 ${total.toFixed(2)}
               </span>
@@ -153,9 +168,7 @@ export default function DigitalReceiptPage() {
             </p>
             <p className="mt-1">
               <span className="text-black/50">Payment: </span>
-              {paidAt
-                ? `${formatReceiptDate(paidAt)}, Card`
-                : "Pending"}
+              {paymentLabel}
             </p>
           </div>
         </div>
@@ -203,12 +216,20 @@ export default function DigitalReceiptPage() {
                 <span>${discount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-8 font-semibold pt-1 border-t border-neutral-200">
-                <span>Total</span>
+                <span>Order total</span>
                 <span>${total.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-8 text-black/70">
                 <span>Payment</span>
-                <span>${total.toFixed(2)}</span>
+                <span>
+                  {capturedPayment != null
+                    ? `${capturedPayment.toFixed(2)}`
+                    : paymentFact.status === "verified"
+                      ? "Amount unavailable"
+                      : paymentFact.status === "unavailable"
+                        ? "Evidence unavailable"
+                        : "Not verified"}
+                </span>
               </div>
             </div>
           </div>

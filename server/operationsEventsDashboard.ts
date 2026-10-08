@@ -2,6 +2,10 @@ import { and, desc, eq, getTableColumns, gte, lt, or, sql, type SQL } from "driz
 import { operationsEvents, orders, type OperationsEvent } from "../drizzle/schema";
 import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd, zonedYmd } from "./dashboardZoned";
 import { getDb } from "./db";
+import {
+  readNativePaymentFacts,
+  type NativePaymentFact,
+} from "./authority/nativePaymentReadService";
 
 export type OperationsEventsBusinessUnit = "all" | "laundry_butler" | "laundry_farm";
 export type OperationsEventsBuilding = "all" | "opus_la" | "century_park_east" | "other" | "unresolved";
@@ -19,9 +23,18 @@ export type OperationsEventsFilters = {
 };
 
 export type OperationsEventDashboardRow = OperationsEvent & {
+  /** Immutable provider-captured amount. Null means unknown/unverified, never current order price. */
   chargedAmount: string | null;
-  paid: boolean | null;
+  /** True only when canonical Payment admission matches the order evidence. */
+  paid: true | null;
+  /** Provider occurrence from the admitted Payment receipt, not order.updatedAt. */
   paidAt: Date | null;
+};
+
+type OperationsEventPaymentCandidateRow = OperationsEvent & {
+  orderTenantId: string | null;
+  orderPaidCandidate: boolean | null;
+  orderPaymentIntentId: string | null;
 };
 
 export type NormalizedOperationsEventsFilters = Required<Omit<OperationsEventsFilters, "customerSearch">> & {
@@ -154,10 +167,50 @@ function csvCell(value: unknown): string {
 function operationsEventDashboardSelect() {
   return {
     ...getTableColumns(operationsEvents),
-    chargedAmount: orders.total,
-    paid: orders.paid,
-    paidAt: orders.paidAt,
+    orderTenantId: orders.tenantId,
+    orderPaidCandidate: orders.paid,
+    orderPaymentIntentId: orders.stripePaymentIntentId,
   };
+}
+
+async function attachAdmittedPaymentFacts(
+  rows: OperationsEventPaymentCandidateRow[]
+): Promise<OperationsEventDashboardRow[]> {
+  let facts = new Map<number, NativePaymentFact>();
+  try {
+    facts = await readNativePaymentFacts(
+      rows
+        .filter(row => row.orderId != null)
+        .map(row => ({
+          id: row.orderId!,
+          tenantId: row.orderTenantId,
+          paid: row.orderPaidCandidate,
+          stripePaymentIntentId: row.orderPaymentIntentId,
+        }))
+    );
+  } catch {
+    // Payment proof unavailable means these display fields are unknown.
+    // The operations event itself remains valid operational evidence.
+  }
+
+  return rows.map(row => {
+    const {
+      orderTenantId: _orderTenantId,
+      orderPaidCandidate: _orderPaidCandidate,
+      orderPaymentIntentId: _orderPaymentIntentId,
+      ...event
+    } = row;
+    const fact = row.orderId == null ? undefined : facts.get(row.orderId);
+    return {
+      ...event,
+      chargedAmount:
+        fact?.capturedAmountCents == null
+          ? null
+          : (fact.capturedAmountCents / 100).toFixed(2),
+      paid: fact ? true : null,
+      paidAt: fact?.occurredAt ? new Date(fact.occurredAt) : null,
+    };
+  });
 }
 
 export function operationsEventsToCsv(rows: OperationsEventDashboardRow[]): string {
@@ -255,9 +308,10 @@ export async function listOperationsEvents(input: OperationsEventsFilters = {}) 
   ]);
 
   const summary = totals[0] ?? { totalEvents: 0, pickupCount: 0, dropoffCount: 0, unresolvedBuildingCount: 0 };
+  const admittedRows = await attachAdmittedPaymentFacts(rows);
   return {
     filters,
-    rows,
+    rows: admittedRows,
     page: filters.page,
     pageSize: filters.pageSize,
     totalRows: Number(summary.totalEvents ?? 0),
@@ -281,9 +335,10 @@ export async function exportOperationsEventsCsv(input: OperationsEventsFilters =
     .leftJoin(orders, eq(operationsEvents.orderId, orders.id))
     .where(operationsEventsWhere(filters))
     .orderBy(desc(operationsEvents.actualEventTimestamp), desc(operationsEvents.id));
+  const admittedRows = await attachAdmittedPaymentFacts(rows);
   return {
     filename: operationsEventsCsvFilename(filters),
-    csv: operationsEventsToCsv(rows),
-    rowCount: rows.length,
+    csv: operationsEventsToCsv(admittedRows),
+    rowCount: admittedRows.length,
   };
 }
