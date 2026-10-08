@@ -25,7 +25,7 @@ describe("three-fact authority slice", () => {
       admission.indexOf("export async function admitNativeStripePayment")
     );
     expect(nativeAdmission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
-      nativeAdmission.indexOf("paid: true")
+      nativeAdmission.indexOf(".update(orders)")
     );
     const decision = source("server/commercialPipeline/commercialOrderPaymentDecision.ts");
     expect(commercial).toContain("readCommercialOrderPaymentDecisionWith(tx");
@@ -81,9 +81,8 @@ describe("three-fact authority slice", () => {
     const migrate = source("scripts/migrate.mjs");
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS `authority_receipts`");
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
-    expect(migrate).toContain(
-      "normalize legacy Stripe order tenants before authority backfill"
-    );
+    expect(migrate).not.toContain("normalize legacy Stripe order tenants before authority backfill");
+    expect(migrate).toContain("WHERE tenantId IS NOT NULL AND TRIM(tenantId) <> ''");
     expect(migrate).toContain(
       "WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'"
     );

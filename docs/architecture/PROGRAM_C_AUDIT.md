@@ -265,3 +265,19 @@ a customer has never paid. Amountless admissions still prove payment existence.
 The real-MySQL customer projection proof now exercises weak flags, fresh admission
 and foreign-tenant exclusion through this predicate. TypeScript and four architecture
 gates pass; existing enrollment behavior is preserved for admitted customers.
+
+## C17: Historical tenant absence is held, never assigned to default
+
+The hostile scan found Payment preparation and the production migration assigning
+historical native Orders without a tenant to default. Both assignments were removed.
+Payment preparation now stops that order before a provider charge; boot admission
+backfills only already-owned rows. The historical null row remains unchanged with
+no receipt under a made-up tenant. No tenant resolver or CleanCloud legacy importer
+was rewritten. Previously stamped production history is not retrospectively assigned,
+unassigned or claimed repaired; lineage reconciliation is a separate data-policy item.
+
+Validation: 17 contracts, real-MySQL missing-ownership proof, and a seeded historical
+null-tenant row surviving a repeated production migration with zero admitted receipts.
+The four gates and TypeScript pass. Existing contracts were updated to require the
+current ownership rule and refund-safe Payment write ordering rather than obsolete
+normalization/always-paid string literals.

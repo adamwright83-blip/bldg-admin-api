@@ -8,8 +8,6 @@ import {
   type AuthorityTransaction,
 } from "./authorityReceipt";
 
-const LEGACY_SINGLE_TENANT_ID = "default";
-
 export async function prepareNativeStripePaymentTenant(input: {
   tenantId: string;
   orderId: number;
@@ -31,14 +29,7 @@ export async function prepareNativeStripePaymentTenant(input: {
 
     const persistedOrderTenantId = order.tenantId?.trim();
     if (!persistedOrderTenantId) {
-      if (tenantId !== LEGACY_SINGLE_TENANT_ID) {
-        throw new Error("Tenant order not found for payment admission");
-      }
-      await tx
-        .update(orders)
-        .set({ tenantId: LEGACY_SINGLE_TENANT_ID })
-        .where(eq(orders.id, input.orderId));
-      return LEGACY_SINGLE_TENANT_ID;
+      throw new Error("Historical order tenant authority is unresolved; establish ownership before payment admission.");
     }
 
     if (persistedOrderTenantId !== tenantId) {

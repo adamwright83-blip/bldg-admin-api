@@ -4891,22 +4891,8 @@ if (!nativeProviderIndexes.length) {
   await runRequired("CREATE INDEX idx_authority_receipts_provider_claim ON authority_receipts (sourceType, sourceRef, claimType, subjectType)", "Native provider capture identity lookup");
 }
 
-// Backfill native Stripe-authoritative paid rows so the new gate does not
-// erase legitimate historical revenue when commercial attribution re-reads it.
-// Legacy single-tenant orders may predate tenant stamping; normalize the source
-// row first so every downstream reader and the Authority Receipt share a tenant.
-await runRequired(
-  `UPDATE orders
-   SET tenantId = CASE
-     WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'
-     ELSE tenantId
-   END
-   WHERE paid = 1
-     AND stripePaymentIntentId IS NOT NULL
-     AND TRIM(stripePaymentIntentId) <> ''
-     AND (tenantId IS NULL OR TRIM(tenantId) = '')`,
-  "normalize legacy Stripe order tenants before authority backfill"
-);
+// Explicit historical admission only for already-owned native Stripe rows.
+// Missing historical tenant ownership remains unresolved; boot must not invent it.
 await runRequired(
   `INSERT IGNORE INTO authority_receipts
     (id, tenantId, claimType, subjectType, subjectId, sourceType, sourceRef,
