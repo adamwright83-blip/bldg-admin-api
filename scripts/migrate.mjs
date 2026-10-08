@@ -4760,6 +4760,53 @@ await ensureRequiredIndex(
   "ALTER TABLE operator_representative_adaptation_receipts ADD KEY idx_operator_rep_adaptation_directive (tenantId,canonicalOperatorId,directiveId,createdAt)"
 );
 
+// Daphne V2 — durable observation, epistemic, preference, intervention,
+// outcome, and metric stores. Production boot does not replay numbered
+// Drizzle migrations, so these historical CREATE TABLE / CREATE INDEX
+// statements must be admitted idempotently here before Claire can use Daphne.
+for (const [relativePath, label] of [
+  ["../drizzle/0124_daphne_v2_observations.sql", "Daphne V2 observation store"],
+  ["../drizzle/0125_daphne_v2_epistemic_claims.sql", "Daphne V2 epistemic store"],
+  ["../drizzle/0126_daphne_v2_canonical_learning.sql", "Daphne V2 canonical learning stores"],
+]) {
+  await applyHistoricalCreateTables(relativePath, label);
+  await applyHistoricalStandaloneIndexes(relativePath, `${label} indexes`);
+}
+await assertRequiredColumns("daphne_observations", [
+  "id", "tenantId", "canonicalOperatorId", "operatorUserId", "sessionId",
+  "agentId", "observationKind", "evidenceChannel", "verificationStatus",
+  "sourceType", "sourceReference", "occurredAt", "payloadJson",
+  "idempotencyKey", "createdAt",
+]);
+await assertRequiredColumns("daphne_epistemic_claims", [
+  "id", "tenantId", "canonicalOperatorId", "agentId", "claimType", "claimKey",
+  "claimJson", "sourceObservationIdsJson", "epistemicStatus",
+  "causalEvidenceStatus", "idempotencyKey", "createdAt",
+]);
+await assertRequiredColumns("daphne_goals", [
+  "id", "tenantId", "canonicalOperatorId", "goalKey", "horizon", "statement",
+  "priority", "status", "sourceObservationId", "createdAt",
+]);
+await assertRequiredColumns("daphne_meta_preferences", [
+  "id", "tenantId", "canonicalOperatorId", "preferenceKey", "valueJson",
+  "version", "sourceObservationId", "status", "createdAt",
+]);
+await assertRequiredColumns("daphne_interventions", [
+  "id", "tenantId", "canonicalOperatorId", "agentId", "decisionPointId",
+  "contextKey", "chosenAction", "selectionMode", "policyVersion",
+  "sourceObservationIdsJson", "idempotencyKey", "createdAt",
+]);
+await assertRequiredColumns("daphne_outcomes", [
+  "id", "tenantId", "canonicalOperatorId", "interventionId", "outcomeClass",
+  "measureKey", "valueJson", "evidenceClass", "verificationStatus",
+  "sourceReference", "observedAt", "idempotencyKey", "createdAt",
+]);
+await assertRequiredColumns("daphne_metric_events", [
+  "id", "tenantId", "canonicalOperatorId", "agentId", "eventName",
+  "propertiesJson", "sourceReference", "occurredAt", "idempotencyKey",
+  "createdAt",
+]);
+
 // Mitch v1 — Game Production Operating System tables
 await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",

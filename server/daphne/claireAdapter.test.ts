@@ -9,8 +9,21 @@ const base:DaphneOperatorCard={
 describe("Daphne V2 Claire adapter",()=>{
  it("is off unless explicitly enabled",()=>expect(isDaphneV2ClaireEnabled("t",{} as any)).toBe(false));
  it("produces bounded non-authoritative style guidance",()=>{
-  const s=buildDaphneClairePromptSection(base)!;
-  expect(s).toContain("interaction style only"); expect(s).toContain("not business truth"); expect(s).toContain("0.90");
+  const s=buildDaphneClairePromptSection({
+    ...base,
+    metaPreferences:{
+      adaptation_enabled:true,
+      response_directness:.9,
+      response_detail:.2,
+      avoid_repetition:true,
+    },
+  })!;
+  expect(s).toContain("interaction style only");
+  expect(s).toContain("not business truth");
+  expect(s).toContain("0.90");
+  expect(s).toContain("lead with the answer or action");
+  expect(s).toContain("keep the response concise");
+  expect(s).toContain("do not repeat a question");
  });
  it("honors explicit adaptation disablement",()=>expect(buildDaphneClairePromptSection({...base,metaPreferences:{adaptation_enabled:false}})).toBeNull());
 });

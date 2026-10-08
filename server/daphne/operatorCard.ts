@@ -74,6 +74,9 @@ export function compileDaphneOperatorCard(input: {
   input.state?.sourceObservationIds.forEach(id => evidenceRefs.add(id));
   input.context?.sourceObservationIds.forEach(id => evidenceRefs.add(id));
   input.goals.forEach(item => evidenceRefs.add(item.sourceObservationId));
+  Object.values(input.metaPreferences).forEach(item => {
+    if (item?.status === "active") evidenceRefs.add(item.sourceObservationId);
+  });
   input.relationship?.sourceObservationIds.forEach(id => evidenceRefs.add(id));
 
   return {
