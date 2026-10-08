@@ -400,7 +400,7 @@ export async function executeCleanCloudIngestion(
   if (paidToBridge.length > 0) {
     try {
       const { bridgeCleanCloudPaidOrder } = await import(
-        "../../../persistentOperator/fieldEventBridge"
+        "../../../agents/persistentOperator/fieldEventBridge"
       );
       for (const order of paidToBridge) {
         await bridgeCleanCloudPaidOrder({

@@ -15,7 +15,7 @@ import { planForDate } from "../missionDirector/missionDirectorService";
 import {
   listGoalCycleObjectives,
   type PersistentGrowthObjective,
-} from "../../persistentOperator/objectiveStore";
+} from "../../agents/persistentOperator/objectiveStore";
 import type { MissionPlanOutcome } from "../../../shared/missionDirector";
 import {
   businessDateInZone,

@@ -724,7 +724,7 @@ export async function resolveCommercialPipelineMission(input: {
 
     // Bridge to Persistent Growth Operator ledger as operational_result if this mission has deterministic lineage to an objective
     try {
-      const { bridgeCommercialResolution } = await import("../../persistentOperator/fieldEventBridge");
+      const { bridgeCommercialResolution } = await import("../../agents/persistentOperator/fieldEventBridge");
       await bridgeCommercialResolution({
         tenantId: input.tenantId,
         actorId: mission.assignedTo ?? input.actorId,

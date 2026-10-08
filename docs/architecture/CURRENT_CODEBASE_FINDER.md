@@ -25,8 +25,9 @@ Code wins if this file becomes stale.
 | Day Director | `server/planning/dayDirector/` |
 | Current Day Line | `server/planning/dayline/` |
 | Weekly planning | `server/claire/weeklyMission/` |
-| Persistent Operator | `server/persistentOperator/` |
-| Operator Representative | `server/operatorRepresentative/` |
+| Persistent Operator | `server/agents/persistentOperator/` |
+| Operator Representative | `server/agents/operatorRepresentative/` |
+| Daphne | `server/agents/daphne/` |
 | Agent tools/runtime | `server/agents/` |
 | Claire | `server/claire/` |
 | Brain V2 action gateway | `server/claire/brain/actions/gateway.ts` |

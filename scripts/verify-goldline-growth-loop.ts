@@ -36,18 +36,18 @@ import { importCleanCloudPaidOrders } from "../server/integrations/cleancloud/cl
 import {
   materializeGoalCycleObjective,
   getGoalCycleObjective,
-} from "../server/persistentOperator/objectiveStore";
+} from "../server/agents/persistentOperator/objectiveStore";
 import {
   appendGoalCycleDecision,
   type GoalCycleDecisionDraft,
-} from "../server/persistentOperator/decisionStore";
+} from "../server/agents/persistentOperator/decisionStore";
 import {
   getAuthoritativeScoreboard,
   getLoadoutDelta,
   getPersistentGrowthHistory,
-} from "../server/persistentOperator/proofReadModels";
-import { operationReceipt } from "../server/persistentOperator/operationReceipt";
-import { processPendingOutcomeLearnings } from "../server/persistentOperator/learningStore";
+} from "../server/agents/persistentOperator/proofReadModels";
+import { operationReceipt } from "../server/agents/persistentOperator/operationReceipt";
+import { processPendingOutcomeLearnings } from "../server/agents/persistentOperator/learningStore";
 import {
   macroGoalRuns,
   goalCycleOutcomes,

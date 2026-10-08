@@ -4,7 +4,7 @@
  * not be one. Lantern City projects business records; it never writes them.
  */
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
-import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
+import { requireCanonicalOperatorIdentityForUser } from "../agents/persistentOperator/identity";
 import { loadLanternObjectiveMarks } from "./objectiveMarksService";
 
 export function lanternObjectiveMarksScope(input: {

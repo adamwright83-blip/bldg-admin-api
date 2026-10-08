@@ -3,8 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { remainingWeekHorizon } from "../../../shared/weeklyMissionReadiness";
-import { requireCanonicalOperatorIdentityForUser } from "../../persistentOperator/identity";
-import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
+import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
+import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import { loadDailyCommandWithWeeklyIntent } from "./dailyCommandIntent";
 import {
   adjustWeeklyMission,

@@ -1,4 +1,4 @@
-import type { DaphneRelationship } from "../daphne/relationshipModel";
+import type { DaphneRelationship } from "../agents/daphne/relationshipModel";
 
 export type DaphneNarrativeRelationshipContext = {
   readonly agentId: string;

@@ -9,7 +9,7 @@ import {
 import {
   durableTriggerShadowEnabled,
   enqueueDurableTriggerForOperator,
-} from "../persistentOperator/goalCycleService";
+} from "../agents/persistentOperator/goalCycleService";
 import {
   resolveAutonomousNightShiftScope,
   type NightShiftAutonomousScope,

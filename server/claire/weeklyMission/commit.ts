@@ -17,7 +17,7 @@ import {
   acceptProposalWithReceipt,
   designateDayDirectorPrimary,
 } from "../../planning/dayDirector/dayDirectorService";
-import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
+import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import { latestWeeklyIntent, saveWeeklyIntent } from "./intentStore";
 import {
   clearWeeklySession,

@@ -119,14 +119,14 @@ describe("neutral action execution gate", () => {
     const appointment = readFileSync(
       path.join(
         process.cwd(),
-        "server/persistentOperator/operatorAppointmentExecution.ts"
+        "server/agents/persistentOperator/operatorAppointmentExecution.ts"
       ),
       "utf8"
     );
     const persistentGate = readFileSync(
       path.join(
         process.cwd(),
-        "server/persistentOperator/actionExecution.ts"
+        "server/agents/persistentOperator/actionExecution.ts"
       ),
       "utf8"
     );

@@ -3,7 +3,7 @@ name: Daphne V2 durable preference acceptance
 on:
   pull_request:
     paths:
-      - 'server/daphne/**'
+      - 'server/agents/daphne/**'
       - 'server/claire/**'
       - '.github/workflows/daphne-v2-acceptance.yml'
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
       - name: Verify Daphne receipts, style rendering and Stage 3B branch
         run: >-
           pnpm vitest run
-          server/daphne/explicitPreferenceCorrection.test.ts
+          server/agents/daphne/explicitPreferenceCorrection.test.ts
           server/claire/proactive/boardService.test.ts
           server/claire/turn/daphneV2RuntimeCorrection.test.ts
           server/claire/turn/daphneAdaptation.test.ts

@@ -3,7 +3,7 @@ import type {
   ExecutionIntelligenceSelectionInput,
 } from "../../shared/executionIntelligence";
 import { listExecutionEligibleTeachings } from "../salesIntel/salesIntelTeachingStore";
-import { getActiveLearnedLoadoutDeltas } from "../persistentOperator/learningStore";
+import { getActiveLearnedLoadoutDeltas } from "../agents/persistentOperator/learningStore";
 
 export interface ExecutionIntelligenceProvider {
   readonly doctrineFamily: string;

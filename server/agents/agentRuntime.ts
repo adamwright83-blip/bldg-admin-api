@@ -5,7 +5,7 @@ import { getAgentTool, getAgentToolPolicy } from "./toolRegistry";
 import {
   evaluatePersistentActionPolicy,
   type PersistentActionPolicyDecision,
-} from "../persistentOperator/actionPolicy";
+} from "./persistentOperator/actionPolicy";
 import type { AgentEventWrite } from "./agentEvents";
 
 export function validatedPersistentPolicyEventContext(

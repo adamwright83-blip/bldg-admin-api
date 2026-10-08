@@ -365,7 +365,7 @@ export async function recordParkingLotClerkObservation(input: {
 
       if (persistedEvent) {
         const { bridgeParkingLotDebrief } = await import(
-          "../persistentOperator/fieldEventBridge"
+          "../agents/persistentOperator/fieldEventBridge"
         );
         await bridgeParkingLotDebrief({
           tenantId: input.tenantId,

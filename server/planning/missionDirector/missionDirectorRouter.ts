@@ -7,7 +7,7 @@ import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { getDb } from "../../db";
 import { isLegacyDayforgeTenant } from "../../saas/tenantAccess";
-import { requireCanonicalOperatorIdentityForUser } from "../../persistentOperator/identity";
+import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
 import { listPlanRevisions, planForDate, recordPlanUsage } from "./missionDirectorService";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

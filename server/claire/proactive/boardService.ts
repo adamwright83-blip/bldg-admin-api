@@ -30,17 +30,17 @@ import { requiresSpendClearance } from "../../strategy/spendClearance";
 import {
   durableTriggerShadowEnabled,
   enqueueDurableTriggerForOperator,
-} from "../../persistentOperator/goalCycleService";
+} from "../../agents/persistentOperator/goalCycleService";
 import {
   backfillPersistentOperatorCommercialFollowUpRef,
   claireProactiveObligations,
   listPersistentOperatorObligationPayloads,
   upsertPersistentOperatorObligation,
-} from "../../persistentOperator/obligationStore";
+} from "../../agents/persistentOperator/obligationStore";
 import {
   loadOperatorDoctrine,
   saveOperatorDoctrine,
-} from "../../persistentOperator/operatorDoctrineStore";
+} from "../../agents/persistentOperator/operatorDoctrineStore";
 
 // Compatibility export: persistent-operator core owns the durable obligation table.
 export { claireProactiveObligations };

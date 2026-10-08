@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const roots = [
-  "server/persistentOperator",
+  "server/agents/persistentOperator",
   "server/executionIntelligence",
 ];
 const explicitGenericFiles = [
