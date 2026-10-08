@@ -56,6 +56,7 @@ describe("loadStrategyCustomerAggregates", () => {
     const nativeRows = [
       {
         id: 9,
+        tenantId: "t1",
         status: "delivered",
         createdAt: new Date("2026-01-01T12:00:00.000Z"),
         firstName: "LiveAmina",
@@ -76,7 +77,14 @@ describe("loadStrategyCustomerAggregates", () => {
         from: (table: Parameters<typeof getTableName>[0]) => {
           const name = getTableName(table);
           if (name === "cleancloud_paid_orders") throw missingCleanCloud;
-          const rows = Promise.resolve(nativeRows);
+          const receiptRows = [{
+            id: "payment-9", tenantId: "t1", claimType: "payment_verified", subjectType: "order", subjectId: "9",
+            sourceType: "stripe_payment_intent", sourceRef: "pi_test_live_amanda", actorType: "system", actorId: null,
+            evidenceClass: "authoritative_external", verificationClass: "VERIFIED", admissionPolicy: "native_stripe_payment_v1",
+            occurredAt: new Date("2026-01-01T12:00:00Z"), admittedAt: new Date("2026-01-01T12:00:00Z"),
+            metadataJson: {}, idempotencyKey: "payment:9",
+          }];
+          const rows = Promise.resolve(name === "authority_receipts" ? receiptRows : nativeRows);
           return Object.assign(rows, { where: () => rows });
         },
       }),
