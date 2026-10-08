@@ -1,6 +1,8 @@
+import { admitNativeStripePayment } from "../server/authority/paymentAdmission";
+import { transitionNativeOrderStatus } from "../server/orders/orderLifecycleService";
 import dotenv from "dotenv";
 import Stripe from "stripe";
-import { getOrderById, updateOrderIntake, ensurePickupCompletedOperationsEventForOrder } from "../server/db";
+import { getOrderById, ensurePickupCompletedOperationsEventForOrder } from "../server/db";
 import { centsToDollars } from "../shared/pricing";
 
 if (process.env.NODE_ENV !== "production") {
@@ -55,13 +57,18 @@ if (paymentIntent.amount < 50) {
 }
 
 const paidAt = new Date(paymentIntent.created * 1000);
-await updateOrderIntake(orderId, {
-  paid: true,
+const tenantId = before.tenantId?.trim();
+if (!tenantId) throw new Error("Payment repair requires established order tenant authority");
+await admitNativeStripePayment({
+  tenantId,
+  orderId,
+  paymentIntentId: paymentIntent.id,
   paidAt,
-  stripePaymentIntentId: paymentIntent.id,
-  total: centsToDollars(paymentIntent.amount),
-  status: "processing",
+  actorId: "stripe-payment-repair",
+  orderPatch: { total: centsToDollars(paymentIntent.amount) },
 });
+await transitionNativeOrderStatus({ orderId, tenantId, status: "processing" });
+
 const eventResult = await ensurePickupCompletedOperationsEventForOrder(orderId, {
   actorDisplayName: "Admin charge repair",
   actualEventTimestamp: paidAt,

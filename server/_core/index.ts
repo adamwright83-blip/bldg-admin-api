@@ -13,7 +13,8 @@ import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { createOrReuseResidentLaundryOrder, upsertUser } from "../db";
+import { upsertUser } from "../db";
+import { createOrReuseResidentOrder } from "../orders/orderLifecycleService";
 import { getSessionCookieOptions } from "./cookies";
 import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -820,7 +821,7 @@ async function startServer() {
       // Single canonical, idempotent create. Resolves retries/double-taps via
       // clientRequestId, falls back to the composite open-order duplicate guard,
       // and recovers from insert races — so one resident request = one order.
-      const { orderId, reused } = await createOrReuseResidentLaundryOrder(orderValues, {
+      const { orderId, reused } = await createOrReuseResidentOrder(orderValues, {
         clientRequestId: intake.clientRequestId,
       });
       console.log(`[Intake ${reqId}] Order ${reused ? "reused (idempotent)" : "created"}: id=${orderId}`);

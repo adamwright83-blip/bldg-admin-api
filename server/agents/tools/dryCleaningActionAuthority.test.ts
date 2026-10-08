@@ -5,6 +5,8 @@ const db = vi.hoisted(() => ({
   updateOrderIntake: vi.fn(),
 }));
 
+vi.mock("../../orders/orderLifecycleService", () => ({ reviseNativeOrder: db.updateOrderIntake }));
+
 vi.mock("../../db", () => ({
   getOrderById: db.getOrderById,
   updateOrderIntake: db.updateOrderIntake,

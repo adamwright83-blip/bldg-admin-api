@@ -1,4 +1,5 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import * as persistence from "../db";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { orders, type InsertOrder, type Order } from "../../drizzle/schema";
 import {
   attemptOrderPickupCollection,
@@ -37,10 +38,20 @@ export type TransitionOrderResult = {
 };
 
 export class OrderTransitionError extends Error {
-  readonly code: "NOT_FOUND" | "UNAUTHORIZED" | "PAYMENT_REQUIRED" | "INVALID_TRANSITION";
+  readonly code:
+    | "NOT_FOUND"
+    | "UNAUTHORIZED"
+    | "PAYMENT_REQUIRED"
+    | "INVALID_TRANSITION"
+    | "CONFLICT";
 
   constructor(
-    code: "NOT_FOUND" | "UNAUTHORIZED" | "PAYMENT_REQUIRED" | "INVALID_TRANSITION",
+    code:
+      | "NOT_FOUND"
+      | "UNAUTHORIZED"
+      | "PAYMENT_REQUIRED"
+      | "INVALID_TRANSITION"
+      | "CONFLICT",
     message: string
   ) {
     super(message);
@@ -56,6 +67,7 @@ export class OrderTransitionError extends Error {
 export async function createNativeOrder(
   input: CreateNativeOrderInput
 ): Promise<number> {
+  assertNonPaymentWrite(input);
   const tenantId = input.tenantId?.trim();
   if (!tenantId) {
     throw new Error("Order creation requires tenant authority");
@@ -75,6 +87,9 @@ export async function createOrReuseResidentOrder(
   order: InsertOrder,
   opts?: { clientRequestId?: string | null }
 ): Promise<{ orderId: number; reused: boolean }> {
+  assertNonPaymentWrite(order);
+  if (!order.tenantId?.trim())
+    throw new Error("Resident order creation requires tenant authority");
   return createOrReuseResidentLaundryOrder(order, opts);
 }
 
@@ -110,22 +125,21 @@ export async function attemptOrderDeliveryTransition(
     }
   }
 
-  // Idempotency: already delivered
-  if (order.status === "delivered") {
-    return { transitioned: false, alreadyCompleted: true, order };
-  }
-
-  // Precondition: delivery rejects when order.paid === false
+  // Delivery never creates payment, including replay of imported unpaid history.
   if (!order.paid) {
     throw new OrderTransitionError(
       "PAYMENT_REQUIRED",
       "Charge the order before marking it delivered."
     );
   }
+  if (order.status === "delivered") {
+    return { transitioned: false, alreadyCompleted: true, order };
+  }
 
   const conditions = [
     eq(orders.id, orderId),
     eq(orders.paid, true),
+    ne(orders.status, "delivered"),
   ];
   if (expectedTenantId) {
     conditions.push(
@@ -210,12 +224,27 @@ export async function transitionNativeOrderStatus(
 
   // 1. Pickup transition
   if (input.status === "collected") {
+    if (order.status === "cancelled")
+      throw new OrderTransitionError(
+        "INVALID_TRANSITION",
+        "This order cannot be collected."
+      );
     const { transitioned, order: collectedOrder } =
-      await attemptOrderPickupCollection(input.orderId);
+      await attemptOrderPickupCollection(input.orderId, order.tenantId);
     if (!collectedOrder) {
       throw new OrderTransitionError("NOT_FOUND", "Order not found");
     }
     if (!transitioned) {
+      if (
+        !["collected", "processing", "ready", "delivered"].includes(
+          collectedOrder.status
+        )
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order could not be collected."
+        );
+      }
       return {
         success: true,
         alreadyCompleted: true,
@@ -231,8 +260,15 @@ export async function transitionNativeOrderStatus(
 
   // 2. Delivery transition
   if (input.status === "delivered") {
-    const { transitioned, alreadyCompleted, order: deliveredOrder } =
-      await attemptOrderDeliveryTransition(input.orderId, requestedTenant, order);
+    const {
+      transitioned,
+      alreadyCompleted,
+      order: deliveredOrder,
+    } = await attemptOrderDeliveryTransition(
+      input.orderId,
+      requestedTenant,
+      order
+    );
     if (!transitioned && !alreadyCompleted) {
       throw new OrderTransitionError(
         "INVALID_TRANSITION",
@@ -267,4 +303,77 @@ export async function transitionNativeOrderStatus(
     alreadyCompleted: false,
     order: updatedOrder,
   };
+}
+
+/** Order revisions cannot create payment truth or bypass lifecycle authority. */
+export async function reviseNativeOrder(
+  orderId: number,
+  data: Partial<
+    Omit<InsertOrder, "paid" | "paidAt" | "stripePaymentIntentId" | "tenantId">
+  >
+): Promise<void> {
+  assertNonPaymentWrite(data);
+  if (
+    ["paid", "paidAt", "stripePaymentIntentId", "tenantId"].some(
+      key => key in data
+    )
+  ) {
+    throw new Error("Order revision cannot change payment or tenant authority");
+  }
+  const { status, ...fields } = data;
+  if (status !== undefined) {
+    await transitionNativeOrderStatus({ orderId, status });
+  }
+  if (Object.keys(fields).length > 0)
+    await persistence.updateOrderIntake(orderId, fields);
+}
+
+export async function attachNativeOrderPaymentMethod(
+  orderId: number,
+  customerId: string,
+  paymentMethodId: string
+): Promise<void> {
+  await persistence.updateOrderStripe(orderId, customerId, paymentMethodId);
+}
+
+export async function attributeNativeOrderToBuilding(
+  orderId: number,
+  buildingSlug: string
+): Promise<void> {
+  await persistence.updateOrderBuildingSlug(orderId, buildingSlug);
+}
+
+export async function attributeNativeCustomerOrdersToBuilding(
+  input: Parameters<typeof persistence.updateOrderBuildingSlugForCustomer>[0]
+): Promise<number> {
+  return persistence.updateOrderBuildingSlugForCustomer(input);
+}
+
+export async function assignNativeOrderVendor(
+  orderId: number,
+  vendorId: number | null
+): Promise<void> {
+  await persistence.updateOrderVendor(orderId, vendorId);
+}
+
+export async function deleteNativeOrder(orderId: number): Promise<void> {
+  await persistence.deleteOrder(orderId);
+}
+
+function assertNonPaymentWrite(data: object): void {
+  const patch = data as Record<string, unknown>;
+  if (
+    patch.paid === true ||
+    patch.paidAt != null ||
+    patch.stripePaymentIntentId != null
+  ) {
+    throw new Error(
+      "Native payment state requires Payment admission authority"
+    );
+  }
+  if ("paid" in patch && patch.paid !== false) {
+    throw new Error(
+      "Native payment state requires Payment admission authority"
+    );
+  }
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { orders, type Order } from "../../drizzle/schema";
 import { getDb } from "../db";
 
@@ -16,7 +16,9 @@ export async function listDriverOrdersByStatus(input: {
   return db
     .select()
     .from(orders)
-    .where(and(eq(orders.status, input.status), driverOrderTenantSql(input.tenantId)))
+    .where(
+      and(eq(orders.status, input.status), driverOrderTenantSql(input.tenantId))
+    )
     .orderBy(desc(orders.createdAt));
 }
 
@@ -29,7 +31,9 @@ export async function listDriverOrdersByDate(input: {
   const db = await getDb();
   if (!db) return [];
   const column =
-    input.dateField === "deliveryDate" ? orders.deliveryDate : orders.pickupDate;
+    input.dateField === "deliveryDate"
+      ? orders.deliveryDate
+      : orders.pickupDate;
   return db
     .select()
     .from(orders)
@@ -52,32 +56,9 @@ export async function getDriverOrderForTenant(input: {
   const [row] = await db
     .select()
     .from(orders)
-    .where(and(eq(orders.id, input.orderId), driverOrderTenantSql(input.tenantId)))
+    .where(
+      and(eq(orders.id, input.orderId), driverOrderTenantSql(input.tenantId))
+    )
     .limit(1);
   return row ?? null;
-}
-
-export async function transitionDriverOrder(input: {
-  tenantId: string;
-  orderId: number;
-  from?: Order["status"][];
-  to: Order["status"];
-}): Promise<{ changed: boolean }> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const conditions = [
-    eq(orders.id, input.orderId),
-    driverOrderTenantSql(input.tenantId),
-  ];
-  if (input.from && input.from.length > 0) {
-    conditions.push(inArray(orders.status, input.from));
-  }
-  const result = await db
-    .update(orders)
-    .set({ status: input.to })
-    .where(and(...conditions));
-  const affectedRows = Number(
-    (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
-  );
-  return { changed: affectedRows > 0 };
 }

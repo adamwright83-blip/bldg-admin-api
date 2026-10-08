@@ -23,6 +23,11 @@ vi.mock("../db", async (importOriginal) => ({
   ...dbMocks,
 }));
 
+vi.mock("../orders/orderLifecycleService", async importOriginal => ({
+  ...(await importOriginal<typeof import("../orders/orderLifecycleService")>()),
+  createOrReuseResidentOrder: dbMocks.createOrReuseResidentLaundryOrder,
+}));
+
 vi.mock("../opsTasks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../opsTasks")>()),
   ...opsTaskMocks,

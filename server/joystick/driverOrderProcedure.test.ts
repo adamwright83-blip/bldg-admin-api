@@ -58,32 +58,60 @@ vi.mock("./driverOrderStore", () => ({
   getDriverOrderForTenant: vi.fn(async (input: { orderId: number }) => {
     return memory.orders.find(order => order.id === input.orderId) ?? null;
   }),
-  transitionDriverOrder: vi.fn(
-    async (input: {
-      tenantId: string;
-      orderId: number;
-      from?: string[];
-      to: string;
-    }) => {
-      memory.transitions.push({
-        tenantId: input.tenantId,
-        orderId: input.orderId,
-        to: input.to,
-      });
-      const order = memory.orders.find(row => row.id === input.orderId);
-      if (!order) return { changed: false };
-      if (input.from && !input.from.includes(order.status)) return { changed: false };
-      order.status = input.to;
-      return { changed: true };
-    }
-  ),
 }));
+
+vi.mock("../orders/orderLifecycleService", async importOriginal => {
+  const actual =
+    await importOriginal<typeof import("../orders/orderLifecycleService")>();
+  return {
+    ...actual,
+    transitionNativeOrderStatus: vi.fn(
+      async (input: { tenantId: string; orderId: number; status: string }) => {
+        const order = memory.orders.find(
+          row =>
+            row.id === input.orderId &&
+            (row.tenantId ?? "default") === input.tenantId
+        );
+        if (!order)
+          throw new actual.OrderTransitionError("NOT_FOUND", "Order not found");
+        if (input.status === "collected" && order.status === "cancelled") {
+          throw new actual.OrderTransitionError(
+            "INVALID_TRANSITION",
+            "This order cannot be collected."
+          );
+        }
+        if (input.status === "delivered" && !order.paid) {
+          throw new actual.OrderTransitionError(
+            "PAYMENT_REQUIRED",
+            "Charge the order before marking it delivered."
+          );
+        }
+        const alreadyCompleted =
+          order.status === input.status ||
+          (input.status === "collected" &&
+            ["processing", "ready", "delivered"].includes(order.status));
+        if (!alreadyCompleted) {
+          memory.transitions.push({
+            tenantId: input.tenantId,
+            orderId: input.orderId,
+            to: input.status,
+          });
+          order.status = input.status;
+        }
+        return { success: true, alreadyCompleted, order };
+      }
+    ),
+  };
+});
 
 import { createContext } from "../_core/context";
 import { sdk } from "../_core/sdk";
 import { appRouter } from "../routers";
 import { driverOrderRouter } from "./driverOrderRouter";
-import { transitionDriverOrder } from "./driverOrderStore";
+import {
+  transitionNativeOrderStatus,
+  OrderTransitionError,
+} from "../orders/orderLifecycleService";
 import { orderVisibleToTenant } from "./driverOrderTenant";
 
 function memberUser(overrides: Partial<User> = {}): User {
@@ -102,11 +130,13 @@ function memberUser(overrides: Partial<User> = {}): User {
   };
 }
 
-function callerContext(overrides: {
-  user?: User | null;
-  tenantId?: string;
-  vendor?: boolean;
-} = {}): TrpcContext {
+function callerContext(
+  overrides: {
+    user?: User | null;
+    tenantId?: string;
+    vendor?: boolean;
+  } = {}
+): TrpcContext {
   return {
     req: undefined as never,
     res: undefined as never,
@@ -193,7 +223,13 @@ describe("driver order procedure", () => {
     effects.collected.mockClear();
     effects.delivered.mockClear();
     access.resolveMembership.mockImplementation(
-      async ({ tenantId, userOpenId }: { tenantId: string; userOpenId: string }) => {
+      async ({
+        tenantId,
+        userOpenId,
+      }: {
+        tenantId: string;
+        userOpenId: string;
+      }) => {
         if (userOpenId === "dayforge:member-a" && tenantId === "tenant-a") {
           return { tenantId, userOpenId, role: memory.role };
         }
@@ -213,7 +249,9 @@ describe("driver order procedure", () => {
     expect(orderVisibleToTenant({ tenantId: null }, "default")).toBe(true);
     expect(orderVisibleToTenant({ tenantId: "  " }, "default")).toBe(true);
     expect(orderVisibleToTenant({ tenantId: null }, "tenant-a")).toBe(false);
-    expect(orderVisibleToTenant({ tenantId: "tenant-a" }, "tenant-b")).toBe(false);
+    expect(orderVisibleToTenant({ tenantId: "tenant-a" }, "tenant-b")).toBe(
+      false
+    );
   });
 
   it("lists and updates the signed-in tenant from the membership, not the request", async () => {
@@ -229,7 +267,10 @@ describe("driver order procedure", () => {
     const byStatus = await orders.listByStatus({ status: "new" });
     expect(byStatus.map(order => order.id).sort()).toEqual([11, 13]);
 
-    const collected = await orders.updateStatus({ orderId: 11, status: "collected" });
+    const collected = await orders.updateStatus({
+      orderId: 11,
+      status: "collected",
+    });
     expect(collected).toEqual({ success: true, alreadyCompleted: false });
     expect(memory.transitions).toEqual([
       { tenantId: "tenant-a", orderId: 11, to: "collected" },
@@ -240,17 +281,25 @@ describe("driver order procedure", () => {
     );
     expect(effects.collected.mock.calls[0]?.[0].order.phone).toBe("3105550101");
 
-    const replay = await orders.updateStatus({ orderId: 11, status: "collected" });
+    const replay = await orders.updateStatus({
+      orderId: 11,
+      status: "collected",
+    });
     expect(replay).toEqual({ success: true, alreadyCompleted: true });
     expect(memory.transitions).toHaveLength(1);
     expect(effects.collected).toHaveBeenCalledTimes(1);
 
-    const delivered = await orders.updateStatus({ orderId: 14, status: "delivered" });
-    expect(delivered).toEqual({ success: true });
+    const delivered = await orders.updateStatus({
+      orderId: 14,
+      status: "delivered",
+    });
+    expect(delivered).toEqual({ success: true, alreadyCompleted: false });
     expect(effects.delivered).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-a" })
     );
-    expect(memory.orders.find(order => order.id === 14)?.status).toBe("delivered");
+    expect(memory.orders.find(order => order.id === 14)?.status).toBe(
+      "delivered"
+    );
     const deliveredAgain = await orders.updateStatus({
       orderId: 14,
       status: "delivered",
@@ -267,7 +316,10 @@ describe("driver order procedure", () => {
       deliveryDate: null,
       phone: "3105550108",
     });
-    const intake = await orders.updateStatus({ orderId: 18, status: "collected" });
+    const intake = await orders.updateStatus({
+      orderId: 18,
+      status: "collected",
+    });
     expect(intake).toEqual({ success: true, alreadyCompleted: false });
     expect(memory.transitions.at(-1)).toEqual({
       tenantId: "tenant-a",
@@ -411,7 +463,9 @@ describe("driver order procedure", () => {
   });
 
   it("does not report a pickup collected when the tenant write changes nothing", async () => {
-    vi.mocked(transitionDriverOrder).mockResolvedValueOnce({ changed: false });
+    vi.mocked(transitionNativeOrderStatus).mockRejectedValueOnce(
+      new OrderTransitionError("CONFLICT", "Order could not be collected.")
+    );
     await expect(
       driverOrderRouter.createCaller(callerContext()).updateStatus({
         orderId: 11,
@@ -473,7 +527,10 @@ describe("driver order procedure", () => {
       protocol: "https",
     };
     const admin = await createContext({
-      req: { ...request, headers: { ...request.headers, host: "admin.bldg.chat" } } as never,
+      req: {
+        ...request,
+        headers: { ...request.headers, host: "admin.bldg.chat" },
+      } as never,
       res: {} as never,
     });
     const driver = await createContext({
@@ -487,13 +544,19 @@ describe("driver order procedure", () => {
     expect(driver.tenantId).toBe(admin.tenantId);
     expect(driver.user?.openId).toBe(admin.user?.openId);
 
-    const adminOrders = await driverOrderRouter.createCaller(admin).listByStatus({
-      status: "new",
-    });
-    const driverOrders = await driverOrderRouter.createCaller(driver).listByStatus({
-      status: "new",
-    });
-    expect(driverOrders.map(order => order.id)).toEqual(adminOrders.map(order => order.id));
+    const adminOrders = await driverOrderRouter
+      .createCaller(admin)
+      .listByStatus({
+        status: "new",
+      });
+    const driverOrders = await driverOrderRouter
+      .createCaller(driver)
+      .listByStatus({
+        status: "new",
+      });
+    expect(driverOrders.map(order => order.id)).toEqual(
+      adminOrders.map(order => order.id)
+    );
     expect(driverOrders.map(order => order.id).sort()).toEqual([11, 13]);
     expect(memory.listedTenants).toEqual(["tenant-a", "tenant-a"]);
   });

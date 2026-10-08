@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { and, eq } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { createNativeOrder } from "../orders/orderLifecycleService";
 import {
   getGeographicTruth,
   normalizeSourceAddress,
@@ -376,7 +377,7 @@ export async function importCustomerOrderHistory(input: {
         }
         if (!dryRun) {
           const createdAt = new Date(`${date}T20:00:00.000Z`);
-          await db.insert(orders).values({
+          await createNativeOrder({
             tenantId: input.tenantId,
             firstName,
             lastName,
@@ -401,7 +402,7 @@ export async function importCustomerOrderHistory(input: {
             specialInstructions: `${IMPORT_SOURCE}:${row.customer_id}:${date}`,
             createdAt,
             updatedAt: createdAt,
-          } as never);
+          });
         }
         insertedForCustomer += 1;
         ordersInserted += 1;

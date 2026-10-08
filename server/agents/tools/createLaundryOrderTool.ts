@@ -1,4 +1,4 @@
-import { createOrReuseResidentLaundryOrder } from "../../db";
+import { createOrReuseResidentOrder } from "../../orders/orderLifecycleService";
 import {
   assertResidentIdentityOrLineage,
   resolveResidentActionId,
@@ -21,7 +21,7 @@ export const createLaundryOrderTool: AgentTool<Record<string, any>, { orderId: n
       typeof input.clientRequestId === "string" && input.clientRequestId.trim()
         ? input.clientRequestId.trim()
         : null;
-    const { orderId, reused } = await createOrReuseResidentLaundryOrder(
+    const { orderId, reused } = await createOrReuseResidentOrder(
       {
         tenantId: ctx.tenantId,
         serviceType: input.serviceType ?? "wash_fold",
