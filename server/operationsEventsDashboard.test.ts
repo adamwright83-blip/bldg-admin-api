@@ -261,12 +261,15 @@ describe("operations events dashboard helpers", () => {
     expect(source).toContain("COALESCE(${operationsEvents.customerPhone}, '') LIKE");
   });
 
-  it("list and CSV queries join operations events to orders for charged amounts", () => {
+  it("list and CSV queries use Orders only as Payment evidence candidates", () => {
     const source = readFileSync(new URL("./operationsEventsDashboard.ts", import.meta.url), "utf8");
     expect(source).toContain("leftJoin(orders, eq(operationsEvents.orderId, orders.id))");
-    expect(source).toContain("chargedAmount: orders.total");
-    expect(source).toContain("paid: orders.paid");
-    expect(source).toContain("paidAt: orders.paidAt");
+    expect(source).toContain("orderTenantId: orders.tenantId");
+    expect(source).toContain("orderPaidCandidate: orders.paid");
+    expect(source).toContain("orderPaymentIntentId: orders.stripePaymentIntentId");
+    expect(source).toContain("readNativePaymentFacts");
+    expect(source).not.toContain("chargedAmount: orders.total");
+    expect(source).not.toContain("paidAt: orders.paidAt");
   });
 
   it("chargeCard persists Stripe payment truth before non-critical side effects", () => {
