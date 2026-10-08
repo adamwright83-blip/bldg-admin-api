@@ -1,5 +1,6 @@
+import { readNativeResidentPaymentProjection, type NativeResidentPaymentFact } from "./customerAssets/nativeResidentPaymentProjection";
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
-import { adminActionLog, bldgUsers, orders } from "../drizzle/schema";
+import { adminActionLog, bldgUsers } from "../drizzle/schema";
 import { getDb } from "./db";
 import { BUILDINGS } from "@shared/buildings";
 import { getDashboardBusinessDayBoundsUtc } from "./revenueIntervention";
@@ -65,8 +66,9 @@ export async function getLevel4OffensiveState(
     };
   }
 
-  const buildingPenetration = await loadBuildingPenetration(db, tenantId);
-  const referralRequest = await loadReferralRequest(db, tenantId);
+  const paymentFacts = await readNativeResidentPaymentProjection(tenantId, db);
+  const buildingPenetration = await loadBuildingPenetration(db, tenantId, paymentFacts);
+  const referralRequest = await loadReferralRequest(db, tenantId, paymentFacts);
 
   return {
     dbAvailable: true,
@@ -78,8 +80,11 @@ export async function getLevel4OffensiveState(
 
 async function loadBuildingPenetration(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  tenantId: string
+  tenantId: string,
+  paymentFacts: NativeResidentPaymentFact[]
 ): Promise<BuildingPenetrationBlock[]> {
+  // Explicit legacy shared registration census; not tenant ownership or Payment evidence.
+  // Tenant-bound paying-resident facts come exclusively from Orders/Payment below.
   const signupRows = await db
     .select({
       buildingSlug: bldgUsers.buildingSlug,
@@ -99,26 +104,14 @@ async function loadBuildingPenetration(
   // Admin-created orders typically have bldgUserId=NULL, and resident-linked orders
   // typically have orders.buildingSlug=NULL, so the only reliable join key is
   // bldgUserId → bldg_users.buildingSlug.
-  const paidRows = await db
-    .select({
-      buildingSlug: bldgUsers.buildingSlug,
-      paidUsers: sql<number>`COUNT(DISTINCT ${orders.bldgUserId})`,
-    })
-    .from(orders)
-    .innerJoin(bldgUsers, eq(orders.bldgUserId, bldgUsers.id))
-    .where(
-      and(
-        eq(orders.tenantId, tenantId),
-        eq(orders.paid, true),
-        isNotNull(bldgUsers.buildingSlug)
-      )
-    )
-    .groupBy(bldgUsers.buildingSlug);
+  const paidIds = new Set(paymentFacts.map(fact => fact.bldgUserId));
+  const paidRows = (await db.select({ id: bldgUsers.id, buildingSlug: bldgUsers.buildingSlug }).from(bldgUsers))
+    .filter(user => paidIds.has(user.id));
 
   const paidUserCountsByAlias = new Map<string, number>();
   for (const r of paidRows) {
     if (!r.buildingSlug) continue;
-    paidUserCountsByAlias.set(r.buildingSlug, Number(r.paidUsers ?? 0));
+    paidUserCountsByAlias.set(r.buildingSlug, (paidUserCountsByAlias.get(r.buildingSlug) ?? 0) + 1);
   }
 
   const touchRows = await db
@@ -203,26 +196,12 @@ async function loadBuildingPenetration(
 
 async function loadReferralRequest(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  tenantId: string
+  tenantId: string,
+  paymentFacts: NativeResidentPaymentFact[]
 ): Promise<ReferralRequestBlock> {
-  // Aggregate paid orders per bldgUserId for this tenant.
-  const aggregateRows = await db
-    .select({
-      bldgUserId: orders.bldgUserId,
-      orderCount: sql<number>`COUNT(*)`,
-      ltvCents: sql<number>`COALESCE(SUM(ROUND(${orders.total} * 100)), 0)`,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.tenantId, tenantId),
-        eq(orders.paid, true),
-        isNotNull(orders.bldgUserId)
-      )
-    )
-    .groupBy(orders.bldgUserId)
-    .having(sql`COUNT(*) >= ${REFERRAL_THRESHOLD_ORDERS}`)
-    .orderBy(desc(sql`COALESCE(SUM(ROUND(${orders.total} * 100)), 0)`));
+  // Unknown monetary values are held for provider reconciliation, not priced from Orders.
+  const aggregateRows = paymentFacts.filter(fact => fact.paidOrderCount >= REFERRAL_THRESHOLD_ORDERS && fact.lifetimeValueCents !== null)
+    .sort((a,b) => b.lifetimeValueCents! - a.lifetimeValueCents!);
 
   if (aggregateRows.length === 0) {
     return { block: "referral_request", candidate: null };
@@ -263,8 +242,8 @@ async function loadReferralRequest(
       userId: user.id,
       firstName,
       lastInitial,
-      orderCount: Number(row.orderCount ?? 0),
-      ltvCents: Number(row.ltvCents ?? 0),
+      orderCount: row.paidOrderCount,
+      ltvCents: row.lifetimeValueCents!,
     };
   }
 
