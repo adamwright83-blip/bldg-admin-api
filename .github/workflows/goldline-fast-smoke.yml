@@ -66,7 +66,7 @@ jobs:
           server/_core/platformAuthority.test.ts
           server/goldlineOnboarding/demoAccess.test.ts
           server/platform/tenancy/tenantIdentity.test.ts
-          server/persistentOperator/identity.test.ts
+          server/agents/persistentOperator/identity.test.ts
 
       - name: Prove Authority Receipt contracts
         run: >-
@@ -98,8 +98,8 @@ jobs:
           server/claire/brain/tests/authority.test.ts
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
           server/operatorArtifact/sendOperatorArtifact.test.ts
-          server/persistentOperator/operationReceipt.test.ts
-          server/persistentOperator/operatorAppointmentExecution.test.ts
+          server/agents/persistentOperator/operationReceipt.test.ts
+          server/agents/persistentOperator/operatorAppointmentExecution.test.ts
 
       - name: Prove Claire domain-port convergence
         run: >-
@@ -108,8 +108,8 @@ jobs:
           server/claire/domainPortAvailability.test.ts
           server/claire/knowledge/accountActions.domainPort.test.ts
           server/claire/proactive/boardService.test.ts
-          server/persistentOperator/obligationStore.boardPort.test.ts
-          server/persistentOperator/operatorDoctrineStore.test.ts
+          server/agents/persistentOperator/obligationStore.boardPort.test.ts
+          server/agents/persistentOperator/operatorDoctrineStore.test.ts
           server/claire/brain/tests/grantBoundLegacyAdapter.test.ts
           server/claire/brain/tests/liveCutover.test.ts
           server/claire/identityTruth.test.ts
@@ -122,14 +122,14 @@ jobs:
       - name: Prove Daphne causal adaptation kernel
         run: >-
           pnpm vitest run
-          server/daphne
+          server/agents/daphne
           server/narratorOs/daphneRelationshipContext.test.ts
-          server/operatorRepresentative/adaptation.test.ts
-          server/operatorRepresentative/adaptationReceipts.test.ts
+          server/agents/operatorRepresentative/adaptation.test.ts
+          server/agents/operatorRepresentative/adaptationReceipts.test.ts
           server/claire/turn/daphneAdaptation.test.ts
           server/claire/turn/daphneV2RuntimeCorrection.test.ts
-          server/operatorRepresentative/readModel.test.ts
-          server/operatorRepresentative/talk.test.ts
+          server/agents/operatorRepresentative/readModel.test.ts
+          server/agents/operatorRepresentative/talk.test.ts
           server/claire/operatorAdaptationContext.test.ts
 
       - name: Prove commercial paid-revenue authority shadow
@@ -161,7 +161,7 @@ jobs:
           server/planning/missionDirector/missionRank.test.ts
           server/planning/missionDirector/pocketDetection.test.ts
           server/weeklyGrowthCandidates/weeklyGrowthCandidates.test.ts
-          server/persistentOperator/decisionEngine.test.ts
+          server/agents/persistentOperator/decisionEngine.test.ts
           server/planning/dayline/currentDayLineService.test.ts
           server/planning/dayline/candidateCompletionLineage.test.ts
 
@@ -180,13 +180,13 @@ jobs:
           server/executionIntelligence/selectExecutionIntelligence.test.ts
           server/armory/armoryJ0.test.ts
           shared/tenantLearningGovernance.test.ts
-          server/persistentOperator/tenantScope.test.ts
-          server/persistentOperator/phase0SchemaContract.test.ts
-          server/persistentOperator/identity.test.ts
-          server/persistentOperator/observability.test.ts
-          server/persistentOperator/identitySchemaContract.test.ts
-          server/operatorRepresentative/readModel.test.ts
-          server/operatorRepresentative/talk.test.ts
+          server/agents/persistentOperator/tenantScope.test.ts
+          server/agents/persistentOperator/phase0SchemaContract.test.ts
+          server/agents/persistentOperator/identity.test.ts
+          server/agents/persistentOperator/observability.test.ts
+          server/agents/persistentOperator/identitySchemaContract.test.ts
+          server/agents/operatorRepresentative/readModel.test.ts
+          server/agents/operatorRepresentative/talk.test.ts
           server/claire/operatorAdaptationContext.test.ts
           server/campaignRuns/canonicalOwnership.test.ts
           server/lanternCity/lanternCityRouter.test.ts
@@ -224,7 +224,7 @@ jobs:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
-          server/operatorRepresentative/daphneStage3b.mysql.integration.test.ts
+          server/agents/operatorRepresentative/daphneStage3b.mysql.integration.test.ts
 
       - name: Prove Mitch producer durability against clean MySQL
         env:

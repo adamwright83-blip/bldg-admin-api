@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
-import { requireEffectiveOperatorIdentityForTenant } from "../../persistentOperator/identity";
-import { recordPersistentOperatorDiagnosticEvent } from "../../persistentOperator/observability";
+import { requireEffectiveOperatorIdentityForTenant } from "../../agents/persistentOperator/identity";
+import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import type { CampaignRun } from "../../../shared/campaignRun";
 import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
-import { bridgeDriverAction } from "../../persistentOperator/fieldEventBridge";
+import { bridgeDriverAction } from "../../agents/persistentOperator/fieldEventBridge";
 import { completeDayDirectorCommitment } from "../dayDirector/dayDirectorService";
 import { getLatestPlan } from "../missionDirector/missionDirectorService";
 import { resolveCandidateCompletionLineage } from "./candidateCompletionLineage";

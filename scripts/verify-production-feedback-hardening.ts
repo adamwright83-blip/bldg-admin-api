@@ -28,8 +28,8 @@ import {
 import {
   sweepUnbridgedParkingLotDebriefs,
   sweepUnpropagatedConquestWins,
-} from "../server/persistentOperator/autonomousWorkerService";
-import { propagateGeographicConquest } from "../server/persistentOperator/geographicConquestService";
+} from "../server/agents/persistentOperator/autonomousWorkerService";
+import { propagateGeographicConquest } from "../server/agents/persistentOperator/geographicConquestService";
 import { readCurrentDayLine } from "../server/planning/dayline/currentDayLineService";
 
 const BOLD = "\x1b[1m";

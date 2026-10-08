@@ -47,12 +47,12 @@ jobs:
           pnpm vitest run
           server/procurement/worker.test.ts
           server/procurement/migrations.test.ts
-          server/persistentOperator/macroGoalRuns.test.ts
-          server/persistentOperator/operatorAppointments.test.ts
-          server/persistentOperator/decisionEngine.test.ts
-          server/persistentOperator/decisionStore.test.ts
-          server/persistentOperator/operationReceipt.test.ts
-          server/persistentOperator/pr4SchemaContract.test.ts
+          server/agents/persistentOperator/macroGoalRuns.test.ts
+          server/agents/persistentOperator/operatorAppointments.test.ts
+          server/agents/persistentOperator/decisionEngine.test.ts
+          server/agents/persistentOperator/decisionStore.test.ts
+          server/agents/persistentOperator/operationReceipt.test.ts
+          server/agents/persistentOperator/pr4SchemaContract.test.ts
           server/claire/proactive/boardService.test.ts
           server/claire/brain/tests/persistentOperatorAuthority.test.ts
       - name: Workflow stores against real MySQL
@@ -61,5 +61,5 @@ jobs:
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/procurement/workflowStore.mysql.integration.test.ts
-          server/persistentOperator/goalCycleStore.mysql.integration.test.ts
-          server/persistentOperator/operatorAppointmentStore.mysql.integration.test.ts
+          server/agents/persistentOperator/goalCycleStore.mysql.integration.test.ts
+          server/agents/persistentOperator/operatorAppointmentStore.mysql.integration.test.ts

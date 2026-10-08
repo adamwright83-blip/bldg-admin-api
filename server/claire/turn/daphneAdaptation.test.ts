@@ -4,8 +4,8 @@ import {
   DAPHNE_STAGE3B_BEHAVIOR_CLASS,
   DAPHNE_STAGE3B_TARGET_KEY,
   type OperatorAdaptationDecision,
-} from "../../operatorRepresentative/adaptationContract";
-import type { DaphneAdaptationUseReceipt } from "../../operatorRepresentative/adaptationReceipts";
+} from "../../agents/operatorRepresentative/adaptationContract";
+import type { DaphneAdaptationUseReceipt } from "../../agents/operatorRepresentative/adaptationReceipts";
 import { runClaireTurn, type ClaireTurnState } from "./claireTurn";
 
 const decision: OperatorAdaptationDecision = {

@@ -78,7 +78,7 @@ import {
   runClaireBrainV2LiveTurn,
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
-import { executePersistentOperatorAction } from "../persistentOperator/actionExecution";
+import { executePersistentOperatorAction } from "../agents/persistentOperator/actionExecution";
 import {
   brainV2CallControlResult,
   brainV2ExecutionFailureResult,
@@ -101,8 +101,8 @@ import {
   renderClaireOpeningVoice,
 } from "./voice/claireVoiceTransport";
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
-import { getDefaultGoalCyclePool } from "../persistentOperator/goalCycleStore";
-import { OperatorAppointmentStore } from "../persistentOperator/operatorAppointmentStore";
+import { getDefaultGoalCyclePool } from "../agents/persistentOperator/goalCycleStore";
+import { OperatorAppointmentStore } from "../agents/persistentOperator/operatorAppointmentStore";
 import { placeClaireOutboundCall } from "../twilioPlatform/claireCallProvider";
 import {
   abandonAuthorizedAmdHandoff,

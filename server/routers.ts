@@ -5,7 +5,7 @@ import {
 } from "./domains/payment/nativePaymentReadService";
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
-import { daphneRouter } from "./daphne/router";
+import { daphneRouter } from "./agents/daphne/router";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,

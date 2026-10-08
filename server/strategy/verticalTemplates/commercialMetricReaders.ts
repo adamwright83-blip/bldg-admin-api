@@ -4,7 +4,7 @@ import {
   commercialOrderAttributions,
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
-import type { AuthoritativeMetricObservation } from "../../persistentOperator/macroGoalRuns";
+import type { AuthoritativeMetricObservation } from "../../agents/persistentOperator/macroGoalRuns";
 import type { MetricReader } from "./registry";
 
 export const propertyAccountsWonMetricReader: MetricReader<AuthoritativeMetricObservation> =

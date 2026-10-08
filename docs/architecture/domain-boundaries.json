@@ -62,8 +62,8 @@
     {
       "domain": "operator",
       "paths": [
-        "server/persistentOperator",
-        "server/operatorRepresentative"
+        "server/agents/persistentOperator",
+        "server/agents/operatorRepresentative"
       ]
     },
     {
@@ -127,7 +127,7 @@
         "server/field"
       ],
       "to": [
-        "server/persistentOperator",
+        "server/agents/persistentOperator",
         "server/goldlineWorld",
         "server/narratorOs"
       ],
@@ -141,7 +141,7 @@
         "server/analytics/canonicalRevenue.ts"
       ],
       "to": [
-        "server/persistentOperator",
+        "server/agents/persistentOperator",
         "server/goldlineWorld",
         "server/narratorOs"
       ],
@@ -153,7 +153,7 @@
         "server/geography"
       ],
       "to": [
-        "server/persistentOperator",
+        "server/agents/persistentOperator",
         "server/goldlineWorld",
         "server/narratorOs"
       ],
@@ -312,8 +312,8 @@
     {
       "concept": "Daphne Operator Correction Evidence",
       "owner": "Daphne",
-      "legalWriteEntrypoint": "server/daphne/explicitPreferenceCorrection.ts",
-      "canonicalReadEntrypoint": "server/daphne/claireAdapter.ts, server/daphne/operatorCard.ts",
+      "legalWriteEntrypoint": "server/agents/daphne/explicitPreferenceCorrection.ts",
+      "canonicalReadEntrypoint": "server/agents/daphne/claireAdapter.ts, server/agents/daphne/operatorCard.ts",
       "evidenceAdmissionSource": "Explicit operator voice or UI correction directive",
       "downstreamConsumers": [
         "server/claire/turn/claireTurn.ts",

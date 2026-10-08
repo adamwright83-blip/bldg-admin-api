@@ -68,7 +68,7 @@ import { startAutomaticGeographicReconciliation } from "../geography/geographicR
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/browserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
-import { startAutonomousPersistentOperatorWorkers } from "../persistentOperator/autonomousWorkerService";
+import { startAutonomousPersistentOperatorWorkers } from "../agents/persistentOperator/autonomousWorkerService";
 import { registerPresidentAgentRoutes } from "../president/httpRoutes";
 
 const warnedUnknownTenantHosts = new Set<string>();

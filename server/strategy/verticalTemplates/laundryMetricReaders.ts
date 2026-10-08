@@ -4,7 +4,7 @@ import { addDaysYmd } from "../../analytics/businessPeriods";
 import { loadBusinessSourceCoverage } from "../../analytics/sourceCoverage";
 import { getDashboardTimeZone, zonedYmd } from "../../dashboardZoned";
 import { getStrategyGrowthMetrics } from "../growthMetrics";
-import type { AuthoritativeMetricObservation } from "../../persistentOperator/macroGoalRuns";
+import type { AuthoritativeMetricObservation } from "../../agents/persistentOperator/macroGoalRuns";
 import type { MetricReader } from "./registry";
 
 function trailingThirtyDayPeriod(asOf: Date, timeZone: string) {

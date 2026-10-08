@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ActionGatewayError, executeGrantedAction } from "../actions/gateway";
 import { mintActionGrant } from "../executive/grants";
-import { approvalMatchesCanonicalOperator } from "../../../persistentOperator/actionPolicy";
+import { approvalMatchesCanonicalOperator } from "../../../agents/persistentOperator/actionPolicy";
 
 describe("persistent operator Brain authority", () => {
 

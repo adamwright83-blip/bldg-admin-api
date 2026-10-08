@@ -9,15 +9,15 @@ import {
 } from "./claireTurn";
 import { safeClaireBrainV3Fallback } from "./brainV3";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
-import { captureExplicitDaphnePreferenceCorrections } from "../../daphne/explicitPreferenceCorrection";
+import { captureExplicitDaphnePreferenceCorrections } from "../../agents/daphne/explicitPreferenceCorrection";
 import {
   isDaphneV2ClaireEnabled,
   loadDaphneClaireGuidance,
-} from "../../daphne/claireAdapter";
-import { loadDaphneMetaPreferences, setDaphneMetaPreference } from "../../daphne/goalsPreferences";
-import { listDaphneObservations } from "../../daphne/observationStore";
-import { buildDaphneV2OperatorCard } from "../../daphne/engine";
-import { resolveCanonicalOperatorIdentity } from "../../persistentOperator/identity";
+} from "../../agents/daphne/claireAdapter";
+import { loadDaphneMetaPreferences, setDaphneMetaPreference } from "../../agents/daphne/goalsPreferences";
+import { listDaphneObservations } from "../../agents/daphne/observationStore";
+import { buildDaphneV2OperatorCard } from "../../agents/daphne/engine";
+import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { deleteTenantData, planTenantDeletion } from "../../saas/tenantLifecycle";
 
 const DATABASE_URL = process.env.DATABASE_URL;

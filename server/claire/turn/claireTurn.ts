@@ -88,7 +88,7 @@ import { routeActiveWeeklySession } from "../weeklyMission/route";
 import {
   parseWeeklyPlanningCallbackRequest,
   scheduleWeeklyPlanningCallbackForOperator,
-} from "../../persistentOperator/operatorAppointmentPolicy";
+} from "../../agents/persistentOperator/operatorAppointmentPolicy";
 import { beginWeeklyMission, loadWeeklyMissionPicture } from "../weeklyMission/driver";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
@@ -140,26 +140,26 @@ import {
   type ClaireOperatorAdaptationContext,
   type ClaireOperatorContextShadowTelemetryEvent,
 } from "../operatorAdaptationContext";
-import { loadOperatorAdaptationDecisionForUser } from "../../operatorRepresentative/adaptation";
+import { loadOperatorAdaptationDecisionForUser } from "../../agents/operatorRepresentative/adaptation";
 import {
   DAPHNE_STAGE3B_BEHAVIOR_CLASS,
   buildDaphneClarificationApplicationResult,
   type DaphneAdaptationApplicationResult,
   type OperatorAdaptationDecision,
-} from "../../operatorRepresentative/adaptationContract";
+} from "../../agents/operatorRepresentative/adaptationContract";
 import {
   recordDaphneAdaptationUse,
   type DaphneAdaptationUseReceipt,
-} from "../../operatorRepresentative/adaptationReceipts";
+} from "../../agents/operatorRepresentative/adaptationReceipts";
 import {
   loadDaphneClaireGuidance,
   type DaphneClaireGuidance,
-} from "../../daphne/claireAdapter";
+} from "../../agents/daphne/claireAdapter";
 import {
   captureExplicitDaphnePreferenceCorrections,
   detectExplicitDaphnePreferenceCorrections,
   type DaphneExplicitPreferenceCaptureResult,
-} from "../../daphne/explicitPreferenceCorrection";
+} from "../../agents/daphne/explicitPreferenceCorrection";
 
 /**
  * One Claire turn, for the phone and the desk alike.

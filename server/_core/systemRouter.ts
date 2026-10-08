@@ -60,8 +60,8 @@ import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
-import { persistentOperatorRouter } from "../persistentOperator/persistentOperatorRouter";
-import { operatorRepresentativeRouter } from "../operatorRepresentative/router";
+import { persistentOperatorRouter } from "../agents/persistentOperator/persistentOperatorRouter";
+import { operatorRepresentativeRouter } from "../agents/operatorRepresentative/router";
 import { franchiseRouter } from "../franchise/franchiseRouter";
 
 export const systemRouter = router({

@@ -451,7 +451,7 @@ export async function importCleanCloudPaidOrders(input: {
   // Post-import: Bridge paid orders to Persistent Growth Operator ledger
   if (paidOrdersToBridge.length > 0) {
     try {
-      const { bridgeCleanCloudPaidOrder } = await import("../../persistentOperator/fieldEventBridge");
+      const { bridgeCleanCloudPaidOrder } = await import("../../agents/persistentOperator/fieldEventBridge");
       for (const order of paidOrdersToBridge) {
         await bridgeCleanCloudPaidOrder({
           tenantId,

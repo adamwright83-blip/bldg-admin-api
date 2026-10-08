@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OperatorContextPacket } from "../persistentOperator/operatorContext";
+import type { OperatorContextPacket } from "../agents/persistentOperator/operatorContext";
 import {
   isClaireOperatorContextAdaptationEnabled,
   isClaireOperatorContextShadowEnabled,

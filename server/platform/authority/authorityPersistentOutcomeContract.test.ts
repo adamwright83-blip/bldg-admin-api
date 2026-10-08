@@ -14,7 +14,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
   });
 
   it("requires Authority Receipts before Persistent Operator learns consequential outcomes", () => {
-    const store = source("server/persistentOperator/outcomeStore.ts");
+    const store = source("server/agents/persistentOperator/outcomeStore.ts");
     expect(store).toContain("assertConsequentialOutcomeAuthority");
     expect(store).toContain('visit_completed: {');
     expect(store).toContain('claimType: "action_completed"');
@@ -29,7 +29,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
   });
 
   it("binds win, payment, and debrief bridges to durable authority rather than caller claims", () => {
-    const bridge = source("server/persistentOperator/fieldEventBridge.ts");
+    const bridge = source("server/agents/persistentOperator/fieldEventBridge.ts");
     expect(bridge).toContain("admitCompletedCommercialVisit");
     expect(bridge).toContain("Account win event is not bound to its Authority Receipt");
     expect(bridge).toContain("payment_evidence_mismatch");

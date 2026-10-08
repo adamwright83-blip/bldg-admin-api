@@ -872,7 +872,7 @@ export async function transitionCommercialMission(input: {
         .limit(1);
 
       if (persistedEvent) {
-        const { bridgeDriverAction } = await import("../persistentOperator/fieldEventBridge");
+        const { bridgeDriverAction } = await import("../agents/persistentOperator/fieldEventBridge");
         await bridgeDriverAction({
           tenantId: input.tenantId,
           actorId: input.actor.id ?? "system",

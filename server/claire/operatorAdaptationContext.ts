@@ -11,11 +11,11 @@ import {
   type OperatorContextPacket,
   type OperatorExplicitPreference,
   type OperatorContextUncertaintyReason,
-} from "../persistentOperator/operatorContext";
+} from "../agents/persistentOperator/operatorContext";
 import {
   resolveCanonicalOperatorIdentity,
-} from "../persistentOperator/identity";
-import type { LearningKind, DeltaType } from "../persistentOperator/learningStore";
+} from "../agents/persistentOperator/identity";
+import type { LearningKind, DeltaType } from "../agents/persistentOperator/learningStore";
 
 export type ClaireOperatorLearnedSignal = {
   learningKind: LearningKind;

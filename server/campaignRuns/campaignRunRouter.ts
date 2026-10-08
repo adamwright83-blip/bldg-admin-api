@@ -16,8 +16,8 @@ import {
 import { PLACEMENT_POINTS, TARGET_SOURCE_CLASSES } from "../../shared/campaignRun";
 import { listFictionPacks } from "../fictionPacks/fictionPackRegistry";
 import { getDb } from "../db";
-import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
-import { recordPersistentOperatorDiagnosticEvent } from "../persistentOperator/observability";
+import { requireCanonicalOperatorIdentityForUser } from "../agents/persistentOperator/identity";
+import { recordPersistentOperatorDiagnosticEvent } from "../agents/persistentOperator/observability";
 import {
   freezeTargetSet,
   getRunProjection,
