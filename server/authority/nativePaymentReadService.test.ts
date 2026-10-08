@@ -80,6 +80,7 @@ describe("Payment-owned native paid reader", () => {
     expect(hasNativePaymentAuthority(refunded, receipts.get(order.id))).toBe(
       false
     );
+    expect((await readNativePaymentFacts([refunded])).has(order.id)).toBe(true);
   });
 
   it("propagates unavailable admission instead of silently claiming economic truth", async () => {
