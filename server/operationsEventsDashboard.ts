@@ -2,7 +2,10 @@ import { and, desc, eq, getTableColumns, gte, lt, or, sql, type SQL } from "driz
 import { operationsEvents, orders, type OperationsEvent } from "../drizzle/schema";
 import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd, zonedYmd } from "./dashboardZoned";
 import { getDb } from "./db";
-import { readNativePaymentFacts } from "./authority/nativePaymentReadService";
+import {
+  readNativePaymentFacts,
+  type NativePaymentFact,
+} from "./authority/nativePaymentReadService";
 
 export type OperationsEventsBusinessUnit = "all" | "laundry_butler" | "laundry_farm";
 export type OperationsEventsBuilding = "all" | "opus_la" | "century_park_east" | "other" | "unresolved";
@@ -173,12 +176,7 @@ function operationsEventDashboardSelect() {
 async function attachAdmittedPaymentFacts(
   rows: OperationsEventPaymentCandidateRow[]
 ): Promise<OperationsEventDashboardRow[]> {
-  let facts = new Map<
-    number,
-    Awaited<ReturnType<typeof readNativePaymentFacts>> extends Map<number, infer V>
-      ? V
-      : never
-  >();
+  let facts = new Map<number, NativePaymentFact>();
   try {
     facts = await readNativePaymentFacts(
       rows
