@@ -14,6 +14,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
 import { upsertUser } from "../db";
+import { readNativePaymentFacts, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import { createOrReuseResidentOrder } from "../orders/orderLifecycleService";
 import { getSessionCookieOptions } from "./cookies";
 import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
@@ -616,9 +617,11 @@ async function startServer() {
         return res.status(404).json({ error: "Order not found" });
       }
 
-      if (!order.paid) {
-        return res.status(403).json({ error: "Order not paid" });
+      const receipts = await readNativePaymentAuthorityReceipts([order]);
+      if (!hasNativePaymentAuthority(order, receipts.get(order.id))) {
+        return res.status(403).json({ error: "Payment admission is required" });
       }
+      const payment = (await readNativePaymentFacts([order])).get(order.id)!;
 
       // Return receipt data
       res.json({
@@ -628,8 +631,11 @@ async function startServer() {
         drycleanItems: order.drycleanItemsJson || [],
         subtotal: order.subtotal,
         discountPercent: order.discountPercent,
-        total: order.total,
-        paid: order.paid,
+        currentQuotedTotal: order.total,
+        total: payment.capturedAmountCents === null ? null : (payment.capturedAmountCents / 100).toFixed(2),
+        paid: true,
+        paidAt: payment.occurredAt,
+        payment,
         status: order.status,
         address: order.address,
         unit: order.unit,

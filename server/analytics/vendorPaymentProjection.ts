@@ -1,3 +1,4 @@
+import { getVendorById } from "../db";
 import type { Order } from "../../drizzle/schema";
 import {
   readNativePaymentFacts,
@@ -22,7 +23,8 @@ export type VendorPaymentProjection = {
  */
 export function projectVendorPayments(
   orders: readonly Order[],
-  paymentFacts: ReadonlyMap<number, NativePaymentFact>
+  paymentFacts: ReadonlyMap<number, NativePaymentFact>,
+  recipientAccountId?: string | null
 ): VendorPaymentProjection[] {
   return orders
     .flatMap(order => {
@@ -30,7 +32,8 @@ export function projectVendorPayments(
       if (!fact) return [];
       const capturedAmountCents = fact.capturedAmountCents;
       const platformFeeCents =
-        capturedAmountCents != null && order.platformFeeCents != null
+        capturedAmountCents != null && order.platformFeeCents != null &&
+        recipientAccountId && order.stripeConnectedAccountIdSnapshot === recipientAccountId
           ? order.platformFeeCents
           : null;
       const payoutCents =
@@ -62,7 +65,8 @@ export async function loadVendorPaymentProjection(
 ): Promise<VendorPaymentProjection[]> {
   const orders = await readNativeOrdersForVendor(vendorId);
   const facts = await readNativePaymentFacts(orders);
-  return projectVendorPayments(orders, facts);
+  const vendor = await getVendorById(vendorId);
+  return projectVendorPayments(orders, facts, vendor?.stripeConnectAccountId);
 }
 
 export function sumKnownCents(values: readonly (number | null)[]): number | null {

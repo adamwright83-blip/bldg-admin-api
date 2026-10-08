@@ -220,3 +220,15 @@ A historical missing-tenant fallback was removed from this economic reader.
 Validation: three real-MySQL capture proofs (including edited amount and payment
 time), 57 focused ledger/revenue/admission/history contracts, TypeScript and the four
 architecture gates. Test-only admitted fixture receipts now carry their occurrence.
+
+## C14: Signed receipt and vendor recipient binding
+
+The separate signed receipt API still returned mutable Orders totals despite staff
+receipt convergence. It now requires Payment admission and returns immutable captured
+dollars/time, with the current intake quote explicitly separate and unknown captures
+preserved. Vendor payout/fee projections require the captured recipient account
+snapshot to match the vendor's established account; reassigned Orders do not prove
+that the new vendor received the old capture. Order capture gross remains distinct.
+
+Validation: 13 focused Payment/vendor contracts including recipient mismatch and
+unknown capture, TypeScript and four architecture gates pass.

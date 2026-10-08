@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import type { Order } from "../../drizzle/schema";
 import type { NativePaymentFact } from "../authority/nativePaymentReadService";
 import {
@@ -11,6 +11,7 @@ const order = {
   id: 41,
   tenantId: "tenant-a",
   vendorId: 7,
+  stripeConnectedAccountIdSnapshot: "acct_vendor7",
   total: "150.00",
   paid: false,
   updatedAt: new Date("2026-10-08T12:00:00Z"),
@@ -31,7 +32,8 @@ describe("vendor Payment projection", () => {
   it("uses immutable capture evidence instead of current order price or paid state", () => {
     const rows = projectVendorPayments(
       [order],
-      new Map([[order.id, fact]])
+      new Map([[order.id, fact]]),
+      "acct_vendor7"
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -99,4 +101,9 @@ describe("vendor Payment projection", () => {
     expect(payouts).not.toContain("o.total");
     expect(payouts).not.toContain("o.updatedAt");
   });
+});
+
+
+test("withholds payout when reassignment does not establish the capture recipient", () => {
+  expect(projectVendorPayments([order], new Map([[order.id, fact]]), "acct_other")[0]).toMatchObject({ capturedAmountCents: 4200, platformFeeCents: null, payoutCents: null });
 });
