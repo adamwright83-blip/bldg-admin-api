@@ -18,7 +18,7 @@ Code wins if this file becomes stale.
 | Money projection | `server/money/moneyProjectionService.ts` |
 | Geography truth | `server/geography/geographicTruthService.ts` |
 | Customer/order geographic truth | `server/geography/customerOrderTruth.ts` |
-| Commercial pipeline | `server/commercialPipeline/` |
+| Commercial pipeline | `server/domains/commercial/` |
 | Commercial missions | `server/commercialMissions/` |
 | Mission Director | `server/missionDirector/` |
 | Day Director | `server/dayDirector/` |

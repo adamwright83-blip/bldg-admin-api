@@ -2,10 +2,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const shared = readFileSync(new URL("../../shared/commercialPipeline.ts", import.meta.url), "utf8");
+const shared = readFileSync(new URL("../../../shared/commercialPipeline.ts", import.meta.url), "utf8");
 const service = readFileSync(new URL("./commercialPipelineService.ts", import.meta.url), "utf8");
-const router = readFileSync(new URL("../legacyDayforgeToday/legacyDayforgeTodayRouter.ts", import.meta.url), "utf8");
-const surface = readFileSync(new URL("../../client/src/game/actions/GoldlineActionSurface.tsx", import.meta.url), "utf8");
+const router = readFileSync(new URL("../../legacyDayforgeToday/legacyDayforgeTodayRouter.ts", import.meta.url), "utf8");
+const surface = readFileSync(new URL("../../../client/src/game/actions/GoldlineActionSurface.tsx", import.meta.url), "utf8");
 
 describe("Real Workday follow-up truth", () => {
   it("records observed outcomes without treating an attempt as success", () => {

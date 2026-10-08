@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgePipelineProcedure, router } from "../_core/trpc";
-import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "../../shared/commercialPipeline";
+import { legacyDayforgePipelineProcedure, router } from "../../_core/trpc";
+import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "@shared/commercialPipeline";
 import {
   advanceCommercialRelationshipStage,
   approveCommercialAgreement,

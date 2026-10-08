@@ -7,7 +7,7 @@ describe("three-fact authority slice", () => {
   it("makes payment truth pass through a durable receipt before native order mutation", () => {
     const route = source("server/routers.ts");
     const admission = source("server/domains/payment/paymentAdmission.ts");
-    const commercial = source("server/commercialPipeline/commercialPipelineService.ts");
+    const commercial = source("server/domains/commercial/commercialPipelineService.ts");
     expect(route).toContain("admitNativeStripePayment");
     expect(admission).toContain("prepareNativeStripePaymentTenant");
     expect(route).toContain(
@@ -27,7 +27,7 @@ describe("three-fact authority slice", () => {
     expect(nativeAdmission.indexOf("admitAuthorityClaimWith")).toBeLessThan(
       nativeAdmission.indexOf(".update(orders)")
     );
-    const decision = source("server/commercialPipeline/commercialOrderPaymentDecision.ts");
+    const decision = source("server/domains/commercial/commercialOrderPaymentDecision.ts");
     expect(commercial).toContain("readCommercialOrderPaymentDecisionWith(tx");
     expect(decision).toContain("findAuthorityReceiptForSubjectWith");
     expect(decision).toContain("paymentAuthorityReceiptMatches");

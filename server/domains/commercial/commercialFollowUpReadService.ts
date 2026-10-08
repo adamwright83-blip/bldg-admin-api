@@ -1,7 +1,7 @@
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { commercialFollowUps } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { isMysqlMissingTableError } from "../mysqlErrors";
+import { commercialFollowUps } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { isMysqlMissingTableError } from "../../mysqlErrors";
 
 export type OpenCommercialFollowUp = {
   id: string;

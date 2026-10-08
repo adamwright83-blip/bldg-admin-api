@@ -7,7 +7,7 @@ import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { createConversationSession } from "../claire/conversation/ledgerService";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
-import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
+import { commercialPipelineRouter } from "../domains/commercial/commercialPipelineRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";

@@ -15,7 +15,7 @@ import {
   commercialProposals,
   commercialRouteAssignments,
   commercialServiceExpectations,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 import type { CommercialMission } from "@shared/commercialMission";
 import {
   commercialPipelineStageRank,
@@ -23,7 +23,7 @@ import {
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
 import type { CommercialLaundryProposalSnapshot } from "@shared/commercialProposal";
-import { getDb } from "../db";
+import { getDb } from "../../db";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]

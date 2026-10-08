@@ -9,7 +9,7 @@ import {
   commercialOrderAttributions,
   orders,
 } from "../../drizzle/schema";
-import { readCommercialOrderPaymentDecisionWith } from "../commercialPipeline/commercialOrderPaymentDecision";
+import { readCommercialOrderPaymentDecisionWith } from "../domains/commercial/commercialOrderPaymentDecision";
 import { getDb } from "../db";
 import { hashCommercialCampaignLinkToken } from "./commercialCampaignLinkService";
 

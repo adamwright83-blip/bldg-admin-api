@@ -36,7 +36,7 @@ import {
   normalizeCommercialContactPhone,
   reconcileWonCommercialDownstreamEffects,
   syncCommercialPipelineForMissionTransitionWith,
-} from "../commercialPipeline/commercialPipelineCore";
+} from "../domains/commercial/commercialPipelineCore";
 import {
   writeLegacyDayforgeEventWith,
   type LegacyDayforgeServerActor,

@@ -6,11 +6,11 @@ const core = readFileSync(
   "utf8"
 );
 const missionStore = readFileSync(
-  new URL("../commercialMissions/commercialMissionStore.ts", import.meta.url),
+  new URL("../../commercialMissions/commercialMissionStore.ts", import.meta.url),
   "utf8"
 );
 const walkIn = readFileSync(
-  new URL("../commercialMissions/commercialWalkInService.ts", import.meta.url),
+  new URL("../../commercialMissions/commercialWalkInService.ts", import.meta.url),
   "utf8"
 );
 

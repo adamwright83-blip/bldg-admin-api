@@ -5,7 +5,7 @@ import {
   type CommercialAccountContactRef,
   type CommercialAccountHistoryCore,
   type CommercialAccountRef,
-} from "../../commercialPipeline/commercialAccountReadService";
+} from "../../domains/commercial/commercialAccountReadService";
 import { searchDayDirectorCommitmentsByTitle } from "../../dayDirector/dayDirectorService";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";

@@ -27,7 +27,7 @@ describe("DayForge SaaS production contract", () => {
         "legacyDayforgeProposalFieldProcedure",
       ],
       [
-        "../commercialPipeline/commercialPipelineRouter.ts",
+        "../domains/commercial/commercialPipelineRouter.ts",
         "legacyDayforgePipelineProcedure",
       ],
       ["../churnRadar/churnRadarRouter.ts", "legacyDayforgeChurnProcedure"],

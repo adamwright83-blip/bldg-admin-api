@@ -1,4 +1,4 @@
-import { readCommercialPaymentAuthorityMismatchReport } from "../server/commercialPipeline/commercialPaymentAuthorityReport";
+import { readCommercialPaymentAuthorityMismatchReport } from "../server/domains/commercial/commercialPaymentAuthorityReport";
 
 const tenantId = process.argv[2]?.trim();
 if (!tenantId) {

@@ -12,7 +12,7 @@ import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { hustlerLeverRouter } from "../churnRadar/hustlerLeverRouter";
-import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
+import { commercialPipelineRouter } from "../domains/commercial/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
 import { legacyDayforgeDemoRouter } from "../legacyDayforgeDemo/demoTenantRouter";
 import { legacyDayforgeTodayRouter } from "../legacyDayforgeToday/legacyDayforgeTodayRouter";

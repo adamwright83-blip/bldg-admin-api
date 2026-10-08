@@ -3,7 +3,7 @@ import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import { listLegacyDayforgeToday } from "./legacyDayforgeTodayService";
 import { z } from "zod";
 import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "@shared/commercialPipeline";
-import { completeCommercialFollowUp, rescheduleCommercialFollowUp } from "../commercialPipeline/commercialPipelineService";
+import { completeCommercialFollowUp, rescheduleCommercialFollowUp } from "../domains/commercial/commercialPipelineService";
 
 export const legacyDayforgeTodayRouter = router({
   list: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
