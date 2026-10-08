@@ -307,12 +307,11 @@ export async function loadGoldlineProgressionEvidence(input: {
         missionId: node.missionId,
         actorId: input.actorId,
         state: node.visualState as "recovery_available" | "recovery_active",
-        verifiedAt:
-          node.visualState === "recovery_active" ? node.resolvedAt : null,
-        sourceRef:
-          node.visualState === "recovery_active"
-            ? `driver_game_world_nodes:mission:${node.missionId}`
-            : `commercial_follow_ups:mission:${node.missionId}`,
+        // Beginning a visual recovery path records intent, not a recovered
+        // customer or completed commercial outcome. Only the owning business
+        // domain may supply a verified recovery witness.
+        verifiedAt: null,
+        sourceRef: `commercial_missions:${node.missionId}`,
       })),
     armoryUsages: validatedUsages.map(usage => ({
       usageId: usage.id,
