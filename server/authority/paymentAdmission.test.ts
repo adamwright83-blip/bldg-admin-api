@@ -52,7 +52,7 @@ describe("paymentAdmission authority", () => {
     ).rejects.toThrow("Tenant order not found for payment admission");
   });
 
-  it("binds legacy default tenant to null-tenant order in prepareNativeStripePaymentTenant", async () => {
+  it("holds a historical null-tenant order without assigning default ownership", async () => {
     const mockTx = {
       select: vi.fn().mockReturnThis(),
       from: vi.fn().mockReturnThis(),
@@ -66,13 +66,9 @@ describe("paymentAdmission authority", () => {
       transaction: vi.fn((cb: any) => cb(mockTx)),
     } as any);
 
-    const resolved = await prepareNativeStripePaymentTenant({
-      tenantId: "default",
-      orderId: 101,
-    });
-    expect(resolved).toBe("default");
-    expect(mockTx.update).toHaveBeenCalledWith(orders);
-    expect(mockTx.set).toHaveBeenCalledWith({ tenantId: "default" });
+    await expect(prepareNativeStripePaymentTenant({ tenantId: "default", orderId: 101 })).rejects.toThrow("tenant authority is unresolved");
+    expect(mockTx.update).not.toHaveBeenCalled();
+    expect(mockTx.set).not.toHaveBeenCalled();
   });
 
   it("rejects admitNativeStripePayment when tenantId or paymentIntentId is missing", async () => {
