@@ -155,6 +155,10 @@ import {
   loadDaphneClaireGuidance,
   type DaphneClaireGuidance,
 } from "../../daphne/claireAdapter";
+import {
+  captureExplicitDaphnePreferenceCorrections,
+  type DaphneExplicitPreferenceCaptureResult,
+} from "../../daphne/explicitPreferenceCorrection";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -366,6 +370,14 @@ export type ClaireTurnDeps = {
     tenantId: string;
     operatorUserId: string;
   }) => Promise<DaphneClaireGuidance | null>;
+  /** Persist only explicit operator-authored Daphne style corrections. */
+  captureDaphneV2PreferenceCorrections?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    utterance: string;
+    conversationId: string;
+    turnId: string;
+  }) => Promise<DaphneExplicitPreferenceCaptureResult>;
   /** Durable closed-decision records consumed by the live Brain V3 branch. */
   decisionStore: ClaireDecisionStore;
   /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
@@ -419,6 +431,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     loadOperatorAdaptationDecision: loadOperatorAdaptationDecisionForUser,
     recordOperatorAdaptationUse: recordDaphneAdaptationUse,
     loadDaphneV2Guidance: loadDaphneClaireGuidance,
+    captureDaphneV2PreferenceCorrections: captureExplicitDaphnePreferenceCorrections,
     decisionStore:
       process.env.NODE_ENV === "test" || Boolean(process.env.VITEST)
         ? createInMemoryClaireDecisionStore()
@@ -662,15 +675,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     operatorUserId: input.operatorUserId,
   }).catch(() => null);
 
-  // Daphne V2 is an optional, fail-closed interaction-style input. It cannot
-  // change business truth, Brain V3 meaning, progression, or Narrator authority.
-  const daphneV2Guidance = await (
-    deps.loadDaphneV2Guidance ?? loadDaphneClaireGuidance
-  )({
-    tenantId: input.tenantId,
-    operatorUserId: input.operatorUserId,
-  }).catch(() => null);
-
   const { state } = input;
   if (!state.sessionKind && input.context?.workday?.session) {
     state.sessionKind = input.context.workday.session;
@@ -735,6 +739,33 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.pendingFragment = null;
     state.fragmentHolds = 0;
   }
+
+  // Explicit user-authored style corrections are persisted only after the
+  // completed utterance boundary. Incomplete voice fragments returned above,
+  // so they cannot accidentally become durable preferences.
+  const daphnePreferenceTurnId = `${input.conversationKey}:${(state.claireTurnCount ?? 0) + 1}`;
+  await (
+    deps.captureDaphneV2PreferenceCorrections ??
+    captureExplicitDaphnePreferenceCorrections
+  )({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    utterance,
+    conversationId: input.conversationKey,
+    turnId: daphnePreferenceTurnId,
+  }).catch(() => null);
+
+  // Reload after correction persistence. This makes an explicit correction
+  // available on this completed turn and all later Claire calls. The payload
+  // remains style-only and cannot alter business truth, Brain V3 meaning,
+  // progression, or Narrator authority.
+  const daphneV2Guidance = await (
+    deps.loadDaphneV2Guidance ?? loadDaphneClaireGuidance
+  )({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  }).catch(() => null);
+
   remember(state, "operator", utterance, nowMs);
   const liveRecoveryRefs = deps.recoveryObligations
     ? (await deps.recoveryObligations(input.tenantId, input.operatorUserId).catch(() => []))
