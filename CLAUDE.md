@@ -1,10 +1,23 @@
 > **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 
-# bldg-admin-api — context that is easy to miss
+# bldg-admin-api — Model Onboarding & Runtime Context
 
-This file is loaded automatically. It exists because two specific things in this repo
-have already caused wrong work, and neither is discoverable by reading the code you
-happen to be editing.
+## 0. Canonical Architecture & Start-Here Entrypoint
+
+**READ [ARCHITECTURE.md](ARCHITECTURE.md) FIRST.**
+
+- `ARCHITECTURE.md` is the canonical, permanent architecture guide for this repository. It defines what JOYSTICK is, the business ownership map, legal write paths, canonical read paths, the Reality Bridge, and agent seat boundaries.
+- **Epistemic Disclosure Requirement:** When reporting architecture reviews or investigations, you must separate your knowledge explicitly into:
+  - `VERIFIED`: Exact files, line numbers, and tests directly observed in source code.
+  - `INFERRED`: Hypotheses or assumptions supported indirectly.
+  - `UNKNOWN`: Uninspected subsystems, missing evidence, or unverified claims.
+  Do not present partial inspection as total comprehension.
+
+---
+
+# Critical Context That Is Easy To Miss
+
+This file exists because specific operational realities in this repo have caused wrong work, and are not discoverable merely by reading local code you are editing.
 
 ---
 
