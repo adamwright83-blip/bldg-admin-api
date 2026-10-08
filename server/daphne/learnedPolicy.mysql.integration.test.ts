@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { systemRouter } from "../_core/systemRouter";
+import { appRouter } from "../routers";
 import { recordDaphneIntervention } from "./interventionLedger";
 import { recordDaphneOutcome } from "./outcomeLedger";
 import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity";
@@ -56,7 +56,7 @@ describeMysql("Daphne V2 verified outcome -> later authenticated policy decision
     }
   },120_000);
 
-  const caller = () => systemRouter.createCaller({
+  const caller = () => appRouter.createCaller({
     req:{headers:{host:"admin.bldg.chat"},protocol:"https"},res:{},
     user:{
       id:numericId,openId,role:"user",tenantId,name:openId,
