@@ -14,6 +14,9 @@ import {
 } from "./goalsPreferences";
 import { recordDaphneObservation } from "./observationStore";
 import { chooseDaphnePolicyAction } from "./policyEngine";
+import { previewDaphneOutcomeInformedPolicy } from "./learnedPolicy";
+import { listDaphneInterventions } from "./interventionLedger";
+import { listDaphneOutcomes } from "./outcomeLedger";
 import { correctDaphneClaim, inspectDaphneClaim, rejectDaphneClaim } from "./userControls";
 import { deleteDaphneV2UserData, exportDaphneV2UserData } from "./privacy";
 
@@ -103,6 +106,31 @@ export const daphneRouter=router({
     const identity=await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.delete"});
     return await deleteDaphneV2UserData({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId});
    }catch(e){identityFailure(e);}
+  }),
+ learnedPolicyPreview:legacyDayforgeTenantMemberProcedure
+  .input(z.object({
+    policyVersion:z.string().trim().min(1).max(64),
+    contextKey:z.string().trim().min(1).max(191),
+    options:z.array(z.object({
+      key:z.string().trim().min(1).max(128),
+      burden:z.number().min(0).max(1),
+      relationshipRisk:z.number().min(0).max(1),
+      preferenceFit:z.number().min(0).max(1),
+      uncertainty:z.number().min(0).max(1),
+      hardBlocked:z.boolean().optional()
+    })).min(1).max(20)
+  }))
+  .query(async({ctx,input})=>{
+    try{
+      const identity=await requireCanonicalOperatorIdentityForUser({
+        tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.learned_policy_preview"
+      });
+      const [interventions,outcomes]=await Promise.all([
+        listDaphneInterventions({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,limit:500}),
+        listDaphneOutcomes({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,limit:500}),
+      ]);
+      return previewDaphneOutcomeInformedPolicy({...input,interventions,outcomes});
+    }catch(e){identityFailure(e);}
   }),
  policyPreview:legacyDayforgeTenantMemberProcedure
   .input(z.object({policyVersion:z.string().trim().min(1).max(64),candidates:z.array(z.object({
