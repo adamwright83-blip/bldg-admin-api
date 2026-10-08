@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 
@@ -61,4 +61,14 @@ export async function readNativeOrdersForVendor(
     .from(orders)
     .where(eq(orders.vendorId, vendorId))
     .orderBy(desc(orders.createdAt));
+}
+
+
+/** Native paid candidates; capture occurrence must be resolved by Payment before windowing. */
+export async function readNativePaidCandidates(tenantId: string) {
+  if (!tenantId.trim()) throw new Error("Payment candidates require established tenant authority");
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select({ ...NATIVE_CUSTOMER_HISTORY_COLUMNS, paidAt: orders.paidAt, serviceType: orders.serviceType })
+    .from(orders).where(and(eq(orders.tenantId, tenantId), eq(orders.paid, true)));
 }
