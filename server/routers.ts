@@ -1,5 +1,8 @@
 import { admitOffensiveCopySource } from "./level4OffensiveSource";
-import { readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
+import {
+  readNativePaymentAuthorityReceipts,
+  readNativePaymentFacts,
+} from "./authority/nativePaymentReadService";
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
 import { daphneRouter } from "./daphne/router";
@@ -1059,7 +1062,38 @@ export const appRouter = router({
           if (error instanceof OrderOwnershipError) return null;
           throw error;
         }
-        return order;
+        try {
+          const paymentFact = (await readNativePaymentFacts([order])).get(order.id);
+          return {
+            ...order,
+            paymentFact: paymentFact
+              ? {
+                  status: "verified" as const,
+                  occurredAt: paymentFact.occurredAt,
+                  capturedAmountCents: paymentFact.capturedAmountCents,
+                  authorityReceiptId: paymentFact.authorityReceiptId,
+                  processor: "stripe" as const,
+                }
+              : {
+                  status: "unverified" as const,
+                  occurredAt: null,
+                  capturedAmountCents: null,
+                  authorityReceiptId: null,
+                  processor: null,
+                },
+          };
+        } catch {
+          return {
+            ...order,
+            paymentFact: {
+              status: "unavailable" as const,
+              occurredAt: null,
+              capturedAmountCents: null,
+              authorityReceiptId: null,
+              processor: null,
+            },
+          };
+        }
       }),
 
     /** Search orders by customer name or phone — platform only (find receipt) */
