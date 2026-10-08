@@ -3,6 +3,7 @@ export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from ".
 import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import { eq } from "drizzle-orm";
+import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../cleancloudPaidEvidence";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { computeRecencyStatus } from "../../shared/customerStatus";
@@ -44,6 +45,8 @@ export type NativeOrderLike = {
 };
 
 export type CleanCloudOrderLike = {
+  tenantId?: string | null;
+  importBatchId?: number | null;
   cleancloudOrderId: string;
   cleancloudCustomerId?: string | null;
   sourceReportType: "orders_sales" | "orders_revenue";
@@ -233,7 +236,7 @@ export function cleanCloudOrderToTruth(
     buildingResolutionStatus: row.buildingResolutionStatus ?? null,
     allowNameComposite: false,
     paid: row.paid == null ? true : isPaidFlag(row.paid),
-    totalCents: Number.isFinite(row.totalCents) ? Number(row.totalCents) : 0,
+    totalCents: (row.paid == null || isPaidFlag(row.paid)) && Number.isFinite(row.totalCents) ? Number(row.totalCents) : null,
     cancelled: false,
     recognizedAt: asDate(row.createdAt),
   };
@@ -379,6 +382,8 @@ export function projectGeographicCustomers(input: {
 /** Narrow read-model projection. Do not select the full `orders` schema. */
 /** Narrow read-model projection. Do not select the full CleanCloud schema. */
 export const CLEANCLOUD_ORDER_TRUTH_COLUMNS = {
+  tenantId: cleancloudPaidOrders.tenantId,
+  importBatchId: cleancloudPaidOrders.importBatchId,
   cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
   cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
   sourceReportType: cleancloudPaidOrders.sourceReportType,
@@ -402,7 +407,7 @@ type TruthDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 async function loadCleanCloudOrderTruthRows(
   db: TruthDb,
   tenantId?: string
-): Promise<CleanCloudOrderLike[]> {
+): Promise<(CleanCloudOrderLike & { tenantId: string; importBatchId: number })[]> {
   return queryOptionalMysqlTable(async () => {
     const query = db
       .select(CLEANCLOUD_ORDER_TRUTH_COLUMNS)
@@ -422,7 +427,40 @@ export async function loadCustomerOrderTruth(
   const nativeRows = tenantId === undefined
     ? await readLegacyNativeCustomerHistoryAcrossTenants(db)
     : await readNativeCustomerHistory(tenantId, db);
-  const cleancloudRows = await loadCleanCloudOrderTruthRows(db, tenantId);
+  const cleancloudCandidates = await loadCleanCloudOrderTruthRows(db, tenantId);
+  // Imported paid flags are candidates. Only the external evidence owner can
+  // admit paid customer progression; never convert this into native Payment.
+  const cleancloudRows: CleanCloudOrderLike[] = [];
+  const byTenant = new Map<string, typeof cleancloudCandidates>();
+  for (const row of cleancloudCandidates) {
+    const owner = row.tenantId?.trim();
+    if (!owner) {
+      cleancloudRows.push({ ...row, paid: false, totalCents: null });
+      continue;
+    }
+    const bucket = byTenant.get(owner) ?? [];
+    bucket.push(row);
+    byTenant.set(owner, bucket);
+  }
+  for (const [owner, rows] of byTenant) {
+    const expectations = rows.map(row => ({
+      tenantId: owner, subjectType: "cleancloud_order" as const,
+      subjectId: row.cleancloudOrderId, sourceType: "cleancloud_paid_order" as const,
+      sourceRef: row.importBatchId == null ? null : `cleancloud-import:${row.importBatchId}:${row.cleancloudOrderId}`,
+    }));
+    const receipts = await readCleanCloudPaidObservationReceipts({ tenantId: owner, expectations });
+    const byOrder = new Map<string, AuthorityReceipt[]>();
+    for (const receipt of receipts) {
+      const bucket = byOrder.get(receipt.subjectId) ?? [];
+      bucket.push(receipt);
+      byOrder.set(receipt.subjectId, bucket);
+    }
+    rows.forEach((row, index) => {
+      const admitted = isPaidFlag(row.paid) && (byOrder.get(row.cleancloudOrderId) ?? []).some(receipt =>
+        cleanCloudPaidObservationReceiptMatches(receipt, expectations[index]!));
+      cleancloudRows.push({ ...row, paid: admitted, totalCents: admitted ? row.totalCents : null });
+    });
+  }
   const nativePaymentAuthorityReceipts = await readNativePaymentAuthorityReceipts(nativeRows);
   return mergeCustomerOrderTruth({
     native: nativeRows,

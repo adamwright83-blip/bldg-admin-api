@@ -40,6 +40,8 @@ describe("customer-order truth projections", () => {
         "address",
         "buildingResolutionStatus",
         "buildingSlug",
+        "tenantId",
+        "importBatchId",
         "cleancloudCustomerId",
         "cleancloudOrderId",
         "createdAt",
