@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { InsertCleancloudPaidOrder } from "../../drizzle/schema";
+import type { InsertCleancloudPaidOrder } from "../../../../drizzle/schema";
 import {
   descriptiveCustomerIdentityHash,
   economicRevisionFingerprint,

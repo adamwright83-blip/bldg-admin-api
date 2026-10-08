@@ -31,7 +31,7 @@ if (process.argv.includes("--prepare")) {
     await connection.query(`CREATE TABLE ${database}.\`${table}\` LIKE goldline_daylight.\`${table}\``);
   }
   await connection.query(`USE ${database}`);
-  for (const path of ["../server/cleancloudBrowserSync/schema.sql", "../server/towerWars/impactSchema.sql"])
+  for (const path of ["../server/integrations/cleancloud/browserSync/schema.sql", "../server/towerWars/impactSchema.sql"])
     await connection.query(readFileSync(new URL(path, import.meta.url), "utf8"));
   await connection.end();
   await import("./goldline-admin-dev-setup");

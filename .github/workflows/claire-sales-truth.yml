@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'server/analytics/**'
-      - 'server/cleancloudBrowserSync/**'
+      - 'server/integrations/cleancloud/**'
       - 'server/claire/**'
       - 'server/geography/customerOrderTruth*'
       - 'client/src/pages/goldline/ClaireDesk.tsx'
@@ -32,7 +32,7 @@ jobs:
         run: >-
           pnpm vitest run
           server/analytics
-          server/cleancloudBrowserSync
+          server/integrations/cleancloud
           server/geography/customerOrderTruth.test.ts
           server/claire/businessConversation.test.ts
           server/claire/claireOralExam.test.ts

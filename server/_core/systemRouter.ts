@@ -45,7 +45,7 @@ import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 import { chapterStateRouter } from "../goldlineWorld/chapterStateRouter";
 import { chapterEventBindingRouter } from "../goldlineWorld/chapterEventBindingRouter";
 import { echoFollowUpRouter } from "../goldlineWorld/echoFollowUpRouter";
-import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
+import { cleancloudBrowserSyncRouter } from "../integrations/cleancloud/browserSync/router";
 import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter";
 import { campaignRunRouter } from "../campaignRuns/campaignRunRouter";
 import { spiritHumanRescueRouter } from "../spiritHumanRescue/rescueRouter";

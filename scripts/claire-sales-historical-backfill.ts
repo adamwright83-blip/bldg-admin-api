@@ -1,4 +1,4 @@
-import { validateHistoricalPayload } from "../server/cleancloudBrowserSync/validation";
+import { validateHistoricalPayload } from "../server/integrations/cleancloud/browserSync/validation";
 import { parseCsv } from "../extensions/gumballpals/core.js";
 import { loadPaidOrderLedger } from "../server/analytics/paidOrderLedger";
 import { reconcileLedgerSpan } from "../server/analytics/canonicalRevenue";
@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { certifyHistoricalSales } from "../server/analytics/salesTruthCertificate";
-import { executeCleanCloudIngestion } from "../server/cleancloudBrowserSync/ingestion";
+import { executeCleanCloudIngestion } from "../server/integrations/cleancloud/browserSync/ingestion";
 
 const args = process.argv.slice(2);
 const value = (flag: string) => args[args.indexOf(flag) + 1];

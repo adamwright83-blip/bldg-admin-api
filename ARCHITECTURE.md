@@ -33,7 +33,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/domains/commercial/`, `server/commercialMissions/`, `server/commercialProposals/` |
 | **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/platform/tenancy/`, `server/saas/` |
 | **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/`, `server/platform/execution/` |
-| **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/cleancloudBrowserSync/`, `server/twilioPlatform/` |
+| **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/integrations/cleancloud/`, `server/twilioPlatform/` |
 | **Claire** | Operator-facing conversational intelligence, chief-of-staff briefing, call handling, and prompt generation. | `server/claire/` |
 | **Daphne** | Operator preference learning, explicit correction ledger, causal model, and consent evidence. | `server/daphne/` |
 | **President** | Autonomous executive improvement, source-backed reasoning, and project proposals. Reports to Adam. | `server/president/` |
@@ -95,7 +95,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Native payment admission or receipt policy | `server/domains/payment/paymentAdmission.ts` | Always persist provider evidence; never trust raw client flags. |
 | Canonical revenue calculations or dollar reporting | `server/domains/payment/nativePaymentReadService.ts`, `server/analytics/canonicalRevenue.ts` | Use immutable captured cents; do not borrow editable `orders.total`. |
 | Stripe webhook ingestion | `server/intake-stripe.ts` | Provider transport only; domain admission must cross Payment boundary. |
-| CleanCloud sync or customer assimilation | `server/cleancloudBrowserSync/` | CleanCloud is external evidence; do not treat as native payment. |
+| CleanCloud sync or customer assimilation | `server/integrations/cleancloud/` | CleanCloud is external evidence; do not treat as native payment. |
 | Commercial account conversion or pipeline stages | `server/domains/commercial/` | Commercial `won` is NOT paid revenue. |
 | Deterministic daily mission ranking | `server/missionDirector/` | Sole deterministic ranker; Persistent Operator proposes, Mission Director ranks. |
 | Claire conversation rules or prompts | `server/claire/turn/`, `server/claire/proactive/` | Check PR #495 holds before modifying active files! Claire must not bypass domain ports. |

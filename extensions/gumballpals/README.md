@@ -47,9 +47,9 @@ The dropdown, calendar selectors and one-store label are grounded in observed DO
 
 `node --test extensions/gumballpals/core.test.mjs`
 
-`pnpm exec vitest run server/cleancloudBrowserSync/validation.test.ts`
+`pnpm exec vitest run server/integrations/cleancloud/browserSync/validation.test.ts`
 
-`pnpm exec tsx server/cleancloudBrowserSync/localDatabaseProof.ts --run-local-db`
+`pnpm exec tsx server/integrations/cleancloud/browserSync/localDatabaseProof.ts --run-local-db`
 
 The database proof uses the already-running local `goldline-mysql` container and clones only three table structures from `goldline_daylight` into a uniquely named disposable database. It never uses the inherited `DATABASE_URL`, logs credentials, copies existing customer records, or changes the source database. The disposable test database is removed afterward.
 

@@ -28,8 +28,8 @@
  * a requested window sits inside that economic-event span.
  */
 import { desc, eq } from "drizzle-orm";
-import { browserSyncReceipts } from "../cleancloudBrowserSync/schema";
-import { asGumballAssimilationStatus } from "../cleancloudBrowserSync/gumballOperatorStatus";
+import { browserSyncReceipts } from "../integrations/cleancloud/browserSync/schema";
+import { asGumballAssimilationStatus } from "../integrations/cleancloud/browserSync/gumballOperatorStatus";
 import { getDb } from "../db";
 import { isMysqlMissingTableError } from "../mysqlErrors";
 import {

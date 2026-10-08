@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import {
   buildCleanCloudCsvSheetPlanFromFile,
   writeCleanCloudCsvPlanToSheet,
-} from "../server/cleancloudCsvSheetSync";
+} from "../server/integrations/cleancloud/cleancloudCsvSheetSync";
 
 if (process.env.NODE_ENV !== "production") {
   dotenv.config();

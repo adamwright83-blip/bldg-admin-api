@@ -2,15 +2,15 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { getDb } from "../db";
-import { ENV } from "../_core/env";
+import { getDb } from "../../../db";
+import { ENV } from "../../../_core/env";
 import { browserSyncBindings } from "./schema";
 import {
   executeCleanCloudIngestion,
   recordSyncAttempt,
   type CleanCloudIngestionResult,
 } from "./ingestion";
-import { pacificToday, validateRange } from "../../extensions/gumballpals/core";
+import { pacificToday, validateRange } from "../../../../extensions/gumballpals/core";
 
 export type CleanCloudDirectCredentials = {
   baseUrl?: string;
@@ -214,7 +214,7 @@ export async function runCleanCloudDirectSync(
   if (!from) {
     try {
       const { loadBusinessSourceCoverage } = await import(
-        "../analytics/sourceCoverage"
+        "../../../analytics/sourceCoverage"
       );
       const snapshot = await loadBusinessSourceCoverage({ tenantId });
       const cleancloud = snapshot.sources.find(s => s.sourceId === "cleancloud");

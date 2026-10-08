@@ -66,7 +66,7 @@ describe("SaaS Slice 5 billing and entitlement certification", () => {
   });
 
   it("does not absorb the tenantless legacy CleanCloud importer into SaaS entitlement", () => {
-    const legacy = source("../cleancloudLegacy.ts");
+    const legacy = source("../integrations/cleancloud/cleancloudLegacy.ts");
     expect(legacy).not.toContain("hasTenantEntitlement");
     expect(legacy).not.toContain("legacyDayforgeSaasSubscriptions");
     expect(legacy).not.toContain('?? "default"');

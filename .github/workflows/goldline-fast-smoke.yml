@@ -174,8 +174,8 @@ jobs:
           server/analytics/canonicalRevenue.test.ts
           server/analytics/paidOrderLedger.test.ts
           server/analytics/paymentAuthorityAdmission.test.ts
-          server/cleancloudPaidOrders.test.ts
-          server/cleancloudBrowserSync/worldOutbox.economic.test.ts
+          server/integrations/cleancloud/cleancloudPaidOrders.test.ts
+          server/integrations/cleancloud/browserSync/worldOutbox.economic.test.ts
           server/analytics/sourceCoverage.test.ts
           server/executionIntelligence/selectExecutionIntelligence.test.ts
           server/armory/armoryJ0.test.ts
@@ -261,8 +261,8 @@ jobs:
           server/strategy/snapshotLiveDerived.integration.test.ts
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
           server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
-          server/cleancloudBrowserSync/gumballCustomerTruth.mysql.integration.test.ts
-          server/cleancloudBrowserSync/worldOutbox.mysql.integration.test.ts
+          server/integrations/cleancloud/browserSync/gumballCustomerTruth.mysql.integration.test.ts
+          server/integrations/cleancloud/browserSync/worldOutbox.mysql.integration.test.ts
       - name: Prove StrategyEngine live snapshot sections
         run: >-
           pnpm vitest run

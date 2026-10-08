@@ -9,7 +9,7 @@ import {
   isTimeBasedSyncDue,
   isTenantDirectSyncDue,
 } from "./cleancloudDirectScheduler";
-import * as sourceCoverageModule from "../analytics/sourceCoverage";
+import * as sourceCoverageModule from "../../../analytics/sourceCoverage";
 
 describe("cleancloud direct sync credentials & configuration", () => {
   it("detects when direct sync credentials are missing", () => {

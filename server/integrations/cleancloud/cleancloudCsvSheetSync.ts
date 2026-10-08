@@ -7,7 +7,7 @@ import {
   parseCleanCloudPaidReportType,
   type CleanCloudPaidReportType,
 } from "./cleancloudPaidOrders";
-import { parseCsv } from "./externalSystems/csvIngestion";
+import { parseCsv } from "../../externalSystems/csvIngestion";
 import {
   colIndex0ToLetter,
   findDayColumn,
@@ -15,8 +15,8 @@ import {
   getMonthlyTabName,
   parseNumericCell,
   resolveMonthlyTabName,
-} from "./sheets";
-import { classifyCleanCloudService, type LaundryFarmServiceClass } from "./laundryFarmSheetSync";
+} from "../../sheets";
+import { classifyCleanCloudService, type LaundryFarmServiceClass } from "../../laundryFarmSheetSync";
 
 const OPERATOR_TIME_ZONE = "America/Los_Angeles";
 

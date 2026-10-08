@@ -1,11 +1,11 @@
 /* LEGACY DAYFORGE COMPATIBILITY: cleancloud direct sync autonomous scheduler */
-import { getDb } from "../db";
+import { getDb } from "../../../db";
 import { browserSyncBindings } from "./schema";
 import {
   isCleanCloudDirectConfigured,
   runCleanCloudDirectSync,
 } from "./cleancloudDirectSync";
-import { pacificToday } from "../../extensions/gumballpals/core";
+import { pacificToday } from "../../../../extensions/gumballpals/core";
 
 const DEFAULT_SCHEDULER_INTERVAL_MS = 60_000 * 15; // 15 minutes
 
@@ -63,7 +63,7 @@ export async function isTenantDirectSyncDue(
 ): Promise<{ due: boolean; reason: string }> {
   try {
     const { loadBusinessSourceCoverage } = await import(
-      "../analytics/sourceCoverage"
+      "../../../analytics/sourceCoverage"
     );
     const snapshot = await loadBusinessSourceCoverage({ tenantId, now });
     const cleancloud = snapshot.sources.find(s => s.sourceId === "cleancloud");

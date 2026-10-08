@@ -283,7 +283,7 @@ export async function proveGumballImportCustomerTruth(input: {
   assert.equal(paid[0]?.cleancloudOrderId, "1");
   assert.equal(Number(paid[0]?.totalCents), 5100);
 
-  const { loadPaidOrderLedger } = await import("../analytics/paidOrderLedger");
+  const { loadPaidOrderLedger } = await import("../../../analytics/paidOrderLedger");
   const ledger = await loadPaidOrderLedger({
     tenantId,
     startUtc: new Date("2026-08-01T00:00:00.000Z"),
@@ -296,7 +296,7 @@ export async function proveGumballImportCustomerTruth(input: {
   assert.equal(ledger.events[0]?.cents, 5100);
 
   const { getGeographicTruth } = await import(
-    "../geography/geographicTruthService"
+    "../../../geography/geographicTruthService"
   );
   const atlas = await getGeographicTruth({ tenantId });
   assert.equal(atlas.customers.length, 1);
@@ -306,7 +306,7 @@ export async function proveGumballImportCustomerTruth(input: {
   assert.equal(atlas.customers[0]?.cadence.confidence, "sparse");
 
   const { loadStrategyCustomerAggregates } = await import(
-    "../strategy/snapshotCustomerAggregateLoad"
+    "../../../strategy/snapshotCustomerAggregateLoad"
   );
   const strategy = await loadStrategyCustomerAggregates(tenantId);
   assert.equal(strategy.status, "available");

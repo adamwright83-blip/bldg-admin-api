@@ -17,7 +17,7 @@
         "server/routers.ts",
         "server/residentIntake",
         "server/opsTasks",
-        "server/cleancloudBrowserSync"
+        "server/integrations/cleancloud"
       ]
     },
     {
@@ -266,8 +266,8 @@
     {
       "concept": "CleanCloud Imported Economic Evidence",
       "owner": "CleanCloud Integration",
-      "legalWriteEntrypoint": "server/cleancloudBrowserSync/assimilateCustomerTruth.ts, server/cleancloudPaidEvidence.ts",
-      "canonicalReadEntrypoint": "server/cleancloudPaidOrders.ts",
+      "legalWriteEntrypoint": "server/integrations/cleancloud/browserSync/assimilateCustomerTruth.ts, server/integrations/cleancloud/cleancloudPaidEvidence.ts",
+      "canonicalReadEntrypoint": "server/integrations/cleancloud/cleancloudPaidOrders.ts",
       "evidenceAdmissionSource": "CleanCloud sync witness payload digest",
       "downstreamConsumers": [
         "server/geography/gumballCustomerTruthDbProof.ts",

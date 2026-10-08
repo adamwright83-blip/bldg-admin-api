@@ -7,7 +7,7 @@ function source(path: string) {
 
 describe("CleanCloud external evidence architecture", () => {
   it("never mints native payment_verified authority from CleanCloud", () => {
-    const world = source("./cleancloudBrowserSync/worldOutbox.ts");
+    const world = source("./browserSync/worldOutbox.ts");
     const evidence = source("./cleancloudPaidEvidence.ts");
     expect(world).toContain("admitCleanCloudPaidObservationWith");
     expect(world).not.toContain('claimType: "payment_verified"');
@@ -17,7 +17,7 @@ describe("CleanCloud external evidence architecture", () => {
 
   it("routes both active paid-order ingestion paths through one CleanCloud writer", () => {
     const csv = source("./cleancloudPaidOrders.ts");
-    const browser = source("./cleancloudBrowserSync/ingestion.ts");
+    const browser = source("./browserSync/ingestion.ts");
     for (const text of [csv, browser]) {
       expect(text).toContain("upsertCleanCloudPaidOrderWith");
       expect(text).not.toContain("insert(cleancloudPaidOrders)");
@@ -28,8 +28,8 @@ describe("CleanCloud external evidence architecture", () => {
   it("keeps native payment and Commercial conversion out of CleanCloud ingestion", () => {
     const files = [
       source("./cleancloudPaidOrders.ts"),
-      source("./cleancloudBrowserSync/ingestion.ts"),
-      source("./cleancloudBrowserSync/worldOutbox.ts"),
+      source("./browserSync/ingestion.ts"),
+      source("./browserSync/worldOutbox.ts"),
       source("./cleancloudPaidEvidence.ts"),
     ].join("\n");
     expect(files).not.toContain("admitNativeStripePayment");
@@ -39,7 +39,7 @@ describe("CleanCloud external evidence architecture", () => {
   });
 
   it("uses source-aware analytics evidence without changing customer identity logic", () => {
-    const ledger = source("./analytics/paidOrderLedger.ts");
+    const ledger = source("../../analytics/paidOrderLedger.ts");
     expect(ledger).toContain("cleancloudEvidence");
     expect(ledger).toContain("readCleanCloudPaidObservationReceipts");
     expect(ledger).toContain("paymentEvidence");

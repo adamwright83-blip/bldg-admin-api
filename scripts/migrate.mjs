@@ -1347,7 +1347,7 @@ await assertRequiredColumns("tenant_provider_usage", [
 // Required, additive Gumballpals schema. Fail startup rather than accept imports
 // against a partially provisioned database.
 const gumballSql = await readFile(
-  new URL("../server/cleancloudBrowserSync/schema.sql", import.meta.url),
+  new URL("../server/integrations/cleancloud/browserSync/schema.sql", import.meta.url),
   "utf8"
 );
 for (const statement of gumballSql

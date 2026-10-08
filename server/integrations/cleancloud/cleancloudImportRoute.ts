@@ -1,9 +1,9 @@
 import type express from "express";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
-import { sdk } from "./_core/sdk";
+import { sdk } from "../../_core/sdk";
 import { importCleanCloudLegacyOrders } from "./cleancloudLegacy";
 import { importCleanCloudPaidOrders, parseCleanCloudPaidReportType } from "./cleancloudPaidOrders";
-import { isValidAgentSharedSecret } from "./agents/s2sEndpoint";
+import { isValidAgentSharedSecret } from "../../agents/s2sEndpoint";
 
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 

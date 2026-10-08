@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { cleancloudPaidOrders, goalCycleObjectives, goalCycleOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { admitCleanCloudPaidObservationWith } from "../cleancloudPaidEvidence";
+import { admitCleanCloudPaidObservationWith } from "../integrations/cleancloud/cleancloudPaidEvidence";
 import { recordGoalCycleOutcome } from "./outcomeStore";
 
 it("rejects CleanCloud economic credit backed by a different import's receipt", async () => {

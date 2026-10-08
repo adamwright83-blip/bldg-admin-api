@@ -165,7 +165,7 @@ import {
 import {
   cleanCloudLegacyCustomers,
   listImportedCleanCloudLegacyCustomers,
-} from "./cleancloudLegacy";
+} from "./integrations/cleancloud/cleancloudLegacy";
 import {
   getClearentCollectedTodayCents,
   listImportedClearentCustomers,

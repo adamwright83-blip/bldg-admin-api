@@ -55,7 +55,7 @@ describe("SaaS Slice 4 tenant lifecycle certification", () => {
   });
 
   it("does not absorb the tenantless legacy CleanCloud importer into tenant lifecycle", () => {
-    const legacy = source("../cleancloudLegacy.ts");
+    const legacy = source("../integrations/cleancloud/cleancloudLegacy.ts");
     expect(legacy).not.toContain("tenantIdForOnboarding");
     expect(legacy).not.toContain("dayforge_saas_tenants");
     expect(legacy).not.toContain('?? "default"');
