@@ -9,6 +9,12 @@
 >
 > **Important:** this is a roadmap, not a substitute for live repository inspection. Always fetch current `main`, list open PRs, and inspect the latest architecture audit docs before acting.
 
+## Program A–D certification update — 2026-10-08
+
+Programs A–D are certified on production source main `85415cb7292e6803092cb5fe835f4f0325f7907c`, after C20 (#498). The final documentation/test checkpoint records exact-head and post-merge proof. Read [Program D certification](./PROGRAM_D_CERTIFICATION.md) and its classified inventory for the actual scope, explicit historical ownership/amount holds, protected heads and four proven baseline test failures. This is architecture certification, not an all-tests-green or business-release claim.
+
+Program E remains the separately scoped post-convergence roadmap; it was not started by this campaign. Older snapshot/remaining-work sections below are historical context and must be reconciled against the certification report and live main before new work.
+
 ## Snapshot
 
 Snapshot main when this document was created:

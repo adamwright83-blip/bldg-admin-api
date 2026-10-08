@@ -132,3 +132,7 @@ Real MySQL proves weak-flag exclusion, foreign-tenant isolation, amount-unknown
 admission eligibility, canonical labels, shared manual/automatic dedupe and exclusion
 of an invented legacy win. Ten authority contracts, TypeScript and four architecture
 gates pass. The UI adds only the order evidence field needed for the existing action.
+
+## Final Program B certification checkpoint
+
+Program B is certified by the current-source [Program D report](./PROGRAM_D_CERTIFICATION.md), including B6 Command Sky source admission and the later external-evidence import fences. No reward/art redesign or protected agent product rewrite was performed.

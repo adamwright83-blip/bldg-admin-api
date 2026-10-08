@@ -25,7 +25,7 @@ it("does not grant reminder-conversion progression from a weak paid flag", async
   try {
     await db
       .update(orders)
-      .set({ paid: true, paidAt, stripePaymentIntentId: "pi_c2" })
+      .set({ paid: true, paidAt, stripePaymentIntentId: `pi_c2_${orderId}` })
       .where(eq(orders.id, orderId));
     await db
       .insert(adminActionLog)
@@ -45,7 +45,7 @@ it("does not grant reminder-conversion progression from a weak paid flag", async
     await admitNativeStripePayment({
       tenantId,
       orderId,
-      paymentIntentId: "pi_c2",
+      paymentIntentId: `pi_c2_${orderId}`,
       paidAt,
       orderPatch: {},
     });

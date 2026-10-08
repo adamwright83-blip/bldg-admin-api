@@ -299,3 +299,7 @@ Validation: a real MySQL witness reproduces false connection on unchanged main a
 A real MySQL witness on main `4730030d` persisted a 9,000-cent economic outcome using a receipt from a different import batch of the same external order. The owning `recordGoalCycleOutcome` admission guard now requires the existing CleanCloud receipt matcher against the exact persisted tenant/order/import whose positive paid amount is used. This applies to all callers, including the public bridge. Unadmitted imports cannot borrow older admission; native Payment and legacy CleanCloud ownership are unchanged.
 
 Validation: the actual write succeeds incorrectly before the change; afterwards it is rejected with zero outcomes persisted. Exact-import admission succeeds and replay is idempotent. 23 focused outcome/authority/evidence contracts, type check and four architecture gates pass.
+
+## Final Program C certification checkpoint
+
+Program C is certified by the current-source [Program D report](./PROGRAM_D_CERTIFICATION.md). Unknown historical native dollars and unresolved historical ownership remain explicit holds, not manufactured financial/tenant truth. Current combined tests, deliberate exceptions and baseline failures are recorded there.
