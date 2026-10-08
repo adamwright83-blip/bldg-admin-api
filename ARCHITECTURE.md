@@ -4,7 +4,7 @@
 
 ## What this product does
 
-**JOYSTICK is a playable operating system for running a real business.** Its Goldline experience turns real operator work into missions, a prioritized **Day Line**, and a downstream fictional world. **Claire** is the conversational chief of staff; **Daphne** adapts how agents interact with the operator. Verified real outcomes may change the game; the game must never invent the customer, visit, payment, captured dollars, delivery or commercial win. See [the product system map](docs/JOYSTICK_SYSTEM_MAP.md), [architecture convergence status](docs/architecture/ARCHITECTURE_CONVERGENCE_STATUS.md), and [game canon](GOLDLINE_CANON.md) for their respective scopes.
+**JOYSTICK is a playable operating system for running a real business.** Its Goldline experience turns real operator work into missions, a prioritized **Day Line**, and a downstream fictional world. **Claire** is the conversational chief of staff; **Daphne** adapts how agents interact with the operator. Verified real outcomes may change the game; the game must never invent the customer, visit, payment, captured dollars, delivery or commercial win. See [Codex's merged Program E0 physical migration audit](docs/architecture/PROGRAM_E_AUDIT.md) for the authoritative planned path moves; the [machine ownership map](docs/architecture/PROGRAM_E_OWNERSHIP_MAP.json) is a current-path navigation inventory, not a competing migration order. See [the product system map](docs/JOYSTICK_SYSTEM_MAP.md), [architecture convergence status](docs/architecture/ARCHITECTURE_CONVERGENCE_STATUS.md), and [game canon](GOLDLINE_CANON.md) for their respective scopes.
 
 ## The authority rule
 
@@ -42,4 +42,4 @@
 
 **Known misleading names:** `goldline/` mixes current Day Line with historical helpers; `joystick/` includes Driver adapters and tenant identity; `businessWorld/`, `driverGameWorld/`, `goldlineWorld/`, `worldForge/`, and `lanternCity/` are not interchangeable truth owners. Review the E0 path classification before splitting or moving any of them.
 
-**Program status:** A–D certified for audited boundaries. **E0/E1** establish the navigational map; E2–E8 require individually proved moves and an independent cold-model comprehension test. Do not declare Program E complete because this file exists.
+**Program status:** A–D certified for audited boundaries. **E0** is documented by Codex's PR #501 audit; **E1** supplies the navigation entrypoint and current-path inventory. E2–E8 require individually proved moves and an independent cold-model comprehension test. Do not declare Program E complete because this file exists.
