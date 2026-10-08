@@ -37,6 +37,7 @@ function event(overrides: Partial<OperationsEventDashboardRow> = {}): Operations
     actorUserId: "7",
     actorDisplayName: "Adam",
     vendorId: null,
+    paymentEvidenceStatus: "verified",
     chargedAmount: "42.50",
     paid: true,
     paidAt: new Date("2026-05-15T02:30:00.000Z"),
@@ -237,6 +238,19 @@ describe("operations events dashboard helpers", () => {
       paid: true,
     });
     expect(row.paidAt?.toISOString()).toBe("2026-05-16T01:00:00.000Z");
+  });
+
+  it("keeps unverified and unavailable Payment evidence explicit", () => {
+    expect(event({ paymentEvidenceStatus: "unverified", chargedAmount: null, paid: null })).toMatchObject({
+      paymentEvidenceStatus: "unverified",
+      chargedAmount: null,
+      paid: null,
+    });
+    expect(event({ paymentEvidenceStatus: "unavailable", chargedAmount: null, paid: null })).toMatchObject({
+      paymentEvidenceStatus: "unavailable",
+      chargedAmount: null,
+      paid: null,
+    });
   });
 
   it("CSV filename reflects active filters", () => {

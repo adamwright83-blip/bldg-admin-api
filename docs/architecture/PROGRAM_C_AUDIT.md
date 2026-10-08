@@ -127,3 +127,12 @@ remains valid operational evidence while its economic fields remain unknown.
 The Payment fact projection intentionally preserves historical admitted occurrence
 after current paid/refund state changes. Current paid-state authority remains a
 separate question from whether the provider-backed payment occurred.
+
+
+## C6: Unknown Payment evidence remains unknown in operations UI
+
+The operations dashboard now carries an explicit payment evidence status:
+`verified`, `unverified`, or `unavailable`. The UI no longer collapses
+unverified/unavailable evidence into "Unpaid" and no longer collapses a verified
+payment with no immutable captured amount into "No charge". Those states render
+as "Payment not verified", "Evidence unavailable", or "Amount unknown".

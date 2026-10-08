@@ -83,10 +83,14 @@ function chargedDisplay(row: OperationsEventRow): {
   muted?: boolean;
 } {
   if (!row.orderId) return { label: "-", detail: null, muted: true };
-  if (!row.paid) return { label: "Unpaid", detail: null, muted: true };
+  if (row.paymentEvidenceStatus === "unavailable")
+    return { label: "Evidence unavailable", detail: null, muted: true };
+  if (row.paymentEvidenceStatus === "unverified")
+    return { label: "Payment not verified", detail: null, muted: true };
 
   const charged = formatMoney(row.chargedAmount);
-  if (!charged) return { label: "No charge", detail: null, muted: true };
+  if (!charged)
+    return { label: "Amount unknown", detail: row.paidAt ? `Paid ${formatDateTime(row.paidAt)}` : null, muted: true };
   return {
     label: charged,
     detail: row.paidAt ? `Paid ${formatDateTime(row.paidAt)}` : null,
