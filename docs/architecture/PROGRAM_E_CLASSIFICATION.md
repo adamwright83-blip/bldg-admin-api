@@ -35,9 +35,13 @@ Verified against `7ba7310df76a142c053c9c2c857b750e207cb221` (October 8, 2026). P
 
 For each future slice require an OLD PATH → NEW PATH map, import/callsite impact assessment, one coherent PR, compile and domain tests, and a post-merge check. Avoid multi-domain tree churn in one PR. Begin physical moves with independently bounded non-overlapping modules; do not relocate any protected #495 path before merge.
 
+## Reconciliation with Codex E0 PR #501
+
+Codex's merged [Program E audit](PROGRAM_E_AUDIT.md) is the controlling E0 classification and target physical taxonomy. This file and the JSON map are supplemental current-path lookup aids, not authorization to move a directory or to replace E0's OLD → NEW migration plan. Where the proposed target tree and this provisional grouping differ, use the E0 audit plus actual ownership callsite evidence before moving anything.
+
 ## E slices and current checkpoint
 
-- **E0** directory classification + target/ownership map: this checkpoint (inventory only).
+- **E0** classification and physical-migration plan: merged in PR #501; this extra full-tree inventory supports E1 navigation.
 - **E1** canonical repository entrypoint and navigational contract: this checkpoint.
 - **E2** Orders/Payment/Commercial and other core business modules: pending small verified slices.
 - **E3** platform, worker and integration boundaries: pending.
