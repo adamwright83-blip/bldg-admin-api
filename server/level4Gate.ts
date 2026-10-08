@@ -1,3 +1,4 @@
+import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { adminActionLog, level4Missions, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -390,7 +391,10 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
   ]);
 
   const collectedCents = collectedToday?.cents ?? 0;
-  const paidToday = allOrders.filter((order) => order.paid && isDateInBusinessDay(order.paidAt, bounds));
+  const paymentReceipts = await readNativePaymentAuthorityReceipts(allOrders);
+  const paidToday = allOrders.filter((order) =>
+    hasNativePaymentAuthority(order, paymentReceipts.get(order.id)) &&
+    isDateInBusinessDay(order.paidAt, bounds));
   const reminderConvertedCount = paidToday.filter((order) => {
     if (!order.paidAt) return false;
     const paidAt = order.paidAt instanceof Date ? order.paidAt : new Date(order.paidAt);
