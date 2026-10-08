@@ -1,12 +1,9 @@
+import { readCommercialProgressionFactsForActor } from "../commercialMissions/commercialWorldReadService";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   armoryWeaponOutcomes,
   armoryWeaponUsages,
-  commercialFollowUps,
-  commercialMissionEvents,
   commercialMissions,
-  commercialPipelineRecords,
-  commercialVisitOutcomes,
   driverScoutDiscoveries,
   driverScoutReports,
   salesIntelFrameworks,
@@ -62,82 +59,14 @@ export async function loadGoldlineProgressionEvidence(input: {
   if (!db) throw new Error("Database not available");
 
   const [
-    missionRows,
-    callRows,
-    followUpRows,
-    visitRows,
+    commercialFacts,
     world,
     usageRows,
     outcomeRows,
     frameworkRows,
     discoveryRows,
   ] = await Promise.all([
-    db
-      .select({
-        mission: commercialMissions,
-        pipeline: commercialPipelineRecords,
-      })
-      .from(commercialMissions)
-      .innerJoin(
-        commercialPipelineRecords,
-        and(
-          eq(commercialPipelineRecords.tenantId, commercialMissions.tenantId),
-          eq(commercialPipelineRecords.missionId, commercialMissions.id)
-        )
-      )
-      .where(
-        and(
-          eq(commercialMissions.tenantId, input.tenantId),
-          eq(commercialMissions.assignedTo, input.actorId)
-        )
-      ),
-    db
-      .select({ event: commercialMissionEvents })
-      .from(commercialMissionEvents)
-      .innerJoin(
-        commercialMissions,
-        and(
-          eq(commercialMissions.tenantId, commercialMissionEvents.tenantId),
-          eq(commercialMissions.id, commercialMissionEvents.missionId),
-          eq(commercialMissions.assignedTo, input.actorId)
-        )
-      )
-      .where(
-        and(
-          eq(commercialMissionEvents.tenantId, input.tenantId),
-          eq(commercialMissionEvents.actorId, input.actorId),
-          eq(commercialMissionEvents.eventName, "cold_call_logged")
-        )
-      ),
-    db
-      .select({ followUp: commercialFollowUps })
-      .from(commercialFollowUps)
-      .innerJoin(
-        commercialMissions,
-        and(
-          eq(commercialMissions.tenantId, commercialFollowUps.tenantId),
-          eq(commercialMissions.id, commercialFollowUps.missionId),
-          eq(commercialMissions.assignedTo, input.actorId)
-        )
-      )
-      .where(eq(commercialFollowUps.tenantId, input.tenantId)),
-    db
-      .select({ visit: commercialVisitOutcomes })
-      .from(commercialVisitOutcomes)
-      .innerJoin(
-        commercialMissions,
-        and(
-          eq(commercialMissions.tenantId, commercialVisitOutcomes.tenantId),
-          eq(commercialMissions.id, commercialVisitOutcomes.missionId),
-          eq(commercialMissions.assignedTo, input.actorId)
-        )
-      )
-      .where(
-        and(
-          eq(commercialVisitOutcomes.tenantId, input.tenantId),
-          eq(commercialVisitOutcomes.recordedBy, input.actorId)
-        )
-      ),
+    readCommercialProgressionFactsForActor(input),
     listDriverGameWorld(input),
     db
       .select({ usage: armoryWeaponUsages })
@@ -216,6 +145,8 @@ export async function loadGoldlineProgressionEvidence(input: {
         )
       ),
   ]);
+
+  const { missionRows, callRows, followUpRows, visitRows } = commercialFacts;
 
   const supportByDoctrine = new Map<string, Set<string>>();
   for (const row of frameworkRows) {
