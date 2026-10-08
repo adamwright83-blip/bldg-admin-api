@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { cleancloudPaidOrders, goalCycleOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { cleanCloudPaidObservationReceiptMatches } from "../cleancloudPaidEvidence";
 import { getAuthorityReceiptById } from "../authority/authorityReceipt";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import {
@@ -358,6 +359,7 @@ async function assertConsequentialOutcomeAuthority(
       .select({
         paid: cleancloudPaidOrders.paid,
         totalCents: cleancloudPaidOrders.totalCents,
+        importBatchId: cleancloudPaidOrders.importBatchId,
       })
       .from(cleancloudPaidOrders)
       .where(
@@ -370,11 +372,18 @@ async function assertConsequentialOutcomeAuthority(
       row =>
         row.paid === true &&
         (row.totalCents ?? 0) > 0 &&
-        row.totalCents === input.monetaryValueCents
+        row.totalCents === input.monetaryValueCents &&
+        cleanCloudPaidObservationReceiptMatches(receipt, {
+          tenantId: input.tenantId,
+          subjectType: "cleancloud_order",
+          subjectId,
+          sourceType: "cleancloud_paid_order",
+          sourceRef: `cleancloud-import:${row.importBatchId}:${subjectId}`,
+        })
     );
     if (!amountMatches) {
       throw new Error(
-        "cleancloud_order_paid amount does not match persisted paid-order evidence"
+        "cleancloud_order_paid amount does not match persisted paid-order evidence and import admission"
       );
     }
   }

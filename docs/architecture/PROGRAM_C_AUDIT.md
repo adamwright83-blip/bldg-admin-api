@@ -293,3 +293,9 @@ Validation: the witness fails before the change and passes afterwards, including
 `getDataCompleteness` could label Stripe paid evidence as connected using only a raw paid flag and processor identifier, with missing ownership coalesced into the default tenant. It now composes Orders-owned explicit-tenant candidates and Payment admission. Unknown historical captured dollars still establish admitted payment occurrence; they never become quote-derived revenue. CleanCloud import availability is explicitly a candidate-data diagnostic, not a paid-event or exact-revenue claim.
 
 Validation: a real MySQL witness reproduces false connection on unchanged main and passes with the change; other-tenant isolation passes. 63 analytics/composer/authority contracts pass (six pre-existing skipped evaluations), plus type check and four architecture gates.
+
+## C20 — CleanCloud economic outcome import binding
+
+A real MySQL witness on main `4730030d` persisted a 9,000-cent economic outcome using a receipt from a different import batch of the same external order. The owning `recordGoalCycleOutcome` admission guard now requires the existing CleanCloud receipt matcher against the exact persisted tenant/order/import whose positive paid amount is used. This applies to all callers, including the public bridge. Unadmitted imports cannot borrow older admission; native Payment and legacy CleanCloud ownership are unchanged.
+
+Validation: the actual write succeeds incorrectly before the change; afterwards it is rejected with zero outcomes persisted. Exact-import admission succeeds and replay is idempotent. 23 focused outcome/authority/evidence contracts, type check and four architecture gates pass.
