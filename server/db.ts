@@ -1521,19 +1521,16 @@ export async function findStripeCardByPhone(
 }
 
 export async function hasCustomerPaidBefore(
-  stripeCustomerId: string
+  stripeCustomerId: string,
+  tenantId: string
 ): Promise<boolean> {
+  if (!tenantId.trim()) throw new Error("Paid customer history requires tenant authority");
   const db = await getDb();
-  if (!db) return false;
-
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(orders)
-    .where(
-      and(eq(orders.stripeCustomerId, stripeCustomerId), eq(orders.paid, true))
-    );
-
-  return (result[0]?.count ?? 0) > 0;
+  if (!db) throw new Error("Payment history unavailable");
+  const candidates = await db.select({ id: orders.id, tenantId: orders.tenantId, paid: orders.paid, stripePaymentIntentId: orders.stripePaymentIntentId })
+    .from(orders).where(and(eq(orders.tenantId, tenantId), eq(orders.stripeCustomerId, stripeCustomerId), eq(orders.paid, true)));
+  const receipts = await readNativePaymentAuthorityReceipts(candidates);
+  return candidates.some(order => hasNativePaymentAuthority(order, receipts.get(order.id)));
 }
 
 export async function deleteOrder(orderId: number): Promise<void> {

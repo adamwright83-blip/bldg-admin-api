@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { orders } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { getDb, hasCustomerPaidBefore } from "../db";
 import { createNativeOrder } from "../orders/orderLifecycleService";
 import { admitNativeStripePayment } from "./paymentAdmission";
 import { readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
@@ -28,13 +28,14 @@ describe("real MySQL Payment → customer/game projection", () => {
       // Simulate a historical/bypassed flag. Test fixture only, not an application write.
       await db
         .update(orders)
-        .set({ paid: true, stripePaymentIntentId: `pi_b2_${orderId}` })
+        .set({ paid: true, stripePaymentIntentId: `pi_b2_${orderId}`, stripeCustomerId: `cus_${orderId}` })
         .where(eq(orders.id, orderId));
       const [row] = await db
         .select()
         .from(orders)
         .where(eq(orders.id, orderId));
       expect((await readNativePaymentAuthorityReceipts([row])).size).toBe(0);
+      expect(await hasCustomerPaidBefore(`cus_${orderId}`, tenantId)).toBe(false);
       expect((await loadCustomerOrderTruth(tenantId))[0]?.paid).toBe(false);
       const [unverifiedAsset] = await listCustomerAssets({ tenantId });
       expect(unverifiedAsset.lifetimeValue.value).toBeNull();
@@ -54,6 +55,8 @@ describe("real MySQL Payment → customer/game projection", () => {
         (await readNativePaymentAuthorityReceipts([row])).has(orderId)
       ).toBe(true);
       expect((await loadCustomerOrderTruth(tenantId))[0]?.paid).toBe(true);
+      expect(await hasCustomerPaidBefore(`cus_${orderId}`, tenantId)).toBe(true);
+      expect(await hasCustomerPaidBefore(`cus_${orderId}`, "other-tenant")).toBe(false);
       const [verifiedAsset] = await listCustomerAssets({ tenantId });
       expect(verifiedAsset.lifetimeValue.value).toBe(4200);
       expect(verifiedAsset.outstandingReceivables.value).toBe(0);

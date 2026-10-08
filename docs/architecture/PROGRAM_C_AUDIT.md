@@ -254,3 +254,14 @@ tenant simultaneous ownership attempts, refund-state replay, metadata conflict a
 historical duplicate withholding. Five related MySQL projection families pass after
 test fixtures use unique provider identities. Both fresh migration paths include
 the new lookup index; no production database/provider reconciliation was executed.
+
+## C16: Paid-customer enrollment requires owned Payment history
+
+The first-paid enrollment predicate previously counted raw paid flags by a global
+Stripe customer ID. It now requires explicit tenant ownership and matching Payment
+admission. Database unavailability is propagated instead of silently asserting that
+a customer has never paid. Amountless admissions still prove payment existence.
+
+The real-MySQL customer projection proof now exercises weak flags, fresh admission
+and foreign-tenant exclusion through this predicate. TypeScript and four architecture
+gates pass; existing enrollment behavior is preserved for admitted customers.
