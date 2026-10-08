@@ -1428,12 +1428,14 @@ export const appRouter = router({
         z.object({
           kind: z.enum(["verbal_commitment", "first_order"]),
           label: z.string().min(1).max(191),
+          orderId: z.number().int().positive().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const result = await logCommandSkyWin({
           tenantId: ctx.tenantId,
           kind: input.kind,
+          orderId: input.orderId,
           label: input.label,
           dedupeKey: `manual:${input.kind}:${input.label
             .toLowerCase()

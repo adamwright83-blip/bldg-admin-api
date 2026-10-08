@@ -27,11 +27,11 @@
  * missing-table tolerance pattern as the Level 4 war. Win events are
  * idempotent via dedupeKey.
  */
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { readCommandSkyFirstPayments } from "./commandSkyPaymentRead";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   commandSkySettings,
   commandSkyWins,
-  orders,
   type CommandSkySettingsRow,
   type CommandSkyWin,
 } from "../drizzle/schema";
@@ -207,7 +207,19 @@ export async function updateCommandSkySettings(
   return next;
 }
 
-export async function logCommandSkyWin(params: {
+type SkyWinInput = {
+  tenantId: string; kind: "verbal_commitment" | "first_order"; label: string; dedupeKey: string; orderId?: number;
+};
+export async function logCommandSkyWin(params: SkyWinInput): Promise<{ recorded: boolean; deduped: boolean; hopeExpiresAt: string }> {
+  if (params.kind === "first_order") {
+    const candidate = (await readCommandSkyFirstPayments(params.tenantId)).find(item => item.orderId === params.orderId);
+    if (!candidate) throw new Error("A tenant-owned first Payment admission is required for this win.");
+    return persistCommandSkyWin({ ...params, label: candidate.label, dedupeKey: candidate.dedupeKey });
+  }
+  return persistCommandSkyWin(params);
+}
+
+async function persistCommandSkyWin(params: {
   tenantId: string;
   kind: "verbal_commitment" | "first_order";
   label: string;
@@ -255,33 +267,10 @@ async function syncFirstOrderWins(tenantId: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
   try {
-    // Last 30 days of paid orders, oldest first; first per phone = candidate.
-    const since = new Date(Date.now() - 30 * 86_400_000);
-    const paid = await db
-      .select({
-        id: orders.id,
-        phone: orders.phone,
-        firstName: orders.firstName,
-        lastName: orders.lastName,
-        createdAt: orders.createdAt,
-      })
-      .from(orders)
-      .where(and(eq(orders.paid, true), gte(orders.createdAt, since)))
-      .orderBy(orders.createdAt)
-      .limit(500);
-    const seen = new Set<string>();
-    for (const order of paid) {
-      const phone = String(order.phone ?? "").replace(/\D/g, "");
-      if (!phone || seen.has(phone)) continue;
-      seen.add(phone);
-      const name =
-        `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || `…${phone.slice(-4)}`;
-      await logCommandSkyWin({
-        tenantId,
-        kind: "first_order",
-        label: `${name} — first order`,
-        dedupeKey: `first-order:${phone}:${order.id}`,
-      });
+    const since = Date.now() - 30 * 86_400_000;
+    const candidates = await readCommandSkyFirstPayments(tenantId);
+    for (const candidate of candidates.filter(item => Date.parse(item.occurredAt) >= since).slice(0, 500)) {
+      await persistCommandSkyWin({ tenantId, kind: "first_order", label: candidate.label, dedupeKey: candidate.dedupeKey });
     }
   } catch (error) {
     if (!isMissingSkyTableError(error)) {
@@ -325,6 +314,8 @@ export async function getCommandSkyState(params: {
     }
   }
 
+  const admittedKeys = new Set(wins.some(win => win.kind === "first_order") ? (await readCommandSkyFirstPayments(params.tenantId)).map(item => item.dedupeKey) : []);
+  wins = wins.filter(win => win.kind !== "first_order" || admittedKeys.has(win.dedupeKey));
   const now = Date.now();
   const activeHope = wins.find(
     (w) => w.hopeExpiresAt && new Date(w.hopeExpiresAt).getTime() > now

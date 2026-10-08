@@ -66,6 +66,7 @@ export function SkyBar() {
   const [winOpen, setWinOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winName, setWinName] = useState("");
+  const [winOrderId, setWinOrderId] = useState("");
   const [winKind, setWinKind] = useState<"verbal_commitment" | "first_order">("verbal_commitment");
 
   const logWin = trpc.admin.logCommandSkyWin.useMutation({
@@ -209,6 +210,9 @@ export function SkyBar() {
                 <span className="block text-[11px] font-normal text-black/55">Counts toward the goal · blue to block end</span>
               </button>
             </div>
+            {winKind === "first_order" && <label className="block text-sm">Order number
+              <input type="number" min="1" value={winOrderId} onChange={e => setWinOrderId(e.target.value)} className="w-full rounded-md border border-black/20 px-3 py-2" />
+            </label>}
             <input
               className="w-full rounded-md border border-black/20 px-3 py-2 text-sm"
               placeholder="Who? (e.g. Sarah M — Century Park East)"
@@ -221,7 +225,7 @@ export function SkyBar() {
             <Button
               className="bg-sky-600 text-white hover:bg-sky-700"
               disabled={logWin.isPending || winName.trim().length < 2}
-              onClick={() => logWin.mutate({ kind: winKind, label: winName.trim() })}
+              onClick={() => logWin.mutate({ kind: winKind, label: winName.trim(), orderId: winKind === "first_order" ? Number(winOrderId) : undefined })}
             >
               {logWin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Make it blue
