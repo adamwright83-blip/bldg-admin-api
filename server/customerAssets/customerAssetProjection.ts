@@ -17,7 +17,11 @@ import {
   unknownValue,
 } from "../../shared/businessGame";
 import { getDb } from "../db";
-import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import {
+  nativeCapturedAmountCents,
+  hasNativePaymentAuthority,
+  readNativePaymentAuthorityReceipts,
+} from "../authority/nativePaymentReadService";
 import {
   customerAssetId,
   customerIdentityHash,
@@ -106,7 +110,8 @@ export async function projectCustomerAssets(input: {
       .where(eq(commercialAccounts.tenantId, input.tenantId)),
   ]);
 
-  const paymentAuthorityReceipts = await readNativePaymentAuthorityReceipts(orderRows);
+  const paymentAuthorityReceipts =
+    await readNativePaymentAuthorityReceipts(orderRows);
   const orderIds = orderRows.map(row => row.id);
   const identityHashes = Array.from(
     new Set(
@@ -189,22 +194,54 @@ export async function projectCustomerAssets(input: {
       );
       const unverifiedPayment = group.some(order => {
         const projection = paymentByOrder.get(order.id);
-        return (order.paid || (projection?.netPaidCents ?? 0) > 0) &&
-          !hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id));
+        return (
+          (order.paid || (projection?.netPaidCents ?? 0) > 0) &&
+          !hasNativePaymentAuthority(
+            order,
+            paymentAuthorityReceipts.get(order.id)
+          )
+        );
       });
+      const unknownPaidAmount = group.some(
+        order =>
+          hasNativePaymentAuthority(
+            order,
+            paymentAuthorityReceipts.get(order.id)
+          ) &&
+          nativeCapturedAmountCents(paymentAuthorityReceipts.get(order.id)) ===
+            null &&
+          !(
+            paymentByOrder.get(order.id)?.providerPaymentId ===
+              order.stripePaymentIntentId &&
+            paymentByOrder.get(order.id)?.currency === "usd" &&
+            Number.isSafeInteger(paymentByOrder.get(order.id)?.netPaidCents)
+          )
+      );
       const paidTotal = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         return (
           sum +
-          (hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id))
-            ? (payment?.netPaidCents ?? cents(order.total)) : 0)
+          (hasNativePaymentAuthority(
+            order,
+            paymentAuthorityReceipts.get(order.id)
+          )
+            ? payment?.providerPaymentId === order.stripePaymentIntentId &&
+              payment.currency === "usd"
+              ? (payment.netPaidCents ?? 0)
+              : (nativeCapturedAmountCents(
+                  paymentAuthorityReceipts.get(order.id)
+                ) ?? 0)
+            : 0)
         );
       }, 0);
       const outstanding = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         const isPaid = payment
           ? ["paid", "partially_refunded"].includes(payment.state)
-          : hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id));
+          : hasNativePaymentAuthority(
+              order,
+              paymentAuthorityReceipts.get(order.id)
+            );
         return (
           sum +
           (isPaid || order.status === "cancelled" ? 0 : cents(order.total))
@@ -219,114 +256,129 @@ export async function projectCustomerAssets(input: {
       );
       const name =
         `${latest.firstName} ${latest.lastName}`.trim() || "Customer";
-      return [{
-        id: customerAssetId(input.tenantId, latest),
-        kind: "residential" as const,
-        displayName: name,
-        identityKey: hash,
-        property: {
-          address: latest.address || null,
-          unit: latest.unit ?? null,
-          buildingSlug: latest.buildingSlug ?? null,
-          latitude: null,
-          longitude: null,
-          geoStatus: "unresolved" as const,
+      return [
+        {
+          id: customerAssetId(input.tenantId, latest),
+          kind: "residential" as const,
+          displayName: name,
+          identityKey: hash,
+          property: {
+            address: latest.address || null,
+            unit: latest.unit ?? null,
+            buildingSlug: latest.buildingSlug ?? null,
+            latitude: null,
+            longitude: null,
+            geoStatus: "unresolved" as const,
+          },
+          contact: { phone: latest.phone || null, email: latest.email ?? null },
+          service: {
+            orderCount: group.length,
+            completedCount: completed.length,
+            lastServiceAt: iso((completed[0] ?? latest).updatedAt),
+            recurring: group.length >= 2,
+            serviceTypes: Array.from(
+              new Set(group.map(order => order.serviceType))
+            ),
+          },
+          lifetimeValue:
+            unverifiedPayment || unknownPaidAmount
+              ? unknownValue<number>("Admitted payment amount is unknown")
+              : sourcedFact(paidTotal, "orders + order_payment_projections"),
+          outstandingReceivables: unverifiedPayment
+            ? unknownValue<number>(
+                "Payment admission is unverified; outstanding balance is unknown"
+              )
+            : sourcedFact(outstanding, "orders + order_payment_projections"),
+          averageOrderValue:
+            unverifiedPayment || unknownPaidAmount
+              ? unknownValue("Admitted paid amount is unknown")
+              : group.some(order =>
+                    hasNativePaymentAuthority(
+                      order,
+                      paymentAuthorityReceipts.get(order.id)
+                    )
+                  )
+                ? sourcedFact(
+                    Math.round(
+                      paidTotal /
+                        group.filter(order =>
+                          hasNativePaymentAuthority(
+                            order,
+                            paymentAuthorityReceipts.get(order.id)
+                          )
+                        ).length
+                    ),
+                    "Payment admission + provider payment projection"
+                  )
+                : unknownValue("No admitted payments available"),
+          health:
+            churn?.grade === "high"
+              ? ("at_risk" as const)
+              : churn?.grade === "medium"
+                ? ("watch" as const)
+                : churn
+                  ? ("healthy" as const)
+                  : ("unknown" as const),
+          healthReason:
+            churn?.reasonsJson && Array.isArray(churn.reasonsJson)
+              ? String(churn.reasonsJson[0] ?? "Churn scan available")
+              : "No current churn scan",
+          recovery: {
+            status: recovery?.status ?? null,
+            interventionId: recovery?.id ?? null,
+          },
+          commercial: null,
+          nextAction:
+            !unverifiedPayment && outstanding > 0
+              ? {
+                  label: "Resolve payment",
+                  path: `/payment-reconciliation?customer=${encodeURIComponent(latest.phone)}`,
+                }
+              : null,
+          timeline: group
+            .flatMap(order => {
+              const entries: CustomerAssetTimelineItem[] = [
+                {
+                  id: `order:${order.id}`,
+                  occurredAt: order.createdAt.toISOString(),
+                  type: "order" as const,
+                  title: `${order.serviceType === "wash_fold" ? "Laundry" : "Dry cleaning"} order #${order.id} · ${order.status}`,
+                  sourceReference: `orders:${order.id}`,
+                  verificationClass: "VERIFIED" as const,
+                  amountCents: null,
+                },
+              ];
+              const receipt = paymentAuthorityReceipts.get(order.id);
+              if (receipt?.occurredAt)
+                entries.push({
+                  id: `payment:${order.id}`,
+                  occurredAt: receipt.occurredAt,
+                  type: "payment" as const,
+                  title: "Payment recorded",
+                  sourceReference: `authority_receipts:${receipt.id}`,
+                  verificationClass: "VERIFIED" as const,
+                  // Current net balance cannot replace the immutable capture amount.
+                  amountCents: nativeCapturedAmountCents(receipt),
+                });
+              return entries;
+            })
+            .sort(
+              (a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)
+            ),
+          dataQuality: {
+            status: churn ? ("trusted" as const) : ("partial" as const),
+            warnings: [
+              "Residential order addresses do not currently carry verified coordinates",
+              ...(churn ? [] : ["No current churn scan for this customer"]),
+            ],
+            sources: [
+              "orders",
+              "order_payment_projections",
+              ...(churn ? ["customer_churn_snapshots"] : []),
+            ],
+          },
         },
-        contact: { phone: latest.phone || null, email: latest.email ?? null },
-        service: {
-          orderCount: group.length,
-          completedCount: completed.length,
-          lastServiceAt: iso((completed[0] ?? latest).updatedAt),
-          recurring: group.length >= 2,
-          serviceTypes: Array.from(
-            new Set(group.map(order => order.serviceType))
-          ),
-        },
-        lifetimeValue: unverifiedPayment ? unknownValue<number>("Payment admission is unverified") : sourcedFact(
-          paidTotal,
-          "orders + order_payment_projections"
-        ),
-        outstandingReceivables: unverifiedPayment ? unknownValue<number>("Payment admission is unverified; outstanding balance is unknown") : sourcedFact(
-          outstanding,
-          "orders + order_payment_projections"
-        ),
-        averageOrderValue: group.length
-          ? deterministicEstimate(
-              Math.round(
-                group.reduce((sum, order) => sum + cents(order.total), 0) /
-                  group.length
-              ),
-              "orders arithmetic",
-              "high"
-            )
-          : unknownValue("No orders available"),
-        health:
-          churn?.grade === "high"
-            ? ("at_risk" as const)
-            : churn?.grade === "medium"
-              ? ("watch" as const)
-              : churn
-                ? ("healthy" as const)
-                : ("unknown" as const),
-        healthReason:
-          churn?.reasonsJson && Array.isArray(churn.reasonsJson)
-            ? String(churn.reasonsJson[0] ?? "Churn scan available")
-            : "No current churn scan",
-        recovery: {
-          status: recovery?.status ?? null,
-          interventionId: recovery?.id ?? null,
-        },
-        commercial: null,
-        nextAction:
-          !unverifiedPayment && outstanding > 0
-            ? {
-                label: "Resolve payment",
-                path: `/payment-reconciliation?customer=${encodeURIComponent(latest.phone)}`,
-              }
-            : null,
-        timeline: group
-          .flatMap(order => {
-            const entries: CustomerAssetTimelineItem[] = [
-              {
-                id: `order:${order.id}`,
-                occurredAt: order.createdAt.toISOString(),
-                type: "order" as const,
-                title: `${order.serviceType === "wash_fold" ? "Laundry" : "Dry cleaning"} order #${order.id} · ${order.status}`,
-                sourceReference: `orders:${order.id}`,
-                verificationClass: "VERIFIED" as const,
-                amountCents: cents(order.total),
-              },
-            ];
-            const receipt = paymentAuthorityReceipts.get(order.id);
-            if (receipt?.occurredAt)
-              entries.push({
-                id: `payment:${order.id}`,
-                occurredAt: receipt.occurredAt,
-                type: "payment" as const,
-                title: "Payment recorded",
-                sourceReference: `authority_receipts:${receipt.id}`,
-                verificationClass: "VERIFIED" as const,
-                // A current net projection is not the amount of this past
-                // payment event. Keep the event amount unknown without an
-                // immutable occurrence amount from Payment authority.
-                amountCents: null,
-              });
-            return entries;
-          })
-          .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)),
-        dataQuality: {
-          status: churn ? ("trusted" as const) : ("partial" as const),
-          warnings: [
-            "Residential order addresses do not currently carry verified coordinates",
-            ...(churn ? [] : ["No current churn scan for this customer"]),
-          ],
-          sources: [
-            "orders",
-            "order_payment_projections",
-            ...(churn ? ["customer_churn_snapshots"] : []),
-          ],
-        },
-      }];
+      ];
     }
   );
 

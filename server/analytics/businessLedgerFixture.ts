@@ -186,8 +186,10 @@ export const fixtureCompleteness: DataCompleteness = {
 
 /** Explicit admitted fixture evidence for source/reconciliation tests; never a production loader. */
 export function withFixturePaymentAuthority(loaders: LedgerLoaders): LedgerLoaders {
+  let admittedFixtureRows: NativeOrderRow[] = [];
   return {
     ...loaders,
+    laundry_butler: async window => { admittedFixtureRows = await loaders.laundry_butler(window); return admittedFixtureRows; },
     cleancloud: async window =>
       (await loaders.cleancloud(window)).map(row => ({
         ...row,
@@ -208,7 +210,7 @@ export function withFixturePaymentAuthority(loaders: LedgerLoaders): LedgerLoade
           admissionPolicy: "native_stripe_payment_v1",
           occurredAt: null,
           admittedAt: FIXTURE_NOW.toISOString(),
-          metadata: null,
+          metadata: { captureEvidence: "stripe_amount_received_v1", capturedCurrency: "usd", capturedAmountCents: Math.round(Number(admittedFixtureRows.find(row => String(row.id) === expected.subjectId)?.total ?? 0) * 100) },
           idempotencyKey: `fixture:native:${index}`,
         }))),
     cleancloudAuthority:

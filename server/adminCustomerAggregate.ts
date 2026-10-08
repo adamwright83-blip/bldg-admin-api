@@ -14,7 +14,7 @@ export type AdminCustomerAggregateDbRow = {
   address: string;
   buildingSlug: string | null;
   totalOrders: number;
-  lifetimeSpend: number;
+  lifetimeSpend: number | null;
   paidOrderCount: number;
   firstOrderAt: Date;
   lastOrderAt: Date;
@@ -316,7 +316,7 @@ function truthToDisplayRow(record: CustomerOrderTruthRecord): OrderAggRow {
     buildingSlug: record.buildingSlug,
     createdAt: record.createdAt,
     paid: record.paid,
-    total: (record.totalCents / 100).toFixed(2),
+    total: record.totalCents === null ? null : (record.totalCents / 100).toFixed(2),
   };
 }
 
@@ -337,6 +337,7 @@ export function buildAdminCustomerAggregatesFromTruth(
 
     let totalOrders = 0;
     let lifetimeSpendCents = 0;
+    let unknownPaidAmount = false;
     let paidOrderCount = 0;
     let firstOrderAt = group[0]!.createdAt;
     let lastOrderAt = group[0]!.createdAt;
@@ -350,10 +351,12 @@ export function buildAdminCustomerAggregatesFromTruth(
       const created = record.createdAt.getTime();
       if (firstOrderAt.getTime() > created) firstOrderAt = record.createdAt;
       if (lastOrderAt.getTime() < created) lastOrderAt = record.createdAt;
+      if (record.paymentAmountUnknown) unknownPaidAmount = true;
       if (record.paid) {
         paidOrderCount += 1;
         if (record.source === "laundry_butler") {
-          lifetimeSpendCents += record.totalCents;
+          if (record.totalCents === null) unknownPaidAmount = true;
+          else lifetimeSpendCents += record.totalCents;
         }
       }
       if (isWithinLastDaysUtc(record.createdAt, 30)) ordersLast30Days += 1;
@@ -381,7 +384,7 @@ export function buildAdminCustomerAggregatesFromTruth(
       address: display.address,
       buildingSlug: display.buildingSlug,
       totalOrders,
-      lifetimeSpend: Math.round(lifetimeSpendCents) / 100,
+      lifetimeSpend: unknownPaidAmount ? null : Math.round(lifetimeSpendCents) / 100,
       paidOrderCount,
       firstOrderAt,
       lastOrderAt,

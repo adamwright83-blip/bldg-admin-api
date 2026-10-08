@@ -1,3 +1,4 @@
+import { nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
 import {
   readPaymentAuthorityReceipts,
   paymentAuthorityReceiptMatches,
@@ -114,7 +115,7 @@ export type UndatedEconomicAdjustment = {
   reason: "payment_date_unknown";
 };
 
-export type UnverifiedPaymentAuthority = { eventKey: string; businessDate: string; source: LedgerSource; cents: number; reason: "missing_or_invalid_receipt" | "authority_unavailable" };
+export type UnverifiedPaymentAuthority = { eventKey: string; businessDate: string; source: LedgerSource; cents: number; reason: "missing_or_invalid_receipt" | "authority_unavailable" | "captured_amount_unknown" };
 
 export type PaidOrderLedger = {
   unverifiedPaymentAuthority?: UnverifiedPaymentAuthority[];
@@ -594,7 +595,13 @@ export async function loadPaidOrderLedger(
         }
 
         if (receipt) {
-          events.push({ ...event, authorityReceiptId: receipt.id });
+          const capture = event.source === "laundry_butler" ? nativeCapturedAmountCents(receipt) : event.cents;
+          if (capture === null) {
+            unverifiedPaymentAuthority.push({ eventKey: event.eventKey, businessDate: event.businessDate, source: event.source, cents: 0, reason: "captured_amount_unknown" });
+            if (!failedSources.includes(event.source)) failedSources.push(event.source);
+            continue;
+          }
+          events.push({ ...event, cents: capture, authorityReceiptId: receipt.id });
         } else {
           unverifiedPaymentAuthority.push({
             eventKey: event.eventKey,

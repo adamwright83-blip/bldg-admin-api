@@ -167,9 +167,18 @@ describe("buildAdminCustomerAggregatesFromTruth", () => {
 
   it("keeps native Stripe spend and adds CleanCloud history on the same phone", () => {
     const records = mergeCustomerOrderTruth({
+      nativePaymentAuthorityReceipts: new Map([[44, {
+        id: "auth-44", tenantId: "tenant-a", claimType: "payment_verified", subjectType: "order", subjectId: "44",
+        sourceType: "stripe_payment_intent", sourceRef: "pi_44", actorType: "system", actorId: null,
+        evidenceClass: "authoritative_external", verificationClass: "VERIFIED", admissionPolicy: "native_stripe_payment_v1",
+        occurredAt: "2026-07-01T12:00:00Z", admittedAt: "2026-07-01T12:00:00Z", idempotencyKey: "payment:44",
+        metadata: { capturedAmountCents: 4000, capturedCurrency: "usd", captureEvidence: "stripe_amount_received_v1" }
+      }]]),
       native: [
         {
           id: 44,
+          tenantId: "tenant-a",
+          stripePaymentIntentId: "pi_44",
           status: "delivered",
           createdAt: new Date("2026-07-01T12:00:00.000Z"),
           firstName: "Ada",

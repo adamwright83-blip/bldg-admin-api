@@ -92,3 +92,18 @@ export async function readNativePaymentAuthorityReceipts(
   }
   return verified;
 }
+
+/** Immutable provider-captured USD amount. Receipt existence alone proves no dollars. */
+export function nativeCapturedAmountCents(
+  receipt?: AuthorityReceipt | null
+): number | null {
+  const metadata = receipt?.metadata;
+  const amount = metadata?.capturedAmountCents;
+  return metadata?.captureEvidence === "stripe_amount_received_v1" &&
+    metadata?.capturedCurrency === "usd" &&
+    typeof amount === "number" &&
+    Number.isSafeInteger(amount) &&
+    amount >= 0
+    ? amount
+    : null;
+}

@@ -208,7 +208,7 @@ export function GrowthBuildingsPage() {
               <strong>{building.totalCustomers} customers</strong>
               <small>
                 {building.activeCustomers} active ·{" "}
-                {new Intl.NumberFormat("en-US", {
+                {building.totalRevenue === null ? "Unknown" : new Intl.NumberFormat("en-US", {
                   style: "currency",
                   currency: "USD",
                   maximumFractionDigits: 0,

@@ -46,6 +46,7 @@ describe("real MySQL Payment → customer/game projection", () => {
         tenantId,
         orderId,
         paymentIntentId: "pi_b2_proof",
+        capture: { paymentIntentId: "pi_b2_proof", status: "succeeded", amountReceivedCents: 4200, currency: "usd" },
         paidAt: new Date(),
         orderPatch: {},
       });

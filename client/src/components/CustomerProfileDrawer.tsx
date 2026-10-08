@@ -185,7 +185,7 @@ export function CustomerProfileDrawer({
                       {formatStatusLabel(profile.data.overview.recencyStatus)}
                     </span>
                     <span className="inline-flex rounded-full px-2 py-0.5 text-xs bg-black text-white uppercase">
-                      {profile.data.overview.tier}
+                      {profile.data.overview.tier ?? "Unknown"}
                     </span>
                   </div>
                   {profile.data.overview.email && (
@@ -298,7 +298,7 @@ export function CustomerProfileDrawer({
                     <div>
                       <p className="text-[10px] uppercase text-black/40">Lifetime spend</p>
                       <p className="font-semibold text-black">
-                        {formatMoney(profile.data.overview.lifetimeSpend)}
+                        {profile.data.overview.lifetimeSpend === null ? "Unknown" : formatMoney(profile.data.overview.lifetimeSpend)}
                       </p>
                       <p className="text-[10px] text-black/45">Paid orders only</p>
                     </div>

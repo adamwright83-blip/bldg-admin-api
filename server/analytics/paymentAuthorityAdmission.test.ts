@@ -63,9 +63,7 @@ function receipt(
     ...expected,
     sourceRef: expected.sourceRef!,
     id: `auth-${expected.subjectId}`,
-    claimType: isCleanCloud
-      ? "cleancloud_paid_observed"
-      : "payment_verified",
+    claimType: isCleanCloud ? "cleancloud_paid_observed" : "payment_verified",
     actorType: "system",
     actorId: null,
     evidenceClass: "authoritative_external",
@@ -75,7 +73,13 @@ function receipt(
       : "native_stripe_payment_v1",
     occurredAt: now.toISOString(),
     admittedAt: now.toISOString(),
-    metadata: null,
+    metadata: isCleanCloud
+      ? null
+      : {
+          capturedAmountCents: 8580,
+          capturedCurrency: "usd",
+          captureEvidence: "stripe_amount_received_v1",
+        },
     idempotencyKey: `fixture:${expected.subjectId}`,
     ...extra,
   };
@@ -115,6 +119,17 @@ describe("canonical payment Authority Receipt admission", () => {
       precision: "recorded_only",
       exactIncludedOrderCount: 0,
       unverifiedPaymentAuthority: { count: 1, cents: 8580 },
+    });
+  });
+  it("keeps an admitted payment amount unknown without provider capture metadata", async () => {
+    const result = await read(
+      loaders([native], [], e => receipt(e, { metadata: null }))
+    );
+    expect(result).toMatchObject({
+      recordedCents: 0,
+      statedExactCents: null,
+      precision: "recorded_only",
+      exactIncludedOrderCount: 0,
     });
   });
   it("admits matching Stripe proof and retains its receipt provenance", async () => {
@@ -225,7 +240,14 @@ describe("canonical payment Authority Receipt admission", () => {
         loaders(
           [{ ...native, total: "10.00", phone: "3105550100" }],
           [{ ...cloud, totalCents: 1000, customerPhone: "3105550100" }],
-          e => receipt(e)
+          e =>
+            receipt(e, {
+              metadata: {
+                capturedAmountCents: 1000,
+                capturedCurrency: "usd",
+                captureEvidence: "stripe_amount_received_v1",
+              },
+            })
         )
       )
     ).toMatchObject({
@@ -293,14 +315,16 @@ describe("bounded existing authority read path", () => {
         }),
       }),
     });
-    const paymentExpectations: PaymentAuthorityExpectation[] =
-      Array.from({ length: 401 }, (_, i) => ({
+    const paymentExpectations: PaymentAuthorityExpectation[] = Array.from(
+      { length: 401 },
+      (_, i) => ({
         tenantId,
         subjectType: "order" as const,
         subjectId: String(i),
         sourceType: "stripe_payment_intent" as const,
         sourceRef: `pi_${i}`,
-      }));
+      })
+    );
     const cleanCloudExpectations: CleanCloudPaidObservationExpectation[] =
       Array.from({ length: 201 }, (_, i) => ({
         tenantId,
@@ -323,12 +347,16 @@ describe("bounded existing authority read path", () => {
       })
     ).toEqual([]);
     expect(filters).toHaveLength(5);
-    expect(filters.slice(0, 3).every(filter =>
-      filter.params.includes("payment_verified")
-    )).toBe(true);
-    expect(filters.slice(3).every(filter =>
-      filter.params.includes("cleancloud_paid_observed")
-    )).toBe(true);
+    expect(
+      filters
+        .slice(0, 3)
+        .every(filter => filter.params.includes("payment_verified"))
+    ).toBe(true);
+    expect(
+      filters
+        .slice(3)
+        .every(filter => filter.params.includes("cleancloud_paid_observed"))
+    ).toBe(true);
     for (const filter of filters) {
       expect(filter.params).toContain(tenantId);
       expect(filter.params.length).toBeLessThanOrEqual(203);
