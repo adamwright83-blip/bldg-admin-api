@@ -45,7 +45,7 @@ async function insertPaidOrder(input: {
     .where(and(eq(orders.tenantId, input.tenantId), eq(orders.phone, input.phone)))
     .limit(1);
   if (!order) throw new Error("fixture order insert failed");
-  const paymentIntentId = `pi_test_${input.phone}`;
+  const paymentIntentId = `pi_test_${order.id}`;
   await admitNativeStripePayment({
     tenantId: input.tenantId,
     orderId: order.id,

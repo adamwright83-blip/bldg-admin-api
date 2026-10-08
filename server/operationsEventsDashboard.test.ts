@@ -290,8 +290,8 @@ describe("operations events dashboard helpers", () => {
     const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
     const chargeStart = source.indexOf("chargeCard:");
     const stripeCreate = source.indexOf("paymentIntent = await stripe.paymentIntents.create", chargeStart);
-    const paidUpdate = source.indexOf("paid: true", stripeCreate);
-    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(input.orderId", paidUpdate);
+    const paidUpdate = source.indexOf("await admitNativeStripePayment", stripeCreate);
+    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(", paidUpdate);
     const receipt = source.indexOf("const receiptToken = await new jose.SignJWT", paidUpdate);
     const sms = source.indexOf("await notifyCardCharged", paidUpdate);
     const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)", paidUpdate);
@@ -312,8 +312,8 @@ describe("operations events dashboard helpers", () => {
   it("repair script updates paid order truth and ensures an operations event", () => {
     const source = readFileSync(new URL("../scripts/repair-stripe-paid-order.ts", import.meta.url), "utf8");
     expect(source).toContain("paymentIntent.status !== \"succeeded\"");
-    expect(source).toContain("paid: true");
-    expect(source).toContain("stripePaymentIntentId: paymentIntent.id");
+    expect(source).toContain("await admitNativeStripePayment");
+    expect(source).toContain("paymentIntentId: paymentIntent.id");
     expect(source).toContain("total: centsToDollars(paymentIntent.amount)");
     expect(source).toContain("ensurePickupCompletedOperationsEventForOrder(orderId");
   });

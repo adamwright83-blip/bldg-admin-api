@@ -60,3 +60,7 @@ is preserved; it is not authorization to assign missing historical tenants.
 - Real MySQL 8.0: 7 integration tests passed, including 8 simultaneous resident creates and 12 simultaneous pickup/delivery requests.
 - Existing fast-contracts targets: 1,295 passed; three `server/claire/turn/decisionRecord.test.ts` failures reproduce identically on untouched starting main (1,295 passed, same three failed). No unrelated repair.
 - Clean production migration runner and separate clean numbered release migrations both completed. Router integration uses the release schema; production boot intentionally omits historical release-only tables.
+
+## Final Program A certification checkpoint
+
+Program A is certified by the current-source [Program D report](./PROGRAM_D_CERTIFICATION.md). Later C12/C15/C16/C17 tightened delivery admission, provider capture ownership, prior-payment enrollment and unresolved historical tenant handling. The original A5 note preserving legacy tenant preparation is superseded by C17: historical NULL ownership is held, not defaulted. Current quote fields never establish historical captured dollars.
