@@ -93,3 +93,24 @@ one event, and replay/current-state changes preserve that event without inventin
 an amount. Four receipt unit tests, geography/reader guards, both Payment projection
 MySQL tests, typecheck, nomenclature, tenant ratchet, and vertical dependency checks
 pass. Starting main: bd124b461a65480995d00b9453b02610a4a5579e.
+
+## B5: Tower Wars consumes admitted economic facts
+
+Tower Wars previously selected native/modern CleanCloud payment rows itself and
+marked processor references/raw paid flags as authoritative, using mutable native
+prices as dollars. Its Reality Bridge adapter now consumes `loadPaidOrderLedger`:
+matching Payment/External observation receipts and durable native capture amounts
+are required before an economic candidate exists. Native Payment and external
+CleanCloud sources retain distinct provenance. Saved game state does not supply
+business facts. Event keys, source lineage and existing compiler/attack rules remain.
+
+MySQL proves a raw paid flag produces no candidate, admission without capture still
+produces no dollars, reconciliation enables the $42 candidate, a subsequent $150
+order-price edit does not alter it, repeat projection is stable, and another tenant
+cannot read it. Existing Tower Wars compiler/day-director/settlement/impact tests are
+run. No game art, unlock mechanics, new rewards or currencies are introduced.
+
+B5 validation note: the two `towerWarsDayDirector` actor-identity unit tests also
+fail unchanged on exact starting main 7209fc50ab7876e878e58ca9d3300831c978258d
+(empty commitment result / commitment not found). These are outside the economic
+reader change and are retained as proven baseline failures.
