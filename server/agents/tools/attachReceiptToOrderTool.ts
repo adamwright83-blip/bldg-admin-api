@@ -1,4 +1,5 @@
-import { getOrderById, updateOrderIntake } from "../../db";
+import { getOrderById } from "../../db";
+import { reviseNativeOrder } from "../../orders/orderLifecycleService";
 import type { AgentTool } from "../toolRegistry";
 
 export const attachReceiptToOrderTool: AgentTool<Record<string, any>> = {
@@ -23,7 +24,7 @@ export const attachReceiptToOrderTool: AgentTool<Record<string, any>> = {
       uploadedAt: new Date().toISOString(),
       parsedLineItems: input.parsedLineItems ?? null,
     };
-    await updateOrderIntake(orderId, {
+    await reviseNativeOrder(orderId, {
       drycleanItemsJson: { ...existing, receipt },
       status: order.status === "new" ? "intake-pending" : order.status,
     });

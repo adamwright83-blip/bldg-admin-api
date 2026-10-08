@@ -1,3 +1,4 @@
+import { attributeNativeOrderToBuilding } from "../server/orders/orderLifecycleService";
 /**
  * Backfill orders.buildingSlug from normalized address via matchBuilding().
  *
@@ -13,7 +14,6 @@ import { normalizeOrderAddress } from "../server/orderLocation";
 import {
   countOrdersMissingBuildingSlug,
   listOrdersMissingBuildingSlugBatch,
-  updateOrderBuildingSlug,
 } from "../server/db";
 
 const BATCH = 100;
@@ -61,7 +61,7 @@ async function main() {
         continue;
       }
 
-      await updateOrderBuildingSlug(row.id, hit.slug);
+      await attributeNativeOrderToBuilding(row.id, hit.slug);
       updated++;
     }
   }

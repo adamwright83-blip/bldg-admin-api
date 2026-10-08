@@ -1,4 +1,5 @@
-import { getOrderById, updateOrderIntake } from "../../db";
+import { getOrderById } from "../../db";
+import { reviseNativeOrder } from "../../orders/orderLifecycleService";
 import type { AgentTool } from "../toolRegistry";
 
 export const completeDryCleaningIntakeTool: AgentTool<Record<string, any>> = {
@@ -28,13 +29,12 @@ export const completeDryCleaningIntakeTool: AgentTool<Record<string, any>> = {
       intakeCompletedAt: new Date().toISOString(),
       chargeRequiresApproval: true,
     };
-    await updateOrderIntake(orderId, {
+    await reviseNativeOrder(orderId, {
       garmentCount: Array.isArray(input.lineItems) ? input.lineItems.length : null,
       drycleanItemsJson,
       subtotal: (customerChargeCents / 100).toFixed(2),
       total: (customerChargeCents / 100).toFixed(2),
       status: "collected",
-      paid: false,
     });
 
     return {

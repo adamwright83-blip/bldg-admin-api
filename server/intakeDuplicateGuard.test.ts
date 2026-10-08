@@ -5,7 +5,7 @@ describe("resident intake duplicate guard", () => {
   it("routes resident intake through the canonical idempotent create helper", () => {
     const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
 
-    expect(source).toContain("createOrReuseResidentLaundryOrder(orderValues");
+    expect(source).toContain("createOrReuseResidentOrder(orderValues");
     expect(source).not.toContain("const orderId = await createOrder(orderValues)");
     expect(source).toContain("duplicate: true");
   });
@@ -38,10 +38,9 @@ describe("resident intake duplicate guard", () => {
   it("blocks unpaid delivery status updates at the shared backend mutation", () => {
     const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 
-    expect(source).toContain('input.status === "delivered" && !order.paid');
-    expect(source).toContain("Charge the order before marking it delivered.");
-    expect(source.indexOf('input.status === "delivered" && !order.paid')).toBeLessThan(
-      source.indexOf("await updateOrderStatus(input.orderId, input.status")
-    );
+    expect(source).toContain("await transitionNativeOrderStatus({");
+    const authority = readFileSync(new URL("./orders/orderLifecycleService.ts", import.meta.url), "utf8");
+    expect(authority).toContain("if (!order.paid)");
+    expect(authority).toContain("Charge the order before marking it delivered.");
   });
 });

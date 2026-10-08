@@ -7,6 +7,7 @@ const db = vi.hoisted(() => ({
   updateOrderStatus: vi.fn(),
   attemptOrderPickupCollection: vi.fn(),
   getDb: vi.fn(),
+  updateOrderIntake: vi.fn(),
 }));
 
 vi.mock("../db", () => ({
@@ -16,9 +17,11 @@ vi.mock("../db", () => ({
   updateOrderStatus: db.updateOrderStatus,
   attemptOrderPickupCollection: db.attemptOrderPickupCollection,
   getDb: db.getDb,
+  updateOrderIntake: db.updateOrderIntake,
 }));
 
 import {
+  reviseNativeOrder,
   createNativeOrder,
   createOrReuseResidentOrder,
   transitionNativeOrderStatus,
@@ -29,6 +32,39 @@ import {
 describe("orderLifecycleService canonical authority", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("rejects paid-state or tenant changes in revisions before persistence", async () => {
+    for (const patch of [
+      { paid: true },
+      { paid: false },
+      { paidAt: new Date() },
+      { tenantId: "other" },
+    ]) {
+      await expect(reviseNativeOrder(10, patch as never)).rejects.toThrow(
+        /authority/
+      );
+    }
+    expect(db.updateOrderIntake).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a stale pickup completed when its CAS did not transition", async () => {
+    db.getOrderById.mockResolvedValue({
+      id: 10,
+      tenantId: "tenant-a",
+      status: "new",
+    });
+    db.attemptOrderPickupCollection.mockResolvedValue({
+      transitioned: false,
+      order: { id: 10, tenantId: "tenant-a", status: "cancelled" },
+    });
+    await expect(
+      transitionNativeOrderStatus({
+        orderId: 10,
+        tenantId: "tenant-a",
+        status: "collected",
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   describe("createNativeOrder", () => {
@@ -206,7 +242,10 @@ describe("orderLifecycleService canonical authority", () => {
       expect(res.success).toBe(true);
       expect(res.alreadyCompleted).toBe(false);
       expect(res.order.status).toBe("collected");
-      expect(db.attemptOrderPickupCollection).toHaveBeenCalledWith(10);
+      expect(db.attemptOrderPickupCollection).toHaveBeenCalledWith(
+        10,
+        "tenant-a"
+      );
     });
 
     it("handles idempotent replay of pickup", async () => {

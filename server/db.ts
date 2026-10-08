@@ -1,3 +1,4 @@
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "./mysqlErrors";
 import {
   and,
   asc,
@@ -380,20 +381,6 @@ async function findOpenResidentLaundryOrderLoose(
       normalizeDuplicateText(candidate.buildingSlug || candidate.address)
     );
   });
-}
-
-/** True for a MySQL duplicate-key violation (ER_DUP_ENTRY / errno 1062). */
-function isDuplicateKeyError(err: unknown): boolean {
-  const e = err as
-    | { code?: string; errno?: number; message?: string }
-    | null
-    | undefined;
-  if (!e) return false;
-  return (
-    e.code === "ER_DUP_ENTRY" ||
-    e.errno === 1062 ||
-    /duplicate entry/i.test(e.message ?? "")
-  );
 }
 
 export function residentOrderReuseMatchesAuthority(
@@ -1005,7 +992,8 @@ export async function getOrdersByDateAndStatus(
  * which routers.ts uses to skip re-sending the pickup SMS.
  */
 export async function attemptOrderPickupCollection(
-  orderId: number
+  orderId: number,
+  expectedTenantId?: string | null
 ): Promise<{ transitioned: boolean; order: Order | undefined }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1016,7 +1004,10 @@ export async function attemptOrderPickupCollection(
     .where(
       and(
         eq(orders.id, orderId),
-        inArray(orders.status, ["new", "intake-pending"])
+        inArray(orders.status, ["new", "intake-pending"]),
+        expectedTenantId !== undefined
+          ? sql`${orders.tenantId} <=> ${expectedTenantId}`
+          : undefined
       )
     );
   const affectedRows = Number(
@@ -1385,17 +1376,12 @@ export async function updateOrderIntake(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  let patch: Partial<InsertOrder> = { ...data };
-  if (data.paid === true && data.paidAt === undefined) {
-    const [existing] = await db
-      .select({ paid: orders.paid, paidAt: orders.paidAt })
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .limit(1);
-    if (existing && !existing.paid) {
-      patch = { ...patch, paidAt: new Date() };
-    }
+  // Payment admission owns all paid-state writes. This helper persists only
+  // Orders revisions; reject accidental payment mutation even through a cast.
+  if ("paid" in data || "paidAt" in data || "stripePaymentIntentId" in data) {
+    throw new Error("Native payment state requires Payment admission authority");
   }
+  const patch = { ...data };
 
   await db.update(orders).set(patch).where(eq(orders.id, orderId));
 }

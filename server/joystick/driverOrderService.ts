@@ -1,3 +1,7 @@
+import {
+  transitionNativeOrderStatus,
+  OrderTransitionError,
+} from "../orders/orderLifecycleService";
 import { NOT_ADMIN_ERR_MSG } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import type { Order } from "../../drizzle/schema";
@@ -9,11 +13,8 @@ import {
   getDriverOrderForTenant,
   listDriverOrdersByDate,
   listDriverOrdersByStatus,
-  transitionDriverOrder,
 } from "./driverOrderStore";
-import {
-  orderVisibleToTenant,
-} from "./driverOrderTenant";
+import { orderVisibleToTenant } from "./driverOrderTenant";
 
 const LIST_STATUSES = [
   "new",
@@ -26,13 +27,6 @@ const LIST_STATUSES = [
 
 export type DriverOrderListStatus = (typeof LIST_STATUSES)[number];
 export type DriverOrderUpdateStatus = "collected" | "delivered";
-
-const COLLECTED_DOWNSTREAM: Order["status"][] = [
-  "collected",
-  "processing",
-  "ready",
-  "delivered",
-];
 
 export function requireDriverSessionTenant(tenantId: string): string {
   const trimmed = tenantId.trim();
@@ -47,7 +41,8 @@ function visibleRows<T extends { tenantId?: string | null; status: string }>(
   input: { tenantId: string; status: string }
 ): T[] {
   return (rows ?? []).filter(
-    row => row.status === input.status && orderVisibleToTenant(row, input.tenantId)
+    row =>
+      row.status === input.status && orderVisibleToTenant(row, input.tenantId)
   );
 }
 
@@ -71,7 +66,8 @@ export async function listDriverOrdersByDateForMember(input: {
 }): Promise<Order[]> {
   const tenantId = requireDriverSessionTenant(input.tenantId);
   const rows = await listDriverOrdersByDate({ ...input, tenantId });
-  const column = input.dateField === "deliveryDate" ? "deliveryDate" : "pickupDate";
+  const column =
+    input.dateField === "deliveryDate" ? "deliveryDate" : "pickupDate";
   return visibleRows(rows, { tenantId, status: input.status }).filter(
     row => row[column] === input.date
   );
@@ -93,70 +89,49 @@ export async function updateDriverOrderStatusForMember(input: {
     throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
   }
 
-  if (input.status === "collected") {
-    if (order.status !== "new" && order.status !== "intake-pending") {
-      if (COLLECTED_DOWNSTREAM.includes(order.status)) {
-        return { success: true, alreadyCompleted: true };
-      }
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "This order cannot be collected.",
-      });
-    }
-    const { changed } = await transitionDriverOrder({
-      tenantId,
-      orderId: input.orderId,
-      from: ["new", "intake-pending"],
-      to: "collected",
-    });
-    if (!changed) {
-      const current = await getDriverOrderForTenant({
-        tenantId,
-        orderId: input.orderId,
-      });
-      if (
-        current &&
-        orderVisibleToTenant(current, tenantId) &&
-        COLLECTED_DOWNSTREAM.includes(current.status)
-      ) {
-        return { success: true, alreadyCompleted: true };
-      }
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: "Order could not be collected.",
-      });
-    }
-    await recordDriverOrderCollected({
-      tenantId,
-      order,
-      actorUserId: input.actorUserId,
-      actorDisplayName: input.actorDisplayName,
-    });
-    return { success: true, alreadyCompleted: false };
-  }
-
-  if (!order.paid) {
+  if (input.status !== "collected" && input.status !== "delivered") {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Charge the order before marking it delivered.",
+      message: "Unsupported Driver status",
     });
   }
-  if (order.status === "delivered") {
-    return { success: true, alreadyCompleted: true };
+  try {
+    const result = await transitionNativeOrderStatus({
+      tenantId,
+      orderId: input.orderId,
+      status: input.status,
+      actor: {
+        source: "driver_app_bldg",
+        actorUserId: input.actorUserId,
+        actorDisplayName: input.actorDisplayName,
+      },
+    });
+    if (!result.alreadyCompleted) {
+      const effect =
+        input.status === "collected"
+          ? recordDriverOrderCollected
+          : recordDriverOrderDelivered;
+      await effect({
+        tenantId,
+        order,
+        actorUserId: input.actorUserId,
+        actorDisplayName: input.actorDisplayName,
+      });
+    }
+    return { success: true, alreadyCompleted: result.alreadyCompleted };
+  } catch (error) {
+    if (error instanceof OrderTransitionError) {
+      throw new TRPCError({
+        code:
+          error.code === "CONFLICT"
+            ? "CONFLICT"
+            : error.code === "NOT_FOUND" || error.code === "UNAUTHORIZED"
+              ? "NOT_FOUND"
+              : "BAD_REQUEST",
+        message:
+          error.code === "UNAUTHORIZED" ? "Order not found" : error.message,
+      });
+    }
+    throw error;
   }
-  const { changed } = await transitionDriverOrder({
-    tenantId,
-    orderId: input.orderId,
-    to: "delivered",
-  });
-  if (!changed) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
-  }
-  await recordDriverOrderDelivered({
-    tenantId,
-    order,
-    actorUserId: input.actorUserId,
-    actorDisplayName: input.actorDisplayName,
-  });
-  return { success: true };
 }

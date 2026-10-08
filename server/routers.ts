@@ -38,6 +38,12 @@ import { TRPCError } from "@trpc/server";
 import { isPlatformAdministrator } from "./joystick/tenantIdentity";
 import {
   createNativeOrder,
+  reviseNativeOrder,
+  attachNativeOrderPaymentMethod,
+  attributeNativeCustomerOrdersToBuilding,
+  assignNativeOrderVendor,
+  deleteNativeOrder,
+
   transitionNativeOrderStatus,
   OrderTransitionError,
 } from "./orders/orderLifecycleService";
@@ -48,18 +54,13 @@ import {
 } from "./orders/orderOwnership";
 import {
   findResidentOrderByClientRequestId,
-  updateOrderStripe,
   getOrderById,
   getOrdersByStatus,
   getOrdersByDateAndStatus,
-  updateOrderBuildingSlugForCustomer,
-  updateOrderIntake,
   searchCustomerByPhone,
   searchOrdersForReceipt,
   hasCustomerPaidBefore,
   findStripeCardByPhone,
-  deleteOrder,
-  updateOrderVendor,
   createVendor,
   getVendorById,
   listVendors,
@@ -648,7 +649,7 @@ export const appRouter = router({
           metadata: { orderId: input.orderId.toString() },
         });
 
-        await updateOrderStripe(input.orderId, customer.id, "");
+        await attachNativeOrderPaymentMethod(input.orderId, customer.id, "");
 
         return {
           clientSecret: setupIntent.client_secret!,
@@ -678,7 +679,7 @@ export const appRouter = router({
           });
         }
 
-        await updateOrderStripe(
+        await attachNativeOrderPaymentMethod(
           input.orderId,
           input.stripeCustomerId,
           input.stripePaymentMethodId
@@ -1660,7 +1661,7 @@ export const appRouter = router({
         );
         let orderRevised = false;
         if (patch && item.orderId != null) {
-          await updateOrderIntake(item.orderId, patch);
+          await reviseNativeOrder(item.orderId, patch);
           orderRevised = true;
           console.log(
             `[ResidentFollowup] order #${item.orderId} revised: ${JSON.stringify(patch)}`
@@ -2988,7 +2989,7 @@ export const appRouter = router({
         assertPlatformOrVendorOrderAuthority(ctx, order, {
           vendorAllowUnassigned: false,
         });
-        await updateOrderIntake(input.orderId, {
+        await reviseNativeOrder(input.orderId, {
           status: "ready",
           bagCount: input.bagCount,
           garmentCount: input.garmentCount ?? null,
@@ -3031,7 +3032,7 @@ export const appRouter = router({
           });
         }
 
-        const updatedCount = await updateOrderBuildingSlugForCustomer({
+        const updatedCount = await attributeNativeCustomerOrdersToBuilding({
           phone: input.phone,
           buildingSlug: building.slug,
           scope: input.scope,
@@ -3068,7 +3069,7 @@ export const appRouter = router({
         assertPlatformOrVendorOrderAuthority(ctx, order, {
           vendorAllowUnassigned: false,
         });
-        await updateOrderIntake(input.orderId, {
+        await reviseNativeOrder(input.orderId, {
           weightLbs: input.weightLbs?.toString() ?? null,
           subtotal: input.subtotal,
           discountPercent: input.discountPercent,
@@ -3112,7 +3113,7 @@ export const appRouter = router({
             ) {
               paymentMethodId = customer.invoice_settings
                 .default_payment_method as string;
-              await updateOrderStripe(
+              await attachNativeOrderPaymentMethod(
                 input.orderId,
                 customerId,
                 paymentMethodId
@@ -3133,7 +3134,7 @@ export const appRouter = router({
             customerId = cardFromPhone.stripeCustomerId;
             paymentMethodId = cardFromPhone.stripePaymentMethodId;
             // Persist the Stripe IDs on this order so future lookups are instant
-            await updateOrderStripe(input.orderId, customerId, paymentMethodId);
+            await attachNativeOrderPaymentMethod(input.orderId, customerId, paymentMethodId);
           }
         }
 
@@ -3181,7 +3182,7 @@ export const appRouter = router({
             });
           }
           if (!order.vendorId) {
-            await updateOrderVendor(input.orderId, vendor.id);
+            await assignNativeOrderVendor(input.orderId, vendor.id);
           }
 
           const vendorAccountId = vendor.stripeConnectAccountId;
@@ -3322,7 +3323,7 @@ export const appRouter = router({
               .sign(sharedSecret);
 
             receiptUrl = `https://app.bldg.chat/receipt/${receiptToken}`;
-            await updateOrderIntake(input.orderId, { portalJwt: receiptUrl });
+            await reviseNativeOrder(input.orderId, { portalJwt: receiptUrl });
           } catch (err) {
             console.warn(
               "[Receipt] Failed to generate receipt after successful charge:",
@@ -3618,7 +3619,7 @@ export const appRouter = router({
             reason: "Order deleted by an authorized operator",
           });
         }
-        await deleteOrder(input.orderId);
+        await deleteNativeOrder(input.orderId);
         return { success: true };
       }),
 
@@ -3786,7 +3787,7 @@ export const appRouter = router({
               status: "collected",
             }));
 
-          await updateOrderIntake(orderId, {
+          await reviseNativeOrder(orderId, {
             ...(existingOrderId ? { specialInstructions } : {}),
             weightLbs: null,
             subtotal: centsToDollars(math.laundryButlerRetailSubtotalCents),
@@ -3885,7 +3886,7 @@ export const appRouter = router({
     updateOrderVendor: protectedProcedure
       .input(z.object({ orderId: z.number(), vendorId: z.number().nullable() }))
       .mutation(async ({ input }) => {
-        await updateOrderVendor(input.orderId, input.vendorId);
+        await assignNativeOrderVendor(input.orderId, input.vendorId);
         return { success: true };
       }),
 
