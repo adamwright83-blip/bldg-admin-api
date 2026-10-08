@@ -31,8 +31,8 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/domains/orders/`, `server/residentIntake.ts`, `server/joystick/driverOrder*` |
 | **Payment** | Native payment admission, durable Stripe capture evidence, receipt verification, and canonical revenue reads. | `server/domains/payment/`, `server/analytics/canonicalRevenue.ts` |
 | **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/domains/commercial/`, `server/commercialMissions/`, `server/commercialProposals/` |
-| **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/joystick/tenantIdentity.ts`, `server/saas/` |
-| **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/actionExecutionGate.ts`, `server/platform/authority/authorityReceipt.ts`, `server/durableExecution/` |
+| **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/platform/tenancy/`, `server/saas/` |
+| **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/`, `server/platform/execution/` |
 | **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/cleancloudBrowserSync/`, `server/twilioPlatform/` |
 | **Claire** | Operator-facing conversational intelligence, chief-of-staff briefing, call handling, and prompt generation. | `server/claire/` |
 | **Daphne** | Operator preference learning, explicit correction ledger, causal model, and consent evidence. | `server/daphne/` |
@@ -56,7 +56,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Captured Dollars** | Payment | Durable Stripe `amount_received` + receipt persistence | `server/domains/payment/nativePaymentReadService.ts`, `loadPaidOrderLedger` | Financial summaries, Tower Wars bank, True PnL | Mutable order price (`orders.total`), intake quotes |
 | **Commercial Conversion** | Commercial | `server/domains/commercial/commercialPipelineService.ts` (`won` status) | `server/domains/commercial/commercialAccountReadService.ts`, `commercialFollowUpReadService.ts` | Day Line, Claire briefing, Lantern City unlocks | Payment, Orders, Game actions |
 | **CleanCloud Evidence** | CleanCloud Integration | `assimilateCustomerTruth.ts`, `cleancloudPaidEvidence.ts` | `cleancloudPaidOrders.ts` | Order correlation, External reconciliation | Native Payment, Native Orders |
-| **Tenant Identity** | Platform Tenancy | Explicit tenant resolver (`tenantIdentity.ts`) | `requireTenantId`, `getTenantScope` | All domain services | `COALESCE(..., 'default')` fallbacks |
+| **Tenant Identity** | Platform Tenancy | Explicit tenant resolver (`server/platform/tenancy/tenantIdentity.ts`) | `requireTenantId`, `getTenantScope` | All domain services | `COALESCE(..., 'default')` fallbacks |
 | **Operator Preferences** | Daphne | `explicitPreferenceCorrection.ts` | `claireAdapter.ts`, `operatorCard.ts` | Claire prompt assembler | Direct unconsented profile edits |
 | **Mission Ranking** | Mission Director | `missionDirectorService.ts`, `rankRankableWork` | `missionDirectorRouter.ts` | Day Line, Operator briefing | Persistent Operator, Claire, Experience |
 
@@ -104,7 +104,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Mitch game producer logic | `server/mitch/` | Managed directly by Adam; do not conflate with shared builder tools. |
 | Lantern City visual map & building display | `server/lanternCity/`, `server/goldlineWorld/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |
 | Tower Wars gameplay mechanics | `server/towerWars/` | Consumes admitted payment evidence; cannot admit payments. |
-| Action execution, retry, or worker leasing | `server/platform/authority/actionExecutionGate.ts`, `server/durableExecution/` | Workers orchestrate domain commands; they do not invent business policy. |
+| Action execution, retry, or worker leasing | `server/platform/execution/worker.ts`, `server/platform/authority/actionExecutionGate.ts` | Workers orchestrate domain commands; they do not invent business policy. |
 
 ---
 

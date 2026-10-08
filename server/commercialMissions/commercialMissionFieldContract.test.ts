@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
+import { sharedPasswordLoginSelection } from "../platform/tenancy/tenantIdentity";
 
 const migration = readFileSync(
   new URL("../../drizzle/0038_commercial_mission_field.sql", import.meta.url),

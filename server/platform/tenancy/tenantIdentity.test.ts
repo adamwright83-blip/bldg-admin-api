@@ -2,12 +2,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { Request } from "express";
-import { getSessionCookieOptions } from "../_core/cookies";
-import { createContext } from "../_core/context";
-import { sdk } from "../_core/sdk";
-import { claireRouter } from "../claire/claireRouter";
-import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
-import { resolveLegacyDayforgeMembership } from "../saas/tenantAccess";
+import { getSessionCookieOptions } from "../../_core/cookies";
+import { createContext } from "../../_core/context";
+import { sdk } from "../../_core/sdk";
+import { claireRouter } from "../../claire/claireRouter";
+import { claireRelationshipOffboardingRouter } from "../../claire/relationshipOffboardingRouter";
+import { resolveLegacyDayforgeMembership } from "../../saas/tenantAccess";
 import {
   authorizeJoystickClaireDesk,
   claireOperatorScope,
@@ -17,7 +17,7 @@ import {
   tenantForAuthenticatedUser,
 } from "./tenantIdentity";
 
-vi.mock("../_core/sdk", () => ({
+vi.mock("../../_core/sdk", () => ({
   sdk: {
     authenticateRequest: vi.fn(),
     authenticateSessionToken: vi.fn(),
@@ -244,23 +244,23 @@ describe("JOYSTICK tenant identity", () => {
 
   it("wires Driver to membership login and isolates the legacy password route", () => {
     const driver = readFileSync(
-      new URL("../../client/src/pages/Driver.tsx", import.meta.url),
+      new URL("../../../client/src/pages/Driver.tsx", import.meta.url),
       "utf8"
     );
     const login = readFileSync(
-      new URL("../../client/src/components/LoginForm.tsx", import.meta.url),
+      new URL("../../../client/src/components/LoginForm.tsx", import.meta.url),
       "utf8"
     );
     const app = readFileSync(
-      new URL("../../client/src/App.tsx", import.meta.url),
+      new URL("../../../client/src/App.tsx", import.meta.url),
       "utf8"
     );
     const dayforge = readFileSync(
-      new URL("../../client/src/pages/LegacyDayforgeLoginPage.tsx", import.meta.url),
+      new URL("../../../client/src/pages/LegacyDayforgeLoginPage.tsx", import.meta.url),
       "utf8"
     );
     const claire = readFileSync(
-      new URL("../claire/claireRouter.ts", import.meta.url),
+      new URL("../../claire/claireRouter.ts", import.meta.url),
       "utf8"
     );
     expect(driver).toContain('mode="membership"');

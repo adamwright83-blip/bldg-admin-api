@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
-import { isLegacySharedPasswordOpenId } from "./tenantIdentity";
+import { isLegacySharedPasswordOpenId } from "../platform/tenancy/tenantIdentity";
 import {
   listDriverOrdersByDateForMember,
   listDriverOrdersByStatusForMember,

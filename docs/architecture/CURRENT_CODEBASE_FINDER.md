@@ -33,11 +33,11 @@ Code wins if this file becomes stale.
 | Goldline world | `server/goldlineWorld/` |
 | Lantern City server reads | `server/lanternCity/` |
 | Live Lantern City client default | `client/src/components/admin/control-room/LanternCityIslands/` |
-| SaaS tenancy | `server/saas/`, `server/joystick/tenantIdentity.ts` |
+| SaaS tenancy | `server/saas/`, `server/platform/tenancy/tenantIdentity.ts` |
 | HELD procurement | `server/procurement/` |
 | President | `server/president/` |
 | Mitch | `server/mitch/` |
-| Shared durable worker | `server/durableExecution/worker.ts` |
+| Shared durable worker | `server/platform/execution/worker.ts` |
 | Production migration bootstrap | `scripts/migrate.mjs` |
 | Existing architecture checks | `scripts/check-*.mjs`, `.github/workflows/` |
 

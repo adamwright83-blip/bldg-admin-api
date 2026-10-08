@@ -16,7 +16,7 @@ import {
   authorizeJoystickClaireDesk,
   isGoldlineDemoOpenId,
   isPlatformAdministrator,
-} from "../joystick/tenantIdentity";
+} from "../platform/tenancy/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";

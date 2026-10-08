@@ -3,7 +3,7 @@ import {
   isLegacyDayforgeTenant,
   resolveLegacyDayforgeMembership,
   roleAllows,
-} from "../saas/tenantAccess";
+} from "../../saas/tenantAccess";
 
 /**
  * Host-only session cookies stay host-only. Admin and Driver each sign in

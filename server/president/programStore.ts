@@ -1,7 +1,7 @@
 import { canonicalJson } from "./canonicalJson";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
-import type { DurableExecutionStore } from "../durableExecution/worker";
+import type { DurableExecutionStore } from "../platform/execution/worker";
 import {
   presidentAuthorityPolicySchema,
   presidentExecutionHandbackSchema,
