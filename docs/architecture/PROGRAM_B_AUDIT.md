@@ -63,3 +63,17 @@ Read-only architecture guards pin the owning boundary.
 Proven pre-existing focused failures on slice starting main `464a44f5`:
 `gumballCustomerTruth` digest expectation and `moneyProjectionService`'s missing-proof
 fixture. They are outside the changed business logic and are not repaired here.
+
+## Slice B3: Commercial owns world/progression fact reads
+
+Driver world and progression previously selected mission/pipeline/account/visit/
+follow-up facts inside game services. A narrow Commercial-owned SELECT-only reader
+now supplies those facts with explicit tenant/actor fences. Saved game nodes are
+read separately and cannot enter the Commercial fact query. Game code retains
+only visual composition and its own compact state. Armory/scout joins to missions
+remain correlation/actor-admission filters for those source records, not independent
+Commercial outcome interpretation.
+
+Real MySQL proves actor and tenant isolation, repeated projection stability, and
+that a saved `captured` game node cannot override a real Commercial `follow_up`.
+No new win/payment/customer/order, no new reward, and no game UX changes.

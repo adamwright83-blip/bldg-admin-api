@@ -1,24 +1,14 @@
+import { readCommercialWorldFactsForActor } from "../commercialMissions/commercialWorldReadService";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
-import {
-  commercialAccountLocations,
-  commercialAccounts,
-  commercialFollowUps,
-  commercialMissionEvents,
-  commercialMissions,
-  commercialPipelineRecords,
-  driverGameWorldNodes,
-} from "../../drizzle/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { driverGameWorldNodes } from "../../drizzle/schema";
 import {
   unresolvedEchoForVisit,
   visualStateForBusinessStatus,
   type DriverGameWorldNode,
 } from "../../shared/driverGameWorld";
 import type { CommercialMissionStatus } from "../../shared/commercialMission";
-import {
-  PARKING_LOT_CLERK_EVENT_NAME,
-  PARKING_LOT_CLERK_PROVENANCE,
-} from "../../shared/commercialMissionField";
+import { PARKING_LOT_CLERK_PROVENANCE } from "../../shared/commercialMissionField";
 import { getDb } from "../db";
 
 let tableReady: Promise<void> | null = null;
@@ -28,7 +18,8 @@ async function ensureDriverGameWorldTable() {
   tableReady = (async () => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS driver_game_world_nodes (
+    await db.execute(
+      sql.raw(`CREATE TABLE IF NOT EXISTS driver_game_world_nodes (
       id varchar(36) NOT NULL PRIMARY KEY, tenantId varchar(64) NOT NULL, actorId varchar(128) NOT NULL,
       missionId int NOT NULL, entityType varchar(64) NOT NULL DEFAULT 'commercial_mission', entityId varchar(191) NOT NULL,
       locationId int NULL, visualState enum('available','approaching','active','captured','contested','recovery_available','recovery_active','watching','closed') NOT NULL,
@@ -38,7 +29,8 @@ async function ensureDriverGameWorldTable() {
       updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_driver_game_world_actor_mission (tenantId,actorId,missionId),
       KEY idx_driver_game_world_tenant_actor_state (tenantId,actorId,visualState,updatedAt)
-    )`));
+    )`)
+    );
   })().catch(error => {
     tableReady = null;
     throw error;
@@ -53,86 +45,31 @@ export async function listDriverGameWorld(input: {
   await ensureDriverGameWorldTable();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const rows = await db
-    .select({
-      missionId: commercialMissions.id,
-      missionStatus: commercialMissions.status,
-      missionCompletedAt: commercialMissions.completedAt,
-      accountId: commercialAccounts.id,
-      accountName: commercialAccounts.name,
-      locationId: commercialAccountLocations.id,
-      pipelineStage: commercialPipelineRecords.stage,
-      approvedContractValueCents:
-        commercialPipelineRecords.approvedContractValueCents,
-      realizedRevenueCents: commercialPipelineRecords.realizedRevenueCents,
-      lossReason: commercialPipelineRecords.lossReason,
-      followUpDue: commercialFollowUps.dueAt,
-      savedVisualState: driverGameWorldNodes.visualState,
-      savedWorldAnchor: driverGameWorldNodes.worldAnchor,
-      savedUnlockedPath: driverGameWorldNodes.unlockedPath,
-      savedDiscoveryState: driverGameWorldNodes.discoveryState,
-      savedVersion: driverGameWorldNodes.version,
-      savedResolvedAt: driverGameWorldNodes.lastResolvedAt,
-      clerkActorId: commercialMissionEvents.actorId,
-      clerkCreatedAt: commercialMissionEvents.createdAt,
-    })
-    .from(commercialMissions)
-    .innerJoin(
-      commercialPipelineRecords,
-      and(
-        eq(commercialPipelineRecords.tenantId, commercialMissions.tenantId),
-        eq(commercialPipelineRecords.missionId, commercialMissions.id)
-      )
-    )
-    .innerJoin(
-      commercialAccounts,
-      and(
-        eq(commercialAccounts.tenantId, commercialMissions.tenantId),
-        eq(commercialAccounts.id, commercialPipelineRecords.accountId)
-      )
-    )
-    .leftJoin(
-      commercialAccountLocations,
-      and(
-        eq(commercialAccountLocations.tenantId, commercialMissions.tenantId),
-        eq(
-          commercialAccountLocations.accountId,
-          commercialPipelineRecords.accountId
-        ),
-        eq(commercialAccountLocations.isPrimary, true)
-      )
-    )
-    .leftJoin(
-      commercialFollowUps,
-      and(
-        eq(commercialFollowUps.tenantId, commercialMissions.tenantId),
-        eq(commercialFollowUps.missionId, commercialMissions.id),
-        eq(commercialFollowUps.status, "open")
-      )
-    )
-    .leftJoin(
-      commercialMissionEvents,
-      and(
-        eq(commercialMissionEvents.tenantId, commercialMissions.tenantId),
-        eq(commercialMissionEvents.missionId, commercialMissions.id),
-        eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
-      )
-    )
-    .leftJoin(
-      driverGameWorldNodes,
-      and(
-        eq(driverGameWorldNodes.tenantId, commercialMissions.tenantId),
-        eq(driverGameWorldNodes.actorId, input.actorId),
-        eq(driverGameWorldNodes.missionId, commercialMissions.id)
-      )
-    )
-    .where(
-      and(
-        eq(commercialMissions.tenantId, input.tenantId),
-        eq(commercialMissions.assignedTo, input.actorId)
-      )
-    )
-    .orderBy(asc(commercialFollowUps.dueAt));
+  const [businessRows, savedRows] = await Promise.all([
+    readCommercialWorldFactsForActor(input),
+    db
+      .select()
+      .from(driverGameWorldNodes)
+      .where(
+        and(
+          eq(driverGameWorldNodes.tenantId, input.tenantId),
+          eq(driverGameWorldNodes.actorId, input.actorId)
+        )
+      ),
+  ]);
+  const savedByMission = new Map(savedRows.map(row => [row.missionId, row]));
+  const rows = businessRows.map(row => {
+    const saved = savedByMission.get(row.missionId);
+    return {
+      ...row,
+      savedVisualState: saved?.visualState ?? null,
+      savedWorldAnchor: saved?.worldAnchor ?? null,
+      savedUnlockedPath: saved?.unlockedPath ?? null,
+      savedDiscoveryState: saved?.discoveryState ?? null,
+      savedVersion: saved?.version ?? null,
+      savedResolvedAt: saved?.lastResolvedAt ?? null,
+    };
+  });
 
   const byMission = new Map<number, DriverGameWorldNode>();
   for (const row of rows) {
@@ -210,7 +147,8 @@ export async function beginDriverRekindle(input: {
   if (!db) throw new Error("Database not available");
   const world = await listDriverGameWorld(input);
   const node = world.find(item => item.missionId === input.missionId);
-  if (!node) throw new Error("Commercial mission not found in this field world");
+  if (!node)
+    throw new Error("Commercial mission not found in this field world");
   if (node.missionStatus === "lost") {
     throw new Error("Closed opportunities cannot enter recovery");
   }
