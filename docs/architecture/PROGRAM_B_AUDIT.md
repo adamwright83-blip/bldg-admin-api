@@ -114,3 +114,6 @@ B5 validation note: the two `towerWarsDayDirector` actor-identity unit tests als
 fail unchanged on exact starting main 7209fc50ab7876e878e58ca9d3300831c978258d
 (empty commitment result / commitment not found). These are outside the economic
 reader change and are retained as proven baseline failures.
+The adapter also composes canonical revenue reconciliation before projecting game
+candidates: proven links and unresolved suspected copies retain the owning ledger's
+withholding policy, including customer identity keys beyond phone numbers.

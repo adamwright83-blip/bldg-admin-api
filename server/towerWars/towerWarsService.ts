@@ -1,3 +1,4 @@
+import { reconcileLedgerSpan } from "../analytics/canonicalRevenue";
 import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { randomUUID } from "node:crypto";
 import { and, eq, gte, isNotNull, isNull, lt, or } from "drizzle-orm";
@@ -201,7 +202,8 @@ export async function loadTowerWarsEconomicCandidates(
 ): Promise<TowerWarsCandidate[]> {
   if (!tenantId.trim()) throw new Error("Tower Wars economic reads require established tenant authority");
   const ledger = await loadPaidOrderLedger({ tenantId, startUtc: start, endExclusiveUtc: end, timeZone: getDashboardTimeZone() });
-  return ledger.events.map(event => ({
+  const reconciled = reconcileLedgerSpan(ledger, { start: zonedYmd(start, getDashboardTimeZone()), end: zonedYmd(new Date(end.getTime() - 1), getDashboardTimeZone()) });
+  return reconciled.includedEvents.map(event => ({
     sourceKey: event.eventKey,
     occurredAt: event.occurredAt,
     orderId: event.source === "laundry_butler" && event.orderNumber ? Number(event.orderNumber) : event.orderNumber ?? null,
