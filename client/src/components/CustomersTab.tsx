@@ -14,6 +14,8 @@ type Props = {
   onOpenProfile: (phone: string) => void;
 };
 
+const paidMoney = (value: number | null | undefined, digits = 2) => value == null ? "Unknown" : `$${value.toFixed(digits)}`;
+
 type CustomerRow = {
   phone: string;
   firstName: string;
@@ -24,20 +26,20 @@ type CustomerRow = {
   /** Latest order address from aggregate (for unresolved-building triage). */
   address: string;
   totalOrders: number;
-  lifetimeSpend: number;
+  lifetimeSpend: number | null;
   lastOrderAt: Date | string;
   recencyStatus: RecencyStatus;
-  tier: Tier;
+  tier: Tier | null;
   statusColor: string;
   propertyGroup?: PropertyGroup;
   propertyDisplayName?: string;
   towerKey?: string;
   towerDisplayName?: string;
   buildingAddressCanonical?: string | null;
-  stripeVerifiedRevenue?: number;
+  stripeVerifiedRevenue?: number | null;
   legacyCleanCloudRevenue?: number;
   clearentXplorPayRevenue?: number;
-  totalOperationalRevenue?: number;
+  totalOperationalRevenue?: number | null;
   source?: string;
   paymentProcessor?: string;
   includedInStripe?: boolean;
@@ -48,7 +50,7 @@ type CustomerRow = {
 type BuildingSummaryEntry = {
   totalCustomers: number;
   activeCustomers: number;
-  totalRevenue: number;
+  totalRevenue: number | null;
   floors?: Record<string, { totalCustomers: number; activeCustomers: number; totalRevenue: number }>;
   estimatedUnits?: number;
 };
@@ -151,28 +153,28 @@ export function CustomersTab({ onOpenProfile }: Props) {
         legacyHelperText: string;
         clearentHelperText?: string;
         grand: {
-          stripeVerifiedRevenue: number;
+          stripeVerifiedRevenue: number | null;
           legacyCleanCloudRevenue: number;
           clearentXplorPayRevenue?: number;
-          totalOperationalRevenue: number;
+          totalOperationalRevenue: number | null;
         };
         properties: Record<
           string,
           {
             propertyDisplayName: string;
-            stripeVerifiedRevenue: number;
+            stripeVerifiedRevenue: number | null;
             legacyCleanCloudRevenue: number;
             clearentXplorPayRevenue?: number;
-            totalOperationalRevenue: number;
+            totalOperationalRevenue: number | null;
             towers: Record<
               string,
               {
                 towerDisplayName: string;
                 buildingAddressCanonical: string | null;
-                stripeVerifiedRevenue: number;
+                stripeVerifiedRevenue: number | null;
                 legacyCleanCloudRevenue: number;
                 clearentXplorPayRevenue?: number;
-                totalOperationalRevenue: number;
+                totalOperationalRevenue: number | null;
               }
             >;
           }
@@ -249,7 +251,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
       return {
         slug,
         label: formatBuildingLabel(slug),
-        totalRevenue: summary?.totalRevenue ?? rows.reduce((sum, r) => sum + (r.lifetimeSpend || 0), 0),
+        totalRevenue: summary ? summary.totalRevenue : rows.some(row => row.lifetimeSpend === null) ? null : rows.reduce((sum, row) => sum + row.lifetimeSpend!, 0),
         totalCustomers: summary?.totalCustomers ?? rows.length,
         activeCustomers:
           summary?.activeCustomers ?? rows.filter((r) => r.recencyStatus === "active").length,
@@ -264,13 +266,13 @@ export function CustomersTab({ onOpenProfile }: Props) {
     sections.sort((a, b) => {
       if (buildingSort === "orders") return b.totalOrders - a.totalOrders;
       if (buildingSort === "active") return b.activeCustomers - a.activeCustomers;
-      return b.totalRevenue - a.totalRevenue;
+      return a.totalRevenue === null ? (b.totalRevenue === null ? 0 : 1) : b.totalRevenue === null ? -1 : b.totalRevenue - a.totalRevenue;
     });
 
-    const revenueRanked = [...sections].sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const revenueRanked = sections.filter(section => section.totalRevenue !== null).sort((a, b) => b.totalRevenue! - a.totalRevenue!);
     const lowestRevenue =
       revenueRanked.length > 0
-        ? Math.min(...revenueRanked.map((s) => s.totalRevenue))
+        ? Math.min(...revenueRanked.map((s) => s.totalRevenue!))
         : null;
     const rankBySlug = new Map(
       revenueRanked.map((s, i) => [s.slug, i + 1])
@@ -278,7 +280,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
 
     return sections.map((s) => ({
       ...s,
-      rankLabel:
+      rankLabel: s.totalRevenue === null ? "Unknown" :
         lowestRevenue != null && s.totalRevenue === lowestRevenue
           ? "LAST"
           : `#${rankBySlug.get(s.slug) ?? "?"}`,
@@ -286,7 +288,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
   }, [resolvedCustomers, buildingSummary, buildingSort]);
 
   const maxRevenue = useMemo(
-    () => buildingSections.reduce((m, s) => Math.max(m, s.totalRevenue), 0),
+    () => buildingSections.reduce((m, s) => s.totalRevenue === null ? m : Math.max(m, s.totalRevenue), 0),
     [buildingSections]
   );
 
@@ -333,7 +335,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
           <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="text-xs uppercase tracking-wider text-black/45">Stripe verified revenue</p>
-              <p className="text-2xl font-semibold text-black">${contestTotals.grand.stripeVerifiedRevenue.toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-black">{paidMoney(contestTotals.grand.stripeVerifiedRevenue)}</p>
             </div>
             <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="text-xs uppercase tracking-wider text-black/45">Legacy CleanCloud revenue</p>
@@ -345,7 +347,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
             </div>
             <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="text-xs uppercase tracking-wider text-black/45">Total operational revenue</p>
-              <p className="text-2xl font-semibold text-black">${contestTotals.grand.totalOperationalRevenue.toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-black">{paidMoney(contestTotals.grand.totalOperationalRevenue)}</p>
             </div>
           </div>
           {contestTotals.clearentHelperText ? (
@@ -364,10 +366,10 @@ export function CustomersTab({ onOpenProfile }: Props) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold text-black">{prop.propertyDisplayName}</h3>
-                      <p className="text-2xl font-semibold text-black">${prop.totalOperationalRevenue.toFixed(2)}</p>
+                      <p className="text-2xl font-semibold text-black">{paidMoney(prop.totalOperationalRevenue)}</p>
                     </div>
                     <div className="text-right text-xs text-black/55">
-                      <div>Stripe ${prop.stripeVerifiedRevenue.toFixed(2)}</div>
+                      <div>Stripe {paidMoney(prop.stripeVerifiedRevenue)}</div>
                       <div>CleanCloud ${prop.legacyCleanCloudRevenue.toFixed(2)}</div>
                       <div>Clearent ${(prop.clearentXplorPayRevenue ?? 0).toFixed(2)}</div>
                     </div>
@@ -381,7 +383,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                             {tower.towerDisplayName}
                             {tower.buildingAddressCanonical ? ` / ${tower.buildingAddressCanonical.split(" ")[0]}` : ""}
                           </span>
-                          <span className="font-medium text-black">${tower.totalOperationalRevenue.toFixed(2)}</span>
+                          <span className="font-medium text-black">{paidMoney(tower.totalOperationalRevenue)}</span>
                         </div>
                       );
                     })}
@@ -504,7 +506,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
 
       <div className="space-y-5">
         {buildingSections.map((section, idx) => {
-          const intensity = maxRevenue > 0 ? section.totalRevenue / maxRevenue : 0;
+          const intensity = maxRevenue > 0 && section.totalRevenue !== null ? section.totalRevenue / maxRevenue : 0;
           const sectionStyle =
             idx === 0
               ? "border-black/25 bg-white shadow-md"
@@ -520,7 +522,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                       {section.label} <span className="text-black/45">- {section.rankLabel}</span>
                     </p>
                     <p className={`font-semibold ${idx === 0 ? "text-4xl" : "text-3xl"} tracking-tight text-black`}>
-                      ${section.totalRevenue.toFixed(0)}
+                      {paidMoney(section.totalRevenue, 0)}
                     </p>
                     <p className="text-sm text-black/55">
                       {section.totalCustomers} customers · {section.activeCustomers} active
@@ -571,7 +573,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                         </p>
                       </div>
                       <div className="text-black/70">{r.unit || "—"}</div>
-                      <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
+                      <div className="text-black/80 font-medium">{paidMoney(r.lifetimeSpend)}</div>
                       <div className="space-y-1">
                         {(r.clearentXplorPayRevenue ?? 0) > 0 ? (
                           <>
@@ -599,7 +601,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                           {formatStatusLabel(r.recencyStatus)}
                         </span>
                       </div>
-                      <div className="text-black/70 uppercase text-xs font-medium">{r.tier}</div>
+                      <div className="text-black/70 uppercase text-xs font-medium">{r.tier ?? "Unknown"}</div>
                     </div>
                   </button>
                 ))}
@@ -647,7 +649,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                       </p>
                     </div>
                     <div className="text-black/70">{r.unit || "—"}</div>
-                    <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
+                    <div className="text-black/80 font-medium">{paidMoney(r.lifetimeSpend)}</div>
                     <div className="text-black/60 text-xs whitespace-nowrap">
                       {formatLastOrder(r.lastOrderAt)}
                     </div>

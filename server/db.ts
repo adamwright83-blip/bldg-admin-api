@@ -1,3 +1,4 @@
+import { hasNativePaymentAuthority, nativeCapturedAmountCents, readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "./mysqlErrors";
 import {
   and,
@@ -744,8 +745,9 @@ export async function listPaidOrdersForBuildingRevenue(
   const db = await getDb();
   if (!db) return [];
 
-  return db
+  const rows = await db
     .select({
+      id: orders.id, tenantId: orders.tenantId, paid: orders.paid, stripePaymentIntentId: orders.stripePaymentIntentId,
       buildingSlug: orders.buildingSlug,
       address: orders.address,
       unit: orders.unit,
@@ -757,6 +759,12 @@ export async function listPaidOrdersForBuildingRevenue(
         ? and(eq(orders.paid, true), eq(orders.tenantId, tenantId))
         : eq(orders.paid, true)
     );
+  const receipts = await readNativePaymentAuthorityReceipts(rows);
+  return rows.map(row => {
+    const receipt = receipts.get(row.id);
+    const captured = hasNativePaymentAuthority(row,receipt) ? nativeCapturedAmountCents(receipt) : null;
+    return { buildingSlug: row.buildingSlug, address: row.address, unit: row.unit, total: captured === null ? null : (captured / 100).toFixed(2) };
+  });
 }
 
 export type AdminDashboardRevenuePeriod = {

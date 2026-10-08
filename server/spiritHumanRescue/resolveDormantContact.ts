@@ -20,7 +20,7 @@ export type ResolvedDormantContact = {
   buildingSlug: string | null;
   lastOrderAt: Date;
   paidOrderCount: number;
-  historicalSpendCents: number;
+  historicalSpendCents?: number;
   phone: string;
 };
 
@@ -79,7 +79,10 @@ export function resolveSendContactFromAggregates(input: {
         buildingSlug: row.buildingSlug,
         lastOrderAt: row.lastOrderAt,
         paidOrderCount: row.paidOrderCount,
-        historicalSpendCents: Math.round(row.lifetimeSpend * 100),
+        historicalSpendCents:
+          row.lifetimeSpend === null
+            ? undefined
+            : Math.round(row.lifetimeSpend * 100),
         phone,
       },
     };
@@ -103,7 +106,10 @@ export async function resolveSendContact(input: {
   now?: Date;
   aggregates?: AdminCustomerAggregateDbRow[];
 }): Promise<SendContactResolution> {
-  const rows = await loadTenantCustomerAggregates(input.tenantId, input.aggregates);
+  const rows = await loadTenantCustomerAggregates(
+    input.tenantId,
+    input.aggregates
+  );
   return resolveSendContactFromAggregates({
     tenantId: input.tenantId,
     snapshotCustomerId: input.snapshotCustomerId,
@@ -131,7 +137,7 @@ export function freezeFactsFromContact(
   lastOrderAt: string;
   daysSinceLastOrder: number;
   paidOrderCount: number;
-  historicalSpendCents: number;
+  historicalSpendCents?: number;
 } {
   const elapsedMs = now.getTime() - contact.lastOrderAt.getTime();
   const daysSinceLastOrder = Math.max(0, Math.floor(elapsedMs / 86_400_000));

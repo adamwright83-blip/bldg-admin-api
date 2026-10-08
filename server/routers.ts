@@ -1,3 +1,4 @@
+import { readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
 import { daphneRouter } from "./daphne/router";
@@ -2046,7 +2047,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const phone = input.phone.trim();
         const rows = await getOrdersByPhoneExact(phone, ctx.tenantId);
-        return buildCustomerProfile(phone, rows);
+        return buildCustomerProfile(phone, rows, await readNativePaymentAuthorityReceipts(rows));
       }),
 
     /** Directory of customers grouped by phone (loads all orders once; fine for typical LB volume) */
@@ -2129,7 +2130,7 @@ export const appRouter = router({
                   clearent.totalCollected) *
                   100
               ) / 100;
-            existing.totalOperationalRevenue =
+            existing.totalOperationalRevenue = existing.stripeVerifiedRevenue === null ? null :
               Math.round(
                 (existing.stripeVerifiedRevenue +
                   existing.legacyCleanCloudRevenue +
@@ -2246,7 +2247,7 @@ export const appRouter = router({
                   reconciled.totalCollected) *
                   100
               ) / 100;
-            existing.totalOperationalRevenue =
+            existing.totalOperationalRevenue = existing.stripeVerifiedRevenue === null ? null :
               Math.round(
                 (existing.stripeVerifiedRevenue +
                   existing.legacyCleanCloudRevenue +
@@ -2349,7 +2350,7 @@ export const appRouter = router({
                 Math.round(
                   (existing.legacyCleanCloudRevenue + legacy.totalSpend) * 100
                 ) / 100;
-              existing.totalOperationalRevenue =
+              existing.totalOperationalRevenue = existing.stripeVerifiedRevenue === null ? null :
                 Math.round(
                   (existing.stripeVerifiedRevenue +
                     existing.legacyCleanCloudRevenue +
@@ -2478,6 +2479,9 @@ export const appRouter = router({
           );
         }
 
+        const unknownBuildingRevenue = new Set<string>();
+        const unknownFloorRevenue = new Set<string>();
+        const unknownContestRevenue = new Set<string>();
         const buildingSummaryMap = new Map<
           string,
           {
@@ -2544,6 +2548,11 @@ export const appRouter = router({
             totalRevenue: 0,
             floors: {},
           };
+          if (order.total === null) {
+            unknownBuildingRevenue.add(key);
+            const floor = deriveFloorNumber(order.unit);
+            if (floor !== null) unknownFloorRevenue.add(`${key}:${floor}`);
+          }
           const amount = parseFloat(String(order.total ?? "0"));
           const revenue = Number.isFinite(amount) ? amount : 0;
           existing.totalRevenue += revenue;
@@ -2644,6 +2653,9 @@ export const appRouter = router({
             | "opus_la"
             | "century_park_east";
           const prop = contestTotals.properties[propertyGroup];
+          if (row.stripeVerifiedRevenue === null) {
+            unknownContestRevenue.add("grand"); unknownContestRevenue.add(propertyGroup); unknownContestRevenue.add(`${propertyGroup}:${row.towerKey}`);
+          }
           const stripe = Number(row.stripeVerifiedRevenue ?? 0);
           const legacy = includeLegacyCleanCloud
             ? Number(row.legacyCleanCloudRevenue ?? 0)
@@ -2668,6 +2680,7 @@ export const appRouter = router({
             }
           >;
           const towerKey = row.towerKey in towers ? row.towerKey : "unknown";
+          if (row.stripeVerifiedRevenue === null) unknownContestRevenue.add(`${propertyGroup}:${towerKey}`);
           if (towers[towerKey]) {
             towers[towerKey].stripeVerifiedRevenue += stripe;
             towers[towerKey].legacyCleanCloudRevenue += legacy;
@@ -2699,13 +2712,13 @@ export const appRouter = router({
             slug,
             {
               ...val,
-              totalRevenue: Math.round(val.totalRevenue * 100) / 100,
+              totalRevenue: unknownBuildingRevenue.has(slug) ? null : Math.round(val.totalRevenue * 100) / 100,
               floors: Object.fromEntries(
                 Object.entries(val.floors).map(([floor, data]) => [
                   floor,
                   {
                     ...data,
-                    totalRevenue: Math.round(data.totalRevenue * 100) / 100,
+                    totalRevenue: unknownFloorRevenue.has(`${slug}:${floor}`) ? null : Math.round(data.totalRevenue * 100) / 100,
                   },
                 ])
               ),
@@ -2713,7 +2726,9 @@ export const appRouter = router({
           ])
         );
 
-        return { customers: rows, buildingSummary, contestTotals };
+        const maskUnknown = <T extends { stripeVerifiedRevenue: number; totalOperationalRevenue: number }>(value: T, key: string) => ({ ...value, stripeVerifiedRevenue: unknownContestRevenue.has(key) ? null : value.stripeVerifiedRevenue, totalOperationalRevenue: unknownContestRevenue.has(key) ? null : value.totalOperationalRevenue });
+        const admittedContestTotals = { ...contestTotals, grand: maskUnknown(contestTotals.grand,"grand"), properties: Object.fromEntries(Object.entries(contestTotals.properties).map(([key,property]) => [key,{...maskUnknown(property,key),towers:Object.fromEntries(Object.entries(property.towers).map(([towerKey,tower]) => [towerKey,maskUnknown(tower,`${key}:${towerKey}`)]))}])) };
+        return { customers: rows, buildingSummary, contestTotals: admittedContestTotals };
       }),
 
     /** Create order manually (admin new order tab) */
@@ -3268,6 +3283,7 @@ export const appRouter = router({
             tenantId: paymentTenantId,
             orderId: input.orderId,
             paymentIntentId: paymentIntent.id,
+            capture: { paymentIntentId: paymentIntent.id, status: paymentIntent.status, amountReceivedCents: paymentIntent.amount_received, currency: paymentIntent.currency },
             paidAt,
             orderPatch: {
               total: centsToDollars(input.amountCents),

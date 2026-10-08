@@ -82,7 +82,7 @@ describe("loadStrategyCustomerAggregates", () => {
             sourceType: "stripe_payment_intent", sourceRef: "pi_test_live_amanda", actorType: "system", actorId: null,
             evidenceClass: "authoritative_external", verificationClass: "VERIFIED", admissionPolicy: "native_stripe_payment_v1",
             occurredAt: new Date("2026-01-01T12:00:00Z"), admittedAt: new Date("2026-01-01T12:00:00Z"),
-            metadataJson: {}, idempotencyKey: "payment:9",
+            metadataJson: { captureEvidence: "stripe_amount_received_v1", capturedCurrency: "usd", capturedAmountCents: 4000 }, idempotencyKey: "payment:9",
           }];
           const rows = Promise.resolve(name === "authority_receipts" ? receiptRows : nativeRows);
           return Object.assign(rows, { where: () => rows });

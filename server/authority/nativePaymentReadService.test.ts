@@ -88,3 +88,33 @@ describe("Payment-owned native paid reader", () => {
     );
   });
 });
+
+describe("captured native amount", () => {
+  it("does not infer cents from a receipt without immutable provider capture evidence", async () => {
+    const { nativeCapturedAmountCents } = await import(
+      "./nativePaymentReadService"
+    );
+    expect(nativeCapturedAmountCents(undefined)).toBeNull();
+    const proof = {
+      metadata: {
+        capturedAmountCents: 4200,
+        capturedCurrency: "usd",
+        captureEvidence: "stripe_amount_received_v1",
+      },
+    } as AuthorityReceipt;
+    expect(nativeCapturedAmountCents(proof)).toBe(4200);
+    expect(nativeCapturedAmountCents({ ...proof, metadata: {} })).toBeNull();
+    expect(
+      nativeCapturedAmountCents({
+        ...proof,
+        metadata: { ...proof.metadata, capturedCurrency: "eur" },
+      })
+    ).toBeNull();
+    expect(
+      nativeCapturedAmountCents({
+        ...proof,
+        metadata: { ...proof.metadata, capturedAmountCents: -1 },
+      })
+    ).toBeNull();
+  });
+});

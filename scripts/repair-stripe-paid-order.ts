@@ -63,6 +63,7 @@ await admitNativeStripePayment({
   tenantId,
   orderId,
   paymentIntentId: paymentIntent.id,
+  capture: { paymentIntentId: paymentIntent.id, status: paymentIntent.status, amountReceivedCents: paymentIntent.amount_received, currency: paymentIntent.currency },
   paidAt,
   actorId: "stripe-payment-repair",
   orderPatch: { total: centsToDollars(paymentIntent.amount) },

@@ -1,3 +1,8 @@
+import {
+  hasNativePaymentAuthority,
+  nativeCapturedAmountCents,
+} from "./authority/nativePaymentReadService";
+import type { AuthorityReceipt } from "./authority/authorityReceipt";
 import { resolveBuildingEvidence } from "@shared/buildings";
 import {
   computeCustomerTier,
@@ -10,17 +15,24 @@ import {
 } from "@shared/customerStatus";
 import type { Order } from "../drizzle/schema";
 
-export function deriveBuildingSlug(order: Pick<Order, "buildingSlug" | "address">): string | null {
+export function deriveBuildingSlug(
+  order: Pick<Order, "buildingSlug" | "address">
+): string | null {
   // Same evidence rule as the Tower Wars ledger: a persisted slug that its own
   // order address contradicts must not be shown as the customer's building.
-  return resolveBuildingEvidence(order.address, order.buildingSlug).building?.slug ?? null;
+  return (
+    resolveBuildingEvidence(order.address, order.buildingSlug).building?.slug ??
+    null
+  );
 }
 
 /**
  * Floor derivation from unit strings.
  * Example: "1205" -> 12. Falls back to null if non-numeric/insufficient signal.
  */
-export function deriveFloorNumber(unit: string | null | undefined): number | null {
+export function deriveFloorNumber(
+  unit: string | null | undefined
+): number | null {
   if (!unit) return null;
   const digits = unit.replace(/\D/g, "");
   if (digits.length < 3) return null;
@@ -39,12 +51,19 @@ function sortOrdersNewestFirst(rows: Order[]): Order[] {
 }
 
 /** Sum of total for paid orders only (documented product rule). */
-export function lifetimeSpendPaidOnly(rows: Order[]): number {
+export function lifetimeSpendPaidOnly(
+  rows: Order[],
+  receipts: ReadonlyMap<number, AuthorityReceipt> = new Map()
+): number | null {
   let sum = 0;
   for (const o of rows) {
     if (!o.paid) continue;
-    const t = parseFloat(String(o.total ?? "0"));
-    if (Number.isFinite(t)) sum += t;
+    const receipt = receipts.get(o.id);
+    const amount = hasNativePaymentAuthority(o, receipt)
+      ? nativeCapturedAmountCents(receipt)
+      : null;
+    if (amount === null) return null;
+    sum += amount / 100;
   }
   return Math.round(sum * 100) / 100;
 }
@@ -69,9 +88,12 @@ export type CustomerProfilePayload = {
     unit: string | null;
     buildingSlug: string | null;
     /** Set when the persisted slug names a building the address contradicts. */
-    buildingEvidenceConflict: { slugBuilding: string; addressBuilding: string } | null;
+    buildingEvidenceConflict: {
+      slugBuilding: string;
+      addressBuilding: string;
+    } | null;
     address: string;
-    lifetimeSpend: number;
+    lifetimeSpend: number | null;
     totalOrders: number;
     firstOrderAt: Date | null;
     lastOrderAt: Date | null;
@@ -81,41 +103,61 @@ export type CustomerProfilePayload = {
     ordersLast30Days: number;
     ordersLast90Days: number;
     recencyStatus: CustomerRecencyStatus;
-    tier: CustomerTier;
+    tier: CustomerTier | null;
     statusColor: StatusColorToken;
     bldgUserIds: number[];
   };
   orders: CustomerOrderLine[];
 };
 
-export function buildCustomerProfile(phone: string, rows: Order[]): CustomerProfilePayload | null {
+export function buildCustomerProfile(
+  phone: string,
+  rows: Order[],
+  receipts: ReadonlyMap<number, AuthorityReceipt> = new Map()
+): CustomerProfilePayload | null {
   if (rows.length === 0) return null;
 
   const sorted = sortOrdersNewestFirst(rows);
   const latest = sorted[0];
-  const spend = lifetimeSpendPaidOnly(sorted);
-  const paidOrders = sorted.filter((o) => o.paid);
+  const spend = lifetimeSpendPaidOnly(sorted, receipts);
+  const paidOrders = sorted.filter(o =>
+    hasNativePaymentAuthority(o, receipts.get(o.id))
+  );
   const avgOrderValue =
-    paidOrders.length > 0 ? Math.round((spend / paidOrders.length) * 100) / 100 : null;
+    spend !== null && paidOrders.length > 0
+      ? Math.round((spend / paidOrders.length) * 100) / 100
+      : null;
   const firstOrderAt = sorted[sorted.length - 1].createdAt;
   const lastOrderAt = latest.createdAt;
-  const ordersLast30Days = sorted.filter((o) => daysSince(o.createdAt) <= 30).length;
-  const ordersLast90Days = sorted.filter((o) => daysSince(o.createdAt) <= 90).length;
+  const ordersLast30Days = sorted.filter(
+    o => daysSince(o.createdAt) <= 30
+  ).length;
+  const ordersLast90Days = sorted.filter(
+    o => daysSince(o.createdAt) <= 90
+  ).length;
   const recencyStatus = computeRecencyStatus({
     totalOrders: sorted.length,
     firstOrderAt,
     lastOrderAt,
   });
-  const tier = computeCustomerTier({ lifetimeSpend: spend, totalOrders: sorted.length });
+  const tier =
+    spend === null
+      ? null
+      : computeCustomerTier({
+          lifetimeSpend: spend,
+          totalOrders: sorted.length,
+        });
   const statusColor = STATUS_COLOR_BY_RECENCY[recencyStatus];
 
   const bldgUserIds = [
     ...new Set(
-      sorted.map((o) => o.bldgUserId).filter((id): id is number => id != null && id > 0)
+      sorted
+        .map(o => o.bldgUserId)
+        .filter((id): id is number => id != null && id > 0)
     ),
   ];
 
-  const orders: CustomerOrderLine[] = sorted.map((o) => {
+  const orders: CustomerOrderLine[] = sorted.map(o => {
     let external: string | null = null;
     if (o.portalJwt) {
       const j = o.portalJwt.trim();
@@ -126,7 +168,7 @@ export function buildCustomerProfile(phone: string, rows: Order[]): CustomerProf
       createdAt: o.createdAt,
       serviceType: o.serviceType,
       total: o.total != null ? String(o.total) : null,
-      paid: o.paid,
+      paid: hasNativePaymentAuthority(o, receipts.get(o.id)),
       status: o.status,
       adminReceiptHref: `/receipt/${o.id}`,
       externalReceiptUrl: external,
@@ -174,7 +216,7 @@ export type CustomerAggregateRow = {
   floorNumber: number | null;
   address: string;
   totalOrders: number;
-  lifetimeSpend: number;
+  lifetimeSpend: number | null;
   firstOrderAt: Date;
   lastOrderAt: Date;
   lastOrderId: number;
@@ -183,7 +225,7 @@ export type CustomerAggregateRow = {
   ordersLast30Days: number;
   ordersLast90Days: number;
   recencyStatus: CustomerRecencyStatus;
-  tier: CustomerTier;
+  tier: CustomerTier | null;
   statusColor: StatusColorToken;
   bldgUserIds: number[];
 };
@@ -197,7 +239,7 @@ export type CustomerAggregateDbRow = {
   address: string;
   buildingSlug: string | null;
   totalOrders: number;
-  lifetimeSpend: number;
+  lifetimeSpend: number | null;
   paidOrderCount: number;
   firstOrderAt: Date;
   lastOrderAt: Date;
@@ -206,26 +248,36 @@ export type CustomerAggregateDbRow = {
   ordersLast90Days: number;
 };
 
-export function hydrateCustomerAggregates(rows: CustomerAggregateDbRow[]): CustomerAggregateRow[] {
+export function hydrateCustomerAggregates(
+  rows: CustomerAggregateDbRow[]
+): CustomerAggregateRow[] {
   const toSafeString = (value: unknown): string =>
     typeof value === "string" ? value : "";
   const toSafeNullableString = (value: unknown): string | null =>
     typeof value === "string" ? value : null;
 
-  return rows.map((r) => {
-    const lifetimeSpend = Math.round(Number(r.lifetimeSpend || 0) * 100) / 100;
+  return rows.map(r => {
+    const lifetimeSpend =
+      r.lifetimeSpend === null
+        ? null
+        : Math.round(Number(r.lifetimeSpend) * 100) / 100;
     const paidOrderCount = Number(r.paidOrderCount || 0);
     const avgOrderValue =
-      paidOrderCount > 0 ? Math.round((lifetimeSpend / paidOrderCount) * 100) / 100 : null;
+      lifetimeSpend !== null && paidOrderCount > 0
+        ? Math.round((lifetimeSpend / paidOrderCount) * 100) / 100
+        : null;
     const recencyStatus = computeRecencyStatus({
       totalOrders: Number(r.totalOrders || 0),
       firstOrderAt: r.firstOrderAt,
       lastOrderAt: r.lastOrderAt,
     });
-    const tier = computeCustomerTier({
-      lifetimeSpend,
-      totalOrders: Number(r.totalOrders || 0),
-    });
+    const tier =
+      lifetimeSpend === null
+        ? null
+        : computeCustomerTier({
+            lifetimeSpend,
+            totalOrders: Number(r.totalOrders || 0),
+          });
 
     return {
       phone: toSafeString(r.phone),

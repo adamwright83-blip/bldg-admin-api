@@ -1,6 +1,6 @@
 import { readNativeCustomerHistory, readLegacyNativeCustomerHistoryAcrossTenants } from "../orders/orderHistoryReadService";
 export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from "../orders/orderHistoryReadService";
-import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import { eq } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
@@ -87,7 +87,8 @@ export type CustomerOrderTruthRecord = {
     | null;
   allowNameComposite: boolean;
   paid: boolean;
-  totalCents: number;
+  totalCents: number | null;
+  paymentAmountUnknown?: boolean;
   cancelled: boolean;
   /**
    * When Goldline first held this order (authoritative source-observation time), distinct from
@@ -199,7 +200,9 @@ export function nativeOrderToTruth(
     // paid rows without matching Payment admission remain customer/order records,
     // but they cannot become paying-customer progression or paid-book truth.
     paid: hasNativePaymentAuthority(row, options?.paymentAuthorityReceipt),
-    totalCents: dollarsToCents(row.total),
+    paymentAmountUnknown: Boolean(row.paid) && nativeCapturedAmountCents(options?.paymentAuthorityReceipt) === null,
+    totalCents: hasNativePaymentAuthority(row, options?.paymentAuthorityReceipt)
+      ? nativeCapturedAmountCents(options?.paymentAuthorityReceipt) : null,
     cancelled,
     recognizedAt: createdAt,
   };
