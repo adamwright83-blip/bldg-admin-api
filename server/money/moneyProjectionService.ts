@@ -77,7 +77,9 @@ export async function getMoneyProjection(input: {
     collectedRevenue: paymentRevenue,
     // Attribution classifies payments already in the ledger; it is not additive revenue.
     realizedRevenue: paymentRevenue,
-    receivables: sourcedFact(
+    receivables: assets.some(asset => asset.outstandingReceivables.value == null)
+      ? unknownValue<number>("Some customer payment balances are unverified")
+      : sourcedFact(
       receivables,
       "customer asset outstanding receivables"
     ),

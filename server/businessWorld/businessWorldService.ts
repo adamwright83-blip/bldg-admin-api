@@ -106,7 +106,7 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
     properties, commercialAssets, territorySignals,
     openThreats,
     growthSignals: territorySignals.slice(0, 5).map(point => ({ id: point.id, title: point.name, value: point.value, sourceReference: point.sourceReference })),
-    financialSummary: { collectedRevenue: paidRevenue, realizedCommercialRevenue: sourcedFact(commercialRevenue, "commercial_pipeline_records.realizedRevenueCents"), receivables: sourcedFact(receivables, "orders + order_payment_projections") },
+    financialSummary: { collectedRevenue: paidRevenue, realizedCommercialRevenue: sourcedFact(commercialRevenue, "commercial_pipeline_records.realizedRevenueCents"), receivables: assets.some(asset => asset.outstandingReceivables.value == null) ? unknownValue<number>("Some customer payment balances are unverified") : sourcedFact(receivables, "orders + order_payment_projections") },
     capabilities: capabilityEvaluations.filter(item => ["READY", "ACTIVE"].includes(item.status)).map(item => item.capability),
     teamSummary: { activeNonOwnerMembers, ownerIndependentRevenue: unknownValue("Executor attribution is not sufficient to compute owner-independent revenue") },
     recentChanges,

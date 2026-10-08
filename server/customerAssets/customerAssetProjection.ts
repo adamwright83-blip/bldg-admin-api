@@ -17,7 +17,7 @@ import {
   unknownValue,
 } from "../../shared/businessGame";
 import { getDb } from "../db";
-import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
+import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import {
   customerAssetId,
   customerIdentityHash,
@@ -106,6 +106,7 @@ export async function projectCustomerAssets(input: {
       .where(eq(commercialAccounts.tenantId, input.tenantId)),
   ]);
 
+  const paymentAuthorityReceipts = await readNativePaymentAuthorityReceipts(orderRows);
   const orderIds = orderRows.map(row => row.id);
   const identityHashes = Array.from(
     new Set(
@@ -186,19 +187,24 @@ export async function projectCustomerAssets(input: {
       const compatibleHashes = new Set(
         group.flatMap(order => customerIdentityHashes(input.tenantId, order))
       );
+      const unverifiedPayment = group.some(order => {
+        const projection = paymentByOrder.get(order.id);
+        return (order.paid || (projection?.netPaidCents ?? 0) > 0) &&
+          !hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id));
+      });
       const paidTotal = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         return (
           sum +
-          (payment?.netPaidCents ??
-            (hasNativePaymentAuthority(order) ? cents(order.total) : 0))
+          (hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id))
+            ? (payment?.netPaidCents ?? cents(order.total)) : 0)
         );
       }, 0);
       const outstanding = group.reduce((sum, order) => {
         const payment = paymentByOrder.get(order.id);
         const isPaid = payment
           ? ["paid", "partially_refunded"].includes(payment.state)
-          : hasNativePaymentAuthority(order);
+          : hasNativePaymentAuthority(order, paymentAuthorityReceipts.get(order.id));
         return (
           sum +
           (isPaid || order.status === "cancelled" ? 0 : cents(order.total))
@@ -236,11 +242,11 @@ export async function projectCustomerAssets(input: {
             new Set(group.map(order => order.serviceType))
           ),
         },
-        lifetimeValue: sourcedFact(
+        lifetimeValue: unverifiedPayment ? unknownValue<number>("Payment admission is unverified") : sourcedFact(
           paidTotal,
           "orders + order_payment_projections"
         ),
-        outstandingReceivables: sourcedFact(
+        outstandingReceivables: unverifiedPayment ? unknownValue<number>("Payment admission is unverified; outstanding balance is unknown") : sourcedFact(
           outstanding,
           "orders + order_payment_projections"
         ),
@@ -272,7 +278,7 @@ export async function projectCustomerAssets(input: {
         },
         commercial: null,
         nextAction:
-          outstanding > 0
+          !unverifiedPayment && outstanding > 0
             ? {
                 label: "Resolve payment",
                 path: `/payment-reconciliation?customer=${encodeURIComponent(latest.phone)}`,
