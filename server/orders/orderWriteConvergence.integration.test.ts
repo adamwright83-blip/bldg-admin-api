@@ -106,3 +106,12 @@ describe("A5 real MySQL Orders convergence", () => {
     ).rejects.toThrow("cannot be collected");
   });
 });
+
+it("holds delivery with a legacy paid flag but no admitted Payment receipt", async () => {
+  const id = await createNativeOrder({ ...fixture(), status: "ready" });
+  const db = (await getDb())!;
+  await db.update(orders).set({ paid: true, stripePaymentIntentId: `pi_unverified_${id}` }).where(eq(orders.id, id));
+  await expect(transitionNativeOrderStatus({ orderId: id, tenantId, status: "delivered" })).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
+  const [held] = await db.select().from(orders).where(eq(orders.id, id));
+  expect(held.status).toBe("ready");
+});

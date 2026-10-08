@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const payment = vi.hoisted(() => ({ receipts: vi.fn(), authorized: vi.fn() }));
+vi.mock("../authority/nativePaymentReadService", () => ({ readNativePaymentAuthorityReceipts: payment.receipts, hasNativePaymentAuthority: payment.authorized }));
+
 const db = vi.hoisted(() => ({
   createOrder: vi.fn(),
   createOrReuseResidentLaundryOrder: vi.fn(),
@@ -32,6 +35,8 @@ import {
 describe("orderLifecycleService canonical authority", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    payment.receipts.mockResolvedValue(new Map());
+    payment.authorized.mockReturnValue(true);
   });
 
   it("rejects paid-state or tenant changes in revisions before persistence", async () => {
@@ -371,4 +376,13 @@ describe("orderLifecycleService canonical authority", () => {
       );
     });
   });
+});
+
+
+it("rejects a weak paid flag before issuing the delivery write", async () => {
+  payment.receipts.mockResolvedValue(new Map());
+  payment.authorized.mockReturnValue(false);
+  db.getDb.mockResolvedValue({});
+  db.getOrderById.mockResolvedValue({ id: 10, tenantId: "tenant-a", status: "ready", paid: true });
+  await expect(attemptOrderDeliveryTransition(10)).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
 });
