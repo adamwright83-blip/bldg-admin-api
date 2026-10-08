@@ -10112,6 +10112,9 @@ export const authorityReceipts = mysqlTable(
       table.subjectId,
       table.admittedAt
     ),
+    nativeProviderLookup: index("idx_authority_receipts_provider_claim").on(
+      table.sourceType, table.sourceRef, table.claimType, table.subjectType
+    ),
     sourceLookup: index("idx_authority_receipts_source").on(
       table.tenantId,
       table.sourceType,

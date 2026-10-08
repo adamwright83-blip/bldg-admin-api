@@ -25,7 +25,7 @@ describe("native Payment history requires occurrence proof", () => {
     try {
       await db
         .update(orders)
-        .set({ paid: true, stripePaymentIntentId: "pi_b4" })
+        .set({ paid: true, stripePaymentIntentId: `pi_b4_${orderId}` })
         .where(eq(orders.id, orderId));
       await db
         .insert(orderPaymentProjections)
@@ -34,7 +34,7 @@ describe("native Payment history requires occurrence proof", () => {
           tenantId,
           orderId,
           provider: "stripe",
-          providerPaymentId: "pi_b4",
+          providerPaymentId: `pi_b4_${orderId}`,
           currency: "usd",
           state: "paid",
           netPaidCents: 4200,
@@ -48,7 +48,7 @@ describe("native Payment history requires occurrence proof", () => {
       const receipt = await admitNativeStripePayment({
         tenantId,
         orderId,
-        paymentIntentId: "pi_b4",
+        paymentIntentId: `pi_b4_${orderId}`,
         paidAt,
         orderPatch: {},
       });

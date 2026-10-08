@@ -316,12 +316,12 @@ export async function transitionNativeOrderStatus(
 export async function reviseNativeOrder(
   orderId: number,
   data: Partial<
-    Omit<InsertOrder, "paid" | "paidAt" | "stripePaymentIntentId" | "tenantId">
+    Omit<InsertOrder, "paid" | "paidAt" | "stripePaymentIntentId" | "tenantId" | "platformFeeCents" | "vendorPayoutCents" | "stripeConnectedAccountIdSnapshot">
   >
 ): Promise<void> {
   assertNonPaymentWrite(data);
   if (
-    ["paid", "paidAt", "stripePaymentIntentId", "tenantId"].some(
+    ["paid", "paidAt", "stripePaymentIntentId", "tenantId", "platformFeeCents", "vendorPayoutCents", "stripeConnectedAccountIdSnapshot"].some(
       key => key in data
     )
   ) {

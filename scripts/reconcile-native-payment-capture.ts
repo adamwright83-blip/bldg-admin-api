@@ -24,7 +24,7 @@ const capture = {
   paymentIntentId: intent.id,
   status: intent.status,
   amountReceivedCents: intent.amount_received,
-  currency: intent.currency,
+  currency: intent.currency, providerOrderId: intent.metadata.orderId, providerTenantId: intent.metadata.tenantId,
 };
 if (intent.status !== "succeeded")
   throw new Error("Provider capture is not succeeded; no amount admitted");

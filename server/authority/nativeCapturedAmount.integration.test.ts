@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { it, expect } from "vitest";
-import { orders } from "../../drizzle/schema";
+import { orders, authorityReceipts } from "../../drizzle/schema";
 import { getDb, listPaidOrdersForBuildingRevenue } from "../db";
 import { buildCustomerProfile } from "../customerProfile";
-import { readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
+import { readNativePaymentFacts, readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
 import {
   createNativeOrder,
   reviseNativeOrder,
@@ -37,7 +37,7 @@ it("withholds missing capture, reconciles durable amounts, and ignores later pri
     timeZone: "UTC",
   };
   const capture = {
-    paymentIntentId: "pi_c3",
+    paymentIntentId: `pi_c3_${orderId}`,
     status: "succeeded",
     amountReceivedCents: 4200,
     currency: "usd",
@@ -46,7 +46,7 @@ it("withholds missing capture, reconciles durable amounts, and ignores later pri
     const receipt = await admitNativeStripePayment({
       tenantId,
       orderId,
-      paymentIntentId: "pi_c3",
+      paymentIntentId: `pi_c3_${orderId}`,
       paidAt,
       orderPatch: {},
     });
@@ -146,7 +146,7 @@ it("persists provider capture on fresh admission and rejects non-succeeded evide
     total: "90.00",
   });
   const capture = {
-    paymentIntentId: "pi_c3_new",
+    paymentIntentId: `pi_c3_new_${orderId}`,
     status: "succeeded",
     amountReceivedCents: 4200,
     currency: "usd",
@@ -199,4 +199,57 @@ it("dates native ledger revenue by admitted occurrence after mutable paidAt chan
     const ledger = await loadPaidOrderLedger({ tenantId, startUtc: new Date("2026-10-07T00:00:00Z"), endExclusiveUtc: new Date("2026-10-08T00:00:00Z"), timeZone: "UTC" });
     expect(ledger.events).toEqual([expect.objectContaining({ cents: 4200, occurredAt: new Date("2026-10-07T12:00:00Z") })]);
   } finally { await db.delete(orders).where(eq(orders.id, id)); }
+});
+
+it("cannot admit one whole provider capture as dollars on two different orders", async () => {
+  const db = (await getDb())!;
+  const tenantId = `exclusive-${randomUUID().slice(0, 8)}`;
+  const ids = await Promise.all([1, 2].map(n => createNativeOrder({ tenantId, firstName: "Capture", lastName: String(n), phone: `310555018${n}`, address: "3545 Wilshire Blvd", pickupDate: "2026-10-08", pickupTimeWindow: "9-11" })));
+  const paymentIntentId = `pi_exclusive_${randomUUID()}`;
+  const capture = { paymentIntentId, status: "succeeded", amountReceivedCents: 4200, currency: "usd" };
+  try {
+    await admitNativeStripePayment({ tenantId, orderId: ids[0], paymentIntentId, paidAt: new Date(), orderPatch: {}, capture });
+    await expect(admitNativeStripePayment({ tenantId, orderId: ids[1], paymentIntentId, paidAt: new Date(), orderPatch: {}, capture })).rejects.toThrow("capture");
+  } finally { for (const id of ids) await db.delete(orders).where(eq(orders.id, id)); }
+});
+
+it("atomically fences competing capture owners and preserves refunded replay state", async () => {
+  const db = (await getDb())!;
+  const baseTenant = `capture-race-${randomUUID().slice(0, 8)}`;
+  const tenants = [baseTenant, `${baseTenant}-other`];
+  const ids = await Promise.all(tenants.map(tenantId => createNativeOrder({ tenantId, firstName: "Race", lastName: "Capture", phone: "3105550198", address: "3545 Wilshire Blvd", pickupDate: "2026-10-08", pickupTimeWindow: "9-11" })));
+  const paymentIntentId = `pi_capture_race_${randomUUID()}`;
+  const capture = { paymentIntentId, status: "succeeded", amountReceivedCents: 4200, currency: "usd" };
+  try {
+    const result = await Promise.allSettled(ids.map((orderId, index) => admitNativeStripePayment({ tenantId: tenants[index], orderId, paymentIntentId, paidAt: new Date(), orderPatch: {}, capture })));
+    expect(result.filter(item => item.status === "fulfilled")).toHaveLength(1);
+    const winner = result.findIndex(item => item.status === "fulfilled");
+    await db.update(orders).set({ paid: false }).where(eq(orders.id, ids[winner]));
+    await admitNativeStripePayment({ tenantId: tenants[winner], orderId: ids[winner], paymentIntentId, paidAt: new Date(), orderPatch: {}, capture });
+    const [replayed] = await db.select().from(orders).where(eq(orders.id, ids[winner]));
+    expect(replayed.paid).toBe(false);
+    await expect(reconcileNativeStripeCapture({ tenantId: tenants[winner], orderId: ids[winner], capture: { ...capture, providerOrderId: String(ids[1 - winner]) } })).rejects.toThrow("metadata conflicts");
+    await expect(admitNativeStripePayment({ tenantId: tenants[winner], orderId: ids[winner], paymentIntentId: `${paymentIntentId}_other`, paidAt: new Date(), orderPatch: {} })).rejects.toThrow("identity");
+  } finally { for (const id of ids) await db.delete(orders).where(eq(orders.id, id)); }
+});
+
+
+it("withholds whole-capture dollars on ambiguous historical bindings without rewriting history", async () => {
+  const db = (await getDb())!;
+  const tenantId = `capture-history-${randomUUID().slice(0, 8)}`;
+  const ids = await Promise.all([1, 2].map(n => createNativeOrder({ tenantId, firstName: "History", lastName: String(n), phone: `310555019${n}`, address: "3545 Wilshire Blvd", pickupDate: "2026-10-08", pickupTimeWindow: "9-11" })));
+  const paymentIntentId = `pi_ambiguous_${randomUUID()}`;
+  try {
+    const receipt = await admitNativeStripePayment({ tenantId, orderId: ids[0], paymentIntentId, paidAt: new Date(), orderPatch: {}, capture: { paymentIntentId, status: "succeeded", amountReceivedCents: 4200, currency: "usd" } });
+    const [stored] = await db.select().from(authorityReceipts).where(eq(authorityReceipts.id, receipt.id));
+    // Simulated historical duplication, never an application admission path.
+    await db.insert(authorityReceipts).values({ ...stored, id: `auth-${randomUUID()}`, subjectId: String(ids[1]), idempotencyKey: `fixture-${randomUUID()}` });
+    await db.update(orders).set({ paid: true, stripePaymentIntentId: paymentIntentId }).where(eq(orders.id, ids[1]));
+    const rows = await db.select().from(orders).where(eq(orders.tenantId, tenantId));
+    const facts = await readNativePaymentFacts(rows);
+    expect(facts.size).toBe(2);
+    expect([...facts.values()].map(fact => fact.capturedAmountCents)).toEqual([null, null]);
+    const [unchanged] = await db.select().from(authorityReceipts).where(eq(authorityReceipts.id, receipt.id));
+    expect(unchanged.metadataJson).toEqual(stored.metadataJson);
+  } finally { for (const id of ids) await db.delete(orders).where(eq(orders.id, id)); }
 });

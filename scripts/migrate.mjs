@@ -4884,6 +4884,13 @@ await assertEnumContainsValues("authority_receipts", "verificationClass", [
   "VERIFIED", "ATTESTED",
 ]);
 
+const [nativeProviderIndexes] = await conn.execute(
+  "SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'authority_receipts' AND INDEX_NAME = 'idx_authority_receipts_provider_claim'"
+);
+if (!nativeProviderIndexes.length) {
+  await runRequired("CREATE INDEX idx_authority_receipts_provider_claim ON authority_receipts (sourceType, sourceRef, claimType, subjectType)", "Native provider capture identity lookup");
+}
+
 // Backfill native Stripe-authoritative paid rows so the new gate does not
 // erase legitimate historical revenue when commercial attribution re-reads it.
 // Legacy single-tenant orders may predate tenant stamping; normalize the source

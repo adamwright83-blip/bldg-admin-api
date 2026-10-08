@@ -28,7 +28,7 @@ describe("real MySQL Payment → customer/game projection", () => {
       // Simulate a historical/bypassed flag. Test fixture only, not an application write.
       await db
         .update(orders)
-        .set({ paid: true, stripePaymentIntentId: "pi_b2_proof" })
+        .set({ paid: true, stripePaymentIntentId: `pi_b2_${orderId}` })
         .where(eq(orders.id, orderId));
       const [row] = await db
         .select()
@@ -45,8 +45,8 @@ describe("real MySQL Payment → customer/game projection", () => {
       await admitNativeStripePayment({
         tenantId,
         orderId,
-        paymentIntentId: "pi_b2_proof",
-        capture: { paymentIntentId: "pi_b2_proof", status: "succeeded", amountReceivedCents: 4200, currency: "usd" },
+        paymentIntentId: `pi_b2_${orderId}`,
+        capture: { paymentIntentId: `pi_b2_${orderId}`, status: "succeeded", amountReceivedCents: 4200, currency: "usd" },
         paidAt: new Date(),
         orderPatch: {},
       });
