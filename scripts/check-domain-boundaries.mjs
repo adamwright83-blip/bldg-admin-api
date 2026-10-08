@@ -37,6 +37,36 @@ try {
   throw error;
 }
 
+// E4b relocated the existing Persistent Operator implementation without changing
+// these two Commercial -> Operator calls. The ratchet compares added import lines,
+// so a path-only rewrite otherwise looks like a newly introduced dependency.
+// This exemption is valid ONLY if the exact pre-move line exists in the chosen
+// ratchet base. A changed call, a new caller, or a new target is still rejected.
+const provenPathOnlyRelocations = new Map([
+  [
+    "server/commercialMissions/commercialMissionStore.ts",
+    new Map([["../agents/persistentOperator/fieldEventBridge", "../persistentOperator/fieldEventBridge"]]),
+  ],
+  [
+    "server/domains/commercial/commercialPipelineService.ts",
+    new Map([["../../agents/persistentOperator/fieldEventBridge", "../../persistentOperator/fieldEventBridge"]]),
+  ],
+]);
+const baseFileCache = new Map();
+function isProvenPathOnlyRelocation(path, addedSource, newSpecifier) {
+  const oldSpecifier = provenPathOnlyRelocations.get(path)?.get(newSpecifier);
+  if (!oldSpecifier) return false;
+  if (!baseFileCache.has(path)) {
+    try {
+      baseFileCache.set(path, execFileSync("git", ["show", `${base}:${path}`], { encoding: "utf8" }));
+    } catch {
+      baseFileCache.set(path, "");
+    }
+  }
+  const oldLine = addedSource.replace(newSpecifier, oldSpecifier).trim();
+  return baseFileCache.get(path).split("\n").some(line => line.trim() === oldLine);
+}
+
 let currentPath = "";
 const violations = [];
 for (const line of diff.split("\n")) {
@@ -61,7 +91,7 @@ for (const line of diff.split("\n")) {
     for (const rule of contract.forbiddenImports) {
       const fromMatches = rule.from.some(prefix => pathMatches(currentPath, prefix));
       const toMatches = rule.to.some(prefix => pathMatches(target, prefix));
-      if (fromMatches && toMatches) {
+      if (fromMatches && toMatches && !isProvenPathOnlyRelocation(currentPath, source, match[1])) {
         violations.push(
           `${rule.id}: ${currentPath} -> ${match[1]} (${target})\n  ${rule.reason}`
         );
