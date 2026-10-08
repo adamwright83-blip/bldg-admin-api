@@ -2572,17 +2572,6 @@ export async function getVendorCustomers(
   }));
 }
 
-export async function getVendorPayouts(vendorId: number): Promise<Order[]> {
-  const db = await getDb();
-  if (!db) return [];
-
-  return db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.vendorId, vendorId), eq(orders.paid, true)))
-    .orderBy(desc(orders.updatedAt));
-}
-
 export async function listVendorUsers(vendorId: number): Promise<VendorUser[]> {
   const db = await getDb();
   if (!db) return [];
