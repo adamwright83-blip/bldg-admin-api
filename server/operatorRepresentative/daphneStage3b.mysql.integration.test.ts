@@ -2,6 +2,7 @@
 // The existing Daphne MySQL CI gate is the production-acceptance anchor for both
 // the narrow Stage 3B causal canary and the broader Daphne V2 correction loop.
 import "../claire/turn/daphneV2RuntimeCorrection.mysql.integration.test";
+import "../daphne/learnedPolicy.mysql.integration.test";
 
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";

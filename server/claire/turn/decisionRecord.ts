@@ -228,19 +228,16 @@ export function deriveClaireClosedDecisions(
     ) {
       relationship = "continues_pending";
     } else if (input.brain.target === "pending_action") {
-      relationship =
-        input.brain.act === "correction"
-          ? "replaces_pending"
-          : "continues_pending";
-    } else if (input.brain.act === "correction" && input.hasPendingBriefing) {
-      // A correction about something else must not erase an unrelated held
-      // briefing. This rule is deliberately narrower than "all corrections
-      // preserve all pending work".
+      // A correction refines the held action; it does not independently prove
+      // that the operator cancelled or replaced it.
+      relationship = "continues_pending";
+    } else if (input.brain.act === "correction") {
+      // With no explicit replacement decision, preserve unrelated pending
+      // work and briefings. A correction must not silently discard either.
       relationship = "continues_pending";
     } else if (
       input.brain.act === "action_request" ||
-      input.brain.act === "work_commitment" ||
-      input.brain.act === "correction"
+      input.brain.act === "work_commitment"
     ) {
       relationship = "replaces_pending";
     }
