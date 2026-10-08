@@ -18,6 +18,10 @@ const VENDOR_TABS = [
 ] as const;
 type VendorTab = (typeof VENDOR_TABS)[number];
 
+function formatKnownCents(cents: number | null): string {
+  return cents == null ? "Unknown" : `${centsToDollars(cents)}`;
+}
+
 /* ===== Vendor Login Form ===== */
 function VendorLoginForm({
   slug,
@@ -173,8 +177,8 @@ function VendorDashboardTab() {
         <Card label="Today's orders" value={String(data.todayOrderCount)} />
         <Card label="Awaiting intake" value={String(data.awaitingIntakeCount)} />
         <Card label="Ready for delivery" value={String(data.readyForDeliveryCount)} />
-        <Card label="This week gross" value={`$${centsToDollars(data.thisWeekGrossCents)}`} />
-        <Card label="This week payout" value={`$${centsToDollars(data.thisWeekPayoutCents)}`} className="col-span-2" />
+        <Card label="This week gross" value={formatKnownCents(data.thisWeekGrossCents)} />
+        <Card label="This week payout" value={formatKnownCents(data.thisWeekPayoutCents)} className="col-span-2" />
       </div>
       <div>
         <h3 className="text-sm font-medium text-black/60 mb-2">Recent orders</h3>
@@ -466,18 +470,19 @@ function VendorPayoutsTab() {
         </thead>
         <tbody>
           {payouts.map((o) => {
-            const gross = o.total ? parseFloat(String(o.total)) : 0;
-            const feeCents = o.platformFeeCents ?? 0;
-            const payoutCents = o.vendorPayoutCents ?? 0;
-            const date = o.updatedAt ? new Date(o.updatedAt).toISOString().split("T")[0] : "—";
+            const date = o.paymentOccurredAt
+              ? new Date(o.paymentOccurredAt).toISOString().split("T")[0]
+              : "—";
             return (
               <tr key={o.id} className="border-b border-black/5">
                 <td className="py-2">{date}</td>
                 <td className="py-2">#{o.id}</td>
-                <td className="py-2">${gross.toFixed(2)}</td>
-                <td className="py-2">${(feeCents / 100).toFixed(2)}</td>
-                <td className="py-2">${(payoutCents / 100).toFixed(2)}</td>
-                <td className="py-2">{o.paid ? "Paid" : "—"}</td>
+                <td className="py-2">{formatKnownCents(o.capturedAmountCents)}</td>
+                <td className="py-2">{formatKnownCents(o.admittedPlatformFeeCents)}</td>
+                <td className="py-2">{formatKnownCents(o.admittedPayoutCents)}</td>
+                <td className="py-2">
+                  {o.currentPaid ? "Paid" : "Historical payment"}
+                </td>
               </tr>
             );
           })}

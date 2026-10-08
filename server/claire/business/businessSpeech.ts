@@ -726,7 +726,9 @@ export function speakFreshness(freshness: DataFreshness, aspect: FreshnessAspect
   };
   const newestSale = () =>
     sale?.paidAt
-      ? `The newest CleanCloud sale I can see is ${speech.money(sale.cents, true)} for ${sale.customerName ?? "an unnamed customer"}, paid ${speech.time(sale.paidAt)}.`
+      ? sale.cents == null
+        ? `The newest CleanCloud sale I can see is for ${sale.customerName ?? "an unnamed customer"}, paid ${speech.time(sale.paidAt)}. I don't have a verified amount for it.`
+        : `The newest CleanCloud sale I can see is ${speech.money(sale.cents, true)} for ${sale.customerName ?? "an unnamed customer"}, paid ${speech.time(sale.paidAt)}.`
       : "";
 
   if (!freshness.gumball.paired && (aspect === "gumball_today" || aspect === "gumball_working")) {

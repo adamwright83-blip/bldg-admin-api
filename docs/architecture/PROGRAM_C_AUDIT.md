@@ -136,3 +136,40 @@ The operations dashboard now carries an explicit payment evidence status:
 unverified/unavailable evidence into "Unpaid" and no longer collapses a verified
 payment with no immutable captured amount into "No charge". Those states render
 as "Payment not verified", "Evidence unavailable", or "Amount unknown".
+
+
+## C7-C9: Remaining native monetary read convergence
+
+### Native data freshness
+
+Native freshness now consumes the Orders-owned explicit-tenant history reader and
+Payment-owned admitted facts. It no longer selects native `orders.paid`,
+`orders.paidAt`, mutable `orders.total`, or a missing-tenant-to-default
+predicate as sale truth. The latest native sale is ordered by Payment receipt
+occurrence. Dollars remain unknown when the occurrence is admitted but immutable
+capture evidence is absent. Claire's freshness renderer speaks that amount as
+unknown rather than coercing null into a dollar value.
+
+### Vendor dashboard and payout history
+
+Vendor operational counts remain Orders facts. A dedicated vendor payment
+projection composes an Orders-owned vendor reader with canonical Payment facts.
+Historical gross and payment time come from immutable capture evidence and receipt
+occurrence, not current order price, `updatedAt`, or raw paid flags. Vendor
+payment history is sorted by admitted payment occurrence. The current paid/refund
+projection remains distinct from historical capture occurrence, so a refunded
+order is labeled as historical payment rather than currently Paid. Known amounts
+retain currency display; unknown amounts remain explicit.
+
+### FIRST_HIRE supporting revenue
+
+FIRST_HIRE readiness still uses Orders operational weight for utilization, with an
+exact persisted tenant predicate. Its supporting trailing revenue is now populated
+only from canonical revenue when that reader may state the requested 30-day window
+exactly. Partial or unavailable revenue remains null. Mutable order quote totals no
+longer masquerade as paid revenue, and missing tenant identity is not coerced to
+`default`.
+
+These changes close the three remaining raw monetary consumer families named by
+the C3 audit. Final Program C certification still requires the post-merge hostile
+repository scan and classification of every remaining suspicious read/write seam.

@@ -83,7 +83,6 @@ import {
   getVendorUserByVendorIdAndEmail,
   getOrdersByVendorId,
   getVendorCustomers,
-  getVendorPayouts,
   createVendorUser,
   updateVendorUserPassword,
   updateVendorBranding,
@@ -175,6 +174,10 @@ import {
   exportOperationsEventsCsv,
   listOperationsEvents,
 } from "./operationsEventsDashboard";
+import {
+  loadVendorPaymentProjection,
+  sumKnownCents,
+} from "./analytics/vendorPaymentProjection";
 import {
   getPaymentReconciliationDashboard,
   listReconciledCleanCloudCustomerRevenue,
@@ -457,7 +460,10 @@ export const appRouter = router({
     dashboard: vendorProcedure.query(async ({ ctx }) => {
       const vid = ctx.vendorSession.vendorId;
       const today = new Date().toISOString().split("T")[0];
-      const orders = await getOrdersByVendorId(vid);
+      const [orders, payments] = await Promise.all([
+        getOrdersByVendorId(vid),
+        loadVendorPaymentProjection(vid),
+      ]);
       const todayOrders = orders.filter(
         o => o.pickupDate === today || o.deliveryDate === today
       );
@@ -466,21 +472,21 @@ export const appRouter = router({
       const weekStart = new Date();
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekStartStr = weekStart.toISOString().split("T")[0];
-      const thisWeekOrders = orders.filter(o => {
-        const d = o.updatedAt
-          ? new Date(o.updatedAt).toISOString().split("T")[0]
-          : "";
-        return d >= weekStartStr && o.paid;
+      const hasUndatedPayment = payments.some(
+        payment => !payment.paymentOccurredAt
+      );
+      const thisWeekPayments = payments.filter(payment => {
+        if (!payment.paymentOccurredAt) return false;
+        return payment.paymentOccurredAt.slice(0, 10) >= weekStartStr;
       });
-      const grossCents = thisWeekOrders.reduce(
-        (s, o) =>
-          s + (o.total ? Math.round(parseFloat(String(o.total)) * 100) : 0),
-        0
-      );
-      const payoutCents = thisWeekOrders.reduce(
-        (s, o) => s + (o.vendorPayoutCents ?? 0),
-        0
-      );
+      const grossCents = hasUndatedPayment
+        ? null
+        : sumKnownCents(
+            thisWeekPayments.map(payment => payment.capturedAmountCents)
+          );
+      const payoutCents = hasUndatedPayment
+        ? null
+        : sumKnownCents(thisWeekPayments.map(payment => payment.payoutCents));
       const last5 = orders.slice(0, 5);
       return {
         todayOrderCount: todayOrders.length,
@@ -554,7 +560,18 @@ export const appRouter = router({
       return getVendorCustomers(ctx.vendorSession.vendorId);
     }),
     listPayouts: vendorProcedure.query(async ({ ctx }) => {
-      return getVendorPayouts(ctx.vendorSession.vendorId);
+      const payments = await loadVendorPaymentProjection(
+        ctx.vendorSession.vendorId
+      );
+      return payments.map(payment => ({
+        ...payment.order,
+        paymentAuthorityReceiptId: payment.authorityReceiptId,
+        paymentOccurredAt: payment.paymentOccurredAt,
+        capturedAmountCents: payment.capturedAmountCents,
+        admittedPlatformFeeCents: payment.platformFeeCents,
+        admittedPayoutCents: payment.payoutCents,
+        currentPaid: payment.currentPaid,
+      }));
     }),
     getConnectDashboardLink: vendorProcedure.query(async ({ ctx }) => {
       const vendor = await getVendorById(ctx.vendorSession.vendorId);
