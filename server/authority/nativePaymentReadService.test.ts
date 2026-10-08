@@ -72,6 +72,15 @@ describe("Payment-owned native paid reader", () => {
       "tenant-b",
     ]);
   });
+  it("retains admitted payment occurrence after the current paid flag changes", async () => {
+    const refunded = { ...order, paid: false };
+    const receipts = await readNativePaymentAuthorityReceipts([refunded]);
+    expect(receipts.has(order.id)).toBe(true);
+    expect(hasNativePaymentAuthority(refunded, receipts.get(order.id))).toBe(
+      false
+    );
+  });
+
   it("propagates unavailable admission instead of silently claiming economic truth", async () => {
     loader.mockRejectedValue(new Error("Authority receipts unavailable"));
     await expect(readNativePaymentAuthorityReceipts([order])).rejects.toThrow(

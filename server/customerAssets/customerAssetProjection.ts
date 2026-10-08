@@ -286,7 +286,6 @@ export async function projectCustomerAssets(input: {
             : null,
         timeline: group
           .flatMap(order => {
-            const payment = paymentByOrder.get(order.id);
             const entries: CustomerAssetTimelineItem[] = [
               {
                 id: `order:${order.id}`,
@@ -298,15 +297,19 @@ export async function projectCustomerAssets(input: {
                 amountCents: cents(order.total),
               },
             ];
-            if (payment?.paidAt)
+            const receipt = paymentAuthorityReceipts.get(order.id);
+            if (receipt?.occurredAt)
               entries.push({
-                id: `payment:${payment.orderId}`,
-                occurredAt: payment.paidAt.toISOString(),
+                id: `payment:${order.id}`,
+                occurredAt: receipt.occurredAt,
                 type: "payment" as const,
-                title: `Payment ${payment.state}`,
-                sourceReference: `order_payment_projections:${payment.orderId}`,
+                title: "Payment recorded",
+                sourceReference: `authority_receipts:${receipt.id}`,
                 verificationClass: "VERIFIED" as const,
-                amountCents: payment.netPaidCents,
+                // A current net projection is not the amount of this past
+                // payment event. Keep the event amount unknown without an
+                // immutable occurrence amount from Payment authority.
+                amountCents: null,
               });
             return entries;
           })

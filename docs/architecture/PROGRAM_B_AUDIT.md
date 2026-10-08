@@ -77,3 +77,19 @@ Commercial outcome interpretation.
 Real MySQL proves actor and tenant isolation, repeated projection stability, and
 that a saved `captured` game node cannot override a real Commercial `follow_up`.
 No new win/payment/customer/order, no new reward, and no game UX changes.
+
+## Slice B4: Payment history uses admitted occurrences
+
+Customer assets previously labeled an `order_payment_projections.paidAt` value
+as a VERIFIED historical payment without an admission receipt. The timeline now
+uses the matching Payment receipt's occurrence time and source reference. The
+Payment reader distinguishes an admitted historical occurrence from the current
+paid flag, so a later state change does not erase the admitted history. Historical
+amount is unknown: a current net projection or editable order price cannot prove
+the amount captured at that earlier occurrence.
+
+Real MySQL proves projection-only history is withheld, admission enables exactly
+one event, and replay/current-state changes preserve that event without inventing
+an amount. Four receipt unit tests, geography/reader guards, both Payment projection
+MySQL tests, typecheck, nomenclature, tenant ratchet, and vertical dependency checks
+pass. Starting main: bd124b461a65480995d00b9453b02610a4a5579e.
