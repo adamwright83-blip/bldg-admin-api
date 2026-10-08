@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { dayDirectorCommitments } from "../../drizzle/schema";
-import type { ConfirmedWorkdayPlan } from "../../shared/claireWorkday";
-import { getDb } from "../db";
+import { dayDirectorCommitments } from "../../../drizzle/schema";
+import type { ConfirmedWorkdayPlan } from "../../../shared/claireWorkday";
+import { getDb } from "../../db";
 
 export type WorkdayPlanSnapshotKey = {
   tenantId: string;

@@ -10,7 +10,7 @@ import { commercialMissionRouter } from "../commercialMissions/commercialMission
 import { commercialPipelineRouter } from "../domains/commercial/commercialPipelineRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { getDashboardTimeZone } from "../dashboardZoned";
-import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
+import { currentDayLineRouter } from "../planning/dayline/currentDayLineRouter";
 import { teamRouter } from "../team/teamRouter";
 import { saasRouter } from "./saasRouter";
 import { deleteTenantData, planTenantDeletion } from "./tenantLifecycle";

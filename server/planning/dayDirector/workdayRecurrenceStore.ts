@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { dayDirectorRecurrenceRules } from "../../drizzle/schema";
-import type { DayDirectorKind } from "../../shared/claireWorkdayCommand";
-import { getDb } from "../db";
+import { dayDirectorRecurrenceRules } from "../../../drizzle/schema";
+import type { DayDirectorKind } from "../../../shared/claireWorkdayCommand";
+import { getDb } from "../../db";
 
 export type DayDirectorRecurrenceRule = {
   id: string;

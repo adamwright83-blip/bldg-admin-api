@@ -13,7 +13,7 @@ import { macroGoalRuns } from "../../drizzle/schema";
 import {
   setDayLineDepsForTesting,
   resetDayLineDepsForTesting,
-} from "../goldline/dayline/currentDayLineService";
+} from "../planning/dayline/currentDayLineService";
 
 /**
  * Reusable mock database fixture with table tracking and in-memory row storage

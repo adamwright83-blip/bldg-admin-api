@@ -4,7 +4,7 @@ import {
   completeDayDirectorCommitment,
   getDayDirectorState,
   updateDayDirectorCommitment,
-} from "../../dayDirector/dayDirectorService";
+} from "../../planning/dayDirector/dayDirectorService";
 import type { ClaireCampaignSummary } from "../campaignAwareness";
 import { joinList, plural } from "../business/businessSpeech";
 import type { MutationReceipt } from "../assertionGuard";

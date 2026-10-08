@@ -22,7 +22,7 @@ import { runWithLlmObservability } from "../_core/llmObservability";
 import { claireOperatorScope } from "../platform/tenancy/tenantIdentity";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
+import { dayDirectorActorId } from "../planning/dayDirector/dayDirectorActor";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 import {
   CLAIRE_ATTESTABLE_EVENT_TYPES,

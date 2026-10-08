@@ -7,8 +7,8 @@ import type { CampaignRun } from "../../../shared/campaignRun";
 import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
 import { bridgeDriverAction } from "../../persistentOperator/fieldEventBridge";
-import { completeDayDirectorCommitment } from "../../dayDirector/dayDirectorService";
-import { getLatestPlan } from "../../missionDirector/missionDirectorService";
+import { completeDayDirectorCommitment } from "../dayDirector/dayDirectorService";
+import { getLatestPlan } from "../missionDirector/missionDirectorService";
 import { resolveCandidateCompletionLineage } from "./candidateCompletionLineage";
 import { readCurrentDayLine } from "./currentDayLineService";
 

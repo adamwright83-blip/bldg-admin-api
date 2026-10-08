@@ -8,7 +8,7 @@ import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidat
 import type { WeeklyDossierFact } from "../../../shared/weeklyMissionReadiness";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import { getActiveMacroGoalForOperators } from "../macroGoalService";
-import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
+import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
 import { listActiveRecurrenceRules } from "../workdayRecurrenceService";
 import { getFieldToday } from "../../field/fieldTodayService";
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";

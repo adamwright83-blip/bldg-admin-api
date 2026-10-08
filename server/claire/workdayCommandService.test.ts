@@ -9,7 +9,7 @@ import {
   UNKNOWN_CARGO_IDENTITY,
   type CommandCommitmentSource,
 } from "../../shared/claireWorkdayCommand";
-import { applyCommandProtection, detectTimePockets } from "../missionDirector/pocketDetection";
+import { applyCommandProtection, detectTimePockets } from "../planning/missionDirector/pocketDetection";
 
 function commitment(overrides: Partial<CommandCommitmentSource>): CommandCommitmentSource {
   return {

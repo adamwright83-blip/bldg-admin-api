@@ -6,7 +6,7 @@ import {
   type CommercialAccountHistoryCore,
   type CommercialAccountRef,
 } from "../../domains/commercial/commercialAccountReadService";
-import { searchDayDirectorCommitmentsByTitle } from "../../dayDirector/dayDirectorService";
+import { searchDayDirectorCommitmentsByTitle } from "../../planning/dayDirector/dayDirectorService";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { searchOperatorConversation, type RememberedTurn } from "./conversationMemory";

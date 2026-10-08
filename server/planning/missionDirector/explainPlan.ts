@@ -8,8 +8,8 @@
  * Anthropic, validate/parse strictly, fall back deterministically on any
  * failure, log rather than throw.
  */
-import { ENV } from "../_core/env";
-import { invokeLLM } from "../_core/llm";
+import { ENV } from "../../_core/env";
+import { invokeLLM } from "../../_core/llm";
 import type { MissionPlanOutcome } from "./missionDirectorTypes";
 
 const explainSchema = {

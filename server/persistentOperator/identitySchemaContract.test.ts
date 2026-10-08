@@ -40,7 +40,7 @@ describe("Persistent operator PR1 schema contract", () => {
   });
 
   it("records Day Director verification only on the first real completion", () => {
-    const router = repoFile("server/dayDirector/dayDirectorRouter.ts");
+    const router = repoFile("server/planning/dayDirector/dayDirectorRouter.ts");
     expect(router).toMatch(/const result = await completeDayDirectorCommitment/);
     expect(router).toMatch(
       /if \(!result\.alreadyCompleted\)[\s\S]*eventKind: "objective_verified"[\s\S]*objectiveId: input\.commitmentId/
@@ -48,8 +48,8 @@ describe("Persistent operator PR1 schema contract", () => {
   });
 
   it("records Day Director creation only when accept inserted a new commitment", () => {
-    const router = repoFile("server/dayDirector/dayDirectorRouter.ts");
-    const service = repoFile("server/dayDirector/dayDirectorService.ts");
+    const router = repoFile("server/planning/dayDirector/dayDirectorRouter.ts");
+    const service = repoFile("server/planning/dayDirector/dayDirectorService.ts");
     expect(router).toMatch(
       /const \{ stored, created \} = await acceptProposalWithReceipt/
     );
@@ -65,9 +65,9 @@ describe("Persistent operator PR1 schema contract", () => {
     const files = [
       "server/persistentOperator/identity.ts",
       "server/persistentOperator/tenantScope.ts",
-      "server/dayDirector/dayDirectorRouter.ts",
-      "server/missionDirector/missionDirectorRouter.ts",
-      "server/goldline/dayline/currentDayLineRouter.ts",
+      "server/planning/dayDirector/dayDirectorRouter.ts",
+      "server/planning/missionDirector/missionDirectorRouter.ts",
+      "server/planning/dayline/currentDayLineRouter.ts",
       "server/claire/weeklyMission/weeklyMissionRouter.ts",
       "server/campaignRuns/campaignRunRouter.ts",
       "server/lanternCity/lanternCityRouter.ts",

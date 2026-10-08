@@ -4,7 +4,7 @@
  * Ranking is grounded and inspectable. campaignId is the final equal-score
  * tie-break only. LLM availability never changes this function's selection.
  */
-import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
+import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 import type {
   MissionPlanOutcome,
   MissionRankEvidence,

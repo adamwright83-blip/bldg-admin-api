@@ -7,8 +7,8 @@ vi.mock("../db", () => ({
 
 import { getDb } from "../db";
 import { loadTenantBusinessIdentity } from "../saas/tenantIdentityService";
-import { loadWorkdayPlanSnapshot } from "../dayDirector/workdayPlanSnapshotStore";
-import { listActiveDayDirectorRecurrenceRules } from "../dayDirector/workdayRecurrenceStore";
+import { loadWorkdayPlanSnapshot } from "../planning/dayDirector/workdayPlanSnapshotStore";
+import { listActiveDayDirectorRecurrenceRules } from "../planning/dayDirector/workdayRecurrenceStore";
 import { latestWeeklyIntent } from "../planning/weeklyIntentStore";
 import { databaseMacroGoalPersistence } from "../planning/macroGoalStore";
 import { loadClaireIdentityTruth } from "./identityTruth";

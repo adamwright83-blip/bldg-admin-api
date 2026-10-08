@@ -8,7 +8,7 @@ import {
   getDayDirectorState,
   proposeCommitment,
   updateDayDirectorCommitment,
-} from "../dayDirector/dayDirectorService";
+} from "../planning/dayDirector/dayDirectorService";
 import { getClaireCampaignSummary, type ClaireCampaignSummary } from "./campaignAwareness";
 import {
   assessAmbiguity,
@@ -53,7 +53,7 @@ import {
   speakCancelResult,
   speakCompletedHistory,
   speakEditResult,
-} from "../goldline/dayline/dayLineMutationService";
+} from "../planning/dayline/dayLineMutationService";
 import {
   approveCapabilityEngineering,
   speakEngineeringStatus,

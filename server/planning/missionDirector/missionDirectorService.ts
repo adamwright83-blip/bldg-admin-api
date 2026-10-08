@@ -4,27 +4,27 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { missionDirectorPlans, opsTasks } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { getDashboardTimeZone } from "../dashboardZoned";
-import { getFieldToday } from "../field/fieldTodayService";
-import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
-import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
-import { loadDailyCommand } from "../claire/dailyCommandContract";
-import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
-import { latestWeeklyIntentForOperators } from "../claire/weeklyMission/intentStore";
+import { missionDirectorPlans, opsTasks } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { getDashboardTimeZone } from "../../dashboardZoned";
+import { getFieldToday } from "../../field/fieldTodayService";
+import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
+import { getActiveMacroGoalForOperators } from "../../claire/macroGoalService";
+import { loadDailyCommand } from "../../claire/dailyCommandContract";
+import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
+import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
   explicitOperatorMissionDisplacement,
-} from "../claire/weeklyMission/dailyCommandIntent";
-import { projectRecurrenceForDate } from "../claire/workdayRecurrenceService";
+} from "../../claire/weeklyMission/dailyCommandIntent";
+import { projectRecurrenceForDate } from "../../claire/workdayRecurrenceService";
 import { detectTimePockets, applyCommandProtection, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
 import { eligibleCampaigns } from "./eligibility";
 import { selectMissionPlan } from "./planSelection";
 import { explainMissionPlan } from "./explainPlan";
 import { computePrepReadiness } from "./prepReadiness";
 import { rankMissionDirectorWork } from "./rankableWork";
-import { loadWeeklyGrowthCandidates } from "../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
+import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import type { RankingContext, RankingOpenTask } from "./missionRank";
 import type { MissionDirectorPlan, MissionPlanOutcome } from "./missionDirectorTypes";
 

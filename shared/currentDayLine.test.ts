@@ -278,7 +278,7 @@ describe("current day line ranking projection", () => {
     const source = readFileSync(new URL("./currentDayLine.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/rankCampaigns|selectMissionPlan|sort\(/);
     const service = readFileSync(
-      new URL("../server/goldline/dayline/currentDayLineService.ts", import.meta.url),
+      new URL("../server/planning/dayline/currentDayLineService.ts", import.meta.url),
       "utf8"
     );
     expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortLegacyDayforgeTodayItems|\.sort\(/);

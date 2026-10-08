@@ -1,4 +1,4 @@
-import { enforceTitleContract } from "../claire/briefing/titleContract";
+import { enforceTitleContract } from "../../claire/briefing/titleContract";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -6,21 +6,21 @@ import {
   dayDirectorProcessingLocations,
   dayDirectorPromptStates,
   towerWarsPromises,
-} from "../../drizzle/schema";
-import type { DayDirectorCommitment, DayDirectorProposal, DayDirectorReference } from "../../shared/dayDirector";
+} from "../../../drizzle/schema";
+import type { DayDirectorCommitment, DayDirectorProposal, DayDirectorReference } from "../../../shared/dayDirector";
 import {
   demotePrimaryCommand,
   emptyCommandMetadata,
   readCommandMetadata,
   readOperatorMissionMetadata,
-} from "../../shared/claireWorkdayCommand";
+} from "../../../shared/claireWorkdayCommand";
 import {
   dayLineDisplayTitle,
   readDayLineOverlay,
-} from "../../shared/goldlineDayLine";
-import { getDb } from "../db";
-import { invokeLLM } from "../_core/llm";
-import { ENV } from "../_core/env";
+} from "../../../shared/goldlineDayLine";
+import { getDb } from "../../db";
+import { invokeLLM } from "../../_core/llm";
+import { ENV } from "../../_core/env";
 
 const proposalSchema = {
   name: "day_director_commitment",

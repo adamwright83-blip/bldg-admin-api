@@ -1,6 +1,6 @@
-import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
+import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
 import { getFieldToday } from "../../field/fieldTodayService";
-import { readCurrentDayLine } from "../../goldline/dayline/currentDayLineService";
+import { readCurrentDayLine } from "../../planning/dayline/currentDayLineService";
 import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";

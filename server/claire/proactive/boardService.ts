@@ -5,7 +5,7 @@ import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
-import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService";
+import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
 import { listOpenCommercialFollowUps } from "../../domains/commercial/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,

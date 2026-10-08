@@ -30,7 +30,7 @@ import {
   sweepUnpropagatedConquestWins,
 } from "../server/persistentOperator/autonomousWorkerService";
 import { propagateGeographicConquest } from "../server/persistentOperator/geographicConquestService";
-import { readCurrentDayLine } from "../server/goldline/dayline/currentDayLineService";
+import { readCurrentDayLine } from "../server/planning/dayline/currentDayLineService";
 
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";

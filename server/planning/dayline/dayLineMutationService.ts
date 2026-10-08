@@ -8,7 +8,7 @@ import {
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { ensureAdamBoard } from "../../claire/proactive/boardService";
-import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
+import { getDayDirectorState } from "../dayDirector/dayDirectorService";
 import { listLegacyDayforgeToday } from "../../legacyDayforgeToday/legacyDayforgeTodayService";
 import { getCommercialMission, listCommercialMissions } from "../../commercialMissions/commercialMissionStore";
 import {

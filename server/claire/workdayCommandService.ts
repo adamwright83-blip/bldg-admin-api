@@ -24,7 +24,7 @@ import {
   type DailyCommand,
 } from "../../shared/claireWorkdayCommand";
 import { getClaireCampaignSummary } from "./campaignAwareness";
-import { getDayDirectorState } from "../dayDirector/dayDirectorService";
+import { getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCargo } from "../goldlineCargo/cargoService";
 

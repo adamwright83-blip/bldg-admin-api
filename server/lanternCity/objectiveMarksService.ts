@@ -22,7 +22,7 @@ import {
 import type { CurrentDayLine } from "../../shared/currentDayLine";
 import { listRunEvents, listRunSlots, listTargets } from "../campaignRuns/campaignRunService";
 import { getDb } from "../db";
-import { readCurrentDayLine } from "../goldline/dayline/currentDayLineService";
+import { readCurrentDayLine } from "../planning/dayline/currentDayLineService";
 
 /** Most recent runs considered for history. Bounded so one tenant cannot make the map unbounded. */
 export const LANTERN_MARK_RUN_LIMIT = 50;
