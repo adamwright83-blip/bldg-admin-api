@@ -93,6 +93,45 @@ export async function readNativePaymentAuthorityReceipts(
   return verified;
 }
 
+export type NativePaymentFact = {
+  orderId: number;
+  tenantId: string;
+  paymentIntentId: string;
+  authorityReceiptId: string;
+  occurredAt: string | null;
+  capturedAmountCents: number | null;
+};
+
+/**
+ * Canonical native Payment read projection.
+ * A fact exists only when exact tenant/order/processor evidence matches an
+ * admitted Payment receipt. Receipt existence proves occurrence; dollars remain
+ * unknown unless immutable provider capture evidence is present.
+ */
+export async function readNativePaymentFacts(
+  rows: readonly NativePaymentEvidence[]
+): Promise<Map<number, NativePaymentFact>> {
+  const receipts = await readNativePaymentAuthorityReceipts(rows);
+  const facts = new Map<number, NativePaymentFact>();
+  for (const row of rows) {
+    if (!Number.isInteger(row.id)) continue;
+    const receipt = receipts.get(row.id!);
+    if (!receipt || !hasNativePaymentAuthority(row, receipt)) continue;
+    const tenantId = row.tenantId?.trim();
+    const paymentIntentId = row.stripePaymentIntentId?.trim();
+    if (!tenantId || !paymentIntentId) continue;
+    facts.set(row.id!, {
+      orderId: row.id!,
+      tenantId,
+      paymentIntentId,
+      authorityReceiptId: receipt.id,
+      occurredAt: receipt.occurredAt,
+      capturedAmountCents: nativeCapturedAmountCents(receipt),
+    });
+  }
+  return facts;
+}
+
 /** Immutable provider-captured USD amount. Receipt existence alone proves no dollars. */
 export function nativeCapturedAmountCents(
   receipt?: AuthorityReceipt | null
