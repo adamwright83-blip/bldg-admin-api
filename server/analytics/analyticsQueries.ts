@@ -2,6 +2,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
 import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import { readNativePaidCandidates } from "../orders/orderHistoryReadService";
 import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
 import {
   activeCustomerPopulation,
@@ -531,17 +532,9 @@ export async function getDataCompleteness(tenantId: string): Promise<DataComplet
   const connected: DataCompleteness["connected"] = [];
   const missing: DataCompleteness["missing"] = [];
 
-  const [paidRow] = await db
-    .select({ cnt: sql<number>`COUNT(*)` })
-    .from(orders)
-    .where(
-      and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-        sql`${orders.paid} = true`,
-        sql`${orders.stripePaymentIntentId} IS NOT NULL`
-      )
-    );
-  if (Number(paidRow?.cnt ?? 0) > 0) {
+  const candidates = await readNativePaidCandidates(tenantId);
+  const receipts = await readNativePaymentAuthorityReceipts(candidates);
+  if (candidates.some(row => hasNativePaymentAuthority(row, receipts.get(row.id)))) {
     connected.push({ source: "Stripe-paid orders", description: "Native Goldline orders with Stripe payment evidence" });
   } else {
     missing.push({ source: "Stripe-paid orders", prevents: "no native paid orders with payment evidence yet" });
@@ -552,7 +545,7 @@ export async function getDataCompleteness(tenantId: string): Promise<DataComplet
     .from(cleancloudPaidOrders)
     .where(eq(cleancloudPaidOrders.tenantId, tenantId));
   if (Number(ccRow?.cnt ?? 0) > 0) {
-    connected.push({ source: "CleanCloud import", description: "Paid CleanCloud orders, counted once per order" });
+    connected.push({ source: "CleanCloud import", description: "Imported CleanCloud order candidates; paid admission and reconciliation are checked separately" });
   }
 
   // Clearent / XplorPay — clearentTransactions has no tenantId column, so global rows

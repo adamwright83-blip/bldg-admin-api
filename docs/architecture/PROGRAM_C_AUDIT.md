@@ -287,3 +287,9 @@ normalization/always-paid string literals.
 A real MySQL witness on main `4bc98a08` showed `loadCustomerOrderTruth` treating a modern imported `paid` flag as paid customer truth without `cleancloud_paid_observed` admission. The loader now composes the existing external-evidence reader and validates tenant, order and exact import source reference before admitting paid status or dollars. Unadmitted rows remain customer history with paid false and amount null. No native Payment receipt is manufactured; `cleancloud_legacy_orders` is untouched.
 
 Validation: the witness fails before the change and passes afterwards, including wrong-tenant and wrong-import rejection. Type check and four architecture gates pass; 60 geography/authority contracts pass. The one geography digest fixture failure reproduces on starting main (D baseline evidence). Protected concurrent PRs do not change these hunks.
+
+## C19 — Payment source availability is an admitted fact
+
+`getDataCompleteness` could label Stripe paid evidence as connected using only a raw paid flag and processor identifier, with missing ownership coalesced into the default tenant. It now composes Orders-owned explicit-tenant candidates and Payment admission. Unknown historical captured dollars still establish admitted payment occurrence; they never become quote-derived revenue. CleanCloud import availability is explicitly a candidate-data diagnostic, not a paid-event or exact-revenue claim.
+
+Validation: a real MySQL witness reproduces false connection on unchanged main and passes with the change; other-tenant isolation passes. 63 analytics/composer/authority contracts pass (six pre-existing skipped evaluations), plus type check and four architecture gates.
