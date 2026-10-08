@@ -173,8 +173,23 @@ function VendorDashboardTab() {
         <Card label="Today's orders" value={String(data.todayOrderCount)} />
         <Card label="Awaiting intake" value={String(data.awaitingIntakeCount)} />
         <Card label="Ready for delivery" value={String(data.readyForDeliveryCount)} />
-        <Card label="This week gross" value={`$${centsToDollars(data.thisWeekGrossCents)}`} />
-        <Card label="This week payout" value={`$${centsToDollars(data.thisWeekPayoutCents)}`} className="col-span-2" />
+        <Card
+          label="This week gross"
+          value={
+            data.thisWeekGrossCents == null
+              ? "Unknown"
+              : `${centsToDollars(data.thisWeekGrossCents)}`
+          }
+        />
+        <Card
+          label="This week payout"
+          value={
+            data.thisWeekPayoutCents == null
+              ? "Unknown"
+              : `${centsToDollars(data.thisWeekPayoutCents)}`
+          }
+          className="col-span-2"
+        />
       </div>
       <div>
         <h3 className="text-sm font-medium text-black/60 mb-2">Recent orders</h3>
@@ -436,9 +451,21 @@ function VendorCustomersTab() {
 }
 
 function VendorPayoutsTab() {
-  const { data: payouts } = trpc.vendor.listPayouts.useQuery();
-  if (!payouts) return <Loader2 className="animate-spin w-6 h-6" />;
+  const { data: payoutResult } = trpc.vendor.listPayouts.useQuery();
+  if (!payoutResult) return <Loader2 className="animate-spin w-6 h-6" />;
 
+  if (payoutResult.status === "unavailable") {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Payouts</h2>
+        <p className="text-sm text-black/60">
+          Payment evidence is currently unavailable. No payout total is being inferred.
+        </p>
+      </div>
+    );
+  }
+
+  const payouts = payoutResult.rows;
   if (!payouts.length) {
     return (
       <div className="space-y-4">
@@ -466,18 +493,28 @@ function VendorPayoutsTab() {
         </thead>
         <tbody>
           {payouts.map((o) => {
-            const gross = o.total ? parseFloat(String(o.total)) : 0;
-            const feeCents = o.platformFeeCents ?? 0;
-            const payoutCents = o.vendorPayoutCents ?? 0;
-            const date = o.updatedAt ? new Date(o.updatedAt).toISOString().split("T")[0] : "—";
+            const grossCents = o.paymentFact.capturedAmountCents;
+            const feeCents = o.platformFeeCents;
+            const payoutCents = o.vendorPayoutCents;
+            const date = o.paymentFact.occurredAt
+              ? new Date(o.paymentFact.occurredAt).toISOString().split("T")[0]
+              : "—";
             return (
               <tr key={o.id} className="border-b border-black/5">
                 <td className="py-2">{date}</td>
                 <td className="py-2">#{o.id}</td>
-                <td className="py-2">${gross.toFixed(2)}</td>
-                <td className="py-2">${(feeCents / 100).toFixed(2)}</td>
-                <td className="py-2">${(payoutCents / 100).toFixed(2)}</td>
-                <td className="py-2">{o.paid ? "Paid" : "—"}</td>
+                <td className="py-2">
+                  {grossCents == null ? "Unknown" : `${(grossCents / 100).toFixed(2)}`}
+                </td>
+                <td className="py-2">
+                  {feeCents == null ? "Unknown" : `${(feeCents / 100).toFixed(2)}`}
+                </td>
+                <td className="py-2">
+                  {payoutCents == null ? "Unknown" : `${(payoutCents / 100).toFixed(2)}`}
+                </td>
+                <td className="py-2">
+                  {o.paymentFact.currentPaid ? "Paid" : "Historical payment"}
+                </td>
               </tr>
             );
           })}
