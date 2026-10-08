@@ -79,3 +79,29 @@ The wider scan also identified remaining independent raw monetary consumers in
 Tower Wars, Level 4 referral selection, native freshness, vendor dashboard and
 capability/order statistics. They are being classified and migrated in subsequent
 coherent slices; B/C are not yet globally certified.
+
+## C4: Resident/referral facts compose owning Orders and Payment readers
+
+Level 4 paid-resident counts and referral lifetime values previously queried raw
+paid flags and summed mutable prices. A customer projection now composes the narrow
+Orders history reader with matching Payment receipts and provider capture cents.
+Admitted payment existence can count a resident even when historical dollars remain
+unknown. A referral object requiring a numeric lifetime value is withheld until its
+captures are reconciled. Prices do not substitute for amounts; tenant is explicit.
+
+Outreach copy/execution previously trusted browser-supplied customer/count/value
+payloads. They now resolve business facts from the durable server projection.
+Stale/foreign targets fail closed; caller-selected brand and reviewed copy remain
+intent/presentation. Execution dedupe runs before source refresh, preserving replay.
+The downstream Ops task uses the admitted source snapshot, not the browser's money.
+No outbound messaging is introduced; this remains the existing reviewed-action log.
+
+MySQL proves weak flags are excluded, amountless receipts enable only counts,
+reconciliation enables immutable value, price changes/replay preserve value, and
+other tenants do not contribute. Source tests prove browser money/count/name values
+cannot replace canonical facts and stale/held targets cannot execute.
+
+The pre-existing tenantless `bldg_users` shared registration census remains an
+explicit legacy observation (signups, not tenant-owned paying customers). No row
+gets assigned a tenant. Tenant-bound paid residents require owned Orders lineage
+and Payment admission. The separate `cleancloud_legacy_orders` exception is untouched.

@@ -1,3 +1,4 @@
+import { admitOffensiveActionSource } from "./level4OffensiveSource";
 /**
  * Level 4 Offensive Growth — "execute action" writer.
  *
@@ -44,7 +45,7 @@ export type ExecuteOffensiveInput =
       block: "building_penetration";
       buildingSlug: string;
       buildingName: string;
-      /** Snapshot of scoring inputs at click time — audit trail, not rehydrated. */
+      /** Server-owned fact snapshot at execution; browser values are not authority. */
       metadata?: {
         convertedUsers?: number;
         convertedPaidUsers?: number;
@@ -90,7 +91,7 @@ export function readPrimaryCopyField(
 }
 
 export type ExecuteOffensiveResult =
-  | { ok: true; deduped: boolean; logId: number | null; actionType: string }
+  | { ok: true; deduped: boolean; logId: number | null; actionType: string; admittedInput?: ExecuteOffensiveInput }
   | { ok: false; error: string };
 
 export async function executeOffensiveAction(
@@ -123,6 +124,9 @@ export async function executeOffensiveAction(
       return { ok: true, deduped: true, logId: existing[0].id, actionType: ACTION_BUILDING_PENETRATION };
     }
 
+    try { input = await admitOffensiveActionSource(tenantId,input); } catch(error) { return {ok:false,error:error instanceof Error ? error.message : "Canonical source unavailable"}; }
+    if (input.block !== "building_penetration") return {ok:false,error:"Canonical source mismatch"};
+
     const ins = await db.insert(adminActionLog).values({
       tenantId,
       actionType: ACTION_BUILDING_PENETRATION,
@@ -145,6 +149,7 @@ export async function executeOffensiveAction(
       deduped: false,
       logId: Number.isFinite(logId) ? logId : null,
       actionType: ACTION_BUILDING_PENETRATION,
+      admittedInput: input,
     };
   }
 
@@ -165,6 +170,9 @@ export async function executeOffensiveAction(
     if (existing.length > 0) {
       return { ok: true, deduped: true, logId: existing[0].id, actionType: ACTION_REFERRAL_REQUEST };
     }
+
+    try { input = await admitOffensiveActionSource(tenantId,input); } catch(error) { return {ok:false,error:error instanceof Error ? error.message : "Canonical source unavailable"}; }
+    if (input.block !== "referral_request") return {ok:false,error:"Canonical source mismatch"};
 
     const ins = await db.insert(adminActionLog).values({
       tenantId,
@@ -190,6 +198,7 @@ export async function executeOffensiveAction(
       deduped: false,
       logId: Number.isFinite(logId) ? logId : null,
       actionType: ACTION_REFERRAL_REQUEST,
+      admittedInput: input,
     };
   }
 

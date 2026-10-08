@@ -1,3 +1,4 @@
+import { admitOffensiveCopySource } from "./level4OffensiveSource";
 import { readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
@@ -1868,10 +1869,10 @@ export const appRouter = router({
           }),
         ])
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         try {
           return await generateLevel4OffensiveCopy(
-            input as GenerateOffensiveCopyInput
+            await admitOffensiveCopySource(ctx.tenantId,input as GenerateOffensiveCopyInput)
           );
         } catch (e) {
           throwCatalogAiAsTrpc(e);
@@ -1941,6 +1942,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: out.error });
         }
         if (!out.deduped) {
+          if (out.admittedInput) input = out.admittedInput as typeof input;
           try {
             const title =
               input.block === "building_penetration"
