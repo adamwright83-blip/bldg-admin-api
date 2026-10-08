@@ -23,5 +23,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Trace suspicious reader usage
+        run: |
+          rg -n --glob '!**/*.test.*' --glob '!**/*.spec.*' --glob '!**/archive/**'             'getOrderStats|getOpenOrderStats|getDataCompleteness|loadLedgerSourceEvidence|projectCustomerAssets|getLevel4GateState|listAdminCustomerAggregates|listPaidOrdersForBuildingRevenue|loadDataFreshness|getRevenueInterventionCandidates|sendPaymentReminderForOrder|logRecentFirstOrderWins'             server shared client/src || true
       - name: Emit hostile architecture inventory
         run: pnpm vitest run server/architectureHostileInventory.audit.test.ts
