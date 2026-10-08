@@ -14,7 +14,7 @@ import {
   isDaphneV2ClaireEnabled,
   loadDaphneClaireGuidance,
 } from "../../daphne/claireAdapter";
-import { loadDaphneMetaPreferences } from "../../daphne/goalsPreferences";
+import { loadDaphneMetaPreferences, setDaphneMetaPreference } from "../../daphne/goalsPreferences";
 import { listDaphneObservations } from "../../daphne/observationStore";
 import { buildDaphneV2OperatorCard } from "../../daphne/engine";
 import { resolveCanonicalOperatorIdentity } from "../../persistentOperator/identity";
@@ -166,6 +166,14 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
       },
       brainV3: vi.fn(async (input: any) => {
         const text = String(input.utterance ?? "");
+        if (/walk me through my day/i.test(text)) {
+          return {
+            ...safeClaireBrainV3Fallback(),
+            act: "question",
+            broadBriefingRequest: true,
+            rationale: "Explicit broad day briefing.",
+          };
+        }
         if (/what should i do/i.test(text)) {
           return {
             ...safeClaireBrainV3Fallback(),
@@ -356,4 +364,63 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
       "EXPLICIT CORRECTION: do not repeat a question, recommendation, or explanation the operator already answered or acted on unless new evidence makes repetition necessary."
     );
   }, 60_000);
+
+  it("LIVE REPRO: durable concise style survives a new call and reaches deterministic board, then reverses", async () => {
+    const h = harness();
+    const longBrief =
+      "GUMBALL failed today. 16 dormant customers ready for recovery: " +
+      Array.from({ length: 16 }, (_, i) => `Customer ${i + 1}`).join(", ") +
+      ". Sales that must survive: Email Mission 15.";
+    const conciseBrief =
+      "GUMBALL import failed today. Recovery candidates need verification before outreach. " +
+      "Next sales follow-up: Email Mission 15.";
+    h.overrides.watchBoard = vi.fn(async () => ({
+      brief: longBrief, conciseBrief, recoveryAccounts: [],
+    }));
+
+    const first = await runClaireTurn(
+      { ...turnInput("Keep your answers shorter from now on.", `daphne-phone-first-${suffix}`, "voice"), allowFragmentWait: false },
+      h.overrides
+    );
+    expect(first.speak).toBe("Got it. I'll keep my answers shorter from now on.");
+    const storedAfterFirst = await loadDaphneMetaPreferences({ tenantId, canonicalOperatorId });
+    expect(storedAfterFirst.response_detail).toMatchObject({ status: "active", value: 0.2 });
+
+    // No Claire state is passed from the first call to this independently
+    // initialized session. loadDaphneClaireGuidance reads the real MySQL row.
+    const second = await runClaireTurn(
+      { ...turnInput("Can you walk me through my day?", `daphne-phone-second-${suffix}`, "voice"), allowFragmentWait: false },
+      h.overrides
+    );
+    expect(second.speak).toBe(conciseBrief);
+    expect(second.speak).not.toContain("Customer 1");
+    expect(second.speak.length).toBeLessThan(longBrief.length);
+
+    const reversed = await runClaireTurn(
+      { ...turnInput("Give me more detail from now on.", `daphne-phone-detail-${suffix}`, "voice"), allowFragmentWait: false },
+      h.overrides
+    );
+    expect(reversed.speak).toBe("Got it. I'll provide more detail from now on.");
+    expect((await loadDaphneMetaPreferences({ tenantId, canonicalOperatorId })).response_detail?.value).toBe(0.85);
+
+    const detailed = await runClaireTurn(
+      { ...turnInput("Can you walk me through my day?", `daphne-phone-after-detail-${suffix}`, "voice"), allowFragmentWait: false },
+      h.overrides
+    );
+    expect(detailed.speak).toBe(longBrief);
+
+    // A stored opt-out must suppress Daphne's deterministic adaptation while
+    // leaving the unmodified board as the fallback presentation.
+    const latest = await loadDaphneMetaPreferences({ tenantId, canonicalOperatorId });
+    await setDaphneMetaPreference({
+      tenantId, canonicalOperatorId, preferenceKey: "adaptation_enabled",
+      value: false, sourceObservationId: latest.response_detail!.sourceObservationId,
+    });
+    expect(await loadDaphneClaireGuidance({ tenantId, operatorUserId: operatorOpenId })).toBeNull();
+    const disabled = await runClaireTurn(
+      { ...turnInput("Can you walk me through my day?", `daphne-phone-disabled-${suffix}`, "voice"), allowFragmentWait: false },
+      h.overrides
+    );
+    expect(disabled.speak).toBe(longBrief);
+  }, 120_000);
 });

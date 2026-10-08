@@ -6,6 +6,8 @@ export type DaphneClaireGuidance = {
   cardGeneratedAt: string;
   evidenceCount: number;
   promptSection: string;
+  /** Active, durable detail preference for deterministic Claire renderers. */
+  responseDetail?: number | null;
 };
 
 export function isDaphneV2ClaireEnabled(
@@ -86,5 +88,5 @@ export async function loadDaphneClaireGuidance(input:{
     agentId:"claire",
   });
   const promptSection=buildDaphneClairePromptSection(card);
-  return promptSection?{cardGeneratedAt:card.generatedAt,evidenceCount:card.evidenceRefs.length,promptSection}:null;
+  return promptSection?{cardGeneratedAt:card.generatedAt,evidenceCount:card.evidenceRefs.length,promptSection,responseDetail:numberPref(card,"response_detail")}:null;
 }

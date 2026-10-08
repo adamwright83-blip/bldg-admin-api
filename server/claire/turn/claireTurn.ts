@@ -157,6 +157,7 @@ import {
 } from "../../daphne/claireAdapter";
 import {
   captureExplicitDaphnePreferenceCorrections,
+  detectExplicitDaphnePreferenceCorrections,
   type DaphneExplicitPreferenceCaptureResult,
 } from "../../daphne/explicitPreferenceCorrection";
 
@@ -327,7 +328,7 @@ export type ClaireTurnDeps = {
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
-  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; salesArtifacts?: SalesInsightArtifact[]; recoveryAccounts?: Array<{ id: string; name: string }> }>;
+  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string; conciseBrief?: string; salesArtifacts?: SalesInsightArtifact[]; recoveryAccounts?: Array<{ id: string; name: string }> }>;
   recoveryObligations?: typeof loadObligations;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
@@ -418,7 +419,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
             (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
         )
         .map(item => ({ id: item.subjectKey, name: item.subjectName }));
-      return { brief: board.brief, salesArtifacts: board.salesArtifacts, recoveryAccounts };
+      return { brief: board.brief, conciseBrief: board.conciseBrief, salesArtifacts: board.salesArtifacts, recoveryAccounts };
     },
     recoveryObligations: loadObligations,
     doctrineTurn: handleDoctrineTurn,
@@ -744,7 +745,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // completed utterance boundary. Incomplete voice fragments returned above,
   // so they cannot accidentally become durable preferences.
   const daphnePreferenceTurnId = `${input.conversationKey}:${(state.claireTurnCount ?? 0) + 1}`;
-  await (
+  const daphnePreferenceResult: DaphneExplicitPreferenceCaptureResult = await (
     deps.captureDaphneV2PreferenceCorrections ??
     captureExplicitDaphnePreferenceCorrections
   )({
@@ -753,7 +754,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     utterance,
     conversationId: input.conversationKey,
     turnId: daphnePreferenceTurnId,
-  }).catch(() => null);
+  }).catch(() => ({
+    status: "persistence_failed" as const,
+    corrections: detectExplicitDaphnePreferenceCorrections(utterance),
+    observationIds: [],
+    readbackVerified: false,
+  }));
 
   // Reload after correction persistence. This makes an explicit correction
   // available on this completed turn and all later Claire calls. The payload
@@ -1386,6 +1392,34 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.workDisposition === "commit" ||
     brainV3.dayLineDisposition !== "none";
 
+  // Durable Daphne style corrections own their confirmation. A generic
+  // doctrine "standing rule" response cannot prove an observation/write/read.
+  if (
+    conversationTarget === "open_conversation" &&
+    !isOperationalWorkOrDayLine &&
+    daphnePreferenceResult.corrections.length > 0
+  ) {
+    const detail = daphnePreferenceResult.corrections.find(c =>
+      c.preferenceKey === "response_detail"
+    );
+    const saved = daphnePreferenceResult.status === "persisted" &&
+      daphnePreferenceResult.readbackVerified === true;
+    const spokenConfirmation = !saved
+      ? "I understand, but I couldn't save that preference for future calls."
+      : detail?.value === 0.2
+        ? "Got it. I'll keep my answers shorter from now on."
+        : detail?.value === 0.85
+          ? "Got it. I'll provide more detail from now on."
+          : "That preference is saved for future calls.";
+    console.info("[DaphneV2]", JSON.stringify({
+      event: "preference_acknowledgement", status: daphnePreferenceResult.status,
+      durableReadback: saved, replyPath: "preference_acknowledgement",
+      preferenceKeys: daphnePreferenceResult.corrections.map(c => c.preferenceKey),
+    }));
+    mark("doctrine");
+    return finish({ speak: spokenConfirmation, kind: "answered" });
+  }
+
   const doctrineSpeak =
     conversationTarget === "open_conversation" &&
     !isOperationalWorkOrDayLine &&
@@ -1415,12 +1449,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
         actorId: input.dayDirectorActorId,
-      }).catch(() => ({ brief: "", recoveryAccounts: [] }));
+      }).catch(() => ({ brief: "", conciseBrief: undefined as string | undefined, recoveryAccounts: [] }));
       if (board.brief) {
-        const surfaced = recoveryRefsNamedInSpeech(board.brief, board.recoveryAccounts ?? []);
+        const useConcise = typeof daphneV2Guidance?.responseDetail === "number" &&
+          daphneV2Guidance.responseDetail <= 0.33 && Boolean(board.conciseBrief);
+        const spokenBoard = useConcise ? board.conciseBrief! : board.brief;
+        const surfaced = recoveryRefsNamedInSpeech(spokenBoard, board.recoveryAccounts ?? []);
         if (surfaced.length) state.surfacedRecoveryAccounts = surfaced;
+        console.info("[DaphneV2]", JSON.stringify({
+          event: "response_style", replyPath: "proactive_board",
+          preferenceActive: typeof daphneV2Guidance?.responseDetail === "number",
+          conciseRendering: useConcise,
+        }));
         mark("proactive_board");
-        return finish({ speak: board.brief, salesArtifacts: "salesArtifacts" in board ? board.salesArtifacts : undefined, kind: "answered" });
+        return finish({ speak: spokenBoard, salesArtifacts: "salesArtifacts" in board ? board.salesArtifacts : undefined, kind: "answered" });
       }
     }
   }

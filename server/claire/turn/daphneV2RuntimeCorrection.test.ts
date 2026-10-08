@@ -16,13 +16,15 @@ function depsForRuntimeLoop(memory: { concise: boolean }) {
   const events: string[] = [];
   const capture = vi.fn(async (input: { utterance: string }) => {
     events.push("capture");
-    if (/shorter|concise|brief/i.test(input.utterance)) memory.concise = true;
+    const isCorrection = /(?:keep your answers shorter|be concise|give me less detail)/i.test(input.utterance);
+    if (isCorrection) memory.concise = true;
     return {
-      status: memory.concise ? "persisted" as const : "no_match" as const,
-      corrections: memory.concise
+      status: isCorrection ? "persisted" as const : "no_match" as const,
+      corrections: isCorrection
         ? [{ preferenceKey: "response_detail" as const, value: 0.2, evidenceText: input.utterance }]
         : [],
-      observationIds: memory.concise ? ["obs-1"] : [],
+      observationIds: isCorrection ? ["obs-1"] : [],
+      readbackVerified: isCorrection,
     };
   });
   const load = vi.fn(async () => {
@@ -31,6 +33,7 @@ function depsForRuntimeLoop(memory: { concise: boolean }) {
       ? {
           cardGeneratedAt: "2026-10-07T19:00:00.000Z",
           evidenceCount: 1,
+          responseDetail: 0.2,
           promptSection:
             "DAPHNE V2 USER-ADAPTATION CONTEXT. Declared response detail preference: 0.20 on [0,1].",
         }
@@ -78,6 +81,14 @@ function depsForRuntimeLoop(memory: { concise: boolean }) {
     loadDaphneV2Guidance: load,
     brainV3: vi.fn(async (input: any) => {
       const text = String(input.utterance ?? "");
+      if (/walk me through my day/i.test(text)) {
+        return {
+          ...safeClaireBrainV3Fallback(),
+          act: "question",
+          broadBriefingRequest: true,
+          rationale: "Broad board response is not model-generated.",
+        };
+      }
       if (/what should i do/i.test(text)) {
         return {
           ...safeClaireBrainV3Fallback(),
@@ -150,5 +161,46 @@ describe("Daphne V2 real Claire correction loop", () => {
       })
     );
     expect(nextCall.speak).toBe("Do the highest-value follow-up first.");
+  });
+
+  it("renders the broad board concisely only when Daphne's active style preference is present", async () => {
+    const h = depsForRuntimeLoop({ concise: true });
+    const longBrief = "GUMBALL failed today. " +
+      Array.from({ length: 16 }, (_, i) => `Customer ${i + 1}`).join(", ") +
+      ". Sales: Email Mission 15.";
+    const conciseBrief = "GUMBALL import failed today. Recovery candidates need verification. Next sales follow-up: Email Mission 15.";
+    h.overrides.watchBoard = vi.fn(async () => ({ brief: longBrief, conciseBrief })) as never;
+    const input = {
+      tenantId: "tenant-a", operatorUserId: "adam", dayDirectorActorId: "1",
+      surface: "text" as const, utterance: "Can you walk me through my day?",
+      state: {} as ClaireTurnState, conversationKey: "new-phone-call",
+      brief: "b", context: context(),
+    };
+    const concise = await runClaireTurn(input, h.overrides);
+    expect(concise.speak).toBe(conciseBrief);
+    expect(concise.speak).not.toContain("Customer 1");
+    expect(h.followUp).not.toHaveBeenCalled();
+
+    h.overrides.loadDaphneV2Guidance = async () => null;
+    const full = await runClaireTurn({ ...input, state: {}, conversationKey: "adaptation-off" }, h.overrides);
+    expect(full.speak).toBe(longBrief);
+  });
+
+  it("does not let generic doctrine falsely acknowledge a failed Daphne save", async () => {
+    const h = depsForRuntimeLoop({ concise: false });
+    h.overrides.captureDaphneV2PreferenceCorrections = (async () => ({
+      status: "readback_failed" as const,
+      corrections: [{ preferenceKey: "response_detail" as const, value: 0.2, evidenceText: "redacted" }],
+      observationIds: ["obs-not-verified"],
+      readbackVerified: false,
+    })) as never;
+    h.overrides.doctrineTurn = async () => "I'll treat that as a standing rule.";
+    const failed = await runClaireTurn({
+      tenantId: "tenant-a", operatorUserId: "adam", dayDirectorActorId: "1",
+      surface: "text", utterance: "Keep your answers shorter from now on.",
+      state: {}, conversationKey: "failed-save", context: context(),
+    }, h.overrides);
+    expect(failed.speak).toContain("couldn't save");
+    expect(failed.speak).not.toContain("standing rule");
   });
 });
