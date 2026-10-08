@@ -1,8 +1,10 @@
+import { readNativeCustomerHistory, readLegacyNativeCustomerHistoryAcrossTenants } from "../orders/orderHistoryReadService";
+export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from "../orders/orderHistoryReadService";
 import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import { eq } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
-import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
+import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { computeRecencyStatus } from "../../shared/customerStatus";
 import {
   inferCustomerCadence,
@@ -372,24 +374,6 @@ export function projectGeographicCustomers(input: {
 }
 
 /** Narrow read-model projection. Do not select the full `orders` schema. */
-export const NATIVE_ORDER_TRUTH_COLUMNS = {
-  tenantId: orders.tenantId,
-  id: orders.id,
-  status: orders.status,
-  createdAt: orders.createdAt,
-  firstName: orders.firstName,
-  lastName: orders.lastName,
-  phone: orders.phone,
-  email: orders.email,
-  address: orders.address,
-  unit: orders.unit,
-  buildingSlug: orders.buildingSlug,
-  bldgUserId: orders.bldgUserId,
-  paid: orders.paid,
-  stripePaymentIntentId: orders.stripePaymentIntentId,
-  total: orders.total,
-} as const;
-
 /** Narrow read-model projection. Do not select the full CleanCloud schema. */
 export const CLEANCLOUD_ORDER_TRUTH_COLUMNS = {
   cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
@@ -412,14 +396,6 @@ export const CLEANCLOUD_ORDER_TRUTH_COLUMNS = {
 
 type TruthDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-async function loadNativeOrderTruthRows(
-  db: TruthDb,
-  tenantId?: string
-): Promise<NativeOrderLike[]> {
-  const query = db.select(NATIVE_ORDER_TRUTH_COLUMNS).from(orders);
-  return tenantId ? query.where(eq(orders.tenantId, tenantId)) : query;
-}
-
 async function loadCleanCloudOrderTruthRows(
   db: TruthDb,
   tenantId?: string
@@ -440,7 +416,9 @@ export async function loadCustomerOrderTruth(
 ): Promise<CustomerOrderTruthRecord[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const nativeRows = await loadNativeOrderTruthRows(db, tenantId);
+  const nativeRows = tenantId === undefined
+    ? await readLegacyNativeCustomerHistoryAcrossTenants(db)
+    : await readNativeCustomerHistory(tenantId, db);
   const cleancloudRows = await loadCleanCloudOrderTruthRows(db, tenantId);
   const nativePaymentAuthorityReceipts = await readNativePaymentAuthorityReceipts(nativeRows);
   return mergeCustomerOrderTruth({
