@@ -14,7 +14,7 @@ import { isExecutiveActionGrant } from "../executive/grants";
 import {
   ActionExecutionGateError,
   executeAdmittedAction,
-} from "../../../authority/actionExecutionGate";
+} from "../../../platform/authority/actionExecutionGate";
 
 export class ActionGatewayError extends Error {
   constructor(message: string) {

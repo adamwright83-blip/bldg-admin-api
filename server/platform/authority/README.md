@@ -16,9 +16,9 @@ Platform-level shared infrastructure for durable authority receipts, action exec
 - `authority_receipts` table (generic execution gate and completion receipts).
 
 ## LEGAL ENTRYPOINTS
-- `executeWithActionGate` (`server/authority/actionExecutionGate.ts`)
-- `recordAuthorityReceipt` (`server/authority/authorityReceipt.ts`)
-- `admitActionCompletion` (`server/authority/actionCompletionAdmission.ts`)
+- `executeWithActionGate` (`server/platform/authority/actionExecutionGate.ts`)
+- `recordAuthorityReceipt` (`server/platform/authority/authorityReceipt.ts`)
+- `admitActionCompletion` (`server/platform/authority/actionCompletionAdmission.ts`)
 
 ## DOWNSTREAM CONSUMERS
 - Durable execution workers (`server/durableExecution/`)

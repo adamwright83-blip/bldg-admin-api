@@ -6,7 +6,7 @@ import {
 import {
   findAuthorityReceiptForSubject,
   type AuthorityReceipt,
-} from "../authority/authorityReceipt";
+} from "../platform/authority/authorityReceipt";
 import { getDb } from "../db";
 import {
   legacyCommercialPaidCents,

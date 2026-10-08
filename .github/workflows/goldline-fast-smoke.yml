@@ -71,14 +71,14 @@ jobs:
       - name: Prove Authority Receipt contracts
         run: >-
           pnpm vitest run
-          server/authority/authorityReceipt.test.ts
-          server/authority/paymentAdmission.test.ts
+          server/platform/authority/authorityReceipt.test.ts
+          server/domains/payment/paymentAdmission.test.ts
           server/cleancloudPaidEvidence.test.ts
           server/cleancloudExternalEvidenceArchitecture.test.ts
           server/paymentAdmissionFailure.integration.test.ts
-          server/authority/authoritySliceContract.test.ts
-          server/authority/authorityPersistentOutcomeContract.test.ts
-          server/authority/actionExecutionGate.test.ts
+          server/platform/authority/authoritySliceContract.test.ts
+          server/platform/authority/authorityPersistentOutcomeContract.test.ts
+          server/platform/authority/actionExecutionGate.test.ts
           shared/goldlineWorld.authority.test.ts
       - name: Prove Action / Execution authority convergence
         run: >-

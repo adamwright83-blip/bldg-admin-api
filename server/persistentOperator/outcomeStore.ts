@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { cleancloudPaidOrders, goalCycleOutcomes } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { cleanCloudPaidObservationReceiptMatches } from "../cleancloudPaidEvidence";
-import { getAuthorityReceiptById } from "../authority/authorityReceipt";
+import { getAuthorityReceiptById } from "../platform/authority/authorityReceipt";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import {
   assertBusinessTruthEvidence,

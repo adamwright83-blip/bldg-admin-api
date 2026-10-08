@@ -32,7 +32,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Payment** | Native payment admission, durable Stripe capture evidence, receipt verification, and canonical revenue reads. | `server/domains/payment/`, `server/analytics/canonicalRevenue.ts` |
 | **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/commercialPipeline/`, `server/commercialMissions/`, `server/commercialProposals/` |
 | **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/joystick/tenantIdentity.ts`, `server/saas/` |
-| **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/authority/actionExecutionGate.ts`, `server/authority/authorityReceipt.ts`, `server/durableExecution/` |
+| **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/actionExecutionGate.ts`, `server/platform/authority/authorityReceipt.ts`, `server/durableExecution/` |
 | **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/cleancloudBrowserSync/`, `server/twilioPlatform/` |
 | **Claire** | Operator-facing conversational intelligence, chief-of-staff briefing, call handling, and prompt generation. | `server/claire/` |
 | **Daphne** | Operator preference learning, explicit correction ledger, causal model, and consent evidence. | `server/daphne/` |
@@ -104,7 +104,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Mitch game producer logic | `server/mitch/` | Managed directly by Adam; do not conflate with shared builder tools. |
 | Lantern City visual map & building display | `server/lanternCity/`, `server/goldlineWorld/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |
 | Tower Wars gameplay mechanics | `server/towerWars/` | Consumes admitted payment evidence; cannot admit payments. |
-| Action execution, retry, or worker leasing | `server/authority/actionExecutionGate.ts`, `server/durableExecution/` | Workers orchestrate domain commands; they do not invent business policy. |
+| Action execution, retry, or worker leasing | `server/platform/authority/actionExecutionGate.ts`, `server/durableExecution/` | Workers orchestrate domain commands; they do not invent business policy. |
 
 ---
 
@@ -113,7 +113,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 When any AI coding agent or engineer conducts an architecture review or reports conclusions, they MUST clearly distinguish their epistemic basis:
 
 - **`VERIFIED`**: Exact files, lines, and documents directly inspected and executed tests observed.
-  - *Example:* "Verified via `server/authority/paymentAdmission.ts#L42-L78` that `admitNativePayment` writes to `authority_receipts`."
+  - *Example:* "Verified via `server/domains/payment/paymentAdmission.ts#L42-L78` that `admitNativePayment` writes to `authority_receipts`."
 - **`INFERRED`**: Logical conclusions supported indirectly by patterns or naming, but not yet verified in live source code.
   - *Example:* "Inferred that `server/dryCleanReceiptIntake.ts` routes through `Orders` because it returns an `orderId`."
 - **`UNKNOWN`**: Uninspected subsystems, unverified assumptions, or missing evidence.

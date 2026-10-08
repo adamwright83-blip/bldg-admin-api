@@ -2,7 +2,7 @@ import {
   hasNativePaymentAuthority,
   nativeCapturedAmountCents,
 } from "./domains/payment/nativePaymentReadService";
-import type { AuthorityReceipt } from "./authority/authorityReceipt";
+import type { AuthorityReceipt } from "./platform/authority/authorityReceipt";
 import { resolveBuildingEvidence } from "@shared/buildings";
 import {
   computeCustomerTier,

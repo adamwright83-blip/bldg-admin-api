@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { commercialMissionEvents } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { commercialMissionEvents } from "../../../drizzle/schema";
+import { getDb } from "../../db";
 import {
   admitAuthorityClaimWith,
   type AuthorityReceipt,

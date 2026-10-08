@@ -9,9 +9,9 @@ import {
   goalCycleOutcomes,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { admitCompletedCommercialVisit } from "../authority/actionCompletionAdmission";
-import { admitCommercialFieldObservation } from "../authority/fieldObservationAdmission";
-import { findAuthorityReceiptForSubject } from "../authority/authorityReceipt";
+import { admitCompletedCommercialVisit } from "../platform/authority/actionCompletionAdmission";
+import { admitCommercialFieldObservation } from "../platform/authority/fieldObservationAdmission";
+import { findAuthorityReceiptForSubject } from "../platform/authority/authorityReceipt";
 import { findCleanCloudPaidObservationReceipt } from "../cleancloudPaidEvidence";
 import {
   getGoalCycleObjective,

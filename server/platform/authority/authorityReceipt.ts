@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { authorityReceipts } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { authorityReceipts } from "../../../drizzle/schema";
+import { getDb } from "../../db";
 
 export const AUTHORITY_CLAIM_TYPES = [
   "payment_verified",
