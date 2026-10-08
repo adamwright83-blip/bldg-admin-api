@@ -83,7 +83,6 @@ import {
   getVendorUserByVendorIdAndEmail,
   getOrdersByVendorId,
   getVendorCustomers,
-  getVendorPayouts,
   createVendorUser,
   updateVendorUserPassword,
   updateVendorBranding,
@@ -465,27 +464,66 @@ export const appRouter = router({
       const readyForDelivery = orders.filter(o => o.status === "ready");
       const weekStart = new Date();
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      const weekStartStr = weekStart.toISOString().split("T")[0];
-      const thisWeekOrders = orders.filter(o => {
-        const d = o.updatedAt
-          ? new Date(o.updatedAt).toISOString().split("T")[0]
-          : "";
-        return d >= weekStartStr && o.paid;
-      });
-      const grossCents = thisWeekOrders.reduce(
-        (s, o) =>
-          s + (o.total ? Math.round(parseFloat(String(o.total)) * 100) : 0),
-        0
+      weekStart.setHours(0, 0, 0, 0);
+
+      let paymentFacts: Awaited<ReturnType<typeof readNativePaymentFacts>> | null = null;
+      try {
+        paymentFacts = await readNativePaymentFacts(orders);
+      } catch {
+        // An unavailable Payment reader is not a zero-dollar week.
+      }
+
+      const thisWeekPayments =
+        paymentFacts == null
+          ? []
+          : orders
+              .map(order => ({ order, fact: paymentFacts!.get(order.id) }))
+              .filter(
+                (row): row is typeof row & { fact: NonNullable<typeof row.fact> } =>
+                  Boolean(
+                    row.fact?.occurredAt &&
+                      Date.parse(row.fact.occurredAt) >= weekStart.getTime()
+                  )
+              );
+      const hasUnknownGross = thisWeekPayments.some(
+        row => row.fact.capturedAmountCents == null
       );
-      const payoutCents = thisWeekOrders.reduce(
-        (s, o) => s + (o.vendorPayoutCents ?? 0),
-        0
+      const hasUnknownPayout = thisWeekPayments.some(
+        row => row.order.vendorPayoutCents == null
       );
+      const hasUnverifiedPaidCandidate =
+        paymentFacts != null &&
+        orders.some(
+          order =>
+            Boolean(order.paid && order.stripePaymentIntentId) &&
+            !paymentFacts!.has(order.id)
+        );
+      const paymentDataStatus =
+        paymentFacts == null
+          ? ("unavailable" as const)
+          : hasUnknownGross || hasUnknownPayout || hasUnverifiedPaidCandidate
+            ? ("partial" as const)
+            : ("verified" as const);
+      const grossCents =
+        paymentFacts == null || hasUnknownGross
+          ? null
+          : thisWeekPayments.reduce(
+              (sum, row) => sum + (row.fact.capturedAmountCents ?? 0),
+              0
+            );
+      const payoutCents =
+        paymentFacts == null || hasUnknownPayout
+          ? null
+          : thisWeekPayments.reduce(
+              (sum, row) => sum + (row.order.vendorPayoutCents ?? 0),
+              0
+            );
       const last5 = orders.slice(0, 5);
       return {
         todayOrderCount: todayOrders.length,
         awaitingIntakeCount: awaitingIntake.length,
         readyForDeliveryCount: readyForDelivery.length,
+        paymentDataStatus,
         thisWeekGrossCents: grossCents,
         thisWeekPayoutCents: payoutCents,
         recentOrders: last5,
@@ -554,7 +592,34 @@ export const appRouter = router({
       return getVendorCustomers(ctx.vendorSession.vendorId);
     }),
     listPayouts: vendorProcedure.query(async ({ ctx }) => {
-      return getVendorPayouts(ctx.vendorSession.vendorId);
+      const orders = await getOrdersByVendorId(ctx.vendorSession.vendorId);
+      let paymentFacts: Awaited<ReturnType<typeof readNativePaymentFacts>>;
+      try {
+        paymentFacts = await readNativePaymentFacts(orders);
+      } catch {
+        return { status: "unavailable" as const, rows: [] };
+      }
+      const rows = orders
+        .map(order => {
+          const fact = paymentFacts.get(order.id);
+          if (!fact) return null;
+          return {
+            ...order,
+            paymentFact: {
+              occurredAt: fact.occurredAt,
+              capturedAmountCents: fact.capturedAmountCents,
+              authorityReceiptId: fact.authorityReceiptId,
+              currentPaid: order.paid === true,
+            },
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null)
+        .sort(
+          (a, b) =>
+            Date.parse(b.paymentFact.occurredAt ?? "1970-01-01") -
+            Date.parse(a.paymentFact.occurredAt ?? "1970-01-01")
+        );
+      return { status: "ok" as const, rows };
     }),
     getConnectDashboardLink: vendorProcedure.query(async ({ ctx }) => {
       const vendor = await getVendorById(ctx.vendorSession.vendorId);
