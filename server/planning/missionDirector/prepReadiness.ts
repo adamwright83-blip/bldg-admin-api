@@ -8,9 +8,9 @@
  */
 import { and, eq } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
-import { opsTaskEvents, opsTasks } from "../../drizzle/schema";
-import { getDb } from "../db";
-import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
+import { opsTaskEvents, opsTasks } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 
 function daysBefore(businessDate: string, days: number): string {
   const [y, m, d] = businessDate.split("-").map(Number);

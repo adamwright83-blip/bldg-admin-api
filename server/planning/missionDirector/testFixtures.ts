@@ -1,4 +1,4 @@
-import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
+import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 
 export function buildCampaign(overrides: Partial<GrowthCampaign> & { campaignId: string }): GrowthCampaign {
   return {

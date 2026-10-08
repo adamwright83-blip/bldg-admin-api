@@ -2,7 +2,7 @@
  * Slice 4 §6 — deterministic campaign eligibility for a target business date.
  * Never touched by the model — see §5's determinism invariant.
  */
-import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
+import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 import type { CampaignRejection } from "./missionDirectorTypes";
 
 export function eligibleCampaigns(input: {

@@ -16,7 +16,7 @@ import {
   readDayLineOverlay,
   type DayLineItemRef,
 } from "./goldlineDayLine";
-import { resolveDayLineTargets } from "../server/goldline/dayline/dayLineMutationService";
+import { resolveDayLineTargets } from "../server/planning/dayline/dayLineMutationService";
 
 const louise: DayLineItemRef = {
   sourceType: "commercial_mission",

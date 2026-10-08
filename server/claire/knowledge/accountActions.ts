@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
-import { acceptProposalWithReceipt } from "../../dayDirector/dayDirectorService";
+import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
 import {
   rescheduleCommercialFollowUp,
   scheduleCommercialFollowUp,

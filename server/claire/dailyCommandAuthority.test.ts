@@ -33,7 +33,7 @@ describe("Daily Command authority", () => {
   });
 
   it("does not project recurrence from the persistence-free mission compute", () => {
-    const mission = source("server/missionDirector/missionDirectorService.ts");
+    const mission = source("server/planning/missionDirector/missionDirectorService.ts");
     const compute = slice(
       mission,
       "export async function computeMissionPlan",

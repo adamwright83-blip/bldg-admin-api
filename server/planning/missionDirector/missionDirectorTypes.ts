@@ -16,7 +16,7 @@ export {
   type NoPlanReason,
   type RankFactor,
   type TimePocket,
-} from "../../shared/missionDirector";
+} from "../../../shared/missionDirector";
 
 export type CampaignRejection = {
   campaignId: string;

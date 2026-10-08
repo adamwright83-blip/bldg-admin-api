@@ -1,7 +1,7 @@
 import {
   loadWorkdayPlanSnapshot,
   upsertWorkdayPlanSnapshot,
-} from "../dayDirector/workdayPlanSnapshotStore";
+} from "../planning/dayDirector/workdayPlanSnapshotStore";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import {

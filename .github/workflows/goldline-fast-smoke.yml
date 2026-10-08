@@ -155,15 +155,15 @@ jobs:
       - name: Prove Planning authority convergence
         run: >-
           pnpm vitest run
-          server/missionDirector/rankableWork.test.ts
-          server/missionDirector/missionDirectorService.test.ts
-          server/missionDirector/planSelection.test.ts
-          server/missionDirector/missionRank.test.ts
-          server/missionDirector/pocketDetection.test.ts
+          server/planning/missionDirector/rankableWork.test.ts
+          server/planning/missionDirector/missionDirectorService.test.ts
+          server/planning/missionDirector/planSelection.test.ts
+          server/planning/missionDirector/missionRank.test.ts
+          server/planning/missionDirector/pocketDetection.test.ts
           server/weeklyGrowthCandidates/weeklyGrowthCandidates.test.ts
           server/persistentOperator/decisionEngine.test.ts
-          server/goldline/dayline/currentDayLineService.test.ts
-          server/goldline/dayline/candidateCompletionLineage.test.ts
+          server/planning/dayline/currentDayLineService.test.ts
+          server/planning/dayline/candidateCompletionLineage.test.ts
 
       - name: Prove Persistent Growth Operator Phase 0 contracts
         run: >-

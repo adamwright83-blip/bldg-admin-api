@@ -9,11 +9,11 @@ import {
 const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
+import { dayDirectorActorId } from "../planning/dayDirector/dayDirectorActor";
 import {
   completeDayDirectorCommitment,
   getDayDirectorState,
-} from "../dayDirector/dayDirectorService";
+} from "../planning/dayDirector/dayDirectorService";
 import { activateTowerWarsPromise } from "./towerWarsService";
 
 type Row = Record<string, any>;

@@ -9,9 +9,9 @@
  */
 
 import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
-import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
+import { getDayDirectorState } from "../dayDirector/dayDirectorService";
 import { getDashboardTimeZone } from "../../dashboardZoned";
-import { planForDate } from "../../missionDirector/missionDirectorService";
+import { planForDate } from "../missionDirector/missionDirectorService";
 import {
   listGoalCycleObjectives,
   type PersistentGrowthObjective,

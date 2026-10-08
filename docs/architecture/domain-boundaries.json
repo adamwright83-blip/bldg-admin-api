@@ -52,10 +52,10 @@
     {
       "domain": "planning",
       "paths": [
-        "server/missionDirector",
-        "server/dayDirector",
+        "server/planning/missionDirector",
+        "server/planning/dayDirector",
         "server/weeklyGrowthCandidates",
-        "server/goldline/dayline",
+        "server/planning/dayline",
         "server/claire/weeklyMission"
       ]
     },
@@ -195,7 +195,7 @@
       "evidenceAdmissionSource": "Resident intake validation or Driver lifecycle request crossing Orders application fence",
       "downstreamConsumers": [
         "server/joystick/driverOrderService.ts",
-        "server/dayDirector/dayDirectorService.ts",
+        "server/planning/dayDirector/dayDirectorService.ts",
         "server/lanternCity/objectiveMarksService.ts"
       ],
       "forbiddenMutationSources": [
@@ -252,7 +252,7 @@
       "canonicalReadEntrypoint": "server/domains/commercial/commercialAccountReadService.ts, server/domains/commercial/commercialFollowUpReadService.ts",
       "evidenceAdmissionSource": "Operator-attested verbal agreement or commercial contract",
       "downstreamConsumers": [
-        "server/dayDirector/dayDirectorService.ts",
+        "server/planning/dayDirector/dayDirectorService.ts",
         "server/claire/turn/claireTurn.ts",
         "server/lanternCity/objectiveMarksService.ts"
       ],

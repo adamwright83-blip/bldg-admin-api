@@ -7,7 +7,7 @@ import {
   getTowerWarsToday,
   recordTowerWarsPromise,
 } from "./towerWarsService";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
+import { dayDirectorActorId } from "../planning/dayDirector/dayDirectorActor";
 import { sandboxFixture, SANDBOX_SCENARIOS } from "@shared/sandboxScenarios";
 import { settleTowerWars } from "@shared/towerWarsSettlement";
 import { isCompletedReplayDate, requireSandboxEnabled, sandboxEnabled } from "./sandboxGate";

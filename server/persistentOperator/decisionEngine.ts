@@ -18,7 +18,7 @@ import { classifyObjectiveExecution, type ObjectiveExecutionType } from "../../s
 import { businessToday } from "../analytics/businessPeriods";
 import { getDb } from "../db";
 import { selectExecutionIntelligence } from "../executionIntelligence/selectExecutionIntelligence";
-import { getLatestPlan } from "../missionDirector/missionDirectorService";
+import { getLatestPlan } from "../planning/missionDirector/missionDirectorService";
 import type { MissionDirectorPlan } from "../../shared/missionDirector";
 import type { VerticalRegistry } from "../strategy/verticalTemplates/registry";
 import { loadWeeklyGrowthCandidates } from "../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";

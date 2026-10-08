@@ -7,10 +7,10 @@ import {
   emptyCommandMetadata,
   type OperatorMissionMetadata,
 } from "../../shared/claireWorkdayCommand";
-import { applyCommandProtection, detectTimePockets } from "../missionDirector/pocketDetection";
-import { selectMissionPlan } from "../missionDirector/planSelection";
-import { buildCampaign } from "../missionDirector/testFixtures";
-import type { RankingContext } from "../missionDirector/missionRank";
+import { applyCommandProtection, detectTimePockets } from "../planning/missionDirector/pocketDetection";
+import { selectMissionPlan } from "../planning/missionDirector/planSelection";
+import { buildCampaign } from "../planning/missionDirector/testFixtures";
+import type { RankingContext } from "../planning/missionDirector/missionRank";
 import {
   OPERATOR_MISSION_ALREADY_SPEAK,
   OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK,

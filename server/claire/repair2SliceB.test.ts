@@ -293,7 +293,7 @@ describe("Slice B — unrelated model consumers are untouched", () => {
     // them would change unrelated behavior and is explicitly out of scope.
     const { readFileSync } = await import("node:fs");
     for (const file of [
-      "server/dayDirector/dayDirectorService.ts",
+      "server/planning/dayDirector/dayDirectorService.ts",
       "server/claire/analysis/conversationEvaluator.ts",
       "server/salesIntel/salesIntelExtraction.ts",
       "server/goldlineWorld/fieldJournalProcessingService.ts",

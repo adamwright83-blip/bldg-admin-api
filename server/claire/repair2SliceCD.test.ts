@@ -429,7 +429,7 @@ describe("Slice C+D — existing personal/canon routing and unrelated consumers"
   it("no non-Claire model consumer file was touched by this slice", async () => {
     const { readFileSync } = await import("node:fs");
     for (const file of [
-      "server/dayDirector/dayDirectorService.ts",
+      "server/planning/dayDirector/dayDirectorService.ts",
       "server/claire/analysis/conversationEvaluator.ts",
       "server/salesIntel/salesIntelExtraction.ts",
       "server/goldlineWorld/fieldJournalProcessingService.ts",

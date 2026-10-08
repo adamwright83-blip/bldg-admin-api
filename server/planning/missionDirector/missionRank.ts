@@ -2,7 +2,7 @@
  * Deterministic Mission Director ranking. LLM never ranks.
  * campaignId is the final equal-score tie-break only.
  */
-import type { GrowthCampaign, MissionCategory } from "../campaignLibrary/campaignLibraryTypes";
+import type { GrowthCampaign, MissionCategory } from "../../campaignLibrary/campaignLibraryTypes";
 import type { MissionRankEvidence, RankFactor, TimePocket } from "./missionDirectorTypes";
 
 export type RankingOpenTask = {

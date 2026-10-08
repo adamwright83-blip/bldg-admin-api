@@ -8,7 +8,7 @@ import { parseBriefingDeterministically } from "./briefing/deterministicBriefing
 import { briefingClock } from "./briefing/briefingTiming";
 import { decorateCommitmentProposal } from "./voiceCommitmentLoop";
 import { deriveDailyCommand, readCommandMetadata, UNKNOWN_CARGO_IDENTITY } from "../../shared/claireWorkdayCommand";
-import { applyCommandProtection, detectTimePockets } from "../missionDirector/pocketDetection";
+import { applyCommandProtection, detectTimePockets } from "../planning/missionDirector/pocketDetection";
 import { classifyDayDirectorKind } from "./workdayCommandKind";
 import { detectUnknownCargoIdentity, resolveCommitmentBusinessDate } from "./workdayCommandLanguage";
 import { cargoFieldsForUnknownIdentity } from "./workdayCargoOrchestrator";

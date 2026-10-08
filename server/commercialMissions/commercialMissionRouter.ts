@@ -91,7 +91,7 @@ import {
   listDriverSalesJournals,
   saveDriverSalesJournal,
 } from "./driverSalesMotivationService";
-import { cancelDayLineItem } from "../goldline/dayline/dayLineMutationService";
+import { cancelDayLineItem } from "../planning/dayline/dayLineMutationService";
 import {
   finalizeMissionLinkedDebrief,
   getMissionLinkedDebriefState,

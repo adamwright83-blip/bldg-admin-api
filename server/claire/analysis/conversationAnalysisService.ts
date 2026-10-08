@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readDayDirectorActionEvidence } from "../../dayDirector/dayDirectorService";
+import { readDayDirectorActionEvidence } from "../../planning/dayDirector/dayDirectorService";
 import { ENV } from "../../_core/env";
 import {
   ANALYSIS_NOTIFICATION_KIND,

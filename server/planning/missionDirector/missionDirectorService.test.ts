@@ -5,7 +5,7 @@ import {
   planningExecutionConstraint,
 } from "./missionDirectorService";
 import { explainMissionPlan } from "./explainPlan";
-import { ENV } from "../_core/env";
+import { ENV } from "../../_core/env";
 
 describe("Mission Director — legacy campaign compatibility", () => {
   it("cannot introduce an alternate campaign outside the generic winner", () => {

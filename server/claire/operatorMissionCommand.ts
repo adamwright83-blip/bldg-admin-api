@@ -33,7 +33,7 @@
 
 import { createHash } from "node:crypto";
 import { AssertionGuard, type MutationReceipt } from "./assertionGuard";
-import { acceptProposal, designateDayDirectorPrimary, getDayDirectorState } from "../dayDirector/dayDirectorService";
+import { acceptProposal, designateDayDirectorPrimary, getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
 import { loadDailyCommand, type DailyCommand } from "./dailyCommandContract";
 import {
   applyWeeklyIntentToCommand,

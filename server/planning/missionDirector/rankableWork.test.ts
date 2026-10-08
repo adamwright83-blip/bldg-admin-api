@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
-import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates";
+import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
+import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidates";
 import { rankMissionDirectorWork } from "./rankableWork";
 
 function candidate(

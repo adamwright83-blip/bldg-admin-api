@@ -10,7 +10,7 @@ import type { MutationReceipt } from "./assertionGuard";
 import { UNKNOWN_CARGO_IDENTITY } from "../../shared/claireWorkdayCommand";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { confirmCargo, deliverCustodyToCustomer, proposeCargo } from "../goldlineCargo/cargoService";
-import { acceptProposal, completeDayDirectorCommitment, updateDayDirectorCommitment } from "../dayDirector/dayDirectorService";
+import { acceptProposal, completeDayDirectorCommitment, updateDayDirectorCommitment } from "../planning/dayDirector/dayDirectorService";
 import { detectUnknownCargoIdentity } from "./workdayCommandLanguage";
 import { classifyDayDirectorKind } from "./workdayCommandKind";
 

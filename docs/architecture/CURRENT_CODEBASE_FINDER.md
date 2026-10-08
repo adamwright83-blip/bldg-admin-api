@@ -21,9 +21,9 @@ Code wins if this file becomes stale.
 | Customer/order geographic truth | `server/geography/customerOrderTruth.ts` |
 | Commercial pipeline | `server/domains/commercial/` |
 | Commercial missions | `server/commercialMissions/` |
-| Mission Director | `server/missionDirector/` |
-| Day Director | `server/dayDirector/` |
-| Current Day Line | `server/goldline/dayline/` |
+| Mission Director | `server/planning/missionDirector/` |
+| Day Director | `server/planning/dayDirector/` |
+| Current Day Line | `server/planning/dayline/` |
 | Weekly planning | `server/claire/weeklyMission/` |
 | Persistent Operator | `server/persistentOperator/` |
 | Operator Representative | `server/operatorRepresentative/` |

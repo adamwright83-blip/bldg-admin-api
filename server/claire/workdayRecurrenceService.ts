@@ -16,9 +16,9 @@ import {
   listActiveDayDirectorRecurrenceRules,
   persistDayDirectorRecurrenceRule,
   type DayDirectorRecurrenceRule,
-} from "../dayDirector/workdayRecurrenceStore";
+} from "../planning/dayDirector/workdayRecurrenceStore";
 import { weekdayOf } from "./briefing/briefingTiming";
-import { acceptProposal } from "../dayDirector/dayDirectorService";
+import { acceptProposal } from "../planning/dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import type { DayDirectorKind } from "../../shared/claireWorkdayCommand";
 
