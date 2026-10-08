@@ -1,4 +1,5 @@
-import { nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
+import { readNativePaidCandidates } from "../orders/orderHistoryReadService";
+import { readNativePaymentFacts, nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
 import {
   readPaymentAuthorityReceipts,
   paymentAuthorityReceiptMatches,
@@ -17,7 +18,7 @@ import {
 import { and, eq, gte, inArray, isNotNull, isNull,
   lt, or, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
-import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
+import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { browserSyncBindings } from "../cleancloudBrowserSync/schema";
 import { getDb } from "../db";
 import {
@@ -373,35 +374,10 @@ async function pairedStoreLabel(db: NonNullable<Awaited<ReturnType<typeof getDb>
 export const databaseLedgerLoaders: LedgerLoaders = {
   reconciliation: loadSalesReconciliationEvidence,
   async laundry_butler(window) {
-    const db = await requireDb();
-    return db
-      .select({
-        id: orders.id,
-        paid: orders.paid,
-        paidAt: orders.paidAt,
-        total: orders.total,
-        stripePaymentIntentId: orders.stripePaymentIntentId,
-        serviceType: orders.serviceType,
-        firstName: orders.firstName,
-        lastName: orders.lastName,
-        phone: orders.phone,
-        email: orders.email,
-        bldgUserId: orders.bldgUserId,
-        address: orders.address,
-        unit: orders.unit,
-        buildingSlug: orders.buildingSlug,
-        createdAt: orders.createdAt,
-      })
-      .from(orders)
-      .where(
-        and(
-          sql`COALESCE(${orders.tenantId}, 'default') = ${window.tenantId}`,
-          eq(orders.paid, true),
-          isNotNull(orders.paidAt),
-          gte(orders.paidAt, window.startUtc),
-          lt(orders.paidAt, window.endExclusiveUtc)
-        )
-      );
+    const candidates = await readNativePaidCandidates(window.tenantId);
+    const facts = await readNativePaymentFacts(candidates);
+    return candidates.map(row => ({ ...row, paidAt: facts.get(row.id)?.occurredAt
+      ? new Date(facts.get(row.id)!.occurredAt!) : row.paidAt }));
   },
   async cleancloud(window) {
     const db = await requireDb();
@@ -601,7 +577,9 @@ export async function loadPaidOrderLedger(
             if (!failedSources.includes(event.source)) failedSources.push(event.source);
             continue;
           }
-          events.push({ ...event, cents: capture, authorityReceiptId: receipt.id });
+          const occurredAt = event.source === "laundry_butler" ? (receipt.occurredAt ? new Date(receipt.occurredAt) : null) : event.occurredAt;
+          if (!occurredAt || !inWindow(occurredAt, window)) continue;
+          events.push({ ...event, occurredAt, businessDate: businessDateOf(occurredAt, input.timeZone), cents: capture, authorityReceiptId: receipt.id });
         } else {
           unverifiedPaymentAuthority.push({
             eventKey: event.eventKey,

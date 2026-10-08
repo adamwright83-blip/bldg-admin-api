@@ -208,7 +208,7 @@ export function withFixturePaymentAuthority(loaders: LedgerLoaders): LedgerLoade
           evidenceClass: "authoritative_external" as const,
           verificationClass: "VERIFIED" as const,
           admissionPolicy: "native_stripe_payment_v1",
-          occurredAt: null,
+          occurredAt: admittedFixtureRows.find(row => String(row.id) === expected.subjectId)?.paidAt?.toISOString() ?? null,
           admittedAt: FIXTURE_NOW.toISOString(),
           metadata: { captureEvidence: "stripe_amount_received_v1", capturedCurrency: "usd", capturedAmountCents: Math.round(Number(admittedFixtureRows.find(row => String(row.id) === expected.subjectId)?.total ?? 0) * 100) },
           idempotencyKey: `fixture:native:${index}`,

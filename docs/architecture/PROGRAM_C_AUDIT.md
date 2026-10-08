@@ -207,3 +207,16 @@ between admission read and transition. No payment is manufactured by delivery.
 
 Validation: 44 lifecycle/ownership/Driver contracts and four MySQL convergence
 proofs pass, including concurrent one-time effects and the formerly bypassing flag.
+
+## C13: Native revenue windows use Payment occurrence
+
+A MySQL witness changed the mutable Orders paidAt after a verified capture and
+proved the capture disappeared from its original revenue window. The native ledger
+now composes explicitly tenant-bound Orders candidates with Payment occurrence
+before applying dates. Returned events also use the matched receipt occurrence.
+Current paid/refund eligibility is retained; this does not claim unknown refunds.
+A historical missing-tenant fallback was removed from this economic reader.
+
+Validation: three real-MySQL capture proofs (including edited amount and payment
+time), 57 focused ledger/revenue/admission/history contracts, TypeScript and the four
+architecture gates. Test-only admitted fixture receipts now carry their occurrence.

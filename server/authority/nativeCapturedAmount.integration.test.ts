@@ -187,3 +187,16 @@ it("persists provider capture on fresh admission and rejects non-succeeded evide
     await db.delete(orders).where(eq(orders.id, orderId));
   }
 });
+
+it("dates native ledger revenue by admitted occurrence after mutable paidAt changes", async () => {
+  const db = (await getDb())!;
+  const tenantId = `c13-${randomUUID().slice(0, 8)}`;
+  const id = await createNativeOrder({ tenantId, firstName: "Time", lastName: "Proof", phone: "3105550191", address: "3545 Wilshire Blvd", pickupDate: "2026-10-08", pickupTimeWindow: "9-11", total: "42.00" });
+  const paymentIntentId = `pi_time_${id}`;
+  try {
+    await admitNativeStripePayment({ tenantId, orderId: id, paymentIntentId, paidAt: new Date("2026-10-07T12:00:00Z"), orderPatch: {}, capture: { paymentIntentId, status: "succeeded", amountReceivedCents: 4200, currency: "usd" } });
+    await db.update(orders).set({ paidAt: new Date("2026-10-09T12:00:00Z"), total: "90.00" }).where(eq(orders.id, id));
+    const ledger = await loadPaidOrderLedger({ tenantId, startUtc: new Date("2026-10-07T00:00:00Z"), endExclusiveUtc: new Date("2026-10-08T00:00:00Z"), timeZone: "UTC" });
+    expect(ledger.events).toEqual([expect.objectContaining({ cents: 4200, occurredAt: new Date("2026-10-07T12:00:00Z") })]);
+  } finally { await db.delete(orders).where(eq(orders.id, id)); }
+});
