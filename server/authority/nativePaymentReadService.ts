@@ -116,7 +116,9 @@ export async function readNativePaymentFacts(
   for (const row of rows) {
     if (!Number.isInteger(row.id)) continue;
     const receipt = receipts.get(row.id!);
-    if (!receipt || !hasNativePaymentAuthority(row, receipt)) continue;
+    // readNativePaymentAuthorityReceipts already exact-matches tenant/order/source/ref.
+    // Historical payment occurrence remains true even if current paid/refund state later changes.
+    if (!receipt) continue;
     const tenantId = row.tenantId?.trim();
     const paymentIntentId = row.stripePaymentIntentId?.trim();
     if (!tenantId || !paymentIntentId) continue;
