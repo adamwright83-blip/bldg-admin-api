@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateFirstHireReadiness, type FirstHireInputs } from "./capabilityEvaluationService";
 
-const ready: FirstHireInputs={activeNonOwnerMembers:0,utilizationPct:90,profitableDeclinedDemandCents:100000,marginPct:30,reserveMonths:4,recurringWorkloadPct:50,scheduleSaturationPct:85,trailingDemandRevenueCents:2000000};
+const ready: FirstHireInputs={activeNonOwnerMembers:0,utilizationPct:90,profitableDeclinedDemandCents:100000,marginPct:30,reserveMonths:4,recurringWorkloadPct:50,scheduleSaturationPct:85,trailingDemandQuotedCents:2000000};
 describe("FIRST_HIRE_READY capability",()=>{
   it("is ready only when every real-business condition passes",()=>expect(evaluateFirstHireReadiness(ready).status).toBe("READY"));
   it("does not falsely unlock with missing data",()=>{const result=evaluateFirstHireReadiness({...ready,reserveMonths:null});expect(result.status).toBe("LOCKED");expect(result.blockingConditions).toContain("reserveMonths is unavailable")});
