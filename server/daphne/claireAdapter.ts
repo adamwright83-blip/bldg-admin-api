@@ -36,9 +36,24 @@ export function buildDaphneClairePromptSection(card:DaphneOperatorCard):string|n
   const direct=numberPref(card,"response_directness");
   const detail=numberPref(card,"response_detail");
   const challenge=numberPref(card,"challenge_level");
-  if(direct!=null) lines.push(`Declared response directness preference: ${direct.toFixed(2)} on [0,1].`);
-  if(detail!=null) lines.push(`Declared response detail preference: ${detail.toFixed(2)} on [0,1].`);
-  if(challenge!=null) lines.push(`Declared challenge level preference: ${challenge.toFixed(2)} on [0,1].`);
+  if(direct!=null) {
+    lines.push(`Declared response directness preference: ${direct.toFixed(2)} on [0,1].`);
+    if(direct>=0.67) lines.push("STYLE INSTRUCTION: lead with the answer or action; be direct and do not pad the response.");
+    if(direct<=0.33) lines.push("STYLE INSTRUCTION: use gentler framing while staying clear and truthful.");
+  }
+  if(detail!=null) {
+    lines.push(`Declared response detail preference: ${detail.toFixed(2)} on [0,1].`);
+    if(detail<=0.33) lines.push("STYLE INSTRUCTION: keep the response concise; give one main point or action unless the operator asks for more.");
+    if(detail>=0.67) lines.push("STYLE INSTRUCTION: include the reasoning and relevant detail instead of only the conclusion.");
+  }
+  if(challenge!=null) {
+    lines.push(`Declared challenge level preference: ${challenge.toFixed(2)} on [0,1].`);
+    if(challenge>=0.67) lines.push("STYLE INSTRUCTION: challenge weak assumptions when relevant, without inventing facts.");
+    if(challenge<=0.33) lines.push("STYLE INSTRUCTION: do not push beyond the stated task unless safety or truth requires it.");
+  }
+  if(card.metaPreferences.avoid_repetition===true) {
+    lines.push("EXPLICIT CORRECTION: do not repeat a question, recommendation, or explanation the operator already answered or acted on unless new evidence makes repetition necessary.");
+  }
   const initiative=card.metaPreferences.proactive_initiative;
   if(typeof initiative==="string") lines.push(`Declared proactive initiative: ${initiative}.`);
   if(card.state?.receptivity&&card.state.receptivity!=="unknown") lines.push(`Current operational receptivity estimate: ${card.state.receptivity}; it expires at ${card.state.validUntil}.`);
