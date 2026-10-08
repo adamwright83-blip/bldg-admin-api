@@ -3291,7 +3291,7 @@ export const appRouter = router({
           let paymentIntent;
           let platformFeeCents: number | null = null;
           let vendorPayoutCents: number | null = null;
-          const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
+          const hasPaidBefore = await hasCustomerPaidBefore(customerId!, paymentTenantId);
           const stripeMetadata = {
             orderId: String(input.orderId),
             tenantId: paymentTenantId,
