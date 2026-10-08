@@ -481,3 +481,17 @@ describe("actual manual/campaign/reconciliation cross-path invariants", () => {
     }
   );
 });
+
+
+describe("native captured evidence without a net projection", () => {
+  const capturedReceipt = { ...receipt, metadata: { captureEvidence: "stripe_amount_received_v1", capturedCurrency: "usd", capturedAmountCents: 4200 } };
+  it("uses immutable provider dollars and receipt occurrence instead of edited price/time", () => {
+    expect(decideCommercialOrderPayment({ tenantId: "default", order: { ...order, paidAt: new Date("2027-01-01") }, receipt: capturedReceipt, projection: null })).toMatchObject({ paidCents: 4200, capturedCents: 4200, paidAt: date, status: "active" });
+  });
+  it("never replaces an existing refund/review projection with gross capture", () => {
+    for (const state of ["refunded", "review_required", "partially_refunded"] as const) {
+      expect(decideCommercialOrderPayment({ tenantId: "default", order, receipt: capturedReceipt, projection: { ...projection, state, netPaidCents: null } }).paidCents).toBe(0);
+    }
+    expect(decideCommercialOrderPayment({ tenantId: "default", order, receipt: capturedReceipt, projection: { ...projection, state: "partially_refunded", netPaidCents: 3000 } }).paidCents).toBe(3000);
+  });
+});

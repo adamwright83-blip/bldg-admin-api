@@ -183,3 +183,16 @@ convergence, that weak fixture correctly stopped qualifying as a dormant paid
 customer. The fixture now creates the order unpaid and establishes the historical
 payment through `admitNativeStripePayment` with succeeded provider capture
 evidence. Runtime payment authority is not weakened merely to satisfy the test.
+
+## C11: Commercial attribution consumes immutable native captures
+
+The real-MySQL release journey reproduced an admitted $240 capture being reported
+as $0 because Commercial required a separate net projection even when none existed.
+Commercial now consumes Payment-owned immutable captured dollars when no net/refund
+projection exists. A present refund or financial-review projection takes precedence;
+unknown partial refunds never fall back to gross captured dollars. Receipts lacking
+capture evidence remain amount-unknown and held for financial review. Payment time
+comes from the receipt occurrence rather than the mutable Orders projection.
+
+Validation: 57 focused contracts and the real-MySQL release journey pass. The journey
+failed at the same $240 assertion on starting main dfe02b9c before this change.

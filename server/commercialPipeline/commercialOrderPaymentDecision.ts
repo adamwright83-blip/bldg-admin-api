@@ -1,3 +1,4 @@
+import { nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { orderPaymentProjections, orders } from "../../drizzle/schema";
 import {
@@ -31,7 +32,7 @@ export function commercialOrderTenantPredicate(tenantId: string) {
     : eq(orders.tenantId, tenantId);
 }
 
-/** Proof licenses payment; the existing projection supplies the net, never order.total. */
+/** Provider net/refund projection takes precedence; absent one, an admitted native capture supplies the captured payment. Never order.total. */
 export function decideCommercialOrderPayment(input: {
   tenantId: string;
   order: NativeOrder;
@@ -62,7 +63,10 @@ export function decideCommercialOrderPayment(input: {
           sourceRef: order.stripePaymentIntentId?.trim() || null,
         })
     );
-  const knownNet = projection?.netPaidCents ?? null;
+  // A present refund/review projection must never be replaced by a gross capture.
+  const capture = authorized ? nativeCapturedAmountCents(receipt) : null;
+  const capturedOnly = projection === null && capture !== null;
+  const knownNet = capturedOnly ? capture : projection?.netPaidCents ?? null;
   const validNet =
     knownNet !== null && Number.isSafeInteger(knownNet) && knownNet >= 0;
   const reversed =
@@ -79,7 +83,7 @@ export function decideCommercialOrderPayment(input: {
     !reversed &&
     !financialReview &&
     validNet &&
-    (projection?.state === "paid" || projection?.state === "partially_refunded")
+    (capturedOnly || projection?.state === "paid" || projection?.state === "partially_refunded")
       ? knownNet!
       : 0;
   return {
@@ -91,10 +95,10 @@ export function decideCommercialOrderPayment(input: {
         ? ("financial_review" as const)
         : ("active" as const),
     currency: projection?.currency ?? "usd",
-    capturedCents: projection?.capturedCents ?? null,
+    capturedCents: capturedOnly ? capture : projection?.capturedCents ?? null,
     refundedCents: projection?.refundedCents ?? null,
     netPaidCents: knownNet,
-    paidAt: order.paidAt,
+    paidAt: receipt?.occurredAt ? new Date(receipt.occurredAt) : null,
     financialReviewReason: financialReview
       ? "Canonical net amount is unavailable or requires financial review."
       : null,
