@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
-import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
+import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
 import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
 import {
   activeCustomerPopulation,
@@ -75,6 +75,7 @@ export type OpenOrderStats = {
   openTotal: number;
   byStatus: Record<string, number>;
   awaitingPayment: number;
+  unverifiedPayment?: number;
 };
 
 export type RepeatCustomerStats = {
@@ -305,6 +306,8 @@ export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStat
   const db = await requireDb();
   const rows = await db
     .select({
+      id: orders.id,
+      tenantId: orders.tenantId,
       status: orders.status,
       paid: orders.paid,
       stripePaymentIntentId: orders.stripePaymentIntentId,
@@ -317,20 +320,23 @@ export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStat
       )
     );
 
+  const paymentReceipts = await readNativePaymentAuthorityReceipts(rows);
   const byStatus: Record<string, number> = {};
   let awaitingPayment = 0;
+  let unverifiedPayment = 0;
 
   for (const row of rows) {
     byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
     if (
-      !hasNativePaymentAuthority(row) &&
+      !hasNativePaymentAuthority(row, paymentReceipts.get(row.id)) &&
       ["collected", "processing", "ready"].includes(row.status)
     ) {
-      awaitingPayment++;
+      if (row.paid) unverifiedPayment++;
+      else awaitingPayment++;
     }
   }
 
-  return { openTotal: rows.length, byStatus, awaitingPayment };
+  return { openTotal: rows.length, byStatus, awaitingPayment, unverifiedPayment };
 }
 
 /** Customer identities with paid orders in the range: repeat (≥2) vs one-time. */

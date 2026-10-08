@@ -41,7 +41,7 @@ import {
   commercialOrderTenantPredicate,
   readCommercialOrderPaymentDecisionWith,
 } from "./commercialOrderPaymentDecision";
-import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
+import { hasNativePaymentEvidence } from "../authority/nativePaymentReadService";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -75,7 +75,7 @@ export function verifiedCommercialPaidCents(
   receipt: AuthorityReceipt | null
 ): number {
   const paymentIntentId = order.stripePaymentIntentId?.trim() ?? "";
-  return hasNativePaymentAuthority(order) &&
+  return hasNativePaymentEvidence(order) &&
     receipt?.claimType === "payment_verified" &&
     receipt.sourceType === "stripe_payment_intent" &&
     receipt.sourceRef === paymentIntentId

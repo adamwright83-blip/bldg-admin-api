@@ -19,6 +19,7 @@ describe("customer-order truth projections", () => {
         "paid",
         "phone",
         "status",
+        "tenantId",
         "stripePaymentIntentId",
         "total",
         "unit",

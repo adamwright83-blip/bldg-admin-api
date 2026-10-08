@@ -39,3 +39,27 @@ Tower Wars, rewards, or unlock rule definitions changed.
 - Native customer/payment projection still uses a paid flag + PaymentIntent string
   without validating an admission receipt. Canonical revenue validates receipts.
   This discrepancy needs a separate owning-domain read seam; B is not yet certified.
+
+## Slice B2: Payment admission supplies customer/game paid truth
+
+A PaymentIntent string plus a checkbox was weaker than canonical revenue admission.
+`nativePaymentReadService` now composes the existing bounded Payment receipt reader
+and its exact tenant/order/source/ref policy matcher. Geography and customer assets
+consume that admission. Commercial's diagnostic evidence predicate is explicitly
+named candidate evidence and retains its separate receipt check; it is not authority.
+
+Rows without established tenant identity remain unverified. Receipt-provider
+unavailability propagates; no fallback grants authority. Unadmitted historical
+paid flags do not become an asserted unpaid debt: asset lifetime value/balance are
+unknown, and Money/Business World preserve that unknown in aggregate receivables.
+Open-order statistics distinguish unverified payment from explicit awaiting payment.
+No new truth table, inferred payment, or historical tenant assignment.
+
+Real MySQL proves an unreceipted paid flag + processor reference cannot produce
+paying-customer/game truth or a known asset value/balance. Canonical Payment admission
+then enables the exact tenant-bound projection. Wrong tenant remains unverified.
+Read-only architecture guards pin the owning boundary.
+
+Proven pre-existing focused failures on slice starting main `464a44f5`:
+`gumballCustomerTruth` digest expectation and `moneyProjectionService`'s missing-proof
+fixture. They are outside the changed business logic and are not repaired here.

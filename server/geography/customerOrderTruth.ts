@@ -1,3 +1,5 @@
+import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import { eq } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
@@ -18,6 +20,7 @@ import { queryOptionalMysqlTable } from "../mysqlErrors";
 export type CustomerOrderSource = "laundry_butler" | "cleancloud";
 
 export type NativeOrderLike = {
+  tenantId?: string | null;
   id: number;
   status: string | null;
   createdAt: Date;
@@ -165,15 +168,9 @@ function isPaidFlag(value: boolean | number | null | undefined): boolean {
   return value === true || value === 1;
 }
 
-export function hasNativePaymentAuthority(
-  row: Pick<NativeOrderLike, "paid" | "stripePaymentIntentId">
-): boolean {
-  return isPaidFlag(row.paid) && Boolean(row.stripePaymentIntentId?.trim());
-}
-
 export function nativeOrderToTruth(
   row: NativeOrderLike,
-  options?: { includeCancelled?: boolean }
+  options?: { includeCancelled?: boolean; paymentAuthorityReceipt?: AuthorityReceipt }
 ): CustomerOrderTruthRecord | null {
   const cancelled = row.status === "cancelled";
   if (cancelled && !options?.includeCancelled) return null;
@@ -197,9 +194,9 @@ export function nativeOrderToTruth(
     allowNameComposite: true,
     // Keep customer/order truth aligned with the canonical revenue authority:
     // a native "paid" checkbox alone is not economic proof. Historical/manual
-    // paid rows without a Stripe PaymentIntent remain customer/order records,
+    // paid rows without matching Payment admission remain customer/order records,
     // but they cannot become paying-customer progression or paid-book truth.
-    paid: hasNativePaymentAuthority(row),
+    paid: hasNativePaymentAuthority(row, options?.paymentAuthorityReceipt),
     totalCents: dollarsToCents(row.total),
     cancelled,
     recognizedAt: createdAt,
@@ -241,6 +238,7 @@ export function mergeCustomerOrderTruth(input: {
   native?: readonly NativeOrderLike[];
   cleancloud?: readonly CleanCloudOrderLike[];
   includeCancelledNative?: boolean;
+  nativePaymentAuthorityReceipts?: ReadonlyMap<number, AuthorityReceipt>;
 }): CustomerOrderTruthRecord[] {
   // The same order appears once per report type; the earliest import is when Goldline first learned it.
   const firstSeen = new Map<string, Date>();
@@ -253,6 +251,7 @@ export function mergeCustomerOrderTruth(input: {
     ...(input.native ?? []).map(row =>
       nativeOrderToTruth(row, {
         includeCancelled: input.includeCancelledNative,
+        paymentAuthorityReceipt: input.nativePaymentAuthorityReceipts?.get(row.id),
       })
     ),
     ...preferCleanCloudOrders(input.cleancloud ?? []).map(cleanCloudOrderToTruth).map(record =>
@@ -374,6 +373,7 @@ export function projectGeographicCustomers(input: {
 
 /** Narrow read-model projection. Do not select the full `orders` schema. */
 export const NATIVE_ORDER_TRUTH_COLUMNS = {
+  tenantId: orders.tenantId,
   id: orders.id,
   status: orders.status,
   createdAt: orders.createdAt,
@@ -442,8 +442,10 @@ export async function loadCustomerOrderTruth(
   if (!db) throw new Error("Database not available");
   const nativeRows = await loadNativeOrderTruthRows(db, tenantId);
   const cleancloudRows = await loadCleanCloudOrderTruthRows(db, tenantId);
+  const nativePaymentAuthorityReceipts = await readNativePaymentAuthorityReceipts(nativeRows);
   return mergeCustomerOrderTruth({
     native: nativeRows,
+    nativePaymentAuthorityReceipts,
     cleancloud: cleancloudRows,
     includeCancelledNative: options?.includeCancelledNative,
   });
