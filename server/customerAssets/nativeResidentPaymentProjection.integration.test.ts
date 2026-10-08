@@ -31,13 +31,13 @@ it("projects admitted resident counts independently of unknown capture amounts a
     ids.push(first);
     await db
       .update(orders)
-      .set({ paid: true, stripePaymentIntentId: "pi_c4_0" })
+      .set({ paid: true, stripePaymentIntentId: `pi_c4_${first}` })
       .where(eq(orders.id, first));
     expect(await readNativeResidentPaymentProjection(tenantId)).toEqual([]);
     await admitNativeStripePayment({
       tenantId,
       orderId: first,
-      paymentIntentId: "pi_c4_0",
+      paymentIntentId: `pi_c4_${first}`,
       paidAt: new Date(),
       orderPatch: {},
     });
@@ -50,11 +50,11 @@ it("projects admitted resident counts independently of unknown capture amounts a
       await admitNativeStripePayment({
         tenantId,
         orderId: id,
-        paymentIntentId: `pi_c4_${n}`,
+        paymentIntentId: `pi_c4_${id}`,
         paidAt: new Date(),
         orderPatch: {},
         capture: {
-          paymentIntentId: `pi_c4_${n}`,
+          paymentIntentId: `pi_c4_${id}`,
           status: "succeeded",
           amountReceivedCents: 4200,
           currency: "usd",
@@ -68,7 +68,7 @@ it("projects admitted resident counts independently of unknown capture amounts a
       tenantId,
       orderId: first,
       capture: {
-        paymentIntentId: "pi_c4_0",
+        paymentIntentId: `pi_c4_${first}`,
         status: "succeeded",
         amountReceivedCents: 4200,
         currency: "usd",
@@ -83,11 +83,11 @@ it("projects admitted resident counts independently of unknown capture amounts a
     await admitNativeStripePayment({
       tenantId: `${tenantId}-other`,
       orderId: other,
-      paymentIntentId: "pi_c4_other",
+      paymentIntentId: `pi_c4_${other}`,
       paidAt: new Date(),
       orderPatch: {},
       capture: {
-        paymentIntentId: "pi_c4_other",
+        paymentIntentId: `pi_c4_${other}`,
         status: "succeeded",
         amountReceivedCents: 9999,
         currency: "usd",

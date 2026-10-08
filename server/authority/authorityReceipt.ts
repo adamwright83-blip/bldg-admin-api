@@ -294,7 +294,7 @@ export async function findAuthorityReceiptForSubjectWith(
     )
     .orderBy(desc(authorityReceipts.admittedAt))
     .limit(1);
-  return row ? toReceipt(row) : null;
+  return row ? (await withNativeCaptureAllocation(tx, [toReceipt(row)]))[0] : null;
 }
 
 
@@ -356,6 +356,24 @@ export function paymentAuthorityReceiptMatches(
   }
 }
 
+/** Ambiguous historical whole-capture allocations prove no per-order dollar amount. */
+async function withNativeCaptureAllocation(tx: AuthorityTransaction, receipts: AuthorityReceipt[]): Promise<AuthorityReceipt[]> {
+  const refs = [...new Set(receipts.filter(r => r.claimType === "payment_verified" && r.sourceType === "stripe_payment_intent" && r.metadata?.captureEvidence === "stripe_amount_received_v1").map(r => r.sourceRef))];
+  const owners = new Map<string, Set<string>>();
+  for (let i = 0; i < refs.length; i += 200) {
+    const rows = await tx.select().from(authorityReceipts).where(and(
+      eq(authorityReceipts.claimType, "payment_verified"), eq(authorityReceipts.subjectType, "order"),
+      eq(authorityReceipts.sourceType, "stripe_payment_intent"), inArray(authorityReceipts.sourceRef, refs.slice(i, i + 200))
+    ));
+    for (const row of rows) {
+      const group = owners.get(row.sourceRef) ?? new Set<string>();
+      group.add(`${row.tenantId}:${row.subjectId}`); owners.set(row.sourceRef, group);
+    }
+  }
+  return receipts.map(receipt => (owners.get(receipt.sourceRef)?.size ?? 0) > 1
+    ? { ...receipt, metadata: { ...receipt.metadata, captureEvidence: "ambiguous_native_capture_v1" } } : receipt);
+}
+
 /** SELECT-only, bounded batch read. All subject versions remain eligible for exact source/ref matching. */
 export async function readPaymentAuthorityReceipts(input: {
   tenantId: string;
@@ -383,5 +401,5 @@ export async function readPaymentAuthorityReceipts(input: {
       );
     receipts.push(...rows.map(toReceipt));
   }
-  return receipts;
+  return withNativeCaptureAllocation(db as unknown as AuthorityTransaction, receipts);
 }

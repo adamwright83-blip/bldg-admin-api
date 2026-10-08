@@ -49,6 +49,19 @@ export async function prepareNativeStripePaymentTenant(input: {
   });
 }
 
+/** Lock provider occurrence identity before admitting a whole native capture to an Order. */
+async function lockNativeProviderBinding(tx: AuthorityTransaction, tenantId: string, orderId: number, paymentIntentId: string) {
+  const existing = await tx.select().from(authorityReceipts).where(and(
+    eq(authorityReceipts.claimType, "payment_verified"),
+    eq(authorityReceipts.subjectType, "order"),
+    eq(authorityReceipts.sourceType, "stripe_payment_intent"),
+    eq(authorityReceipts.sourceRef, paymentIntentId)
+  )).for("update").limit(2);
+  if (existing.some(row => row.tenantId !== tenantId || row.subjectId !== String(orderId)))
+    throw new Error("Provider capture is already bound to another native order; allocation is unknown.");
+  return existing.length > 0;
+}
+
 export async function admitNativeStripePayment(input: {
   tenantId: string;
   orderId: number;
@@ -67,17 +80,23 @@ export async function admitNativeStripePayment(input: {
   if (!paymentIntentId)
     throw new Error("Stripe payment admission requires PaymentIntent evidence");
 
+  validateCaptureOwnership(input.capture, tenantId, input.orderId);
   if (input.capture) validateStripeCapture(input.capture, paymentIntentId);
 
   return db.transaction(async tx => {
     const [order] = await tx
-      .select({ id: orders.id, tenantId: orders.tenantId })
+      .select({ id: orders.id, tenantId: orders.tenantId, paid: orders.paid, stripePaymentIntentId: orders.stripePaymentIntentId })
       .from(orders)
       .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, tenantId)))
       .for("update")
       .limit(1);
     if (!order) throw new Error("Tenant order not found for payment admission");
 
+    if (order.stripePaymentIntentId && order.stripePaymentIntentId !== paymentIntentId)
+      throw new Error("Provider capture cannot replace the native order payment identity.");
+    const replay = await lockNativeProviderBinding(tx, tenantId, input.orderId, paymentIntentId);
+    if (input.orderPatch.tenantId !== undefined && input.orderPatch.tenantId !== tenantId)
+      throw new Error("Payment cannot change native order tenant authority.");
     let receipt = await admitAuthorityClaimWith(tx, {
       tenantId,
       claimType: "payment_verified",
@@ -101,7 +120,7 @@ export async function admitNativeStripePayment(input: {
       .update(orders)
       .set({
         ...input.orderPatch,
-        paid: true,
+        paid: replay && order.paid === false ? false : true,
         paidAt: input.paidAt,
         stripePaymentIntentId: paymentIntentId,
       })
@@ -116,7 +135,14 @@ export type StripeCaptureEvidence = {
   status: string;
   amountReceivedCents: number;
   currency: string;
+  providerOrderId?: string;
+  providerTenantId?: string;
 };
+function validateCaptureOwnership(capture: StripeCaptureEvidence | undefined, tenantId: string, orderId: number) {
+  if ((capture?.providerOrderId && capture.providerOrderId !== String(orderId)) ||
+      (capture?.providerTenantId && capture.providerTenantId !== tenantId))
+    throw new Error("Provider capture metadata conflicts with native order ownership.");
+}
 function validateStripeCapture(
   capture: StripeCaptureEvidence,
   paymentIntentId: string
@@ -172,6 +198,7 @@ export async function reconcileNativeStripeCapture(input: {
 }): Promise<AuthorityReceipt> {
   if (!input.tenantId.trim())
     throw new Error("Capture reconciliation requires tenant authority");
+  validateCaptureOwnership(input.capture, input.tenantId, input.orderId);
   validateStripeCapture(input.capture, input.capture.paymentIntentId);
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -186,6 +213,7 @@ export async function reconcileNativeStripeCapture(input: {
       .limit(1);
     if (!order || order.stripePaymentIntentId !== input.capture.paymentIntentId)
       throw new Error("Provider capture does not match tenant order");
+    await lockNativeProviderBinding(tx, input.tenantId, input.orderId, input.capture.paymentIntentId);
     const [row] = await tx
       .select()
       .from(authorityReceipts)

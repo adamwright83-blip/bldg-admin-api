@@ -133,6 +133,7 @@ describe("paymentAdmission authority", () => {
       limit: vi
         .fn()
         .mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a" }])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           {
             id: "auth-101",
@@ -197,7 +198,7 @@ describe("paymentAdmission authority", () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       for: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue([{ id: 101, tenantId: "tenant-a" }]),
+      limit: vi.fn().mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a" }]).mockResolvedValue([]),
       insert: vi.fn().mockReturnThis(),
       values: vi.fn().mockReturnThis(),
       onDuplicateKeyUpdate: vi.fn(async () => {

@@ -232,3 +232,25 @@ that the new vendor received the old capture. Order capture gross remains distin
 
 Validation: 13 focused Payment/vendor contracts including recipient mismatch and
 unknown capture, TypeScript and four architecture gates pass.
+
+## C15: One native provider occurrence cannot supply two whole captures
+
+A MySQL hostile witness admitted the same $42 PaymentIntent on two Orders. Payment
+now locks the provider binding before admitting a native occurrence and rejects
+another order/tenant as owner. Provider metadata contradicting order/tenant ownership
+is rejected. Existing payment identity cannot be replaced, and receipt replay does
+not reactivate a later unpaid/refund state. Capture reconciliation uses the same
+binding guard. Ordinary Orders revisions cannot alter frozen fee/payout/recipient
+fields. A nonunique lookup index supports the transactional predicate; it does not
+rewrite historical ownership or impose a legacy uniqueness migration.
+
+Historical duplicate receipt bindings keep occurrence evidence but their per-order
+dollar allocation is unknown. Payment readers withhold whole-capture dollar evidence
+for all conflicting subjects; no quote-based allocation is invented and stored
+receipts are not rewritten. Provider reconcilers carry available ownership metadata.
+
+Validation: 100 focused contracts; six real-MySQL capture proofs including cross-
+tenant simultaneous ownership attempts, refund-state replay, metadata conflict and
+historical duplicate withholding. Five related MySQL projection families pass after
+test fixtures use unique provider identities. Both fresh migration paths include
+the new lookup index; no production database/provider reconciliation was executed.

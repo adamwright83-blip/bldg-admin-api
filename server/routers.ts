@@ -3338,7 +3338,7 @@ export const appRouter = router({
             tenantId: paymentTenantId,
             orderId: input.orderId,
             paymentIntentId: paymentIntent.id,
-            capture: { paymentIntentId: paymentIntent.id, status: paymentIntent.status, amountReceivedCents: paymentIntent.amount_received, currency: paymentIntent.currency },
+            capture: { paymentIntentId: paymentIntent.id, status: paymentIntent.status, amountReceivedCents: paymentIntent.amount_received, currency: paymentIntent.currency, providerOrderId: paymentIntent.metadata.orderId, providerTenantId: paymentIntent.metadata.tenantId },
             paidAt,
             orderPatch: {
               total: centsToDollars(input.amountCents),

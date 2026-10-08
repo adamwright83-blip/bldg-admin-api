@@ -34,7 +34,7 @@ it("bridges only admitted captured dollars into Tower Wars, with price/replay/te
   try {
     await db
       .update(orders)
-      .set({ paid: true, paidAt, stripePaymentIntentId: "pi_b5" })
+      .set({ paid: true, paidAt, stripePaymentIntentId: `pi_b5_${orderId}` })
       .where(eq(orders.id, orderId));
     expect(await loadTowerWarsEconomicCandidates(tenantId, start, end)).toEqual(
       []
@@ -42,7 +42,7 @@ it("bridges only admitted captured dollars into Tower Wars, with price/replay/te
     await admitNativeStripePayment({
       tenantId,
       orderId,
-      paymentIntentId: "pi_b5",
+      paymentIntentId: `pi_b5_${orderId}`,
       paidAt,
       orderPatch: {},
     });
@@ -53,7 +53,7 @@ it("bridges only admitted captured dollars into Tower Wars, with price/replay/te
       tenantId,
       orderId,
       capture: {
-        paymentIntentId: "pi_b5",
+        paymentIntentId: `pi_b5_${orderId}`,
         status: "succeeded",
         amountReceivedCents: 4200,
         currency: "usd",

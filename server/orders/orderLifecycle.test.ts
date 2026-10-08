@@ -45,6 +45,9 @@ describe("orderLifecycleService canonical authority", () => {
       { paid: false },
       { paidAt: new Date() },
       { tenantId: "other" },
+      { platformFeeCents: 500 },
+      { vendorPayoutCents: null },
+      { stripeConnectedAccountIdSnapshot: "acct_other" },
     ]) {
       await expect(reviseNativeOrder(10, patch as never)).rejects.toThrow(
         /authority/
