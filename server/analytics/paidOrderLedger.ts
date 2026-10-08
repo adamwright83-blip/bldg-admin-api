@@ -10,7 +10,7 @@ import {
   cleanCloudPaidObservationReceiptMatches,
   readCleanCloudPaidObservationReceipts,
   type CleanCloudPaidObservationExpectation,
-} from "../cleancloudPaidEvidence";
+} from "../integrations/cleancloud/cleancloudPaidEvidence";
 import {
   loadSalesReconciliationEvidence,
   type SalesReconciliationEvidence,
@@ -19,7 +19,7 @@ import { and, eq, gte, inArray, isNotNull, isNull,
   lt, or, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
-import { browserSyncBindings } from "../cleancloudBrowserSync/schema";
+import { browserSyncBindings } from "../integrations/cleancloud/browserSync/schema";
 import { getDb } from "../db";
 import {
   buildingFor,

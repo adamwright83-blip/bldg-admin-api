@@ -35,7 +35,7 @@ import { registerOperatorArtifactSmsRoutes } from "../operatorArtifact/sendOpera
 import { registerSpiritHumanInboundSmsRoutes } from "../spiritHumanRescue/inboundSmsRoute";
 import { registerSalesCallRoutes } from "../salesCalls";
 import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
-import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
+import { registerCleanCloudImportRoutes } from "../integrations/cleancloud/cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
@@ -66,8 +66,8 @@ import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "./posth
 import { posthogBrowserConfig } from "./posthogServer";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
-import { startCleanCloudDirectScheduler } from "../cleancloudBrowserSync/cleancloudDirectScheduler";
-import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
+import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/browserSync/cleancloudDirectScheduler";
+import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../persistentOperator/autonomousWorkerService";
 import { registerPresidentAgentRoutes } from "../president/httpRoutes";
 

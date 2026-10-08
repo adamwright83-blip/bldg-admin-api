@@ -49,7 +49,7 @@ describe("SaaS Slice 7 privacy and connected-channel certification", () => {
   });
 
   it("does not tenant-bind, deduplicate, or default the known legacy CleanCloud importer", () => {
-    const legacy = source("../cleancloudLegacy.ts");
+    const legacy = source("../integrations/cleancloud/cleancloudLegacy.ts");
     expect(legacy).not.toContain("tenantId");
     expect(legacy).not.toContain('?? "default"');
     expect(legacy).not.toContain("onDuplicateKeyUpdate");

@@ -9,8 +9,8 @@ import {
   validateExportUrl,
   validateRevenueExportUrl,
   validateRange,
-} from "../../extensions/gumballpals/core.js";
-import { normalizePropertyTower } from "../../shared/propertyTowers";
+} from "../../../../extensions/gumballpals/core.js";
+import { normalizePropertyTower } from "../../../../shared/propertyTowers";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 
 export function invalid(message: string): never {

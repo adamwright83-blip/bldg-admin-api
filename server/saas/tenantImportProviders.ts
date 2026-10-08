@@ -8,7 +8,7 @@ import {
   importCleanCloudPaidOrders,
   normalizeCleanCloudPaidOrderRow,
   parseCleanCloudPaidReportType,
-} from "../cleancloudPaidOrders";
+} from "../integrations/cleancloud/cleancloudPaidOrders";
 import { parseCsv } from "../externalSystems/csvIngestion";
 
 class CleanCloudCsvImportProvider implements OrderCustomerImportProvider {

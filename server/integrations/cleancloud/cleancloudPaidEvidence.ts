@@ -3,14 +3,14 @@ import {
   authorityReceipts,
   cleancloudPaidOrders,
   type InsertCleancloudPaidOrder,
-} from "../drizzle/schema";
+} from "../../../drizzle/schema";
 import {
   admitAuthorityClaimWith,
   assertAuthorityClaimPolicy,
   type AuthorityReceipt,
   type AuthorityTransaction,
-} from "./platform/authority/authorityReceipt";
-import { getDb } from "./db";
+} from "../../platform/authority/authorityReceipt";
+import { getDb } from "../../db";
 
 export type CleanCloudPaidObservationExpectation = {
   tenantId: string;

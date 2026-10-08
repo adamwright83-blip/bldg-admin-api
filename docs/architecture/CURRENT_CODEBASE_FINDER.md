@@ -12,8 +12,9 @@ Code wins if this file becomes stale.
 |---|---|
 | Platform HTTP/tRPC/auth | `server/_core/`, `server/routers.ts` |
 | Main DB access | `server/db.ts`, `drizzle/schema.ts` |
-| Authority receipts | `server/authority/authorityReceipt.ts` |
-| Native payment admission | `server/authority/paymentAdmission.ts` |
+| Authority receipts | `server/platform/authority/authorityReceipt.ts` |
+| Native payment admission | `server/domains/payment/paymentAdmission.ts` |
+| CleanCloud integration | `server/integrations/cleancloud/` |
 | Canonical revenue reconciliation | `server/analytics/canonicalRevenue.ts`, `server/analytics/paidOrderLedger.ts` |
 | Money projection | `server/money/moneyProjectionService.ts` |
 | Geography truth | `server/geography/geographicTruthService.ts` |

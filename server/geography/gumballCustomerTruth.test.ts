@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { validatePayload } from "../cleancloudBrowserSync/validation";
-import { assimilateImportedCustomerTruth } from "../cleancloudBrowserSync/assimilateCustomerTruth";
-import { formatGumballOperatorStatus } from "../cleancloudBrowserSync/gumballOperatorStatus";
+import { validatePayload } from "../integrations/cleancloud/browserSync/validation";
+import { assimilateImportedCustomerTruth } from "../integrations/cleancloud/browserSync/assimilateCustomerTruth";
+import { formatGumballOperatorStatus } from "../integrations/cleancloud/browserSync/gumballOperatorStatus";
 import { mapCleanCloudOrders, mapNativeOrders } from "../analytics/paidOrderLedger";
 import { inferCustomerCadence } from "../../shared/lanternCity";
 import {

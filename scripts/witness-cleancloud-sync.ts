@@ -7,10 +7,10 @@ if (process.env.DATABASE_URL?.includes("mysql.railway.internal")) {
 }
 import { getDb } from "../server/db";
 import { cleancloudPaidOrders } from "../drizzle/schema";
-import { browserSyncBindings, browserSyncAttempts, browserSyncReceipts } from "../server/cleancloudBrowserSync/schema";
-import { loadTenantOperatingPulse } from "../server/cleancloudBrowserSync/operatingPulse";
-import { loadLatestCleanCloudSales } from "../server/cleancloudBrowserSync/latestSales";
-import { runCleanCloudDirectSync } from "../server/cleancloudBrowserSync/cleancloudDirectSync";
+import { browserSyncBindings, browserSyncAttempts, browserSyncReceipts } from "../server/integrations/cleancloud/browserSync/schema";
+import { loadTenantOperatingPulse } from "../server/integrations/cleancloud/browserSync/operatingPulse";
+import { loadLatestCleanCloudSales } from "../server/integrations/cleancloud/browserSync/latestSales";
+import { runCleanCloudDirectSync } from "../server/integrations/cleancloud/browserSync/cleancloudDirectSync";
 import { desc, eq, and } from "drizzle-orm";
 
 async function main() {

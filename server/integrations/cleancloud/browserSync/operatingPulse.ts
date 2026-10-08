@@ -3,9 +3,9 @@
  * Not a public endpoint. No customer names, amounts, phones, or addresses.
  */
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "../db";
-import { isMysqlMissingTableError } from "../mysqlErrors";
-import { loadBusinessSourceCoverage } from "../analytics/sourceCoverage";
+import { getDb } from "../../../db";
+import { isMysqlMissingTableError } from "../../../mysqlErrors";
+import { loadBusinessSourceCoverage } from "../../../analytics/sourceCoverage";
 import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "./schema";
 
 export type JawbreakerState = "refreshed" | "failed" | "pending" | "skipped" | "never";

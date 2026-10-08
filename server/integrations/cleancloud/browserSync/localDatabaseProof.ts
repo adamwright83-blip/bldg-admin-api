@@ -69,9 +69,9 @@ async function main() {
     await grantGumballProofMembership(connection, "gumball-truth", "sync-proof-truth");
     const { cleancloudBrowserSyncRouter } = await import("./router");
     const { compileAuthoritativeEvents } = await import(
-      "../towerWars/towerWarsService"
+      "../../../towerWars/towerWarsService"
     );
-    const { compileTowerWarsState } = await import("../../shared/towerWars");
+    const { compileTowerWarsState } = await import("../../../../shared/towerWars");
     const ctx = (tenantId = "default", openId = "sync-proof") =>
       ({
         tenantId,
@@ -125,7 +125,7 @@ async function main() {
     assert.equal(counts[0].n, 1);
     assert.equal(Number(counts[0].cents), 5100);
     const { drainEconomicOutbox } = await import("./worldOutbox");
-    const { getGeographicTruth } = await import("../geography/geographicTruthService");
+    const { getGeographicTruth } = await import("../../../geography/geographicTruthService");
     assert.equal(await drainEconomicOutbox(), 0, "import must drain the outbox itself");
     const atlas = await getGeographicTruth({ tenantId: "default" });
     assert.equal(atlas.customers.length, 1);

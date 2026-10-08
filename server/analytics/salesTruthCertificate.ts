@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseCsv } from "../../extensions/gumballpals/core.js";
-import { normalizeCleanCloudPaidOrderRow } from "../cleancloudPaidOrders";
+import { normalizeCleanCloudPaidOrderRow } from "../integrations/cleancloud/cleancloudPaidOrders";
 import {
   partitionCleanCloudOrders,
   type CleanCloudOrderRow,

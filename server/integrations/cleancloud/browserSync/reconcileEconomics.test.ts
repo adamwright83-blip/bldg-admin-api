@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import type { CleanCloudOrderRow } from "../analytics/paidOrderLedger";
-import { deriveBusinessSourceCoverage } from "../analytics/sourceCoverage";
-import { dashboardControlCoverageRange, UNKNOWN_EVIDENCE } from "../analytics/sourceBindings";
+import type { CleanCloudOrderRow } from "../../../analytics/paidOrderLedger";
+import { deriveBusinessSourceCoverage } from "../../../analytics/sourceCoverage";
+import { dashboardControlCoverageRange, UNKNOWN_EVIDENCE } from "../../../analytics/sourceBindings";
 import {
   UNEVIDENCED_EVENT_TYPES,
   reconcileControlTotals,

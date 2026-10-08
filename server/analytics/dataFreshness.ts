@@ -6,7 +6,7 @@ import {
   clearentImportBatches,
   clearentTransactions,
 } from "../../drizzle/schema";
-import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "../cleancloudBrowserSync/schema";
+import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "../integrations/cleancloud/browserSync/schema";
 import { getDb } from "../db";
 import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
 import { readNativeCustomerHistory } from "../domains/orders/orderHistoryReadService";

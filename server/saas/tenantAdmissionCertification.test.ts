@@ -106,7 +106,7 @@ describe("SaaS Slice 1 tenant admission certification", () => {
   });
 
   it("keeps the known tenantless CleanCloud legacy importer outside SaaS admission", () => {
-    const legacy = source("../cleancloudLegacy.ts");
+    const legacy = source("../integrations/cleancloud/cleancloudLegacy.ts");
     expect(legacy).toContain("cleancloudLegacyOrders");
     expect(legacy).not.toContain("legacyDayforgeSaas");
     expect(legacy).not.toContain("tenantForAuthenticatedUser");

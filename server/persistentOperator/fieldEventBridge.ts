@@ -12,7 +12,7 @@ import { getDb } from "../db";
 import { admitCompletedCommercialVisit } from "../platform/authority/actionCompletionAdmission";
 import { admitCommercialFieldObservation } from "../platform/authority/fieldObservationAdmission";
 import { findAuthorityReceiptForSubject } from "../platform/authority/authorityReceipt";
-import { findCleanCloudPaidObservationReceipt } from "../cleancloudPaidEvidence";
+import { findCleanCloudPaidObservationReceipt } from "../integrations/cleancloud/cleancloudPaidEvidence";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,

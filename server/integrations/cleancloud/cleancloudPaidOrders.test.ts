@@ -5,7 +5,7 @@ import {
   parseCleanCloudPacificDate,
   sumCleanCloudClearentCandidates,
 } from "./cleancloudPaidOrders";
-import { parseCsv } from "./externalSystems/csvIngestion";
+import { parseCsv } from "../../externalSystems/csvIngestion";
 
 const may12SalesRows = [
   {

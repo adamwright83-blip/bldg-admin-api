@@ -3,7 +3,7 @@ export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from ".
 import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import type { AuthorityReceipt } from "../platform/authority/authorityReceipt";
 import { eq } from "drizzle-orm";
-import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../cleancloudPaidEvidence";
+import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../integrations/cleancloud/cleancloudPaidEvidence";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { computeRecencyStatus } from "../../shared/customerStatus";

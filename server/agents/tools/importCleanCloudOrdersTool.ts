@@ -1,5 +1,5 @@
 import type { AgentTool } from "../toolRegistry";
-import { importCleanCloudLegacyOrders } from "../../cleancloudLegacy";
+import { importCleanCloudLegacyOrders } from "../../integrations/cleancloud/cleancloudLegacy";
 import { cleanCloudDailyOrdersSalesPlaybook } from "../../externalSystems/playbooks";
 
 export const importCleanCloudOrdersTool: AgentTool<Record<string, any>> = {

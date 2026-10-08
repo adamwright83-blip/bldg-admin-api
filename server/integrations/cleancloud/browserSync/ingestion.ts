@@ -1,13 +1,13 @@
 /* LEGACY DAYFORGE COMPATIBILITY: cleancloud browser sync ingestion foundation */
 import { randomUUID, createHash } from "node:crypto";
-import { salesSourceRevisions } from "../analytics/salesReconciliationStore";
+import { salesSourceRevisions } from "../../../analytics/salesReconciliationStore";
 import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { getDb } from "../db";
-import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
+import { getDb } from "../../../db";
+import { findPhysicalEntityIdByAddress } from "../../../goldlineWorld/entityLookup";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { validatePayload, validateHistoricalPayload } from "./validation";
-import { cleancloudImportBatches } from "../../drizzle/schema";
+import { cleancloudImportBatches } from "../../../../drizzle/schema";
 import {
   cleanCloudPaidOrderBusinessFields,
   upsertCleanCloudPaidOrderWith,
@@ -400,7 +400,7 @@ export async function executeCleanCloudIngestion(
   if (paidToBridge.length > 0) {
     try {
       const { bridgeCleanCloudPaidOrder } = await import(
-        "../persistentOperator/fieldEventBridge"
+        "../../../persistentOperator/fieldEventBridge"
       );
       for (const order of paidToBridge) {
         await bridgeCleanCloudPaidOrder({
@@ -416,7 +416,7 @@ export async function executeCleanCloudIngestion(
           totalCents: order.totalCents,
           paidDateUtc: order.paidAt,
           sourceFileName: `${sourcePrefix}_sync:${input.requestId}`,
-        }).catch(err => {
+        }).catch((err: unknown) => {
           console.warn(
             "[CleanCloudSync] order bridge deferred",
             err instanceof Error ? err.message : err

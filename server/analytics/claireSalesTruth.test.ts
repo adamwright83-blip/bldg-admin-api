@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { certifyHistoricalSales } from "./salesTruthCertificate";
-import { validateHistoricalPayload } from "../cleancloudBrowserSync/validation";
+import { validateHistoricalPayload } from "../integrations/cleancloud/browserSync/validation";
 import {
   applyLineageFilters,
   lineageBreakdown,

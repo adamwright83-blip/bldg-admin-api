@@ -5,11 +5,11 @@ import {
   cleancloudImportBatches,
   type CleancloudPaidOrder,
   type InsertCleancloudPaidOrder,
-} from "../drizzle/schema";
-import { getDb } from "./db";
-import { parseCsv, type CsvRecord } from "./externalSystems/csvIngestion";
-import { enqueueEconomicSnapshot } from "./cleancloudBrowserSync/worldOutbox";
-import { findPhysicalEntityIdByAddress } from "./goldlineWorld/entityLookup";
+} from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { parseCsv, type CsvRecord } from "../../externalSystems/csvIngestion";
+import { enqueueEconomicSnapshot } from "./browserSync/worldOutbox";
+import { findPhysicalEntityIdByAddress } from "../../goldlineWorld/entityLookup";
 import {
   requireCleanCloudTenantId,
   upsertCleanCloudPaidOrderWith,
@@ -451,7 +451,7 @@ export async function importCleanCloudPaidOrders(input: {
   // Post-import: Bridge paid orders to Persistent Growth Operator ledger
   if (paidOrdersToBridge.length > 0) {
     try {
-      const { bridgeCleanCloudPaidOrder } = await import("./persistentOperator/fieldEventBridge");
+      const { bridgeCleanCloudPaidOrder } = await import("../../persistentOperator/fieldEventBridge");
       for (const order of paidOrdersToBridge) {
         await bridgeCleanCloudPaidOrder({
           tenantId,
@@ -463,7 +463,7 @@ export async function importCleanCloudPaidOrders(input: {
           totalCents: order.totalCents,
           paidDateUtc: order.paidAt,
           sourceFileName,
-        }).catch(err => {
+        }).catch((err: unknown) => {
           console.warn("[PersistentOperator] cleancloud paid order bridge deferred", err);
         });
       }

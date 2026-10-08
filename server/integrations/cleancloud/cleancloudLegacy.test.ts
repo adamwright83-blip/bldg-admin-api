@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { normalizePropertyTower } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers } from "./cleancloudLegacy";
-import { parseCsv } from "./externalSystems/csvIngestion";
-import { cleanCloudDailyOrdersSalesPlaybook } from "./externalSystems/playbooks";
+import { parseCsv } from "../../externalSystems/csvIngestion";
+import { cleanCloudDailyOrdersSalesPlaybook } from "../../externalSystems/playbooks";
 
 describe("CleanCloud legacy customer import data", () => {
   it("normalizes contest addresses to property and tower", () => {

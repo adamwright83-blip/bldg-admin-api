@@ -3,8 +3,8 @@
  * Payment time, customer name, amount, and when Goldline stored the row.
  */
 import { and, desc, eq, sql } from "drizzle-orm";
-import { cleancloudPaidOrders } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { cleancloudPaidOrders } from "../../../../drizzle/schema";
+import { getDb } from "../../../db";
 
 export type LatestCleanCloudSale = {
   at: string | null;
