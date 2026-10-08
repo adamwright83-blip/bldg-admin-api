@@ -1,9 +1,9 @@
+import { reconcileLedgerSpan } from "../analytics/canonicalRevenue";
+import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { randomUUID } from "node:crypto";
 import { and, eq, gte, isNotNull, isNull, lt, or } from "drizzle-orm";
 import {
-  cleancloudPaidOrders,
   dayDirectorCommitments,
-  orders,
   towerWarsPromises,
 } from "../../drizzle/schema";
 import { resolveBuildingEvidence } from "../../shared/buildings";
@@ -194,139 +194,33 @@ export function compileAuthoritativeEvents(input: {
   return { events, exclusions };
 }
 
-async function loadCandidates(
+/** Reality Bridge adapter: only receipt-admitted economic facts can become game candidates. */
+export async function loadTowerWarsEconomicCandidates(
   tenantId: string,
   start: Date,
   end: Date
 ): Promise<TowerWarsCandidate[]> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const [localRows, cleancloudRows] = await Promise.all([
-    db
-      .select()
-      .from(orders)
-      .where(
-        and(
-          eq(orders.tenantId, tenantId),
-          eq(orders.paid, true),
-          isNotNull(orders.paidAt),
-          gte(orders.paidAt, start),
-          lt(orders.paidAt, end)
-        )
-      ),
-    db
-      .select()
-      .from(cleancloudPaidOrders)
-      .where(
-        and(
-          eq(cleancloudPaidOrders.tenantId, tenantId),
-          eq(cleancloudPaidOrders.paid, true),
-          or(
-            and(
-              eq(cleancloudPaidOrders.sourceReportType, "orders_sales"),
-              gte(cleancloudPaidOrders.paymentDateUtc, start),
-              lt(cleancloudPaidOrders.paymentDateUtc, end)
-            ),
-            and(
-              eq(cleancloudPaidOrders.sourceReportType, "orders_revenue"),
-              gte(cleancloudPaidOrders.paidDateUtc, start),
-              lt(cleancloudPaidOrders.paidDateUtc, end)
-            )
-          )
-        )
-      ),
-  ]);
-
-  const candidates: TowerWarsCandidate[] = localRows.map(order => {
-    const stripe = Boolean(order.stripePaymentIntentId?.trim());
-    return {
-      sourceKey: `order:${order.id}`,
-      occurredAt: order.paidAt!,
-      orderId: order.id,
-      address: order.address,
-      buildingSlug: order.buildingSlug,
-      customerName: `${order.firstName} ${order.lastName}`.trim() || null,
-      customerPhone: order.phone || null,
-      customerIdentity: customerIdentityHash(tenantId, order),
-      cents: Math.round(Number(order.total ?? 0) * 100),
-      source: stripe ? "stripe" : "local_order_payment",
-      // Migration 0011 proxies cannot be distinguished by paidAt alone. A
-      // persisted processor id is authoritative; unproven local rows are held out.
-      authoritative: stripe,
-      exclusionReason: stripe
-        ? null
-        : "local_paid_at_has_no_authoritative_payment_evidence",
-      sourceEvidence: {
-        economicEventKey: `order:${order.id}`,
-        orderId: order.id,
-        stripePaymentIntentId: order.stripePaymentIntentId,
-        paidAtBasis: stripe ? "stripe_payment_intent" : "unverified_paidAt",
-        buildingEvidenceConflict: buildingConflictNote(
-          order.address,
-          order.buildingSlug
-        ),
-      },
-    };
-  });
-
-  const byCleancloudOrder = new Map<string, (typeof cleancloudRows)[number]>();
-  for (const row of cleancloudRows) {
-    const current = byCleancloudOrder.get(row.cleancloudOrderId);
-    if (
-      !current ||
-      (current.sourceReportType === "orders_revenue" &&
-        row.sourceReportType === "orders_sales")
-    ) {
-      byCleancloudOrder.set(row.cleancloudOrderId, row);
-    }
-  }
-  for (const row of Array.from(byCleancloudOrder.values())) {
-    const occurredAt =
-      row.sourceReportType === "orders_sales"
-        ? row.paymentDateUtc
-        : row.paidDateUtc;
-    if (!occurredAt) continue;
-    const isClearent = /clearent/i.test(
-      `${row.paymentType ?? ""} ${row.cardPaymentType ?? ""}`
-    );
-    candidates.push({
-      sourceKey: `cleancloud:${row.cleancloudOrderId}`,
-      occurredAt,
-      orderId: row.cleancloudOrderId,
-      address: row.address ?? row.buildingName,
-      buildingSlug: row.buildingSlug,
-      customerName: row.customerName || null,
-      customerPhone: row.customerPhone,
-      customerIdentity:
-        row.customerPhone || row.customerName
-          ? customerIdentityHash(tenantId, {
-              phone: row.customerPhone,
-              firstName: row.customerName,
-              address: row.address,
-              buildingSlug: row.buildingSlug,
-            })
-          : null,
-      cents: row.totalCents,
-      source: isClearent ? "clearent_xplorpay" : "cleancloud",
-      authoritative: true,
-      exclusionReason: null,
-      sourceEvidence: {
-        economicEventKey: `cleancloud:${row.cleancloudOrderId}`,
-        cleancloudPaidOrderId: row.id,
-        cleancloudOrderId: row.cleancloudOrderId,
-        sourceReportType: row.sourceReportType,
-        buildingEvidenceConflict: buildingConflictNote(
-          row.address ?? row.buildingName,
-          row.buildingSlug
-        ),
-        timestampField:
-          row.sourceReportType === "orders_sales"
-            ? "paymentDateUtc"
-            : "paidDateUtc",
-      },
-    });
-  }
-  return candidates;
+  if (!tenantId.trim()) throw new Error("Tower Wars economic reads require established tenant authority");
+  const ledger = await loadPaidOrderLedger({ tenantId, startUtc: start, endExclusiveUtc: end, timeZone: getDashboardTimeZone() });
+  const reconciled = reconcileLedgerSpan(ledger, { start: zonedYmd(start, getDashboardTimeZone()), end: zonedYmd(new Date(end.getTime() - 1), getDashboardTimeZone()) });
+  return reconciled.includedEvents.map(event => ({
+    sourceKey: event.eventKey,
+    occurredAt: event.occurredAt,
+    orderId: event.source === "laundry_butler" && event.orderNumber ? Number(event.orderNumber) : event.orderNumber ?? null,
+    address: event.address ?? null,
+    buildingSlug: event.building ?? null,
+    customerName: event.customerName,
+    customerPhone: event.identity.phone ?? null,
+    customerIdentity: customerIdentityHash(tenantId, {
+      phone: event.identity.phone ?? "", email: event.identity.email ?? null,
+      bldgUserId: event.identity.bldgUserId ?? null, cleancloudCustomerId: event.identity.cleancloudCustomerId ?? null, address: event.address ?? "", buildingSlug: event.building ?? null,
+    }),
+    cents: event.cents,
+    source: event.source === "laundry_butler" ? "stripe" : event.processor === "clearent" ? "clearent_xplorpay" : "cleancloud",
+    authoritative: true,
+    exclusionReason: null,
+    sourceEvidence: { economicEventKey: event.eventKey, authorityReceiptId: event.authorityReceiptId ?? null, stripePaymentIntentId: event.paymentEvidence?.sourceRef ?? null, cleancloudSourceRef: event.cleancloudEvidence?.sourceRef ?? null, buildingEvidenceConflict: buildingConflictNote(event.address,event.building) },
+  }));
 }
 
 function contributors(
@@ -384,7 +278,7 @@ export async function getTowerWarsToday(input: {
 }) {
   const bounds = getBusinessDayWindow(input.now);
   const season = rivalrySeasonWindow(bounds.businessDate);
-  const candidates = await loadCandidates(
+  const candidates = await loadTowerWarsEconomicCandidates(
       input.tenantId,
       season.startUtc,
       bounds.endExclusiveUtc
@@ -476,7 +370,7 @@ export async function getTowerWarsSettlement(input: {
     };
   }
 
-  const candidates = await loadCandidates(
+  const candidates = await loadTowerWarsEconomicCandidates(
     input.tenantId,
     startUtc,
     bounds.endExclusiveUtc
