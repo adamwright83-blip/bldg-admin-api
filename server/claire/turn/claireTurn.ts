@@ -1113,6 +1113,37 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     closedDecisions.pendingActionRelationship.effectiveOutput;
   let closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
   let operatorAdaptation: DaphneAdaptationApplicationResult | undefined;
+  // Durable Daphne style corrections own their confirmation. A generic
+  // doctrine "standing rule" response cannot prove an observation/write/read.
+  if (
+    !hasPendingAction &&
+    brainV3.workDisposition !== "propose" &&
+    brainV3.workDisposition !== "commit" &&
+    brainV3.dayLineDisposition === "none" &&
+    daphnePreferenceResult.corrections.length > 0
+  ) {
+    const detail = daphnePreferenceResult.corrections.find(c =>
+      c.preferenceKey === "response_detail"
+    );
+    const saved = daphnePreferenceResult.status === "persisted" &&
+      daphnePreferenceResult.readbackVerified === true;
+    const spokenConfirmation = !saved
+      ? "I understand, but I couldn't save that preference for future calls."
+      : detail?.value === 0.2
+        ? "Got it. I'll keep my answers shorter from now on."
+        : detail?.value === 0.85
+          ? "Got it. I'll provide more detail from now on."
+          : "That preference is saved for future calls.";
+    console.info("[DaphneV2]", JSON.stringify({
+      event: "preference_acknowledgement", status: daphnePreferenceResult.status,
+      durableReadback: saved, replyPath: "preference_acknowledgement",
+      preferenceKeys: daphnePreferenceResult.corrections.map(c => c.preferenceKey),
+    }));
+    mark("doctrine");
+    return finish({ speak: spokenConfirmation, kind: "answered" });
+  }
+
+
 
   const daphneMayAskInstead =
     closedDecisionBranch === "continue" &&
@@ -1391,34 +1422,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     brainV3.workDisposition === "propose" ||
     brainV3.workDisposition === "commit" ||
     brainV3.dayLineDisposition !== "none";
-
-  // Durable Daphne style corrections own their confirmation. A generic
-  // doctrine "standing rule" response cannot prove an observation/write/read.
-  if (
-    conversationTarget === "open_conversation" &&
-    !isOperationalWorkOrDayLine &&
-    daphnePreferenceResult.corrections.length > 0
-  ) {
-    const detail = daphnePreferenceResult.corrections.find(c =>
-      c.preferenceKey === "response_detail"
-    );
-    const saved = daphnePreferenceResult.status === "persisted" &&
-      daphnePreferenceResult.readbackVerified === true;
-    const spokenConfirmation = !saved
-      ? "I understand, but I couldn't save that preference for future calls."
-      : detail?.value === 0.2
-        ? "Got it. I'll keep my answers shorter from now on."
-        : detail?.value === 0.85
-          ? "Got it. I'll provide more detail from now on."
-          : "That preference is saved for future calls.";
-    console.info("[DaphneV2]", JSON.stringify({
-      event: "preference_acknowledgement", status: daphnePreferenceResult.status,
-      durableReadback: saved, replyPath: "preference_acknowledgement",
-      preferenceKeys: daphnePreferenceResult.corrections.map(c => c.preferenceKey),
-    }));
-    mark("doctrine");
-    return finish({ speak: spokenConfirmation, kind: "answered" });
-  }
 
   const doctrineSpeak =
     conversationTarget === "open_conversation" &&
