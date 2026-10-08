@@ -3,6 +3,9 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { legacyDayforgeSaasMemberships, legacyDayforgeSaasTenantLocations, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact, unknownValue } from "../../shared/businessGame";
 import { getDb } from "../db";
+import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
+import { addDaysYmd } from "../analytics/businessPeriods";
+import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
 import { getTruePnlCockpitSummary } from "../truePnlCockpit";
 import type { CapabilityEvaluation } from "./capabilityTypes";
@@ -45,22 +48,36 @@ export function evaluateFirstHireReadiness(input: FirstHireInputs, now = new Dat
     evidence: checks.map(([metric, actual, threshold, label]) => ({ metric, actual: actual == null ? unknownValue(`${metric} unavailable`) : deterministicEstimate(actual, "capability input adapter", "high"), policyThreshold: label, passes: actual == null ? null : actual >= threshold })),
     blockingConditions: status === "ACTIVE" ? [] : blockingConditions,
     supportingMetrics: { ...input },
-    assumptions: ["Readiness policy v1 is conservative and auditable", "A READY result requires every listed business condition; motivational score is excluded", "Approved proposals and estimated pipeline value do not count as reserve or realized demand"],
+    assumptions: ["Readiness policy v1 is conservative and auditable", "A READY result requires every listed business condition; motivational score is excluded", "Approved proposals and estimated pipeline value do not count as reserve or realized demand", "Trailing revenue is supporting-only and is populated only when canonical revenue is exact for the window"],
     nextReevaluationConditions: missing.map(metric => `Configure or capture ${metric}`),
-    dataQuality: { status: missing.length ? "insufficient" : "trusted", warnings: missing.map(metric => `Missing ${metric}`), sources: ["orders", "dayforge_saas_tenant_locations", "customer_assets", "true_pnl", "dayforge_saas_memberships"] },
+    dataQuality: { status: missing.length ? "insufficient" : "trusted", warnings: [...missing.map(metric => `Missing ${metric}`), ...(input.trailingDemandRevenueCents == null ? ["Trailing canonical revenue unavailable or not exact"] : [])], sources: ["orders", "canonical_revenue", "dayforge_saas_tenant_locations", "customer_assets", "true_pnl", "dayforge_saas_memberships"] },
   };
 }
 
 export async function getCapabilityEvaluations(input: { tenantId: string }): Promise<CapabilityEvaluation[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const since = new Date(Date.now() - 30 * 86_400_000);
-  const [orderMetrics, locations, members, assets, pnl] = await Promise.all([
-    db.select({ count: sql<number>`count(*)`, revenue: sql<number>`coalesce(sum(${orders.total}),0)`, weight: sql<number>`sum(${orders.weightLbs})`, weightedCount: sql<number>`sum(case when ${orders.weightLbs} is not null then 1 else 0 end)` }).from(orders).where(and(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`, gte(orders.createdAt, since))),
+  const now = new Date();
+  const since = new Date(now.getTime() - 30 * 86_400_000);
+  const timeZone = getDashboardTimeZone();
+  const revenueTo = zonedYmd(now, timeZone);
+  const revenueFrom = addDaysYmd(revenueTo, -29);
+  const [orderMetrics, locations, members, assets, pnl, revenue] = await Promise.all([
+    db
+      .select({ weight: sql<number>`sum(${orders.weightLbs})` })
+      .from(orders)
+      .where(and(eq(orders.tenantId, input.tenantId), gte(orders.createdAt, since))),
     db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
     db.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true))),
     listCustomerAssets({ tenantId: input.tenantId }),
     input.tenantId === "default" ? getTruePnlCockpitSummary({ period: "month" }) : Promise.resolve(null),
+    readCanonicalRevenue({
+      tenantId: input.tenantId,
+      from: revenueFrom,
+      to: revenueTo,
+      timeZone,
+      now,
+    }),
   ]);
   const metric = orderMetrics[0];
   const primary = locations.find(location => location.isPrimary) ?? locations[0];
@@ -77,6 +94,9 @@ export async function getCapabilityEvaluations(input: { tenantId: string }): Pro
     reserveMonths: null,
     recurringWorkloadPct: customerCount ? Math.round((recurringCount / customerCount) * 100) : null,
     scheduleSaturationPct: null,
-    trailingDemandRevenueCents: metric?.revenue == null ? null : Math.round(Number(metric.revenue) * 100),
+    trailingDemandRevenueCents:
+      revenue.status === "ok" && revenue.mayStateExact
+        ? revenue.statedExactCents
+        : null,
   })];
 }

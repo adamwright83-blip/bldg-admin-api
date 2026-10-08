@@ -5,11 +5,15 @@ import {
   clearentDailySummaries,
   clearentImportBatches,
   clearentTransactions,
-  orders,
 } from "../../drizzle/schema";
 import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "../cleancloudBrowserSync/schema";
 import { getDb } from "../db";
 import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
+import { readNativeCustomerHistory } from "../orders/orderHistoryReadService";
+import {
+  readNativePaymentFacts,
+  type NativePaymentFact,
+} from "../authority/nativePaymentReadService";
 
 /**
  * Is the business data current? This separates EVENT time (when a sale
@@ -22,7 +26,7 @@ import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
 export type LatestSale = {
   orderNumber: string;
   customerName: string | null;
-  cents: number;
+  cents: number | null;
   /** Payment (sale) time. */
   paidAt: string | null;
   placedAt: string | null;
@@ -108,6 +112,42 @@ async function optional<T>(work: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+export function projectLatestNativeSale(
+  rows: readonly {
+    id: number;
+    firstName: string | null;
+    lastName: string | null;
+    createdAt: Date;
+  }[],
+  paymentFacts: ReadonlyMap<number, NativePaymentFact>
+): LatestSale | null {
+  const admitted = rows
+    .map(order => ({ order, fact: paymentFacts.get(order.id) }))
+    .filter(
+      (entry): entry is { order: (typeof rows)[number]; fact: NativePaymentFact } =>
+        Boolean(entry.fact?.occurredAt)
+    )
+    .sort(
+      (a, b) =>
+        Date.parse(b.fact.occurredAt!) - Date.parse(a.fact.occurredAt!) ||
+        b.order.id - a.order.id
+    );
+  const latest = admitted[0];
+  if (!latest) return null;
+  return {
+    orderNumber: String(latest.order.id),
+    customerName:
+      `${latest.order.firstName ?? ""} ${latest.order.lastName ?? ""}`.trim() ||
+      null,
+    cents: latest.fact.capturedAmountCents,
+    paidAt: latest.fact.occurredAt,
+    placedAt: iso(latest.order.createdAt),
+    ingestedAt: null,
+    paymentType: "Stripe",
+    cardPaymentType: null,
+  };
+}
+
 export async function loadDataFreshness(input: { tenantId: string; now?: Date; timeZone: string }): Promise<DataFreshness> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -116,7 +156,7 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
   const startOfToday = zonedDayStartUtc(today, input.timeZone);
 
   const saleTime = sql<Date>`COALESCE(${cleancloudPaidOrders.paymentDateUtc}, ${cleancloudPaidOrders.paidDateUtc})`;
-  const [ccLatest, ccIngested, ccToday, ccIngestedToday, batches, binding, receipts, attempts, nativeLatest, clearentTx, clearentDaily, clearentBatch] =
+  const [ccLatest, ccIngested, ccToday, ccIngestedToday, batches, binding, receipts, attempts, nativeHistory, clearentTx, clearentDaily, clearentBatch] =
     await Promise.all([
       db
         .select({
@@ -175,26 +215,7 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
             .limit(10),
         null
       ),
-      db
-        .select({
-          id: orders.id,
-          firstName: orders.firstName,
-          lastName: orders.lastName,
-          total: orders.total,
-          paidAt: orders.paidAt,
-          createdAt: orders.createdAt,
-        })
-        .from(orders)
-        .where(
-          and(
-            sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`,
-            eq(orders.paid, true),
-            sql`${orders.stripePaymentIntentId} IS NOT NULL`,
-            sql`${orders.paidAt} IS NOT NULL`
-          )
-        )
-        .orderBy(desc(orders.paidAt))
-        .limit(1),
+      readNativeCustomerHistory(input.tenantId, db),
       input.tenantId === "default"
         ? optional(() => db.select({ n: sql<number>`COUNT(*)` }).from(clearentTransactions), [{ n: 0 }])
         : Promise.resolve([{ n: 0 }]),
@@ -240,7 +261,11 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
     });
   }
   const bound = binding[0] ?? null;
-  const native = nativeLatest[0];
+  const nativePaymentFacts = await readNativePaymentFacts(nativeHistory);
+  const nativeLatestSale = projectLatestNativeSale(
+    nativeHistory,
+    nativePaymentFacts
+  );
   const dateOnly = (value: Date | string | null | undefined, timeZone: string) => {
     const at = iso(value);
     return at ? zonedYmd(new Date(at), timeZone) : null;
@@ -299,20 +324,7 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
           }))
         : null,
     },
-    native: {
-      latestSale: native
-        ? {
-            orderNumber: String(native.id),
-            customerName: `${native.firstName ?? ""} ${native.lastName ?? ""}`.trim() || null,
-            cents: Math.round(Number(native.total ?? 0) * 100),
-            paidAt: iso(native.paidAt),
-            placedAt: iso(native.createdAt),
-            ingestedAt: null,
-            paymentType: "Stripe",
-            cardPaymentType: null,
-          }
-        : null,
-    },
+    native: { latestSale: nativeLatestSale },
     clearent: {
       applicable: input.tenantId === "default",
       transactionCount: Number(clearentTx[0]?.n ?? 0),

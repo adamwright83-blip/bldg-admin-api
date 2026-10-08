@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 
@@ -44,4 +44,21 @@ export async function readLegacyNativeCustomerHistoryAcrossTenants(
   const db = database ?? (await getDb());
   if (!db) throw new Error("Database not available");
   return db.select(NATIVE_CUSTOMER_HISTORY_COLUMNS).from(orders);
+}
+
+
+/** Orders-owned vendor view. Payment truth must be composed by Payment consumers. */
+export async function readNativeOrdersForVendor(
+  vendorId: number,
+  database?: OrdersReadDb
+) {
+  if (!Number.isInteger(vendorId) || vendorId <= 0)
+    throw new Error("Vendor order history requires established vendor authority");
+  const db = database ?? (await getDb());
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(orders)
+    .where(eq(orders.vendorId, vendorId))
+    .orderBy(desc(orders.createdAt));
 }
