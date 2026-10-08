@@ -242,4 +242,84 @@ describe("Daphne Stage 3B Claire branch integration", () => {
     expect(write).not.toHaveBeenCalled();
     expect(result.operatorAdaptation).toBeUndefined();
   });
+  it("persists a natural-language correction before reloading Daphne guidance for the same and next turn", async () => {
+    let corrected = false;
+    const capture = vi.fn(async () => {
+      corrected = true;
+      return {
+        status: "persisted" as const,
+        corrections: [
+          {
+            preferenceKey: "avoid_repetition" as const,
+            value: true,
+            evidenceText: "Stop repeating yourself.",
+          },
+        ],
+        observationIds: ["obs-correction"],
+      };
+    });
+    const loadGuidance = vi.fn(async () =>
+      corrected
+        ? {
+            cardGeneratedAt: "2026-10-07T12:00:00.000Z",
+            evidenceCount: 1,
+            promptSection:
+              "EXPLICIT CORRECTION: do not repeat a question, recommendation, or explanation the operator already answered or acted on unless new evidence makes repetition necessary.",
+          }
+        : null
+    );
+    const followUp = vi.fn(async input => {
+      expect(input.daphnePromptSection).toContain("EXPLICIT CORRECTION");
+      expect(input.daphnePromptSection).toContain("do not repeat");
+      return "Changed response pattern.";
+    });
+
+    const first = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "Stop repeating yourself.",
+        state: {},
+        conversationKey: "preference-loop-a",
+      },
+      {
+        ...safeOverrides(),
+        captureDaphneV2PreferenceCorrections: capture,
+        loadDaphneV2Guidance: loadGuidance,
+        followUp: followUp as any,
+      }
+    );
+
+    expect(capture).toHaveBeenCalledBefore(loadGuidance as any);
+    expect(first.speak).toBe("Changed response pattern.");
+
+    const second = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "What should I focus on?",
+        state: {},
+        conversationKey: "preference-loop-b",
+      },
+      {
+        ...safeOverrides(),
+        captureDaphneV2PreferenceCorrections: async () => ({
+          status: "no_match" as const,
+          corrections: [],
+          observationIds: [],
+        }),
+        loadDaphneV2Guidance: loadGuidance,
+        followUp: followUp as any,
+      }
+    );
+
+    expect(second.speak).toBe("Changed response pattern.");
+    expect(loadGuidance).toHaveBeenCalledTimes(2);
+    expect(followUp).toHaveBeenCalledTimes(2);
+  });
+
 });
