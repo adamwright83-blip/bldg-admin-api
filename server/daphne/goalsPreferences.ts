@@ -12,6 +12,7 @@ export const DAPHNE_META_PREFERENCE_KEYS = [
   "safe_experimentation",
   "cross_agent_sharing",
   "cross_user_learning",
+  "avoid_repetition",
   "response_directness",
   "response_detail",
   "challenge_level",
@@ -146,7 +147,7 @@ export function validateDaphneMetaPreferenceValue(
   value: unknown
 ): void {
   if (
-    ["adaptation_enabled", "personality_inference", "memory_recall", "safe_experimentation", "cross_agent_sharing", "cross_user_learning"].includes(key)
+    ["adaptation_enabled", "personality_inference", "memory_recall", "safe_experimentation", "cross_agent_sharing", "cross_user_learning", "avoid_repetition"].includes(key)
     && typeof value !== "boolean"
   ) {
     throw new Error(`Daphne preference ${key} requires a boolean`);
