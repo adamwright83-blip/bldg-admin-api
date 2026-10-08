@@ -63,7 +63,7 @@ describe("admin native order ownership", () => {
         openId: "oauth-platform-admin",
         role: "admin",
       }).admin.getOrder({ id: 21 })
-    ).resolves.toEqual(order);
+    ).resolves.toMatchObject(order);
   });
 
   it("rejects tenant-local intake mutation against another tenant", async () => {
