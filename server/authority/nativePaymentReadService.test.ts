@@ -8,6 +8,7 @@ vi.mock("./authorityReceipt", async importOriginal => ({
 import {
   hasNativePaymentAuthority,
   readNativePaymentAuthorityReceipts,
+  readNativePaymentFacts,
 } from "./nativePaymentReadService";
 
 function receipt(overrides: Partial<AuthorityReceipt> = {}): AuthorityReceipt {
@@ -86,6 +87,35 @@ describe("Payment-owned native paid reader", () => {
     await expect(readNativePaymentAuthorityReceipts([order])).rejects.toThrow(
       "unavailable"
     );
+  });
+
+  it("projects only admitted occurrence and immutable captured dollars", async () => {
+    loader.mockResolvedValue([
+      receipt({
+        metadata: {
+          capturedAmountCents: 4200,
+          capturedCurrency: "usd",
+          captureEvidence: "stripe_amount_received_v1",
+        },
+      }),
+    ]);
+    const facts = await readNativePaymentFacts([order]);
+    expect(facts.get(order.id)).toEqual({
+      orderId: 101,
+      tenantId: "tenant-a",
+      paymentIntentId: "pi_verified",
+      authorityReceiptId: "auth-1",
+      occurredAt: "2026-10-07T00:00:00Z",
+      capturedAmountCents: 4200,
+    });
+
+    loader.mockResolvedValue([receipt({ metadata: {} })]);
+    expect((await readNativePaymentFacts([order])).get(order.id)).toMatchObject({
+      capturedAmountCents: null,
+    });
+
+    loader.mockResolvedValue([receipt({ sourceRef: "pi_other" })]);
+    expect((await readNativePaymentFacts([order])).has(order.id)).toBe(false);
   });
 });
 
