@@ -1,5 +1,5 @@
 import { readNativeCustomerHistory } from "./orders/orderHistoryReadService";
-import { readNativePaymentFacts } from "./authority/nativePaymentReadService";
+import { readNativePaymentFacts } from "./domains/payment/nativePaymentReadService";
 
 /** First admitted native payment per customer phone; game state supplies no customer truth. */
 export async function readCommandSkyFirstPayments(tenantId: string) {

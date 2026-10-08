@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 describe("three-fact authority slice", () => {
   it("makes payment truth pass through a durable receipt before native order mutation", () => {
     const route = source("server/routers.ts");
-    const admission = source("server/authority/paymentAdmission.ts");
+    const admission = source("server/domains/payment/paymentAdmission.ts");
     const commercial = source("server/commercialPipeline/commercialPipelineService.ts");
     expect(route).toContain("admitNativeStripePayment");
     expect(admission).toContain("prepareNativeStripePaymentTenant");

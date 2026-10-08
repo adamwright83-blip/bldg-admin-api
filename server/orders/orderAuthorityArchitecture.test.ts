@@ -10,7 +10,7 @@ const persistenceOwners = new Set([
 ]);
 const directWriteOwners = new Set([
   ...persistenceOwners,
-  "server/authority/paymentAdmission.ts",
+  "server/domains/payment/paymentAdmission.ts",
 ]);
 // Deliberate demo fixtures, not production order admission. No directory exemptions.
 const fixtures = new Set([
@@ -143,7 +143,7 @@ describe("Order Authority Architecture Guard", () => {
     ).toEqual([]);
     expect(
       violations(
-        "server/authority/paymentAdmission.ts",
+        "server/domains/payment/paymentAdmission.ts",
         "db.update(orders).set({ paid: true });"
       )
     ).toEqual([]);

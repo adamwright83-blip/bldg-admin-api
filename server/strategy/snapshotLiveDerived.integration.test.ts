@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
-import { admitNativeStripePayment } from "../authority/paymentAdmission";
+import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
 import { describe, expect, it } from "vitest";
 import { getDb } from "../db";
 import { _clearSnapshotStore, buildStrategySnapshot } from "./snapshotBuilder";

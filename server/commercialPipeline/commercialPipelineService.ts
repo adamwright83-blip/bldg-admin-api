@@ -41,7 +41,7 @@ import {
   commercialOrderTenantPredicate,
   readCommercialOrderPaymentDecisionWith,
 } from "./commercialOrderPaymentDecision";
-import { hasNativePaymentEvidence } from "../authority/nativePaymentReadService";
+import { hasNativePaymentEvidence } from "../domains/payment/nativePaymentReadService";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]

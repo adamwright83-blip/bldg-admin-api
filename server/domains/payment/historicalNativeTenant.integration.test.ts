@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { orders } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { createNativeOrder } from "../orders/orderLifecycleService";
+import { orders } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { createNativeOrder } from "../../orders/orderLifecycleService";
 import { prepareNativeStripePaymentTenant, admitNativeStripePayment } from "./paymentAdmission";
 
 it("holds missing historical ownership without changing tenant or admitting default payment", async () => {

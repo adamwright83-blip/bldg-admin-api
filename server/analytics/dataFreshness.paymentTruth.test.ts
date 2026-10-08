@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { projectLatestNativeSale } from "./dataFreshness";
-import type { NativePaymentFact } from "../authority/nativePaymentReadService";
+import type { NativePaymentFact } from "../domains/payment/nativePaymentReadService";
 
 const rows = [
   {

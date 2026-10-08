@@ -1,7 +1,7 @@
 import {
   hasNativePaymentAuthority,
   nativeCapturedAmountCents,
-} from "./authority/nativePaymentReadService";
+} from "./domains/payment/nativePaymentReadService";
 import type { AuthorityReceipt } from "./authority/authorityReceipt";
 import { resolveBuildingEvidence } from "@shared/buildings";
 import {

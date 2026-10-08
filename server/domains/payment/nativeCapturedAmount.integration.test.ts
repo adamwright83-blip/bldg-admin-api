@@ -1,21 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { it, expect } from "vitest";
-import { orders, authorityReceipts } from "../../drizzle/schema";
-import { getDb, listPaidOrdersForBuildingRevenue } from "../db";
-import { buildCustomerProfile } from "../customerProfile";
+import { orders, authorityReceipts } from "../../../drizzle/schema";
+import { getDb, listPaidOrdersForBuildingRevenue } from "../../db";
+import { buildCustomerProfile } from "../../customerProfile";
 import { readNativePaymentFacts, readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
 import {
   createNativeOrder,
   reviseNativeOrder,
-} from "../orders/orderLifecycleService";
+} from "../../orders/orderLifecycleService";
 import {
   admitNativeStripePayment,
   reconcileNativeStripeCapture,
 } from "./paymentAdmission";
-import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
-import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
-import { loadCustomerOrderTruth } from "../geography/customerOrderTruth";
+import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
+import { listCustomerAssets } from "../../customerAssets/customerAssetProjection";
+import { loadCustomerOrderTruth } from "../../geography/customerOrderTruth";
 it("withholds missing capture, reconciles durable amounts, and ignores later price edits", async () => {
   const db = (await getDb())!;
   const tenantId = `c3-${randomUUID().slice(0, 8)}`;

@@ -1,4 +1,4 @@
-import { hasNativePaymentAuthority, nativeCapturedAmountCents, readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
+import { hasNativePaymentAuthority, nativeCapturedAmountCents, readNativePaymentAuthorityReceipts } from "./domains/payment/nativePaymentReadService";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "./mysqlErrors";
 import {
   and,

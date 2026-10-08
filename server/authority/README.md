@@ -1,38 +1,33 @@
-# Subsystem Contract: Payment Authority & Execution Gates
+# Subsystem Contract: Platform Authority & Execution Gates
 
 ## PURPOSE
-Authoritative domain owner for native payment admission, immutable capture dollar verification, and platform-wide action execution gates.
+Platform-level shared infrastructure for durable authority receipts, action execution gates, and cross-domain admission verification.
 
 ## OWNS
-- Native payment admission (`authority_receipts` ledger).
-- Provider capture proof interpretation (Stripe `amount_received` & currency).
-- Canonical native payment read models.
-- Shared platform action execution gates.
+- Shared platform action execution gates (`actionExecutionGate.ts`).
+- Generic durable authority receipt persistence (`authorityReceipt.ts`).
+- Neutral action completion admission (`actionCompletionAdmission.ts`).
+- Field observation admission (`fieldObservationAdmission.ts`).
 
 ## READS
-- Stripe webhook payloads & provider charges.
-- Native order identifiers and explicit tenant context.
+- Tenant context and action inputs across domains.
 
 ## WRITES
-- `authority_receipts` table.
-- Provider claim locks (preventing duplicate capture binding).
+- `authority_receipts` table (generic execution gate and completion receipts).
 
 ## LEGAL ENTRYPOINTS
-- `admitNativePayment` (`server/authority/paymentAdmission.ts`)
-- `recordAuthorityReceipt` (`server/authority/authorityReceipt.ts`)
 - `executeWithActionGate` (`server/authority/actionExecutionGate.ts`)
-- `getNativePaymentStatus` / `getNativePaymentOccurrenceHistory` (`server/authority/nativePaymentReadService.ts`)
+- `recordAuthorityReceipt` (`server/authority/authorityReceipt.ts`)
+- `admitActionCompletion` (`server/authority/actionCompletionAdmission.ts`)
 
 ## DOWNSTREAM CONSUMERS
-- Orders delivery gate (requiring payment admission before delivery)
-- Canonical revenue analytics (`server/analytics/canonicalRevenue.ts`)
-- Tower Wars economic banking (`server/towerWars/towerWarsService.ts`)
+- Durable execution workers (`server/durableExecution/`)
+- Persistent Operator action runs (`server/persistentOperator/`)
 
 ## MUST NEVER OWN
-- Order status lifecycle transitions (owned by Orders).
-- Commercial conversion `won` (owned by Commercial).
-- Game narrative/progression (owned by Experience).
+- Domain-specific payment policy or Stripe capture admission (owned by `server/domains/payment/`).
+- Order lifecycle transitions (owned by `server/orders/`).
+- Commercial conversion (owned by `server/commercialPipeline/`).
 
 ## LEGACY/COMPATIBILITY EXCEPTIONS
-- Historical payment receipts without provider amount proof remain unknown dollars (occurrence proven, amount unadmitted).
-- Seeded NULL-tenant migration witness row remains unresolved.
+- Generic receipt schemas shared across historical and modern actions.

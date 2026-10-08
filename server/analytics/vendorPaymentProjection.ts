@@ -3,7 +3,7 @@ import type { Order } from "../../drizzle/schema";
 import {
   readNativePaymentFacts,
   type NativePaymentFact,
-} from "../authority/nativePaymentReadService";
+} from "../domains/payment/nativePaymentReadService";
 import { readNativeOrdersForVendor } from "../orders/orderHistoryReadService";
 
 export type VendorPaymentProjection = {

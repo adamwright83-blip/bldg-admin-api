@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orders, orderPaymentProjections } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { createNativeOrder } from "../orders/orderLifecycleService";
-import { projectCustomerAssets } from "../customerAssets/customerAssetProjection";
+import { orders, orderPaymentProjections } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { createNativeOrder } from "../../orders/orderLifecycleService";
+import { projectCustomerAssets } from "../../customerAssets/customerAssetProjection";
 import { admitNativeStripePayment } from "./paymentAdmission";
 
 describe("native Payment history requires occurrence proof", () => {

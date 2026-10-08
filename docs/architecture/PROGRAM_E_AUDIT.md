@@ -187,7 +187,13 @@ server/
 8. **E7 — Final Legibility & Import Audit:**
    - Run repo-wide scan for obsolete directory references and eliminate dead aliases.
    - Synchronize all architecture docs to final paths.
-9. **E8 — Cold-Model Certification:**
-   - Run verification suite on final HEAD.
-   - Execute genuine independent cold-model comprehension examination.
-   - Final certification sign-off.
+---
+
+## 7. Execution Ledger & Merged Slices
+
+| Slice | PR | Branch / Head | Scope & Verification | Status |
+|---|---|---|---|---|
+| **E0** | #501 | `program-e/slice-0-classification-audit` | Initialized Program E classification audit, protected PR registers, and target taxonomy. All 4 architecture gates passed. | **MERGED** (`b48df520`) |
+| **E1** | #502 | `program-e/slice-1-canonical-narrative` | Root `ARCHITECTURE.md`, `CLAUDE.md` model onboarding bootloader, machine-readable `conceptOwnershipMap` in `domain-boundaries.json`, and 5 subsystem contracts. All 4 gates passed. | **MERGED** (`99347208`) |
+| **E2a** | Pending | `program-e/slice-2a-payment-domain` | Established `server/domains/payment/`. Relocated payment admission, native read services, and payment authority tests from `server/authority/`. Updated 22 consumer files and tests. `pnpm check` (zero errors), 4 architecture gates clean, 49 unit/contract tests passed. | **IN REVIEW** |
+

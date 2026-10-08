@@ -23,7 +23,7 @@
       "domain": "money",
       "paths": [
         "server/money",
-        "server/authority/paymentAdmission.ts",
+        "server/domains/payment/paymentAdmission.ts",
         "server/analytics/canonicalRevenue.ts",
         "server/analytics/paidOrderLedger.ts"
       ]
@@ -133,7 +133,7 @@
       "id": "money-does-not-push-operator-or-game",
       "from": [
         "server/money",
-        "server/authority/paymentAdmission.ts",
+        "server/domains/payment/paymentAdmission.ts",
         "server/analytics/canonicalRevenue.ts"
       ],
       "to": [
@@ -205,8 +205,8 @@
     {
       "concept": "Native Payment Occurrence",
       "owner": "Payment",
-      "legalWriteEntrypoint": "server/authority/paymentAdmission.ts (admitNativePayment)",
-      "canonicalReadEntrypoint": "server/authority/nativePaymentReadService.ts",
+      "legalWriteEntrypoint": "server/domains/payment/paymentAdmission.ts (admitNativePayment)",
+      "canonicalReadEntrypoint": "server/domains/payment/nativePaymentReadService.ts",
       "evidenceAdmissionSource": "Stripe webhook payment intent / charge confirmation with authority receipt",
       "downstreamConsumers": [
         "server/orders/orderLifecycleService.ts (delivery eligibility fence)",
@@ -224,8 +224,8 @@
     {
       "concept": "Native Captured Amount",
       "owner": "Payment",
-      "legalWriteEntrypoint": "server/authority/paymentAdmission.ts (durable Stripe amount_received persistence)",
-      "canonicalReadEntrypoint": "server/authority/nativePaymentReadService.ts, server/analytics/canonicalRevenue.ts",
+      "legalWriteEntrypoint": "server/domains/payment/paymentAdmission.ts (durable Stripe amount_received persistence)",
+      "canonicalReadEntrypoint": "server/domains/payment/nativePaymentReadService.ts, server/analytics/canonicalRevenue.ts",
       "evidenceAdmissionSource": "Immutable provider capture receipts",
       "downstreamConsumers": [
         "server/analytics/canonicalRevenue.ts",
@@ -251,7 +251,7 @@
         "server/lanternCity/objectiveMarksService.ts"
       ],
       "forbiddenMutationSources": [
-        "server/authority/paymentAdmission.ts (won is not paid)",
+        "server/domains/payment/paymentAdmission.ts (won is not paid)",
         "server/goldlineWorld",
         "server/driverGameWorld"
       ],
@@ -268,7 +268,7 @@
         "server/money/moneyProjectionService.ts (qualified as external evidence)"
       ],
       "forbiddenMutationSources": [
-        "server/authority/paymentAdmission.ts",
+        "server/domains/payment/paymentAdmission.ts",
         "server/orders/orderLifecycleService.ts"
       ],
       "legacyCompatibilityExceptions": "cleancloud_legacy_orders table remains an explicit unresolved tenantless data-policy exception."

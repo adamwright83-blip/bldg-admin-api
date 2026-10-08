@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
-import { orders, authorityReceipts } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { orders, authorityReceipts } from "../../../drizzle/schema";
+import { getDb } from "../../db";
 import {
   admitAuthorityClaimWith,
   paymentAuthorityReceiptMatches,
   type AuthorityReceipt,
   type AuthorityTransaction,
-} from "./authorityReceipt";
+} from "../../authority/authorityReceipt";
 
 export async function prepareNativeStripePaymentTenant(input: {
   tenantId: string;

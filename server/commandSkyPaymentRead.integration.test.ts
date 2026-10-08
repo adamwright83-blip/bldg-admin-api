@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { orders, commandSkyWins, commandSkySettings } from "../drizzle/schema";
 import { getDb } from "./db";
 import { createNativeOrder } from "./orders/orderLifecycleService";
-import { admitNativeStripePayment } from "./authority/paymentAdmission";
+import { admitNativeStripePayment } from "./domains/payment/paymentAdmission";
 import { readCommandSkyFirstPayments } from "./commandSkyPaymentRead";
 import { logCommandSkyWin, getCommandSkyState } from "./commandSky";
 
