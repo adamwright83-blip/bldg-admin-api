@@ -31,3 +31,18 @@ backfilled from current price. Repository evidence does not establish whether th
 historical amounts should be reconstructed from provider captures, interpreted net
 of refunds, or withheld pending reconciliation. That specific historical/data-policy
 item remains unresolved; no provider credentials or production data were used.
+
+## C2: Reminder conversion requires Payment admission
+
+The Level 4 gate's existing reminder-conversion consequence previously counted raw
+paid flags. The count now composes the owning Payment reader and exact receipt
+matcher. Operational collection blockers retain their existing behavior; no unknown
+payment is reinterpreted as a new asserted debt. MySQL proves a weak paid flag earns
+no conversion, canonical admission enables the existing consequence, and repeated
+projection does not multiply it. The test isolates unrelated offensive presentation
+loading while exercising real Orders, action logs, Payment receipts and gate logic.
+
+Adam resolved the historical-dollar policy: unknown amounts must be withheld and
+reconciled from durable provider captures. Editable order prices must never supply
+canonical paid dollars, customer value, or game/business truth. Work on that reader
+family continues in a separate slice.
