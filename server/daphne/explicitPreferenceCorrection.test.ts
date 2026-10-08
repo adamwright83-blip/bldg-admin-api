@@ -102,10 +102,16 @@ describe("Daphne V2 explicit preference correction parser", () => {
         }) as any,
         recordObservation: recordObservation as any,
         setPreference: setPreference as any,
+        readPreferences: (async () => ({
+          avoid_repetition: {
+            status: "active", sourceObservationId: "obs-correction-1", value: true,
+          },
+        })) as any,
       }
     );
 
     expect(result.status).toBe("persisted");
+    expect(result.readbackVerified).toBe(true);
     expect(recordObservation).toHaveBeenCalledTimes(1);
     expect(setPreference).toHaveBeenCalledWith({
       tenantId: "tenant-a",
@@ -116,4 +122,61 @@ describe("Daphne V2 explicit preference correction parser", () => {
     });
   });
 
+
+  it("never claims success when a stored preference cannot be read back", async () => {
+    const result = await captureExplicitDaphnePreferenceCorrections(
+      {
+        tenantId: "tenant-a", operatorUserId: "adam",
+        utterance: "Keep your answers shorter from now on.",
+        conversationId: "call-2", turnId: "call-2:1",
+      },
+      {
+        enabled: () => true,
+        resolveIdentity: (async () => ({
+          ok: true, identity: { tenantId: "tenant-a", canonicalOperatorId: "operator-a" },
+        })) as any,
+        recordObservation: (async () => ({ id: "obs-short" })) as any,
+        setPreference: (async () => ({
+          status: "active", value: 0.2, sourceObservationId: "obs-short",
+        })) as any,
+        readPreferences: (async () => ({})) as any,
+      }
+    );
+    expect(result.status).toBe("readback_failed");
+    expect(result.readbackVerified).toBe(false);
+    expect(result.corrections[0].value).toBe(0.2);
+  });
+
+  it("returns a failure receipt for storage errors, never a standing-rule success", async () => {
+    const result = await captureExplicitDaphnePreferenceCorrections(
+      {
+        tenantId: "tenant-a", operatorUserId: "adam",
+        utterance: "Keep your answers shorter from now on.",
+        conversationId: "call-3", turnId: "call-3:1",
+      },
+      {
+        enabled: () => true,
+        resolveIdentity: (async () => ({
+          ok: true, identity: { tenantId: "tenant-a", canonicalOperatorId: "operator-a" },
+        })) as any,
+        recordObservation: (async () => { throw new Error("storage unavailable"); }) as any,
+      }
+    );
+    expect(result.status).toBe("persistence_failed");
+    expect(result.readbackVerified).toBe(false);
+  });
+
+  it("preserves correction intent when Daphne is disabled", async () => {
+    const result = await captureExplicitDaphnePreferenceCorrections(
+      {
+        tenantId: "tenant-a", operatorUserId: "adam",
+        utterance: "Keep your answers shorter from now on.",
+        conversationId: "call-disabled", turnId: "call-disabled:1",
+      },
+      { enabled: () => false }
+    );
+    expect(result.status).toBe("disabled");
+    expect(result.corrections.map(c => c.preferenceKey)).toEqual(["response_detail"]);
+    expect(result.readbackVerified).toBe(false);
+  });
 });

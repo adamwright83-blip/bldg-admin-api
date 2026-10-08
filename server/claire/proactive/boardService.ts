@@ -136,6 +136,42 @@ async function placeOnDayLine(input: {
   }
 }
 
+/**
+ * Structured, fact-preserving spoken summary. Never infers dormancy, rewrites
+ * customer history, or speaks every recovery identity without a request.
+ */
+export function conciseOperatorBoardSpeech(input: {
+  warnings: readonly string[];
+  recoveries: readonly ProactiveObligation[];
+  sales: readonly ProactiveObligation[];
+  overload: ReturnType<typeof overloadJudgment>;
+  skipSales: boolean;
+}): string {
+  const lines: string[] = [];
+  const warning = input.warnings[0];
+  if (warning) {
+    if (warning.startsWith("GUMBALL failed today.")) lines.push("GUMBALL import failed today.");
+    else if (warning.startsWith("GUMBALL did not run today.")) lines.push("GUMBALL did not import today.");
+    else if (warning.startsWith("CleanCloud is only current")) lines.push("CleanCloud data freshness is uncertain.");
+    else lines.push(warning); // Unknown critical warnings must not be dropped.
+  }
+  if (input.overload.kind !== "ok") lines.push(input.overload.speak);
+  const recoveries = input.recoveries.filter(item =>
+    item.status === "scheduled" || item.status === "draft_prepared"
+  );
+  if (recoveries.length) {
+    lines.push(warning
+      ? "Recovery candidates need verification before outreach."
+      : "Recovery follow-ups are on the board; ask for details before outreach.");
+  }
+  const nextSale = input.skipSales ? null :
+    input.sales.find(item => item.status === "scheduled");
+  if (nextSale) lines.push(`Next sales follow-up: ${nextSale.title}.`);
+  return lines.length
+    ? lines.join(" ")
+    : "Nothing urgent is on the board. Ask if you'd like the full detail.";
+}
+
 export async function ensureOperatorBoard(input: {
   tenantId: string;
   operatorUserId: string;
@@ -147,7 +183,7 @@ export async function ensureOperatorBoard(input: {
     serviceLabel: string;
   };
   force?: boolean;
-}): Promise<{ brief: string; created: number ; salesArtifacts?: SalesInsightArtifact[] }> {
+}): Promise<{ brief: string; conciseBrief?: string; created: number; salesArtifacts?: SalesInsightArtifact[] }> {
   if (!isStrategyFeatureEnabled(input.tenantId, STRATEGY_FLAGS.LEGACY_AUTONOMY)) {
     return { brief: "", created: 0 };
   }
@@ -340,16 +376,20 @@ export async function ensureOperatorBoard(input: {
   const insight = await loadSalesInsight(input.tenantId, new Date(now), timeZone).catch(() => null);
   const freshInsight = insight && surfacedSalesInsights.get(sweepKey) !== insight.observationReference ? insight : null;
   if (freshInsight) surfacedSalesInsights.set(sweepKey, freshInsight.observationReference);
+  const recoveries = obligations.filter(item => item.kind === "dormant_recovery");
+  const sales = obligations.filter(item =>
+    item.kind === "sales_follow_up" && item.status === "scheduled"
+  );
+  const overload = overloadJudgment([]);
   return {
     created,
     salesArtifacts: freshInsight ? [freshInsight] : [],
     brief: [freshInsight?.speech, morningChiefOfStaffBrief({
-      recoveries: obligations.filter(item => item.kind === "dormant_recovery"),
-      sales: obligations.filter(item => item.kind === "sales_follow_up" && item.status === "scheduled"),
-      warnings,
-      overload: overloadJudgment([]),
-      skipSales,
+      recoveries, sales, warnings, overload, skipSales,
     })].filter(Boolean).join(" "),
+    conciseBrief: conciseOperatorBoardSpeech({
+      recoveries, sales, warnings, overload, skipSales,
+    }),
   };
 }
 
@@ -362,7 +402,7 @@ export async function ensureAdamBoard(input: {
   operatorUserId: string;
   actorId: string;
   force?: boolean;
-}): Promise<{ brief: string; created: number ; salesArtifacts?: SalesInsightArtifact[] }> {
+}): Promise<{ brief: string; conciseBrief?: string; created: number; salesArtifacts?: SalesInsightArtifact[] }> {
   return ensureOperatorBoard({
     ...input,
     timeZone: getDashboardTimeZone(),

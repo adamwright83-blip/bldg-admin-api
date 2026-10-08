@@ -3,6 +3,7 @@ import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity
 import { isDaphneV2ClaireEnabled } from "./claireAdapter";
 import {
   setDaphneMetaPreference,
+  loadDaphneMetaPreferences,
   type DaphneMetaPreferenceKey,
 } from "./goalsPreferences";
 import { recordDaphneObservation } from "./observationStore";
@@ -14,7 +15,8 @@ export type DaphneExplicitPreferenceCorrection = {
 };
 
 export type DaphneExplicitPreferenceCaptureResult = {
-  status: "disabled" | "no_match" | "identity_unresolved" | "persisted";
+  status: "disabled" | "no_match" | "identity_unresolved" | "persisted" | "persistence_failed" | "readback_failed";
+  readbackVerified: boolean;
   corrections: DaphneExplicitPreferenceCorrection[];
   observationIds: string[];
 };
@@ -198,19 +200,27 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
   resolveIdentity?: typeof resolveCanonicalOperatorIdentity;
   recordObservation?: typeof recordDaphneObservation;
   setPreference?: typeof setDaphneMetaPreference;
+  readPreferences?: typeof loadDaphneMetaPreferences;
 } = {}): Promise<DaphneExplicitPreferenceCaptureResult> {
   const enabled = dependencies.enabled ?? isDaphneV2ClaireEnabled;
   const resolveIdentity = dependencies.resolveIdentity ?? resolveCanonicalOperatorIdentity;
   const recordObservation = dependencies.recordObservation ?? recordDaphneObservation;
   const setPreference = dependencies.setPreference ?? setDaphneMetaPreference;
-  if (!enabled(input.tenantId)) {
-    return { status: "disabled", corrections: [], observationIds: [] };
-  }
-
+  const readPreferences = dependencies.readPreferences ?? loadDaphneMetaPreferences;
   const corrections = detectExplicitDaphnePreferenceCorrections(input.utterance);
-  if (!corrections.length) {
-    return { status: "no_match", corrections: [], observationIds: [] };
-  }
+  const result = (
+    status: DaphneExplicitPreferenceCaptureResult["status"],
+    observationIds: string[] = []
+  ): DaphneExplicitPreferenceCaptureResult => {
+    if (corrections.length) console.info("[DaphnePreference]", JSON.stringify({
+      event: "durable_preference_capture", status,
+      readbackVerified: status === "persisted",
+      preferenceKeys: corrections.map(c => c.preferenceKey),
+    }));
+    return { status, corrections, observationIds, readbackVerified: status === "persisted" };
+  };
+  if (!corrections.length) return result("no_match");
+  if (!enabled(input.tenantId)) return result("disabled");
 
   const raw = input.operatorUserId.trim();
   const source = /^\d+$/.test(raw)
@@ -220,12 +230,12 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
     tenantId: input.tenantId,
     source,
     subsystem: "daphne_v2_explicit_preference_correction",
-  });
-  if (!resolution.ok) {
-    return { status: "identity_unresolved", corrections, observationIds: [] };
-  }
+  }).catch(() => null);
+  if (!resolution?.ok) return result("identity_unresolved");
 
   const observationIds: string[] = [];
+  const sources = new Map<DaphneMetaPreferenceKey, string>();
+  try {
   for (const correction of corrections) {
     const idempotencyKey = `explicit-correction:${stableObservationKey({
       conversationId: input.conversationId,
@@ -256,6 +266,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       idempotencyKey,
     });
     observationIds.push(observed.id);
+    sources.set(correction.preferenceKey, observed.id);
     await setPreference({
       tenantId: input.tenantId,
       canonicalOperatorId: resolution.identity.canonicalOperatorId,
@@ -264,6 +275,25 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       sourceObservationId: observed.id,
     });
   }
+  } catch {
+    return result("persistence_failed", observationIds);
+  }
 
-  return { status: "persisted", corrections, observationIds };
+  // A successful write is not an acknowledgement. Require a fresh durable
+  // read of the latest tenant/operator-scoped preference and its source receipt.
+  try {
+    const latest = await readPreferences({
+      tenantId: input.tenantId,
+      canonicalOperatorId: resolution.identity.canonicalOperatorId,
+    });
+    const verified = corrections.every(correction => {
+      const stored = latest[correction.preferenceKey];
+      return stored?.status === "active" &&
+        stored.sourceObservationId === sources.get(correction.preferenceKey) &&
+        JSON.stringify(stored.value) === JSON.stringify(correction.value);
+    });
+    return result(verified ? "persisted" : "readback_failed", observationIds);
+  } catch {
+    return result("readback_failed", observationIds);
+  }
 }

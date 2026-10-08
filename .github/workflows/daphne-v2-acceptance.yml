@@ -1,0 +1,64 @@
+# LEGACY DAYFORGE COMPATIBILITY: CI migration runner uses retained historical bootstrap keys.
+name: Daphne V2 durable preference acceptance
+on:
+  pull_request:
+    paths:
+      - 'server/daphne/**'
+      - 'server/claire/**'
+      - '.github/workflows/daphne-v2-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  daphne-durable-two-call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: legacy_dayforge_release
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: ci
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/legacy_dayforge_release
+      DAYFORGE_RELEASE_DB: "1"
+      DAYFORGE_RELEASE_TEST_MODE: "1"
+      APP_SHARED_API_SECRET: legacy-dayforge-release-app-secret-000000000000000000000
+      JWT_SECRET: legacy-dayforge-release-jwt-secret-000000000000000000000
+      STRIPE_SECRET_KEY: legacy-dayforge-release-placeholder-not-used
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify TypeScript compile
+        run: pnpm check
+      - name: Verify Daphne receipts, style rendering and Stage 3B branch
+        run: >-
+          pnpm vitest run
+          server/daphne/explicitPreferenceCorrection.test.ts
+          server/claire/proactive/boardService.test.ts
+          server/claire/turn/daphneV2RuntimeCorrection.test.ts
+          server/claire/turn/daphneAdaptation.test.ts
+      - name: Bootstrap disposable MySQL authority and preference tables
+        run: pnpm db:legacy-dayforge:release
+      - name: Verify two independent Claire calls from durable MySQL preference
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/claire/turn/daphneV2RuntimeCorrection.mysql.integration.test.ts
