@@ -281,3 +281,9 @@ null-tenant row surviving a repeated production migration with zero admitted rec
 The four gates and TypeScript pass. Existing contracts were updated to require the
 current ownership rule and refund-safe Payment write ordering rather than obsolete
 normalization/always-paid string literals.
+
+## C18 — CleanCloud customer projection admission
+
+A real MySQL witness on main `4bc98a08` showed `loadCustomerOrderTruth` treating a modern imported `paid` flag as paid customer truth without `cleancloud_paid_observed` admission. The loader now composes the existing external-evidence reader and validates tenant, order and exact import source reference before admitting paid status or dollars. Unadmitted rows remain customer history with paid false and amount null. No native Payment receipt is manufactured; `cleancloud_legacy_orders` is untouched.
+
+Validation: the witness fails before the change and passes afterwards, including wrong-tenant and wrong-import rejection. Type check and four architecture gates pass; 60 geography/authority contracts pass. The one geography digest fixture failure reproduces on starting main (D baseline evidence). Protected concurrent PRs do not change these hunks.
