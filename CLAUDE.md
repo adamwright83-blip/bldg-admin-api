@@ -2,6 +2,8 @@
 
 # bldg-admin-api — context that is easy to miss
 
+**Program E canonical starting point:** Read [ARCHITECTURE.md](ARCHITECTURE.md) first for current JOYSTICK purpose, ownership, cross-domain write/read boundaries, and change locations. Consult `docs/architecture/PROGRAM_E_OWNERSHIP_MAP.json` for machine-readable current-path inventory. This guide retains integration and compatibility warnings; it does not grant business authority to a directory label. Preserve the eight files owned by Daphne PR #495 until that PR merges.
+
 This file is loaded automatically. It exists because two specific things in this repo
 have already caused wrong work, and neither is discoverable by reading the code you
 happen to be editing.
