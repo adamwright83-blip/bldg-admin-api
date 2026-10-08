@@ -23,6 +23,18 @@ describe("Daphne V2 Operator Card", () => {
     expect(card.guardrails.mayMintNarrativeDisclosure).toBe(false);
   });
 
+  it("includes active MetaPreference source observations in the compiled evidence chain", () => {
+    const card = compileDaphneOperatorCard({
+      tenantId: "t", canonicalOperatorId: "o", agentId: "claire",
+      generatedAt: new Date("2026-10-07T00:00:00Z"),
+      person: [], state: null, context: null, goals: [], relationship: null,
+      metaPreferences: { response_detail: pref("response_detail", 0.2) },
+      hypotheses: [], responseModel: [],
+    });
+    expect(card.metaPreferences.response_detail).toBe(0.2);
+    expect(card.evidenceRefs).toContain("obs");
+  });
+
   it("obeys explicit disablement of personality inference", () => {
     const card = compileDaphneOperatorCard({
       tenantId: "t", canonicalOperatorId: "o", agentId: "claire",
