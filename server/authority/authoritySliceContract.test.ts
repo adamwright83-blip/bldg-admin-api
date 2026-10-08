@@ -83,9 +83,7 @@ describe("three-fact authority slice", () => {
     expect(migrate).toContain("legacy_stripe_payment_backfill_v1");
     expect(migrate).not.toContain("normalize legacy Stripe order tenants before authority backfill");
     expect(migrate).toContain("WHERE tenantId IS NOT NULL AND TRIM(tenantId) <> ''");
-    expect(migrate).toContain(
-      "WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'"
-    );
+    expect(migrate).not.toContain("WHEN tenantId IS NULL OR TRIM(tenantId) = '' THEN 'default'");
     expect(cleanCloudMigration).toContain("cleancloud_paid_observed");
     expect(migrate).toContain(
       "legacy_cleancloud_paid_observation_backfill_v1"
