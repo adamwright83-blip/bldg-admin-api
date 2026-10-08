@@ -24,7 +24,11 @@ function expectation(
   row: NativePaymentEvidence
 ): PaymentAuthorityExpectation | null {
   const tenantId = row.tenantId?.trim();
-  if (!tenantId || !Number.isInteger(row.id) || !hasNativePaymentEvidence(row))
+  if (
+    !tenantId ||
+    !Number.isInteger(row.id) ||
+    !row.stripePaymentIntentId?.trim()
+  )
     return null;
   return {
     tenantId,
@@ -42,11 +46,15 @@ export function hasNativePaymentAuthority(
 ): boolean {
   const expected = expectation(row);
   return Boolean(
-    expected && receipt && paymentAuthorityReceiptMatches(receipt, expected)
+    hasNativePaymentEvidence(row) &&
+      expected &&
+      receipt &&
+      paymentAuthorityReceiptMatches(receipt, expected)
   );
 }
 
-/** SELECT-only batches. Missing historical tenant authority remains unverified. */
+/** SELECT-only payment occurrence receipts, independent of current paid/refund flags.
+ * Missing historical tenant authority remains unverified. */
 export async function readNativePaymentAuthorityReceipts(
   rows: readonly NativePaymentEvidence[]
 ): Promise<Map<number, AuthorityReceipt>> {
