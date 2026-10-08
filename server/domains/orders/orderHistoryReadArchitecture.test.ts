@@ -6,7 +6,7 @@ it("keeps Orders customer-history selection in its owning read boundary", () => 
     "utf8"
   );
   const consumer = readFileSync(
-    new URL("../geography/customerOrderTruth.ts", import.meta.url),
+    new URL("../../geography/customerOrderTruth.ts", import.meta.url),
     "utf8"
   );
   expect(consumer).not.toContain(".from(orders)");

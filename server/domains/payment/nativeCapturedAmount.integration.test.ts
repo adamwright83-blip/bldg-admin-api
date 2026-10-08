@@ -8,7 +8,7 @@ import { readNativePaymentFacts, readNativePaymentAuthorityReceipts } from "./na
 import {
   createNativeOrder,
   reviseNativeOrder,
-} from "../../orders/orderLifecycleService";
+} from "../orders/orderLifecycleService";
 import {
   admitNativeStripePayment,
   reconcileNativeStripeCapture,

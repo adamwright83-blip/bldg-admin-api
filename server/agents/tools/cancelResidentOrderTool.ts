@@ -1,5 +1,5 @@
 import { getOrderById } from "../../db";
-import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
+import { transitionNativeOrderStatus } from "../../domains/orders/orderLifecycleService";
 import {
   positiveIntegerOrNull,
   resolveResidentActionId,
@@ -8,7 +8,7 @@ import type { AgentTool } from "../toolRegistry";
 import {
   assertOrderResidentAuthority,
   assertOrderTenantAuthority,
-} from "../../orders/orderOwnership";
+} from "../../domains/orders/orderOwnership";
 
 type CancelResidentOrderInput = {
   orderId?: number | string | null;

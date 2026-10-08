@@ -39,7 +39,7 @@ describe("resident intake duplicate guard", () => {
     const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 
     expect(source).toContain("await transitionNativeOrderStatus({");
-    const authority = readFileSync(new URL("./orders/orderLifecycleService.ts", import.meta.url), "utf8");
+    const authority = readFileSync(new URL("./domains/orders/orderLifecycleService.ts", import.meta.url), "utf8");
     expect(authority).toContain("if (!order.paid)");
     expect(authority).toContain("Charge the order before marking it delivered.");
   });

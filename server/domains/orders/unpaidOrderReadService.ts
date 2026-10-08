@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { orders } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { orders } from "../../../drizzle/schema";
+import { getDb } from "../../db";
 
 export type UnpaidOrderReadRecord = {
   id: number;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getOrderById } from "../db";
-import { transitionNativeOrderStatus } from "../orders/orderLifecycleService";
+import { transitionNativeOrderStatus } from "../domains/orders/orderLifecycleService";
 import {
   type CustodyLocationKey,
   custodyLocationFromEvidence,

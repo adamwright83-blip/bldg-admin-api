@@ -51,12 +51,12 @@ import {
 
   transitionNativeOrderStatus,
   OrderTransitionError,
-} from "./orders/orderLifecycleService";
+} from "./domains/orders/orderLifecycleService";
 import {
   assertOrderTenantAuthority,
   assertOrderVendorAuthority,
   OrderOwnershipError,
-} from "./orders/orderOwnership";
+} from "./domains/orders/orderOwnership";
 import {
   findResidentOrderByClientRequestId,
   getOrderById,

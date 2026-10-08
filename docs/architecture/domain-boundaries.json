@@ -186,8 +186,8 @@
     {
       "concept": "Order Lifecycle",
       "owner": "Orders",
-      "legalWriteEntrypoint": "server/orders/orderLifecycleService.ts (transitionNativeOrderStatus), server/orders/orderOwnership.ts (createOrReuseResidentOrder)",
-      "canonicalReadEntrypoint": "server/orders/orderHistoryReadService.ts, server/orders/unpaidOrderReadService.ts",
+      "legalWriteEntrypoint": "server/domains/orders/orderLifecycleService.ts (transitionNativeOrderStatus), server/domains/orders/orderOwnership.ts (createOrReuseResidentOrder)",
+      "canonicalReadEntrypoint": "server/domains/orders/orderHistoryReadService.ts, server/domains/orders/unpaidOrderReadService.ts",
       "evidenceAdmissionSource": "Resident intake validation or Driver lifecycle request crossing Orders application fence",
       "downstreamConsumers": [
         "server/joystick/driverOrderService.ts",
@@ -209,12 +209,12 @@
       "canonicalReadEntrypoint": "server/domains/payment/nativePaymentReadService.ts",
       "evidenceAdmissionSource": "Stripe webhook payment intent / charge confirmation with authority receipt",
       "downstreamConsumers": [
-        "server/orders/orderLifecycleService.ts (delivery eligibility fence)",
+        "server/domains/orders/orderLifecycleService.ts (delivery eligibility fence)",
         "server/analytics/canonicalRevenue.ts",
         "server/towerWars/towerWarsService.ts"
       ],
       "forbiddenMutationSources": [
-        "server/orders",
+        "server/domains/orders",
         "server/commercialPipeline",
         "server/towerWars",
         "server/driverGameWorld"
@@ -233,7 +233,7 @@
         "server/truePnlCockpit.ts"
       ],
       "forbiddenMutationSources": [
-        "server/orders (orders.total is mutable quote, not captured dollars)",
+        "server/domains/orders (orders.total is mutable quote, not captured dollars)",
         "server/commercialPipeline",
         "server/money/scenarioService.ts"
       ],
@@ -269,7 +269,7 @@
       ],
       "forbiddenMutationSources": [
         "server/domains/payment/paymentAdmission.ts",
-        "server/orders/orderLifecycleService.ts"
+        "server/domains/orders/orderLifecycleService.ts"
       ],
       "legacyCompatibilityExceptions": "cleancloud_legacy_orders table remains an explicit unresolved tenantless data-policy exception."
     },

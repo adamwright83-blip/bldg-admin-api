@@ -6,7 +6,7 @@ import { getDb } from "../db";
 import {
   createNativeOrder,
   reviseNativeOrder,
-} from "../orders/orderLifecycleService";
+} from "../domains/orders/orderLifecycleService";
 import {
   admitNativeStripePayment,
   reconcileNativeStripeCapture,

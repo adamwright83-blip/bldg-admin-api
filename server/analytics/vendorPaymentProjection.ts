@@ -4,7 +4,7 @@ import {
   readNativePaymentFacts,
   type NativePaymentFact,
 } from "../domains/payment/nativePaymentReadService";
-import { readNativeOrdersForVendor } from "../orders/orderHistoryReadService";
+import { readNativeOrdersForVendor } from "../domains/orders/orderHistoryReadService";
 
 export type VendorPaymentProjection = {
   order: Order;

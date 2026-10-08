@@ -5,13 +5,13 @@ const mocks = vi.hoisted(() => ({
   updateOrderIntake: vi.fn(),
 }));
 
-vi.mock("../db", async importOriginal => ({
+vi.mock("../../db", async importOriginal => ({
   ...(await importOriginal<any>()),
   getOrderById: mocks.getOrderById,
   updateOrderIntake: mocks.updateOrderIntake,
 }));
 
-import { appRouter } from "../routers";
+import { appRouter } from "../../routers";
 
 function caller(input: {
   tenantId: string;

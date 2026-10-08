@@ -4,7 +4,7 @@ import { it, expect, vi } from "vitest";
 vi.mock("../../level4Offensive", () => ({ getLevel4OffensiveState: vi.fn(async () => ({ buildingPenetration: [], referralRequest: null, marketHole: { status: "stubbed_for_v1" } })) }));
 import { orders, adminActionLog } from "../../../drizzle/schema";
 import { getDb } from "../../db";
-import { createNativeOrder } from "../../orders/orderLifecycleService";
+import { createNativeOrder } from "../orders/orderLifecycleService";
 import { getLevel4GateState } from "../../level4Gate";
 import { admitNativeStripePayment } from "./paymentAdmission";
 it("does not grant reminder-conversion progression from a weak paid flag", async () => {

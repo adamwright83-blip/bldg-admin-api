@@ -1,5 +1,5 @@
 import { getOrderById } from "../../db";
-import { reviseNativeOrder } from "../../orders/orderLifecycleService";
+import { reviseNativeOrder } from "../../domains/orders/orderLifecycleService";
 import type { AgentTool } from "../toolRegistry";
 
 export const attachReceiptToOrderTool: AgentTool<Record<string, any>> = {

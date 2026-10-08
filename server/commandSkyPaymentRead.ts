@@ -1,4 +1,4 @@
-import { readNativeCustomerHistory } from "./orders/orderHistoryReadService";
+import { readNativeCustomerHistory } from "./domains/orders/orderHistoryReadService";
 import { readNativePaymentFacts } from "./domains/payment/nativePaymentReadService";
 
 /** First admitted native payment per customer phone; game state supplies no customer truth. */

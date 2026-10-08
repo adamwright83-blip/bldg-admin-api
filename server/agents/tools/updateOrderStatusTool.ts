@@ -1,8 +1,8 @@
 import { getOrderById } from "../../db";
-import { transitionNativeOrderStatus } from "../../orders/orderLifecycleService";
+import { transitionNativeOrderStatus } from "../../domains/orders/orderLifecycleService";
 import { isTrustedOrderStateActor } from "../permissions";
 import type { AgentTool } from "../toolRegistry";
-import { assertOrderTenantAuthority } from "../../orders/orderOwnership";
+import { assertOrderTenantAuthority } from "../../domains/orders/orderOwnership";
 
 export const updateOrderStatusTool: AgentTool<Record<string, any>> = {
   name: "updateOrderStatusTool",

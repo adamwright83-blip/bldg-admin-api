@@ -1,6 +1,6 @@
 import { listRecentCleanCloudCustomerNames } from "../../analytics/cleancloudCustomerReadService";
 import { listDayDirectorProcessingLocationNames } from "../../dayDirector/dayDirectorService";
-import { listRecentTenantOrderCustomerNames } from "../../orders/unpaidOrderReadService";
+import { listRecentTenantOrderCustomerNames } from "../../domains/orders/unpaidOrderReadService";
 import { listAccountRefs } from "./accountKnowledge";
 
 /**

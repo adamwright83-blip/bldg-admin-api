@@ -1,4 +1,4 @@
-import { readNativePaidCandidates } from "../orders/orderHistoryReadService";
+import { readNativePaidCandidates } from "../domains/orders/orderHistoryReadService";
 import { readNativePaymentFacts, nativeCapturedAmountCents } from "../domains/payment/nativePaymentReadService";
 import {
   readPaymentAuthorityReceipts,

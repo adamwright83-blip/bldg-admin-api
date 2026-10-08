@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { and, eq } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { createNativeOrder } from "../orders/orderLifecycleService";
+import { createNativeOrder } from "../domains/orders/orderLifecycleService";
 import {
   getGeographicTruth,
   normalizeSourceAddress,
