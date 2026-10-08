@@ -18,9 +18,9 @@ Authoritative domain owner for native laundry/dry-cleaning order lifecycle, inta
 - Order status transition history and audit timestamps.
 
 ## LEGAL ENTRYPOINTS
-- `transitionNativeOrderStatus` (`server/orders/orderLifecycleService.ts`)
-- `createOrReuseResidentOrder` (`server/orders/orderOwnership.ts`)
-- `reviseNativeOrder` (`server/orders/orderLifecycleService.ts`)
+- `transitionNativeOrderStatus` (`server/domains/orders/orderLifecycleService.ts`)
+- `createOrReuseResidentOrder` (`server/domains/orders/orderOwnership.ts`)
+- `reviseNativeOrder` (`server/domains/orders/orderLifecycleService.ts`)
 
 ## DOWNSTREAM CONSUMERS
 - Driver UI / route execution
@@ -36,4 +36,4 @@ Authoritative domain owner for native laundry/dry-cleaning order lifecycle, inta
 
 ## LEGACY/COMPATIBILITY EXCEPTIONS
 - Historical tenantless order workbook imports quarantined in `scripts/`.
-- Disposable test fixtures in `server/orders/*.test.ts`.
+- Disposable test fixtures in `server/domains/orders/*.test.ts`.

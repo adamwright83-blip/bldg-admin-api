@@ -1,5 +1,5 @@
 import { admitNativeStripePayment } from "../server/domains/payment/paymentAdmission";
-import { transitionNativeOrderStatus } from "../server/orders/orderLifecycleService";
+import { transitionNativeOrderStatus } from "../server/domains/orders/orderLifecycleService";
 import dotenv from "dotenv";
 import Stripe from "stripe";
 import { getOrderById, ensurePickupCompletedOperationsEventForOrder } from "../server/db";

@@ -9,7 +9,7 @@ import {
 import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "../cleancloudBrowserSync/schema";
 import { getDb } from "../db";
 import { zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
-import { readNativeCustomerHistory } from "../orders/orderHistoryReadService";
+import { readNativeCustomerHistory } from "../domains/orders/orderHistoryReadService";
 import {
   readNativePaymentFacts,
   type NativePaymentFact,

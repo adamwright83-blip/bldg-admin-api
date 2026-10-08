@@ -1,4 +1,4 @@
-import { createNativeOrder } from "../../orders/orderLifecycleService";
+import { createNativeOrder } from "../../domains/orders/orderLifecycleService";
 import type { AgentTool } from "../toolRegistry";
 
 export const createPendingDryCleaningOrderTool: AgentTool<Record<string, any>, { orderId: number; status: "intake-pending" }> = {

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { orders, commandSkyWins, commandSkySettings } from "../drizzle/schema";
 import { getDb } from "./db";
-import { createNativeOrder } from "./orders/orderLifecycleService";
+import { createNativeOrder } from "./domains/orders/orderLifecycleService";
 import { admitNativeStripePayment } from "./domains/payment/paymentAdmission";
 import { readCommandSkyFirstPayments } from "./commandSkyPaymentRead";
 import { logCommandSkyWin, getCommandSkyState } from "./commandSky";

@@ -1,7 +1,7 @@
 import {
   transitionNativeOrderStatus,
   OrderTransitionError,
-} from "../orders/orderLifecycleService";
+} from "../domains/orders/orderLifecycleService";
 import { NOT_ADMIN_ERR_MSG } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import type { Order } from "../../drizzle/schema";

@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { orders } from "../../../drizzle/schema";
 import { getDb, hasCustomerPaidBefore } from "../../db";
-import { createNativeOrder } from "../../orders/orderLifecycleService";
+import { createNativeOrder } from "../orders/orderLifecycleService";
 import { admitNativeStripePayment } from "./paymentAdmission";
 import { readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
 import { loadCustomerOrderTruth } from "../../geography/customerOrderTruth";

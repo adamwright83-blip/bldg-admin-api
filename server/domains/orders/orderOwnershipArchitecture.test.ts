@@ -13,9 +13,9 @@ describe("order ownership architecture", () => {
   });
 
   it("keeps ownership decisions outside Claire and inside native order/admin surfaces", () => {
-    const routers = source("../routers.ts");
-    const cancel = source("../agents/tools/cancelResidentOrderTool.ts");
-    const status = source("../agents/tools/updateOrderStatusTool.ts");
+    const routers = source("../../routers.ts");
+    const cancel = source("../../agents/tools/cancelResidentOrderTool.ts");
+    const status = source("../../agents/tools/updateOrderStatusTool.ts");
 
     expect(routers).toContain("assertPlatformOrVendorOrderAuthority");
     expect(routers).toContain("allowCrossTenant: isPlatformAdministrator(ctx.user)");
@@ -25,7 +25,7 @@ describe("order ownership architecture", () => {
   });
 
   it("tenant-scopes phone-based building attribution instead of treating phone as authority", () => {
-    const db = source("../db.ts");
+    const db = source("../../db.ts");
     expect(db).toContain("updateOrderBuildingSlugForCustomer(input");
     expect(db).toContain("tenantId?: string");
     expect(db).toContain("COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default')");

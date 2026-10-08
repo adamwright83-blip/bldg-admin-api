@@ -28,7 +28,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 
 | System | Role & Purpose | Current Primary Location |
 |---|---|---|
-| **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/orders/`, `server/residentIntake.ts`, `server/joystick/driverOrder*` |
+| **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/domains/orders/`, `server/residentIntake.ts`, `server/joystick/driverOrder*` |
 | **Payment** | Native payment admission, durable Stripe capture evidence, receipt verification, and canonical revenue reads. | `server/domains/payment/`, `server/analytics/canonicalRevenue.ts` |
 | **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/commercialPipeline/`, `server/commercialMissions/`, `server/commercialProposals/` |
 | **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/joystick/tenantIdentity.ts`, `server/saas/` |
@@ -51,7 +51,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 
 | Business Concept | Owning Domain | Legal Write Path | Canonical Read Path | Downstream Consumers | Forbidden Owners |
 |---|---|---|---|---|---|
-| **Order Lifecycle** | Orders | `transitionNativeOrderStatus`, `createOrReuseResidentOrder` | `orderHistoryReadService.ts`, `unpaidOrderReadService.ts` | Driver UI, Admin UI, Day Line, Lantern City | Driver, Game, Workers, Lantern City |
+| **Order Lifecycle** | Orders | `transitionNativeOrderStatus`, `createOrReuseResidentOrder` | `server/domains/orders/orderHistoryReadService.ts`, `unpaidOrderReadService.ts` | Driver UI, Admin UI, Day Line, Lantern City | Driver, Game, Workers, Lantern City |
 | **Payment Admission** | Payment | `admitNativePayment`, `recordAuthorityReceipt` | `server/domains/payment/nativePaymentReadService.ts`, `canonicalRevenue.ts` | Orders delivery fence, Revenue charts, Tower Wars | Orders status, Stripe webhook without receipt, UI checkmarks |
 | **Captured Dollars** | Payment | Durable Stripe `amount_received` + receipt persistence | `server/domains/payment/nativePaymentReadService.ts`, `loadPaidOrderLedger` | Financial summaries, Tower Wars bank, True PnL | Mutable order price (`orders.total`), intake quotes |
 | **Commercial Conversion** | Commercial | `commercialPipelineService.ts` (`won` status) | `commercialAccountReadService.ts`, `commercialFollowUpReadService.ts` | Day Line, Claire briefing, Lantern City unlocks | Payment, Orders, Game actions |
@@ -90,8 +90,8 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 
 | To change this behavior... | Change it in this location... | Important constraint / boundary |
 |---|---|---|
-| Native order status progression or delivery rules | `server/orders/orderLifecycleService.ts` | Delivery requires matching Payment admission receipt. |
-| Resident order intake logic | `server/residentIntake.ts` / `server/orders/orderOwnership.ts` | S2S contracts with external `Cursor_residentapp` must remain stable. |
+| Native order status progression or delivery rules | `server/domains/orders/orderLifecycleService.ts` | Delivery requires matching Payment admission receipt. |
+| Resident order intake logic | `server/residentIntake.ts` / `server/domains/orders/orderOwnership.ts` | S2S contracts with external `Cursor_residentapp` must remain stable. |
 | Native payment admission or receipt policy | `server/domains/payment/paymentAdmission.ts` | Always persist provider evidence; never trust raw client flags. |
 | Canonical revenue calculations or dollar reporting | `server/domains/payment/nativePaymentReadService.ts`, `server/analytics/canonicalRevenue.ts` | Use immutable captured cents; do not borrow editable `orders.total`. |
 | Stripe webhook ingestion | `server/intake-stripe.ts` | Provider transport only; domain admission must cross Payment boundary. |

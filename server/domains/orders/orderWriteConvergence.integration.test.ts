@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { orders } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
+import { orders } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { admitNativeStripePayment } from "../payment/paymentAdmission";
 import {
   createNativeOrder,
   createOrReuseResidentOrder,
@@ -12,11 +12,11 @@ import {
 } from "./orderLifecycleService";
 
 const effects = vi.hoisted(() => ({ collected: vi.fn(), delivered: vi.fn() }));
-vi.mock("../joystick/driverOrderEffects", () => ({
+vi.mock("../../joystick/driverOrderEffects", () => ({
   recordDriverOrderCollected: effects.collected,
   recordDriverOrderDelivered: effects.delivered,
 }));
-import { updateDriverOrderStatusForMember } from "../joystick/driverOrderService";
+import { updateDriverOrderStatusForMember } from "../../joystick/driverOrderService";
 
 const tenantId = `a5-${randomUUID().slice(0, 10)}`;
 const fixture = () => ({

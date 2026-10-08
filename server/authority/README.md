@@ -26,7 +26,7 @@ Platform-level shared infrastructure for durable authority receipts, action exec
 
 ## MUST NEVER OWN
 - Domain-specific payment policy or Stripe capture admission (owned by `server/domains/payment/`).
-- Order lifecycle transitions (owned by `server/orders/`).
+- Order lifecycle transitions (owned by `server/domains/orders/`).
 - Commercial conversion (owned by `server/commercialPipeline/`).
 
 ## LEGACY/COMPATIBILITY EXCEPTIONS

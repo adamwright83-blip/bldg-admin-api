@@ -3,10 +3,10 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const repoRoot = new URL("../..", import.meta.url).pathname;
+const repoRoot = new URL("../../..", import.meta.url).pathname;
 const persistenceOwners = new Set([
   "server/db.ts",
-  "server/orders/orderLifecycleService.ts",
+  "server/domains/orders/orderLifecycleService.ts",
 ]);
 const directWriteOwners = new Set([
   ...persistenceOwners,
@@ -154,7 +154,7 @@ describe("Order Authority Architecture Guard", () => {
       '"paid" in data || "paidAt" in data || "stripePaymentIntentId" in data'
     );
     const service = readFileSync(
-      join(repoRoot, "server/orders/orderLifecycleService.ts"),
+      join(repoRoot, "server/domains/orders/orderLifecycleService.ts"),
       "utf8"
     );
     expect(service).toContain("assertNonPaymentWrite(input)");

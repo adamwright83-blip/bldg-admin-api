@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const payment = vi.hoisted(() => ({ receipts: vi.fn(), authorized: vi.fn() }));
-vi.mock("../domains/payment/nativePaymentReadService", () => ({ readNativePaymentAuthorityReceipts: payment.receipts, hasNativePaymentAuthority: payment.authorized }));
+vi.mock("../payment/nativePaymentReadService", () => ({ readNativePaymentAuthorityReceipts: payment.receipts, hasNativePaymentAuthority: payment.authorized }));
 
 const db = vi.hoisted(() => ({
   createOrder: vi.fn(),
@@ -13,7 +13,7 @@ const db = vi.hoisted(() => ({
   updateOrderIntake: vi.fn(),
 }));
 
-vi.mock("../db", () => ({
+vi.mock("../../db", () => ({
   createOrder: db.createOrder,
   createOrReuseResidentLaundryOrder: db.createOrReuseResidentLaundryOrder,
   getOrderById: db.getOrderById,

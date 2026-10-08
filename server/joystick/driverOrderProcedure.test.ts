@@ -60,9 +60,9 @@ vi.mock("./driverOrderStore", () => ({
   }),
 }));
 
-vi.mock("../orders/orderLifecycleService", async importOriginal => {
+vi.mock("../domains/orders/orderLifecycleService", async importOriginal => {
   const actual =
-    await importOriginal<typeof import("../orders/orderLifecycleService")>();
+    await importOriginal<typeof import("../domains/orders/orderLifecycleService")>();
   return {
     ...actual,
     transitionNativeOrderStatus: vi.fn(
@@ -111,7 +111,7 @@ import { driverOrderRouter } from "./driverOrderRouter";
 import {
   transitionNativeOrderStatus,
   OrderTransitionError,
-} from "../orders/orderLifecycleService";
+} from "../domains/orders/orderLifecycleService";
 import { orderVisibleToTenant } from "./driverOrderTenant";
 
 function memberUser(overrides: Partial<User> = {}): User {

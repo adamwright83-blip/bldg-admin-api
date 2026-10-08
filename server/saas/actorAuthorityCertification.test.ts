@@ -82,7 +82,7 @@ describe("SaaS Slice 3 role and actor authority certification", () => {
   });
 
   it("keeps lifecycle ownership rules below the SaaS actor layer rather than reinventing vendor or driver policy", () => {
-    const ownership = source("../orders/orderOwnership.ts");
+    const ownership = source("../domains/orders/orderOwnership.ts");
     const driver = source("../joystick/driverOrderService.ts");
     expect(ownership).toContain("assertOrderVendorAuthority");
     expect(driver).toContain("tenantId");

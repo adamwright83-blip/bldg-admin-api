@@ -1,4 +1,4 @@
-import { createOrReuseResidentOrder } from "../../orders/orderLifecycleService";
+import { createOrReuseResidentOrder } from "../../domains/orders/orderLifecycleService";
 import {
   assertResidentIdentityOrLineage,
   resolveResidentActionId,

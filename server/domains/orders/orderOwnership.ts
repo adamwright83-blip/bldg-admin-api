@@ -1,4 +1,4 @@
-import type { Order } from "../../drizzle/schema";
+import type { Order } from "../../../drizzle/schema";
 
 type OrderOwnershipRecord = Pick<
   Order,

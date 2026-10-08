@@ -1,4 +1,4 @@
-import { attributeNativeOrderToBuilding } from "../server/orders/orderLifecycleService";
+import { attributeNativeOrderToBuilding } from "../server/domains/orders/orderLifecycleService";
 /**
  * Backfill orders.buildingSlug from normalized address via matchBuilding().
  *

@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
-import { orders } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { orders } from "../../../drizzle/schema";
+import { getDb } from "../../db";
 
 /** Orders facts only. Payment admission and external evidence are composed by consumers. */
 export const NATIVE_CUSTOMER_HISTORY_COLUMNS = {

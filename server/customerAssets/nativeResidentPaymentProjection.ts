@@ -1,4 +1,4 @@
-import { readNativeCustomerHistory } from "../orders/orderHistoryReadService";
+import { readNativeCustomerHistory } from "../domains/orders/orderHistoryReadService";
 import {
   hasNativePaymentAuthority,
   nativeCapturedAmountCents,
