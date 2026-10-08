@@ -1,7 +1,7 @@
 import {
   executeAdmittedAction,
   type ActionExecutionResult,
-} from "../authority/actionExecutionGate";
+} from "../platform/authority/actionExecutionGate";
 import {
   evaluatePersistentActionPolicy,
   type PersistentActionPolicyDecision,

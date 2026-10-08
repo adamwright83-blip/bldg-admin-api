@@ -9,7 +9,7 @@ import {
   assertAuthorityClaimPolicy,
   type AuthorityReceipt,
   type AuthorityTransaction,
-} from "./authority/authorityReceipt";
+} from "./platform/authority/authorityReceipt";
 import { getDb } from "./db";
 
 export type CleanCloudPaidObservationExpectation = {

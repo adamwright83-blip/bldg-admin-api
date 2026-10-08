@@ -10,7 +10,7 @@ import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
-import { getAuthorityReceiptById } from "../authority/authorityReceipt";
+import { getAuthorityReceiptById } from "../platform/authority/authorityReceipt";
 
 /** Include unresolved bindings: a paid order is real without a guessed place. */
 export async function listCurrentEconomicReceipts(tenantId: string) {

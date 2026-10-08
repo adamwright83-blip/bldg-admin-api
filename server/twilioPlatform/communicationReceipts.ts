@@ -11,7 +11,7 @@ import {
 } from "@shared/twilioPlatform";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
-import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
+import { admitAuthorityClaimWith } from "../platform/authority/authorityReceipt";
 
 /**
  * One communications receipt log. Twilio retries collapse onto the same row.

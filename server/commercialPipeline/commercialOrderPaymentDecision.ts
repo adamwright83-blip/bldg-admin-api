@@ -5,7 +5,7 @@ import {
   findAuthorityReceiptForSubjectWith,
   paymentAuthorityReceiptMatches,
   type AuthorityReceipt,
-} from "../authority/authorityReceipt";
+} from "../platform/authority/authorityReceipt";
 
 type PaymentReader = Parameters<typeof findAuthorityReceiptForSubjectWith>[0];
 type NativeOrder = Pick<

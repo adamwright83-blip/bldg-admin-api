@@ -36,7 +36,7 @@ import {
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
-import type { AuthorityReceipt } from "../authority/authorityReceipt";
+import type { AuthorityReceipt } from "../platform/authority/authorityReceipt";
 import {
   commercialOrderTenantPredicate,
   readCommercialOrderPaymentDecisionWith,

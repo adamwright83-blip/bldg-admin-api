@@ -3,7 +3,7 @@ import {
   readPaymentAuthorityReceipts,
   type AuthorityReceipt,
   type PaymentAuthorityExpectation,
-} from "../../authority/authorityReceipt";
+} from "../../platform/authority/authorityReceipt";
 
 export type NativePaymentEvidence = {
   id?: number;

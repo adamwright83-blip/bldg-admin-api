@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthorityReceipt } from "../../authority/authorityReceipt";
+import type { AuthorityReceipt } from "../../platform/authority/authorityReceipt";
 const loader = vi.hoisted(() => vi.fn());
-vi.mock("../../authority/authorityReceipt", async importOriginal => ({
-  ...(await importOriginal<typeof import("../../authority/authorityReceipt")>()),
+vi.mock("../../platform/authority/authorityReceipt", async importOriginal => ({
+  ...(await importOriginal<typeof import("../../platform/authority/authorityReceipt")>()),
   readPaymentAuthorityReceipts: loader,
 }));
 import {

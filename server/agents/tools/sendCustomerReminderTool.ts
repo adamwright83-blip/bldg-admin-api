@@ -1,5 +1,5 @@
 import { sendSMSWithReceipt } from "../../_core/sms";
-import { findAuthorityReceiptForSubject } from "../../authority/authorityReceipt";
+import { findAuthorityReceiptForSubject } from "../../platform/authority/authorityReceipt";
 import { recordCommunicationReceipt } from "../../twilioPlatform/communicationReceipts";
 import type { AgentTool } from "../toolRegistry";
 

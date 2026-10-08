@@ -16,7 +16,7 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { admitAuthorityClaimWith } from "../authority/authorityReceipt";
+import { admitAuthorityClaimWith } from "../platform/authority/authorityReceipt";
 import {
   formatMissionCode,
   type CommercialMission,

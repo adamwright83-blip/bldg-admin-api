@@ -5,7 +5,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 
 describe("persistent outcome Authority Receipt boundary", () => {
   it("admits visit completion only from a persisted human commercial mission event", () => {
-    const admission = source("server/authority/actionCompletionAdmission.ts");
+    const admission = source("server/platform/authority/actionCompletionAdmission.ts");
     expect(admission).toContain('event.eventName !== "visit_completed"');
     expect(admission).toContain("System/model actors cannot attest completed field work");
     expect(admission).toContain('claimType: "action_completed"');
@@ -42,7 +42,7 @@ describe("persistent outcome Authority Receipt boundary", () => {
   });
 
   it("admits debrief testimony only from a persisted human observation bound to its visit outcome", () => {
-    const admission = source("server/authority/fieldObservationAdmission.ts");
+    const admission = source("server/platform/authority/fieldObservationAdmission.ts");
     expect(admission).toContain("PARKING_LOT_CLERK_EVENT_NAME");
     expect(admission).toContain("PARKING_LOT_CLERK_PROVENANCE");
     expect(admission).toContain("System/model or anonymous actors cannot attest field observations");

@@ -5,7 +5,7 @@ import {
   paymentAuthorityReceiptMatches,
   type AuthorityReceipt,
   type PaymentAuthorityExpectation,
-} from "../authority/authorityReceipt";
+} from "../platform/authority/authorityReceipt";
 import {
   cleanCloudPaidObservationReceiptMatches,
   readCleanCloudPaidObservationReceipts,

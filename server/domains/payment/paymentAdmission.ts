@@ -6,7 +6,7 @@ import {
   paymentAuthorityReceiptMatches,
   type AuthorityReceipt,
   type AuthorityTransaction,
-} from "../../authority/authorityReceipt";
+} from "../../platform/authority/authorityReceipt";
 
 export async function prepareNativeStripePaymentTenant(input: {
   tenantId: string;

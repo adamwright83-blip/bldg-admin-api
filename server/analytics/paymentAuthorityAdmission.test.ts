@@ -12,7 +12,7 @@ import {
   readPaymentAuthorityReceipts,
   type AuthorityReceipt,
   type PaymentAuthorityExpectation,
-} from "../authority/authorityReceipt";
+} from "../platform/authority/authorityReceipt";
 import {
   readCleanCloudPaidObservationReceipts,
   type CleanCloudPaidObservationExpectation,

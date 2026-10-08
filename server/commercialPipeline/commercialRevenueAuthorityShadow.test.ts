@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuthorityReceipt } from "../authority/authorityReceipt";
+import type { AuthorityReceipt } from "../platform/authority/authorityReceipt";
 import {
   legacyCommercialPaidCents,
   verifiedCommercialPaidCents,
