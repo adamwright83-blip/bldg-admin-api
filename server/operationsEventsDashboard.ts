@@ -23,7 +23,8 @@ export type OperationsEventsFilters = {
 };
 
 export type OperationsEventDashboardRow = OperationsEvent & {
-  /** Immutable provider-captured amount. Null means unknown/unverified, never current order price. */
+  paymentEvidenceStatus: "verified" | "unverified" | "unavailable";
+  /** Immutable provider-captured amount. Null means unknown, never current order price. */
   chargedAmount: string | null;
   /** True only when canonical Payment admission matches the order evidence. */
   paid: true | null;
@@ -177,6 +178,7 @@ async function attachAdmittedPaymentFacts(
   rows: OperationsEventPaymentCandidateRow[]
 ): Promise<OperationsEventDashboardRow[]> {
   let facts = new Map<number, NativePaymentFact>();
+  let evidenceUnavailable = false;
   try {
     facts = await readNativePaymentFacts(
       rows
@@ -191,6 +193,7 @@ async function attachAdmittedPaymentFacts(
   } catch {
     // Payment proof unavailable means these display fields are unknown.
     // The operations event itself remains valid operational evidence.
+    evidenceUnavailable = true;
   }
 
   return rows.map(row => {
@@ -203,6 +206,11 @@ async function attachAdmittedPaymentFacts(
     const fact = row.orderId == null ? undefined : facts.get(row.orderId);
     return {
       ...event,
+      paymentEvidenceStatus: fact
+        ? "verified"
+        : evidenceUnavailable
+          ? "unavailable"
+          : "unverified",
       chargedAmount:
         fact?.capturedAmountCents == null
           ? null
