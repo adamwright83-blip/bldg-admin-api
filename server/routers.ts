@@ -2,14 +2,14 @@ import { admitOffensiveCopySource } from "./level4OffensiveSource";
 import {
   readNativePaymentAuthorityReceipts,
   readNativePaymentFacts,
-} from "./authority/nativePaymentReadService";
+} from "./domains/payment/nativePaymentReadService";
 import { getDashboardTimeZone } from "./dashboardZoned";
 import { presidentRouter } from "./president/router";
 import { daphneRouter } from "./daphne/router";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,
-} from "./authority/paymentAdmission";
+} from "./domains/payment/paymentAdmission";
 import {
   writeDriverExpenseToSheet,
   writeDryCleaningCostToSheet,

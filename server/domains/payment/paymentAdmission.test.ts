@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { orders } from "../../drizzle/schema";
+import { orders } from "../../../drizzle/schema";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,
 } from "./paymentAdmission";
-import { getDb } from "../db";
+import { getDb } from "../../db";
 
-vi.mock("../db", () => ({
+vi.mock("../../db", () => ({
   getDb: vi.fn(),
 }));
 

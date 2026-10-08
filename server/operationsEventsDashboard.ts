@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import {
   readNativePaymentFacts,
   type NativePaymentFact,
-} from "./authority/nativePaymentReadService";
+} from "./domains/payment/nativePaymentReadService";
 
 export type OperationsEventsBusinessUnit = "all" | "laundry_butler" | "laundry_farm";
 export type OperationsEventsBuilding = "all" | "opus_la" | "century_park_east" | "other" | "unresolved";

@@ -1,4 +1,4 @@
-import { admitNativeStripePayment } from "../server/authority/paymentAdmission";
+import { admitNativeStripePayment } from "../server/domains/payment/paymentAdmission";
 import { transitionNativeOrderStatus } from "../server/orders/orderLifecycleService";
 import dotenv from "dotenv";
 import Stripe from "stripe";

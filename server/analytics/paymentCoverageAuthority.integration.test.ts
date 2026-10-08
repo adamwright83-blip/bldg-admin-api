@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { createNativeOrder } from "../orders/orderLifecycleService";
-import { admitNativeStripePayment } from "../authority/paymentAdmission";
+import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
 import { getDataCompleteness } from "./analyticsQueries";
 
 it("reports native payment connection only from owned admission, including unknown historical amounts", async () => {

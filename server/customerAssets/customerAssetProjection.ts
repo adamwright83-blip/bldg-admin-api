@@ -21,7 +21,7 @@ import {
   nativeCapturedAmountCents,
   hasNativePaymentAuthority,
   readNativePaymentAuthorityReceipts,
-} from "../authority/nativePaymentReadService";
+} from "../domains/payment/nativePaymentReadService";
 import {
   customerAssetId,
   customerIdentityHash,

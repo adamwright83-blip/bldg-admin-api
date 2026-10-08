@@ -10,7 +10,7 @@ import {
 import {
   admitNativeStripePayment,
   reconcileNativeStripeCapture,
-} from "../authority/paymentAdmission";
+} from "../domains/payment/paymentAdmission";
 import { readNativeResidentPaymentProjection } from "./nativeResidentPaymentProjection";
 it("projects admitted resident counts independently of unknown capture amounts and fences tenant/value", async () => {
   const db = (await getDb())!;

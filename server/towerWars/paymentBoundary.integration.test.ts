@@ -10,7 +10,7 @@ import {
 import {
   admitNativeStripePayment,
   reconcileNativeStripeCapture,
-} from "../authority/paymentAdmission";
+} from "../domains/payment/paymentAdmission";
 import {
   loadTowerWarsEconomicCandidates,
   compileAuthoritativeEvents,

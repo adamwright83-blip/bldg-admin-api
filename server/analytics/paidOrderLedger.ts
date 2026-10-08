@@ -1,5 +1,5 @@
 import { readNativePaidCandidates } from "../orders/orderHistoryReadService";
-import { readNativePaymentFacts, nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
+import { readNativePaymentFacts, nativeCapturedAmountCents } from "../domains/payment/nativePaymentReadService";
 import {
   readPaymentAuthorityReceipts,
   paymentAuthorityReceiptMatches,

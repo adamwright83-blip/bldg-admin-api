@@ -1,6 +1,6 @@
 import { readNativeCustomerHistory, readLegacyNativeCustomerHistoryAcrossTenants } from "../orders/orderHistoryReadService";
 export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from "../orders/orderHistoryReadService";
-import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import type { AuthorityReceipt } from "../authority/authorityReceipt";
 import { eq } from "drizzle-orm";
 import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../cleancloudPaidEvidence";

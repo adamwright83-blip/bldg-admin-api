@@ -1,14 +1,14 @@
-import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
-import { getMoneyProjection } from "../money/moneyProjectionService";
+import { listCustomerAssets } from "../../customerAssets/customerAssetProjection";
+import { getMoneyProjection } from "../../money/moneyProjectionService";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orders } from "../../drizzle/schema";
-import { getDb, hasCustomerPaidBefore } from "../db";
-import { createNativeOrder } from "../orders/orderLifecycleService";
+import { orders } from "../../../drizzle/schema";
+import { getDb, hasCustomerPaidBefore } from "../../db";
+import { createNativeOrder } from "../../orders/orderLifecycleService";
 import { admitNativeStripePayment } from "./paymentAdmission";
 import { readNativePaymentAuthorityReceipts } from "./nativePaymentReadService";
-import { loadCustomerOrderTruth } from "../geography/customerOrderTruth";
+import { loadCustomerOrderTruth } from "../../geography/customerOrderTruth";
 
 describe("real MySQL Payment → customer/game projection", () => {
   it("withholds historical weak paid state until exact canonical Payment admission", async () => {

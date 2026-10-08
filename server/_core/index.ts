@@ -14,7 +14,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
 import { upsertUser } from "../db";
-import { readNativePaymentFacts, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../authority/nativePaymentReadService";
+import { readNativePaymentFacts, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import { createOrReuseResidentOrder } from "../orders/orderLifecycleService";
 import { getSessionCookieOptions } from "./cookies";
 import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";

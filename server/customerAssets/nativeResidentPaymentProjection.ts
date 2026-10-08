@@ -3,7 +3,7 @@ import {
   hasNativePaymentAuthority,
   nativeCapturedAmountCents,
   readNativePaymentAuthorityReceipts,
-} from "../authority/nativePaymentReadService";
+} from "../domains/payment/nativePaymentReadService";
 import type { getDb } from "../db";
 export type NativeResidentPaymentFact = {
   bldgUserId: number;

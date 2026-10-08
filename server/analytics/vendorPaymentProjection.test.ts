@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, test } from "vitest";
 import type { Order } from "../../drizzle/schema";
-import type { NativePaymentFact } from "../authority/nativePaymentReadService";
+import type { NativePaymentFact } from "../domains/payment/nativePaymentReadService";
 import {
   projectVendorPayments,
   sumKnownCents,

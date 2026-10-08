@@ -1,7 +1,7 @@
 /** Explicit historical Payment reconciliation. Default is read-only preview. */
 import Stripe from "stripe";
 import { getOrderById } from "../server/db";
-import { reconcileNativeStripeCapture } from "../server/authority/paymentAdmission";
+import { reconcileNativeStripeCapture } from "../server/domains/payment/paymentAdmission";
 const value = (name: string) =>
   process.argv
     .find(arg => arg.startsWith(`--${name}=`))

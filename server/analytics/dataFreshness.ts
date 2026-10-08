@@ -13,7 +13,7 @@ import { readNativeCustomerHistory } from "../orders/orderHistoryReadService";
 import {
   readNativePaymentFacts,
   type NativePaymentFact,
-} from "../authority/nativePaymentReadService";
+} from "../domains/payment/nativePaymentReadService";
 
 /**
  * Is the business data current? This separates EVENT time (when a sale

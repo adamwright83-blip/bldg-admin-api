@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { admitNativeStripePayment } from "../authority/paymentAdmission";
+import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
 import {
   createNativeOrder,
   createOrReuseResidentOrder,

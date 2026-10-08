@@ -1,4 +1,4 @@
-import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "./authority/nativePaymentReadService";
+import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "./domains/payment/nativePaymentReadService";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { adminActionLog, level4Missions, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";

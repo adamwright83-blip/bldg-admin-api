@@ -39,7 +39,7 @@ vi.mock("./db", async importOriginal => ({
     mocks.ensurePickupCompletedOperationsEventForOrder,
 }));
 
-vi.mock("./authority/paymentAdmission", () => ({
+vi.mock("./domains/payment/paymentAdmission", () => ({
   prepareNativeStripePaymentTenant: mocks.prepareNativeStripePaymentTenant,
   admitNativeStripePayment: mocks.admitNativeStripePayment,
 }));

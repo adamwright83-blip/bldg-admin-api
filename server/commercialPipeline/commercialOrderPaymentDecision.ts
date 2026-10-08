@@ -1,4 +1,4 @@
-import { nativeCapturedAmountCents } from "../authority/nativePaymentReadService";
+import { nativeCapturedAmountCents } from "../domains/payment/nativePaymentReadService";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { orderPaymentProjections, orders } from "../../drizzle/schema";
 import {
