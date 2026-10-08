@@ -1,4 +1,6 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { orders } from "../../drizzle/schema";
+import { admitNativeStripePayment } from "../authority/paymentAdmission";
 import { describe, expect, it } from "vitest";
 import { getDb } from "../db";
 import { _clearSnapshotStore, buildStrategySnapshot } from "./snapshotBuilder";
@@ -21,7 +23,7 @@ async function insertPaidOrder(input: {
   await db.execute(sql`
     INSERT INTO orders (
       tenantId, serviceType, pickupDate, pickupTimeWindow, address,
-      firstName, lastName, phone, status, paid, stripePaymentIntentId, total, createdAt
+      firstName, lastName, phone, status, paid, total, createdAt
     ) VALUES (
       ${input.tenantId},
       'wash_fold',
@@ -32,12 +34,31 @@ async function insertPaidOrder(input: {
       'Live',
       ${input.phone},
       'delivered',
-      1,
-      ${`pi_test_${input.phone}`},
+      0,
       '40.00',
       ${created}
     )
   `);
+  const [order] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.tenantId, input.tenantId), eq(orders.phone, input.phone)))
+    .limit(1);
+  if (!order) throw new Error("fixture order insert failed");
+  const paymentIntentId = `pi_test_${input.phone}`;
+  await admitNativeStripePayment({
+    tenantId: input.tenantId,
+    orderId: order.id,
+    paymentIntentId,
+    paidAt: input.createdAt,
+    capture: {
+      paymentIntentId,
+      status: "succeeded",
+      amountReceivedCents: 4000,
+      currency: "usd",
+    },
+    orderPatch: { total: "40.00", status: "delivered" },
+  });
 }
 
 describe("Slice 2 strategy snapshot — real MySQL aggregates", () => {

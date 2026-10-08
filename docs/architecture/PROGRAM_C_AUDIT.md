@@ -173,3 +173,13 @@ longer masquerade as paid revenue, and missing tenant identity is not coerced to
 These changes close the three remaining raw monetary consumer families named by
 the C3 audit. Final Program C certification still requires the post-merge hostile
 repository scan and classification of every remaining suspicious read/write seam.
+
+
+## C10: Strategy snapshot fixtures use canonical Payment admission
+
+The real-MySQL strategy snapshot fixture previously manufactured a paid customer
+by inserting `paid = true` and a PaymentIntent directly. After read-side Payment
+convergence, that weak fixture correctly stopped qualifying as a dormant paid
+customer. The fixture now creates the order unpaid and establishes the historical
+payment through `admitNativeStripePayment` with succeeded provider capture
+evidence. Runtime payment authority is not weakened merely to satisfy the test.
