@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Program E — LLM Legibility, Physical Repository Reorganization, and Cold-Model Certification Audit
 
 ## 1. Executive Summary and Starting Checkpoint

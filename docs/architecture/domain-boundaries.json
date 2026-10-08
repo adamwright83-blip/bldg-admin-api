@@ -181,5 +181,144 @@
       ],
       "reason": "Game consumes admitted facts/read models; it must not grow new direct business-domain implementation dependencies."
     }
+  ],
+  "conceptOwnershipMap": [
+    {
+      "concept": "Order Lifecycle",
+      "owner": "Orders",
+      "legalWriteEntrypoint": "server/orders/orderLifecycleService.ts (transitionNativeOrderStatus), server/orders/orderOwnership.ts (createOrReuseResidentOrder)",
+      "canonicalReadEntrypoint": "server/orders/orderHistoryReadService.ts, server/orders/unpaidOrderReadService.ts",
+      "evidenceAdmissionSource": "Resident intake validation or Driver lifecycle request crossing Orders application fence",
+      "downstreamConsumers": [
+        "server/joystick/driverOrderService.ts",
+        "server/dayDirector/dayDirectorService.ts",
+        "server/lanternCity/objectiveMarksService.ts"
+      ],
+      "forbiddenMutationSources": [
+        "server/driverGameWorld",
+        "server/goldlineWorld",
+        "server/lanternCity",
+        "server/durableExecution"
+      ],
+      "legacyCompatibilityExceptions": "Legacy tenantless order imports and raw seed fixtures are quarantined."
+    },
+    {
+      "concept": "Native Payment Occurrence",
+      "owner": "Payment",
+      "legalWriteEntrypoint": "server/authority/paymentAdmission.ts (admitNativePayment)",
+      "canonicalReadEntrypoint": "server/authority/nativePaymentReadService.ts",
+      "evidenceAdmissionSource": "Stripe webhook payment intent / charge confirmation with authority receipt",
+      "downstreamConsumers": [
+        "server/orders/orderLifecycleService.ts (delivery eligibility fence)",
+        "server/analytics/canonicalRevenue.ts",
+        "server/towerWars/towerWarsService.ts"
+      ],
+      "forbiddenMutationSources": [
+        "server/orders",
+        "server/commercialPipeline",
+        "server/towerWars",
+        "server/driverGameWorld"
+      ],
+      "legacyCompatibilityExceptions": "Historical receipts without amount evidence prove occurrence only, with dollar amount held unknown."
+    },
+    {
+      "concept": "Native Captured Amount",
+      "owner": "Payment",
+      "legalWriteEntrypoint": "server/authority/paymentAdmission.ts (durable Stripe amount_received persistence)",
+      "canonicalReadEntrypoint": "server/authority/nativePaymentReadService.ts, server/analytics/canonicalRevenue.ts",
+      "evidenceAdmissionSource": "Immutable provider capture receipts",
+      "downstreamConsumers": [
+        "server/analytics/canonicalRevenue.ts",
+        "server/towerWars/towerWarsService.ts",
+        "server/truePnlCockpit.ts"
+      ],
+      "forbiddenMutationSources": [
+        "server/orders (orders.total is mutable quote, not captured dollars)",
+        "server/commercialPipeline",
+        "server/money/scenarioService.ts"
+      ],
+      "legacyCompatibilityExceptions": "Historical native amounts missing durable provider proof remain unknown."
+    },
+    {
+      "concept": "Commercial Conversion (Won)",
+      "owner": "Commercial",
+      "legalWriteEntrypoint": "server/commercialPipeline/commercialPipelineService.ts",
+      "canonicalReadEntrypoint": "server/commercialPipeline/commercialAccountReadService.ts, server/commercialPipeline/commercialFollowUpReadService.ts",
+      "evidenceAdmissionSource": "Operator-attested verbal agreement or commercial contract",
+      "downstreamConsumers": [
+        "server/dayDirector/dayDirectorService.ts",
+        "server/claire/turn/claireTurn.ts",
+        "server/lanternCity/objectiveMarksService.ts"
+      ],
+      "forbiddenMutationSources": [
+        "server/authority/paymentAdmission.ts (won is not paid)",
+        "server/goldlineWorld",
+        "server/driverGameWorld"
+      ],
+      "legacyCompatibilityExceptions": "None. Commercial conversion never automatically implies payment."
+    },
+    {
+      "concept": "CleanCloud Imported Economic Evidence",
+      "owner": "CleanCloud Integration",
+      "legalWriteEntrypoint": "server/cleancloudBrowserSync/assimilateCustomerTruth.ts, server/cleancloudPaidEvidence.ts",
+      "canonicalReadEntrypoint": "server/cleancloudPaidOrders.ts",
+      "evidenceAdmissionSource": "CleanCloud sync witness payload digest",
+      "downstreamConsumers": [
+        "server/geography/gumballCustomerTruthDbProof.ts",
+        "server/money/moneyProjectionService.ts (qualified as external evidence)"
+      ],
+      "forbiddenMutationSources": [
+        "server/authority/paymentAdmission.ts",
+        "server/orders/orderLifecycleService.ts"
+      ],
+      "legacyCompatibilityExceptions": "cleancloud_legacy_orders table remains an explicit unresolved tenantless data-policy exception."
+    },
+    {
+      "concept": "Tenant Identity and Isolation",
+      "owner": "Platform Tenancy",
+      "legalWriteEntrypoint": "server/saas/tenantLifecycle.ts",
+      "canonicalReadEntrypoint": "server/joystick/tenantIdentity.ts (requireTenantId, getTenantScope)",
+      "evidenceAdmissionSource": "Validated user session, API key, or tenant token",
+      "downstreamConsumers": [
+        "All domain, planning, platform, and agent services"
+      ],
+      "forbiddenMutationSources": [
+        "Unauthenticated client requests",
+        "Implicit COALESCE(..., 'default') fallbacks"
+      ],
+      "legacyCompatibilityExceptions": "Laundry Farm historical records retain 'default' tenant until deliberate migration."
+    },
+    {
+      "concept": "Game Progression and World State",
+      "owner": "Experience / Game",
+      "legalWriteEntrypoint": "server/goldlineWorld/chapterStateService.ts, server/goldlineWorld/worldEventStore.ts",
+      "canonicalReadEntrypoint": "server/goldlineWorld/lanternCityOverviewService.ts, server/goldlineProgression/**",
+      "evidenceAdmissionSource": "Reality Bridge projection consuming admitted business facts",
+      "downstreamConsumers": [
+        "client/src/pages/GoldlineScene.tsx",
+        "client/src/pages/LanternCitySceneV6"
+      ],
+      "forbiddenMutationSources": [
+        "None (game state is owned by game systems, but game state cannot write to business domains)"
+      ],
+      "legacyCompatibilityExceptions": "Historical chapter save files retain backward compatibility."
+    },
+    {
+      "concept": "Daphne Operator Correction Evidence",
+      "owner": "Daphne",
+      "legalWriteEntrypoint": "server/daphne/explicitPreferenceCorrection.ts",
+      "canonicalReadEntrypoint": "server/daphne/claireAdapter.ts, server/daphne/operatorCard.ts",
+      "evidenceAdmissionSource": "Explicit operator voice or UI correction directive",
+      "downstreamConsumers": [
+        "server/claire/turn/claireTurn.ts",
+        "server/claire/proactive/boardService.ts"
+      ],
+      "forbiddenMutationSources": [
+        "Automated inference without operator confirmation",
+        "Claire unverified generation"
+      ],
+      "legacyCompatibilityExceptions": "Protected under PR #495 active workstream."
+    }
   ]
 }
+
