@@ -1,7 +1,7 @@
 import React from "react";
 import { Building2, Flame, Map, ScrollText } from "lucide-react";
 
-const CITY_HREF = "https://admin.bldg.chat/growth/lantern-city";
+const CITY_HREF = "/growth/lantern-city";
 
 export type GoldlineNavActive = "day" | "week" | "play" | "journal";
 
@@ -61,7 +61,7 @@ export function GoldlineGameNav({
         <ScrollText />
         <span>JOURNAL</span>
       </button>
-      <a href={CITY_HREF} target="_blank" rel="noreferrer">
+      <a href={CITY_HREF}>
         <Building2 />
         <span>CITY</span>
       </a>
