@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical table/API literals only; canonical product is JOYSTICK. */
 import { test, expect } from "@playwright/test";
 import superjson from "superjson";
 import { buildJoystickDraftPreview } from "../../shared/joystickAcquisition";
