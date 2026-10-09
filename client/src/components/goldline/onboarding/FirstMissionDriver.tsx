@@ -14,8 +14,8 @@ export function FirstMissionDriver({session}:{session:GoldlineOnboardingSession}
  const utils=trpc.useUtils();
  const refresh=()=>utils.system.goldlineOnboarding.state.invalidate();
  const traversal=trpc.system.goldlineOnboarding.traversal.useMutation({onSuccess:refresh});
- const report=trpc.system.goldlineOnboarding.fieldOutcome.useMutation({onSuccess:()=>{if(session.acquisitionSessionId)captureProductEvent("joystick_first_real_action_completed",{action_kind:"field_outcome"});setBriefing(false);void refresh();}});
- const defeat=trpc.system.goldlineOnboarding.defeat.useMutation({onSuccess:refresh});
+ const report=trpc.system.goldlineOnboarding.fieldOutcome.useMutation({onSuccess:()=>{captureProductEvent("joystick_first_real_action_completed",{action_kind:"field_outcome",acquisitionSessionId:session.acquisitionSessionId});setBriefing(false);void refresh();}});
+ const defeat=trpc.system.goldlineOnboarding.defeat.useMutation({onSuccess:()=>{captureProductEvent("guardian_defeated",{guardianId:mission.guardianId,missionId:mission.id});refresh();}});
  const [briefing,setBriefing]=useState(false),[text,setText]=useState(""),[confirmed,setConfirmed]=useState(false),[encounter,setEncounter]=useState(false);
  const [gps,setGps]=useState<{latitude:number;longitude:number;accuracy:number}|null>(null),[gpsStatus,setGpsStatus]=useState("GPS optional; confirm your own presence below.");
  useEffect(()=>{captureProductEvent("first_mission_started",{missionId:mission.id,guardianId:mission.guardianId,territoryId:mission.territoryId});},[mission.id,mission.guardianId,mission.territoryId]);

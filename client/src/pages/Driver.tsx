@@ -114,7 +114,11 @@ export default function Driver() {
 }
 
 function AuthenticatedDriver() {
-  const [sideQuestOpen, setSideQuestOpen] = useState(false);
+  const [sideQuestOpen, setSideQuestOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mission") === "first" || params.get("firstSpark") === "1" || window.location.hash === "#first-mission";
+  });
   const [publicBootstrapFailed, setPublicBootstrapFailed] = useState(false);
   const { loading: authLoading, isAuthenticated } = useAuth();
   const publicDriverHost =
@@ -143,6 +147,15 @@ function AuthenticatedDriver() {
   const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
   const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
   const firstSparkAvailable = Boolean(firstMission && !firstMission.gameplayCompletedAt);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if ((params.get("mission") === "first" || params.get("firstSpark") === "1" || window.location.hash === "#first-mission") && firstSparkAvailable) {
+        setSideQuestOpen(true);
+      }
+    }
+  }, [firstSparkAvailable]);
 
   useEffect(() => {
     document.documentElement.dataset.goldlineFirstSparkAvailable = String(firstSparkAvailable);
