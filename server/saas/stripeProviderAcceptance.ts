@@ -140,6 +140,15 @@ export async function runStripeProviderAcceptance(
         reason: `Refusing Stripe acceptance execution outside designated disposable test database: ${name}`,
       };
     }
+    // Test adapters must not reach the real onboarding store at all. That
+    // store uses process.env.DATABASE_URL independently of this connection.
+    if (injectedDependencies) {
+      return {
+        status: "FAILED",
+        failureStep: "injected_dependencies",
+        reason: "Injected Stripe/database adapters are restricted to guard tests and cannot perform real onboarding writes",
+      };
+    }
 
     const stripe =
       options?.stripeClient ??
