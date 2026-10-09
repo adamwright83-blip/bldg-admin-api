@@ -165,7 +165,7 @@ describe("host routing", () => {
 
 describe("production migration creates what the first mission writes to", () => {
   const migrate = repo("scripts", "migrate.mjs");
-  const worldSchema = repo("server", "goldlineWorld", "schema.sql");
+  const worldSchema = repo("server", "platform", "persistence", "goldlineCompatibilitySchema.sql");
   const firstMission = repo("server", "goldlineOnboarding", "firstMission.ts");
 
   it("bootstraps goldline_world_events, which the field outcome inserts into", () => {
