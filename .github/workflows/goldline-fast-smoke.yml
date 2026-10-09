@@ -73,8 +73,8 @@ jobs:
           pnpm vitest run
           server/platform/authority/authorityReceipt.test.ts
           server/domains/payment/paymentAdmission.test.ts
-          server/cleancloudPaidEvidence.test.ts
-          server/cleancloudExternalEvidenceArchitecture.test.ts
+          server/integrations/cleancloud/cleancloudPaidEvidence.test.ts
+          server/integrations/cleancloud/cleancloudExternalEvidenceArchitecture.test.ts
           server/paymentAdmissionFailure.integration.test.ts
           server/platform/authority/authoritySliceContract.test.ts
           server/platform/authority/authorityPersistentOutcomeContract.test.ts

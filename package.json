@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:legacy-dayforge:release": "vitest run server/legacyDayforgeRelease server/territory server/commercialMissions server/commercialProposals server/commercialPipeline server/legacyDayforgeEvents server/claire server/mysqlErrors.test.ts shared/legacyDayforgeEvents.test.ts shared/goldlineTruthContract.test.ts shared/goldlineActionContract.test.ts",
+    "test:legacy-dayforge:release": "vitest run server/legacyDayforgeRelease server/territory server/commercialMissions server/commercialProposals server/domains/commercial server/legacyDayforgeEvents server/claire server/mysqlErrors.test.ts shared/legacyDayforgeEvents.test.ts shared/goldlineTruthContract.test.ts shared/goldlineActionContract.test.ts",
     "test:legacy-dayforge:release:integration": "vitest run --config vitest.integration.config.ts server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts",
     "test:legacy-dayforge:release:e2e": "playwright test --config playwright.legacy-dayforge.config.ts",
     "check:legacy-dayforge:release": "tsc --project tsconfig.legacy-dayforge-release.json",

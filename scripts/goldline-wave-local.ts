@@ -42,7 +42,7 @@ if (process.argv.includes("--prepare")) {
   await resetGoldlineProofWorld();
   process.exit(0);
 } else if (process.argv.includes("--seed-impacts")) {
-  const { importCleanCloudPaidOrders } = await import("../server/cleancloudPaidOrders");
+  const { importCleanCloudPaidOrders } = await import("../server/integrations/cleancloud/cleancloudPaidOrders");
   const { formatInTimeZone } = await import("date-fns-tz");
   const today = formatInTimeZone(new Date(), "America/Los_Angeles", "yyyy-MM-dd");
   await importCleanCloudPaidOrders({ tenantId: "default", sourceReportType: "orders_sales", sourceFileName: "local-fifteen-impact-proof.csv",
@@ -60,7 +60,7 @@ if (process.argv.includes("--prepare")) {
     idempotencyKey: "wave-local-recurrence", correlationId: "local-guardian-proof", metadata: { fixture: true } });
   console.log("Local-only dormancy fixture follows saved victory."); process.exit(0);
 } else if (process.argv.includes("--seed-chain")) {
-  const { importCleanCloudPaidOrders } = await import("../server/cleancloudPaidOrders");
+  const { importCleanCloudPaidOrders } = await import("../server/integrations/cleancloud/cleancloudPaidOrders");
   for (const [id, date, value] of [["wave-prior-season", "2026-08-25", "100.00"], ["wave-live-chain", "2026-09-04", "100.00"]]) {
     await importCleanCloudPaidOrders({ tenantId: "default", sourceReportType: "orders_sales", sourceFileName: "local-chain-proof.csv",
       csvText: `Order ID,Customer,Address,Paid,Payment Date,Total\n${id},Local chain fixture,3545 Wilshire Blvd,Yes,${date},${value}` });
@@ -68,7 +68,7 @@ if (process.argv.includes("--prepare")) {
   console.log("Local-only prior-season and new economic chain fixtures imported; background publisher owns delivery.");
   process.exit(0);
 } else if (process.argv.includes("--seed-repair")) {
-  const { importCleanCloudPaidOrders } = await import("../server/cleancloudPaidOrders");
+  const { importCleanCloudPaidOrders } = await import("../server/integrations/cleancloud/cleancloudPaidOrders");
   await importCleanCloudPaidOrders({ tenantId: "default", sourceReportType: "orders_sales", sourceFileName: "local-repair-proof.csv",
     csvText: "Order ID,Customer,Address,Paid,Payment Date,Total\nwave-impact-proof,Local fixture,2170 Century Park East,Yes,2026-09-01,750.00" });
   const { getDb } = await import("../server/db");
