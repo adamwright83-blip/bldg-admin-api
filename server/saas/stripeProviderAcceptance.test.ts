@@ -137,21 +137,23 @@ describe("JOYSTICK Stripe provider acceptance test-mode gate", () => {
       },
     } as any;
 
+    const mockDb = {
+      query: async (sql: string) => {
+        if (sql.includes("DATABASE()")) return [[{ name: "joystick_stripe_acceptance" }]];
+        throw new Error("No onboarding or billing query may execute with injected clients");
+      },
+      end: async () => {},
+    } as any;
+
     const result = await runStripeProviderAcceptance({
-      databaseUrl: "mysql://root:root@localhost:3418/joystick_real_acceptance",
+      dbConnection: mockDb,
       allowlistedAccountId: "acct_laundry_farm_id",
       stripeClient: fakeStripe,
     });
 
-    // Should fail at account_safeguard or database_connection
-    if (result.failureStep === "database_connection") {
-      // expected in isolated environment without local db on 3418
-      expect(result.status).toBe("FAILED");
-    } else {
-      expect(result.status).toBe("FAILED");
-      expect(result.failureStep).toBe("account_safeguard");
-      expect(result.reason).toContain("Laundry Farm account detected");
-    }
+    expect(result.status).toBe("FAILED");
+    expect(result.failureStep).toBe("account_safeguard");
+    expect(result.reason).toContain("Laundry Farm account detected");
 
     delete process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY;
     delete process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET;
