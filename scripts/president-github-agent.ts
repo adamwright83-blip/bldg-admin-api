@@ -290,7 +290,7 @@ function engineeringPrompt(m: Mission, feedback: string | null) {
     "Hard rules:",
     "- Do not merge or deploy.",
     "- Do not touch server/mitch/**.",
-    "- Do not touch server/commercialPipeline/**, server/commercialCampaigns/**, server/authority/**, server/geography/**, server/goldlineWorld/**, server/lanternCity/**, drizzle/schema.ts, server/routers.ts, package.json, scripts/migrate.mjs, or .github/workflows/**.",
+    "- Do not touch server/domains/commercial/**, server/commercialCampaigns/**, server/platform/authority/**, server/domains/payment/**, server/geography/**, server/goldlineWorld/**, server/lanternCity/**, drizzle/schema.ts, server/routers.ts, package.json, scripts/migrate.mjs, or .github/workflows/**.",
     "- Do not commit or push; the harness owns git publication.",
     "- Do not broaden scope or perform unrelated refactors.",
     "- Add/update focused tests when needed.",
