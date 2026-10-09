@@ -24,7 +24,7 @@ import {
   type WitnessControl,
 } from "./reconcileEconomics";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
-import { findPhysicalEntityIdByAddress } from "../../../goldlineWorld/entityLookup";
+import { findPhysicalEntityIdByAddress } from "../../../experience/goldlineWorld/entityLookup";
 import {
   assimilateImportedCustomerTruth,
   assimilationReceiptFields,

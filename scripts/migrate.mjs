@@ -1509,7 +1509,7 @@ await assertRequiredColumns("cleancloud_verified_economic_events", [
 ]);
 
 const impactSql = await readFile(
-  new URL("../server/towerWars/impactSchema.sql", import.meta.url),
+  new URL("../server/experience/towerWars/impactSchema.sql", import.meta.url),
   "utf8"
 );
 for (const statement of impactSql
@@ -1566,7 +1566,7 @@ await assertRequiredColumns("goldline_field_cargo", [
   "linkedOrderId",
 ]);
 const worldEventsSql = await readFile(
-  new URL("../server/goldlineWorld/schema.sql", import.meta.url),
+  new URL("../server/experience/goldlineWorld/schema.sql", import.meta.url),
   "utf8"
 );
 for (const statement of worldEventsSql

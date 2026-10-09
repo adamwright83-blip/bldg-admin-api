@@ -7,8 +7,8 @@ import { listLegacyDayforgeToday } from "../legacyDayforgeToday/legacyDayforgeTo
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
-import { listFuturePressure } from "../goldlineWorld/futurePressureService";
-import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
+import { listFuturePressure } from "../experience/goldlineWorld/futurePressureService";
+import { findPhysicalEntityIdByAddress } from "../experience/goldlineWorld/entityLookup";
 
 function moneyCents(value: unknown): number {
   const parsed = Number(value ?? 0);

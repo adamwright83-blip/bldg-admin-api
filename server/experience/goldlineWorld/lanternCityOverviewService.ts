@@ -1,0 +1,738 @@
+import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import {
+  customerRecoveryInterventions,
+  goldlineLanternOperations,
+  goldlineTerritoryDefinitions,
+} from "../../../drizzle/schema";
+import {
+  hostForBinding,
+  surfaceForCampaignHost,
+} from "../../../shared/goldlineCampaignRuntime";
+import {
+  classifyTerritory,
+  deriveTerritoryOccupancy,
+  territoryByName,
+} from "../../../shared/lanternTerritories";
+import { deriveTerritoryVisualState } from "../../../shared/lanternTerritoryVisualState";
+import {
+  decayForecastLine,
+  forecastTerritoryDecay,
+} from "../../../shared/lanternDecayForecast";
+import { getRevenueSummary } from "../../analytics/analyticsQueries";
+import { getDb } from "../../db";
+import { getGeographicTruth } from "../../geography/geographicTruthService";
+import { commitAuthoredDayForOperation } from "../../nightShift/authoredDayService";
+import {
+  deriveRekindling,
+  type RekindlingEvent,
+} from "../../../shared/rekindlingEvents";
+import { getOrMaterializeTodayCampaign } from "./campaignService";
+import { listPresentedTerritories } from "./territoryService";
+import { listRecoveryChronicleSince } from "./worldEventStore";
+import { getTodayFeaturedOperation } from "../../strategy/todayFeaturedService";
+
+export const AUTHORED_V6_TERRITORY_IDS = [
+  "koreatown",
+  "century-city",
+  "beverly-hills",
+  "west-hollywood",
+  "hollywood",
+  "los-feliz",
+  "silver-lake",
+  "east-hollywood",
+  "mid-city",
+  "echo-park",
+  "downtown",
+  "westlake",
+  "arts-district",
+  "hollywood-hills-west",
+] as const;
+type Atlas = Awaited<ReturnType<typeof getGeographicTruth>>;
+type Customer = Atlas["customers"][number];
+type Campaign = Awaited<ReturnType<typeof getOrMaterializeTodayCampaign>>;
+export type LanternOperationBaseline = {
+  id: string;
+  stableKey: string;
+  sourceCampaignChapterId: string | null;
+  operationType: "campaign" | "recovery" | "explore";
+  campaignTerritoryDefinitionId: string | null;
+  lanternCityTerritoryId: string | null;
+  startedAt: string;
+  baselineCustomerIdentityKeys: string[];
+  baselineDormantIdentityKeys: string[];
+  anchorCustomerIdentityKey: string | null;
+};
+/** Real territory occupancy, from the same evidence the scene composes with. */
+export type LanternTerritoryOccupancyFlags = {
+  guarded: boolean;
+  conquered: boolean;
+  pressureReturned: boolean;
+};
+/** Presented territory state as `goldlineWorld.territories` returns it. */
+export type LanternPresentedTerritoryState = {
+  definition: { realGeographyLabel: string | null };
+  state: { cleared: boolean; pressureReturned?: boolean };
+};
+/** Real outreach evidence the rekindling state is derived from. */
+export type LanternRekindlingInput = {
+  interventions: readonly { id: string; customerKey: string }[];
+  events: readonly (RekindlingEvent & { correlationId: string })[];
+};
+function businessDateIn(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+export type LanternTerritoryDossier = {
+  territoryId: string;
+  territoryName: string;
+  counts: { total: number; active: number; dimming: number; dark: number };
+  decayForecast: string | null;
+  knownLight: null | Pick<
+    Customer,
+    | "identityKey"
+    | "displayName"
+    | "phone"
+    | "totalOrders"
+    | "firstOrderAt"
+    | "lastOrderAt"
+    | "cadence"
+  >;
+};
+
+export function resolveChapterLanternTerritory(
+  chapter: Campaign["campaign"]["chapters"][number] | null,
+  definitions: Array<{ id: string; realGeographyLabel: string | null }>
+) {
+  const campaignTerritoryDefinitionId = chapter?.territoryId ?? null;
+  const label = definitions.find(
+    d => d.id === campaignTerritoryDefinitionId
+  )?.realGeographyLabel;
+  const anchor = chapter?.physicalAnchors?.find(
+    a => Number.isFinite(a.latitude) && Number.isFinite(a.longitude)
+  );
+  return {
+    campaignTerritoryDefinitionId,
+    lanternCityTerritoryId:
+      (label ? territoryByName(label)?.id : null) ??
+      (anchor
+        ? classifyTerritory(anchor.latitude!, anchor.longitude!)?.id
+        : null) ??
+      null,
+  };
+}
+/**
+ * Mirrors `composeLanternCityScene`: guarded/conquered come from
+ * `deriveTerritoryOccupancy` over located customers plus cleared territory
+ * history; pressure returned comes from cleared territories whose pressure
+ * came back. No flag is assumed.
+ */
+export function deriveDossierOccupancy(input: {
+  atlas: Atlas;
+  territoryStates?: readonly LanternPresentedTerritoryState[];
+}): (territoryId: string) => LanternTerritoryOccupancyFlags {
+  const conquered = new Set<string>();
+  const lost = new Set<string>();
+  for (const item of input.territoryStates ?? []) {
+    const territory = territoryByName(item.definition.realGeographyLabel ?? "");
+    if (territory && item.state.cleared)
+      (item.state.pressureReturned ? lost : conquered).add(territory.id);
+  }
+  const located = input.atlas.customers.filter(c => c.location);
+  const occupancy = deriveTerritoryOccupancy({
+    customers: located.map(c => c.location!),
+    totalCustomers: input.atlas.customers.length,
+    atlasReady: true,
+    conqueredTerritoryIds: conquered,
+  });
+  const rows = new Map(
+    occupancy.territories.map(row => [row.territory.id, row] as const)
+  );
+  return territoryId => {
+    const row = rows.get(territoryId);
+    return {
+      guarded: row?.guarded ?? false,
+      conquered: row?.conquered ?? false,
+      pressureReturned: lost.has(territoryId),
+    };
+  };
+}
+function visualEnvironment(
+  d: LanternTerritoryDossier,
+  occupancy: LanternTerritoryOccupancyFlags
+) {
+  const state = deriveTerritoryVisualState({
+    ...d.counts,
+    territoryId: d.territoryId,
+    ...occupancy,
+  });
+  return ["infested", "overgrown", "closed_construction"].includes(state)
+    ? "infested"
+    : state === "healthy"
+      ? "healthy"
+      : state === "locked_opportunity"
+        ? "locked"
+        : "cooling";
+}
+/**
+ * Replace as rescue (brief §8, building-level). A first order from a new
+ * resident, placed after the operation began, in the building of a baseline
+ * lantern that is still dark restores that building's light. The building is
+ * the geocoded canonical address; a raw address string never matches. Each
+ * dark lantern is rescued at most once and each new resident rescues at most
+ * one lantern, so RESTORE DORMANT LIGHTS can never exceed its baseline.
+ */
+export function deriveReplacementRescues(input: {
+  territoryCustomers: readonly Customer[];
+  baselineCustomers: readonly string[];
+  stillDark: readonly string[];
+  identities: ReadonlyMap<string, Customer>;
+  startedAt: string;
+}): { dormantIdentityKey: string; newResidentIdentityKey: string }[] {
+  const started = new Date(input.startedAt).getTime();
+  const newResidents = input.territoryCustomers
+    .filter(
+      c =>
+        !input.baselineCustomers.includes(c.identityKey) &&
+        new Date(c.firstOrderAt).getTime() > started &&
+        !!c.location?.canonicalAddress
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.firstOrderAt).getTime() -
+          new Date(b.firstOrderAt).getTime() ||
+        a.identityKey.localeCompare(b.identityKey)
+    );
+  const used = new Set<string>();
+  const rescues: { dormantIdentityKey: string; newResidentIdentityKey: string }[] =
+    [];
+  for (const dormantKey of [...input.stillDark].sort()) {
+    const building = input.identities.get(dormantKey)?.location?.canonicalAddress;
+    if (!building) continue;
+    const resident = newResidents.find(
+      c => !used.has(c.identityKey) && c.location?.canonicalAddress === building
+    );
+    if (!resident) continue;
+    used.add(resident.identityKey);
+    rescues.push({
+      dormantIdentityKey: dormantKey,
+      newResidentIdentityKey: resident.identityKey,
+    });
+  }
+  return rescues;
+}
+function returned(customer: Customer | undefined, startedAt: string) {
+  return (
+    !!customer &&
+    customer.cadence.state !== "dark" &&
+    new Date(customer.lastOrderAt).getTime() > new Date(startedAt).getTime()
+  );
+}
+
+export function projectLanternCityOverview(input: {
+  atlas: Atlas;
+  paidRevenueThisWeek: number | null;
+  campaign: Campaign;
+  resolvedCampaignTerritory?: {
+    campaignTerritoryDefinitionId: string | null;
+    lanternCityTerritoryId: string | null;
+  };
+  operation?: LanternOperationBaseline;
+  territoryStates?: readonly LanternPresentedTerritoryState[];
+  rekindling?: LanternRekindlingInput;
+}) {
+  const occupancyFor = deriveDossierOccupancy(input);
+  const grouped = new Map<string, Customer[]>();
+  for (const c of input.atlas.customers) {
+    if (!c.location) continue;
+    const t = classifyTerritory(c.location.latitude, c.location.longitude);
+    if (t && AUTHORED_V6_TERRITORY_IDS.includes(t.id as never))
+      grouped.set(t.id, [...(grouped.get(t.id) ?? []), c]);
+  }
+  const dossiers: LanternTerritoryDossier[] = AUTHORED_V6_TERRITORY_IDS.map(
+    territoryId => {
+      const customers = grouped.get(territoryId) ?? [];
+      const territory = customers[0]?.location
+        ? classifyTerritory(
+            customers[0].location.latitude,
+            customers[0].location.longitude
+          )
+        : null;
+      const counts = customers.reduce(
+        (m, c) => {
+          m[c.cadence.state]++;
+          m.total++;
+          return m;
+        },
+        { total: 0, active: 0, dimming: 0, dark: 0 }
+      );
+      const knownLight =
+        [...customers]
+          .filter(c => c.cadence.state === "dark")
+          .sort(
+            (a, b) =>
+              b.cadence.daysSinceLastOrder - a.cadence.daysSinceLastOrder ||
+              a.identityKey.localeCompare(b.identityKey)
+          )[0] ?? null;
+      return {
+        territoryId,
+        territoryName:
+          territory?.name ??
+          territoryId
+            .split("-")
+            .map(w => w[0]!.toUpperCase() + w.slice(1))
+            .join(" "),
+        counts,
+        decayForecast: decayForecastLine(
+          forecastTerritoryDecay({
+            territoryId,
+            customers: customers.map(customer => ({
+              identityKey: customer.identityKey,
+              cadence: customer.cadence,
+            })),
+            occupancy: occupancyFor(territoryId),
+          })
+        ),
+        knownLight,
+      };
+    }
+  );
+  const chapter =
+    input.campaign.campaign.chapters.find(
+      c => c.stableChapterId === input.campaign.campaign.currentChapterId
+    ) ?? null;
+  const resolved = input.resolvedCampaignTerritory ?? {
+    campaignTerritoryDefinitionId: chapter?.territoryId ?? null,
+    lanternCityTerritoryId: null,
+  };
+  const recovery =
+    [...dossiers]
+      .filter(d => d.counts.dark > 0)
+      .sort(
+        (a, b) =>
+          b.counts.dark - a.counts.dark ||
+          a.territoryId.localeCompare(b.territoryId)
+      )[0] ?? null;
+  const territoryId =
+    input.operation?.lanternCityTerritoryId ??
+    (chapter
+      ? resolved.lanternCityTerritoryId
+      : (recovery?.territoryId ?? null));
+  const dossier = dossiers.find(d => d.territoryId === territoryId) ?? null;
+  const isRecovery =
+    input.operation?.operationType === "recovery" ||
+    (!input.operation && !chapter && !!dossier);
+  const startedAt = input.operation?.startedAt ?? new Date().toISOString();
+  const baselineCustomers =
+    input.operation?.baselineCustomerIdentityKeys ??
+    (dossier
+      ? (grouped.get(dossier.territoryId) ?? []).map(c => c.identityKey)
+      : []);
+  const baselineDormant =
+    input.operation?.baselineDormantIdentityKeys ??
+    (isRecovery && dossier
+      ? (grouped.get(dossier.territoryId) ?? [])
+          .filter(c => c.cadence.state === "dark")
+          .map(c => c.identityKey)
+      : []);
+  const anchorKey =
+    input.operation?.anchorCustomerIdentityKey ??
+    (isRecovery ? (dossier?.knownLight?.identityKey ?? null) : null);
+  const identities = new Map(
+    input.atlas.customers.map(c => [c.identityKey, c])
+  );
+  const anchor = anchorKey ? identities.get(anchorKey) : undefined;
+  const returnedDormant = baselineDormant.filter(k =>
+    returned(identities.get(k), startedAt)
+  );
+  const replacementRescues =
+    dossier && isRecovery
+      ? deriveReplacementRescues({
+          territoryCustomers: grouped.get(dossier.territoryId) ?? [],
+          baselineCustomers,
+          stillDark: baselineDormant.filter(
+            k => !returnedDormant.includes(k)
+          ),
+          identities,
+          startedAt,
+        })
+      : [];
+  const recovered = returnedDormant.length + replacementRescues.length;
+  const second =
+    dossier && isRecovery
+      ? ((grouped.get(dossier.territoryId) ?? [])
+          .filter(
+            c =>
+              !baselineCustomers.includes(c.identityKey) &&
+              new Date(c.firstOrderAt).getTime() > new Date(startedAt).getTime()
+          )
+          .sort(
+            (a, b) =>
+              new Date(a.firstOrderAt).getTime() -
+              new Date(b.firstOrderAt).getTime()
+          )[0] ?? null)
+      : null;
+  // Rekindling state: highest impact class reached per lantern since the
+  // operation began, read from world events on that customer's real recovery
+  // interventions. Derived, never stored; a send alone is only a spark.
+  const interventionsByCustomer = new Map<string, string[]>();
+  for (const item of input.rekindling?.interventions ?? [])
+    interventionsByCustomer.set(item.customerKey, [
+      ...(interventionsByCustomer.get(item.customerKey) ?? []),
+      `recovery-intervention:${item.id}`,
+    ]);
+  const rekindling =
+    isRecovery && dossier
+      ? Array.from(
+          new Set([...(anchorKey ? [anchorKey] : []), ...baselineDormant])
+        ).map(customerIdentityKey => {
+          const correlations = new Set(
+            interventionsByCustomer.get(customerIdentityKey) ?? []
+          );
+          const derived = deriveRekindling({
+            since: startedAt,
+            events: (input.rekindling?.events ?? []).filter(e =>
+              correlations.has(e.correlationId)
+            ),
+          });
+          return {
+            customerIdentityKey,
+            state: derived.state,
+            reached: derived.reached,
+            lastToolUse: derived.lastToolUse
+              ? {
+                  tool: derived.lastToolUse.tool,
+                  businessDate: businessDateIn(
+                    derived.lastToolUse.occurredAt,
+                    input.atlas.timeZone
+                  ),
+                }
+              : null,
+          };
+        })
+      : [];
+  const binding = chapter?.selectedGameplayBinding ?? "recovery";
+  const environment = dossier
+    ? visualEnvironment(dossier, occupancyFor(dossier.territoryId))
+    : null;
+  const title = chapter
+    ? binding === "authoritative_visit_route"
+      ? "HOLD THE ROUTE"
+      : binding === "guardian_finale"
+        ? "FACE THE GUARDIAN"
+        : "ADVANCE THE CAMPAIGN"
+    : dossier
+      ? environment === "infested"
+        ? "PURGE THE RAT NEST"
+        : "RESTORE THE LIGHT"
+      : "EXPLORE LANTERN CITY";
+  const objectives =
+    isRecovery && dossier
+      ? [
+          ...(anchorKey
+            ? [
+                {
+                  id: `relight:${anchorKey}`,
+                  label: `RELIGHT ${(anchor?.displayName ?? anchorKey).toUpperCase()}`,
+                  current: returned(anchor, startedAt) ? 1 : 0,
+                  target: 1,
+                },
+              ]
+            : []),
+          {
+            id: `restore:${dossier.territoryId}`,
+            label: "RESTORE DORMANT LIGHTS",
+            current: recovered,
+            target: baselineDormant.length,
+          },
+          {
+            id: `second-light:${dossier.territoryId}`,
+            label: "ESTABLISH THE SECOND LIGHT",
+            current: second ? 1 : 0,
+            target: 1,
+          },
+        ].filter(o => o.target > 0)
+      : chapter
+        ? [
+            {
+              id: `commitment:${chapter.stableChapterId}`,
+              label:
+                chapter.fictionalTreatment || "COMPLETE REQUIRED COMMITMENT",
+              current: 0,
+              target: 1,
+            },
+          ]
+        : [];
+  const dark = input.atlas.customers.filter(
+    c => c.cadence.state === "dark"
+  ).length;
+  const campaignOthers = input.campaign.campaign.chapters.filter(
+    c =>
+      c.stableChapterId !== chapter?.stableChapterId &&
+      !input.campaign.campaign.completedChapterIds?.includes(c.stableChapterId)
+  ).length;
+  const recoveryOthers = dossiers.filter(
+    d => d.counts.dark > 0 && d.territoryId !== territoryId
+  ).length;
+  return {
+    businessDate: input.atlas.businessDate,
+    timeZone: input.atlas.timeZone,
+    scoreboard: {
+      customers: input.atlas.customers.length,
+      districtsLit: {
+        numerator: dossiers.filter(d => d.counts.active + d.counts.dimming > 0)
+          .length,
+        denominator: AUTHORED_V6_TERRITORY_IDS.length,
+        provenance:
+          "Authored V6 districts with at least one real non-dark customer",
+      },
+      paidRevenueThisWeek: input.paidRevenueThisWeek,
+      dormant: { numerator: dark, denominator: input.atlas.customers.length },
+      revenueProvenance:
+        input.paidRevenueThisWeek === null
+          ? "Exact paid revenue unavailable: canonical source coverage or payment evidence is incomplete for Monday through business date"
+          : "Canonical paid revenue, Monday through business date",
+    },
+    featuredOperation: {
+      id:
+        input.operation?.id ??
+        chapter?.stableChapterId ??
+        `${input.atlas.businessDate}:${dossier ? `recovery:${dossier.territoryId}` : "explore"}`,
+      title,
+      territoryId,
+      lanternCityTerritoryId: territoryId,
+      campaignTerritoryDefinitionId:
+        input.operation?.campaignTerritoryDefinitionId ??
+        resolved.campaignTerritoryDefinitionId,
+      territoryName: dossier?.territoryName ?? "Los Angeles",
+      briefing:
+        dossier && isRecovery
+          ? `${dossier.territoryName} is losing light. Restore real service and establish the next light through real business.`
+          : chapter?.fictionalTreatment ||
+            "The city is quiet. Explore the board and review real customer lights.",
+      objectives,
+      binding,
+      host: hostForBinding(binding),
+      surface: surfaceForCampaignHost(binding),
+      isFixedCommitment: !!(chapter?.required || chapter?.hardAnchor),
+      environment,
+      operationStartedAt: startedAt,
+      baselineDormantIdentityKeys: baselineDormant,
+      /** Buildings relit by a new resident's first order while the old lantern stayed dark. */
+      replacementRescues,
+      /** Per dormant lantern: spark / ember / flame from real events since the operation began. */
+      rekindling,
+      knownLightIdentityKey: anchorKey,
+      secondLight:
+        isRecovery && dossier
+          ? {
+              id: `second-light:${dossier.territoryId}`,
+              territoryId: dossier.territoryId,
+              status: second
+                ? ("completed_by_real_customer" as const)
+                : ("waiting_for_reality" as const),
+              personIdentity: null,
+              completedCustomerIdentityKey: second?.identityKey ?? null,
+            }
+          : null,
+    },
+    otherOpportunityCount: campaignOthers + recoveryOthers,
+    territoryDossiers: dossiers,
+  };
+}
+
+async function materialize(input: {
+  tenantId: string;
+  operatorId: string;
+  atlas: Atlas;
+  campaign: Campaign;
+  resolved: {
+    campaignTerritoryDefinitionId: string | null;
+    lanternCityTerritoryId: string | null;
+  };
+}): Promise<LanternOperationBaseline> {
+  const chapter =
+    input.campaign.campaign.chapters.find(
+      c => c.stableChapterId === input.campaign.campaign.currentChapterId
+    ) ?? null;
+  const candidates = AUTHORED_V6_TERRITORY_IDS.map(id => ({
+    id,
+    customers: input.atlas.customers.filter(
+      c =>
+        c.location &&
+        classifyTerritory(c.location.latitude, c.location.longitude)?.id === id
+    ),
+  }));
+  const fallback = !chapter
+    ? candidates
+        .filter(x => x.customers.some(c => c.cadence.state === "dark"))
+        .sort(
+          (a, b) =>
+            b.customers.filter(c => c.cadence.state === "dark").length -
+              a.customers.filter(c => c.cadence.state === "dark").length ||
+            a.id.localeCompare(b.id)
+        )[0]
+    : null;
+  const territoryId = chapter
+    ? input.resolved.lanternCityTerritoryId
+    : (fallback?.id ?? null);
+  const customers = candidates.find(x => x.id === territoryId)?.customers ?? [];
+  const type = chapter
+    ? chapter.selectedGameplayBinding === "recovery" &&
+      !chapter.required &&
+      !chapter.hardAnchor &&
+      territoryId
+      ? "recovery"
+      : "campaign"
+    : territoryId
+      ? "recovery"
+      : "explore";
+  const stableKey = chapter
+    ? `chapter:${chapter.stableChapterId}`
+    : `${input.atlas.businessDate}:${type}:${territoryId ?? "city"}`;
+  const dormant =
+    type === "recovery"
+      ? customers
+          .filter(c => c.cadence.state === "dark")
+          .sort(
+            (a, b) =>
+              b.cadence.daysSinceLastOrder - a.cadence.daysSinceLastOrder ||
+              a.identityKey.localeCompare(b.identityKey)
+          )
+      : [];
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .insert(goldlineLanternOperations)
+    .values({
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      stableKey,
+      sourceCampaignChapterId: chapter?.stableChapterId ?? null,
+      operationType: type,
+      campaignTerritoryDefinitionId:
+        input.resolved.campaignTerritoryDefinitionId,
+      lanternCityTerritoryId: territoryId,
+      startedAt: new Date(),
+      baselineCustomerIdentityKeysJson: customers.map(c => c.identityKey),
+      baselineDormantIdentityKeysJson: dormant.map(c => c.identityKey),
+      anchorCustomerIdentityKey: dormant[0]?.identityKey ?? null,
+      status: "active",
+      metadataJson: { projection: "lantern-city-v6" },
+    })
+    .onDuplicateKeyUpdate({ set: { stableKey } });
+  const [row] = await db
+    .select()
+    .from(goldlineLanternOperations)
+    .where(
+      and(
+        eq(goldlineLanternOperations.tenantId, input.tenantId),
+        eq(goldlineLanternOperations.operatorId, input.operatorId),
+        eq(goldlineLanternOperations.stableKey, stableKey)
+      )
+    )
+    .limit(1);
+  if (!row) throw new Error("Lantern operation was not materialized");
+  await commitAuthoredDayForOperation({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: input.atlas.businessDate,
+    operationStableKey: stableKey,
+  });
+  return {
+    id: row.id,
+    stableKey: row.stableKey,
+    sourceCampaignChapterId: row.sourceCampaignChapterId,
+    operationType:
+      row.operationType as LanternOperationBaseline["operationType"],
+    campaignTerritoryDefinitionId: row.campaignTerritoryDefinitionId,
+    lanternCityTerritoryId: row.lanternCityTerritoryId,
+    startedAt: row.startedAt.toISOString(),
+    baselineCustomerIdentityKeys:
+      row.baselineCustomerIdentityKeysJson as string[],
+    baselineDormantIdentityKeys:
+      row.baselineDormantIdentityKeysJson as string[],
+    anchorCustomerIdentityKey: row.anchorCustomerIdentityKey,
+  };
+}
+function mondayThrough(date: string) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return { start: d.toISOString().slice(0, 10), end: date };
+}
+export async function getLanternCityOverview(input: {
+  tenantId: string;
+  operatorId: string;
+}) {
+  const atlas = await getGeographicTruth({ tenantId: input.tenantId });
+  const [campaign, revenue, territoryStates] = await Promise.all([
+    getOrMaterializeTodayCampaign(input),
+    getRevenueSummary(input.tenantId, {
+      range: mondayThrough(atlas.businessDate),
+      groupBy: "week",
+      basis: "paidAt",
+    }),
+    listPresentedTerritories({ tenantId: input.tenantId }),
+  ]);
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const definitions = await db
+    .select({
+      id: goldlineTerritoryDefinitions.id,
+      realGeographyLabel: goldlineTerritoryDefinitions.realGeographyLabel,
+    })
+    .from(goldlineTerritoryDefinitions)
+    .where(eq(goldlineTerritoryDefinitions.tenantId, input.tenantId));
+  const chapter =
+    campaign.campaign.chapters.find(
+      c => c.stableChapterId === campaign.campaign.currentChapterId
+    ) ?? null;
+  const resolved = resolveChapterLanternTerritory(chapter, definitions);
+  const operation = await materialize({ ...input, atlas, campaign, resolved });
+  const [interventions, events] = await Promise.all([
+    db
+      .select({
+        id: customerRecoveryInterventions.id,
+        customerKey: customerRecoveryInterventions.customerKeyHash,
+      })
+      .from(customerRecoveryInterventions)
+      .where(eq(customerRecoveryInterventions.tenantId, input.tenantId)),
+    listRecoveryChronicleSince({
+      tenantId: input.tenantId,
+      since: operation?.startedAt ?? `${atlas.businessDate}T00:00:00.000Z`,
+    }),
+  ]);
+  const overview = projectLanternCityOverview({
+    rekindling: { interventions, events },
+    atlas,
+    campaign,
+    operation,
+    resolvedCampaignTerritory: resolved,
+    paidRevenueThisWeek: revenue.statedExactRevenue ?? null,
+    territoryStates,
+  });
+
+  // Guardrail G7: StrategyEngine is the single source of truth for featuredOperation
+  try {
+    const featured = await getTodayFeaturedOperation(input.tenantId);
+    if (featured) {
+      overview.featuredOperation.id = featured.operationId;
+      overview.featuredOperation.title = featured.worldName;
+      (overview.featuredOperation as any).businessName = featured.businessName;
+      (overview.featuredOperation as any).strategySnapshotId = featured.snapshotId;
+      (overview.featuredOperation as any).strategyProvenance = featured.provenance;
+      if (featured.briefing) {
+        overview.featuredOperation.briefing = featured.briefing;
+      }
+    }
+  } catch {
+    // Non-fatal fallback to existing projected featuredOperation
+  }
+
+  return overview;
+}

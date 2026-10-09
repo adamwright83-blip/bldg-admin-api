@@ -4,7 +4,7 @@ import { salesSourceRevisions } from "../../../analytics/salesReconciliationStor
 import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../../db";
-import { findPhysicalEntityIdByAddress } from "../../../goldlineWorld/entityLookup";
+import { findPhysicalEntityIdByAddress } from "../../../experience/goldlineWorld/entityLookup";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { validatePayload, validateHistoricalPayload } from "./validation";
 import { cleancloudImportBatches } from "../../../../drizzle/schema";

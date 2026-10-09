@@ -70,7 +70,7 @@ describe("Persistent operator PR1 schema contract", () => {
       "server/planning/dayline/currentDayLineRouter.ts",
       "server/claire/weeklyMission/weeklyMissionRouter.ts",
       "server/campaignRuns/campaignRunRouter.ts",
-      "server/lanternCity/lanternCityRouter.ts",
+      "server/experience/lanternCity/lanternCityRouter.ts",
     ];
     for (const file of files) {
       expect(repoFile(file)).not.toMatch(/tenantId\s*:\s*[^\n]*\?\?\s*["']default["']/);

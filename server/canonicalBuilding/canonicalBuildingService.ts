@@ -53,7 +53,7 @@ import { getLevel4OffensiveState } from "../level4Offensive";
 import {
   getTowerWarsSettlement,
   getTowerWarsToday,
-} from "../towerWars/towerWarsService";
+} from "../experience/towerWars/towerWarsService";
 import { visualStateForBusinessStatus } from "@shared/driverGameWorld";
 import type { TowerWarsSettlement } from "@shared/towerWarsSettlement";
 

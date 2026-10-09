@@ -1,0 +1,200 @@
+import { readCommercialWorldFactsForActor } from "../../commercialMissions/commercialWorldReadService";
+import { randomUUID } from "node:crypto";
+import { and, eq, sql } from "drizzle-orm";
+import { driverGameWorldNodes } from "../../../drizzle/schema";
+import {
+  unresolvedEchoForVisit,
+  visualStateForBusinessStatus,
+  type DriverGameWorldNode,
+} from "../../../shared/driverGameWorld";
+import type { CommercialMissionStatus } from "../../../shared/commercialMission";
+import { PARKING_LOT_CLERK_PROVENANCE } from "../../../shared/commercialMissionField";
+import { getDb } from "../../db";
+
+let tableReady: Promise<void> | null = null;
+
+async function ensureDriverGameWorldTable() {
+  if (tableReady) return tableReady;
+  tableReady = (async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.execute(
+      sql.raw(`CREATE TABLE IF NOT EXISTS driver_game_world_nodes (
+      id varchar(36) NOT NULL PRIMARY KEY, tenantId varchar(64) NOT NULL, actorId varchar(128) NOT NULL,
+      missionId int NOT NULL, entityType varchar(64) NOT NULL DEFAULT 'commercial_mission', entityId varchar(191) NOT NULL,
+      locationId int NULL, visualState enum('available','approaching','active','captured','contested','recovery_available','recovery_active','watching','closed') NOT NULL,
+      worldAnchor varchar(64) NOT NULL DEFAULT 'fortress_gate', unlockedPath varchar(64) NULL,
+      discoveryState enum('hidden','discovered','engaged') NOT NULL DEFAULT 'discovered', lastResolvedAt timestamp NULL,
+      metadataJson json NULL, version int NOT NULL DEFAULT 1, createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_driver_game_world_actor_mission (tenantId,actorId,missionId),
+      KEY idx_driver_game_world_tenant_actor_state (tenantId,actorId,visualState,updatedAt)
+    )`)
+    );
+  })().catch(error => {
+    tableReady = null;
+    throw error;
+  });
+  return tableReady;
+}
+
+export async function listDriverGameWorld(input: {
+  tenantId: string;
+  actorId: string;
+}): Promise<DriverGameWorldNode[]> {
+  await ensureDriverGameWorldTable();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [businessRows, savedRows] = await Promise.all([
+    readCommercialWorldFactsForActor(input),
+    db
+      .select()
+      .from(driverGameWorldNodes)
+      .where(
+        and(
+          eq(driverGameWorldNodes.tenantId, input.tenantId),
+          eq(driverGameWorldNodes.actorId, input.actorId)
+        )
+      ),
+  ]);
+  const savedByMission = new Map(savedRows.map(row => [row.missionId, row]));
+  const rows = businessRows.map(row => {
+    const saved = savedByMission.get(row.missionId);
+    return {
+      ...row,
+      savedVisualState: saved?.visualState ?? null,
+      savedWorldAnchor: saved?.worldAnchor ?? null,
+      savedUnlockedPath: saved?.unlockedPath ?? null,
+      savedDiscoveryState: saved?.discoveryState ?? null,
+      savedVersion: saved?.version ?? null,
+      savedResolvedAt: saved?.lastResolvedAt ?? null,
+    };
+  });
+
+  const byMission = new Map<number, DriverGameWorldNode>();
+  for (const row of rows) {
+    const visualState = visualStateForBusinessStatus({
+      missionStatus: row.missionStatus as CommercialMissionStatus,
+      savedVisualState: row.savedVisualState,
+    });
+    const existing = byMission.get(row.missionId);
+    const followUpDue = row.followUpDue?.toISOString() ?? null;
+    if (existing) {
+      if (!existing.contestedUntil && followUpDue) {
+        existing.contestedUntil = followUpDue;
+      }
+      continue;
+    }
+    byMission.set(row.missionId, {
+      missionId: row.missionId,
+      entityType: "commercial_mission",
+      entityId: String(row.missionId),
+      accountId: row.accountId,
+      accountName: row.accountName,
+      locationId: row.locationId ?? null,
+      missionStatus: row.missionStatus as CommercialMissionStatus,
+      visualState,
+      worldAnchor:
+        visualState === "recovery_active"
+          ? "gold_side_entrance"
+          : (row.savedWorldAnchor ?? "fortress_gate"),
+      unlockedPath:
+        visualState === "contested" || visualState === "recovery_active"
+          ? (row.savedUnlockedPath ?? "gold_recovery_path")
+          : null,
+      discoveryState: row.savedDiscoveryState ?? "discovered",
+      contestedUntil: followUpDue,
+      verifiedAnnualValueCents:
+        row.missionStatus === "won" && row.pipelineStage === "won"
+          ? (row.approvedContractValueCents ?? null)
+          : null,
+      realizedRevenueCents: row.realizedRevenueCents ?? 0,
+      lossReason: row.lossReason ?? null,
+      version: row.savedVersion ?? 0,
+      isTodayActive: !["won", "lost"].includes(row.missionStatus),
+      isHistorical: ["won", "lost"].includes(row.missionStatus),
+      regionKey:
+        row.savedWorldAnchor ??
+        (row.locationId ? `location_${row.locationId}` : "fortress_gate"),
+      resolvedAt:
+        (row.savedResolvedAt ?? row.missionCompletedAt)?.toISOString() ?? null,
+      realVisitReaction:
+        row.clerkActorId && row.clerkCreatedAt
+          ? {
+              kind: "completed_visit_trace",
+              missionId: row.missionId,
+              provenance: PARKING_LOT_CLERK_PROVENANCE,
+              reportedBy: row.clerkActorId,
+              reportedAt: row.clerkCreatedAt.toISOString(),
+            }
+          : null,
+      unresolvedEcho: unresolvedEchoForVisit({
+        missionId: row.missionId,
+        missionStatus: row.missionStatus as CommercialMissionStatus,
+        clerkReportedAt: row.clerkCreatedAt?.toISOString() ?? null,
+      }),
+    });
+  }
+  return Array.from(byMission.values());
+}
+
+export async function beginDriverRekindle(input: {
+  tenantId: string;
+  actorId: string;
+  missionId: number;
+}): Promise<DriverGameWorldNode> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const world = await listDriverGameWorld(input);
+  const node = world.find(item => item.missionId === input.missionId);
+  if (!node)
+    throw new Error("Commercial mission not found in this field world");
+  if (node.missionStatus === "lost") {
+    throw new Error("Closed opportunities cannot enter recovery");
+  }
+  if (node.missionStatus !== "follow_up") {
+    throw new Error("A real follow-up must exist before recovery can begin");
+  }
+  if (node.visualState === "recovery_active") return node;
+  const id = randomUUID();
+  const resolvedAt = new Date();
+  await db
+    .insert(driverGameWorldNodes)
+    .values({
+      id,
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      missionId: input.missionId,
+      entityType: "commercial_mission",
+      entityId: String(input.missionId),
+      locationId: node.locationId,
+      visualState: "recovery_active",
+      worldAnchor: "gold_side_entrance",
+      unlockedPath: "gold_recovery_path",
+      discoveryState: "engaged",
+      lastResolvedAt: resolvedAt,
+      metadataJson: { source: "follow_up_due" },
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        visualState: "recovery_active",
+        worldAnchor: "gold_side_entrance",
+        unlockedPath: "gold_recovery_path",
+        discoveryState: "engaged",
+        lastResolvedAt: resolvedAt,
+        version: sql`${driverGameWorldNodes.version} + 1`,
+      },
+    });
+  return {
+    ...node,
+    visualState: "recovery_active",
+    worldAnchor: "gold_side_entrance",
+    unlockedPath: "gold_recovery_path",
+    discoveryState: "engaged",
+    version: node.version + 1,
+    isTodayActive: true,
+    isHistorical: false,
+    regionKey: "gold_side_entrance",
+    resolvedAt: resolvedAt.toISOString(),
+  };
+}

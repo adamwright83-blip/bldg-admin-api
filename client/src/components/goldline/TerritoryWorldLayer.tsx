@@ -4,7 +4,7 @@ import { challengeSummary, type PresentedTerritory } from "@shared/goldlineTerri
 import { guardianById } from "@shared/goldlineGuardians";
 import { buildVeilGeometry, pointInPolygon } from "@shared/goldlineTerritoryGeometry";
 import { trpc } from "@/lib/trpc";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/goldlineWorld/cityWorldService";
 import { TerritoryVeilLayer } from "./TerritoryVeilLayer";
 import { GuardianActor } from "./GuardianActor";
 import { GuardianEncounter } from "./GuardianEncounter";
