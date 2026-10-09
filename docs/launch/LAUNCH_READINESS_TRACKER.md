@@ -65,7 +65,7 @@
 
 | #533 | `codex/real-customer-acceptance` | Correct mocked UI and preview-only isolation claims | `37dacd3549053ddfbe1c03593b1ea52fc5f0863b` | MERGED |
 | #534 | `codex/real-acceptance-environment` | Real browser/backend/MySQL onboarding, mission, second-login and tenant-isolation acceptance; persisted Day Line receipt | `4f68941b1e889073cfd00bd135aa0dd8061a513c` | MERGED |
-| #535 | `codex/acceptance-schema-approval` | Restore omitted production context schema from existing historical DDL | candidate `00b477e29308ac51bb60603fbd0a6b427ebe8a1a` | OPEN FOR APPROVAL |
+| #535 | `codex/acceptance-schema-approval` | Restore omitted production context schema from existing historical DDL | candidate `fcf061041189d2cffc5bbf5eb445582f3ef4d9cf` | OPEN FOR APPROVAL |
 
 ## 4. Real Acceptance Release Gates
 
@@ -75,9 +75,17 @@ MySQL, with guarded required historical schema in the disposable test database.
 procedures, database checks, screenshots, source SHA and hosted CI run.
 
 Production bootstrap omits required context stores. PR #535 repairs those omissions
-and remains **OPEN FOR APPROVAL** because it changes production schema. Stripe
-provider verification remains **BLOCKED** by missing verified JOYSTICK test-mode
-configuration. Overall launch remains **IN PROGRESS**, with **NO-GO** for inviting
-the first ten trial customers until both gates are resolved. Earlier mocked UI
+and remains **OPEN FOR APPROVAL** because it changes production schema. Pre-upgrade
+data preservation and idempotent migrations have been verified against disposable MySQL 8.
+Stripe provider verification remains **BLOCKED** by missing verified JOYSTICK test-mode
+configuration; automated test harness and requirements documented in [Stripe Provider Acceptance](STRIPE_PROVIDER_ACCEPTANCE.md).
+
+Release execution documentation and operational playbooks are ready:
+- [Deployment Sequence](DEPLOYMENT_SEQUENCE.md)
+- [Rollback and Recovery Playbook](ROLLBACK_AND_RECOVERY.md)
+- [First 10 Customers Operational Playbook](FIRST_TEN_CUSTOMERS_OPS.md)
+
+Overall launch remains **IN PROGRESS**, with **NO-GO** for inviting
+the first ten trial customers until both gates (PR #535 schema approval and live Stripe test mode verification) are resolved. Earlier mocked UI
 coverage remains useful and separately classified; CERT-1 through CERT-6 remain
 static source contracts.

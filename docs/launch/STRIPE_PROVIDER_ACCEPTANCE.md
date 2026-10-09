@@ -45,3 +45,14 @@ The suite refuses a database whose name does not contain `billing_lifecycle`. It
 The injected `fakeStripe` adapter fabricates Checkout, subscription retrieval, and signature verification. Its configurable fixture deliberately uses a nine-day trial and synthetic prices. Consequently, even a passing run is **REAL MYSQL INTEGRATION PASSED**, not proof of a seven-day/$49 provider plan, actual card-on-file behavior, real webhook signatures, or absence of early Stripe charges.
 
 Hosted execution: [launch run 37971466617](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37971466617), PR #534, exact source SHA `0b1556b5937fc76b41613b3a3faae239a512a2d1`. Billing lifecycle: **REAL MYSQL INTEGRATION PASSED**, 2 tests. Provider acceptance remains **BLOCKED** regardless of the database integration result.
+
+## Test-mode harness and blocker verification
+
+An automated test-mode acceptance harness is implemented at `server/saas/stripeProviderAcceptance.ts` and tested via `server/saas/stripeProviderAcceptance.test.ts`.
+
+When executed without verified provider credentials, it asserts `BLOCKED` with explicit missing environment variables:
+- `DAYFORGE_BILLING_STRIPE_SECRET_KEY`
+- `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`
+- `DAYFORGE_BILLING_APP_URL`
+
+When configured with a live or invalid key format, it rejects execution immediately before making external requests. When valid test credentials and a disposable database are provided, it verifies account ownership (ensuring Laundry Farm is not targeted), asserts the presence of the 7-day trial and $49/mo USD price in `dayforge_saas_billing_plans`, and tests subscription checkout creation without touching production data.
