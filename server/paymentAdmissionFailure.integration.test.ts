@@ -172,7 +172,10 @@ describe("native Stripe payment durable-admission failure", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "Authority receipt did not persist",
+      paymentIntentId: "pi_provider_succeeded",
+      reconciliationRequired: true,
+      error:
+        "Payment was captured by Stripe (pi_provider_succeeded), but authority admission failed: Authority receipt did not persist. Payment reconciliation is required. Do not retry the charge blindly.",
     });
 
     expect(mocks.attributeOrderFromCampaign).not.toHaveBeenCalled();
