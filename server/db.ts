@@ -1011,6 +1011,7 @@ export type UpdateOrderStatusGuard = {
   expectedTenantId?: string | null;
   expectedVendorId?: number | null;
   requireUnassignedVendor?: boolean;
+  testPreUpdateHook?: () => Promise<void> | void;
 };
 
 export async function attemptOrderPickupCollection(
@@ -1071,9 +1072,7 @@ export async function updateOrderStatus(
 
     if (guard) {
       if (guard.expectedTenantId !== undefined) {
-        const expected = guard.expectedTenantId?.trim() ?? null;
-        const actual = previousOrder.tenantId?.trim() ?? null;
-        if (actual !== expected) {
+        if (previousOrder.tenantId !== guard.expectedTenantId) {
           throw new OrderUpdateConflictError(
             "Order tenant changed concurrently"
           );
@@ -1100,9 +1099,7 @@ export async function updateOrderStatus(
     const updateConditions = [eq(orders.id, orderId)];
     if (guard?.expectedTenantId !== undefined) {
       updateConditions.push(
-        guard.expectedTenantId === null
-          ? sql`${orders.tenantId} IS NULL OR ${orders.tenantId} = ''`
-          : sql`${orders.tenantId} <=> ${guard.expectedTenantId}`
+        sql`${orders.tenantId} <=> ${guard.expectedTenantId}`
       );
     }
     if (guard?.requireUnassignedVendor) {
@@ -1112,6 +1109,10 @@ export async function updateOrderStatus(
       guard.expectedVendorId !== null
     ) {
       updateConditions.push(eq(orders.vendorId, guard.expectedVendorId));
+    }
+
+    if (guard?.testPreUpdateHook) {
+      await guard.testPreUpdateHook();
     }
 
     const updateResult = await tx

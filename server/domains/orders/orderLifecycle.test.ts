@@ -561,6 +561,160 @@ describe("orderLifecycleService canonical authority", () => {
       expect(res.order.status).toBe("delivered");
     });
 
+    it("allows default-host vendor 77 to deliver a tenant-other order assigned to vendor 77 with admitted payment evidence", async () => {
+      const mockTx = {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+          }),
+        }),
+      };
+      db.getDb.mockResolvedValue(mockTx);
+      db.getOrderById
+        .mockResolvedValueOnce({
+          id: 55,
+          tenantId: "tenant-other",
+          vendorId: 77,
+          status: "ready",
+          paid: true,
+          stripePaymentIntentId: "pi_55",
+        })
+        .mockResolvedValueOnce({
+          id: 55,
+          tenantId: "tenant-other",
+          vendorId: 77,
+          status: "delivered",
+          paid: true,
+          stripePaymentIntentId: "pi_55",
+        });
+      payment.authorized.mockReturnValue(true);
+
+      const res = await transitionNativeOrderStatus({
+        orderId: 55,
+        status: "delivered",
+        tenantId: "default",
+        vendorId: 77,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.alreadyCompleted).toBe(false);
+      expect(res.order.status).toBe("delivered");
+    });
+
+    it("denies vendor 88 from delivering a tenant-other order assigned to vendor 77", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 55,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "ready",
+        paid: true,
+        stripePaymentIntentId: "pi_55",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 55,
+          status: "delivered",
+          tenantId: "default",
+          vendorId: 88,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    });
+
+    it("denies vendor 77 from delivering an unassigned tenant-other order", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 56,
+        tenantId: "tenant-other",
+        vendorId: null,
+        status: "ready",
+        paid: true,
+        stripePaymentIntentId: "pi_56",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 56,
+          status: "delivered",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    });
+
+    it("denies delivery when order is unpaid or paid without matching payment admission evidence", async () => {
+      // 4a. Unpaid
+      db.getOrderById.mockResolvedValueOnce({
+        id: 57,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "ready",
+        paid: false,
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 57,
+          status: "delivered",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "PAYMENT_REQUIRED",
+        message: "Charge the order before marking it delivered.",
+      });
+
+      // 4b. Paid flag true, but no matching payment authority receipt
+      db.getOrderById.mockResolvedValueOnce({
+        id: 58,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "ready",
+        paid: true,
+        stripePaymentIntentId: "pi_58",
+      });
+      payment.authorized.mockReturnValueOnce(false);
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 58,
+          status: "delivered",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "PAYMENT_REQUIRED",
+        message: "Matching Payment admission is required before delivery.",
+      });
+    });
+
+    it("handles repeated delivery of the same order idempotently with no duplicate effects", async () => {
+      db.getDb.mockResolvedValue({});
+      db.getOrderById.mockResolvedValue({
+        id: 59,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "delivered",
+        paid: true,
+        stripePaymentIntentId: "pi_59",
+      });
+      payment.authorized.mockReturnValue(true);
+
+      const res = await transitionNativeOrderStatus({
+        orderId: 59,
+        status: "delivered",
+        tenantId: "default",
+        vendorId: 77,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.alreadyCompleted).toBe(true);
+      expect(res.order.status).toBe("delivered");
+    });
+
     it("executes standard transitions using updateOrderStatus", async () => {
       db.getOrderById
         .mockResolvedValueOnce({

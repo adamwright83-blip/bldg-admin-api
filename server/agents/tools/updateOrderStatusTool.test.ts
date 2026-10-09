@@ -51,6 +51,9 @@ describe("updateOrderStatusTool tenant authority", () => {
       expect.objectContaining({
         actorUserId: "driver-1",
         actorDisplayName: "driver",
+      }),
+      expect.objectContaining({
+        expectedTenantId: "tenant-a",
       })
     );
     expect(result.output).toEqual({ orderId: 41, status: "processing" });

@@ -422,10 +422,17 @@ describe("resident-safe agent tools", () => {
 
     const result = await cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx);
 
-    expect(dbMocks.updateOrderStatus).toHaveBeenCalledWith(172, "cancelled", expect.objectContaining({
-      actorUserId: "bldg_user:42",
-      actorDisplayName: "resident_chat",
-    }));
+    expect(dbMocks.updateOrderStatus).toHaveBeenCalledWith(
+      172,
+      "cancelled",
+      expect.objectContaining({
+        actorUserId: "bldg_user:42",
+        actorDisplayName: "resident_chat",
+      }),
+      expect.objectContaining({
+        expectedTenantId: "default",
+      })
+    );
     expect(result.output).toMatchObject({ orderCancelled: true, orderId: 172, status: "cancelled" });
   });
 
