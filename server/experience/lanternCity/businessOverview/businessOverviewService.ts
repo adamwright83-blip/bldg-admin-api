@@ -7,15 +7,15 @@ import {
   legacyDayforgeSaasTenants,
   orderPaymentEvents,
   territoryScanResults,
-} from "../../drizzle/schema";
-import { sourcedFact, unknownValue } from "../../shared/businessGame";
-import { getDb } from "../db";
-import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
-import { resolvePeriod } from "../analytics/businessPeriods";
-import { listCustomerAssets } from "../customerAssets/customerAssetProjection";
-import type { RankedTerritoryOpportunity } from "../territory/territoryDiscovery";
-import type { BusinessStage, BusinessWorldProjection, WorldPoint } from "./businessWorldTypes";
-import { getCapabilityEvaluations } from "../capabilities/capabilityEvaluationService";
+} from "../../../../drizzle/schema";
+import { sourcedFact, unknownValue } from "../../../../shared/businessGame";
+import { getDb } from "../../../db";
+import { readCanonicalRevenue } from "../../../analytics/canonicalRevenue";
+import { resolvePeriod } from "../../../analytics/businessPeriods";
+import { listCustomerAssets } from "../../../customerAssets/customerAssetProjection";
+import type { RankedTerritoryOpportunity } from "../../../territory/territoryDiscovery";
+import type { BusinessStage, BusinessWorldProjection, WorldPoint } from "./businessOverviewTypes";
+import { getCapabilityEvaluations } from "../../../capabilities/capabilityEvaluationService";
 
 export function deriveBusinessStage(input: { activeNonOwnerMembers: number; firstHireReady?: boolean; capacityConstrained?: boolean; sustainableSolo?: boolean }): BusinessStage {
   if (input.activeNonOwnerMembers >= 8) return "OPERATOR";

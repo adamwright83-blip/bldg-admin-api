@@ -26,3 +26,19 @@ Old → new mapping: every listed filename moves from `server/joystick/` to `ser
 - VERIFIED: `businessWorld/businessWorldService.ts` performs reads and composes canonical revenue, customer assets, memberships, territory signals and capabilities. This is a downstream business overview projection, not a second business authority.
 - VERIFIED: `worldForge/officialPropertyResearch.ts` fetches bounded public official-site evidence with DNS/private-target protection and source excerpts. Separate integration ownership from artwork/builder orchestration.
 - UNKNOWN: final placement of remaining mixed files requires their own source/dependency/write classification before movement. Directory naming alone does not establish ownership.
+
+## E5b — Driver projection versus real field execution
+
+Prerequisite E5a merged as #515, verified main `d602fa6058969ca7ee7a28d7e2202b9b09531eb9`; all four gates, TypeScript, 57 Orders/SaaS assertions and matched 4/4 real-MySQL assertions passed. Hosted fast contracts passed; world, legacy and mobile retain exactly the recovery baseline failure identities.
+
+Classified source and source-contract tests before relocation. The per-file map in `evidence/program-e-e5b-files.json` records responsibilities, writes, dependencies and test coverage. The three different lanes are deliberately separate:
+
+- Experience Driver owns only visual nodes, progression reads and `missionMutations` interpretation. `verifiedAt` remains NULL for visual recovery intent. `missionMutationService` never mutates native Orders, Payment or Commercial outcomes.
+- Field outreach owns real operator-first phone workflows, pinned contacts, membership, verified outgoing caller ID, provider legs and CAS/recovery. It calls the existing Commercial outcome service. No provider call was executed during validation.
+- Field Scout is an application orchestrator, not game authority: provider discovery → persisted territory scan → canonical Commercial mission creation → derived Scout/node publication. Real mission authority remains in `commercialMissionStore`. Existing atomicity and every persisted identifier stay unchanged.
+- Composition owns the existing mixed public router. Procedure names/input/auth scopes remain byte-equivalent after import resolution; no new router or endpoint is invented.
+- Lantern City's business overview reads owning-domain/customer/financial projections. Its collected-revenue contract remains canonical admitted economics, and unavailable is UNKNOWN rather than zero. Public `businessWorld` API and response symbols remain compatibility contracts; the source directory/files now identify it as overview composition.
+
+No protected implementation/test file is a consumer requiring edits in this slice. Old API/event/table names are preserved. The mobile workflow selector must follow the split lanes so future field/game changes keep their coverage. Pre-move broader selection: 32 files, 188 passes, exactly two known Tower Wars baseline failures.
+
+E5b local validation on committed source: all four architecture gates pass, 200 assertions pass across 34 files with the same two Tower Wars baseline failures (expanded selection adds schema-path and Commercial reader contracts). Real MySQL mission-interpretation persistence is 4/4 on exact clean pre-E and 4/4 after relocation. An initial pre-move invocation overlapped edits and is excluded; it is not used as baseline evidence. Broad baseline 188/2 and expanded repair 200/2 are distinct selections, not an identical full-suite comparison. The rule destinations include Experience so future moves cannot evade Commercial/Money/Geography downstream restrictions.

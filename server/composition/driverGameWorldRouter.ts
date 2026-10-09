@@ -5,12 +5,12 @@ import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import {
   beginDriverRekindle,
   listDriverGameWorld,
-} from "./driverGameWorldService";
+} from "../experience/goldline/driver/driverGameWorldService";
 import {
   evaluateAndPersistMutation,
   evidenceFromWorldNode,
   getLatestMutation,
-} from "./missionMutationService";
+} from "../experience/goldline/driver/missionMutationService";
 import {
   breakColdCallCombo,
   completeColdCallTarget,
@@ -19,7 +19,7 @@ import {
   getColdCallRollingCall,
   rollColdCallTarget,
   selectColdCallChainTarget,
-} from "./coldCallBurstService";
+} from "../field/outreach/coldCallBurstService";
 import { ColdCallCallerIdUnverifiedError } from "../salesCalls";
 import { ProspectLegNotConnectedError } from "../../shared/coldCallBurst";
 import { COMMERCIAL_MISSION_CALL_OUTCOMES } from "../commercialMissions/commercialMissionCallService";
@@ -27,9 +27,9 @@ import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScou
 import {
   getLatestScoutReport,
   runExpansionScout,
-} from "./expansionScoutService";
+} from "../field/scout/expansionScoutService";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { projectGoldlineProgressionForIdentity } from "./progressionProjectionService";
+import { projectGoldlineProgressionForIdentity } from "../experience/goldline/driver/progressionProjectionService";
 
 function scoutProvider() {
   const key =

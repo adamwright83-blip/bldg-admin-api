@@ -13,7 +13,7 @@ import {
   type ExpansionScoutEvidence,
 } from "../../shared/expansionScout";
 import { getDb } from "../db";
-import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
+import { projectGoldlineProgressionForIdentity } from "../experience/goldline/driver/progressionProjectionService";
 
 export async function getExpansionScoutEvidence(input: {
   tenantId: string;

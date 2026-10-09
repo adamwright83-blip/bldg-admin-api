@@ -15,9 +15,9 @@ later without a rewrite.
 | Source | Where | Real output shape |
 |---|---|---|
 | FIELD | `server/field/getFieldMoves.ts` | `FieldMoveCandidate` / `FieldMovesResult` |
-| Cold Call | `server/driverGameWorld/coldCallBurstService.ts` | `ColdCallBatch` / `ColdCallTarget` (`shared/coldCallBurst.ts`) |
-| Recovery / Rekindle | `server/driverGameWorld/driverGameWorldService.ts` | `DriverGameWorldNode` (`shared/driverGameWorld.ts`) |
-| Expansion Scout | `server/driverGameWorld/expansionScoutService.ts` | `ScoutDiscovery` → a real `commercialMissions` row |
+| Cold Call | `server/field/outreach/coldCallBurstService.ts` | `ColdCallBatch` / `ColdCallTarget` (`shared/coldCallBurst.ts`) |
+| Recovery / Rekindle | `server/experience/goldline/driver/driverGameWorldService.ts` | `DriverGameWorldNode` (`shared/driverGameWorld.ts`) |
+| Expansion Scout | `server/field/scout/expansionScoutService.ts` | `ScoutDiscovery` → a real `commercialMissions` row |
 
 These are four independently-shaped services, not four implementations of a
 shared runtime interface — and this run does not force them into one. What

@@ -1,5 +1,5 @@
-import type { CustomerAssetSummary } from "../customerAssets/customerAssetTypes";
-import type { DataQuality, ProvenancedValue } from "../../shared/businessGame";
+import type { CustomerAssetSummary } from "../../../customerAssets/customerAssetTypes";
+import type { DataQuality, ProvenancedValue } from "../../../../shared/businessGame";
 
 export type BusinessStage = "SOLO" | "SUSTAINABLE_SOLO" | "CAPACITY_CONSTRAINED" | "FIRST_HIRE_READY" | "TEAM" | "CREW_CHIEF" | "OPERATOR" | "TYCOON";
 
