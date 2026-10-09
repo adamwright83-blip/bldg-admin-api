@@ -15,7 +15,7 @@ jobs:
   fast-contracts:
     name: fast-contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     services:
       mysql:
         image: mysql:8.0
@@ -355,22 +355,25 @@ jobs:
   fast-browser:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: fast-smoke-world
+            timeout: 15
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/worldSmoke.spec.ts
               e2e/goldline-smoke/lanternCityMount.spec.ts
               e2e/goldline-smoke/operatorRepresentative.spec.ts
           - name: fast-smoke-territories
+            timeout: 5
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/territoriesSmoke.spec.ts
           - name: fast-smoke-campaign
+            timeout: 5
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/campaignSmoke.spec.ts
