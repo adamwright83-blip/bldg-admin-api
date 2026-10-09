@@ -156,7 +156,8 @@ const GoldlineFictionHarness =
 
 export default function GoldlineDriverController({
   onOpenFirstMission,
-}: { onOpenFirstMission?: () => void } = {}) {
+  firstMissionEvidence,
+}: { onOpenFirstMission?: () => void; firstMissionEvidence?: { text: string; reportedAt: string } | null } = {}) {
   const search = new URLSearchParams(window.location.search);
   if (GoldlineProgressionHarness && search.has("goldlineProgressionFixture")) {
     return (
@@ -181,14 +182,16 @@ export default function GoldlineDriverController({
     );
   }
   return (
-    <LiveGoldlineDriverController onOpenFirstMission={onOpenFirstMission} />
+    <LiveGoldlineDriverController onOpenFirstMission={onOpenFirstMission} firstMissionEvidence={firstMissionEvidence} />
   );
 }
 
 function LiveGoldlineDriverController({
   onOpenFirstMission,
+  firstMissionEvidence,
 }: {
   onOpenFirstMission?: () => void;
+  firstMissionEvidence?: { text: string; reportedAt: string } | null;
 }) {
   const launchSearch = new URLSearchParams(window.location.search);
   const launchOperationId = launchSearch.get("lanternOperation");
@@ -1485,6 +1488,7 @@ function LiveGoldlineDriverController({
     <div className="driver-day-home" data-testid="driver-day-home">
       <GoldlineDayPlan
         onOpenFirstMission={onOpenFirstMission}
+        firstMissionEvidence={firstMissionEvidence}
         onOpenJournal={() => setJournalOpen(true)}
         onResolveStop={resolveDayStop}
         onArchiveStop={async stop => {

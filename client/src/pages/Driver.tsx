@@ -217,7 +217,7 @@ function AuthenticatedDriver() {
   return (
     <>
       <ClaireAnalysisInbox />
-      <GoldlineDriverController onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />
+      <GoldlineDriverController firstMissionEvidence={firstMission?.outcome} onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />
     </>
   );
 }

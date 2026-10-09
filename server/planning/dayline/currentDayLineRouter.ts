@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
+import { goldlineWorldEvents } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { businessDateInZone } from "../../../shared/currentDayLine";
+import { getDashboardTimeZone } from "../../dashboardZoned";
 import { TRPCError } from "@trpc/server";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { requireEffectiveOperatorIdentityForTenant } from "../../agents/persistentOperator/identity";
@@ -87,6 +92,24 @@ export const currentDayLineRouter = router({
         }).catch(() => undefined)
       )
     );
+    // Completed field evidence is a read-only receipt, outside Mission Director ranking.
+    // Actor and tenant predicates preserve the scope of the authenticated operator.
+    const db = await getDb();
+    if (db) {
+      const events = await db.select().from(goldlineWorldEvents).where(and(
+        eq(goldlineWorldEvents.tenantId, identity.tenantId),
+        eq(goldlineWorldEvents.actorId, identity.canonicalOpenId),
+        eq(goldlineWorldEvents.eventType, "territory_scout_observed"),
+        eq(goldlineWorldEvents.verificationClass, "ATTESTED"),
+        eq(goldlineWorldEvents.sourceType, "goldline_first_mission")
+      ));
+      line.completedEvidence = events
+        .filter(event => businessDateInZone(event.occurredAt, getDashboardTimeZone()) === line.businessDate)
+        .map(event => ({ missionId: event.sourceId!, status: "completed" as const,
+          text: String((event.metadataJson as { text?: string } | null)?.text ?? ""),
+          reportedAt: event.occurredAt.toISOString(), verificationClass: "ATTESTED" as const,
+          provenance: "operator_reported" as const }));
+    }
     return line;
   }),
 
