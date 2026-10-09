@@ -3,8 +3,10 @@
     /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
         --python scripts/assets/coastal-proof/build_trailblazer.py -- [--sources ~/Desktop/coastal-proof-sources] [--render out_prefix]
 
-Built ON the CC0 Quaternius Superhero_Female_FullBody base (65-bone skeleton shared with the
-animation library). Canon: ~/Desktop/coastal-proof-refs/trailblazer-v2-*.png. Sides below are
+Her body, head, skin, eyes, brows and lashes are MakeHuman's (CC0), fitted to the CC0 Quaternius
+Superhero_Female_FullBody skeleton by build_mh_body.py (the 65-bone skeleton shared with the animation
+library). Run that first; without its output, or with --quaternius-body, she is built on the Quaternius
+mannequin body as before. Canon: ~/Desktop/coastal-proof-refs/trailblazer-v2-*.png. Sides below are
 HER left/right; the base faces -Y, so her left is +X.
 
 - cream cropped sleeveless top, laced V front, olive side panels, leather shoulder straps with brass buckles
@@ -64,14 +66,131 @@ def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+MH_BLEND = os.path.join(SRC, "mpfb", "trailblazer_mh_body.blend")
+MH_DATA = os.path.expanduser("~/Library/Application Support/Blender/5.2/extensions/.user/user_default/mpfb/data")
+USE_MH = "--quaternius-body" not in argv and os.path.exists(MH_BLEND)
+
+
+def image_material(name, path, alpha=False, roughness=0.6):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(path)
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    if alpha:
+        nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        if hasattr(m, "blend_method"):
+            m.blend_method = "CLIP"
+    bsdf.inputs["Roughness"].default_value = roughness
+    return m
+
+
+def import_mh_body(arm):
+    """Trailblazer's MakeHuman body/head/eyes/brows/lashes (build_mh_body.py), already fitted and weighted
+    to this same Quaternius skeleton: bind them to the armature imported here."""
+    with bpy.data.libraries.load(MH_BLEND) as (src, dst):
+        dst.objects = [n for n in src.objects if n in ("TB_Body", "TB_Eyes", "TB_Brows", "TB_Lashes")]
+    parts = {}
+    for ob in dst.objects:
+        bpy.context.scene.collection.objects.link(ob)
+        ob.parent = arm
+        ob.matrix_parent_inverse = arm.matrix_world.inverted()
+        for mod in ob.modifiers:
+            if mod.type == "ARMATURE":
+                mod.object = arm
+        ob.data.materials.clear()
+        parts[ob.name] = ob
+    # MakeHuman's eyes are an eyeball plus a clear cornea shell over it; three.js would draw the shell
+    # opaque (a blank pale disc over the iris), so drop it: its faces map to the texture's small corner swatch
+    eyes = parts["TB_Eyes"].data
+    bm = bmesh.new()
+    bm.from_mesh(eyes)
+    uvl = bm.loops.layers.uv.active
+    cornea = [f for f in bm.faces if all(l[uvl].uv.x > 0.85 and l[uvl].uv.y < 0.14 for l in f.loops)]
+    bmesh.ops.delete(bm, geom=cornea, context="FACES")
+    bm.to_mesh(eyes)
+    bm.free()
+    print(f"[trailblazer] eyes: dropped {len(cornea)} cornea faces")
+    # MakeHuman fits brows and lashes to its own base mesh; on this body parts of them end up a few
+    # millimetres under the skin, where the depth test hides them. Lift any such vertex onto the skin.
+    bme = parts["TB_Body"].data
+    tree = BVHTree.FromPolygons([v.co.copy() for v in bme.vertices], [tuple(p.vertices) for p in bme.polygons])
+    for name, gap in (("TB_Brows", 0.0012), ("TB_Lashes", 0.0006)):
+        moved = 0
+        for v in parts[name].data.vertices:
+            hit, nrm, _, _ = tree.find_nearest(v.co)
+            if hit is not None and (v.co - hit).dot(nrm) < gap:
+                v.co = hit + nrm * gap
+                moved += 1
+        print(f"[trailblazer] {name}: lifted {moved}/{len(parts[name].data.vertices)} vertices onto the skin")
+    skin = os.path.join(MH_DATA, "skins", "young_asian_female", "young_lightskinned_female_diffuse3.png")
+    parts["TB_Body"].data.materials.append(image_material("MI_Superhero_MH_Skin", skin, roughness=0.62))
+    parts["TB_Eyes"].data.materials.append(image_material("TB_Eyes", os.path.join(MH_DATA, "eyes", "materials", "brown_eye.png"), roughness=0.12))
+    parts["TB_Brows"].data.materials.append(image_material("TB_Brows", os.path.join(MH_DATA, "eyebrows", "eyebrow001", "eyebrow001.png"), alpha=True, roughness=0.7))
+    parts["TB_Lashes"].data.materials.append(image_material("TB_Lashes", os.path.join(MH_DATA, "eyelashes", "eyelashes01", "eyelashes01.png"), alpha=True, roughness=0.7))
+    print(f"[trailblazer] MakeHuman body: {len(parts['TB_Body'].data.vertices)} verts, skin {os.path.basename(skin)}")
+    return parts["TB_Body"]
+
+
+def head_box(ob):
+    """World bounds of the vertices the Head bone owns (the skull and face)."""
+    idx = ob.vertex_groups.get("Head")
+    if idx is None:
+        return None
+    mw = ob.matrix_world
+    pts = [mw @ v.co for v in ob.data.vertices if any(g.group == idx.index and g.weight > 0.5 for g in v.groups)]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    return lo, hi
+
+
+# The hair pack, the bun, the tie and the face-framing strands were placed on the mannequin's head.
+# On the MakeHuman head they are carried by the map from one head's bounds onto the other's.
+HEAD_FIT = None
+
+
+def fit_head(co):
+    if HEAD_FIT is None:
+        return co
+    (qlo, qhi), (mlo, mhi) = HEAD_FIT
+    return Vector(tuple(mlo[i] + (co[i] - qlo[i]) * (mhi[i] - mlo[i]) / max(1e-6, qhi[i] - qlo[i]) for i in range(3)))
+
+
 def import_base():
+    global HEAD_FIT
     bpy.ops.import_scene.gltf(filepath=BASE)
     for ob in list(bpy.data.objects):
         if ob.type == "MESH" and ob.parent is None:
             bpy.data.objects.remove(ob)
     arm = [o for o in bpy.data.objects if o.type == "ARMATURE"][0]
     body = bpy.data.objects["Superhero_Female"]
+    if USE_MH:
+        q_head = head_box(body)
+        # the MakeHuman body replaces the mannequin's body, eyes and brows; the skeleton is the same one
+        for ob in [o for o in bpy.data.objects if o.type == "MESH" and o.parent is arm]:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        body = import_mh_body(arm)
+        HEAD_FIT = (q_head, head_box(body))
+        print(f"[trailblazer] head fit: mannequin {q_head[0][:]}..{q_head[1][:]} -> MakeHuman {HEAD_FIT[1][0][:]}..{HEAD_FIT[1][1][:]}")
     return arm, body
+
+
+def subdivided(body):
+    """A once-subdivided copy of the body for cutting garments from: finer faces, so a cut line
+    follows the design instead of the base mesh's quads. bmesh carries the skin weights over."""
+    me = body.data.copy()
+    ob = body.copy()
+    ob.data = me
+    ob.name = "TB_GarmentSource"
+    bpy.context.scene.collection.objects.link(ob)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=1, use_grid_fill=True)
+    bm.to_mesh(me)
+    bm.free()
+    return ob
 
 
 def bone_names(arm):
@@ -111,14 +230,23 @@ def snap_boundary(bm, snap):
                 v.co = target
 
 
-def extract(body, name, pred, inflate, color_fn, info, snap=None, ident=0):
-    """Copy the body faces where pred(centroid, normal, bone) holds; push out by `inflate` metres."""
+def extract(body, name, pred, inflate, color_fn, info, snap=None, ident=0, loose=False):
+    """Copy the body faces where pred(centroid, normal, bone) holds; push out by `inflate` metres.
+    loose: also keep a face when any of its corners passes, so the piece overshoots its outline
+    everywhere; for pieces whose exact outline the runtime shader cuts per pixel (no stair-steps)."""
     me = body.data.copy()
     ob = body.copy()
     ob.data = me
     ob.name = name
     bpy.context.scene.collection.objects.link(ob)
     keep = set(i for i, (c, n, b) in enumerate(info) if pred(c, n, b))
+    if loose:
+        verts = body.data.vertices
+        for i, poly in enumerate(body.data.polygons):
+            if i not in keep:
+                c, n, b = info[i]
+                if any(pred(verts[vi].co, n, b) for vi in poly.vertices):
+                    keep.add(i)
     bm = bmesh.new()
     bm.from_mesh(me)
     bm.faces.ensure_lookup_table()
@@ -194,12 +322,8 @@ def top_color(c, n, v):
 def shorts_pred(c, n, b):
     if b in ARM_BONES or is_hand_or_finger(b):
         return False
-    if not (0.80 <= c.z <= 1.035):
-        return False
-    # frayed, uneven hem
-    if c.z < 0.835 and noise.noise(c * 40.0) > -0.1:
-        return False
-    return True
+    # the frayed hem is cut per pixel by the runtime shader (a clean fringe, not whole faces)
+    return 0.795 <= c.z <= 1.035
 
 
 def shorts_color(c, n, v):
@@ -413,7 +537,7 @@ def build_boots(arm, body):
     for s in ("l", "r"):
         b = arm.data.bones.get(f"ball_{s}")
         bone_y[s] = (arm.matrix_world @ b.head_local).y if b else None
-    SEG = 18
+    SEG = 28
 
     def ring_pts(cx, cy, z, rx, ry):
         return [Vector((cx + math.cos(2 * math.pi * i / SEG) * rx, cy + math.sin(2 * math.pi * i / SEG) * ry, z)) for i in range(SEG)]
@@ -425,7 +549,7 @@ def build_boots(arm, body):
             for k in range(len(vs) - 1):
                 for i in range(n if closed else n - 1):
                     j = (i + 1) % n
-                    bm.faces.new((vs[k][i], vs[k][j], vs[k + 1][j], vs[k + 1][i]))
+                    bm.faces.new((vs[k][i], vs[k][j], vs[k + 1][j], vs[k + 1][i])).smooth = True
         return build
 
     for side, s in ((1, "l"), (-1, "r")):
@@ -442,12 +566,25 @@ def build_boots(arm, body):
             if h < 0.16 and len(sel) > 8:
                 keep = sel[sel[:, 1] > np.median(sel[:, 1]) - 0.03]   # the ankle, not the instep in front of it
                 sel = keep if len(keep) >= 4 else sel
-            cx, cy = float(sel[:, 0].mean()), float(sel[:, 1].mean())
+            cx, cy = float((sel[:, 0].min() + sel[:, 0].max()) / 2), float((sel[:, 1].min() + sel[:, 1].max()) / 2)
             rx = float(np.abs(sel[:, 0] - cx).max()) + 0.013
             ry = float(np.abs(sel[:, 1] - cy).max()) + 0.013
+            rings.append([cx, cy, float(h), rx, ry])
+        # a boot shaft is smooth leather, not a cast of the calf: smooth the fitted rings along the
+        # leg (never tighter than the leg), then flare the top
+        arr = np.array(rings)
+        for _ in range(3):
+            sm = arr.copy()
+            sm[1:-1, [0, 1, 3, 4]] = (arr[:-2, [0, 1, 3, 4]] + 2 * arr[1:-1, [0, 1, 3, 4]] + arr[2:, [0, 1, 3, 4]]) / 4
+            sm[:, 3] = np.maximum(sm[:, 3], arr[:, 3] - 0.003)
+            sm[:, 4] = np.maximum(sm[:, 4], arr[:, 4] - 0.003)
+            arr = sm
+        rings = []
+        for cx, cy, h, rx, ry in arr:
             flare = 1.0 + 0.1 * max(0.0, (h - 0.34) / 0.065)
-            rings.append((cx, cy, float(h), rx * flare, ry * flare))
+            rings.append((float(cx), float(cy), float(h), float(rx) * flare, float(ry) * flare))
         parts.append((loft([ring_pts(*r) for r in rings]), BOOT + (ID_BOOT,)))
+        print(f"[trailblazer] boot {s} rings", [tuple(round(x, 3) for x in r) for r in rings[::3]])
         # turned-down top edge
         cx, cy, h, rx, ry = rings[-1]
         parts.append((loft([ring_pts(cx, cy, h, rx, ry), ring_pts(cx, cy, h + 0.004, rx + 0.006, ry + 0.006),
@@ -588,6 +725,17 @@ def build_hair(arm, head_tree):
         target = Vector((0.0, 0.035, 1.80))
         for v in keep:
             v.co = target + (v.co - c) * 1.12
+    if HEAD_FIT is not None:
+        mw = hair.matrix_world
+        inv = mw.inverted()
+        for v in bm.verts:
+            w = fit_head(mw @ v.co)
+            # never inside the scalp: at least 4 mm out along the skin's normal
+            if head_tree is not None:
+                hit = head_tree.find_nearest(w)
+                if hit[0] is not None and (w - hit[0]).dot(hit[1]) < 0.004:
+                    w = hit[0] + hit[1] * 0.004
+            v.co = inv @ w
     bm.to_mesh(me)
     bm.free()
     # vertex colour black for all hair (texture still carries the strands)
@@ -627,7 +775,10 @@ def build_tie_and_strands(arm):
                 for i in range(4):
                     bm.faces.new((vs[i][0], vs[i][1], vs[i + 1][1], vs[i + 1][0]))
             parts.append((strand, HAIR_BLACK + (ID_HAIR,)))
-    return rigid_mesh("TB_HairBits", arm, parts, lambda co: {"Head": 1.0})
+    ob = rigid_mesh("TB_HairBits", arm, parts, lambda co: {"Head": 1.0})
+    for v in ob.data.vertices:
+        v.co = fit_head(v.co)
+    return ob
 
 
 # ---------------------------------------------------------------------------
@@ -778,17 +929,20 @@ def main():
         for ca in list(me.color_attributes):
             me.color_attributes.remove(ca)
 
-    info = face_info(body)
+    src = subdivided(body) if USE_MH else body
+    info = face_info(src)
     gm = garments_material()
     pieces = [
-        extract(body, "TB_Top", top_pred, 0.0075, top_color, info, top_snap, ID_LINEN),
-        extract(body, "TB_Shorts", shorts_pred, 0.0085, shorts_color, info, z_snap([1.035], keep=lambda co: co.z < 0.9), ID_DENIM),
-        extract(body, "TB_Belt", belt_pred, 0.016, belt_color, info, z_snap([0.962, 1.022]), ID_LEATHER),
-        extract(body, "TB_Socks", socks_pred, 0.0085, socks_color, info, z_snap([0.375, 0.455]), ID_KNIT),
-        extract(body, "TB_Bracer", bracer_pred, 0.0095, bracer_color, info, x_snap([0.47, 0.625]), ID_BRACER),
-        extract(body, "TB_Strap", strap_pred, 0.0175, strap_color, info, strap_snap, ID_STRAP),
+        extract(src, "TB_Top", top_pred, 0.0075, top_color, info, None if USE_MH else top_snap, ID_LINEN, loose=USE_MH),
+        extract(src, "TB_Shorts", shorts_pred, 0.0085, shorts_color, info, z_snap([1.035], keep=lambda co: co.z < 0.9), ID_DENIM, loose=USE_MH),
+        extract(src, "TB_Belt", belt_pred, 0.016, belt_color, info, z_snap([0.962, 1.022]), ID_LEATHER),
+        extract(src, "TB_Socks", socks_pred, 0.0085, socks_color, info, z_snap([0.375, 0.455]), ID_KNIT),
+        extract(src, "TB_Bracer", bracer_pred, 0.0095, bracer_color, info, x_snap([0.47, 0.625]), ID_BRACER),
+        extract(src, "TB_Strap", strap_pred, 0.0175, strap_color, info, None if USE_MH else strap_snap, ID_STRAP, loose=USE_MH),
     ]
-    tattoo = build_tattoo(body, info)
+    tattoo = build_tattoo(src, info)
+    if src is not body:
+        bpy.data.objects.remove(src, do_unlink=True)
 
     verts = [tuple(v.co) for v in body.data.vertices]
     polys = [tuple(p.vertices) for p in body.data.polygons]
@@ -850,6 +1004,16 @@ def main():
         tassels.append((cloth_strip((ox, -0.012, 0.37), (ox, 0.012, 0.37), 0.08, 2, taper=0.5), BOOT + (ID_LEATHER,)))
     tassel_ob = rigid_mesh("TB_Tassels", arm, tassels, lambda co: {"calf_l" if co.x > 0 else "calf_r": 1.0})
     boots = build_boots(arm, body)
+    if USE_MH:
+        # her legs inside the boots (fitted above) are never seen, but they still cast shadow onto the
+        # boot leather: the skin shader's discard does not reach the shadow pass. Delete them.
+        bm = bmesh.new()
+        bm.from_mesh(body.data)
+        hidden = [f for f in bm.faces if all(v.co.z < 0.375 for v in f.verts)]
+        bmesh.ops.delete(bm, geom=hidden, context="FACES")
+        bm.to_mesh(body.data)
+        bm.free()
+        print(f"[trailblazer] dropped {len(hidden)} leg faces inside the boots")
     hair = build_hair(arm, tree)
     hairbits = build_tie_and_strands(arm)
 
@@ -879,8 +1043,10 @@ def main():
     print(f"[trailblazer] total tris {tris}")
 
     for img in bpy.data.images:
-        if img.size[0] > 1024:
-            img.scale(1024, 1024)
+        # the skin carries her face: keep it at 2048; everything else at 1024
+        limit = 2048 if "skinned" in img.name or "diffuse" in img.name else 1024
+        if img.size[0] > limit:
+            img.scale(limit, limit)
     out = os.path.join(OUT_DIR, "trailblazer.glb")
     bpy.ops.export_scene.gltf(
         filepath=out, export_format="GLB", export_yup=True, export_animations=False, export_skins=True,
