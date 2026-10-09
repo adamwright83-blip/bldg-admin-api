@@ -192,7 +192,12 @@
       "to": [
         "server/commercialMissions",
         "server/commercialPipeline",
-        "server/money"
+        "server/money",
+        "server/domains/orders/orderLifecycleService",
+        "server/domains/orders/orderOwnership",
+        "server/domains/payment/paymentAdmission",
+        "server/domains/commercial/commercialPipelineService",
+        "server/domains/commercial/commercialPipelineCore"
       ],
       "reason": "Game consumes admitted facts/read models; it must not grow new direct business-domain implementation dependencies."
     }
