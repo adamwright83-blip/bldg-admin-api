@@ -1,0 +1,290 @@
+{
+  "baseline": "7ba7310df76a142c053c9c2c857b750e207cb221",
+  "startingMain": "6f90f5334416b6a09cdf0f5c2b5fa3c09a61d726",
+  "repairPR": 514,
+  "timezone": "UTC unless explicitly noted in audit",
+  "logs": [
+    {
+      "name": "baseline-claire-utc",
+      "sha256": "b57812fcd7cda15b44321d6a14dfc1e3ff2e50d083a45947b79e03d8aa2e2f8c",
+      "sourceLog": "/tmp/program-e-recovery-evidence/baseline-claire-utc.log",
+      "summary": [
+        " Test Files  9 failed | 146 passed (155)",
+        "      Tests  20 failed | 2012 passed (2032)",
+        "   Duration  146.71s (transform 5.52s, setup 0ms, collect 253.79s, tests 12.35s, environment 19ms, prepare 7.49s)"
+      ],
+      "failures": [
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > does not count a duplicate customer twice across sources",
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > marks one available source as partial, never an approximate total",
+        "FAIL  server/claire/amdVoicemail.test.ts > no new autonomous dialer > searches this slice and finds no repeated operator, reminder, or planning dialer",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > revenue \u2192 previous 30 \u2192 which had more orders, all inside one call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > keeps each call's analytical context to that call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > single work goes to the work loop; a question while it waits is answered and the proposal is kept",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > dated work becomes one briefing proposal, and a save that fails is never spoken as saved",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > ordinary conversation still reaches Claire's normal follow-up",
+        "FAIL  server/claire/contextAssembler.test.ts > Claire today and tomorrow work picture > assembles tomorrow from tomorrow's explicit business date",
+        "FAIL  server/claire/twilioClaireIntegration.test.ts > Claire Twilio integration seams > sends only from an explicit decision and refuses a caller destination",
+        "FAIL  server/claire/conversation/conversationLedger.test.ts > Claire conversation ledger > does not let the evaluator rewrite live turns and flags high-value examples",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > includes native Laundry Butler orders, not just CleanCloud",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > first-paid-order-in-target-building is NOT a live kind: no persisted target-building mapping exists",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > one underlying order is at most one evidence identity",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > with both CleanCloud report rows, recognizedAt is the EARLIEST import; native orders recognize at creation",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > dormant reorder needs a real gap on the same canonical customer",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: lucky result > a paid order without consistency is real business movement but skips nothing",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: consistency plus genuine progress > rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a correction clears the pending proposal outright",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a query refinement clears the pending proposal outright"
+      ]
+    },
+    {
+      "name": "repair-claire-final",
+      "sha256": "8a4c4787c7f3e23ba6348c4611680c6ae95dc8df401f4fe60f93ee2f108abbef",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-claire-final.log",
+      "summary": [
+        " Test Files  9 failed | 146 passed (155)",
+        "      Tests  20 failed | 2016 passed (2036)",
+        "   Duration  112.76s (transform 3.86s, setup 0ms, collect 193.09s, tests 10.29s, environment 16ms, prepare 5.75s)"
+      ],
+      "failures": [
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > does not count a duplicate customer twice across sources",
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > marks one available source as partial, never an approximate total",
+        "FAIL  server/claire/amdVoicemail.test.ts > no new autonomous dialer > searches this slice and finds no repeated operator, reminder, or planning dialer",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > revenue \u2192 previous 30 \u2192 which had more orders, all inside one call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > keeps each call's analytical context to that call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > single work goes to the work loop; a question while it waits is answered and the proposal is kept",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > dated work becomes one briefing proposal, and a save that fails is never spoken as saved",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > ordinary conversation still reaches Claire's normal follow-up",
+        "FAIL  server/claire/contextAssembler.test.ts > Claire today and tomorrow work picture > assembles tomorrow from tomorrow's explicit business date",
+        "FAIL  server/claire/twilioClaireIntegration.test.ts > Claire Twilio integration seams > sends only from an explicit decision and refuses a caller destination",
+        "FAIL  server/claire/conversation/conversationLedger.test.ts > Claire conversation ledger > does not let the evaluator rewrite live turns and flags high-value examples",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > includes native Laundry Butler orders, not just CleanCloud",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > first-paid-order-in-target-building is NOT a live kind: no persisted target-building mapping exists",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > one underlying order is at most one evidence identity",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > with both CleanCloud report rows, recognizedAt is the EARLIEST import; native orders recognize at creation",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > dormant reorder needs a real gap on the same canonical customer",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: lucky result > a paid order without consistency is real business movement but skips nothing",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: consistency plus genuine progress > rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a correction clears the pending proposal outright",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a query refinement clears the pending proposal outright"
+      ]
+    },
+    {
+      "name": "baseline-broad",
+      "sha256": "815dfaabf74535f4c662c6d3b88040783204f2b223e39d0b8d626e5c3785eb81",
+      "sourceLog": "/tmp/program-e-recovery-evidence/baseline-broad.log",
+      "summary": [
+        " Test Files  3 failed | 105 passed (108)",
+        "      Tests  4 failed | 717 passed | 6 skipped (727)",
+        "   Duration  108.98s (transform 10.06s, setup 0ms, collect 181.90s, tests 6.81s, environment 25ms, prepare 8.66s)"
+      ],
+      "failures": [
+        "FAIL  server/cleancloudCsvSheetSync.test.ts > CleanCloud CSV sheet sync > skips paid cash rows and unpaid rows",
+        "FAIL  server/missionDirector/prepReadiness.test.ts > Mission Director prep completion evidence > uses completedAt rather than createdAt for the prep deadline",
+        "FAIL  server/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > fails closed on unpaid CleanCloud orders or zero-dollar totals",
+        "FAIL  server/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > leaves orders unattributed when no deterministic lineage connects them to an objective"
+      ]
+    },
+    {
+      "name": "repair-broad",
+      "sha256": "3666b8b4f69242bcf05dd38c4faa42826a6e798c660fa61f993029b4f3786da9",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-broad.log",
+      "summary": [
+        " Test Files  3 failed | 114 passed (117)",
+        "      Tests  4 failed | 815 passed | 6 skipped (825)",
+        "   Duration  113.26s (transform 10.35s, setup 0ms, collect 188.52s, tests 8.31s, environment 16ms, prepare 8.77s)"
+      ],
+      "failures": [
+        "FAIL  server/agents/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > fails closed on unpaid CleanCloud orders or zero-dollar totals",
+        "FAIL  server/agents/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > leaves orders unattributed when no deterministic lineage connects them to an objective",
+        "FAIL  server/integrations/cleancloud/cleancloudCsvSheetSync.test.ts > CleanCloud CSV sheet sync > skips paid cash rows and unpaid rows",
+        "FAIL  server/planning/missionDirector/prepReadiness.test.ts > Mission Director prep completion evidence > uses completedAt rather than createdAt for the prep deadline"
+      ]
+    },
+    {
+      "name": "baseline-sales-truth",
+      "sha256": "f8a5bfda17dd3c0476bb048bbd8710c3d5f7f9553bdb08928ea0ad08c504c0f8",
+      "sourceLog": "/tmp/program-e-recovery-evidence/baseline-sales-truth.log",
+      "summary": [
+        " Test Files  1 failed | 27 passed (28)",
+        "      Tests  1 failed | 348 passed | 6 skipped (355)",
+        "   Duration  18.92s (transform 2.19s, setup 0ms, collect 31.38s, tests 1.20s, environment 3ms, prepare 1.03s)"
+      ],
+      "failures": [
+        "FAIL  server/cleancloudCsvSheetSync.test.ts > CleanCloud CSV sheet sync > skips paid cash rows and unpaid rows"
+      ]
+    },
+    {
+      "name": "repair-sales-truth",
+      "sha256": "de56ba04c79239060387fc31175f9412dc7c66eacd93f46fd89de7fe63ae2977",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-sales-truth.log",
+      "summary": [
+        " Test Files  1 failed | 27 passed (28)",
+        "      Tests  1 failed | 348 passed | 6 skipped (355)",
+        "   Duration  40.97s (transform 4.48s, setup 0ms, collect 69.29s, tests 2.47s, environment 4ms, prepare 2.27s)"
+      ],
+      "failures": [
+        "FAIL  server/integrations/cleancloud/cleancloudCsvSheetSync.test.ts > CleanCloud CSV sheet sync > skips paid cash rows and unpaid rows"
+      ]
+    },
+    {
+      "name": "baseline-restored-coverage",
+      "sha256": "45e31da3c7207fc12eb425a46208a32142816ca330bbbe3bc0500b21e24189dc",
+      "sourceLog": "/tmp/program-e-recovery-evidence/baseline-restored-coverage.log",
+      "summary": [
+        " Test Files  9 passed (9)",
+        "      Tests  83 passed (83)",
+        "   Duration  4.84s (transform 518ms, setup 0ms, collect 6.48s, tests 59ms, environment 1ms, prepare 499ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "repair-restored-coverage",
+      "sha256": "964461864a624d8f2cd1a040d904e4fa86c7c0dc8c153bce5bd6a2db0c38bdf6",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-restored-coverage.log",
+      "summary": [
+        " Test Files  9 passed (9)",
+        "      Tests  83 passed (83)",
+        "   Duration  6.32s (transform 810ms, setup 0ms, collect 8.68s, tests 82ms, environment 2ms, prepare 577ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "repair-focused-final",
+      "sha256": "a75da2832a9472c78533a6b2d098467c2f99e324711010fc298445d69d36910a",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-focused-final.log",
+      "summary": [
+        " Test Files  7 passed (7)",
+        "      Tests  93 passed (93)",
+        "   Duration  72.47s (transform 14.66s, setup 0ms, collect 102.79s, tests 380ms, environment 1ms, prepare 3.15s)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "repair-daphne-worker-contracts",
+      "sha256": "f7aa9d70669e9cdf5f69a5959b2685597f32cd4cd6eb564ff5bc36e5730718d6",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-daphne-worker-contracts.log",
+      "summary": [
+        " Test Files  13 passed (13)",
+        "      Tests  84 passed (84)",
+        "   Duration  24.26s (transform 5.30s, setup 0ms, collect 40.14s, tests 1.99s, environment 2ms, prepare 944ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-recovery-baseline-worker-utc",
+      "sha256": "c3fb76dba154d091a3911136f09c58f092301ce5eebf22479bdea69b91a9164c",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-worker-utc.log",
+      "summary": [
+        " Test Files  3 passed (3)",
+        "      Tests  34 passed (34)",
+        "   Duration  33.80s (transform 234ms, setup 0ms, collect 731ms, tests 32.09s, environment 1ms, prepare 287ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-regression-recovery-worker-utc",
+      "sha256": "1fad638ee0cd19d1e4750eeca8191e8a52d49e7d58b66ba7847f3e11e1b20bc4",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-worker-utc.log",
+      "summary": [
+        " Test Files  3 passed (3)",
+        "      Tests  34 passed (34)",
+        "   Duration  18.70s (transform 259ms, setup 0ms, collect 763ms, tests 16.61s, environment 1ms, prepare 259ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-recovery-baseline-daphne-legacy-mysql",
+      "sha256": "fc4f1c2cf82e09b1ada9dab36fc38f98c350bad230575310625d34252e30f92d",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-daphne-legacy-mysql.log",
+      "summary": [
+        " Test Files  2 passed (2)",
+        "      Tests  4 passed (4)",
+        "   Duration  26.38s (transform 4.38s, setup 0ms, collect 14.20s, tests 11.28s, environment 0ms, prepare 155ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-regression-recovery-daphne-legacy-mysql",
+      "sha256": "784acad65860efcffd8fd4548bdd4b661c3ca23a1fe43134820cf25722bc67f0",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-daphne-legacy-mysql.log",
+      "summary": [
+        " Test Files  2 passed (2)",
+        "      Tests  5 passed (5)",
+        "   Duration  26.58s (transform 4.49s, setup 0ms, collect 14.06s, tests 11.60s, environment 0ms, prepare 284ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "baseline-cleancloud-mysql",
+      "sha256": "8d127a1c3349e209bf0347729d52351e5d69c3e55807a3e6179ab58df64fbf98",
+      "sourceLog": "/tmp/program-e-recovery-evidence/baseline-cleancloud-mysql.log",
+      "summary": [
+        " Test Files  1 passed (1)",
+        "      Tests  1 passed (1)",
+        "   Duration  1.79s (transform 384ms, setup 0ms, collect 1.53s, tests 95ms, environment 0ms, prepare 45ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "repair-cleancloud-mysql",
+      "sha256": "fb8920f69494874c17ca96412a0b133c41312ecae8a865a4541faa579adc2a98",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-cleancloud-mysql.log",
+      "summary": [
+        " Test Files  1 passed (1)",
+        "      Tests  1 passed (1)",
+        "   Duration  1.87s (transform 409ms, setup 0ms, collect 1.64s, tests 78ms, environment 0ms, prepare 41ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-recovery-baseline-program-d",
+      "sha256": "28f5da42c2ca7f36d7dedbf23bded401299fe17b3cf91e4b99f2e2bdf4261772",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-program-d.log",
+      "summary": [
+        " Test Files  3 failed | 3 passed (6)",
+        "      Tests  4 failed | 33 passed (37)",
+        "   Duration  6.10s (transform 990ms, setup 0ms, collect 9.66s, tests 165ms, environment 1ms, prepare 420ms)"
+      ],
+      "failures": [
+        "FAIL  server/geography/gumballCustomerTruth.test.ts > digest stability for existing browser-sync tests > keeps the same payload digest used by production import",
+        "FAIL  server/money/moneyProjectionService.test.ts > Money Authority Receipt availability > holds missing proof out with recorded-only qualification, not an exact cumulative zero",
+        "FAIL  server/towerWars/towerWarsDayDirector.test.ts > Tower Wars \u2192 Day Director actor identity > arms the promise in the authenticated user's visible Day Director state",
+        "FAIL  server/towerWars/towerWarsDayDirector.test.ts > Tower Wars \u2192 Day Director actor identity > fulfills the originating promise when its Day Director work completes"
+      ]
+    },
+    {
+      "name": "program-e-regression-recovery-program-d",
+      "sha256": "1c3c463a2ffbad6b7d9eb264190a122b554b0cd0deb39199e7abf7b1ba01af97",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-program-d.log",
+      "summary": [
+        " Test Files  3 failed | 3 passed (6)",
+        "      Tests  4 failed | 33 passed (37)",
+        "   Duration  5.90s (transform 1.17s, setup 0ms, collect 9.47s, tests 112ms, environment 1ms, prepare 399ms)"
+      ],
+      "failures": [
+        "FAIL  server/geography/gumballCustomerTruth.test.ts > digest stability for existing browser-sync tests > keeps the same payload digest used by production import",
+        "FAIL  server/money/moneyProjectionService.test.ts > Money Authority Receipt availability > holds missing proof out with recorded-only qualification, not an exact cumulative zero",
+        "FAIL  server/towerWars/towerWarsDayDirector.test.ts > Tower Wars \u2192 Day Director actor identity > arms the promise in the authenticated user's visible Day Director state",
+        "FAIL  server/towerWars/towerWarsDayDirector.test.ts > Tower Wars \u2192 Day Director actor identity > fulfills the originating promise when its Day Director work completes"
+      ]
+    },
+    {
+      "name": "program-e-recovery-baseline-bundle",
+      "sha256": "aa5eed9072eb158e7f49d53440f1fea48db274d81b44c5348dee064c2f719cb0",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-bundle.log",
+      "summary": [],
+      "failures": [
+        "[FAIL] three.js isolation: hero-DKp6D4HV.js statically imports three.js chunk BufferGeometryUtils-WcliCiyr.js"
+      ]
+    },
+    {
+      "name": "program-e-regression-recovery-bundle",
+      "sha256": "a3641a73823b57b051cf5ff677e5d8ce0a4ea96664e01be47ee1b83ef5bc94d6",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-bundle.log",
+      "summary": [],
+      "failures": [
+        "[FAIL] three.js isolation: hero-DKp6D4HV.js statically imports three.js chunk BufferGeometryUtils-WcliCiyr.js"
+      ]
+    }
+  ]
+}

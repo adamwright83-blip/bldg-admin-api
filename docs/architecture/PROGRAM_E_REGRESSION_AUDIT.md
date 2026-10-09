@@ -66,25 +66,25 @@ All seven complete workflow logs and job/step metadata were retrieved using `gh 
 
 ## Failure matrix
 
-Repair PR is pending creation; local repair is not a merged repair.
+Repair and audit PR: [#514](https://github.com/adamwright83-blip/bldg-admin-api/pull/514). Local validation is complete for the listed repairs; hosted final-head validation and merge are still required.
 
 | Test / Job | Pre-E | Post-E | Classification | Root Cause | Repair PR | Final Result |
 |---|---|---|---|---|---|---|
-| Payment authority admission (sales-truth) | 20 pass | Missing module | PROGRAM E REGRESSION | #510 moved CleanCloud; test still imports `../cleancloudPaidEvidence` | Pending | Local 20 pass; merge pending |
+| Payment authority admission (sales-truth) | 20 pass | Missing module | PROGRAM E REGRESSION | #510 moved CleanCloud; test still imports `../cleancloudPaidEvidence` | #514 | Local 20 pass; merge pending |
 | CSV sync skip cash/unpaid (sales-truth) | Same expected 1 / actual 2 | Same failure | PREEXISTING BASELINE | Not a relocation behavior change; baseline and moved implementation reproduce it | None | Remains; assertion unchanged |
-| Operator appointments (durable-worker) | 7 pass | Missing registry | PROGRAM E REGRESSION | #512 left `../../toolRegistry` rather than `../toolRegistry` | Pending | Local 7 pass; merge pending |
-| Claire board (worker, Daphne, fast, legacy) | Domain-port tests pass | Wrong mock; real DB accessed or empty board | PROGRAM E REGRESSION | #512 left old obligation-store mock identity | Pending | Local 4 pass, including error propagation and Daphne concise board |
-| Operator Mission Command | 34 pass | ENOENT | PROGRAM E REGRESSION | #511 left filesystem URL to old Mission Director | Pending | Local 34 pass |
-| Daily Command intent | 12 pass | ENOENT | PROGRAM E REGRESSION | #511 left filesystem URL to old Mission Director | Pending | Local 12 pass |
-| Weekly execution type | 13 pass | ENOENT | PROGRAM E REGRESSION | #511 left rank/selection filesystem URLs | Pending | Local 13 pass |
-| Day Line cargo linkage | 3 pass | 3 failures | PROGRAM E REGRESSION | #511 left old Day Director mock identity | Pending | Local 3 pass |
-| Commercial guard: mission store and pipeline | Gate pass; both calls exist | Two forbidden added-import reports | PROGRAM E REGRESSION (ratchet relocation accounting) | #512 rewrote preexisting calls' import paths; guard treats them as new edges | Pending | Historical E4 diff passes with Git rename and identical-line proof; adversarial checker tests pass |
-| Operator goal cycle MySQL | Loads migration, later assertion failure | Cannot open `server/drizzle/0103...` | PROGRAM E REGRESSION | #512 left migration URL one level too shallow | Pending | Path repaired; UTC matched rerun pending |
-| Operator appointment MySQL | 14 pass | Cannot open `server/drizzle/0104...` | PROGRAM E REGRESSION | #512 left migration URL one level too shallow | Pending | Local 14 pass; UTC matched rerun pending |
-| Procurement availableAt / goal cycle final attempt | Fail in initial local-zone run | Fail after migration-path repair | INFRASTRUCTURE / FLAKY investigation pending | UTC server vs local Node timezone is a hypothesis; do not dismiss until UTC rerun completes | None | UNRESOLVED pending rerun |
+| Operator appointments (durable-worker) | 7 pass | Missing registry | PROGRAM E REGRESSION | #512 left `../../toolRegistry` rather than `../toolRegistry` | #514 | Local 7 pass; merge pending |
+| Claire board (worker, Daphne, fast, legacy) | Domain-port tests pass | Wrong mock; real DB accessed or empty board | PROGRAM E REGRESSION | #512 left old obligation-store mock identity | #514 | Local 4 pass, including error propagation and Daphne concise board |
+| Operator Mission Command | 34 pass | ENOENT | PROGRAM E REGRESSION | #511 left filesystem URL to old Mission Director | #514 | Local 34 pass |
+| Daily Command intent | 12 pass | ENOENT | PROGRAM E REGRESSION | #511 left filesystem URL to old Mission Director | #514 | Local 12 pass |
+| Weekly execution type | 13 pass | ENOENT | PROGRAM E REGRESSION | #511 left rank/selection filesystem URLs | #514 | Local 13 pass |
+| Day Line cargo linkage | 3 pass | 3 failures | PROGRAM E REGRESSION | #511 left old Day Director mock identity | #514 | Local 3 pass |
+| Commercial guard: mission store and pipeline | Gate pass; both calls exist | Two forbidden added-import reports | PROGRAM E REGRESSION (ratchet relocation accounting) | #512 rewrote preexisting calls' import paths; guard treats them as new edges | #514 | Historical E4 diff passes with Git rename and identical-line proof; adversarial checker tests pass |
+| Operator goal cycle MySQL | Loads migration, later assertion failure | Cannot open `server/drizzle/0103...` | PROGRAM E REGRESSION | #512 left migration URL one level too shallow | #514 | UTC matched worker run: 34/34 pass on both revisions |
+| Operator appointment MySQL | 14 pass | Cannot open `server/drizzle/0104...` | PROGRAM E REGRESSION | #512 left migration URL one level too shallow | #514 | UTC matched worker run: 34/34 pass on both revisions |
+| Procurement availableAt / goal cycle final attempt | Fail in initial local-zone run | Fail after migration-path repair | INFRASTRUCTURE / FLAKY (timezone configuration) | Local Node timezone versus UTC MySQL; both revisions pass all 34 assertions with TZ=UTC | None | Resolved under matched CI timezone; no production-code change |
 | Mobile three.js isolation | Same hero/chunk failure | Same hero/chunk failure | PREEXISTING BASELINE | `hero-DKp6D4HV.js` statically imports `BufferGeometryUtils-WcliCiyr.js`; frontend inputs and lockfile unchanged | None | Both production builds succeed; both budgets fail identically |
 | Protected Claire fixtures in legacy release | Baseline reproduces failures | Hosted failures | PREEXISTING BASELINE for reproduced assertions; workflow-environment details remain unresolved | Missing fixture identities, authority evidence, schema/mocks and stale source-shape assertion, individually recorded below | #476 (owner work) | Deferred; protected files untouched |
-| Remaining legacy and broad-suite findings | Partial coverage | Partial coverage | UNRESOLVED | See coverage/blockers below | Pending | Not certified |
+| Remaining legacy and broad-suite findings | Partial coverage | Partial coverage | UNRESOLVED | See coverage/blockers below | #514 | Not certified |
 
 ## Commercial architectural justification
 
@@ -92,7 +92,7 @@ Pre-E `server/commercialPipeline/commercialPipelineService.ts:727` already dynam
 
 ## Protected work and baseline Claire findings
 
-Fetched all open PRs. #476, #411, #375, #374, #359, #361, #503 and #504 are open. #495 is merged. None of their branches were altered or merged. #513 remains frozen. No President or Mitch implementation was edited.
+Fetched all open PRs. #476, #411, #375, #374, #359, #361, #503 and #504 are open. #495 is merged. None of their branches were altered or merged. #513 remains frozen. No actively edited President or Mitch implementation was changed. The inactive `scripts/president-github-agent.ts` forbidden-path prompt was mechanically updated to retain protection of the relocated Commercial, platform authority and Payment files. The seven protected PR file lists were fetched; none includes that script.
 
 #476 exact protected files:
 
@@ -108,15 +108,49 @@ Fetched all open PRs. #476, #411, #375, #374, #359, #361, #503 and #504 are open
 
 Clean baseline Claire run: 155 files, 2032 tests; 11 files failed, 24 assertions failed, 2008 tests passed. Protected failures: active metric (2), AMD source-shape (1), Twilio analytics missing real operator fixture (5), context assembler (1), conversation ledger (1), corrective pass paid-evidence fixtures (5), failure fixtures (2), production replay pending-state fixtures (2), Twilio artifact integration missing operator (1). Additional baseline findings: operatingTruthGuards (1) and repair2SliceB (3), requiring nondeterminism/environment investigation. These are distinct from Program D's four documented historical failures; those four have not yet all been reproduced in this recovery and are not used to excuse unrelated failures.
 
-## Coverage gaps and recovery blockers
+## Additional migration-completeness repairs
 
-- Hosted repair CI, clean committed repair revision, main merge and final recovery SHA not yet verified.
-- Broad domains, exact sales-truth/Daphne/worker commands and TypeScript completion still being collected.
-- Matched UTC MySQL results still pending; legacy journey and Daphne two-call integration require explicit disposable schema bootstrap and execution.
-- Full fast browser workflows, cancelled world smoke and remaining mobile schema steps are not yet replayed locally.
-- Broad Claire current run overlapping edits is explicitly excluded; requires clean rerun.
-- Historical Program D four-failure reproduction remains incomplete.
-- Documentation PRs #503/#504 are deliberately deferred to E7 reconciliation.
-- No E5 folder move was performed. No duplicated old implementation, fixture expectation weakening, test disabling, default tenant manufacture or production operation occurred.
+- #510 left `server/geography/cleanCloudCustomerAuthority.integration.test.ts` importing removed CleanCloud evidence. Updated to the canonical integration. The real MySQL assertion passes both pre-E and repair (1/1 each).
+- #510 left two old CleanCloud test paths in `goldline-fast-smoke.yml`; Vitest silently selected other matching files and omitted those suites. Updated both explicit paths. Matched CleanCloud evidence + Commercial selection: 9 files / 83 tests pass on both revisions.
+- #508 left `test:legacy-dayforge:release` selecting the removed `server/commercialPipeline` directory. Updated the selector to `server/domains/commercial`, restoring its original logical coverage.
+- #510 left three dynamic imports in `scripts/goldline-wave-local.ts`. Corrected only their paths. This local fixture operation was not executed against an inherited or production database.
+- #505/#507/#508 moved the files protected by the President GitHub prompt, but left its forbidden globs at removed paths. Corrected the globs to Commercial, platform authority and Payment. This preserves protection rather than adding autonomy or changing executive behavior.
 
-**PROGRAM E — RECOVERY BLOCKED** until the pending evidence and any newly identified defects are resolved. **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED**; E8 has not run.
+A Git-rename-based scan of static imports, dynamic literal imports, `vi.mock`, `require`, and literal filesystem URLs found no further references to removed implementations after these fixes. Historical labels and architecture prose are not treated as active imports. Final exhaustive documentation reconciliation remains E7.
+
+## Validation collected
+
+| Coverage | Pre-E | Repair |
+|---|---|---|
+| Main TypeScript | Exit 0 | Exit 0, clean committed repair run |
+| Legacy release harness TypeScript | Exit 0 | Exit 0 |
+| Four architecture gates | Pass | Pass; also passes against the historical E4b parent, not merely the repair parent |
+| Focused relocation defects | Tests pass before moves (CSV/AMD baseline failures excluded) | Seven files, 93/93 pass |
+| Worker real MySQL, TZ=UTC | 3 files, 34/34 pass | 3 files, 34/34 pass |
+| Legacy journey + Daphne real MySQL | 2 files, 4/4 pass | 2 files, 5/5 pass; extra durable concise-style test introduced independently by #495 |
+| CleanCloud customer authority real MySQL | 1/1 pass | 1/1 pass |
+| CleanCloud evidence + Commercial coverage | 9 files, 83/83 pass | 9 files, 83/83 pass |
+| Sales-truth workflow logical selection | 28 files; 348 pass, 6 skipped, CSV assertion fails | Same counts and same sole failure |
+| Full Claire, TZ=UTC | 155 files; 2012 pass, 20 failures | 155 files; 2016 pass, same 20 failures; four extra tests from #495 |
+| Broad domains / workers / receipts | 108 files; 717 pass, 6 skipped, 4 failures | 117 files; 815 pass, 6 skipped, same 4 failures (different selections; not an identical full-suite claim) |
+| Program D historical failure selection | 33 pass, four documented failures | Identical |
+| Production build | Pass | Pass |
+| Bundle budget | Same preexisting hero/three.js failure | Identical chunks and failure |
+| Daphne + worker deterministic workflow commands | Baseline covered by domain suite and board reproduction | 13 files, 84/84 pass |
+
+Full Claire UTC runs agree on exactly the 20 failures in the nine protected #476 files. The extra four failures in the initial local-time baseline Claire run disappeared under matching UTC runner configuration (operatingTruthGuards and repair2SliceB); they are environment-sensitive, not evidence of migration defects. The initial overlapping current run is excluded.
+
+Hosted first-head run evidence: worker [37869436846](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436846), Daphne [37869436817](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436817), and nomenclature [37869436869](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436869) pass. Sales [37869436814](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436814) fails only the matched baseline CSV assertion. The later mobile [37869702515](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869702515) log confirms the identical baseline bundle failure. These run SHAs precede the final audit commit; final-head checks still must be reviewed. Superseded fast and legacy runs were cancelled by workflow concurrency, never represented as passing.
+
+## Remaining gate dependencies and unavailable portions
+
+- Final-head hosted CI, repair/audit merge, latest-main fetch and exact recovery SHA must still be verified.
+- Hosted legacy deterministic failures must be checked against the reproduced protected baseline exceptions; no new failure may be silently folded into that group.
+- Final hosted fast contracts and world browser smoke remain required. Local pre-E browser smoke was not replayed; pre-E frontend source, lockfile and resulting bundle identities are unchanged, but this is not a fabricated browser pass.
+- The workflows' remaining MySQL stages and mobile schema coverage are provided by final hosted CI, not inferred from TypeScript or deployment results.
+- The field bridge DB-unavailable fixtures and prepReadiness assertion were reproduced on both revisions in the broad run; matched UTC follow-up results are preserved separately.
+- Documentation PRs #503/#504 remain open and deliberately deferred to E7.
+- No protected work is currently demonstrated to block a *new* migration regression: the protected failures reproduce before E. Their baseline repair belongs to #476.
+- E5–E8 have not begun. No directory was moved, duplicate implementation restored, expectation weakened, test disabled, tenant manufactured or production operation performed.
+
+**PROGRAM E — RECOVERY BLOCKED** pending final safety evidence and merge. **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED**; E8 has not run.
