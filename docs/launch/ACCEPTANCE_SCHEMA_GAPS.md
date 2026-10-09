@@ -1,3 +1,4 @@
+<!-- LEGACY DAYFORGE COMPATIBILITY: retained historical migration/schema file references only; canonical product is JOYSTICK. -->
 # Real backend acceptance: production bootstrap gaps
 
 The real browser/backend acceptance run found missing stores after `node scripts/migrate.mjs`: `sales_intel_teachings`, `territory_operator_profiles`, `territory_scan_results`, `operations_events`, and `sales_intel_source_artifacts.sourceRegistryId`. Unlike mocked frontend responses, actual world and customer context readers execute these MySQL queries.
