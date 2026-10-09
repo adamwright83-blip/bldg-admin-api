@@ -157,6 +157,13 @@ describe("chargeCard post-admission fault isolation and failure injection", () =
     mocks.admitNativeStripePayment.mockResolvedValue({
       receiptId: "rcpt_202",
       status: "succeeded",
+      statusDisposition: {
+        previousStatus: "new",
+        resultingStatus: "processing",
+        transitioned: true,
+        preservedExistingStatus: false,
+        cancelled: false,
+      },
     });
     mocks.attributeOrderFromCampaign.mockResolvedValue({
       attributed: true,
@@ -227,6 +234,111 @@ describe("chargeCard post-admission fault isolation and failure injection", () =
       expect(mocks.notifyCardCharged).not.toHaveBeenCalled();
       expect(mocks.writeOrderToSheet).not.toHaveBeenCalled();
       expect(mocks.createOpsTask).not.toHaveBeenCalled();
+    });
+
+    it("reports reconciliationRequired when status helper throws inside admission transaction", async () => {
+      mocks.admitNativeStripePayment.mockRejectedValue(
+        new Error("Status transition helper failed: foreign key or lock timeout")
+      );
+
+      const result = await caller().admin.chargeCard({
+        orderId: 202,
+        amountCents: 5200,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.paymentIntentId).toBe("pi_stripe_confirmed_999");
+      expect(result.reconciliationRequired).toBe(true);
+      expect(result.error).toMatch(/reconciliation is required/i);
+      expect(result.error).not.toMatch(/card may have been declined/i);
+    });
+  });
+
+  describe("Orders status decoupling and disposition propagation", () => {
+    it("passes orderPatch without status to admitNativeStripePayment and caller receives success: true", async () => {
+      const result = await caller().admin.chargeCard({
+        orderId: 202,
+        amountCents: 5200,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.paymentIntentId).toBe("pi_stripe_confirmed_999");
+      expect(result.statusDisposition).toEqual({
+        previousStatus: "new",
+        resultingStatus: "processing",
+        transitioned: true,
+        preservedExistingStatus: false,
+        cancelled: false,
+      });
+
+      // Verify that admitNativeStripePayment was called with orderPatch containing NO status
+      expect(mocks.admitNativeStripePayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderPatch: expect.not.objectContaining({
+            status: expect.anything(),
+          }),
+        })
+      );
+    });
+
+    it("preserves cancelled order, returns success: true with reconciliationRequired: true, and skips pickup completed event", async () => {
+      mocks.admitNativeStripePayment.mockResolvedValueOnce({
+        receiptId: "rcpt_202_cancelled",
+        status: "succeeded",
+        statusDisposition: {
+          previousStatus: "cancelled",
+          resultingStatus: "cancelled",
+          transitioned: false,
+          preservedExistingStatus: true,
+          cancelled: true,
+        },
+      });
+
+      const result = await caller().admin.chargeCard({
+        orderId: 202,
+        amountCents: 5200,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.paymentIntentId).toBe("pi_stripe_confirmed_999");
+      expect(result.reconciliationRequired).toBe(true);
+      expect(result.statusDisposition?.cancelled).toBe(true);
+
+      // Must NOT create false pickup completed operations event for cancelled order
+      expect(
+        mocks.ensurePickupCompletedOperationsEventForOrder
+      ).not.toHaveBeenCalled();
+
+      // Receipts, notifications, and sheets still execute
+      expect(mocks.writeOrderToSheet).toHaveBeenCalledOnce();
+      expect(mocks.notifyOwner).toHaveBeenCalledOnce();
+    });
+
+    it("preserves delivered order status and returns success: true without reconciliationRequired", async () => {
+      mocks.admitNativeStripePayment.mockResolvedValueOnce({
+        receiptId: "rcpt_202_delivered",
+        status: "succeeded",
+        statusDisposition: {
+          previousStatus: "delivered",
+          resultingStatus: "delivered",
+          transitioned: false,
+          preservedExistingStatus: true,
+          cancelled: false,
+        },
+      });
+
+      const result = await caller().admin.chargeCard({
+        orderId: 202,
+        amountCents: 5200,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.paymentIntentId).toBe("pi_stripe_confirmed_999");
+      expect(result.reconciliationRequired).toBeUndefined();
+      expect(result.statusDisposition?.resultingStatus).toBe("delivered");
+      expect(
+        mocks.ensurePickupCompletedOperationsEventForOrder
+      ).toHaveBeenCalledOnce();
     });
   });
 

@@ -18,8 +18,15 @@ Authoritative business domain owner for native payment admission, immutable capt
 - Orders payment fields upon verified admission.
 
 ## LEGAL ENTRYPOINTS
-- `admitNativePayment` (`server/domains/payment/paymentAdmission.ts`)
+- `admitNativeStripePayment` (`server/domains/payment/paymentAdmission.ts`)
 - `getNativePaymentStatus` / `getNativePaymentOccurrenceHistory` (`server/domains/payment/nativePaymentReadService.ts`)
+
+## BEHAVIORAL CONTRACT: ORDER STATUS DECOUPLING
+Payment admission strictly owns payment truth (`paid`, `paidAt`, `stripePaymentIntentId`, and `authority_receipts`).
+- `orderPatch` accepts only an explicit allowlist of authorized financial snapshot fields (`total`, `isFirstPaidOrder`, `platformFeeCents`, `vendorPayoutCents`, `stripeConnectedAccountIdSnapshot`, `vendorNameSnapshot`, `routingPrioritySnapshot`).
+- Unrecognized properties (including `status`, `tenantId`, and other lifecycle/ownership fields) are rejected at runtime before any database mutation.
+- Payment does NOT assign or mutate `orders.status`. Status updates are delegated exclusively to the Orders helper `admitOrderProcessingStatusInTransaction` within the atomic transaction.
+- Behavioral change: previously, every successful charge forced `status: "processing"`. Now, pre-existing `collected`, `processing`, `ready`, `delivered`, and `cancelled` statuses are preserved without regression.
 
 ## DOWNSTREAM CONSUMERS
 - Orders delivery gate (requiring payment admission before delivery)
@@ -34,3 +41,4 @@ Authoritative business domain owner for native payment admission, immutable capt
 ## LEGACY/COMPATIBILITY EXCEPTIONS
 - Historical payment receipts without provider amount proof remain unknown dollars (occurrence proven, amount unadmitted).
 - Seeded NULL-tenant migration witness row remains unresolved.
+
