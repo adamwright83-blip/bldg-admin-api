@@ -25,11 +25,13 @@ Production and unrelated temporary-service variable values were deliberately not
 
 ## Exact requirements to unblock
 
-1. `DAYFORGE_BILLING_STRIPE_SECRET_KEY`: a valid Stripe **test-mode** secret key for a verified JOYSTICK-owned account, with account identity established before any provider operation. Never use Laundry Farm's account.
-2. `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`: the signing secret for the JOYSTICK test endpoint forwarding to `/api/dayforge/billing/stripe-webhook` in the disposable acceptance environment.
+1. `DAYFORGE_BILLING_STRIPE_SECRET_KEY`: a valid Stripe **test-mode** secret key (must start with `sk_test_`) for a verified JOYSTICK-owned account, with account identity established before any provider operation. Never use Laundry Farm's account.
+2. `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`: the signing secret (must start with `whsec_`) for the JOYSTICK test endpoint forwarding to `/api/dayforge/billing/stripe-webhook` in the disposable acceptance environment.
 3. `DAYFORGE_BILLING_APP_URL`: the acceptance application's reachable origin, so hosted Checkout returns to that application rather than the default production URL.
-4. An active disposable `dayforge_saas_billing_plans` row whose `stripePriceId` references a verified test-mode recurring Stripe price: USD 4,900 cents per month, with `trialDays = 7`. The application reads the price from this database row; it has no separate launch-price environment variable.
-5. Test-only Checkout completion and signed webhook delivery/replay against the disposable database. Evidence must establish card collection, one subscription, one tenant, owner activation, seven-day trial, and no early paid charge. No live configuration or payment authority change is authorized by this acceptance run.
+4. `JOYSTICK_STRIPE_ALLOWLISTED_ACCOUNT_ID`: the explicitly allowlisted Stripe account ID for the dedicated JOYSTICK test account. Rejects if retrieved account does not match or if Laundry Farm is detected.
+5. An active disposable `dayforge_saas_billing_plans` row whose `stripePriceId` references a verified test-mode recurring Stripe price: USD 4,900 cents per month, with `trialDays = 7`. The application reads the price from this database row; it has no separate launch-price environment variable.
+6. Execution against a designated disposable test database (name must contain `billing_lifecycle`, `joystick_real_acceptance`, or `stripe_acceptance`).
+7. Complete end-to-end verification of all 11 mandatory provider and persistence conditions before any `PASSED` status is issued.
 
 ## Executable database integration retained
 
@@ -46,13 +48,24 @@ The injected `fakeStripe` adapter fabricates Checkout, subscription retrieval, a
 
 Hosted execution: [launch run 37971466617](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37971466617), PR #534, exact source SHA `0b1556b5937fc76b41613b3a3faae239a512a2d1`. Billing lifecycle: **REAL MYSQL INTEGRATION PASSED**, 2 tests. Provider acceptance remains **BLOCKED** regardless of the database integration result.
 
-## Test-mode harness and blocker verification
+## Test-mode harness and result semantics
 
 An automated test-mode acceptance harness is implemented at `server/saas/stripeProviderAcceptance.ts` and tested via `server/saas/stripeProviderAcceptance.test.ts`.
 
-When executed without verified provider credentials, it asserts `BLOCKED` with explicit missing environment variables:
-- `DAYFORGE_BILLING_STRIPE_SECRET_KEY`
-- `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`
-- `DAYFORGE_BILLING_APP_URL`
+### Result Semantics
+- **BLOCKED:** Required external credentials, allowlisted account ID, or approved configuration are missing.
+- **FAILED:** A configured acceptance run executes against disposable DB/provider, but an assertion (allowlist match, account safety, price/currency, trial days, payment method presence, webhook processing, idempotency replay, tenant provisioning, owner activation, early charge absence) fails.
+- **PASSED:** All 11 mandatory end-to-end provider and persistence assertions complete successfully. The harness NEVER returns PASSED on preliminary checks.
 
-When configured with a live or invalid key format, it rejects execution immediately before making external requests. When valid test credentials and a disposable database are provided, it verifies account ownership (ensuring Laundry Farm is not targeted), asserts the presence of the 7-day trial and $49/mo USD price in `dayforge_saas_billing_plans`, and tests subscription checkout creation without touching production data.
+### Mandatory Verification Steps for PASSED
+1. An explicitly approved JOYSTICK Stripe account ID matching `JOYSTICK_STRIPE_ALLOWLISTED_ACCOUNT_ID`.
+2. A $49/month USD recurring price in Stripe.
+3. A 7-day trial period.
+4. Test-mode Checkout completion.
+5. Payment-method collection attached to subscription.
+6. Exactly one intended Stripe subscription.
+7. Correct signed webhook processing (`checkout.session.completed`).
+8. Replay of the same signed event without duplicate tenant, subscription, or financial effect (`ignored` with `duplicate_event`).
+9. Exactly one correctly provisioned tenant in database.
+10. Successful owner activation.
+11. No unintended early charge (amount_paid = 0 during trial).
