@@ -27,6 +27,7 @@ test("real authenticated two-tenant HTTP isolation and denied-write persistence"
     evidence.push({ procedure, input, status: response.status(), body });
     expect(response.ok(), `Cross-tenant ${procedure} must be denied`).toBe(false);
     const error = body.error?.json ?? body.error;
+    expect(error?.message ?? "").not.toMatch(/No procedure found/i);
     if (error?.data?.code === "INTERNAL_SERVER_ERROR") {
       // Legacy domain services throw plain errors for absent tenant records.
       // A generic server failure alone is never sufficient denial evidence.
@@ -121,7 +122,7 @@ test("real authenticated two-tenant HTTP isolation and denied-write persistence"
       await denied(request, "system.customerAssets.detail", { assetId: other.assetId });
       // Order administration is restricted to platform/driver/vendor roles; tenant
       // owners receive their scoped order history through customerAssets instead.
-      await denied(request, "orders.getOrder", { id: other.orderId });
+      await denied(request, "admin.getOrder", { id: other.orderId });
       const beforeOwn = await snapshot(owner.tenantId);
       const beforeForeign = await snapshot(foreign.tenantId);
       await denied(request, "system.goldlineOnboarding.fieldOutcome", { missionId: foreign.missionId, text: "Cross tenant observation must never persist", confirmedPresence: true, gps: null }, true);
@@ -130,7 +131,7 @@ test("real authenticated two-tenant HTTP isolation and denied-write persistence"
       await denied(request, "system.currentDayLine.today", { targetTenantId: foreign.tenantId });
       await denied(request, "system.currentDayLine.completeItem", { targetTenantId: foreign.tenantId, itemId: String(other.missionId), evidenceReference: "cross-tenant forbidden attempt" }, true);
       await denied(request, "system.claire.driveContext", { phase: "pre_drive", missionId: other.missionId });
-      await denied(request, "orders.updateStatus", { orderId: other.orderId, status: "collected" }, true);
+      await denied(request, "admin.updateStatus", { orderId: other.orderId, status: "collected" }, true);
       // These procedures accept no tenant identifier. Supplying a foreign identity must
       // not replace the authenticated identity or disclose its configuration/billing/world.
       expect((await rpc(request, "system.saas.me", { tenantId: foreign.tenantId })).tenantId).toBe(owner.tenantId);
