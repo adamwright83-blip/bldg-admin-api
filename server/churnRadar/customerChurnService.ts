@@ -34,7 +34,7 @@ import {
   type PaidOrderEvent,
 } from "../analytics/paidOrderLedger";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacy/dayforge/events/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../experience/goldline/world/worldEventStore";
 import { findPhysicalEntityIdByAddress } from "../experience/goldline/world/entityLookup";
 import {

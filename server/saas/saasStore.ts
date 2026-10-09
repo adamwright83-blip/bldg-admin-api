@@ -40,7 +40,7 @@ import type {
 } from "../../shared/tenantImports";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as duplicateKey } from "../mysqlErrors";
-import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacy/dayforge/events/legacyDayforgeEventStore";
 import { GoogleGeocoder } from "../geography/googleGeocoder";
 import { seedSessionFromAcquisition } from "../goldlineOnboarding/store";
 import { JOYSTICK_PREPAY_QUESTION_KEYS, type GoldlineOnboardingQuestionKey } from "../../shared/goldlineOnboarding";

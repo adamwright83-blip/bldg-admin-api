@@ -17,7 +17,7 @@ import {
   readCommercialMissionWith,
   type CommercialMissionTransaction,
 } from "../commercialMissions/commercialMissionStore";
-import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacy/dayforge/events/legacyDayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
   // Driver-built missions are activated to game_ready before collateral is

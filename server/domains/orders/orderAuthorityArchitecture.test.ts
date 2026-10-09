@@ -14,8 +14,8 @@ const directWriteOwners = new Set([
 ]);
 // Deliberate demo fixtures, not production order admission. No directory exemptions.
 const fixtures = new Set([
-  "server/legacyDayforgeDemo/demoTenantSeed.ts",
-  "server/legacyDayforgeDemo/demoTenantReset.ts",
+  "server/legacy/dayforge/demo/demoTenantSeed.ts",
+  "server/legacy/dayforge/demo/demoTenantReset.ts",
   "scripts/goldline-living-world-proof-seed.ts",
   "scripts/goldline-wave-local.ts",
 ]);

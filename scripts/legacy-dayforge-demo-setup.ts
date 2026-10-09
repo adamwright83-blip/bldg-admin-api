@@ -7,7 +7,7 @@
  */
 import "dotenv/config";
 import { ENV } from "../server/_core/env";
-import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
+import { seedDemoTenant } from "../server/legacy/dayforge/demo/demoTenantSeed";
 import { printDemoUrls } from "./legacyDayforgeDemoUrls";
 
 async function main() {

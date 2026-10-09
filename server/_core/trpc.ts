@@ -17,7 +17,7 @@ import {
   isGoldlineDemoOpenId,
   isPlatformAdministrator,
 } from "../platform/tenancy/tenantIdentity";
-import { assertTrpcMutationOrigin } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { assertTrpcMutationOrigin } from "../legacy/dayforge/security/legacyDayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
 

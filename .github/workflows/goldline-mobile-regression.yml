@@ -25,7 +25,7 @@ on:
       - "server/composition/goldlineWorldRouter.ts"
       - "server/platform/persistence/**"
       - "server/integrations/googleMaps/**"
-      - "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts"
+      - "server/legacy/dayforge/release/legacyDayforgeReleaseJourney.integration.test.ts"
       - "server/openChannel/**"
       - "server/impactSignals/**"
       - "shared/localTargetRun.ts"
@@ -182,7 +182,7 @@ jobs:
       matrix:
         include:
           - name: mobile-legacy-compatibility-release
-            command: pnpm vitest run --config vitest.integration.config.ts server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts
+            command: pnpm vitest run --config vitest.integration.config.ts server/legacy/dayforge/release/legacyDayforgeReleaseJourney.integration.test.ts
           - name: mobile-armory
             command: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts
           - name: mobile-sales-intel

@@ -59,8 +59,8 @@ import {
   configuredTrustProxy,
   legacyDayforgeSecurityHeaders,
   resolveTrustedClientIp,
-} from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
-import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
+} from "../legacy/dayforge/security/legacyDayforgeSecurity";
+import { registerLegacyDayforgeRetentionRoute } from "../legacy/dayforge/retention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { emitServerLog, shutdownServerTelemetry, startServerLogs } from "./posthogLogs";
 import { posthogBrowserConfig } from "./posthogServer";

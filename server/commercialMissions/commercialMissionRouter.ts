@@ -16,7 +16,7 @@ import {
   legacyDayforgeTenantAdminProcedure,
   router,
 } from "../_core/trpc";
-import { listLegacyDayforgeTimeline } from "../legacyDayforgeEvents/legacyDayforgeTimeline";
+import { listLegacyDayforgeTimeline } from "../legacy/dayforge/events/legacyDayforgeTimeline";
 import {
   assertDriverCanReadMission,
   assertDriverTransitionAllowed,
@@ -66,7 +66,7 @@ import {
 import {
   generateLegacyDayforgeMissionCoaching,
   getActiveLegacyDayforgeCoachingArtifact,
-} from "../legacyDayforgeCoaching/legacyDayforgeCoachingRuntime";
+} from "../legacy/dayforge/coaching/legacyDayforgeCoachingRuntime";
 import { ProspectLegNotConnectedError } from "@shared/coldCallBurst";
 import {
   COMMERCIAL_MISSION_CALL_OUTCOMES,

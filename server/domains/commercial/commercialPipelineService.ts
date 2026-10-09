@@ -34,7 +34,7 @@ import {
   transitionCommercialMissionWith,
 } from "../../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../../armory/armoryEvidenceService";
-import { writeLegacyDayforgeEventWith } from "../../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../../legacy/dayforge/events/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../../dashboardZoned";
 import type { AuthorityReceipt } from "../../platform/authority/authorityReceipt";
 import {

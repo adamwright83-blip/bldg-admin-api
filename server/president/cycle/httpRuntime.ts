@@ -7,7 +7,7 @@ import {
   isPlatformAdministrator,
   tenantForAuthenticatedUser,
 } from "../../platform/tenancy/tenantIdentity";
-import { assertTrpcMutationOrigin } from "../../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { assertTrpcMutationOrigin } from "../../legacy/dayforge/security/legacyDayforgeSecurity";
 import { createPresidentCycleRouter } from "./api";
 import type { CycleStore } from "./cycleStore";
 import {

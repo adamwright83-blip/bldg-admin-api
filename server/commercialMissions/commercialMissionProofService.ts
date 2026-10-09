@@ -11,8 +11,8 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { storageDelete, storageGet, storagePut } from "../storage";
-import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
-import { DAYFORGE_RETENTION_MATRIX } from "../legacyDayforgeRetention/retentionPolicy";
+import { writeLegacyDayforgeEventWith } from "../legacy/dayforge/events/legacyDayforgeEventStore";
+import { DAYFORGE_RETENTION_MATRIX } from "../legacy/dayforge/retention/retentionPolicy";
 import type { CommercialMissionTransaction } from "./commercialMissionStore";
 
 export const COMMERCIAL_MISSION_PROOF_MAX_BYTES = 10 * 1024 * 1024;
