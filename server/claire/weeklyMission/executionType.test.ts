@@ -384,8 +384,8 @@ describe("weekly execution type", () => {
     expect(shared).not.toMatch(/function hasFieldExecution|function hasRemoteExecution/);
     expect(shared).toMatch(/classifyObjectiveExecution/);
     expect(existsSync(new URL("../../weeklyOperatingPlan.ts", import.meta.url))).toBe(false);
-    const rank = readFileSync(new URL("../../missionDirector/missionRank.ts", import.meta.url), "utf8");
-    const selection = readFileSync(new URL("../../missionDirector/planSelection.ts", import.meta.url), "utf8");
+    const rank = readFileSync(new URL("../../planning/missionDirector/missionRank.ts", import.meta.url), "utf8");
+    const selection = readFileSync(new URL("../../planning/missionDirector/planSelection.ts", import.meta.url), "utf8");
     const controller = readFileSync(
       new URL("../../../client/src/pages/driver/GoldlineDriverController.tsx", import.meta.url),
       "utf8"

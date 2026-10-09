@@ -32,7 +32,7 @@ async function applySchema() {
     )
   `);
   const sql = await readFile(
-    new URL("../../drizzle/0104_persistent_operator_authority_appointments.sql", import.meta.url),
+    new URL("../../../drizzle/0104_persistent_operator_authority_appointments.sql", import.meta.url),
     "utf8"
   );
   for (const statement of sql

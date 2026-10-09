@@ -222,7 +222,7 @@ describe("Daily Command weekly intent", () => {
       title: "Field the six buildings",
       source: "daily_command",
     });
-    const missionDirector = readFileSync(new URL("../../missionDirector/missionDirectorService.ts", import.meta.url), "utf8");
+    const missionDirector = readFileSync(new URL("../../planning/missionDirector/missionDirectorService.ts", import.meta.url), "utf8");
     const seam = readFileSync(new URL("./dailyCommandIntent.ts", import.meta.url), "utf8");
     expect(missionDirector).toMatch(/loadDailyCommand/);
     expect(missionDirector).toMatch(/applyWeeklyIntentToCommand/);

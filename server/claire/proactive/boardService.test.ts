@@ -6,7 +6,7 @@ const obligationMocks = vi.hoisted(() => ({
   backfillPersistentOperatorCommercialFollowUpRef: vi.fn(),
 }));
 
-vi.mock("../../persistentOperator/obligationStore", () => ({
+vi.mock("../../agents/persistentOperator/obligationStore", () => ({
   claireProactiveObligations: {},
   ...obligationMocks,
 }));

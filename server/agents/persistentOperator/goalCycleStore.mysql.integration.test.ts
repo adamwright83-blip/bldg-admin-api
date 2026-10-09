@@ -18,7 +18,7 @@ async function rows<T extends RowDataPacket>(sql: string, params: unknown[] = []
 
 async function applyPr2Schema() {
   const sql = await readFile(
-    new URL("../../drizzle/0103_persistent_growth_goal_cycles.sql", import.meta.url),
+    new URL("../../../drizzle/0103_persistent_growth_goal_cycles.sql", import.meta.url),
     "utf8"
   );
   for (const statement of sql

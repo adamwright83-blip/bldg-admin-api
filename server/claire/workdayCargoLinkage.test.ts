@@ -13,7 +13,7 @@ vi.mock("../goldlineCargo/cargoService", () => ({
   deliverCustodyToCustomer: (...args: unknown[]) => deliverCustodyToCustomer(...args),
 }));
 
-vi.mock("../dayDirector/dayDirectorService", () => ({
+vi.mock("../planning/dayDirector/dayDirectorService", () => ({
   acceptProposal: (...args: unknown[]) => acceptProposal(...args),
   completeDayDirectorCommitment: (...args: unknown[]) => completeDayDirectorCommitment(...args),
   updateDayDirectorCommitment: (...args: unknown[]) => updateDayDirectorCommitment(...args),

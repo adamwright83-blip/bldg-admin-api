@@ -677,7 +677,7 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
       resolve(REPO_ROOT, "server/churnRadar"),
       resolve(REPO_ROOT, "server/planning/dayDirector"),
       resolve(REPO_ROOT, "server/campaignRuns"),
-      resolve(REPO_ROOT, "server/commercialPipeline"),
+      resolve(REPO_ROOT, "server/domains/commercial"),
       resolve(REPO_ROOT, "server/field"),
       resolve(REPO_ROOT, "server/salesCalls.ts"),
     ];
@@ -1133,7 +1133,7 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
       resolve(REPO_ROOT, "server/churnRadar"),
       resolve(REPO_ROOT, "server/planning/dayDirector"),
       resolve(REPO_ROOT, "server/campaignRuns"),
-      resolve(REPO_ROOT, "server/commercialPipeline"),
+      resolve(REPO_ROOT, "server/domains/commercial"),
       resolve(REPO_ROOT, "server/field"),
       resolve(REPO_ROOT, "server/salesCalls.ts"),
     ];

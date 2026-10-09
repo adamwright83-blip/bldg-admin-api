@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { admitCleanCloudPaidObservationWith } from "../cleancloudPaidEvidence";
+import { admitCleanCloudPaidObservationWith } from "../integrations/cleancloud/cleancloudPaidEvidence";
 import { loadCustomerOrderTruth } from "./customerOrderTruth";
 
 it("withholds unadmitted CleanCloud paid progression and fences admission to tenant and import", async () => {

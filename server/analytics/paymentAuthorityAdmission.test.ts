@@ -16,7 +16,7 @@ import {
 import {
   readCleanCloudPaidObservationReceipts,
   type CleanCloudPaidObservationExpectation,
-} from "../cleancloudPaidEvidence";
+} from "../integrations/cleancloud/cleancloudPaidEvidence";
 import { resetDbForTesting, setDbForTesting } from "../db";
 import { getRevenueSummary } from "./analyticsQueries";
 
