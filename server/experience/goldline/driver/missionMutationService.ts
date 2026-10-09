@@ -10,14 +10,14 @@
  */
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { missionMutations } from "../../drizzle/schema";
+import { missionMutations } from "../../../../drizzle/schema";
 import {
   deriveMutation,
   type MutationDecision,
   type MutationEvidence,
-} from "../../shared/missionMutation";
-import { getDb } from "../db";
-import type { DriverGameWorldNode } from "../../shared/driverGameWorld";
+} from "../../../../shared/missionMutation";
+import { getDb } from "../../../db";
+import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 
 /**
  * Builds evidence from the same `DriverGameWorldNode` the world read path

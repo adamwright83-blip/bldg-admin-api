@@ -4,7 +4,7 @@ const world = vi.hoisted(() => ({ nodes: [] as unknown[] }));
 vi.mock("./driverGameWorldService", () => ({
   listDriverGameWorld: vi.fn(async () => world.nodes),
 }));
-vi.mock("../db", () => ({
+vi.mock("../../../db", () => ({
   getDb: vi.fn(async () => {
     const chain = {
       from: () => chain,

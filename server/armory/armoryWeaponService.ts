@@ -24,7 +24,7 @@ import type {
   SalesIntelFramework,
 } from "../../shared/salesIntel";
 import { getDb } from "../db";
-import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
+import { projectGoldlineProgressionForIdentity } from "../experience/goldline/driver/progressionProjectionService";
 import {
   countIndependentSourceSupport,
   queryDriverVisibleFrameworks,

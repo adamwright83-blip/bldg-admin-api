@@ -6,24 +6,24 @@ import {
   driverGameWorldNodes,
   driverScoutDiscoveries,
   driverScoutReports,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 import type {
   CommercialMissionAccountSnapshot,
   CommercialMissionOpportunitySnapshot,
-} from "../../shared/commercialMission";
-import type { ScoutReport } from "../../shared/expansionScout";
-import { getDb } from "../db";
-import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
-import { getExpansionScoutEvidence } from "../capabilities/expansionScoutCapability";
+} from "../../../shared/commercialMission";
+import type { ScoutReport } from "../../../shared/expansionScout";
+import { getDb } from "../../db";
+import { createCommercialMission } from "../../commercialMissions/commercialMissionStore";
+import { getExpansionScoutEvidence } from "../../capabilities/expansionScoutCapability";
 import {
   discoverLaundryTerritory,
   type TerritoryBusinessProvider,
-} from "../territory/territoryDiscovery";
+} from "../../territory/territoryDiscovery";
 import {
   getTerritoryOperatorProfile,
   persistTerritoryScan,
-} from "../territory/territoryStore";
-import { projectGoldlineProgressionForIdentity } from "./progressionProjectionService";
+} from "../../territory/territoryStore";
+import { projectGoldlineProgressionForIdentity } from "../../experience/goldline/driver/progressionProjectionService";
 
 const CATEGORY_BY_ARCHETYPE: Record<string, string[]> = {
   property_management: ["property management company", "apartment complex"],

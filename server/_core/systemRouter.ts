@@ -20,7 +20,7 @@ import { commercialCampaignRouter } from "../commercialCampaigns/commercialCampa
 import { legacyDayforgeProofRouter } from "../legacyDayforgeProof/legacyDayforgeProofRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { fieldRouter } from "../field/fieldRouter";
-import { businessWorldRouter } from "../businessWorld/businessWorldRouter";
+import { businessWorldRouter } from "../experience/lanternCity/businessOverview/businessOverviewRouter";
 import { growRouter } from "../grow/growRouter";
 import { moneyRouter } from "../money/moneyRouter";
 import { unloadRouter } from "../unload/unloadRouter";
@@ -31,7 +31,7 @@ import { openChannelRouter } from "../openChannel/openChannelRouter";
 import { day1TenDoorsRouter } from "../openChannel/day1TenDoorsRouter";
 import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
-import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
+import { driverGameWorldRouter } from "../composition/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../legacyDayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../planning/dayDirector/dayDirectorRouter";

@@ -15,7 +15,7 @@ import {
 import type { CSSProperties } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import type { WorldPoint } from "../../../server/businessWorld/businessWorldTypes";
+import type { WorldPoint } from "../../../server/experience/lanternCity/businessOverview/businessOverviewTypes";
 
 function dollars(cents: number | null | undefined): string {
   return cents == null

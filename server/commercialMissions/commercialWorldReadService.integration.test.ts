@@ -12,7 +12,7 @@ import {
   readCommercialWorldFactsForActor,
   readCommercialProgressionFactsForActor,
 } from "./commercialWorldReadService";
-import { listDriverGameWorld } from "../driverGameWorld/driverGameWorldService";
+import { listDriverGameWorld } from "../experience/goldline/driver/driverGameWorldService";
 const prefix = `b3-${randomUUID().slice(0, 8)}`;
 const tenants = [`${prefix}-a`, `${prefix}-b`];
 afterAll(async () => {

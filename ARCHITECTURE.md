@@ -40,7 +40,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Mitch** | Autonomous game producer and game development agent. Managed directly by Adam (President does not manage Mitch). | `server/mitch/` |
 | **Day Line** | Operator's prioritized daily schedule, commitments, and active work agenda. | `server/dayDirector/`, `server/goldline/dayline/` |
 | **Mission Director** | Sole deterministic ranker for candidate operational work and sales missions. | `server/missionDirector/` |
-| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/goldlineWorld/`, `server/driverGameWorld/`, `server/companions/` |
+| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/goldlineWorld/`, `server/experience/goldline/driver/`, `server/field/outreach/`, `server/field/scout/`, `server/companions/` |
 | **Lantern City** | Visual interactive city map composing authoritative business projections onto 2.5D visual landmarks. | `server/lanternCity/`, `server/goldlineWorld/lanternCityOverviewService.ts` |
 | **Tower Wars** | Game mode where towers represent economic activity, consuming canonical admitted payment facts. | `server/towerWars/` |
 | **Legacy Quarantine** | Quarantined historical compatibility code and database migration fixtures from DayForge. | `server/legacyDayforge*` |

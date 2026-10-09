@@ -24,9 +24,9 @@ describe("Commercial-owned world fact boundary", () => {
     const reader = source("./commercialWorldReadService.ts");
     expect(reader).not.toContain("driverGameWorldNodes");
     expect(reader).not.toMatch(/\.(?:insert|update|delete)\s*\(/);
-    const world = source("../driverGameWorld/driverGameWorldService.ts");
+    const world = source("../experience/goldline/driver/driverGameWorldService.ts");
     const progression = source(
-      "../driverGameWorld/progressionProjectionService.ts"
+      "../experience/goldline/driver/progressionProjectionService.ts"
     );
     expect(world).toContain("readCommercialWorldFactsForActor(input)");
     expect(world).not.toContain("commercialPipelineRecords");
