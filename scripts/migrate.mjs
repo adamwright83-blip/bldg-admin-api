@@ -5276,5 +5276,38 @@ await runRequired(
   "attach authority receipts to historical Goldline account wins"
 );
 
+// Real JOYSTICK backend readers require these existing historical stores.
+// Additive schema repair only; no tenant data or financial authority backfill.
+for (const [relativePath, label] of [
+  ["../drizzle/0027_operations_events.sql", "Operations event reader"],
+  ["../drizzle/0036_territory_intelligence.sql", "Territory world reader"],
+  ["../drizzle/0055_sales_intel_source_registry.sql", "Sales source registry reader"],
+  ["../drizzle/0056_sales_intel_teachings.sql", "Sales teaching reader"],
+]) {
+  await applyHistoricalCreateTables(relativePath, label);
+  await applyHistoricalStandaloneIndexes(relativePath, `${label} indexes`);
+}
+await ensureRequiredColumn(
+  "sales_intel_source_artifacts", "sourceRegistryId",
+  "ALTER TABLE `sales_intel_source_artifacts` ADD COLUMN `sourceRegistryId` varchar(36) NULL AFTER `id`"
+);
+// Match existing 0055 DDL; reject incompatible indexes instead of replacing them.
+const sourceRegistryIndex = await getIndexColumns("sales_intel_source_artifacts", "idx_sales_intel_source_registry");
+if (sourceRegistryIndex.length === 0) {
+  await runRequired(
+    "ALTER TABLE `sales_intel_source_artifacts` ADD INDEX `idx_sales_intel_source_registry` (`sourceRegistryId`)",
+    "Sales source registry index"
+  );
+} else if (sourceRegistryIndex.length !== 1 || sourceRegistryIndex[0] !== "sourceRegistryId") {
+  throw new Error("Sales source registry index differs from historical 0055 DDL");
+}
+await assertRequiredColumns("operations_events", ["id", "tenantId", "actualEventTimestamp"]);
+await assertRequiredColumns("territory_operator_profiles", ["tenantId", "routePointsJson"]);
+await assertRequiredColumns("territory_scan_sessions", ["id", "tenantId", "centerJson"]);
+await assertRequiredColumns("territory_scan_results", ["id", "tenantId", "scanSessionId"]);
+await assertRequiredColumns("sales_intel_sources", ["id", "canonicalSourceUrlHash"]);
+await assertRequiredColumns("sales_intel_source_artifacts", ["sourceRegistryId"]);
+await assertRequiredColumns("sales_intel_teachings", ["id", "teachingKey", "reviewState"]);
+
 await conn.end();
 console.log("\nMigration complete.");
