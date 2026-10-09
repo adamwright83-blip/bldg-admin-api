@@ -162,15 +162,27 @@ The final legacy [run 37870378116](https://github.com/adamwright83-blip/bldg-adm
 
 Matched native-domain MySQL: the eight relocated Orders/Payment/Commercial files pass all 21 assertions. Including `server/orders.integration.test.ts` and `server/ordersStatusTransition.integration.test.ts` yields identical 10-file results on both revisions: 24 pass / 3 fail. The three additional baseline fixtures omit tenant authority (two) or matching Payment admission (one); business admission rules remain intact.
 
+## Extended-budget final source validation
+
+Repair source head `4fd4d02f36dad3dddb41adf52a21125dbc561b65` completed [hosted fast run 37871032658](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37871032658). Fast contracts passed every step, including clean production migration/bootstrap, authenticated Daphne adaptation, Mitch durability, campaign invariants, ops task concurrency, live Strategy snapshot, Real Workday, sales loadout and Rook authority. Campaign, territory, Claire conversation and linked-debrief checks passed. Worker, Daphne, nomenclature and every SaaS check passed on this source head. Legacy retains exactly the protected 20 baseline failures; sales retains the sole reproduced CSV failure; mobile retains the reproduced bundle budget failure with its other six jobs passing.
+
+Matched additional real-MySQL stages pass on both revisions: eight files, 25 baseline assertions and 26 repair assertions (the extra durable Daphne preference assertion comes from #495). Each production bootstrap was also executed twice successfully against a separate disposable clean database. Native Orders/Payment/Commercial coverage is 21/21 on both; the expanded root-fixture selection retains the same three disclosed authority-fixture failures.
+
+The world browser completed with seven failures, 16 passes, seven skips and 12 serial tests not run. The independent hosted pre-E comparison reproduced all seven exact failure identities with the same counts: **PREEXISTING BASELINE**. Missing `.lc-lantern` elements (six cases) and a missing `.gl-world-title` (one desktop case) reproduce before Program E. These tests and frontend source are unchanged. The 12 dependent serial cases did not run on either revision; they are unavailable evidence, not fabricated passes.
+
+The equivalent hosted pre-E reference [run 37871962549](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37871962549) uses diagnostic commit `3001c1dc5dde5324f9e1fc997ff411b83de69b9a`. Its parent is exactly `PRE_PROGRAM_E_BACKUP`; its only changed file is `.github/workflows/goldline-fast-smoke.yml`, and its only edits are the same timeout budgets. Every baseline application, test, fixture, dependency and script is byte-identical to `7ba7310`. The original clean baseline worktree remains unmodified. No baseline source was changed to compile or pass.
+
+Pre-E fast contracts, campaign, territories, Claire conversation and linked debrief all passed in that same run. The portable evidence JSON preserves both full-log hashes and the exact seven browser failure identities. No unresolved new Program E regression remains in the investigated coverage.
+
 ## Remaining gate dependencies and unavailable portions
 
-- Final-head hosted CI, repair/audit merge, latest-main fetch and exact recovery SHA must still be verified.
+- Hosted checks on final repair source are complete; the evidence-only audit update, repair/audit merge, latest-main fetch and exact recovery SHA still must be verified.
 - Hosted legacy deterministic failures must be checked against the reproduced protected baseline exceptions; no new failure may be silently folded into that group.
-- Final hosted fast contracts and world browser smoke remain required. Local pre-E browser smoke was not replayed; pre-E frontend source, lockfile and resulting bundle identities are unchanged, but this is not a fabricated browser pass.
-- The workflows' remaining MySQL stages and mobile schema coverage are provided by final hosted CI, not inferred from TypeScript or deployment results.
+- Hosted fast contracts passed on both revisions. World browser has seven exactly matched baseline failures; 12 dependent serial tests did not run on either revision and remain explicitly unavailable.
+- All remaining fast MySQL stages pass in hosted CI and matched disposable local MySQL. Mobile build and schema stage cannot reach its later schema command because of the identical bundle-budget failure; separate schema-release CI passes, but this does not claim the blocked mobile step ran.
 - The field bridge DB-unavailable fixtures (two assertions) and prepReadiness assertion also reproduce in matched UTC follow-ups: 18 pass / 3 fail on each revision. They are separate PREEXISTING BASELINE fixtures, not timezone-dismissed regressions.
 - Documentation PRs #503/#504 remain open and deliberately deferred to E7.
 - No protected work is currently demonstrated to block a *new* migration regression: the protected failures reproduce before E. Their baseline repair belongs to #476.
 - E5–E8 have not begun. No directory was moved, duplicate implementation restored, expectation weakened, test disabled, tenant manufactured or production operation performed.
 
-**PROGRAM E — RECOVERY BLOCKED** pending final safety evidence and merge. **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED**; E8 has not run.
+**PROGRAM E — RECOVERY BLOCKED** pending merged recovery audit/repairs and verification of main. **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED**; E8 has not run.

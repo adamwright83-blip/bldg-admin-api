@@ -416,5 +416,146 @@
         "FAIL  server/planning/missionDirector/prepReadiness.test.ts > Mission Director prep completion evidence > uses completedAt rather than createdAt for the prep deadline"
       ]
     }
+  ],
+  "finalValidatedSource": "4fd4d02f36dad3dddb41adf52a21125dbc561b65",
+  "additionalLogs": [
+    {
+      "name": "final-focused",
+      "sha256": "5df75fc3350efdfd597636ee0d0d81e4cb611f2b43a234003a2263023d7943ba",
+      "summary": [
+        " Test Files  8 passed (8)",
+        "      Tests  144 passed (144)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "repair-domain-mysql-matched",
+      "sha256": "a03acfee17ced2833db212a441be022cc46a2dc677fc01699db8dcffaed4d884",
+      "summary": [
+        " Test Files  2 failed | 8 passed (10)",
+        "      Tests  3 failed | 24 passed (27)"
+      ],
+      "failures": [
+        " FAIL  server/orders.integration.test.ts > orders.create > creates an order and returns an orderId",
+        " FAIL  server/orders.integration.test.ts > orders.create > creates an order without optional fields",
+        " FAIL  server/ordersStatusTransition.integration.test.ts > orders.updateStatus \u2014 canonical pickup/delivery transition > D. GENUINE PAID/ELIGIBLE DELIVERY: a paid order transitions ready -> delivered"
+      ]
+    },
+    {
+      "name": "program-e-recovery-baseline-fast-mysql",
+      "sha256": "6911d1deb2494340b8ac0bd92d4265377cfb4977446a550ec00a07521f6648f4",
+      "summary": [
+        " Test Files  8 passed (8)",
+        "      Tests  25 passed (25)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-regression-recovery-fast-mysql",
+      "sha256": "2790a6fe1993667d5c78699da18fdb4bfc69067a7e09d070783c93599a361721",
+      "summary": [
+        " Test Files  8 passed (8)",
+        "      Tests  26 passed (26)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "extended-fast",
+      "sha256": "be3acdf0fc9757c8036996d9b9519a86b433fcff037f7b584ce38d0475b7951c",
+      "summary": [
+        "claire-conversation-contracts\tProve Claire semantic routing and structured referents\t2026-10-09T01:42:43.8672730Z  Test Files  4 passed (4)",
+        "claire-conversation-contracts\tProve Claire semantic routing and structured referents\t2026-10-09T01:42:43.8673591Z       Tests  46 passed (46)",
+        "fast-contracts\tProve Gate A platform authority boundary\t2026-10-09T01:44:40.7160561Z  Test Files  4 passed (4)",
+        "fast-contracts\tProve Gate A platform authority boundary\t2026-10-09T01:44:40.7161622Z       Tests  54 passed (54)",
+        "fast-contracts\tProve Authority Receipt contracts\t2026-10-09T01:44:45.0724385Z  Test Files  8 passed (8)",
+        "fast-contracts\tProve Authority Receipt contracts\t2026-10-09T01:44:45.0725401Z       Tests  40 passed (40)",
+        "fast-contracts\tProve Action / Execution authority convergence\t2026-10-09T01:45:04.9650878Z  Test Files  17 passed (17)",
+        "fast-contracts\tProve Action / Execution authority convergence\t2026-10-09T01:45:04.9652226Z       Tests  131 passed (131)",
+        "fast-contracts\tProve Claire domain-port convergence\t2026-10-09T01:45:19.6554310Z  Test Files  14 passed (14)",
+        "fast-contracts\tProve Claire domain-port convergence\t2026-10-09T01:45:19.6555789Z       Tests  73 passed (73)",
+        "fast-contracts\tProve Daphne causal adaptation kernel\t2026-10-09T01:45:46.7268691Z  Test Files  38 passed (38)",
+        "fast-contracts\tProve Daphne causal adaptation kernel\t2026-10-09T01:45:46.7269857Z       Tests  137 passed (137)",
+        "fast-contracts\tProve commercial paid-revenue authority shadow\t2026-10-09T01:45:50.2822133Z  Test Files  4 passed (4)",
+        "fast-contracts\tProve commercial paid-revenue authority shadow\t2026-10-09T01:45:50.2823539Z       Tests  14 passed (14)",
+        "fast-contracts\tProve read-only commercial payment mismatch report\t2026-10-09T01:45:53.5245967Z  Test Files  1 passed (1)",
+        "fast-contracts\tProve read-only commercial payment mismatch report\t2026-10-09T01:45:53.5247531Z       Tests  5 passed (5)",
+        "fast-contracts\tProve churn and recovery planning-input truth\t2026-10-09T01:45:54.7177070Z  Test Files  3 passed (3)",
+        "fast-contracts\tProve churn and recovery planning-input truth\t2026-10-09T01:45:54.7181684Z       Tests  25 passed (25)",
+        "fast-contracts\tProve Planning authority convergence\t2026-10-09T01:46:02.6433180Z  Test Files  9 passed (9)",
+        "fast-contracts\tProve Planning authority convergence\t2026-10-09T01:46:02.6434258Z       Tests  96 passed (96)",
+        "fast-contracts\tProve Persistent Growth Operator Phase 0 contracts\t2026-10-09T01:46:21.9215756Z  Test Files  23 passed (23)",
+        "fast-contracts\tProve Persistent Growth Operator Phase 0 contracts\t2026-10-09T01:46:21.9216768Z       Tests  179 passed (179)",
+        "fast-contracts\tProve Mitch native producer contracts\t2026-10-09T01:46:27.7220599Z  Test Files  5 passed (5)",
+        "fast-contracts\tProve Mitch native producer contracts\t2026-10-09T01:46:27.7221815Z       Tests  33 passed (33)",
+        "fast-contracts\tProve exact property Google Places targeting\t2026-10-09T01:46:31.2790081Z  Test Files  2 passed (2)",
+        "fast-contracts\tProve exact property Google Places targeting\t2026-10-09T01:46:31.2791414Z       Tests  14 passed (14)",
+        "fast-contracts\tProve Daphne causal chain through authenticated production entrypoints\t2026-10-09T01:46:50.3404166Z  Test Files  1 passed (1)",
+        "fast-contracts\tProve Daphne causal chain through authenticated production entrypoints\t2026-10-09T01:46:50.3405187Z       Tests  7 passed (7)",
+        "fast-contracts\tProve Mitch producer durability against clean MySQL\t2026-10-09T01:46:53.6734647Z  Test Files  1 passed (1)",
+        "fast-contracts\tProve Mitch producer durability against clean MySQL\t2026-10-09T01:46:53.6736790Z       Tests  1 passed (1)",
+        "fast-contracts\tProve campaign and behavioral truth invariants\t2026-10-09T01:47:03.2991745Z  Test Files  16 passed (16)",
+        "fast-contracts\tProve campaign and behavioral truth invariants\t2026-10-09T01:47:03.2992889Z       Tests  188 passed (188)",
+        "fast-contracts\tProve ops task completion concurrency against real MySQL\t2026-10-09T01:47:10.6015343Z  Test Files  6 passed (6)",
+        "fast-contracts\tProve ops task completion concurrency against real MySQL\t2026-10-09T01:47:10.6016357Z       Tests  18 passed (18)",
+        "fast-contracts\tProve StrategyEngine live snapshot sections\t2026-10-09T01:47:27.2512422Z  Test Files  13 passed (13)",
+        "fast-contracts\tProve StrategyEngine live snapshot sections\t2026-10-09T01:47:27.2513996Z       Tests  167 passed (167)",
+        "fast-contracts\tProve Real Workday truth invariants\t2026-10-09T01:47:31.7211571Z  Test Files  5 passed (5)",
+        "fast-contracts\tProve Real Workday truth invariants\t2026-10-09T01:47:31.7212885Z       Tests  69 passed (69)",
+        "fast-contracts\tProve Claire pre-visit sales loadout\t2026-10-09T01:47:33.2554478Z  Test Files  4 passed (4)",
+        "fast-contracts\tProve Claire pre-visit sales loadout\t2026-10-09T01:47:33.2555920Z       Tests  20 passed (20)",
+        "fast-contracts\tProve Rook CONTACT authority boundary\t2026-10-09T01:47:40.1420724Z  Test Files  3 passed (3)",
+        "fast-contracts\tProve Rook CONTACT authority boundary\t2026-10-09T01:47:40.1422049Z       Tests  39 passed (39)",
+        "linked-debrief-contracts\tProve mission-linked tower debrief\t2026-10-09T01:43:24.0220492Z  Test Files  5 passed (5)",
+        "linked-debrief-contracts\tProve mission-linked tower debrief\t2026-10-09T01:43:24.0221322Z       Tests  43 passed (43)",
+        "fast-smoke-world\tRun deterministic micro gate\t2026-10-09T01:47:45.8148954Z   7 failed",
+        "fast-smoke-world\tRun deterministic micro gate\t2026-10-09T01:47:45.8159975Z   7 skipped",
+        "fast-smoke-world\tRun deterministic micro gate\t2026-10-09T01:47:45.8160195Z   12 did not run",
+        "fast-smoke-campaign\tRun deterministic micro gate\t2026-10-09T01:44:18.5744092Z   2 skipped",
+        "fast-smoke-territories\tRun deterministic micro gate\t2026-10-09T01:45:18.1736466Z   3 skipped"
+      ],
+      "failures": [
+        "fast-smoke-world\tRun deterministic micro gate\t2026-10-09T01:47:45.8066089Z   4) [desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:309:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a admin Lantern City has one top-left chrome owner at the reported viewport "
+      ]
+    }
+  ],
+  "hostedWorldComparison": [
+    {
+      "name": "extended-fast",
+      "sha256": "be3acdf0fc9757c8036996d9b9519a86b433fcff037f7b584ce38d0475b7951c",
+      "worldFailures": [
+        "[desktop] \u203a e2e/goldline-smoke/lanternCityMount.spec.ts:21:3 \u203a Lantern City V6 route and retained workflows \u203a mounts a populated composed city without legacy lantern geometry",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:151:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a focus, inspect and back restore the prior camera",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:196:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a a bounded autonomous incident makes the idle city visibly alive",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:309:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a admin Lantern City has one top-left chrome owner at the reported viewport",
+        "[mobile] \u203a e2e/goldline-smoke/lanternCityMount.spec.ts:21:3 \u203a Lantern City V6 route and retained workflows \u203a mounts a populated composed city without legacy lantern geometry",
+        "[mobile] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:151:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a focus, inspect and back restore the prior camera",
+        "[mobile] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:196:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a a bounded autonomous incident makes the idle city visibly alive"
+      ],
+      "worldSummary": [
+        "  7 failed",
+        "  7 skipped",
+        "  12 did not run",
+        "  16 passed (3.8m)"
+      ]
+    },
+    {
+      "name": "pre-e-world-hosted",
+      "sha256": "0b3e06becdd4a4bd934020584b36fa3d4edbcdf3add5015d66a5c7ed48506865",
+      "worldFailures": [
+        "[desktop] \u203a e2e/goldline-smoke/lanternCityMount.spec.ts:21:3 \u203a Lantern City V6 route and retained workflows \u203a mounts a populated composed city without legacy lantern geometry",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:151:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a focus, inspect and back restore the prior camera",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:196:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a a bounded autonomous incident makes the idle city visibly alive",
+        "[desktop] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:309:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a admin Lantern City has one top-left chrome owner at the reported viewport",
+        "[mobile] \u203a e2e/goldline-smoke/lanternCityMount.spec.ts:21:3 \u203a Lantern City V6 route and retained workflows \u203a mounts a populated composed city without legacy lantern geometry",
+        "[mobile] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:151:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a focus, inspect and back restore the prior camera",
+        "[mobile] \u203a e2e/goldline-smoke/worldSmoke.spec.ts:196:3 \u203a Goldline smoke \u2014 the world opens, thinks and plays \u203a a bounded autonomous incident makes the idle city visibly alive"
+      ],
+      "worldSummary": [
+        "  7 failed",
+        "  7 skipped",
+        "  12 did not run",
+        "  16 passed (3.6m)"
+      ]
+    }
   ]
 }
