@@ -2964,6 +2964,9 @@ export const appRouter = router({
             if (err.code === "PAYMENT_REQUIRED") {
               throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
             }
+            if (err.code === "CONFLICT") {
+              throw new TRPCError({ code: "CONFLICT", message: err.message });
+            }
             throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
           }
           throw err;

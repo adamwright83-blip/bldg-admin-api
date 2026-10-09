@@ -1,6 +1,6 @@
 import { readNativePaymentAuthorityReceipts, hasNativePaymentAuthority } from "../payment/nativePaymentReadService";
 import * as persistence from "../../db";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { orders, type InsertOrder, type Order } from "../../../drizzle/schema";
 import {
   attemptOrderPickupCollection,
@@ -9,11 +9,14 @@ import {
   getDb,
   getOrderById,
   updateOrderStatus,
+  OrderUpdateConflictError,
+  type UpdateOrderStatusGuard,
 } from "../../db";
 import type { OperationsEventActorContext } from "../../operationsEvents";
 import {
   assertOrderTenantAuthority,
   assertOrderVendorAuthority,
+  canonicalOrderTenantId,
   OrderOwnershipError,
 } from "./orderOwnership";
 
@@ -116,7 +119,11 @@ export async function createOrReuseResidentOrder(
 export async function attemptOrderDeliveryTransition(
   orderId: number,
   expectedTenantId?: string | null,
-  existingOrder?: Order
+  existingOrder?: Order,
+  guard?: {
+    expectedVendorId?: number | null;
+    requireUnassignedVendor?: boolean;
+  }
 ): Promise<{ transitioned: boolean; alreadyCompleted: boolean; order: Order }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -167,6 +174,11 @@ export async function attemptOrderDeliveryTransition(
       sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${expectedTenantId.trim()}`
     );
   }
+  if (guard?.requireUnassignedVendor) {
+    conditions.push(isNull(orders.vendorId));
+  } else if (guard?.expectedVendorId !== undefined && guard.expectedVendorId !== null) {
+    conditions.push(eq(orders.vendorId, guard.expectedVendorId));
+  }
 
   const result = await db
     .update(orders)
@@ -207,23 +219,31 @@ export async function transitionNativeOrderStatus(
   }
 
   const requestedTenant = input.tenantId?.trim();
-  if (requestedTenant) {
-    try {
-      assertOrderTenantAuthority({
-        order,
-        tenantId: requestedTenant,
-        allowCrossTenant: input.allowCrossTenant,
-        // Preserve the existing vendor-status behavior: a vendor session on
-        // the legacy default host was not tenant-restricted here. Vendor
-        // assignment remains the authority for that path.
-        allowLegacyDefaultWildcard: input.vendorId != null,
-      });
-    } catch (error) {
-      if (error instanceof OrderOwnershipError) {
-        throw new OrderTransitionError("UNAUTHORIZED", error.message);
-      }
-      throw error;
+  if (!requestedTenant) {
+    throw new OrderTransitionError(
+      "UNAUTHORIZED",
+      "Order transition requires tenant authority"
+    );
+  }
+
+  const isCrossTenantAssignedVendor =
+    input.vendorId != null &&
+    order.vendorId != null &&
+    order.vendorId === input.vendorId;
+
+  try {
+    assertOrderTenantAuthority({
+      order,
+      tenantId: requestedTenant,
+      allowCrossTenant: Boolean(
+        input.allowCrossTenant || isCrossTenantAssignedVendor
+      ),
+    });
+  } catch (error) {
+    if (error instanceof OrderOwnershipError) {
+      throw new OrderTransitionError("UNAUTHORIZED", error.message);
     }
+    throw error;
   }
 
   if (input.vendorId != null) {
@@ -232,7 +252,7 @@ export async function transitionNativeOrderStatus(
         order,
         vendorId: input.vendorId,
         // Existing updateStatus behavior allowed a vendor to transition an
-        // unassigned order. Preserve it; do not invent assignment policy here.
+        // unassigned order on the same tenant.
         allowUnassigned: true,
       });
     } catch (error) {
@@ -243,6 +263,15 @@ export async function transitionNativeOrderStatus(
     }
   }
 
+  const mutationGuard: UpdateOrderStatusGuard = {
+    expectedTenantId: order.tenantId,
+    ...(input.vendorId != null
+      ? order.vendorId == null
+        ? { requireUnassignedVendor: true }
+        : { expectedVendorId: input.vendorId }
+      : {}),
+  };
+
   // 1. Pickup transition
   if (input.status === "collected") {
     if (order.status === "cancelled")
@@ -251,7 +280,7 @@ export async function transitionNativeOrderStatus(
         "This order cannot be collected."
       );
     const { transitioned, order: collectedOrder } =
-      await attemptOrderPickupCollection(input.orderId, order.tenantId);
+      await attemptOrderPickupCollection(input.orderId, order.tenantId, mutationGuard);
     if (!collectedOrder) {
       throw new OrderTransitionError("NOT_FOUND", "Order not found");
     }
@@ -264,6 +293,35 @@ export async function transitionNativeOrderStatus(
         throw new OrderTransitionError(
           "CONFLICT",
           "Order could not be collected."
+        );
+      }
+      if (
+        mutationGuard.expectedTenantId !== undefined &&
+        canonicalOrderTenantId(collectedOrder.tenantId) !==
+          canonicalOrderTenantId(mutationGuard.expectedTenantId)
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order tenant changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.requireUnassignedVendor &&
+        collectedOrder.vendorId != null
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.expectedVendorId !== undefined &&
+        mutationGuard.expectedVendorId !== null &&
+        collectedOrder.vendorId !== mutationGuard.expectedVendorId
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
         );
       }
       return {
@@ -288,13 +346,45 @@ export async function transitionNativeOrderStatus(
     } = await attemptOrderDeliveryTransition(
       input.orderId,
       requestedTenant,
-      order
+      order,
+      mutationGuard
     );
     if (!transitioned && !alreadyCompleted) {
       throw new OrderTransitionError(
         "INVALID_TRANSITION",
         "Order could not be delivered."
       );
+    }
+    if (alreadyCompleted) {
+      if (
+        mutationGuard.expectedTenantId !== undefined &&
+        canonicalOrderTenantId(deliveredOrder.tenantId) !==
+          canonicalOrderTenantId(mutationGuard.expectedTenantId)
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order tenant changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.requireUnassignedVendor &&
+        deliveredOrder.vendorId != null
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.expectedVendorId !== undefined &&
+        mutationGuard.expectedVendorId !== null &&
+        deliveredOrder.vendorId !== mutationGuard.expectedVendorId
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
+        );
+      }
     }
     return {
       success: true,
@@ -313,7 +403,19 @@ export async function transitionNativeOrderStatus(
   }
 
   // 4. Other transitions
-  await updateOrderStatus(input.orderId, input.status, input.actor);
+  try {
+    await updateOrderStatus(input.orderId, input.status, input.actor, mutationGuard);
+  } catch (error) {
+    if (
+      error instanceof OrderUpdateConflictError ||
+      (error instanceof Error &&
+        (error.message.includes("concurrently") ||
+          error.message.includes("conflict")))
+    ) {
+      throw new OrderTransitionError("CONFLICT", error.message);
+    }
+    throw error;
+  }
   const updatedOrder = await getOrderById(input.orderId);
   if (!updatedOrder) {
     throw new OrderTransitionError("NOT_FOUND", "Order not found after update");

@@ -999,25 +999,50 @@ export async function getOrdersByDateAndStatus(
  * request retried) sees `transitioned: false` against the resulting order,
  * which routers.ts uses to skip re-sending the pickup SMS.
  */
+export class OrderUpdateConflictError extends Error {
+  readonly code = "CONFLICT" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "OrderUpdateConflictError";
+  }
+}
+
+export type UpdateOrderStatusGuard = {
+  expectedTenantId?: string | null;
+  expectedVendorId?: number | null;
+  requireUnassignedVendor?: boolean;
+};
+
 export async function attemptOrderPickupCollection(
   orderId: number,
-  expectedTenantId?: string | null
+  expectedTenantId?: string | null,
+  guard?: {
+    expectedVendorId?: number | null;
+    requireUnassignedVendor?: boolean;
+  }
 ): Promise<{ transitioned: boolean; order: Order | undefined }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  const conditions = [
+    eq(orders.id, orderId),
+    inArray(orders.status, ["new", "intake-pending"]),
+  ];
+
+  if (expectedTenantId !== undefined) {
+    conditions.push(sql`${orders.tenantId} <=> ${expectedTenantId}`);
+  }
+
+  if (guard?.requireUnassignedVendor) {
+    conditions.push(isNull(orders.vendorId));
+  } else if (guard?.expectedVendorId !== undefined && guard.expectedVendorId !== null) {
+    conditions.push(eq(orders.vendorId, guard.expectedVendorId));
+  }
+
   const result = await db
     .update(orders)
     .set({ status: "collected" })
-    .where(
-      and(
-        eq(orders.id, orderId),
-        inArray(orders.status, ["new", "intake-pending"]),
-        expectedTenantId !== undefined
-          ? sql`${orders.tenantId} <=> ${expectedTenantId}`
-          : undefined
-      )
-    );
+    .where(and(...conditions));
   const affectedRows = Number(
     (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
   );
@@ -1029,7 +1054,8 @@ export async function attemptOrderPickupCollection(
 export async function updateOrderStatus(
   orderId: number,
   status: Order["status"],
-  actor?: OperationsEventActorContext
+  actor?: OperationsEventActorContext,
+  guard?: UpdateOrderStatusGuard
 ): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1041,8 +1067,66 @@ export async function updateOrderStatus(
       .where(eq(orders.id, orderId))
       .limit(1);
     const previousOrder = existing[0];
-    await tx.update(orders).set({ status }).where(eq(orders.id, orderId));
     if (!previousOrder) return;
+
+    if (guard) {
+      if (guard.expectedTenantId !== undefined) {
+        const expected = guard.expectedTenantId?.trim() ?? null;
+        const actual = previousOrder.tenantId?.trim() ?? null;
+        if (actual !== expected) {
+          throw new OrderUpdateConflictError(
+            "Order tenant changed concurrently"
+          );
+        }
+      }
+      if (guard.requireUnassignedVendor) {
+        if (previousOrder.vendorId != null) {
+          throw new OrderUpdateConflictError(
+            "Order vendor assignment changed concurrently"
+          );
+        }
+      } else if (
+        guard.expectedVendorId !== undefined &&
+        guard.expectedVendorId !== null
+      ) {
+        if (previousOrder.vendorId !== guard.expectedVendorId) {
+          throw new OrderUpdateConflictError(
+            "Order vendor assignment changed concurrently"
+          );
+        }
+      }
+    }
+
+    const updateConditions = [eq(orders.id, orderId)];
+    if (guard?.expectedTenantId !== undefined) {
+      updateConditions.push(
+        guard.expectedTenantId === null
+          ? sql`${orders.tenantId} IS NULL OR ${orders.tenantId} = ''`
+          : sql`${orders.tenantId} <=> ${guard.expectedTenantId}`
+      );
+    }
+    if (guard?.requireUnassignedVendor) {
+      updateConditions.push(isNull(orders.vendorId));
+    } else if (
+      guard?.expectedVendorId !== undefined &&
+      guard.expectedVendorId !== null
+    ) {
+      updateConditions.push(eq(orders.vendorId, guard.expectedVendorId));
+    }
+
+    const updateResult = await tx
+      .update(orders)
+      .set({ status })
+      .where(and(...updateConditions));
+
+    const affectedRows = Number(
+      (updateResult as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
+    );
+    if (affectedRows === 0 && previousOrder.status !== status) {
+      throw new OrderUpdateConflictError(
+        "Order could not be updated due to concurrent modification"
+      );
+    }
 
     const event = buildOperationEventForOrderStatusChange({
       order: previousOrder,
