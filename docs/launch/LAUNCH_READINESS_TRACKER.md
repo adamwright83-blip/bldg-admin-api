@@ -61,4 +61,4 @@
 | #529 | `feat/launch-first-action-dayline` | Direct entry to First Mission from reveal, prominent Day Line empty state & Next Up card, unconditional action telemetry | `4488ecba` | MERGED |
 | #530 | `test/launch-readiness-certifications` | Automated source-level certification suite verifying CERT-1 through CERT-6 | `0ef704f5` | MERGED |
 | #531 | `feat/launch-acceptance-remediation-p1` | Landing commercial terms & briefing sections, dual credential resilience, executable acceptance suite | `3fa089df` | MERGED |
-| #532 | `feat/launch-acceptance-journeys-p2` | Complete executable verification for ACCEPTANCE 4 (first mission & reload persistence), ACCEPTANCE 5 (session restoration), ACCEPTANCE 6 (two-tenant isolation) | TBD | IN PROGRESS |
+| #532 | `feat/launch-acceptance-journeys-p2` | Complete executable verification for ACCEPTANCE 4 (first mission & reload persistence), ACCEPTANCE 5 (session restoration), ACCEPTANCE 6 (two-tenant isolation) | `a57a95ee` | MERGED |
