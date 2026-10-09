@@ -26,7 +26,7 @@ describe("Goldline campaign migration", () => {
 describe("campaign publish concurrency", () => {
   it("treats a duplicate day insert as already published", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "server/goldlineWorld/campaignService.ts"),
+      resolve(process.cwd(), "server/experience/goldline/world/campaignService.ts"),
       "utf8"
     );
     expect(source).toContain("isMysqlDuplicateKeyError");
@@ -38,7 +38,7 @@ describe("campaign publish concurrency", () => {
 
   it("does not duplicate FieldToday into campaign tables", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "server/goldlineWorld/campaignService.ts"),
+      resolve(process.cwd(), "server/experience/goldline/world/campaignService.ts"),
       "utf8"
     );
     expect(source).toContain("goldlineObjectivesFromFieldToday");
@@ -48,7 +48,7 @@ describe("campaign publish concurrency", () => {
 
   it("persists instance updates and revision rows in one transaction with bounded OCC retry", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "server/goldlineWorld/campaignService.ts"),
+      resolve(process.cwd(), "server/experience/goldline/world/campaignService.ts"),
       "utf8"
     );
     expect(source).toContain("MAX_CAMPAIGN_REVISION_ATTEMPTS = 4");
@@ -70,7 +70,7 @@ describe("campaign publish concurrency", () => {
 describe("campaign review-fix contracts", () => {
   it("does not expose a member API that completes a Guardian finale without territory defeat", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "server/goldlineWorld/goldlineWorldRouter.ts"),
+      resolve(process.cwd(), "server/composition/goldlineWorldRouter.ts"),
       "utf8"
     );
     expect(source).not.toContain("recordCampaignChapterGameCompleted");

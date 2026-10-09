@@ -25,7 +25,7 @@ describe("Goldline territory migration", () => {
 describe("territory publish concurrency", () => {
   it("treats a duplicate stable-key insert as already published", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "server/goldlineWorld/territoryService.ts"),
+      resolve(process.cwd(), "server/experience/goldline/world/territoryService.ts"),
       "utf8"
     );
     expect(source).toContain("isMysqlDuplicateKeyError");
