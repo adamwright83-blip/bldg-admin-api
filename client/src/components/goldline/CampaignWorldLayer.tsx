@@ -3,7 +3,7 @@ import { CampaignGoldLine } from "./CampaignGoldLine";
 import { CampaignHudConnected } from "./CampaignHud";
 import { CampaignChapterHost } from "./CampaignChapterHost";
 import "./goldline-campaign.css";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/goldlineWorld/cityWorldService";
 
 export function CampaignWorldLayer({
   entities,

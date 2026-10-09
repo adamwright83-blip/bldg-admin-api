@@ -45,8 +45,8 @@ vi.mock("../storage", () => ({
 }));
 
 vi.mock("../_core/env", () => ({ ENV: envState }));
-vi.mock("../goldlineWorld/worldEventStore", () => ({ appendGoldlineWorldEvent: worldMocks.append }));
-vi.mock("../goldlineWorld/fieldJournalProcessingService", () => ({ queueFieldJournalProcessing: worldMocks.queue }));
+vi.mock("../experience/goldlineWorld/worldEventStore", () => ({ appendGoldlineWorldEvent: worldMocks.append }));
+vi.mock("../experience/goldlineWorld/fieldJournalProcessingService", () => ({ queueFieldJournalProcessing: worldMocks.queue }));
 
 type InsertedRow = Record<string, unknown>;
 

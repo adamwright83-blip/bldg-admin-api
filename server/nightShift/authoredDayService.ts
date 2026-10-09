@@ -18,7 +18,7 @@ import {
   deterministicNightShiftPlan,
   type NightShiftSelectionPlan,
 } from "../../shared/authoredDay";
-import { AUTHORED_V6_TERRITORY_IDS } from "../goldlineWorld/lanternCityOverviewService";
+import { AUTHORED_V6_TERRITORY_IDS } from "../experience/goldlineWorld/lanternCityOverviewService";
 import { forecastTerritoryDecay } from "../../shared/lanternDecayForecast";
 import {
   openObligations,
@@ -30,7 +30,7 @@ import { ENV } from "../_core/env";
 import { invokeLLM } from "../_core/llm";
 import { getBusinessDayWindow, getDashboardTimeZone } from "../dashboardZoned";
 import { getFieldToday } from "../field/fieldTodayService";
-import { listFuturePressure } from "../goldlineWorld/futurePressureService";
+import { listFuturePressure } from "../experience/goldlineWorld/futurePressureService";
 import { getGeographicTruth } from "../geography/geographicTruthService";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 

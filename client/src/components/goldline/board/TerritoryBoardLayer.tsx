@@ -46,7 +46,7 @@ import {
   bridgeAxisBetween,
   type BoardPlacement,
 } from "@shared/goldlineBoardKit";
-import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../../server/experience/goldlineWorld/cityWorldService";
 
 /** How the board renders each readiness state. Presentation only. */
 const READINESS_PRESENTATION: Record<

@@ -62,19 +62,19 @@ import { admitNativeStripePayment } from "../domains/payment/paymentAdmission";
 import {
   beginDriverRekindle,
   listDriverGameWorld,
-} from "../driverGameWorld/driverGameWorldService";
+} from "../experience/driverGameWorld/driverGameWorldService";
 import {
   completeColdCallTarget,
   createColdCallBatch,
   getColdCallBurstState,
   startColdCallTarget,
-} from "../driverGameWorld/coldCallBurstService";
+} from "../experience/driverGameWorld/coldCallBurstService";
 import {
   getLatestScoutReport,
   runExpansionScout,
-} from "../driverGameWorld/expansionScoutService";
+} from "../experience/driverGameWorld/expansionScoutService";
 import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScoutCapability";
-import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
+import { projectGoldlineProgressionForIdentity } from "../experience/driverGameWorld/progressionProjectionService";
 import {
   discoverLaundryTerritory,
   type RankedTerritoryOpportunity,

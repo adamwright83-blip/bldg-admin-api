@@ -9,7 +9,7 @@
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import { challengeSummary, type TerritoryDefinition, type TerritoryDerivedState } from "@shared/goldlineTerritories";
 import { buildVeilGeometry, polygonToSvgPath } from "@shared/goldlineTerritoryGeometry";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/goldlineWorld/cityWorldService";
 
 export function TerritoryVeilLayer({
   definition,

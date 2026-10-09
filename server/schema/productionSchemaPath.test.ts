@@ -37,7 +37,7 @@ function tableNames(sql: string): string[] {
 const RUNTIME_GUARDS = [
   "server/externalOrders/externalOrderService.ts",
   "server/storage.ts",
-  "server/driverGameWorld/driverGameWorldService.ts",
+  "server/experience/driverGameWorld/driverGameWorldService.ts",
   "server/commandSky.ts",
   "server/level4War.ts",
   "server/googleCalendar/googleCalendarService.ts",

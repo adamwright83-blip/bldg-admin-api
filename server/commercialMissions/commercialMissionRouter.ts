@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
+import { appendGoldlineWorldEvent } from "../experience/goldlineWorld/worldEventStore";
 import {
   COMMERCIAL_CONTACT_PREFERRED_CHANNELS,
   COMMERCIAL_CONTACT_RELATIONSHIP_TYPES,
@@ -746,7 +746,7 @@ export const commercialMissionRouter = router({
         assignedTo: input.assignedTo ?? ctx.user.openId,
       });
       const { findPhysicalEntityIdByAddress } = await import(
-        "../goldlineWorld/entityLookup"
+        "../experience/goldlineWorld/entityLookup"
       );
       const physicalEntityId = await findPhysicalEntityIdByAddress({
         tenantId: ctx.tenantId,

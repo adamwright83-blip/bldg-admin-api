@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { GOLDLINE_LA_LANDMARKS, projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import { strategicCrossings } from "@shared/goldlineCrossings";
 import type { PresentedTerritory } from "@shared/goldlineTerritories";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/goldlineWorld/cityWorldService";
 
 export function KingdomCrossingsLayer({ territories, entities }: { territories: readonly PresentedTerritory[]; entities: readonly CityWorldEntity[] }) {
   const [selected, setSelected] = useState<string | null>(null);

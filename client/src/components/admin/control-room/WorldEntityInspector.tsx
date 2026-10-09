@@ -19,7 +19,7 @@ import type {
   CustomerLocationCluster,
   GeographicCustomer,
 } from "./customerGeography";
-import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../../server/experience/goldlineWorld/cityWorldService";
 
 type CityEntity = CityWorldEntity;
 /**

@@ -1,6 +1,6 @@
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import type { CampaignInstance } from "@shared/goldlineCampaign";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/goldlineWorld/cityWorldService";
 
 function chapterPoint(
   campaign: CampaignInstance,

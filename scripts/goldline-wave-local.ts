@@ -31,7 +31,7 @@ if (process.argv.includes("--prepare")) {
     await connection.query(`CREATE TABLE ${database}.\`${table}\` LIKE goldline_daylight.\`${table}\``);
   }
   await connection.query(`USE ${database}`);
-  for (const path of ["../server/integrations/cleancloud/browserSync/schema.sql", "../server/towerWars/impactSchema.sql"])
+  for (const path of ["../server/integrations/cleancloud/browserSync/schema.sql", "../server/experience/towerWars/impactSchema.sql"])
     await connection.query(readFileSync(new URL(path, import.meta.url), "utf8"));
   await connection.end();
   await import("./goldline-admin-dev-setup");
@@ -49,8 +49,8 @@ if (process.argv.includes("--prepare")) {
     csvText: `Order ID,Customer,Address,Paid,Payment Date,Total\nwave-impact-proof,Local fixture,2170 Century Park East,Yes,${today},750.00` });
   process.exit(0);
 } else if (process.argv.includes("--seed-recurrence")) {
-  const { listPresentedTerritories } = await import("../server/goldlineWorld/territoryService");
-  const { appendGoldlineWorldEvent } = await import("../server/goldlineWorld/worldEventStore");
+  const { listPresentedTerritories } = await import("../server/experience/goldlineWorld/territoryService");
+  const { appendGoldlineWorldEvent } = await import("../server/experience/goldlineWorld/worldEventStore");
   const [territory] = await listPresentedTerritories({ tenantId: "default" });
   if (!territory?.state.cleared) throw new Error("Win the local Guardian first");
   await appendGoldlineWorldEvent({ tenantId: "default", physicalEntityId: territory.definition.members[0]!.physicalEntityId,
@@ -81,8 +81,8 @@ if (process.argv.includes("--prepare")) {
   console.log("Local-only post-impact collection fixture ready.");
   process.exit(0);
 } else if (process.argv.includes("--seed-guardian-ready")) {
-  const { listPresentedTerritories } = await import("../server/goldlineWorld/territoryService");
-  const { appendGoldlineWorldEvent } = await import("../server/goldlineWorld/worldEventStore");
+  const { listPresentedTerritories } = await import("../server/experience/goldlineWorld/territoryService");
+  const { appendGoldlineWorldEvent } = await import("../server/experience/goldlineWorld/worldEventStore");
   const [territory] = await listPresentedTerritories({ tenantId: "default" });
   if (!territory) throw new Error("No local territory fixture");
   for (const member of territory.definition.members) await appendGoldlineWorldEvent({ tenantId: "default", physicalEntityId: member.physicalEntityId, eventType: "visited", classification: "action", actorType: "operator", actorId: "local-browser-proof", occurredAt: new Date().toISOString(), sourceType: "local_fixture", sourceId: member.physicalEntityId, sourceEvidenceReference: "local-proof:evidence-gate", provenanceClass: "operator_observed", verificationClass: "VERIFIED", confidence: "high", idempotencyKey: `wave-ready:${member.physicalEntityId}`, correlationId: "local-guardian-proof", metadata: { fixture: true } });

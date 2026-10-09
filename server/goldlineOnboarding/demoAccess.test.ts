@@ -165,7 +165,7 @@ describe("host routing", () => {
 
 describe("production migration creates what the first mission writes to", () => {
   const migrate = repo("scripts", "migrate.mjs");
-  const worldSchema = repo("server", "goldlineWorld", "schema.sql");
+  const worldSchema = repo("server", "experience", "goldlineWorld", "schema.sql");
   const firstMission = repo("server", "goldlineOnboarding", "firstMission.ts");
 
   it("bootstraps goldline_world_events, which the field outcome inserts into", () => {
@@ -173,7 +173,7 @@ describe("production migration creates what the first mission writes to", () => 
     expect(firstMission).toContain("tx.insert(goldlineWorldEvents)");
     // migrate.mjs is the production bootstrap and never runs drizzle/*.sql, so
     // the table must be applied from a hand-written schema file.
-    expect(migrate).toContain("../server/goldlineWorld/schema.sql");
+    expect(migrate).toContain("../server/experience/goldlineWorld/schema.sql");
     expect(migrate).toContain('"Goldline world events"');
     expect(migrate).toContain('assertRequiredColumns("goldline_world_events"');
     expect(worldSchema).toContain("CREATE TABLE IF NOT EXISTS `goldline_world_events`");

@@ -69,7 +69,7 @@ async function main() {
     await grantGumballProofMembership(connection, "gumball-truth", "sync-proof-truth");
     const { cleancloudBrowserSyncRouter } = await import("./router");
     const { compileAuthoritativeEvents } = await import(
-      "../../../towerWars/towerWarsService"
+      "../../../experience/towerWars/towerWarsService"
     );
     const { compileTowerWarsState } = await import("../../../../shared/towerWars");
     const ctx = (tenantId = "default", openId = "sync-proof") =>

@@ -11,12 +11,12 @@ import {
   towerWeaponConcepts,
 } from "../../drizzle/schema";
 import type { FieldJournalExtraction } from "../../shared/fieldJournal";
-import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
+import { appendGoldlineWorldEvent } from "../experience/goldlineWorld/worldEventStore";
 import {
   normalizePhysicalAlias,
   resolvePhysicalIdentity,
   type PhysicalIdentityCandidate,
-} from "../goldlineWorld/identityResolver";
+} from "../experience/goldlineWorld/identityResolver";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import { getDb } from "../db";
 import { syncGeographicEntities, geocodePendingLocations } from "../geography/geographicTruthService";
