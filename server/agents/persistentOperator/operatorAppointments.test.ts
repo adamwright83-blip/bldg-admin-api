@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { targetWeekHorizon } from "../../../shared/weeklyMissionReadiness";
-import { getAgentToolPolicy } from "../../toolRegistry";
+import { getAgentToolPolicy } from "../toolRegistry";
 import { parseWeeklyPlanningCallbackRequest } from "./operatorAppointmentPolicy";
 import { insideSundayStandingWindow } from "./operatorAppointmentExecution";
 import {

@@ -702,7 +702,7 @@ describe("operator mission director and playable projection", () => {
   it("stays a Day Director adapter and does not grow a second mission system", () => {
     const source = readFileSync(new URL("./operatorMissionCommand.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/completeDayDirectorCommitment|saveWeeklyIntent|narrator|opsTasks|local-digital-footprint|runClaireBrainTurn|ExecutiveActionGrant/);
-    const missionDirector = readFileSync(new URL("../missionDirector/missionDirectorService.ts", import.meta.url), "utf8");
+    const missionDirector = readFileSync(new URL("../planning/missionDirector/missionDirectorService.ts", import.meta.url), "utf8");
     const compute = missionDirector.slice(
       missionDirector.indexOf("export async function computeMissionPlan"),
       missionDirector.indexOf("const activeRuns")

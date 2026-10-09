@@ -37,6 +37,40 @@ try {
   throw error;
 }
 
+// A relocation can rewrite an existing import without adding a semantic edge.
+// Require Git rename evidence and the identical pre-move source line; no caller
+// or target is allowlisted. New callers and changed import forms still fail.
+const renamedPaths = new Map();
+for (const line of execFileSync("git", ["diff", "--name-status", "--find-renames", base, "HEAD"], { encoding: "utf8" }).trim().split("\n")) {
+  const [status, oldPath, newPath] = line.split("\t");
+  if (status?.startsWith("R")) renamedPaths.set(newPath, oldPath);
+}
+const stripExtension = path => path.replace(/\.(?:[cm]?[jt]sx?)$/, "");
+const oldTargets = new Map([...renamedPaths].map(([next, previous]) => [stripExtension(next), stripExtension(previous)]));
+const baseFiles = new Map();
+function provenRelocatedImport(path, source, specifier, target) {
+  const oldPath = renamedPaths.get(path) || path;
+  const oldTarget = oldTargets.get(target) || target;
+  if (oldPath === path && oldTarget === target) return false;
+  if (!baseFiles.has(oldPath)) {
+    try {
+      baseFiles.set(oldPath, execFileSync("git", ["show", `${base}:${oldPath}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+    } catch { baseFiles.set(oldPath, ""); }
+  }
+  for (const oldLine of baseFiles.get(oldPath).split("\n")) {
+    const imports = [
+      ...oldLine.matchAll(/\bfrom\s+["']([^"']+)["']/g),
+      ...oldLine.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g),
+      ...oldLine.matchAll(/\brequire\s*\(\s*["']([^"']+)["']\s*\)/g),
+    ];
+    for (const match of imports) {
+      if (resolveImport(oldPath, match[1]) === oldTarget &&
+          oldLine.replace(match[1], specifier).trim() === source.trim()) return true;
+    }
+  }
+  return false;
+}
+
 let currentPath = "";
 const violations = [];
 for (const line of diff.split("\n")) {
@@ -61,7 +95,7 @@ for (const line of diff.split("\n")) {
     for (const rule of contract.forbiddenImports) {
       const fromMatches = rule.from.some(prefix => pathMatches(currentPath, prefix));
       const toMatches = rule.to.some(prefix => pathMatches(target, prefix));
-      if (fromMatches && toMatches) {
+      if (fromMatches && toMatches && !provenRelocatedImport(currentPath, source, match[1], target)) {
         violations.push(
           `${rule.id}: ${currentPath} -> ${match[1]} (${target})\n  ${rule.reason}`
         );
