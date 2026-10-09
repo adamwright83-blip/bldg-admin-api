@@ -37,6 +37,7 @@ export interface RunStripeAcceptanceOptions {
   allowlistedAccountId?: string;
   stripeClient?: Stripe;
   dbConnection?: Connection;
+  onCheckoutReady?: (details: { sessionId: string; url: string }) => void;
 }
 
 export async function runStripeProviderAcceptance(
@@ -295,6 +296,8 @@ export async function runStripeProviderAcceptance(
         reason: "Stripe Checkout session creation failed to return session ID or URL",
       };
     }
+
+    if (checkout.url) options?.onCheckoutReady?.({ sessionId: checkout.id, url: checkout.url });
 
     // Stripe Checkout requires a real test-card submission. Give an operator a
     // bounded opportunity to complete the hosted page in the *same* process,
