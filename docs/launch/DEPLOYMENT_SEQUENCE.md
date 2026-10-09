@@ -58,4 +58,3 @@
 2. Verify 3-question onboarding preview generates clean draft tokens.
 3. Validate Day Line view renders active state without 500 errors.
 4. Verify error tracking and PostHog ingestion receiving telemetry.
-EOF
