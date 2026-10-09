@@ -7,7 +7,6 @@ import {
 } from "./saasBilling";
 import {
   activateOnboardingOwner,
-  getSaasTenantBySlug,
   saveOnboardingConfiguration,
   startSaasOnboarding,
 } from "./saasStore";
@@ -65,8 +64,9 @@ export async function runStripeProviderAcceptance(options?: {
 
   const db: Connection = await mysql.createConnection(dbUrl);
   try {
-    const [[database]] = await db.query("SELECT DATABASE() AS name");
-    const name = String((database as { name?: string })?.name ?? "");
+    const [dbRows] = await db.query("SELECT DATABASE() AS name");
+    const database = (dbRows as any[])[0];
+    const name = String(database?.name ?? "");
     if (!name.includes("billing_lifecycle") && !name.includes("acceptance")) {
       throw new Error(`Refusing Stripe acceptance execution outside disposable test database: ${name}`);
     }
