@@ -11,7 +11,7 @@ import {
   writeLegacyDayforgeEvent,
   writeLegacyDayforgeEventWith,
   type LegacyDayforgeEventInput,
-} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+} from "../legacy/dayforge/events/legacyDayforgeEventStore";
 import { getDb } from "../db";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import type {

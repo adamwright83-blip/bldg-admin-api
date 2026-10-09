@@ -43,7 +43,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/experience/goldline/world/`, `server/experience/goldline/driver/`, `server/field/outreach/`, `server/field/scout/`, `server/companions/` |
 | **Lantern City** | Visual interactive city map composing authoritative business projections onto 2.5D visual landmarks. | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` |
 | **Tower Wars** | Game mode where towers represent economic activity, consuming canonical admitted payment facts. | `server/experience/goldline/modes/towerWars/` |
-| **Legacy Quarantine** | Quarantined historical compatibility code and database migration fixtures from DayForge. | `server/legacyDayforge*` |
+| **Legacy Quarantine** | Quarantined historical compatibility code and database migration fixtures from DayForge. | `server/legacy/dayforge/` |
 
 ---
 

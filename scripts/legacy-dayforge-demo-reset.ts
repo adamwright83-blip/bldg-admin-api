@@ -9,8 +9,8 @@
  */
 import "dotenv/config";
 import { ENV } from "../server/_core/env";
-import { resetDemoTenant } from "../server/legacyDayforgeDemo/demoTenantReset";
-import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
+import { resetDemoTenant } from "../server/legacy/dayforge/demo/demoTenantReset";
+import { seedDemoTenant } from "../server/legacy/dayforge/demo/demoTenantSeed";
 import { printDemoUrls } from "./legacyDayforgeDemoUrls";
 
 async function main() {

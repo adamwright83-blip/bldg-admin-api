@@ -16,7 +16,7 @@ vi.mock("../../db", () => ({ getDb: async () => mocks.db }));
 vi.mock("../../commercialMissions/commercialMissionStore", () => ({
   getCommercialMission: async () => ({ id: 3 }),
 }));
-vi.mock("../../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
+vi.mock("../../legacy/dayforge/events/legacyDayforgeEventStore", () => ({
   writeLegacyDayforgeEventWith: async () => {},
 }));
 const date = new Date("2026-10-05T00:00:00Z");

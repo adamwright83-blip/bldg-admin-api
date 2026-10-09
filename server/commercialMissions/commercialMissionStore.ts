@@ -40,7 +40,7 @@ import {
 import {
   writeLegacyDayforgeEventWith,
   type LegacyDayforgeServerActor,
-} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+} from "../legacy/dayforge/events/legacyDayforgeEventStore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";

@@ -14,10 +14,10 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import { ENV } from "../server/_core/env";
 import { getDb } from "../server/db";
-import { verifyDemoTenant } from "../server/legacyDayforgeDemo/demoTenantVerify";
-import { resetDemoTenant } from "../server/legacyDayforgeDemo/demoTenantReset";
-import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
-import { getLegacyDayforgeProviderStatus } from "../server/legacyDayforgeDemo/providerStatus";
+import { verifyDemoTenant } from "../server/legacy/dayforge/demo/demoTenantVerify";
+import { resetDemoTenant } from "../server/legacy/dayforge/demo/demoTenantReset";
+import { seedDemoTenant } from "../server/legacy/dayforge/demo/demoTenantSeed";
+import { getLegacyDayforgeProviderStatus } from "../server/legacy/dayforge/demo/providerStatus";
 import { printDemoUrls } from "./legacyDayforgeDemoUrls";
 
 const PORT = process.env.PORT || "3000";
