@@ -742,14 +742,29 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           )}
         {!props.isLoading && !props.loadError && plan.stops.length === 0 && (
           <div className="gdp-empty">
-            <strong>A blank page. Your next chapter.</strong>
+            <strong>
+              {props.onOpenFirstMission
+                ? "Your first objective is ready."
+                : "A blank page. Your next chapter."}
+            </strong>
             <span>
-              No stops are scheduled yet. Bring in your route, capture a field
-              opportunity, or warm up with a Lantern Run.
+              {props.onOpenFirstMission
+                ? "Your scout mission is waiting. Complete your field observation to map your territory and uncover your world."
+                : "No stops are scheduled yet. Bring in your route, capture a field opportunity, or warm up with a Lantern Run."}
             </span>
-            <button type="button" onClick={props.onOpenImport}>
-              IMPORT OR ADD STOPS <ChevronRight size={16} />
-            </button>
+            {props.onOpenFirstMission ? (
+              <button
+                type="button"
+                className="gdp-first-mission-btn"
+                onClick={props.onOpenFirstMission}
+              >
+                BEGIN FIRST MISSION · THE FIRST SPARK <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button type="button" onClick={props.onOpenImport}>
+                IMPORT OR ADD STOPS <ChevronRight size={16} />
+              </button>
+            )}
             <button
               type="button"
               onClick={props.onOpenJournal ?? props.onEnterOperations}
@@ -808,15 +823,37 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       <section className="gdp-next-up" data-testid="day-plan-next-up">
         <div>
           <small>NEXT UP</small>
-          <strong>{nextStop?.title ?? "THE LINE IS OPEN"}</strong>
+          <strong>
+            {nextStop?.title ??
+              (props.onOpenFirstMission
+                ? "THE FIRST SPARK"
+                : "THE LINE IS OPEN")}
+          </strong>
           <span>
             {nextStop
               ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}`
-              : "NO SCHEDULED STOP"}
+              : props.onOpenFirstMission
+                ? "OPTIONAL SCOUT · TERRITORY UNMAPPED"
+                : "NO SCHEDULED STOP"}
           </span>
         </div>
-        <button type="button" onClick={startNext} disabled={props.isLoading}>
-          {nextStop ? "OPEN CHAPTER" : "ADD STOPS"} <ChevronRight />
+        <button
+          type="button"
+          onClick={
+            nextStop
+              ? startNext
+              : props.onOpenFirstMission
+                ? props.onOpenFirstMission
+                : startNext
+          }
+          disabled={props.isLoading}
+        >
+          {nextStop
+            ? "OPEN CHAPTER"
+            : props.onOpenFirstMission
+              ? "START MISSION"
+              : "ADD STOPS"}{" "}
+          <ChevronRight />
         </button>
       </section>
 
