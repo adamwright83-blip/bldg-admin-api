@@ -1,3 +1,4 @@
+<!-- LEGACY DAYFORGE COMPATIBILITY: historical login route literal only; canonical product is JOYSTICK. -->
 # Real JOYSTICK customer acceptance
 
 Run against disposable MySQL 8 with the root account able to create and delete

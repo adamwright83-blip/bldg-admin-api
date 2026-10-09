@@ -108,9 +108,12 @@ test("real authenticated two-tenant HTTP isolation and denied-write persistence"
       expect(JSON.stringify(line)).not.toContain(foreign.tenantId);
       const world = await rpc(request, "system.businessWorld.get");
       expect(world.business.tenantId).toBe(owner.tenantId);
-      const claire = await rpc(request, "system.claire.driveContext", { phase: "pre_drive", missionId: own.missionId });
+      const claire = await rpc(request, "system.claire.driveContext", { phase: "pre_drive" });
       expect(claire.identityTruth.tenant.tenantId).toBe(owner.tenantId);
-      expect(claire.mission.id).toBe(own.missionId);
+      expect(claire.identityTruth.tenant.businesses[0].registeredName).toBe(owner === a ? "Isolation A" : "Isolation B");
+      const missionContext = await rpc(request, "system.claire.driveContext", { phase: "pre_drive", missionId: own.missionId });
+      expect(missionContext.mission.id).toBe(own.missionId);
+      expect(missionContext.identityTruth.tenant.tenantId).toBe(owner.tenantId);
       const assets = await rpc(request, "system.customerAssets.list");
       expect(assets.some((row: any) => row.id === own.assetId)).toBe(true);
       expect(assets.some((row: any) => row.id === other.assetId)).toBe(false);

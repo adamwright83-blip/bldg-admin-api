@@ -21,7 +21,11 @@ try {
     const [rows] = await db.execute('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', ['commercial_visit_outcomes', name]);
     if (!rows.length) await db.execute(`ALTER TABLE commercial_visit_outcomes ${definition}`);
   }
-  for (const file of ['0027_operations_events.sql', '0036_territory_intelligence.sql', '0038_commercial_mission_field.sql', '0055_sales_intel_source_registry.sql', '0056_sales_intel_teachings.sql']) {
+  const coachingSource = await readFile(new URL('../drizzle/0045_dayforge_30_day_foundation.sql', import.meta.url), 'utf8');
+  const coachingCreate = coachingSource.split(';').map(sql => sql.trim()).find(sql => /^CREATE TABLE `commercial_mission_coaching_artifacts`/.test(sql));
+  if (!coachingCreate) throw new Error('Historical coaching table DDL missing');
+  await db.execute(coachingCreate.replace(/^CREATE TABLE /, 'CREATE TABLE IF NOT EXISTS '));
+  for (const file of ['0027_operations_events.sql', '0036_territory_intelligence.sql', '0038_commercial_mission_field.sql', '0039_commercial_proposals.sql', '0055_sales_intel_source_registry.sql', '0056_sales_intel_teachings.sql']) {
     const source = await readFile(new URL(`../drizzle/${file}`, import.meta.url), 'utf8');
     const statements = source.replace(/^\s*--.*$/gm, '').split(';').map(sql => sql.trim()).filter(Boolean);
     for (const original of statements) {
