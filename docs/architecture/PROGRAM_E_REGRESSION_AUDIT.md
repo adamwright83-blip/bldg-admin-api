@@ -46,7 +46,7 @@ Repair focused reproduction omits known baseline CSV and protected AMD fixtures,
 
 Worker integration command: `TZ=UTC DATABASE_URL=mysql://root:program-e-disposable@127.0.0.1:34317/mysql pnpm vitest run --maxWorkers=1 --minWorkers=1 --config vitest.integration.config.ts` followed by `server/procurement/workflowStore.mysql.integration.test.ts` and the applicable `goalCycleStore.mysql.integration.test.ts` / `operatorAppointmentStore.mysql.integration.test.ts` beneath `server/persistentOperator/` (pre-E) or `server/agents/persistentOperator/` (E4b).
 
-Broader domain selection is recorded in `baseline-broad.log` and `repair-broad.log`; these selections have different file sets and are not represented as identical full suites. Workflow commands must additionally be replayed from each revision's YAML, including separate MySQL bootstraps and browser steps. Unexecuted stages remain unavailable, never passing.
+Broader domain selection is recorded in `baseline-broad.log` and `repair-broad.log`; these selections have different file sets and are not represented as identical full suites. Workflow commands must additionally be replayed from each revision's YAML, including separate MySQL bootstraps and browser steps. Unexecuted stages remain unavailable, never passing. The exact legacy deterministic command was additionally run on separate empty disposable databases with CI=true, NODE_ENV=ci, TZ=UTC and the workflow fixture flags/secrets, matching its pre-bootstrap job order.
 
 ## Exact E4b failing job identities
 
@@ -92,7 +92,7 @@ Pre-E `server/commercialPipeline/commercialPipelineService.ts:727` already dynam
 
 ## Protected work and baseline Claire findings
 
-Fetched all open PRs. #476, #411, #375, #374, #359, #361, #503 and #504 are open. #495 is merged. None of their branches were altered or merged. #513 remains frozen. No actively edited President or Mitch implementation was changed. The inactive `scripts/president-github-agent.ts` forbidden-path prompt was mechanically updated to retain protection of the relocated Commercial, platform authority and Payment files. The seven protected PR file lists were fetched; none includes that script.
+Fetched all open PRs. #476, #411, #375, #374, #359, #361, #503 and #504 are open. #495 is merged. None of their branches were altered or merged. #513 remains frozen. No actively edited President or Mitch implementation was changed. The inactive `scripts/president-github-agent.ts` forbidden-path prompt was mechanically updated to retain protection of the relocated Commercial, platform authority and Payment files. The seven protected PR file lists were fetched; none includes that script. `package.json` is shared with #359/#374, but their exact patches only add `president:stage1:witness`; recovery edits only `test:legacy-dayforge:release`. No protected script entry or implementation hunk is changed.
 
 #476 exact protected files:
 
@@ -116,7 +116,9 @@ Clean baseline Claire run: 155 files, 2032 tests; 11 files failed, 24 assertions
 - #510 left three dynamic imports in `scripts/goldline-wave-local.ts`. Corrected only their paths. This local fixture operation was not executed against an inherited or production database.
 - #505/#507/#508 moved the files protected by the President GitHub prompt, but left its forbidden globs at removed paths. Corrected the globs to Commercial, platform authority and Payment. This preserves protection rather than adding autonomy or changing executive behavior.
 
-A Git-rename-based scan of static imports, dynamic literal imports, `vi.mock`, `require`, and literal filesystem URLs found no further references to removed implementations after these fixes. Historical labels and architecture prose are not treated as active imports. Final exhaustive documentation reconciliation remains E7.
+Two literal `resolve(REPO_ROOT, "server/commercialPipeline")` roots in `server/goldlineVerification/sliceE.productionIngestion.test.ts` were also left by #508. Pre-E passes 51/51; unrepaired current fails two ENOENT assertions; canonical root repair restores 51/51 without weakening the authority assertions.
+
+A Git-rename-based scan of static imports, dynamic literal imports, `vi.mock`, `require`, literal filesystem URLs and repository-root literals found no further references to removed implementations after these fixes. Historical labels and architecture prose are not treated as active imports. Final exhaustive documentation reconciliation remains E7.
 
 ## Validation collected
 
@@ -124,12 +126,14 @@ A Git-rename-based scan of static imports, dynamic literal imports, `vi.mock`, `
 |---|---|---|
 | Main TypeScript | Exit 0 | Exit 0, clean committed repair run |
 | Legacy release harness TypeScript | Exit 0 | Exit 0 |
-| Four architecture gates | Pass | Pass; also passes against the historical E4b parent, not merely the repair parent |
+| Four architecture gates | Pass | Pass; also passes against the historical E4b parent and PRE_PROGRAM_E_BACKUP, not merely the repair parent |
 | Focused relocation defects | Tests pass before moves (CSV/AMD baseline failures excluded) | Seven files, 93/93 pass |
 | Worker real MySQL, TZ=UTC | 3 files, 34/34 pass | 3 files, 34/34 pass |
 | Legacy journey + Daphne real MySQL | 2 files, 4/4 pass | 2 files, 5/5 pass; extra durable concise-style test introduced independently by #495 |
 | CleanCloud customer authority real MySQL | 1/1 pass | 1/1 pass |
 | CleanCloud evidence + Commercial coverage | 9 files, 83/83 pass | 9 files, 83/83 pass |
+| Narrator production-ingestion authority | 51/51 pass | 51/51 pass; unrepaired current had two ENOENT failures |
+| Legacy deterministic workflow command, empty disposable DB | 210 files; 2324 pass, 20 failures | 210 files; 2328 pass, identical 20 failures |
 | Sales-truth workflow logical selection | 28 files; 348 pass, 6 skipped, CSV assertion fails | Same counts and same sole failure |
 | Full Claire, TZ=UTC | 155 files; 2012 pass, 20 failures | 155 files; 2016 pass, same 20 failures; four extra tests from #495 |
 | Broad domains / workers / receipts | 108 files; 717 pass, 6 skipped, 4 failures | 117 files; 815 pass, 6 skipped, same 4 failures (different selections; not an identical full-suite claim) |
@@ -140,6 +144,8 @@ A Git-rename-based scan of static imports, dynamic literal imports, `vi.mock`, `
 
 Full Claire UTC runs agree on exactly the 20 failures in the nine protected #476 files. The extra four failures in the initial local-time baseline Claire run disappeared under matching UTC runner configuration (operatingTruthGuards and repair2SliceB); they are environment-sensitive, not evidence of migration defects. The initial overlapping current run is excluded.
 
+The actual hosted pre-E legacy [run 37844902234](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37844902234), PR #499 head `a2874762a8599750425fd50aebd26c0790313530`, independently records exactly the same 20 failures in nine files, 2324 passes across 210 files. This supports PREEXISTING BASELINE classification under the hosted empty-database environment, not just a local approximation.
+
 Hosted first-head run evidence: worker [37869436846](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436846), Daphne [37869436817](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436817), and nomenclature [37869436869](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436869) pass. Sales [37869436814](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436814) fails only the matched baseline CSV assertion. The later mobile [37869702515](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869702515) log confirms the identical baseline bundle failure. These run SHAs precede the final audit commit; final-head checks still must be reviewed. Superseded fast and legacy runs were cancelled by workflow concurrency, never represented as passing.
 
 ## Remaining gate dependencies and unavailable portions
@@ -148,7 +154,7 @@ Hosted first-head run evidence: worker [37869436846](https://github.com/adamwrig
 - Hosted legacy deterministic failures must be checked against the reproduced protected baseline exceptions; no new failure may be silently folded into that group.
 - Final hosted fast contracts and world browser smoke remain required. Local pre-E browser smoke was not replayed; pre-E frontend source, lockfile and resulting bundle identities are unchanged, but this is not a fabricated browser pass.
 - The workflows' remaining MySQL stages and mobile schema coverage are provided by final hosted CI, not inferred from TypeScript or deployment results.
-- The field bridge DB-unavailable fixtures and prepReadiness assertion were reproduced on both revisions in the broad run; matched UTC follow-up results are preserved separately.
+- The field bridge DB-unavailable fixtures (two assertions) and prepReadiness assertion also reproduce in matched UTC follow-ups: 18 pass / 3 fail on each revision. They are separate PREEXISTING BASELINE fixtures, not timezone-dismissed regressions.
 - Documentation PRs #503/#504 remain open and deliberately deferred to E7.
 - No protected work is currently demonstrated to block a *new* migration regression: the protected failures reproduce before E. Their baseline repair belongs to #476.
 - E5–E8 have not begun. No directory was moved, duplicate implementation restored, expectation weakened, test disabled, tenant manufactured or production operation performed.

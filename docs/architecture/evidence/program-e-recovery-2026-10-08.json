@@ -285,6 +285,136 @@
       "failures": [
         "[FAIL] three.js isolation: hero-DKp6D4HV.js statically imports three.js chunk BufferGeometryUtils-WcliCiyr.js"
       ]
+    },
+    {
+      "name": "program-e-recovery-baseline-legacy-workflow",
+      "sha256": "b4d7bc99355cc66a674f66bbbf1d04bee63264cca6b58b8832e66ee8065eef43",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-legacy-workflow.log",
+      "summary": [
+        " Test Files  9 failed | 201 passed (210)",
+        "      Tests  20 failed | 2324 passed (2344)",
+        "   Duration  171.95s (transform 5.02s, setup 0ms, collect 282.08s, tests 23.38s, environment 27ms, prepare 11.27s)"
+      ],
+      "failures": [
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > does not count a duplicate customer twice across sources",
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > marks one available source as partial, never an approximate total",
+        "FAIL  server/claire/amdVoicemail.test.ts > no new autonomous dialer > searches this slice and finds no repeated operator, reminder, or planning dialer",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > revenue \u2192 previous 30 \u2192 which had more orders, all inside one call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > keeps each call's analytical context to that call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > single work goes to the work loop; a question while it waits is answered and the proposal is kept",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > dated work becomes one briefing proposal, and a save that fails is never spoken as saved",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > ordinary conversation still reaches Claire's normal follow-up",
+        "FAIL  server/claire/contextAssembler.test.ts > Claire today and tomorrow work picture > assembles tomorrow from tomorrow's explicit business date",
+        "FAIL  server/claire/twilioClaireIntegration.test.ts > Claire Twilio integration seams > sends only from an explicit decision and refuses a caller destination",
+        "FAIL  server/claire/conversation/conversationLedger.test.ts > Claire conversation ledger > does not let the evaluator rewrite live turns and flags high-value examples",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > includes native Laundry Butler orders, not just CleanCloud",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > first-paid-order-in-target-building is NOT a live kind: no persisted target-building mapping exists",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > one underlying order is at most one evidence identity",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > with both CleanCloud report rows, recognizedAt is the EARLIEST import; native orders recognize at creation",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > dormant reorder needs a real gap on the same canonical customer",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: lucky result > a paid order without consistency is real business movement but skips nothing",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: consistency plus genuine progress > rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a correction clears the pending proposal outright",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a query refinement clears the pending proposal outright"
+      ]
+    },
+    {
+      "name": "program-e-regression-recovery-legacy-workflow",
+      "sha256": "e28ba05078e938ec0ba245db04f81c89b00cc5ecc2a03824a6f866876d0d9edd",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-legacy-workflow.log",
+      "summary": [
+        " Test Files  9 failed | 201 passed (210)",
+        "      Tests  20 failed | 2328 passed (2348)",
+        "   Duration  172.28s (transform 5.33s, setup 0ms, collect 283.12s, tests 23.06s, environment 27ms, prepare 10.83s)"
+      ],
+      "failures": [
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > does not count a duplicate customer twice across sources",
+        "FAIL  server/claire/activeCustomerMetric.test.ts > active customer metric > marks one available source as partial, never an approximate total",
+        "FAIL  server/claire/amdVoicemail.test.ts > no new autonomous dialer > searches this slice and finds no repeated operator, reminder, or planning dialer",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > revenue \u2192 previous 30 \u2192 which had more orders, all inside one call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > keeps each call's analytical context to that call",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > single work goes to the work loop; a question while it waits is answered and the proposal is kept",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > dated work becomes one briefing proposal, and a save that fails is never spoken as saved",
+        "FAIL  server/claire/claireTwilioAnalytics.test.ts > live Claire call answers business questions in the call (U) > ordinary conversation still reaches Claire's normal follow-up",
+        "FAIL  server/claire/contextAssembler.test.ts > Claire today and tomorrow work picture > assembles tomorrow from tomorrow's explicit business date",
+        "FAIL  server/claire/twilioClaireIntegration.test.ts > Claire Twilio integration seams > sends only from an explicit decision and refuses a caller destination",
+        "FAIL  server/claire/conversation/conversationLedger.test.ts > Claire conversation ledger > does not let the evaluator rewrite live turns and flags high-value examples",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > includes native Laundry Butler orders, not just CleanCloud",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > first-paid-order-in-target-building is NOT a live kind: no persisted target-building mapping exists",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > one underlying order is at most one evidence identity",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > with both CleanCloud report rows, recognizedAt is the EARLIEST import; native orders recognize at creation",
+        "FAIL  server/claire/progression/correctivePass.test.ts > 3. canonical customer/order truth > dormant reorder needs a real gap on the same canonical customer",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: lucky result > a paid order without consistency is real business movement but skips nothing",
+        "FAIL  server/claire/progression/failureFixtures.test.ts > fixture: consistency plus genuine progress > rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a correction clears the pending proposal outright",
+        "FAIL  server/claire/turn/productionCallReplay.test.ts > pending proposals are superseded, not just un-nagged > a query refinement clears the pending proposal outright"
+      ]
+    },
+    {
+      "name": "program-e-recovery-baseline-narrator-before",
+      "sha256": "6de7ac632dd69b2025597de0626c9e2a05b3e6b5ef7f47db4a7a8cc6bd150a11",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-narrator-before.log",
+      "summary": [
+        " Test Files  1 passed (1)",
+        "      Tests  51 passed (51)",
+        "   Duration  6.22s (transform 1.58s, setup 0ms, collect 5.29s, tests 159ms, environment 0ms, prepare 203ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-regression-recovery-narrator-before",
+      "sha256": "f193ee2b7acc30c028705e7ec0cc69686af46a40bc142fa3f93f537d36aa56e8",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-narrator-before.log",
+      "summary": [
+        " Test Files  1 failed (1)",
+        "      Tests  2 failed | 49 passed (51)",
+        "   Duration  6.19s (transform 1.40s, setup 0ms, collect 5.25s, tests 162ms, environment 0ms, prepare 172ms)"
+      ],
+      "failures": [
+        "FAIL  server/goldlineVerification/sliceE.productionIngestion.test.ts > Narrator OS Slice E \u2014 production verified Goldline ingestion > does not attach the issuer to current Goldline mutation producers",
+        "FAIL  server/goldlineVerification/sliceE.productionIngestion.test.ts > Narrator OS Slice E \u2014 authority, identity, and conflicting replay > 14. zero live business mutation producers remain wired"
+      ]
+    },
+    {
+      "name": "repair-narrator",
+      "sha256": "bae9108753968a525f380efea325180efd1eefffc4c6258a3cccede156f11afa",
+      "sourceLog": "/tmp/program-e-recovery-evidence/repair-narrator.log",
+      "summary": [
+        " Test Files  1 passed (1)",
+        "      Tests  51 passed (51)",
+        "   Duration  2.33s (transform 652ms, setup 0ms, collect 1.97s, tests 124ms, environment 0ms, prepare 58ms)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "program-e-recovery-baseline-remaining-utc",
+      "sha256": "33ca2c7369ead90dded7cad51e7bf85da203b2c7b0e93c8ca96cdb9145c96ab9",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-recovery-baseline-remaining-utc.log",
+      "summary": [
+        " Test Files  2 failed (2)",
+        "      Tests  3 failed | 18 passed (21)",
+        "   Duration  2.92s (transform 411ms, setup 0ms, collect 2.56s, tests 16ms, environment 0ms, prepare 82ms)"
+      ],
+      "failures": [
+        "FAIL  server/missionDirector/prepReadiness.test.ts > Mission Director prep completion evidence > uses completedAt rather than createdAt for the prep deadline",
+        "FAIL  server/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > fails closed on unpaid CleanCloud orders or zero-dollar totals",
+        "FAIL  server/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > leaves orders unattributed when no deterministic lineage connects them to an objective"
+      ]
+    },
+    {
+      "name": "program-e-regression-recovery-remaining-utc",
+      "sha256": "37e9f384c457ef19383a2b2afdec40fd29e1e3c2c0aaab6ebcbef049a0853eac",
+      "sourceLog": "/tmp/program-e-recovery-evidence/program-e-regression-recovery-remaining-utc.log",
+      "summary": [
+        " Test Files  2 failed (2)",
+        "      Tests  3 failed | 18 passed (21)",
+        "   Duration  2.90s (transform 418ms, setup 0ms, collect 2.55s, tests 16ms, environment 0ms, prepare 78ms)"
+      ],
+      "failures": [
+        "FAIL  server/agents/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > fails closed on unpaid CleanCloud orders or zero-dollar totals",
+        "FAIL  server/agents/persistentOperator/fieldEventBridge.test.ts > Persistent Growth Operator \u2014 Field Event Bridge (Truth Rules & Seams) > Rule 2: CleanCloud -> Economic Outcome (Deterministic Lineage Only) > leaves orders unattributed when no deterministic lineage connects them to an objective",
+        "FAIL  server/planning/missionDirector/prepReadiness.test.ts > Mission Director prep completion evidence > uses completedAt rather than createdAt for the prep deadline"
+      ]
     }
   ]
 }
