@@ -1,4 +1,5 @@
 import "./held-landing.css";
+import JoystickLanding from "./JoystickLanding";
 
 const services = [
   { number: "01", label: "Laundry" },
@@ -14,6 +15,17 @@ const examples = [
 ];
 
 export default function HeldLanding() {
+  const hostname =
+    typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const isHeldHost =
+    hostname === "laundrybutler.com" ||
+    hostname === "www.laundrybutler.com" ||
+    hostname.includes("held");
+
+  if (!isHeldHost) {
+    return <JoystickLanding />;
+  }
+
   return (
     <div className="held-site" id="top">
       <header className="held-nav">

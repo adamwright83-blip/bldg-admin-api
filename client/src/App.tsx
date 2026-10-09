@@ -707,10 +707,6 @@ function Router() {
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
-  const isHeldHost =
-    hostname === "laundrybutler.com" ||
-    hostname === "www.laundrybutler.com" ||
-    hostname.includes("held");
 
   // Commercial SaaS members are intentionally confined to the supported
   // JOYSTICK surface. Historical Admin/BLDG routes remain available to
@@ -898,9 +894,7 @@ function Router() {
               ? () => <VendorPortal slug={vendorSlug ?? ""} />
               : tenant.templateType === "laundryfarm"
                 ? LaundryFarmHome
-                : isHeldHost
-                  ? HeldLandingRoute
-                  : JoystickLandingRoute
+                : HeldLandingRoute
         }
       />
       <Route path={"/admin"} component={Admin} />
