@@ -69,3 +69,17 @@ An automated test-mode acceptance harness is implemented at `server/saas/stripeP
 9. Exactly one correctly provisioned tenant in database.
 10. Successful owner activation.
 11. No unintended early charge (amount_paid = 0 during trial).
+
+## Real provider runbook (not yet executed)
+
+Use an **explicitly approved JOYSTICK-owned Stripe test account**. Never reuse Laundry Farm credentials or real customer records. Configure the application and harness with the same test webhook secret and the same disposable local database.
+
+1. Run disposable MySQL on loopback with the **exact** database name `joystick_stripe_acceptance`; initialize via `node scripts/migrate.mjs`. The harness checks that `DATABASE_URL` matches this database, and that the application uses the same environment. Do not point at Railway production.
+2. Start the JOYSTICK application on a loopback HTTP origin and forward **actual Stripe test-mode webhook deliveries** for `checkout.session.completed` to `/api/dayforge/billing/stripe-webhook` using Stripe CLI or a dedicated test webhook endpoint. Configure `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET` to the signing secret of that forwarding endpoint, in both processes.
+3. Supply the test-only environment variables through a local secret manager (never put values in Git or chat): `DAYFORGE_BILLING_STRIPE_SECRET_KEY`, `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET`, `DAYFORGE_BILLING_APP_URL`, `JOYSTICK_STRIPE_ALLOWLISTED_ACCOUNT_ID`, and `DATABASE_URL`. Create/select an active test `joystick-growth-standard` plan pointing to a **Stripe test-mode USD $49/month price** with `trialDays = 7`.
+4. With the application and webhook forwarder running, run `JOYSTICK_STRIPE_CHECKOUT_WAIT_MS=300000 pnpm exec tsx scripts/run-stripe-provider-acceptance.ts`. The CLI prints only the *test Checkout URL*, not the account credentials, token or test password. Open the URL and complete hosted Checkout with a Stripe **test card** before the wait expires.
+5. The harness retrieves the actual subscription and invoice, proves a real Stripe Checkout event was **already processed by the application webhook handler**, locally signs and replays that same Stripe event ID to prove idempotency, checks the tenant and subscription in MySQL, generates a valid bcrypt hash, and tests the actual `/api/dayforge/auth/login` endpoint. The first delivery is provider-signed; the deliberate replay is **locally signed with Stripe's documented test signer**, not represented as a second provider delivery.
+
+`BLOCKED` means configuration or Checkout completion is still outstanding; `FAILED` means a configured assertion failed; `PASSED` requires all actual provider and backend assertions to finish. Offline signature unit tests do **not** constitute provider acceptance.
+
+Before exposing a staging webhook publicly, verify its endpoint belongs to this isolated local/test app and cannot reach production. Do not run this command against live subscriptions, tenants, or customer records.

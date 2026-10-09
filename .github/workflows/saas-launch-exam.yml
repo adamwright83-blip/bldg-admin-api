@@ -45,6 +45,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check launch candidate
         run: pnpm check
+      - name: Stripe acceptance guard and signed-event contract (offline, NOT provider acceptance)
+        run: pnpm vitest run server/saas/stripeProviderAcceptance.test.ts
       - name: Product and SaaS contract
         run: pnpm vitest run server/saas/saasContract.test.ts
       - name: Create disposable launch databases
