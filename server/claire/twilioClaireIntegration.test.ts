@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => {
   delete process.env.CLAIRE_TWILIO_CONVERSATION_RELAY;
   return {
     getUserByOpenId: vi.fn(async (openId: string) => ({
-      tenantId: "goldline",
+      id: 1, tenantId: "goldline",
       openId,
     })),
   };
@@ -78,7 +78,7 @@ beforeEach(() => {
   delete process.env.CLAIRE_TWILIO_CONVERSATION_RELAY;
   hoisted.getUserByOpenId.mockReset();
   hoisted.getUserByOpenId.mockImplementation(async (openId: string) => ({
-    tenantId: "goldline",
+    id: 1, tenantId: "goldline",
     openId,
   }));
 });

@@ -381,21 +381,26 @@ describe("correctness challenge outranks refinement wording (review defect)", ()
   });
 });
 
-describe("pending proposals are superseded, not just un-nagged", () => {
+describe("pending proposals require explicit supersession", () => {
   const withPending = () => {
     const h = stateful();
     h.state.pendingProposal = { title: "Call Dana at The Louise", sourceText: "x" } as never;
     return h;
   };
 
+  it("an explicit refusal clears the pending proposal", async () => {
+    const h = withPending();
+    await h.say("Actually don't do that.");
+    expect(h.state.pendingProposal).toBeFalsy();
+  });
+
   it.each([
-    ["a refusal", "Actually don't do that."],
-    ["a correction", "No, I meant I want to talk it through."],
+    ["an unrelated correction", "No, I meant I want to talk it through."],
     ["a query refinement", "What were the other four?"],
-  ])("%s clears the pending proposal outright", async (_label, utterance) => {
+  ])("%s preserves an unrevoked pending proposal", async (_label, utterance) => {
     const h = withPending();
     await h.say(utterance);
-    expect(h.state.pendingProposal).toBeFalsy();
+    expect(h.state.pendingProposal?.title).toBe("Call Dana at The Louise");
   });
 
   it("nothing is left to remind about once superseded", async () => {
