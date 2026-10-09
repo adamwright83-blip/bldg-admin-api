@@ -13,9 +13,9 @@
 
 Programs A–D are certified on production source main `85415cb7292e6803092cb5fe835f4f0325f7907c`, after C20 (#498). The final documentation/test checkpoint records exact-head and post-merge proof. Read [Program D certification](./PROGRAM_D_CERTIFICATION.md) and its classified inventory for the actual scope, explicit historical ownership/amount holds, protected heads and four proven baseline test failures. This is architecture certification, not an all-tests-green or business-release claim.
 
-## Program E execution update — 2026-10-08
+## Program E certification update — 2026-10-08
 
-Program E (LLM Legibility, Physical Repository Reorganization, and Cold-Model Certification) is actively executing:
+Program E (LLM Legibility, Physical Repository Reorganization, and Cold-Model Certification) is **CERTIFIED**:
 - **E0 (Classification & Protected Work Register):** MERGED (#501)
 - **E1 (Canonical Root Narrative ARCHITECTURE.md & Subsystem Contracts):** MERGED (#502)
 - **E2 (Core Business Domains: Payment, Orders, Commercial):** MERGED (#505, #506, #508)
@@ -23,10 +23,11 @@ Program E (LLM Legibility, Physical Repository Reorganization, and Cold-Model Ce
 - **E4 (Planning & Agents Subsystems):** MERGED (#511, #512, #514)
 - **E5 (Experience & Game Relocation: Orders, World Split, Geography/Planning, Modes):** MERGED (#515, #516, #517, #518)
 - **E6 (Legacy DayForge Quarantine Consolidation into `server/legacy/dayforge/`):** MERGED (#519)
-- **E7 (Architecture Documentation Audit & Ratchet Synchronization):** IN PROGRESS (#520)
-- **E8 (Independent Cold-Model Certification):** PENDING
+- **E7 (Architecture Documentation Audit & Ratchet Synchronization):** MERGED (#520)
+- **E8 (Independent Cold-Model Certification):** CERTIFIED (`docs/architecture/PROGRAM_E_COLD_MODEL_CERTIFICATION.md`)
 
-Current verified main: `835200c2aae3d729c13b30fe9d9dcfd6e15d862d` (post-PR #519).
+Current certified main: `51025da1e71ba2db8a7cb08cf70ca9b67a149b56`.
+Final Verdict: **LLM LEGIBILITY CERTIFIED — JOYSTICK ARCHITECTURE PROJECT COMPLETE**.
 
 Primary supporting audit docs:
 
