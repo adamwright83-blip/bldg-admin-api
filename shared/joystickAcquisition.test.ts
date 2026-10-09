@@ -37,4 +37,40 @@ describe("JOYSTICK draft preview truth boundary", () => {
       provenance: "operator_declared",
     });
   });
+
+  it("generates specific personalized briefings for commercial service archetypes (ACCEPTANCE 2)", () => {
+    const carpetCleaner = buildJoystickDraftPreview({
+      answers: {
+        daily_work: "Commercial carpet cleaner maintaining office buildings and medical suites",
+        service_area: "Pasadena and the San Gabriel Valley",
+        avoidance: "Following up on sent quotes and calling back cold facility managers",
+      },
+    });
+    expect(carpetCleaner.briefing.text).toContain("Commercial carpet cleaner maintaining office buildings and medical suites");
+    expect(carpetCleaner.briefing.text).toContain("Pasadena and the San Gabriel Valley");
+    expect(carpetCleaner.briefing.text).toContain("Following up on sent quotes and calling back cold facility managers");
+    expect(carpetCleaner.briefing.text).not.toContain("generic placeholder");
+
+    const fitnessStudio = buildJoystickDraftPreview({
+      answers: {
+        daily_work: "Boutique fitness studio running group HIIT and personal training sessions",
+        service_area: "Downtown Austin",
+        avoidance: "Reaching out to members who stopped booking 30 days ago",
+      },
+    });
+    expect(fitnessStudio.briefing.text).toContain("Boutique fitness studio running group HIIT and personal training sessions");
+    expect(fitnessStudio.briefing.text).toContain("Downtown Austin");
+    expect(fitnessStudio.briefing.text).toContain("Reaching out to members who stopped booking 30 days ago");
+
+    const petGroomer = buildJoystickDraftPreview({
+      answers: {
+        daily_work: "Mobile pet groomer providing doorstep bathing and haircut services",
+        service_area: "Scottsdale and East Phoenix",
+        avoidance: "Collecting Google reviews after completing appointments",
+      },
+    });
+    expect(petGroomer.briefing.text).toContain("Mobile pet groomer providing doorstep bathing and haircut services");
+    expect(petGroomer.briefing.text).toContain("Scottsdale and East Phoenix");
+    expect(petGroomer.briefing.text).toContain("Collecting Google reviews after completing appointments");
+  });
 });

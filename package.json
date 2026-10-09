@@ -13,6 +13,7 @@
     "saas:schema:release-exam": "node scripts/schema-release-exam.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:launch:acceptance": "playwright test --config playwright.launch.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:legacy-dayforge:release": "vitest run server/legacy/dayforge/release server/territory server/commercialMissions server/commercialProposals server/domains/commercial server/legacy/dayforge/events server/claire server/mysqlErrors.test.ts shared/legacyDayforgeEvents.test.ts shared/goldlineTruthContract.test.ts shared/goldlineActionContract.test.ts",
     "test:legacy-dayforge:release:integration": "vitest run --config vitest.integration.config.ts server/legacy/dayforge/release/legacyDayforgeReleaseJourney.integration.test.ts",
