@@ -1,0 +1,27 @@
+name: Program E ownership map
+
+on:
+  pull_request:
+    paths:
+      - 'ARCHITECTURE.md'
+      - 'CLAUDE.md'
+      - 'docs/architecture/PROGRAM_E_OWNERSHIP_MAP.json'
+      - 'docs/architecture/PROGRAM_E_CLASSIFICATION.md'
+      - 'docs/architecture/PROGRAM_E_COLD_READ_EXAM.md'
+      - 'scripts/check-program-e-ownership.mjs'
+      - '.github/workflows/program-e-ownership-map.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  classified-current-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Validate all current server folders, authority pointers, and protected Daphne paths
+        run: node scripts/check-program-e-ownership.mjs
