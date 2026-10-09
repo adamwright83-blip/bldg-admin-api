@@ -8,8 +8,8 @@
 import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { missionMutations } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { missionMutations } from "../../../../drizzle/schema";
+import { getDb } from "../../../db";
 import {
   evaluateAndPersistMutation,
   getLatestMutation,

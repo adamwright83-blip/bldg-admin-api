@@ -1,0 +1,281 @@
+[
+  {
+    "oldPath": "server/driverGameWorld/MISSION_SOURCE_ARCHITECTURE.md",
+    "newPath": "server/experience/goldline/driver/MISSION_SOURCE_ARCHITECTURE.md",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [],
+    "dependencies": [],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/coldCallBurstService.ts",
+    "newPath": "server/field/outreach/coldCallBurstService.ts",
+    "responsibility": "Real operator-first call orchestration, CAS claims, domain-admitted outcomes; no game timer grades conversations",
+    "writeTargets": [
+      "driverColdCallBatches",
+      "driverColdCallTargets",
+      "driverColdCallTargets",
+      "driverColdCallTargets",
+      "salesCallAttempts",
+      "driverColdCallTargets",
+      "driverColdCallTargets",
+      "driverColdCallTargets",
+      "driverColdCallBatches",
+      "driverColdCallTargets",
+      "driverColdCallTargets",
+      "driverColdCallBatches",
+      "driverColdCallBatches"
+    ],
+    "dependencies": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/commercialMission",
+      "../../shared/coldCallBurst",
+      "../db",
+      "../territory/territoryDiscovery",
+      "../commercialMissions/commercialMissionCallService",
+      "../claire/claireTwilio",
+      "../salesCalls"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/coldCallRollingCall.test.ts",
+    "newPath": "server/field/outreach/coldCallRollingCall.test.ts",
+    "responsibility": "Existing provider-leg/CAS/tenant contract; fake phone provider",
+    "writeTargets": [],
+    "dependencies": [
+      "node:fs",
+      "express",
+      "vitest",
+      "../../drizzle/schema",
+      "../../shared/coldCallBurst",
+      "twilio",
+      "../salesCalls",
+      "../claire/communicationsContextPort",
+      "./coldCallBurstService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/driverGameWorldContract.test.ts",
+    "newPath": "server/experience/goldline/driver/driverGameWorldContract.test.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [],
+    "dependencies": [
+      "node:fs",
+      "vitest"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/driverGameWorldRouter.ts",
+    "newPath": "server/composition/driverGameWorldRouter.ts",
+    "responsibility": "Authenticated mixed field/game route wiring; public procedure names stable",
+    "writeTargets": [],
+    "dependencies": [
+      "@trpc/server",
+      "zod",
+      "../_core/trpc",
+      "./driverGameWorldService",
+      "./missionMutationService",
+      "./coldCallBurstService",
+      "../salesCalls",
+      "../../shared/coldCallBurst",
+      "../commercialMissions/commercialMissionCallService",
+      "../capabilities/expansionScoutCapability",
+      "./expansionScoutService",
+      "../territory/googlePlacesTerritoryProvider",
+      "./progressionProjectionService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/driverGameWorldService.ts",
+    "newPath": "server/experience/goldline/driver/driverGameWorldService.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [
+      "driverGameWorldNodes"
+    ],
+    "dependencies": [
+      "../commercialMissions/commercialWorldReadService",
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/driverGameWorld",
+      "../../shared/commercialMission",
+      "../../shared/commercialMissionField",
+      "../db"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/expansionScoutService.ts",
+    "newPath": "server/field/scout/expansionScoutService.ts",
+    "responsibility": "Provider-sourced discovery application; canonical Commercial mission creation and derived node publication",
+    "writeTargets": [
+      "driverScoutReports",
+      "driverScoutDiscoveries",
+      "driverGameWorldNodes"
+    ],
+    "dependencies": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/commercialMission",
+      "../../shared/expansionScout",
+      "../db",
+      "../commercialMissions/commercialMissionStore",
+      "../capabilities/expansionScoutCapability",
+      "../territory/territoryDiscovery",
+      "../territory/territoryStore",
+      "./progressionProjectionService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/missionMutation.integration.test.ts",
+    "newPath": "server/experience/goldline/driver/missionMutation.integration.test.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [
+      "missionMutations"
+    ],
+    "dependencies": [
+      "node:crypto",
+      "drizzle-orm",
+      "vitest",
+      "../../drizzle/schema",
+      "../db",
+      "./missionMutationService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/missionMutationService.ts",
+    "newPath": "server/experience/goldline/driver/missionMutationService.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [
+      "missionMutations"
+    ],
+    "dependencies": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/missionMutation",
+      "../db",
+      "../../shared/driverGameWorld"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/progressionProjectionService.ts",
+    "newPath": "server/experience/goldline/driver/progressionProjectionService.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [],
+    "dependencies": [
+      "../commercialMissions/commercialWorldReadService",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineProgression",
+      "../../shared/salesIntel",
+      "../db",
+      "../armory/armoryFoundation",
+      "./driverGameWorldService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/recoveryTruthBoundary.test.ts",
+    "newPath": "server/experience/goldline/driver/recoveryTruthBoundary.test.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [],
+    "dependencies": [
+      "vitest",
+      "./progressionProjectionService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/driverGameWorld/run2Contracts.test.ts",
+    "newPath": "server/experience/goldline/driver/run2Contracts.test.ts",
+    "responsibility": "Driver visual world/progression/evidence interpretation or its colocated contract; no native lifecycle/payment/conversion writes",
+    "writeTargets": [],
+    "dependencies": [
+      "node:fs",
+      "vitest"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+  },
+  {
+    "oldPath": "server/businessWorld/businessWorldRouter.ts",
+    "newPath": "server/experience/lanternCity/businessOverview/businessOverviewRouter.ts",
+    "responsibility": "Read-only business overview composition, schema or colocated canonical-revenue contract; never native authority",
+    "writeTargets": [],
+    "dependencies": [
+      "../_core/trpc",
+      "./businessWorldService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+  },
+  {
+    "oldPath": "server/businessWorld/businessWorldService.test.ts",
+    "newPath": "server/experience/lanternCity/businessOverview/businessOverviewService.test.ts",
+    "responsibility": "Read-only business overview composition, schema or colocated canonical-revenue contract; never native authority",
+    "writeTargets": [],
+    "dependencies": [
+      "../analytics/businessLedgerFixture",
+      "vitest",
+      "./businessWorldService",
+      "../analytics/canonicalRevenue",
+      "../db"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+  },
+  {
+    "oldPath": "server/businessWorld/businessWorldService.ts",
+    "newPath": "server/experience/lanternCity/businessOverview/businessOverviewService.ts",
+    "responsibility": "Read-only business overview composition, schema or colocated canonical-revenue contract; never native authority",
+    "writeTargets": [],
+    "dependencies": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/businessGame",
+      "../db",
+      "../analytics/canonicalRevenue",
+      "../analytics/businessPeriods",
+      "../customerAssets/customerAssetProjection",
+      "../territory/territoryDiscovery",
+      "./businessWorldTypes",
+      "../capabilities/capabilityEvaluationService"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+  },
+  {
+    "oldPath": "server/businessWorld/businessWorldTypes.ts",
+    "newPath": "server/experience/lanternCity/businessOverview/businessOverviewTypes.ts",
+    "responsibility": "Read-only business overview composition, schema or colocated canonical-revenue contract; never native authority",
+    "writeTargets": [],
+    "dependencies": [
+      "../customerAssets/customerAssetTypes",
+      "../../shared/businessGame"
+    ],
+    "protectedOverlap": false,
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+  }
+]

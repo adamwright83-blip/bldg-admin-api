@@ -84,6 +84,7 @@
       "domain": "game",
       "paths": [
         "server/goldlineWorld",
+        "server/experience",
         "server/goldlineKingdoms",
         "server/goldlineProgression",
         "server/lanternCity",
@@ -174,6 +175,7 @@
       "id": "game-does-not-import-business-implementation",
       "from": [
         "server/goldlineWorld",
+        "server/experience",
         "server/goldlineKingdoms",
         "server/lanternCity",
         "server/narratorOs"
@@ -199,7 +201,7 @@
         "server/lanternCity/objectiveMarksService.ts"
       ],
       "forbiddenMutationSources": [
-        "server/driverGameWorld",
+        "server/experience/goldline/driver",
         "server/goldlineWorld",
         "server/lanternCity",
         "server/platform/execution",
@@ -222,7 +224,7 @@
         "server/domains/orders",
         "server/commercialPipeline",
         "server/towerWars",
-        "server/driverGameWorld"
+        "server/experience/goldline/driver"
       ],
       "legacyCompatibilityExceptions": "Historical receipts without amount evidence prove occurrence only, with dollar amount held unknown."
     },
@@ -259,7 +261,7 @@
       "forbiddenMutationSources": [
         "server/domains/payment/paymentAdmission.ts (won is not paid)",
         "server/goldlineWorld",
-        "server/driverGameWorld"
+        "server/experience/goldline/driver"
       ],
       "legacyCompatibilityExceptions": "None. Commercial conversion never automatically implies payment."
     },

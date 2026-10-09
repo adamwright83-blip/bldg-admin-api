@@ -1,6 +1,6 @@
-import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
+import { withFixturePaymentAuthority } from "../../../analytics/businessLedgerFixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deriveBusinessStage, getBusinessWorld } from "./businessWorldService";
+import { deriveBusinessStage, getBusinessWorld } from "./businessOverviewService";
 
 describe("business stage", () => {
   it("derives team state from real active non-owner membership", () => {
@@ -19,9 +19,9 @@ describe("business stage", () => {
 
 // Financial summary integration: existing customer/territory projections are not payment authority.
 
-import * as canonical from "../analytics/canonicalRevenue";
-import { resetDbForTesting, setDbForTesting } from "../db";
-vi.mock("../customerAssets/customerAssetProjection", () => ({
+import * as canonical from "../../../analytics/canonicalRevenue";
+import { resetDbForTesting, setDbForTesting } from "../../../db";
+vi.mock("../../../customerAssets/customerAssetProjection", () => ({
   listCustomerAssets: async () => [
     {
       id: "commercial-fixture",
@@ -35,7 +35,7 @@ vi.mock("../customerAssets/customerAssetProjection", () => ({
     },
   ],
 }));
-vi.mock("../capabilities/capabilityEvaluationService", () => ({
+vi.mock("../../../capabilities/capabilityEvaluationService", () => ({
   getCapabilityEvaluations: async () => [],
 }));
 const actualRead = canonical.readCanonicalRevenue;

@@ -2,22 +2,22 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const coldCallService = readFileSync(
-  new URL("./coldCallBurstService.ts", import.meta.url),
+  new URL("../../../field/outreach/coldCallBurstService.ts", import.meta.url),
   "utf8"
 );
 const coldCallUi = readFileSync(
   new URL(
-    "../../client/src/game/encounters/coldCall/ColdCallBurst.tsx",
+    "../../../../client/src/game/encounters/coldCall/ColdCallBurst.tsx",
     import.meta.url
   ),
   "utf8"
 );
 const scoutService = readFileSync(
-  new URL("./expansionScoutService.ts", import.meta.url),
+  new URL("../../../field/scout/expansionScoutService.ts", import.meta.url),
   "utf8"
 );
 const migration = readFileSync(
-  new URL("../../drizzle/0052_goldline_run2_loop.sql", import.meta.url),
+  new URL("../../../../drizzle/0052_goldline_run2_loop.sql", import.meta.url),
   "utf8"
 );
 

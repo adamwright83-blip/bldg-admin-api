@@ -7,15 +7,15 @@ const service = readFileSync(
   "utf8"
 );
 const migration = readFileSync(
-  new URL("../../drizzle/0051_driver_game_world.sql", import.meta.url),
+  new URL("../../../../drizzle/0051_driver_game_world.sql", import.meta.url),
   "utf8"
 );
 const game = readFileSync(
-  new URL("../../client/src/game/GoldlineGameHome.tsx", import.meta.url),
+  new URL("../../../../client/src/game/GoldlineGameHome.tsx", import.meta.url),
   "utf8"
 );
 const migrationVerifier = readFileSync(
-  new URL("../../scripts/legacy-dayforge-migrations-verify.ts", import.meta.url),
+  new URL("../../../../scripts/legacy-dayforge-migrations-verify.ts", import.meta.url),
   "utf8"
 );
 

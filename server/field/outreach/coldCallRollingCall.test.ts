@@ -9,11 +9,11 @@ import {
   driverColdCallTargets,
   salesCallAttempts,
   territoryOperatorProfiles,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 import {
   COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE,
   ProspectLegNotConnectedError,
-} from "../../shared/coldCallBurst";
+} from "../../../shared/coldCallBurst";
 
 const OPERATOR = "+13105550111";
 const CLAIRE_FROM = "+13105550000";
@@ -36,16 +36,16 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../db", () => ({ getDb: mocks.getDb }));
-vi.mock("../_core/env", () => ({
+vi.mock("../../db", () => ({ getDb: mocks.getDb }));
+vi.mock("../../_core/env", () => ({
   ENV: { adminBaseUrl: "https://admin.example.test", ownerOpenId: "adam-admin" },
 }));
-vi.mock("../claire/claireTwilio", () => ({
+vi.mock("../../claire/claireTwilio", () => ({
   authorizedOperatorPhone: mocks.authorizedOperatorPhone,
   claireTwilioFromNumber: mocks.claireTwilioFromNumber,
   registerClaireRoutes: () => undefined,
 }));
-vi.mock("../commercialMissions/commercialMissionCallService", () => ({
+vi.mock("../../commercialMissions/commercialMissionCallService", () => ({
   recordCommercialMissionCallAttempt: mocks.recordCommercialMissionCallAttempt,
 }));
 vi.mock("twilio", async importOriginal => {
@@ -78,8 +78,8 @@ import {
   goldlineTransportStatusFromCustomerLeg,
   handleBridgeTwiml,
   handleCallStatus,
-} from "../salesCalls";
-import { loadClaireCommunicationsContext } from "../claire/communicationsContextPort";
+} from "../../salesCalls";
+import { loadClaireCommunicationsContext } from "../../claire/communicationsContextPort";
 import {
   COLD_CALL_ROLL_RECOVERY_BOUND_MS,
   COLD_CALL_STALE_DIALING_REP_REASON,
@@ -1305,20 +1305,20 @@ describe("Cold Call Burst operator-first roll", () => {
 
 describe("Cold Call Burst client contract", () => {
   const ui = readFileSync(
-    new URL("../../client/src/game/encounters/coldCall/ColdCallBurst.tsx", import.meta.url),
+    new URL("../../../client/src/game/encounters/coldCall/ColdCallBurst.tsx", import.meta.url),
     "utf8"
   );
   const controller = readFileSync(
-    new URL("../../client/src/pages/driver/GoldlineDriverController.tsx", import.meta.url),
+    new URL("../../../client/src/pages/driver/GoldlineDriverController.tsx", import.meta.url),
     "utf8"
   );
-  const router = readFileSync(new URL("./driverGameWorldRouter.ts", import.meta.url), "utf8");
-  const salesCalls = readFileSync(new URL("../salesCalls.ts", import.meta.url), "utf8");
+  const router = readFileSync(new URL("../../composition/driverGameWorldRouter.ts", import.meta.url), "utf8");
+  const salesCalls = readFileSync(new URL("../../salesCalls.ts", import.meta.url), "utf8");
   const migration = readFileSync(
-    new URL("../../drizzle/0095_cold_call_attempt_link.sql", import.meta.url),
+    new URL("../../../drizzle/0095_cold_call_attempt_link.sql", import.meta.url),
     "utf8"
   );
-  const migrate = readFileSync(new URL("../../scripts/migrate.mjs", import.meta.url), "utf8");
+  const migrate = readFileSync(new URL("../../../scripts/migrate.mjs", import.meta.url), "utf8");
 
   it("sends target identity only and has no tel fallback", () => {
     expect(ui).not.toMatch(/tel\s*:/);
@@ -1380,7 +1380,7 @@ describe("Cold Call Burst client contract", () => {
     expect(migration).toContain("cold_call_target_id");
     expect(migrate).toContain("ADD COLUMN cold_call_target_id");
     const contactMigration = readFileSync(
-      new URL("../../drizzle/0096_cold_call_target_contact.sql", import.meta.url),
+      new URL("../../../drizzle/0096_cold_call_target_contact.sql", import.meta.url),
       "utf8"
     );
     expect(contactMigration).toContain("contactId");
