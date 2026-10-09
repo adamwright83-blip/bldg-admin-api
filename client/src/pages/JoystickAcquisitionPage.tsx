@@ -19,7 +19,10 @@ const SESSION_KEY = "joystick_acquisition_credentials";
 
 function readCredentials(): Credentials | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY)
+        : null;
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Credentials;
     return parsed.sessionId && parsed.resumeToken ? parsed : null;
@@ -94,6 +97,7 @@ export default function JoystickAcquisitionPage() {
             resumeToken: result.resumeToken,
           };
           sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+          localStorage.setItem(SESSION_KEY, JSON.stringify(next));
           setCredentials(next);
         },
         onError: cause => setError(cause.message),
@@ -252,6 +256,7 @@ export default function JoystickAcquisitionPage() {
         throw new Error(body.error || "Account activated, but sign-in failed.");
       }
       sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
       captureProductEvent("joystick_first_entry", { destination: "/onboarding" });
       window.location.assign("/onboarding");
     } catch (cause) {
@@ -369,12 +374,12 @@ export default function JoystickAcquisitionPage() {
               </div>
               <p className="ja-kicker">CLAIRE'S OPENING READ</p>
               <h1>{preview.area.canonicalAddress || preview.area.declared}</h1>
-              <p>{preview.briefing.text}</p>
+              <p data-testid="draft-preview-briefing">{preview.briefing.text}</p>
               <div className="ja-dayline">
                 <span>{preview.recommendedAction.title}</span>
                 <strong>{preview.recommendedAction.text}</strong>
               </div>
-              <small>Draft preview · based only on your answers{preview.area.provenance === "geocoded_declaration" ? " and the place you declared" : ""}.</small>
+              <small data-testid="draft-preview-label">Draft preview · based only on your answers{preview.area.provenance === "geocoded_declaration" ? " and the place you declared" : ""}.</small>
             </div>
             <form className="ja-form ja-identity" onSubmit={submitIdentity}>
               <p className="ja-kicker">SAVE THIS WORLD</p>
@@ -406,6 +411,7 @@ export default function JoystickAcquisitionPage() {
                 <span>{preview.recommendedAction.title}</span>
                 <strong>{preview.recommendedAction.text}</strong>
               </div>
+              <small data-testid="draft-preview-label">Draft preview · based only on your answers.</small>
             </div>
             <div className="ja-checkout">
               <p className="ja-kicker">START PLAYING</p>
