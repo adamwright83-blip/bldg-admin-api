@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrpcContext } from "../_core/context";
-import type { User } from "../../drizzle/schema";
+import type { TrpcContext } from "../../../_core/context";
+import type { User } from "../../../../drizzle/schema";
 
 const access = vi.hoisted(() => ({
   resolveMembership: vi.fn(),
@@ -27,15 +27,15 @@ const effects = vi.hoisted(() => ({
   delivered: vi.fn(async () => undefined),
 }));
 
-vi.mock("../saas/tenantAccess", async importOriginal => {
-  const actual = await importOriginal<typeof import("../saas/tenantAccess")>();
+vi.mock("../../../saas/tenantAccess", async importOriginal => {
+  const actual = await importOriginal<typeof import("../../../saas/tenantAccess")>();
   return {
     ...actual,
     resolveLegacyDayforgeMembership: access.resolveMembership,
   };
 });
 
-vi.mock("../_core/sdk", () => ({
+vi.mock("../../../_core/sdk", () => ({
   sdk: {
     authenticateRequest: vi.fn(),
   },
@@ -60,9 +60,9 @@ vi.mock("./driverOrderStore", () => ({
   }),
 }));
 
-vi.mock("../domains/orders/orderLifecycleService", async importOriginal => {
+vi.mock("../orderLifecycleService", async importOriginal => {
   const actual =
-    await importOriginal<typeof import("../domains/orders/orderLifecycleService")>();
+    await importOriginal<typeof import("../orderLifecycleService")>();
   return {
     ...actual,
     transitionNativeOrderStatus: vi.fn(
@@ -104,14 +104,14 @@ vi.mock("../domains/orders/orderLifecycleService", async importOriginal => {
   };
 });
 
-import { createContext } from "../_core/context";
-import { sdk } from "../_core/sdk";
-import { appRouter } from "../routers";
+import { createContext } from "../../../_core/context";
+import { sdk } from "../../../_core/sdk";
+import { appRouter } from "../../../routers";
 import { driverOrderRouter } from "./driverOrderRouter";
 import {
   transitionNativeOrderStatus,
   OrderTransitionError,
-} from "../domains/orders/orderLifecycleService";
+} from "../orderLifecycleService";
 import { orderVisibleToTenant } from "./driverOrderTenant";
 
 function memberUser(overrides: Partial<User> = {}): User {

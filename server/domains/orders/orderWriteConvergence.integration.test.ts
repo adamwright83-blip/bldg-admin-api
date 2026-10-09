@@ -12,11 +12,11 @@ import {
 } from "./orderLifecycleService";
 
 const effects = vi.hoisted(() => ({ collected: vi.fn(), delivered: vi.fn() }));
-vi.mock("../../joystick/driverOrderEffects", () => ({
+vi.mock("./driver/driverOrderEffects", () => ({
   recordDriverOrderCollected: effects.collected,
   recordDriverOrderDelivered: effects.delivered,
 }));
-import { updateDriverOrderStatusForMember } from "../../joystick/driverOrderService";
+import { updateDriverOrderStatusForMember } from "./driver/driverOrderService";
 
 const tenantId = `a5-${randomUUID().slice(0, 10)}`;
 const fixture = () => ({
