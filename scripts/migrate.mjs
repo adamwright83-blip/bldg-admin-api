@@ -5282,6 +5282,7 @@ for (const [relativePath, label] of [
   ["../drizzle/0027_operations_events.sql", "Operations event reader"],
   ["../drizzle/0036_territory_intelligence.sql", "Territory world reader"],
   ["../drizzle/0038_commercial_mission_field.sql", "Commercial field reader"],
+  ["../drizzle/0039_commercial_proposals.sql", "Commercial proposal reader"],
   ["../drizzle/0055_sales_intel_source_registry.sql", "Sales source registry reader"],
   ["../drizzle/0056_sales_intel_teachings.sql", "Sales teaching reader"],
 ]) {
@@ -5302,6 +5303,12 @@ if (sourceRegistryIndex.length === 0) {
 } else if (sourceRegistryIndex.length !== 1 || sourceRegistryIndex[0] !== "sourceRegistryId") {
   throw new Error("Sales source registry index differs from historical 0055 DDL");
 }
+// Only the coaching table from 0045; do not replay payment/entitlement DDL.
+const coachingCreate = (await readSqlStatements("../drizzle/0045_dayforge_30_day_foundation.sql"))
+  .find(sql => /^CREATE TABLE `commercial_mission_coaching_artifacts`/.test(sql));
+if (!coachingCreate) throw new Error("Historical coaching table DDL missing");
+await runRequired(coachingCreate.replace(/^CREATE TABLE /, "CREATE TABLE IF NOT EXISTS "), "Commercial mission coaching reader");
+await assertRequiredColumns("commercial_mission_coaching_artifacts", ["id", "tenantId", "missionId", "structuredOutputJson", "active"]);
 // Preserve the existing 0038 additive visit fields without replaying its user-role change.
 const fieldVisitStatements = await readSqlStatements("../drizzle/0038_commercial_mission_field.sql");
 const fieldVisitColumns = fieldVisitStatements.find(sql => /^ALTER TABLE `commercial_visit_outcomes`\s+ADD COLUMN/.test(sql));
