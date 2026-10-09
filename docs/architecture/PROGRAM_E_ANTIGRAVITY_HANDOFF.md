@@ -10,7 +10,8 @@ Status snapshot: October 8, 2026 Pacific. This is a continuation guide, not fina
 | E4b | #512; `6f90f5334416b6a09cdf0f5c2b5fa3c09a61d726` | Recovery starting main |
 | Recovery | [#514](https://github.com/adamwright83-blip/bldg-admin-api/pull/514); `53fe3b0b5218ff5a836f47948d0a17f6ed62fac8` | MERGED; E0–E4 regression gate passed |
 | E5a Driver Orders | [#515](https://github.com/adamwright83-blip/bldg-admin-api/pull/515); `d602fa6058969ca7ee7a28d7e2202b9b09531eb9` | MERGED; verified tree equals validated PR source |
-| E5b Driver/overview split | [#516](https://github.com/adamwright83-blip/bldg-admin-api/pull/516); branch `codex/program-e-e5-driver-projections`; head `4d42f2b93119afc21d29d4e0c0f1ca754367e90e` | OPEN at this snapshot; local validation complete, hosted checks pending. Do not presume merged |
+| E5b Driver/overview split | [#516](https://github.com/adamwright83-blip/bldg-admin-api/pull/516); merged main `69aa6777bc912fbe259b5dd2d3cf166a78dbc986` | MERGED; complete hosted validation, only exact baseline failures |
+| E5c authority split | [#517](https://github.com/adamwright83-blip/bldg-admin-api/pull/517); branch `codex/program-e-e5-authority-splits` | OPEN; local validation complete, hosted CI pending; do not presume merged |
 | E5 remaining / E6 / E7 / E8 | Not complete at this snapshot | No LLM certification |
 
 Immutable annotated tags were pushed and remotely peeled, including after recovery merge:
@@ -80,15 +81,17 @@ Read `PROGRAM_E_E5_CLASSIFICATION.md` and `evidence/program-e-e5b-files.json`.
 
 Completed E5a: all seven `server/joystick/driverOrder*` files → `server/domains/orders/driver/`; field router, Orders convergence mock/import and SaaS source assertion updated. Public routes stable; no legacy visibility behavior or native tenant/Payment fence changed. 57 contract assertions, matched 4/4 real-MySQL races, TypeScript/four gates and hosted validation passed. `server/joystick` has no remaining implementation.
 
-E5b pending merge: `driverGameWorldService`, progression projection and mission interpretation → `server/experience/goldline/driver/`; real cold-call workflow/test → `server/field/outreach/`; real Scout application → `server/field/scout/`; mixed public router → `server/composition/driverGameWorldRouter.ts`; four read-only `businessWorld` files → `server/experience/lanternCity/businessOverview/` with overview filenames. API names and schema/event contracts remain stable. No active protected file overlaps.
+Completed E5b (#516): `driverGameWorldService`, progression projection and mission interpretation → `server/experience/goldline/driver/`; real cold-call workflow/test → `server/field/outreach/`; real Scout application → `server/field/scout/`; mixed public router → `server/composition/driverGameWorldRouter.ts`; four read-only `businessWorld` files → `server/experience/lanternCity/businessOverview/` with overview filenames. API names and schema/event contracts remain stable. No active protected file overlaps.
 
 E5b local: TypeScript/four gates, ratchets against main and adversarial checker pass; expanded broader selection 34 files / 200 pass / same two Tower Wars baseline failures; interpretation MySQL 4/4 on clean pre-E and moved source. Initial pre-move MySQL invocation overlapped edits and is EXCLUDED; the clean rerun is valid. Before broader move: 32 files / 188 pass / same two Tower Wars failures; different selections must be disclosed.
 
-### Most consequential remaining splits (prioritize these)
+### Authority splits implemented in #517 (verify merge status first)
 
-1. `worldForgeService.ts` currently mixes physical identity/aliases/bindings, provider/official research, canonical Commercial prospect admission and tower artwork. Separate owned Geography helpers from Field application orchestration, official-site transport into Integrations, and pure artwork/contract/provider responsibilities. Keep persisted forge states, idempotency keys, source classification, admission, transitions, errors and provider guards unchanged. It creates only through the existing Commercial mission owner; do not move that real admission into a game builder. `identityResolver.ts` is geographic identity, not game identity. Shared pure game/visual contracts are legitimate in `shared`; avoid new Field→Game implementation coupling merely to extract a pure prompt.
-2. `cityWorldService.ts` materializes provisional display entities/aliases for already-geocoded customers, with transaction/unique-alias race recovery. Extract that exact materializer into Geography before moving read composition to Lantern City. It does NOT create native customers/payments. Preserve unknown coordinates and identity semantics.
-3. `towerWarsService.ts` lines ~420 onward has four promise functions; activation writes `dayDirectorCommitments`. Move the real permission-backed promise application to Planning, update router/test imports directly, and keep game revenue/attack calculations in Experience. No compatibility re-export/second owner. Existing two identity fixtures remain baseline until independently repaired.
+1. Before #517, `worldForgeService.ts` mixed physical identity/aliases/bindings, provider/official research, canonical Commercial prospect admission and tower artwork. Separate owned Geography helpers from Field application orchestration, official-site transport into Integrations, and pure artwork/contract/provider responsibilities. Keep persisted forge states, idempotency keys, source classification, admission, transitions, errors and provider guards unchanged. It creates only through the existing Commercial mission owner; do not move that real admission into a game builder. `identityResolver.ts` is geographic identity, not game identity. Shared pure game/visual contracts are legitimate in `shared`; avoid new Field→Game implementation coupling merely to extract a pure prompt.
+2. Before #517, `cityWorldService.ts` materialized provisional display entities/aliases for already-geocoded customers, with transaction/unique-alias race recovery. Extract that exact materializer into Geography before moving read composition to Lantern City. It does NOT create native customers/payments. Preserve unknown coordinates and identity semantics.
+3. Before #517, `towerWarsService.ts` lines ~420 onward had four promise functions; activation writes `dayDirectorCommitments`. Move the real permission-backed promise application to Planning, update router/test imports directly, and keep game revenue/attack calculations in Experience. No compatibility re-export/second owner. Existing two identity fixtures remain baseline until independently repaired.
+
+#517 implementation: exact old function bodies now live in Geography `physicalEntityApplication.ts` and `provisionalPropertyEntities.ts`, Planning `dayDirector/towerWarsPromiseService.ts`, Field `propertyDiscovery/towerForgeWorkflow.ts`, Integrations `propertyResearch/officialPropertyResearch.ts`, and pure shared `propertyEvidence.ts` / `towerForgeContracts.ts` / `towerGenerationPrompt.ts`. Image provider/contracts tests are under Experience `goldline/builder/`. Physical identity resolver/test moved to Geography. No wrappers or compatibility re-exports. Source-body identity was independently checked against main (except exported ownership declarations). TypeScript/four gates pass; same logical broad selection remains 200 pass / two baseline promise failures across 34 files. MySQL journal→city plus captured-payment→Tower Wars is exactly 14/14 before/after with explicit proof mode. No active protected PR file overlap. All code is committed/pushed; hosted CI still must be classified before merge.
 
 ### Remaining physical E5 map (classify before actual move)
 
@@ -113,7 +116,7 @@ E8 only after final validated E7 main: fresh competent evaluator with ordinary r
 ## Exact practical continuation procedure
 
 1. Fetch main/open PRs; inspect new commits and protected patches. Do not reset to this snapshot.
-2. If #516 remains open, inspect all hosted check logs. Compare failed legacy/world/bundle identities with the established evidence, not just conclusions. Fix any NEW failure; do not merge unvalidated code. Normal merge only, with matching head SHA, then fetch main and compare tree to validated head.
+2. If #517 remains open, inspect all hosted check logs. Compare failed legacy/world/bundle identities with the established evidence, not just conclusions. Fix any NEW failure; do not merge unvalidated code. Normal merge only, with matching head SHA, then fetch main and compare tree to validated head.
 3. Branch from that latest verified main. For each next coherent slice: CLASSIFY → SPLIT → MOVE → update every consumer/mock/source-root/workflow → focused + broader + real-MySQL coverage → TypeScript/four gates against base → hosted CI → normal merge → fetch/verify main. No next move on an unvalidated previous move.
 4. Keep all work committed/pushed. If usage/tools block completion, preserve an accurate GitHub handoff and stop affected work. User authorizes sequential validated PRs/merges without routine approval, but never production operations, protected branch edits, force pushes, weakened tests or fabricated certification.
 
@@ -138,6 +141,6 @@ Helper `/tmp/program-e-recovery-evidence/relocate.py` rewrites resolved relative
 
 ## Verdict
 
-E0–E4 recovery PASSED; E5 partial; E6/E7/E8 PENDING at this snapshot.
+E0–E4 recovery PASSED; E5a/E5b merged, E5c awaiting hosted validation; E5 partial; E6/E7/E8 PENDING at this snapshot.
 
 **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED.** Do not print JOYSTICK ARCHITECTURE PROJECT COMPLETE until final main contains validated E5/E6/E7, semantic invariants still hold and independent cold-model acceptance passes.
