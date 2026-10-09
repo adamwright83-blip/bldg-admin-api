@@ -30,7 +30,7 @@ describe("journal world actions", () => {
   });
 
   it("records world actions before the journal is marked processed", () => {
-    const source = readFileSync(join(__dirname, "fieldJournalProcessingService.ts"), "utf8");
+    const source = readFileSync(join(__dirname, "../../../field/journal/fieldJournalProcessingService.ts"), "utf8");
     expect(source).toContain("recordJournalActionsOnMatchedEntities");
     const actionIndex = source.indexOf("recordJournalActionsOnMatchedEntities");
     const processedIndex = source.lastIndexOf('processingStatus: coaching.status');
