@@ -248,7 +248,7 @@ export async function saveDriverSalesJournal(input: {
     if (!field?.arrivedAt) {
       throw new Error("The debrief requires a persisted field arrival.");
     }
-    const { findPhysicalEntityIdByAddress } = await import("../goldlineWorld/entityLookup");
+    const { findPhysicalEntityIdByAddress } = await import("../experience/goldline/world/entityLookup");
     debriefPhysicalEntityId = await findPhysicalEntityIdByAddress({
       tenantId: input.tenantId,
       address: mission.account.address,
@@ -299,7 +299,7 @@ export async function saveDriverSalesJournal(input: {
     transcript: rawTranscript,
     processingStatus: "captured" as const,
   };
-  const { appendGoldlineWorldEvent } = await import("../goldlineWorld/worldEventStore");
+  const { appendGoldlineWorldEvent } = await import("../experience/goldline/world/worldEventStore");
   const worldEvent = await appendGoldlineWorldEvent({
     tenantId: input.tenantId,
     physicalEntityId: debriefPhysicalEntityId,
@@ -319,7 +319,7 @@ export async function saveDriverSalesJournal(input: {
     correlationId: `field-journal:${journal.id}`,
     metadata: { debriefMissionId: input.debriefMissionId ?? null, journalDate: input.journalDate, hasAudio: Boolean(audioStorageKey), hasDeviceLocation: Boolean(input.location) },
   });
-  const { queueFieldJournalProcessing } = await import("../goldlineWorld/fieldJournalProcessingService");
+  const { queueFieldJournalProcessing } = await import("../field/journal/fieldJournalProcessingService");
   queueFieldJournalProcessing({ tenantId: input.tenantId, journalEntryId: journal.id });
   return {
     id: journal.id,

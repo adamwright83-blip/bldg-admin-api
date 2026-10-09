@@ -10,7 +10,7 @@ const dayPlan = readFileSync(
   "utf8"
 );
 const overview = readFileSync(
-  new URL("../goldlineWorld/lanternCityOverviewService.ts", import.meta.url),
+  new URL("../experience/lanternCity/lanternCityOverviewService.ts", import.meta.url),
   "utf8"
 );
 

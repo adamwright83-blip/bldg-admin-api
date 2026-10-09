@@ -672,7 +672,9 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
   it("does not attach the issuer to current Goldline mutation producers", () => {
     const producerRoots = [
       resolve(REPO_ROOT, "server/commercialMissions"),
-      resolve(REPO_ROOT, "server/goldlineWorld"),
+      resolve(REPO_ROOT, "server/experience"),
+      resolve(REPO_ROOT, "server/composition"),
+      resolve(REPO_ROOT, "server/integrations/googleMaps"),
       resolve(REPO_ROOT, "server/spiritHumanRescue"),
       resolve(REPO_ROOT, "server/churnRadar"),
       resolve(REPO_ROOT, "server/planning/dayDirector"),
@@ -1128,7 +1130,9 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
     ).toBe(false);
     const producerRoots = [
       resolve(REPO_ROOT, "server/commercialMissions"),
-      resolve(REPO_ROOT, "server/goldlineWorld"),
+      resolve(REPO_ROOT, "server/experience"),
+      resolve(REPO_ROOT, "server/composition"),
+      resolve(REPO_ROOT, "server/integrations/googleMaps"),
       resolve(REPO_ROOT, "server/spiritHumanRescue"),
       resolve(REPO_ROOT, "server/churnRadar"),
       resolve(REPO_ROOT, "server/planning/dayDirector"),

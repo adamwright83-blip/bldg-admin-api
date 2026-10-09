@@ -1,5 +1,5 @@
 import { getGeographicTruth, geocodePendingLocations } from "../../../geography/geographicTruthService";
-import { listCityWorldEntities } from "../../../goldlineWorld/cityWorldService";
+import { listCityWorldEntities } from "../../../experience/lanternCity/cityWorldService";
 import { drainEconomicOutbox } from "./worldOutbox";
 import type { GumballAssimilationStatus } from "./gumballOperatorStatus";
 

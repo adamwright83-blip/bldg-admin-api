@@ -10,7 +10,7 @@ import {
   towerWeaponConcepts,
 } from "../../../drizzle/schema";
 import type { FieldJournalExtraction } from "../../../shared/fieldJournal";
-import { appendGoldlineWorldEvent } from "../../goldlineWorld/worldEventStore";
+import { appendGoldlineWorldEvent } from "../../experience/goldline/world/worldEventStore";
 import { bindPhysicalEntity, createOrResolvePhysicalEntity, persistEvidence } from "../../geography/physicalEntityApplication";
 import { buildTowerGenerationPrompt } from "../../../shared/towerGenerationPrompt";
 import { selectPlaceCandidate } from "../../geography/propertyDiscoveryContracts";

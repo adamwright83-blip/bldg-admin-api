@@ -190,7 +190,7 @@ jobs:
           server/agents/operatorRepresentative/talk.test.ts
           server/claire/operatorAdaptationContext.test.ts
           server/campaignRuns/canonicalOwnership.test.ts
-          server/lanternCity/lanternCityRouter.test.ts
+          server/experience/lanternCity/lanternCityRouter.test.ts
           shared/lanternCityObjectiveMarks.test.ts
       - name: Prove Mitch native producer contracts
         run: >-
@@ -285,7 +285,7 @@ jobs:
           pnpm vitest run
           shared/goldlineTemporal.test.ts
           shared/goldlineFuturePressure.test.ts
-          server/goldlineWorld/futurePressureService.test.ts
+          server/experience/goldline/world/futurePressureService.test.ts
           server/field/fieldOpportunityService.test.ts
           server/field/fieldTodayService.test.ts
       - name: Prove Claire pre-visit sales loadout

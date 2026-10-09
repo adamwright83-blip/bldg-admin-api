@@ -83,14 +83,14 @@
     {
       "domain": "game",
       "paths": [
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience",
         "server/goldlineKingdoms",
         "server/goldlineProgression",
-        "server/lanternCity",
+        "server/experience/lanternCity",
         "server/narratorOs",
         "server/companions",
-        "server/towerWars"
+        "server/experience/goldline/modes/towerWars"
       ]
     },
     {
@@ -129,7 +129,7 @@
       ],
       "to": [
         "server/agents/persistentOperator",
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience",
         "server/narratorOs"
       ],
@@ -144,7 +144,7 @@
       ],
       "to": [
         "server/agents/persistentOperator",
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience",
         "server/narratorOs"
       ],
@@ -157,7 +157,7 @@
       ],
       "to": [
         "server/agents/persistentOperator",
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience",
         "server/narratorOs"
       ],
@@ -177,10 +177,10 @@
     {
       "id": "game-does-not-import-business-implementation",
       "from": [
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience",
         "server/goldlineKingdoms",
-        "server/lanternCity",
+        "server/experience/lanternCity",
         "server/narratorOs"
       ],
       "to": [
@@ -201,12 +201,12 @@
       "downstreamConsumers": [
         "server/domains/orders/driver/driverOrderService.ts",
         "server/planning/dayDirector/dayDirectorService.ts",
-        "server/lanternCity/objectiveMarksService.ts"
+        "server/experience/lanternCity/objectiveMarksService.ts"
       ],
       "forbiddenMutationSources": [
         "server/experience/goldline/driver",
-        "server/goldlineWorld",
-        "server/lanternCity",
+        "server/experience/goldline/world",
+        "server/experience/lanternCity",
         "server/platform/execution",
         "server/durableExecution"
       ],
@@ -221,12 +221,12 @@
       "downstreamConsumers": [
         "server/domains/orders/orderLifecycleService.ts (delivery eligibility fence)",
         "server/analytics/canonicalRevenue.ts",
-        "server/towerWars/towerWarsService.ts"
+        "server/experience/goldline/modes/towerWars/towerWarsService.ts"
       ],
       "forbiddenMutationSources": [
         "server/domains/orders",
         "server/commercialPipeline",
-        "server/towerWars",
+        "server/experience/goldline/modes/towerWars",
         "server/experience/goldline/driver"
       ],
       "legacyCompatibilityExceptions": "Historical receipts without amount evidence prove occurrence only, with dollar amount held unknown."
@@ -239,7 +239,7 @@
       "evidenceAdmissionSource": "Immutable provider capture receipts",
       "downstreamConsumers": [
         "server/analytics/canonicalRevenue.ts",
-        "server/towerWars/towerWarsService.ts",
+        "server/experience/goldline/modes/towerWars/towerWarsService.ts",
         "server/truePnlCockpit.ts"
       ],
       "forbiddenMutationSources": [
@@ -259,11 +259,11 @@
       "downstreamConsumers": [
         "server/planning/dayDirector/dayDirectorService.ts",
         "server/claire/turn/claireTurn.ts",
-        "server/lanternCity/objectiveMarksService.ts"
+        "server/experience/lanternCity/objectiveMarksService.ts"
       ],
       "forbiddenMutationSources": [
         "server/domains/payment/paymentAdmission.ts (won is not paid)",
-        "server/goldlineWorld",
+        "server/experience/goldline/world",
         "server/experience/goldline/driver"
       ],
       "legacyCompatibilityExceptions": "None. Commercial conversion never automatically implies payment."
@@ -302,8 +302,8 @@
     {
       "concept": "Game Progression and World State",
       "owner": "Experience / Game",
-      "legalWriteEntrypoint": "server/goldlineWorld/chapterStateService.ts, server/goldlineWorld/worldEventStore.ts",
-      "canonicalReadEntrypoint": "server/goldlineWorld/lanternCityOverviewService.ts, server/goldlineProgression/**",
+      "legalWriteEntrypoint": "server/experience/goldline/world/chapterStateService.ts, server/experience/goldline/world/worldEventStore.ts",
+      "canonicalReadEntrypoint": "server/experience/lanternCity/lanternCityOverviewService.ts, server/goldlineProgression/**",
       "evidenceAdmissionSource": "Reality Bridge projection consuming admitted business facts",
       "downstreamConsumers": [
         "client/src/pages/GoldlineScene.tsx",

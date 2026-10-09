@@ -63,3 +63,19 @@ The game Tower Wars calculation no longer contains raw promise/Day Director writ
 Baseline before extraction: Phase A real journal → city projection and captured-payment → Tower Wars integration pass 14/14 on two files with `TZ=UTC`, disposable MySQL and explicit `GOLDLINE_PROOF_MODE=1`. Without that required proof adapter, journal extraction honestly returns empty fallback and the Phase A fixture does not establish its claims; that unsupported invocation is not used as baseline evidence.
 
 This slice prioritizes authority splits. Remaining Goldline world, Lantern City and Tower Wars mechanical relocation is still pending and must be listed in the continuation handoff; E5/E8 are not certified.
+
+## E5d — finish classified world/experience paths
+
+Prerequisite #517 merged at verified main `76fd4e604334c290de7ff6e87a4ffb5e1eaa37f7`. Complete hosted fast contracts/schema/other checks passed; raw world/legacy/mobile logs retain exactly the disclosed baseline identities. Source tree equals validated head. Extracted authority functions were independently compared against the prerequisite source and are unchanged apart from owned exports.
+
+The per-file map `evidence/program-e-e5d-files.json` records all 55 remaining old/new paths, explicit responsibility and source import/write census. Census hits are syntactic hints (hash/map operations can match), not automatically claims of database authority. This follows the preceding authority split rather than wholesale mixed-folder renaming:
+
+- Chapter/campaign/territory/world receipt and derived future-pressure state go to Experience Goldline world. Canonical business facts still cross domain admission; event `account_won` requires matching persisted Commercial authority receipt and binding.
+- Lantern City overview/city read composition and objective marks go to Experience Lantern City. Its geographic materializer and identity owner were already extracted to Geography.
+- Field Journal extraction/processing/reported commitments go to Field journal; target research/ranking goes to Field targeting. Uncertain/operator-reported claims retain their exact source classes and do not become provider-verified business outcomes.
+- Actual Commercial follow-up reader/brief/router go to the Commercial follow-up application. Travel transport goes to Google Maps integration.
+- The mixed Goldline router is Composition wiring across those owners; route names, inputs, procedures and auth scopes are stable.
+- Tower Wars game mode/impact projections go under Goldline modes; real promise activation already belongs to Planning.
+- Historical mixed Goldline bootstrap SQL goes under Platform persistence. Every DDL/table/column/default/persisted identifier stays byte-identical. Only its loading URL changes. President bootstrap additions are in independent end-of-file hunks; no protected implementation is edited.
+
+Update root ownership/active finder paths and workflow/source-census selectors with the move. Historical Program A–D evidence is retained. Narrator scans follow the new Experience roots without dropping Field/Commercial producers. Full E7 prose/legacy reconciliation and E8 remain pending; do not treat E5 completion as full project certification.
