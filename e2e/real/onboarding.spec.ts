@@ -1,5 +1,7 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical database, route and environment literals only; canonical product is JOYSTICK. */
 import { createHash } from "node:crypto";
 import { test, expect } from "@playwright/test";
+import superjson from "superjson";
 import mysql, { type Connection, type RowDataPacket } from "mysql2/promise";
 
 const credentialKey = "joystick_acquisition_credentials";
@@ -52,9 +54,16 @@ test("real onboarding persists answers, resumes the same draft and labels propos
     expect(new Date(persisted.expiresAt).getTime()).toBeGreaterThan(Date.now());
     await page.reload();
     await expect(page.getByRole("button", { name: "BUILD MY FIRST DAY LINE", exact: true })).toBeVisible();
+    const resumeUrl = (resumeToken: string) => new URL(`/api/trpc/system.saas.resume?input=${encodeURIComponent(JSON.stringify({ json: { sessionId, resumeToken } }))}`, page.url()).href;
+    const resumedResponse = await page.context().request.get(resumeUrl(credentials.resumeToken));
+    expect(resumedResponse.status()).toBe(200);
+    const resumed = superjson.deserialize<any>((await resumedResponse.json()).result.data);
+    expect(resumed.id).toBe(sessionId);
+    expect(resumed.draftAnswers).toEqual(answers);
     await page.getByRole("button", { name: "BUILD MY FIRST DAY LINE", exact: true }).click();
     await expect(page.getByTestId("draft-preview-briefing")).toContainText(answers.daily_work);
     await expect(page.getByTestId("draft-preview-briefing")).toContainText(answers.avoidance);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(answers.service_area);
     await expect(page.getByTestId("draft-preview-label")).toContainText("Draft preview · based only on your answers");
     const savedPreview = json((await readDraft()).draftPreviewJson);
     expect(savedPreview).toMatchObject({
@@ -67,6 +76,7 @@ test("real onboarding persists answers, resumes the same draft and labels propos
     });
     // Only the legitimately issued persisted resume credential is carried into
     // a new browser. No auth response, business route or database state is mocked.
+    const securityEvidence = { tokenBytes: 32, encodedLength: credentials.resumeToken.length, storedHashAlgorithm: "SHA256", storedHashMatches: true, originalExpiresAt: new Date(persisted.expiresAt).toISOString(), invalidTokenHttpStatus: 0, expiredTokenHttpStatus: 0 };
     const context = await browser.newContext();
     try {
       await context.addInitScript(({ key, value }) => localStorage.setItem(key, value), {
@@ -82,6 +92,18 @@ test("real onboarding persists answers, resumes the same draft and labels propos
       const invalid = await context.request.get(new URL(`/api/trpc/system.saas.resume?input=${encodeURIComponent(JSON.stringify({ json: { sessionId, resumeToken: "x".repeat(43) } }))}`, page.url()).href);
       expect(invalid.ok()).toBe(false);
       expect(await invalid.text()).toContain("invalid or expired");
+      securityEvidence.invalidTokenHttpStatus = invalid.status();
+      // Only this disposable draft is expired. The legitimate token must cease
+      // authorizing a resume even though its hash still matches the stored hash.
+      await db.execute("UPDATE dayforge_saas_onboarding_sessions SET expiresAt = ? WHERE id = ?", [new Date(Date.now() - 60_000), sessionId]);
+      try {
+        const expired = await context.request.get(resumeUrl(credentials.resumeToken));
+        expect(expired.ok()).toBe(false);
+        expect(await expired.text()).toContain("invalid or expired");
+        securityEvidence.expiredTokenHttpStatus = expired.status();
+      } finally {
+        await db.execute("UPDATE dayforge_saas_onboarding_sessions SET expiresAt = ? WHERE id = ?", [persisted.expiresAt, sessionId]);
+      }
     } finally {
       await context.close();
     }
@@ -92,7 +114,7 @@ test("real onboarding persists answers, resumes the same draft and labels propos
       expect(responses.some(response => response.procedure.includes(procedure) && response.status === 200)).toBe(true);
     }
     await testInfo.attach("onboarding-database-and-http-evidence", {
-      body: JSON.stringify({ sessionId, answers, preview: savedPreview, tenantId: null, responses }, null, 2), contentType: "application/json",
+      body: JSON.stringify({ sessionId, answers, serverResumedAnswers: resumed.draftAnswers, preview: savedPreview, tenantId: null, securityEvidence, responses }, null, 2), contentType: "application/json",
     });
     await testInfo.attach("onboarding-preview", { body: await page.screenshot(), contentType: "image/png" });
   } finally {

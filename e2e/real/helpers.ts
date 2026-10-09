@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical database, route and environment literals only; canonical product is JOYSTICK. */
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
@@ -66,14 +67,17 @@ export async function cleanupOwner(owner: TestOwner) {
   } finally { await db.end(); }
 }
 export async function login(page: Page, owner: TestOwner) {
-  await page.goto("/driver");
+  await page.goto("/play");
   await expect(page.locator('input[type="email"]')).toBeVisible();
   await page.locator('input[type="email"]').fill(owner.email);
   await page.locator('input[type="password"]').fill(owner.password);
+  const navigation = page.waitForEvent("framenavigated", frame => frame === page.mainFrame());
   const response = page.waitForResponse(r => r.url().endsWith("/api/dayforge/auth/login") && r.request().method() === "POST");
   await page.getByRole("button", {name:"Sign in",exact:true}).click();
   const result = await response;
   expect(result.status()).toBe(200);
+  await navigation;
+  await page.waitForLoadState("domcontentloaded");
   const me = await rpc(page.context().request, "auth.me");
   expect(me.openId).toBe(owner.openId);
   expect((await page.context().cookies()).some(cookie=>cookie.httpOnly)).toBe(true);

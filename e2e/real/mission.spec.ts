@@ -1,5 +1,7 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical database, route and environment literals only; canonical product is JOYSTICK. */
 import { test, expect } from "@playwright/test";
 import mysql from "mysql2/promise";
+import { knownTerritoryIds } from "../../shared/goldlineLocalWorld";
 import { cleanupOwner, database, login, provisionOwner, rpc } from "./helpers";
 
 const observation = "Visited Pasadena commercial corridor. Observed worn carpet at a public office entrance; next useful action is an owner-approved quote follow-up.";
@@ -10,11 +12,14 @@ test("REAL acceptance 4/5: field evidence persists, replays once, and survives a
   let second: Awaited<ReturnType<typeof browser.newContext>> | undefined;
   try {
     const page = await context.newPage();
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
     await login(page, owner);
     const before = await rpc(context.request, "system.goldlineOnboarding.state");
     expect(before.session.tenantId).toBe(owner.tenantId);
     expect(before.session.mission.id).toBe(owner.missionId);
     expect(before.session.mission.outcome).toBeNull();
+    expect(knownTerritoryIds(before.session.world.topology, [])).toEqual([]);
     await page.goto("/play?mission=first");
     await expect(page.getByTestId("first-mission-driver")).toBeVisible();
     await page.getByRole("button", {name:"YOUR FIELD OBJECTIVE",exact:true}).click();
@@ -30,6 +35,8 @@ test("REAL acceptance 4/5: field evidence persists, replays once, and survives a
       const [sessions] = await db.execute<mysql.RowDataPacket[]>(`SELECT payload FROM goldline_onboarding_sessions WHERE tenantId=?`, [owner.tenantId]);
       const saved = typeof sessions[0].payload === "string" ? JSON.parse(sessions[0].payload) : sessions[0].payload;
       expect(saved.mission.status).toBe("completed");
+      expect(knownTerritoryIds(saved.world.topology, [saved.mission.checkpoint.id])).toContain(saved.mission.territoryId);
+      expect(saved.mission.gameplayCompletedAt).toBeNull();
       expect(saved.mission.outcome).toMatchObject({text:observation,actorId:owner.openId,provenance:"operator_reported"});
       const [events] = await db.execute<mysql.RowDataPacket[]>(`SELECT * FROM goldline_world_events WHERE tenantId=? AND sourceId=?`, [owner.tenantId,owner.missionId]);
       expect(events).toHaveLength(1);
@@ -46,15 +53,19 @@ test("REAL acceptance 4/5: field evidence persists, replays once, and survives a
     // The completed field work must be represented by the server-produced Day Line.
     expect(JSON.stringify(line)).toContain(owner.missionId);
     expect(JSON.stringify(line)).toContain("completed");
+    expect(pageErrors).toEqual([]);
     await page.screenshot({path:testInfo.outputPath("mission-completed.png"),fullPage:true});
     await expect(page.getByRole("link",{name:"RETURN TO LANTERN CITY →"})).toHaveAttribute("href","/growth/lantern-city");
-    await page.goto("/driver");
+    await page.goto("/play");
     await expect(page.getByTestId("day-line-first-mission-evidence")).toContainText(observation);
+    await page.getByRole("button", {name:"OPEN FIELD JOURNAL",exact:true}).click();
+    await expect(page.getByTestId("journal-transcript")).toBeVisible();
+    await page.getByRole("button", {name:"Close journal",exact:true}).click();
     await context.close();
     second = await browser.newContext();
     expect(await second.cookies()).toEqual([]);
     const returning = await second.newPage();
-    await returning.goto("/driver");
+    await returning.goto("/play");
     expect(await rpc(second.request,"auth.me")).toBeNull();
     await login(returning,owner);
     const me = await rpc(second.request,"auth.me");

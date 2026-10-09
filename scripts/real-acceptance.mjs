@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical database, route and environment literals only; canonical product is JOYSTICK. */
 import { spawn } from 'node:child_process';
 import mysql from 'mysql2/promise';
 
@@ -34,7 +35,8 @@ try {
   await db.query('DROP DATABASE IF EXISTS joystick_real_acceptance');
   await db.query('CREATE DATABASE joystick_real_acceptance');
   await run('node', ['scripts/migrate.mjs']);
-  await run('pnpm', ['exec', 'vite', 'build']);
+  await run('node', ['scripts/acceptance-schema-compat.mjs']);
+  await run('pnpm', ['exec', 'vite', 'build', '--config', 'vite.real.config.ts']);
   await run('pnpm', ['exec', 'esbuild', 'server/_core/index.ts', '--platform=node', '--packages=external', '--bundle', '--format=esm', '--outfile=dist/index.js']);
   await run('pnpm', ['exec', 'playwright', 'test', '--config', 'playwright.real.config.ts', ...process.argv.slice(2)]);
 } finally {

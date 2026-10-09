@@ -1,3 +1,4 @@
+<!-- LEGACY DAYFORGE COMPATIBILITY: retained historical database, route and environment literals only; canonical product is JOYSTICK. -->
 # JOYSTICK Stripe provider acceptance
 
 Acceptance 3: **BLOCKED — Missing provider test credentials**. Audited October 9, 2026. No Stripe API request, real charge, account modification, or Laundry Farm account access was performed.
