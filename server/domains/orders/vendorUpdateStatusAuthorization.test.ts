@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   ensurePickupCompletedOperationsEventForOrder: vi.fn(),
   recordWarActionSafe: vi.fn(),
   notifyPickupEnRoute: vi.fn(),
+  getDb: vi.fn(),
+  readNativePaymentAuthorityReceipts: vi.fn(),
+  hasNativePaymentAuthority: vi.fn(),
 }));
 
 vi.mock("../../db", async importOriginal => {
@@ -19,8 +22,14 @@ vi.mock("../../db", async importOriginal => {
     attemptOrderPickupCollection: mocks.attemptOrderPickupCollection,
     ensurePickupCompletedOperationsEventForOrder:
       mocks.ensurePickupCompletedOperationsEventForOrder,
+    getDb: mocks.getDb,
   };
 });
+
+vi.mock("../payment/nativePaymentReadService", () => ({
+  readNativePaymentAuthorityReceipts: mocks.readNativePaymentAuthorityReceipts,
+  hasNativePaymentAuthority: mocks.hasNativePaymentAuthority,
+}));
 
 vi.mock("../../level4War", async importOriginal => {
   const actual = await importOriginal<typeof import("../../level4War")>();
@@ -70,6 +79,8 @@ describe("tRPC admin.updateStatus vendor authorization and mutation-time guarant
     mocks.updateOrderStatus.mockResolvedValue(undefined);
     mocks.ensurePickupCompletedOperationsEventForOrder.mockResolvedValue(undefined);
     mocks.notifyPickupEnRoute.mockResolvedValue(undefined);
+    mocks.readNativePaymentAuthorityReceipts.mockResolvedValue(new Map());
+    mocks.hasNativePaymentAuthority.mockReturnValue(true);
   });
 
   it("denies vendor session call against unrelated unassigned SaaS order with UNAUTHORIZED", async () => {
@@ -275,5 +286,141 @@ describe("tRPC admin.updateStatus vendor authorization and mutation-time guarant
     });
 
     expect(mocks.recordWarActionSafe).not.toHaveBeenCalled();
+  });
+
+  it("allows default-host vendor 77 to deliver an assigned tenant-other order with admitted payment", async () => {
+    const mockDb = {
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+        }),
+      }),
+    };
+    mocks.getDb.mockResolvedValue(mockDb);
+    mocks.getOrderById
+      .mockResolvedValueOnce({
+        id: 108,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "ready",
+        paid: true,
+        stripePaymentIntentId: "pi_108",
+        phone: "+13105550108",
+      })
+      .mockResolvedValueOnce({
+        id: 108,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "delivered",
+        paid: true,
+        stripePaymentIntentId: "pi_108",
+        phone: "+13105550108",
+      });
+
+    const caller = vendorCaller(77, "default");
+    const result = await caller.admin.updateStatus({
+      orderId: 108,
+      status: "delivered",
+    });
+
+    expect(result).toEqual({ success: true, alreadyCompleted: false });
+  });
+
+  it("denies vendor 88 from delivering a tenant-other order assigned to vendor 77", async () => {
+    mocks.getOrderById.mockResolvedValue({
+      id: 108,
+      tenantId: "tenant-other",
+      vendorId: 77,
+      status: "ready",
+      paid: true,
+      stripePaymentIntentId: "pi_108",
+      phone: "+13105550108",
+    });
+
+    const caller = vendorCaller(88, "default");
+    await expect(
+      caller.admin.updateStatus({ orderId: 108, status: "delivered" })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("denies vendor 77 from delivering an unassigned tenant-other order", async () => {
+    mocks.getOrderById.mockResolvedValue({
+      id: 109,
+      tenantId: "tenant-other",
+      vendorId: null,
+      status: "ready",
+      paid: true,
+      stripePaymentIntentId: "pi_109",
+      phone: "+13105550109",
+    });
+
+    const caller = vendorCaller(77, "default");
+    await expect(
+      caller.admin.updateStatus({ orderId: 109, status: "delivered" })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("denies delivery when order is unpaid or missing payment admission", async () => {
+    // Unpaid
+    mocks.getOrderById.mockResolvedValueOnce({
+      id: 110,
+      tenantId: "tenant-other",
+      vendorId: 77,
+      status: "ready",
+      paid: false,
+      phone: "+13105550110",
+    });
+
+    const caller = vendorCaller(77, "default");
+    await expect(
+      caller.admin.updateStatus({ orderId: 110, status: "delivered" })
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Charge the order before marking it delivered.",
+    });
+
+    // Paid flag true without admission receipt
+    mocks.getOrderById.mockResolvedValueOnce({
+      id: 111,
+      tenantId: "tenant-other",
+      vendorId: 77,
+      status: "ready",
+      paid: true,
+      stripePaymentIntentId: "pi_111",
+      phone: "+13105550111",
+    });
+    mocks.hasNativePaymentAuthority.mockReturnValueOnce(false);
+
+    await expect(
+      caller.admin.updateStatus({ orderId: 111, status: "delivered" })
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Matching Payment admission is required before delivery.",
+    });
+  });
+
+  it("handles repeated delivery of the same order idempotently with no duplicate effects", async () => {
+    mocks.getDb.mockResolvedValue({});
+    mocks.getOrderById.mockResolvedValue({
+      id: 112,
+      tenantId: "tenant-other",
+      vendorId: 77,
+      status: "delivered",
+      paid: true,
+      stripePaymentIntentId: "pi_112",
+      phone: "+13105550112",
+    });
+
+    const caller = vendorCaller(77, "default");
+    const result = await caller.admin.updateStatus({
+      orderId: 112,
+      status: "delivered",
+    });
+
+    expect(result).toEqual({ success: true, alreadyCompleted: true });
   });
 });

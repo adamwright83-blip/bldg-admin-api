@@ -68,3 +68,5 @@ jobs:
           server/saas/saasCustomerBoundary.test.ts
           server/saas/hostileTenant.integration.test.ts
           server/claire/conversation/transcriptLog.test.ts
+      - name: Run Orders real MySQL write convergence and guard integration suite
+        run: pnpm vitest run --config vitest.integration.config.ts server/domains/orders/orderWriteConvergence.integration.test.ts

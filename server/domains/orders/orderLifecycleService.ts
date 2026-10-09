@@ -33,6 +33,8 @@ export type TransitionOrderInput = {
   actor?: OperationsEventActorContext;
   vendorId?: number | null;
   allowCrossTenant?: boolean;
+  testPreMutationHook?: (order: Order) => Promise<void> | void;
+  testPreUpdateHook?: () => Promise<void> | void;
 };
 
 export type PaymentAdmissionStatusDisposition = {
@@ -123,6 +125,7 @@ export async function attemptOrderDeliveryTransition(
   guard?: {
     expectedVendorId?: number | null;
     requireUnassignedVendor?: boolean;
+    testPreUpdateHook?: () => Promise<void> | void;
   }
 ): Promise<{ transitioned: boolean; alreadyCompleted: boolean; order: Order }> {
   const db = await getDb();
@@ -165,19 +168,20 @@ export async function attemptOrderDeliveryTransition(
   const conditions = [
     eq(orders.id, orderId),
     eq(orders.paid, true),
-    eq(orders.tenantId, order.tenantId!),
     eq(orders.stripePaymentIntentId, order.stripePaymentIntentId!),
     ne(orders.status, "delivered"),
   ];
-  if (expectedTenantId) {
-    conditions.push(
-      sql`COALESCE(NULLIF(TRIM(${orders.tenantId}), ''), 'default') = ${expectedTenantId.trim()}`
-    );
+  if (expectedTenantId !== undefined) {
+    conditions.push(sql`${orders.tenantId} <=> ${expectedTenantId}`);
   }
   if (guard?.requireUnassignedVendor) {
     conditions.push(isNull(orders.vendorId));
   } else if (guard?.expectedVendorId !== undefined && guard.expectedVendorId !== null) {
     conditions.push(eq(orders.vendorId, guard.expectedVendorId));
+  }
+
+  if (guard?.testPreUpdateHook) {
+    await guard.testPreUpdateHook();
   }
 
   const result = await db
@@ -270,7 +274,12 @@ export async function transitionNativeOrderStatus(
         ? { requireUnassignedVendor: true }
         : { expectedVendorId: input.vendorId }
       : {}),
+    ...(input.testPreUpdateHook ? { testPreUpdateHook: input.testPreUpdateHook } : {}),
   };
+
+  if (input.testPreMutationHook) {
+    await input.testPreMutationHook(order);
+  }
 
   // 1. Pickup transition
   if (input.status === "collected") {
@@ -285,16 +294,6 @@ export async function transitionNativeOrderStatus(
       throw new OrderTransitionError("NOT_FOUND", "Order not found");
     }
     if (!transitioned) {
-      if (
-        !["collected", "processing", "ready", "delivered"].includes(
-          collectedOrder.status
-        )
-      ) {
-        throw new OrderTransitionError(
-          "CONFLICT",
-          "Order could not be collected."
-        );
-      }
       if (
         mutationGuard.expectedTenantId !== undefined &&
         canonicalOrderTenantId(collectedOrder.tenantId) !==
@@ -324,6 +323,16 @@ export async function transitionNativeOrderStatus(
           "Order vendor assignment changed concurrently"
         );
       }
+      if (
+        !["collected", "processing", "ready", "delivered"].includes(
+          collectedOrder.status
+        )
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order could not be collected."
+        );
+      }
       return {
         success: true,
         alreadyCompleted: true,
@@ -345,13 +354,42 @@ export async function transitionNativeOrderStatus(
       order: deliveredOrder,
     } = await attemptOrderDeliveryTransition(
       input.orderId,
-      requestedTenant,
+      order.tenantId,
       order,
       mutationGuard
     );
     if (!transitioned && !alreadyCompleted) {
+      if (
+        mutationGuard.expectedTenantId !== undefined &&
+        canonicalOrderTenantId(deliveredOrder.tenantId) !==
+          canonicalOrderTenantId(mutationGuard.expectedTenantId)
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order tenant changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.requireUnassignedVendor &&
+        deliveredOrder.vendorId != null
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
+        );
+      }
+      if (
+        mutationGuard.expectedVendorId !== undefined &&
+        mutationGuard.expectedVendorId !== null &&
+        deliveredOrder.vendorId !== mutationGuard.expectedVendorId
+      ) {
+        throw new OrderTransitionError(
+          "CONFLICT",
+          "Order vendor assignment changed concurrently"
+        );
+      }
       throw new OrderTransitionError(
-        "INVALID_TRANSITION",
+        "CONFLICT",
         "Order could not be delivered."
       );
     }
