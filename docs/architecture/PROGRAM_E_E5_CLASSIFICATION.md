@@ -42,3 +42,24 @@ Classified source and source-contract tests before relocation. The per-file map 
 No protected implementation/test file is a consumer requiring edits in this slice. Old API/event/table names are preserved. The mobile workflow selector must follow the split lanes so future field/game changes keep their coverage. Pre-move broader selection: 32 files, 188 passes, exactly two known Tower Wars baseline failures.
 
 E5b local validation on committed source: all four architecture gates pass, 200 assertions pass across 34 files with the same two Tower Wars baseline failures (expanded selection adds schema-path and Commercial reader contracts). Real MySQL mission-interpretation persistence is 4/4 on exact clean pre-E and 4/4 after relocation. An initial pre-move invocation overlapped edits and is excluded; it is not used as baseline evidence. Broad baseline 188/2 and expanded repair 200/2 are distinct selections, not an identical full-suite comparison. The rule destinations include Experience so future moves cannot evade Commercial/Money/Geography downstream restrictions.
+
+## E5c — physical evidence, promise authority and artwork split
+
+Prerequisite #516 merged at verified main `69aa6777bc912fbe259b5dd2d3cf166a78dbc986`; its tree equals the validated PR head. Every hosted check passed except the exact previously reproduced world seven, protected legacy twenty and identical bundle failure. No new regression was folded into baseline.
+
+| Actual source responsibility | Final owner / files | Reads, writes and authority |
+|---|---|---|
+| Physical identity matching and alias normalization | Geography `physicalIdentityResolver.ts` + existing test | Pure identity resolution from source clues; no native customer/payment mutation |
+| Physical identity/alias/binding/evidence persistence | Geography `physicalEntityApplication.ts` | Exact existing forge helper bodies; writes only physical entities, aliases, bindings and source-evidence items; source labels/identity rules unchanged |
+| Provisional display entity materialization | Geography `provisionalPropertyEntities.ts` | Exact existing city helper body; unique normalized alias transaction/race recovery retained; existing geocoded customers are inputs, not newly created customers |
+| Official property-site evidence transport | Integrations `propertyResearch/officialPropertyResearch.ts` + test | Same bounded HTML extraction, DNS/private-target rejection and source excerpts; does not admit native business truth |
+| Evidence schema / pure tower contract / prompt | Shared `propertyEvidence.ts`, `towerForgeContracts.ts`, `towerGenerationPrompt.ts` | Read-only pure kernels consumed by Field and Experience; no dependency on a server business implementation, no duplicated schema/model or compatibility re-export |
+| Artwork provider and existing contract assertions | Experience `goldline/builder/towerImageProvider.ts`, `towerForgeContracts.test.ts` | Same configured/unconfigured/proof-only provider selection and production rejection; tests retain every original expectation |
+| Journal property discovery + forge application | Field `propertyDiscovery/towerForgeWorkflow.ts` | Orchestrates owned Geography persistence, canonical Commercial mission creation, shared artwork kernel/provider and derived publication. No native Orders/Payment mutation or replacement Commercial conversion owner |
+| Real permission-backed promises and activation | Planning `dayDirector/towerWarsPromiseService.ts` + existing promise tests | Exact four existing function bodies; Day Director commitment insert lives with Planning. Returns `createdRevenue:false`, `attackCreated:false`; game service consumes the promise read and router calls the real application |
+
+The game Tower Wars calculation no longer contains raw promise/Day Director writes. The city read composition no longer contains physical entity/alias writes. Forge orchestration no longer owns raw physical identity/alias/binding/evidence persistence. Existing runtime call order, DB predicates/transactions, error paths, state transitions, source classifications, API shapes, idempotency keys and production provider guards are retained. No production provider operation was executed.
+
+Baseline before extraction: Phase A real journal → city projection and captured-payment → Tower Wars integration pass 14/14 on two files with `TZ=UTC`, disposable MySQL and explicit `GOLDLINE_PROOF_MODE=1`. Without that required proof adapter, journal extraction honestly returns empty fallback and the Phase A fixture does not establish its claims; that unsupported invocation is not used as baseline evidence.
+
+This slice prioritizes authority splits. Remaining Goldline world, Lantern City and Tower Wars mechanical relocation is still pending and must be listed in the continuation handoff; E5/E8 are not certified.

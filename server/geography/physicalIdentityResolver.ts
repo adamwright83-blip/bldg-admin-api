@@ -1,4 +1,4 @@
-import { normalizeSourceAddress } from "../geography/geographicTruthService";
+import { normalizeSourceAddress } from "./geographicTruthService";
 
 export type PhysicalIdentityCandidate = {
   physicalEntityId: string;

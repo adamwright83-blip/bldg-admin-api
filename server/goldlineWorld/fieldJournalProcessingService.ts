@@ -250,7 +250,7 @@ export async function processFieldJournalEntry(input: {
     });
 
     if (structured.extraction.entities.some(entity => entity.kind === "potential_property" || entity.kind === "existing_property")) {
-      const { queueForgeCandidatesFromJournal } = await import("../worldForge/worldForgeService");
+      const { queueForgeCandidatesFromJournal } = await import("../field/propertyDiscovery/towerForgeWorkflow");
       await queueForgeCandidatesFromJournal({
         tenantId: input.tenantId,
         journalEntryId: journal.id,

@@ -21,7 +21,7 @@ import {
   queueTowerForgeJob,
   rejectTowerForgeJob,
   selectTowerWeaponConcept,
-} from "../worldForge/worldForgeService";
+} from "../field/propertyDiscovery/towerForgeWorkflow";
 import { listCityWorldEntities } from "./cityWorldService";
 import {
   listPresentedTerritories,
