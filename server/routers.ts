@@ -3216,6 +3216,7 @@ export const appRouter = router({
           };
         }
 
+        let paymentIntent: any = undefined;
         try {
           // Laundry payments must never silently fall back to a platform-only
           // charge. Resolve the vendor again at charge time for older orders
@@ -3288,7 +3289,6 @@ export const appRouter = router({
             });
           }
 
-          let paymentIntent;
           let platformFeeCents: number | null = null;
           let vendorPayoutCents: number | null = null;
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!, paymentTenantId);
@@ -3334,36 +3334,71 @@ export const appRouter = router({
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
-          await admitNativeStripePayment({
-            tenantId: paymentTenantId,
-            orderId: input.orderId,
-            paymentIntentId: paymentIntent.id,
-            capture: { paymentIntentId: paymentIntent.id, status: paymentIntent.status, amountReceivedCents: paymentIntent.amount_received, currency: paymentIntent.currency, providerOrderId: paymentIntent.metadata.orderId, providerTenantId: paymentIntent.metadata.tenantId },
-            paidAt,
-            orderPatch: {
-              total: centsToDollars(input.amountCents),
-              status: "processing",
-              isFirstPaidOrder: !hasPaidBefore,
-              platformFeeCents,
-              vendorPayoutCents,
-              stripeConnectedAccountIdSnapshot: vendorAccountId,
-              vendorNameSnapshot: vendor.name,
-              routingPrioritySnapshot: paymentRoute.priority,
-            },
-          });
+          try {
+            await admitNativeStripePayment({
+              tenantId: paymentTenantId,
+              orderId: input.orderId,
+              paymentIntentId: paymentIntent.id,
+              capture: {
+                paymentIntentId: paymentIntent.id,
+                status: paymentIntent.status,
+                amountReceivedCents: paymentIntent.amount_received,
+                currency: paymentIntent.currency,
+                providerOrderId: paymentIntent.metadata?.orderId,
+                providerTenantId: paymentIntent.metadata?.tenantId,
+              },
+              paidAt,
+              orderPatch: {
+                total: centsToDollars(input.amountCents),
+                status: "processing",
+                isFirstPaidOrder: !hasPaidBefore,
+                platformFeeCents,
+                vendorPayoutCents,
+                stripeConnectedAccountIdSnapshot: vendorAccountId,
+                vendorNameSnapshot: vendor.name,
+                routingPrioritySnapshot: paymentRoute.priority,
+              },
+            });
+          } catch (admissionErr: any) {
+            console.error(
+              `[ChargeCard] RECONCILIATION REQUIRED: Stripe PaymentIntent ${paymentIntent.id} succeeded for order ${input.orderId}, but native payment admission failed:`,
+              admissionErr
+            );
+            return {
+              success: false,
+              paymentIntentId: paymentIntent.id,
+              reconciliationRequired: true,
+              error:
+                `Payment was captured by Stripe (${paymentIntent.id}), but authority admission failed: ${admissionErr?.message || "Unknown error"}. Payment reconciliation is required. Do not retry the charge blindly.`,
+            };
+          }
 
-          await attributeOrderFromCampaign({
-            tenantId: paymentTenantId,
-            orderId: input.orderId,
-            requestId: crypto.randomUUID(),
-            actorId: "payment-success",
-          });
+          try {
+            await attributeOrderFromCampaign({
+              tenantId: paymentTenantId,
+              orderId: input.orderId,
+              requestId: crypto.randomUUID(),
+              actorId: "payment-success",
+            });
+          } catch (err) {
+            console.warn(
+              "[ChargeCard] Failed to attribute order from campaign:",
+              err
+            );
+          }
 
-          await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
-            actorDisplayName: "Admin charge",
-            actualEventTimestamp: paidAt,
-            reason: "stripe_charge_succeeded",
-          });
+          try {
+            await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
+              actorDisplayName: "Admin charge",
+              actualEventTimestamp: paidAt,
+              reason: "stripe_charge_succeeded",
+            });
+          } catch (err) {
+            console.warn(
+              "[ChargeCard] Failed to record pickup completed operations event:",
+              err
+            );
+          }
 
           let receiptUrl: string | null = null;
           try {
@@ -3511,6 +3546,15 @@ export const appRouter = router({
             "[ChargeCard] Charge or payment-truth persistence failed:",
             err.message
           );
+          if (paymentIntent?.id) {
+            return {
+              success: false,
+              paymentIntentId: paymentIntent.id,
+              reconciliationRequired: true,
+              error:
+                `Payment was captured by Stripe (${paymentIntent.id}), but an error occurred: ${err.message || "Unknown error"}. Payment reconciliation is required. Do not retry the charge blindly.`,
+            };
+          }
           return {
             success: false,
             error:
