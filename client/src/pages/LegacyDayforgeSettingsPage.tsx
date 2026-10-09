@@ -1,6 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { trpc } from "@/lib/trpc";
-import { useRef, useState, type FormEvent } from "react";
+import { captureProductEvent } from "@/lib/posthog";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./legacy-dayforge-onboarding.css";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
@@ -33,7 +34,24 @@ export default function LegacyDayforgeSettingsPage() {
     setEmail("");
   }
 
+  useEffect(() => {
+    if (me.data?.billing?.status === "canceled") {
+      const alreadyReported = sessionStorage.getItem("joystick_cancellation_reported");
+      if (!alreadyReported) {
+        sessionStorage.setItem("joystick_cancellation_reported", "true");
+        captureProductEvent("trial_cancellation", {
+          planName: me.data?.billing?.planName,
+          tenantId: me.data?.membership?.tenantId,
+        });
+      }
+    }
+  }, [me.data?.billing?.status, me.data?.billing?.planName, me.data?.membership?.tenantId]);
+
   async function openPortal() {
+    captureProductEvent("billing_portal_opened", {
+      planName: me.data?.billing?.planName,
+      status: me.data?.billing?.status,
+    });
     const result = await portal.mutateAsync({ requestId: crypto.randomUUID() });
     window.location.assign(result.url);
   }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { captureProductEvent } from "@/lib/posthog";
 import type { GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
@@ -18,6 +18,7 @@ export function FirstMissionDriver({session}:{session:GoldlineOnboardingSession}
  const defeat=trpc.system.goldlineOnboarding.defeat.useMutation({onSuccess:refresh});
  const [briefing,setBriefing]=useState(false),[text,setText]=useState(""),[confirmed,setConfirmed]=useState(false),[encounter,setEncounter]=useState(false);
  const [gps,setGps]=useState<{latitude:number;longitude:number;accuracy:number}|null>(null),[gpsStatus,setGpsStatus]=useState("GPS optional; confirm your own presence below.");
+ useEffect(()=>{captureProductEvent("first_mission_started",{missionId:mission.id,guardianId:mission.guardianId,territoryId:mission.territoryId});},[mission.id,mission.guardianId,mission.territoryId]);
  const guardian=guardianById(mission.guardianId);
  const definition:TerritoryDefinition=useMemo(()=>({id:mission.territoryId,tenantId:session.tenantId,stableKey:mission.id,version:1,fantasyTitle:mission.title,realGeographyLabel:mission.checkpoint.label,grammar:"visit_hunt",guardianId:mission.guardianId,members:[],geometryMode:"cluster",createdFrom:"first_mission",publishedAt:session.completedAt!,classification:"game_projection"}),[mission.id,mission.territoryId,mission.guardianId,mission.title,mission.checkpoint.label,session.tenantId,session.completedAt]);
  const state:TerritoryDerivedState=useMemo(()=>({territoryId:mission.territoryId,stableKey:mission.id,version:1,readiness:mission.outcome?"confrontation_ready":"veiled",completedMemberIds:[],remainingMemberIds:[],members:[],confrontationReady:Boolean(mission.outcome),cleared:Boolean(mission.gameplayCompletedAt),clearedAt:mission.gameplayCompletedAt,clearedEventId:null,guardianId:mission.guardianId,evidenceRevisedAfterClear:false}),[mission.id,mission.territoryId,mission.outcome,mission.gameplayCompletedAt,mission.guardianId]);

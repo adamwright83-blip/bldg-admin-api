@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { recordClaireInteraction } from "@/lib/posthog";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import type {
   OpenChannelEditableTask,
@@ -478,11 +479,12 @@ export default function OpenChannel({
               className="open-channel-primary"
               data-testid="plan-tomorrow-with-claire"
               disabled={callClaire.isPending}
-              onClick={() =>
+              onClick={() => {
+                recordClaireInteraction({ source: "open_channel_plan_tomorrow" });
                 void callClaire.mutateAsync({
                   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                })
-              }
+                });
+              }}
             >
               {callClaire.isPending ? (
                 <><Loader2 className="spin" /> CALLING CLAIRE…</>

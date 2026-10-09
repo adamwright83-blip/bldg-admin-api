@@ -1,5 +1,5 @@
 import { getLoginUrl } from "@/const";
-import { syncPosthogIdentity } from "@/lib/posthog";
+import { captureProductEvent, syncPosthogIdentity } from "@/lib/posthog";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
@@ -99,6 +99,26 @@ export function useAuth(options?: UseAuthOptions) {
           }
         : null,
     });
+    if (user && typeof window !== "undefined" && !visualTestMode) {
+      try {
+        const sessionMarked = sessionStorage.getItem("joystick_session_recorded");
+        if (!sessionMarked) {
+          sessionStorage.setItem("joystick_session_recorded", "true");
+          const hasVisitedBefore = localStorage.getItem("joystick_ever_logged_in");
+          if (hasVisitedBefore) {
+            captureProductEvent("returning_session", {
+              openId: user.openId,
+              role: user.role,
+              tenantId: "tenantId" in user ? user.tenantId : null,
+            });
+          } else {
+            localStorage.setItem("joystick_ever_logged_in", "true");
+          }
+        }
+      } catch {
+        // Storage access issues must not throw.
+      }
+    }
   }, [state.loading, state.user, visualTestMode]);
 
   return {

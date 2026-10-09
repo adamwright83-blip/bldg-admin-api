@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronRight, Compass, LockKeyhole, X } from "lucide-react";
 import { toast } from "sonner";
+import { recordClaireInteraction } from "@/lib/posthog";
 import { trpc } from "@/lib/trpc";
 import type { CustodyLocationKey } from "@shared/custodyLocations";
 import { VehicleCargo, type VehicleCargoItem } from "./VehicleCargo";
@@ -48,6 +49,7 @@ export function DriverVehicleDrawer({
   async function handleClaireBrief() {
     if (callClaire.isPending) return;
     setClaireState("calling");
+    recordClaireInteraction({ source: "vehicle_drawer" });
     try {
       await callClaire.mutateAsync({
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
