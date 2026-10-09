@@ -186,3 +186,9 @@ Pre-E fast contracts, campaign, territories, Claire conversation and linked debr
 - E5–E8 have not begun. No directory was moved, duplicate implementation restored, expectation weakened, test disabled, tenant manufactured or production operation performed.
 
 **PROGRAM E — RECOVERY BLOCKED** pending merged recovery audit/repairs and verification of main. **PROGRAM E — LLM LEGIBILITY NOT CERTIFIED**; E8 has not run.
+
+## Verified merged recovery checkpoint
+
+PR #514 merged at `53fe3b0b5218ff5a836f47948d0a17f6ed62fac8`. Fetched origin/main and compared its complete tree with final validated head `a96c65fe`: no differences. Final hosted fast run [37872555538](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37872555538) passes contracts and reproduces the same seven world failures, counts and unavailable serial cases as exact-source pre-E. Final legacy [37872555598](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37872555598) has exactly the same 20 protected failures / 2328 passes; sales [37872555571](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37872555571) has the sole matched CSV failure / 348 passes / six skips; mobile [37872555718](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37872555718) retains identical bundle chunks and all six other jobs pass. Every remaining hosted check passes. Both remote tags peeled to their required commits after merge.
+
+**PROGRAM E — E0–E4 REGRESSION GATE PASSED.** The earlier blocked status records the pre-merge checkpoint and is superseded by this verified merge. E5 may proceed; E8 remains pending and LLM legibility is not certified.

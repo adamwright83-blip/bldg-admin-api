@@ -28,7 +28,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 
 | System | Role & Purpose | Current Primary Location |
 |---|---|---|
-| **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/domains/orders/`, `server/residentIntake.ts`, `server/joystick/driverOrder*` |
+| **Orders** | Native order lifecycle authority, state transitions, resident intake, and canonical order history. | `server/domains/orders/`, `server/residentIntake.ts`, `server/domains/orders/driver/` |
 | **Payment** | Native payment admission, durable Stripe capture evidence, receipt verification, and canonical revenue reads. | `server/domains/payment/`, `server/analytics/canonicalRevenue.ts` |
 | **Commercial** | Commercial B2B accounts, proposals, campaign pipeline, visit attestation, and conversion (`won`). | `server/domains/commercial/`, `server/commercialMissions/`, `server/commercialProposals/` |
 | **Platform Tenancy** | Multi-tenant identity, tenant resolution, and data isolation. Missing tenant is held unresolved, never defaulted. | `server/platform/tenancy/`, `server/saas/` |

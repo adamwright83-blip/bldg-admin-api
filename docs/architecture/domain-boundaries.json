@@ -194,7 +194,7 @@
       "canonicalReadEntrypoint": "server/domains/orders/orderHistoryReadService.ts, server/domains/orders/unpaidOrderReadService.ts",
       "evidenceAdmissionSource": "Resident intake validation or Driver lifecycle request crossing Orders application fence",
       "downstreamConsumers": [
-        "server/joystick/driverOrderService.ts",
+        "server/domains/orders/driver/driverOrderService.ts",
         "server/planning/dayDirector/dayDirectorService.ts",
         "server/lanternCity/objectiveMarksService.ts"
       ],

@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { orders, type Order } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { orders, type Order } from "../../../../drizzle/schema";
+import { getDb } from "../../../db";
 
 /** Legacy rows with a null or blank tenant belong to the default laundry tenant. */
 export function driverOrderTenantSql(tenantId: string) {

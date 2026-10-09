@@ -1,10 +1,10 @@
 import {
   transitionNativeOrderStatus,
   OrderTransitionError,
-} from "../domains/orders/orderLifecycleService";
+} from "../orderLifecycleService";
 import { NOT_ADMIN_ERR_MSG } from "@shared/const";
 import { TRPCError } from "@trpc/server";
-import type { Order } from "../../drizzle/schema";
+import type { Order } from "../../../../drizzle/schema";
 import {
   recordDriverOrderCollected,
   recordDriverOrderDelivered,

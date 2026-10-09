@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Order } from "../../drizzle/schema";
+import type { Order } from "../../../../drizzle/schema";
 
 const sms = vi.hoisted(() => ({ notifyPickupEnRoute: vi.fn(async () => false) }));
 const war = vi.hoisted(() => ({ recordWarActionSafe: vi.fn() }));
 const db = vi.hoisted(() => ({ getDb: vi.fn(async () => null) }));
 
-vi.mock("../_core/sms", () => ({
+vi.mock("../../../_core/sms", () => ({
   notifyPickupEnRoute: sms.notifyPickupEnRoute,
 }));
-vi.mock("../level4War", () => ({
+vi.mock("../../../level4War", () => ({
   recordWarActionSafe: war.recordWarActionSafe,
 }));
-vi.mock("../db", () => ({
+vi.mock("../../../db", () => ({
   getDb: db.getDb,
 }));
 

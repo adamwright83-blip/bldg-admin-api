@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { driverOrderRouter } from "../joystick/driverOrderRouter";
+import { driverOrderRouter } from "../domains/orders/driver/driverOrderRouter";
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { activateCommercialMissionForField } from "../commercialMissions/commercialMissionActivationService";
 import { getFieldMoves } from "./fieldOpportunityService";
