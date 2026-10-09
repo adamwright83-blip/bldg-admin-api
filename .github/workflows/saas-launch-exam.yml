@@ -109,3 +109,19 @@ jobs:
         run: |
           node scripts/migrate.mjs
           pnpm vitest run --config vitest.integration.config.ts server/saas/joystickAcquisition.lifecycle.integration.test.ts
+
+      - name: Install real acceptance browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real browser, backend, authentication and MySQL acceptance
+        env:
+          JOYSTICK_ACCEPTANCE_DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_real_acceptance
+        run: pnpm test:launch:real
+      - name: Upload real acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: joystick-real-acceptance
+          path: |
+            playwright-report/real
+            test-results
+          retention-days: 14

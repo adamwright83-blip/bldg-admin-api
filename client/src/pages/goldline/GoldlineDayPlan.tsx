@@ -91,6 +91,7 @@ export type GoldlineDayPlanProps = {
   onArchiveStop?: (stop: DayPlanStop) => Promise<boolean>;
   onOpenJournal?: () => void;
   onOpenFirstMission?: () => void;
+  firstMissionEvidence?: { text: string; reportedAt: string } | null;
   onOpenImport: () => void;
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
@@ -596,6 +597,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </span>
       </div>
 
+      {props.firstMissionEvidence && (
+        <section className="gdp-load-error" data-testid="day-line-first-mission-evidence" aria-label="Completed field evidence">
+          <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
+          <p>{props.firstMissionEvidence.text}</p>
+          <small>Operator-attested observation · {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}. No sale or revenue verified.</small>
+        </section>
+      )}
       <section className="gdp-route" aria-label="Today's Gold Line">
         <svg
           className="gdp-line"

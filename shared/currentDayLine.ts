@@ -54,6 +54,7 @@ export type CurrentDayLineItem = {
 };
 
 export type CurrentDayLine = {
+  completedEvidence?: Array<{ missionId: string; status: "completed"; text: string; reportedAt: string; verificationClass: "ATTESTED"; provenance: "operator_reported" }>;
   scope: "today";
   businessDate: string;
   orderingAuthority: typeof CURRENT_DAY_LINE_ORDERING_AUTHORITY;
