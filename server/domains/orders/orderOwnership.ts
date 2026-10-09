@@ -35,12 +35,6 @@ export function hasOrderTenantAuthority(input: {
   if (input.allowCrossTenant) return true;
 
   const orderTenantId = canonicalOrderTenantId(input.order.tenantId);
-  if (
-    input.allowLegacyDefaultWildcard &&
-    actorTenantId === "default"
-  ) {
-    return true;
-  }
   return orderTenantId === actorTenantId;
 }
 

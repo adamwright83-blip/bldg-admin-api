@@ -115,3 +115,70 @@ it("holds delivery with a legacy paid flag but no admitted Payment receipt", asy
   const [held] = await db.select().from(orders).where(eq(orders.id, id));
   expect(held.status).toBe("ready");
 });
+
+describe("real MySQL vendor authorization and mutation-time guards", () => {
+  it("denies default-host vendor from mutating unassigned SaaS order in database", async () => {
+    const id = await createNativeOrder({ ...fixture(), status: "new", vendorId: null });
+    await expect(
+      transitionNativeOrderStatus({
+        orderId: id,
+        tenantId: "default",
+        vendorId: 77,
+        status: "processing",
+      })
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    const db = (await getDb())!;
+    const [persisted] = await db.select().from(orders).where(eq(orders.id, id));
+    expect(persisted.status).toBe("new");
+  });
+
+  it("permits assigned vendor to transition order cross-tenant in database", async () => {
+    const id = await createNativeOrder({ ...fixture(), status: "new", vendorId: 77 });
+    const result = await transitionNativeOrderStatus({
+      orderId: id,
+      tenantId: "default",
+      vendorId: 77,
+      status: "processing",
+    });
+    expect(result.success).toBe(true);
+
+    const db = (await getDb())!;
+    const [persisted] = await db.select().from(orders).where(eq(orders.id, id));
+    expect(persisted.status).toBe("processing");
+  });
+
+  it("rejects transition when vendor assignment changed concurrently before write", async () => {
+    const id = await createNativeOrder({ ...fixture(), status: "new", vendorId: 77 });
+    const db = (await getDb())!;
+
+    // Concurrently reassign vendor to 88 right before mutation runs with guard for 77
+    await db.update(orders).set({ vendorId: 88 }).where(eq(orders.id, id));
+
+    await expect(
+      transitionNativeOrderStatus({
+        orderId: id,
+        tenantId: "default",
+        vendorId: 77,
+        status: "processing",
+      })
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects transition when tenant changed concurrently before write", async () => {
+    const id = await createNativeOrder({ ...fixture(), status: "new", vendorId: 77 });
+    const db = (await getDb())!;
+
+    // Concurrently reassign tenant right before mutation runs
+    await db.update(orders).set({ tenantId: `hijacked-${randomUUID().slice(0, 8)}` }).where(eq(orders.id, id));
+
+    await expect(
+      transitionNativeOrderStatus({
+        orderId: id,
+        tenantId,
+        vendorId: 77,
+        status: "processing",
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});

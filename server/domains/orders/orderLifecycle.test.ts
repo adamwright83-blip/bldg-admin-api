@@ -3,15 +3,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const payment = vi.hoisted(() => ({ receipts: vi.fn(), authorized: vi.fn() }));
 vi.mock("../payment/nativePaymentReadService", () => ({ readNativePaymentAuthorityReceipts: payment.receipts, hasNativePaymentAuthority: payment.authorized }));
 
-const db = vi.hoisted(() => ({
-  createOrder: vi.fn(),
-  createOrReuseResidentLaundryOrder: vi.fn(),
-  getOrderById: vi.fn(),
-  updateOrderStatus: vi.fn(),
-  attemptOrderPickupCollection: vi.fn(),
-  getDb: vi.fn(),
-  updateOrderIntake: vi.fn(),
-}));
+const db = vi.hoisted(() => {
+  class OrderUpdateConflictError extends Error {
+    readonly code = "CONFLICT" as const;
+    constructor(message: string) {
+      super(message);
+      this.name = "OrderUpdateConflictError";
+    }
+  }
+
+  return {
+    createOrder: vi.fn(),
+    createOrReuseResidentLaundryOrder: vi.fn(),
+    getOrderById: vi.fn(),
+    updateOrderStatus: vi.fn(),
+    attemptOrderPickupCollection: vi.fn(),
+    getDb: vi.fn(),
+    updateOrderIntake: vi.fn(),
+    OrderUpdateConflictError,
+  };
+});
 
 vi.mock("../../db", () => ({
   createOrder: db.createOrder,
@@ -21,6 +32,7 @@ vi.mock("../../db", () => ({
   attemptOrderPickupCollection: db.attemptOrderPickupCollection,
   getDb: db.getDb,
   updateOrderIntake: db.updateOrderIntake,
+  OrderUpdateConflictError: db.OrderUpdateConflictError,
 }));
 
 import {
@@ -206,20 +218,13 @@ describe("orderLifecycleService canonical authority", () => {
       ).resolves.toMatchObject({ success: true, alreadyCompleted: false });
     });
 
-    it("preserves the existing vendor default-host unassigned transition behavior", async () => {
-      db.getOrderById
-        .mockResolvedValueOnce({
-          id: 13,
-          tenantId: "tenant-other",
-          vendorId: null,
-          status: "new",
-        })
-        .mockResolvedValueOnce({
-          id: 13,
-          tenantId: "tenant-other",
-          vendorId: null,
-          status: "processing",
-        });
+    it("rejects default-host vendor transition on an unrelated tenant unassigned order", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 13,
+        tenantId: "tenant-other",
+        vendorId: null,
+        status: "new",
+      });
 
       await expect(
         transitionNativeOrderStatus({
@@ -228,7 +233,211 @@ describe("orderLifecycleService canonical authority", () => {
           tenantId: "default",
           vendorId: 77,
         })
-      ).resolves.toMatchObject({ success: true, alreadyCompleted: false });
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Order does not belong to tenant",
+      });
+
+      expect(db.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("rejects transition on an order assigned to a different vendor across tenants", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 14,
+        tenantId: "tenant-other",
+        vendorId: 88,
+        status: "new",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 14,
+          status: "processing",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Order does not belong to tenant",
+      });
+
+      expect(db.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("rejects transition on an order assigned to a different vendor on the same tenant", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 15,
+        tenantId: "tenant-same",
+        vendorId: 88,
+        status: "new",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 15,
+          status: "processing",
+          tenantId: "tenant-same",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Order does not belong to vendor",
+      });
+
+      expect(db.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("allows default-host vendor transition on unassigned order belonging to actual default tenant", async () => {
+      db.getOrderById
+        .mockResolvedValueOnce({
+          id: 16,
+          tenantId: "default",
+          vendorId: null,
+          status: "new",
+        })
+        .mockResolvedValueOnce({
+          id: 16,
+          tenantId: "default",
+          vendorId: null,
+          status: "processing",
+        });
+
+      const res = await transitionNativeOrderStatus({
+        orderId: 16,
+        status: "processing",
+        tenantId: "default",
+        vendorId: 77,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.alreadyCompleted).toBe(false);
+      expect(db.updateOrderStatus).toHaveBeenCalledWith(
+        16,
+        "processing",
+        undefined,
+        expect.objectContaining({
+          expectedTenantId: "default",
+          requireUnassignedVendor: true,
+        })
+      );
+    });
+
+    it("allows authenticated vendor transition on order assigned to that vendor across tenants", async () => {
+      db.getOrderById
+        .mockResolvedValueOnce({
+          id: 17,
+          tenantId: "tenant-other",
+          vendorId: 77,
+          status: "new",
+        })
+        .mockResolvedValueOnce({
+          id: 17,
+          tenantId: "tenant-other",
+          vendorId: 77,
+          status: "processing",
+        });
+
+      const res = await transitionNativeOrderStatus({
+        orderId: 17,
+        status: "processing",
+        tenantId: "default",
+        vendorId: 77,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.alreadyCompleted).toBe(false);
+      expect(db.updateOrderStatus).toHaveBeenCalledWith(
+        17,
+        "processing",
+        undefined,
+        expect.objectContaining({
+          expectedTenantId: "tenant-other",
+          expectedVendorId: 77,
+        })
+      );
+    });
+
+    it("rejects transition when actor tenant is missing or blank", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 18,
+        tenantId: "tenant-a",
+        vendorId: 77,
+        status: "new",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 18,
+          status: "processing",
+          tenantId: "",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Order transition requires tenant authority",
+      });
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 18,
+          status: "processing",
+          tenantId: null,
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Order transition requires tenant authority",
+      });
+
+      expect(db.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it("rejects transition when vendor assignment changes concurrently before mutation", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 19,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "new",
+      });
+      db.updateOrderStatus.mockRejectedValueOnce(
+        new Error("Order vendor assignment changed concurrently")
+      );
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 19,
+          status: "processing",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: "Order vendor assignment changed concurrently",
+      });
+    });
+
+    it("rejects transition when tenant changes concurrently before mutation", async () => {
+      db.getOrderById.mockResolvedValue({
+        id: 20,
+        tenantId: "tenant-other",
+        vendorId: 77,
+        status: "new",
+      });
+      db.updateOrderStatus.mockRejectedValueOnce(
+        new Error("Order tenant changed concurrently")
+      );
+
+      await expect(
+        transitionNativeOrderStatus({
+          orderId: 20,
+          status: "processing",
+          tenantId: "default",
+          vendorId: 77,
+        })
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: "Order tenant changed concurrently",
+      });
     });
 
     it("routes pickup through atomic attemptOrderPickupCollection", async () => {
@@ -253,7 +462,8 @@ describe("orderLifecycleService canonical authority", () => {
       expect(res.order.status).toBe("collected");
       expect(db.attemptOrderPickupCollection).toHaveBeenCalledWith(
         10,
-        "tenant-a"
+        "tenant-a",
+        expect.objectContaining({ expectedTenantId: "tenant-a" })
       );
     });
 
@@ -376,7 +586,8 @@ describe("orderLifecycleService canonical authority", () => {
       expect(db.updateOrderStatus).toHaveBeenCalledWith(
         10,
         "processing",
-        expect.objectContaining({ source: "driver_app_bldg" })
+        expect.objectContaining({ source: "driver_app_bldg" }),
+        expect.objectContaining({ expectedTenantId: "tenant-a" })
       );
     });
   });
