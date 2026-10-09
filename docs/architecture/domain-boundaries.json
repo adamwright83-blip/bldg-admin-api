@@ -130,6 +130,7 @@
       "to": [
         "server/agents/persistentOperator",
         "server/goldlineWorld",
+        "server/experience",
         "server/narratorOs"
       ],
       "reason": "Commercial producers may not add new inline downstream Operator/Game mutations."
@@ -144,6 +145,7 @@
       "to": [
         "server/agents/persistentOperator",
         "server/goldlineWorld",
+        "server/experience",
         "server/narratorOs"
       ],
       "reason": "Money admits/reads economic truth; downstream systems consume it."
@@ -156,6 +158,7 @@
       "to": [
         "server/agents/persistentOperator",
         "server/goldlineWorld",
+        "server/experience",
         "server/narratorOs"
       ],
       "reason": "Geography owns geographic truth and does not mutate downstream projections."
@@ -329,4 +332,3 @@
     }
   ]
 }
-

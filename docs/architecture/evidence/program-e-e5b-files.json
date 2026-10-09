@@ -6,7 +6,9 @@
     "writeTargets": [],
     "dependencies": [],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/coldCallBurstService.ts",
@@ -40,7 +42,11 @@
       "../salesCalls"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [
+      "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/coldCallRollingCall.test.ts",
@@ -59,7 +65,9 @@
       "./coldCallBurstService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/driverGameWorldContract.test.ts",
@@ -71,7 +79,9 @@
       "vitest"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/driverGameWorldRouter.ts",
@@ -94,7 +104,11 @@
       "./progressionProjectionService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [
+      "server/_core/systemRouter.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/driverGameWorldService.ts",
@@ -114,7 +128,14 @@
       "../db"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [
+      "server/commercialMissions/commercialWorldReadService.integration.test.ts",
+      "server/commercialMissions/commercialWorldReadService.test.ts",
+      "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts",
+      "server/schema/productionSchemaPath.test.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/expansionScoutService.ts",
@@ -139,7 +160,11 @@
       "./progressionProjectionService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [
+      "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/missionMutation.integration.test.ts",
@@ -157,7 +182,9 @@
       "./missionMutationService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/missionMutationService.ts",
@@ -175,7 +202,9 @@
       "../../shared/driverGameWorld"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/progressionProjectionService.ts",
@@ -193,7 +222,14 @@
       "./driverGameWorldService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [
+      "server/armory/armoryWeaponService.ts",
+      "server/capabilities/expansionScoutCapability.ts",
+      "server/commercialMissions/commercialWorldReadService.test.ts",
+      "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/recoveryTruthBoundary.test.ts",
@@ -205,7 +241,9 @@
       "./progressionProjectionService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/driverGameWorld/run2Contracts.test.ts",
@@ -217,7 +255,9 @@
       "vitest"
     ],
     "protectedOverlap": false,
-    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke"
+    "tests": "Existing Driver contract, Run-2, recovery truth, cold-call rolling, and MySQL mutation persistence; public route smoke",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/businessWorld/businessWorldRouter.ts",
@@ -229,7 +269,11 @@
       "./businessWorldService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers",
+    "consumers": [
+      "server/_core/systemRouter.ts"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/businessWorld/businessWorldService.test.ts",
@@ -244,7 +288,9 @@
       "../db"
     ],
     "protectedOverlap": false,
-    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/businessWorld/businessWorldService.ts",
@@ -264,7 +310,9 @@
       "../capabilities/capabilityEvaluationService"
     ],
     "protectedOverlap": false,
-    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers",
+    "consumers": [],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   },
   {
     "oldPath": "server/businessWorld/businessWorldTypes.ts",
@@ -276,6 +324,10 @@
       "../../shared/businessGame"
     ],
     "protectedOverlap": false,
-    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers"
+    "tests": "Existing overview Treasury/unknown-vs-zero assertions; TypeScript route consumers",
+    "consumers": [
+      "client/src/product/WorldView.tsx"
+    ],
+    "evidenceSource": "Actual source/write/import inspection; provider payload, Commercial admission or canonical owning reads as stated by responsibility; no new evidence source"
   }
 ]
