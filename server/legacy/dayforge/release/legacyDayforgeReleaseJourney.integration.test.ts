@@ -856,7 +856,6 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       capture: { paymentIntentId: `pi_release_${suffix}`, status: "succeeded", amountReceivedCents: 24000, currency: "usd" },
       paidAt: new Date(),
       orderPatch: {
-        status: "delivered",
         total: "240.00",
       },
       actorId: "release-operator",

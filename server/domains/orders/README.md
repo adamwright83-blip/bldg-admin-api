@@ -19,8 +19,15 @@ Authoritative domain owner for native laundry/dry-cleaning order lifecycle, inta
 
 ## LEGAL ENTRYPOINTS
 - `transitionNativeOrderStatus` (`server/domains/orders/orderLifecycleService.ts`)
+- `admitOrderProcessingStatusInTransaction` (`server/domains/orders/orderLifecycleService.ts`)
 - `createOrReuseResidentOrder` (`server/domains/orders/orderOwnership.ts`)
 - `reviseNativeOrder` (`server/domains/orders/orderLifecycleService.ts`)
+
+## BEHAVIORAL CONTRACT: PAYMENT ADMISSION STATUS GUARD
+During native payment admission, Orders domain owns status transitions via `admitOrderProcessingStatusInTransaction`:
+- **Preserved Statuses:** Orders already in `collected`, `processing`, `ready`, `delivered`, or `cancelled` preserve their existing state. Payment admission never forces them back to `processing`.
+- **Cancelled Orders:** Cancelled status is preserved, and the returned status disposition flags `cancelled: true`. Callers (`chargeCard`) report `success: true` and `reconciliationRequired: true` without creating false pickup-completed events.
+- **Initial Statuses:** Orders in `new` or `intake-pending` transition to `processing`.
 
 ## DOWNSTREAM CONSUMERS
 - Driver UI / route execution

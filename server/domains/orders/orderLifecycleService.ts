@@ -32,6 +32,20 @@ export type TransitionOrderInput = {
   allowCrossTenant?: boolean;
 };
 
+export type PaymentAdmissionStatusDisposition = {
+  previousStatus: OrderStatus;
+  resultingStatus: OrderStatus;
+  transitioned: boolean;
+  preservedExistingStatus: boolean;
+  cancelled: boolean;
+};
+
+export type LockedOrderRowForPaymentAdmission = {
+  id: number;
+  tenantId: string | null;
+  status: OrderStatus;
+};
+
 export type TransitionOrderResult = {
   success: true;
   alreadyCompleted: boolean;
@@ -383,4 +397,63 @@ function assertNonPaymentWrite(data: object): void {
       "Native payment state requires Payment admission authority"
     );
   }
+}
+
+/**
+ * Narrow Orders-owned lifecycle helper executed within an established payment admission transaction.
+ *
+ * Requirements:
+ * - Accepts ONLY the database transaction and locked order row (with tenantId).
+ * - Cannot accept arbitrary statuses: only advances eligible pre-processing states to "processing".
+ * - If the locked status is already "processing", "ready", "collected", or "delivered", preserves existing status without regression.
+ * - If the locked status is "cancelled", preserves "cancelled" status and marks disposition as cancelled.
+ * - Otherwise ("new", "intake-pending"), transitions status to "processing".
+ */
+export async function admitOrderProcessingStatusInTransaction(
+  tx: any,
+  lockedOrder: LockedOrderRowForPaymentAdmission,
+  tenantId: string
+): Promise<PaymentAdmissionStatusDisposition> {
+  const currentStatus = lockedOrder.status;
+
+  // 1. Preserved post-intake and terminal execution statuses: do not change or regress
+  if (
+    currentStatus === "processing" ||
+    currentStatus === "ready" ||
+    currentStatus === "collected" ||
+    currentStatus === "delivered"
+  ) {
+    return {
+      previousStatus: currentStatus,
+      resultingStatus: currentStatus,
+      transitioned: false,
+      preservedExistingStatus: true,
+      cancelled: false,
+    };
+  }
+
+  // 2. Preserved cancelled status: do not change, flag for caller reconciliation
+  if (currentStatus === "cancelled") {
+    return {
+      previousStatus: currentStatus,
+      resultingStatus: currentStatus,
+      transitioned: false,
+      preservedExistingStatus: true,
+      cancelled: true,
+    };
+  }
+
+  // 3. Set processing for other statuses (e.g. "new", "intake-pending")
+  await tx
+    .update(orders)
+    .set({ status: "processing" })
+    .where(and(eq(orders.id, lockedOrder.id), eq(orders.tenantId, tenantId)));
+
+  return {
+    previousStatus: currentStatus,
+    resultingStatus: "processing",
+    transitioned: true,
+    preservedExistingStatus: false,
+    cancelled: false,
+  };
 }

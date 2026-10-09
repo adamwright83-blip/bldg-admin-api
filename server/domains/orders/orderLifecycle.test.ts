@@ -29,6 +29,7 @@ import {
   createOrReuseResidentOrder,
   transitionNativeOrderStatus,
   attemptOrderDeliveryTransition,
+  admitOrderProcessingStatusInTransaction,
   OrderTransitionError,
 } from "./orderLifecycleService";
 
@@ -389,3 +390,85 @@ it("rejects a weak paid flag before issuing the delivery write", async () => {
   db.getOrderById.mockResolvedValue({ id: 10, tenantId: "tenant-a", status: "ready", paid: true });
   await expect(attemptOrderDeliveryTransition(10)).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
 });
+
+describe("admitOrderProcessingStatusInTransaction Orders helper", () => {
+  it("transitions 'new' and 'intake-pending' statuses to 'processing'", async () => {
+    for (const preStatus of ["new", "intake-pending"] as const) {
+      const mockTx = {
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue({}),
+      };
+
+      const disposition = await admitOrderProcessingStatusInTransaction(
+        mockTx,
+        { id: 42, tenantId: "tenant-a", status: preStatus },
+        "tenant-a"
+      );
+
+      expect(disposition).toEqual({
+        previousStatus: preStatus,
+        resultingStatus: "processing",
+        transitioned: true,
+        preservedExistingStatus: false,
+        cancelled: false,
+      });
+
+      expect(mockTx.update).toHaveBeenCalled();
+      expect(mockTx.set).toHaveBeenCalledWith({ status: "processing" });
+    }
+  });
+
+  it("preserves 'collected', 'processing', 'ready', and 'delivered' without regressing status", async () => {
+    for (const preservedStatus of ["collected", "processing", "ready", "delivered"] as const) {
+      const mockTx = {
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue({}),
+      };
+
+      const disposition = await admitOrderProcessingStatusInTransaction(
+        mockTx,
+        { id: 42, tenantId: "tenant-a", status: preservedStatus },
+        "tenant-a"
+      );
+
+      expect(disposition).toEqual({
+        previousStatus: preservedStatus,
+        resultingStatus: preservedStatus,
+        transitioned: false,
+        preservedExistingStatus: true,
+        cancelled: false,
+      });
+
+      expect(mockTx.update).not.toHaveBeenCalled();
+      expect(mockTx.set).not.toHaveBeenCalled();
+    }
+  });
+
+  it("preserves 'cancelled' status and flags cancelled in disposition", async () => {
+    const mockTx = {
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue({}),
+    };
+
+    const disposition = await admitOrderProcessingStatusInTransaction(
+      mockTx,
+      { id: 42, tenantId: "tenant-a", status: "cancelled" },
+      "tenant-a"
+    );
+
+    expect(disposition).toEqual({
+      previousStatus: "cancelled",
+      resultingStatus: "cancelled",
+      transitioned: false,
+      preservedExistingStatus: true,
+      cancelled: true,
+    });
+
+    expect(mockTx.update).not.toHaveBeenCalled();
+    expect(mockTx.set).not.toHaveBeenCalled();
+  });
+});
+

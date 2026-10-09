@@ -9,6 +9,7 @@ import { daphneRouter } from "./agents/daphne/router";
 import {
   admitNativeStripePayment,
   prepareNativeStripePaymentTenant,
+  type NativePaymentAdmissionResult,
 } from "./domains/payment/paymentAdmission";
 import {
   writeDriverExpenseToSheet,
@@ -3210,7 +3211,7 @@ export const appRouter = router({
 
         if (!customerId || !paymentMethodId) {
           return {
-            success: false,
+            success: false as const,
             error:
               "No card on file for this customer. Collect payment manually.",
           };
@@ -3334,8 +3335,9 @@ export const appRouter = router({
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
+          let admissionResult: NativePaymentAdmissionResult;
           try {
-            await admitNativeStripePayment({
+            admissionResult = await admitNativeStripePayment({
               tenantId: paymentTenantId,
               orderId: input.orderId,
               paymentIntentId: paymentIntent.id,
@@ -3350,7 +3352,6 @@ export const appRouter = router({
               paidAt,
               orderPatch: {
                 total: centsToDollars(input.amountCents),
-                status: "processing",
                 isFirstPaidOrder: !hasPaidBefore,
                 platformFeeCents,
                 vendorPayoutCents,
@@ -3365,12 +3366,19 @@ export const appRouter = router({
               admissionErr
             );
             return {
-              success: false,
+              success: false as const,
               paymentIntentId: paymentIntent.id,
-              reconciliationRequired: true,
+              reconciliationRequired: true as const,
               error:
                 `Payment was captured by Stripe (${paymentIntent.id}), but authority admission failed: ${admissionErr?.message || "Unknown error"}. Payment reconciliation is required. Do not retry the charge blindly.`,
             };
+          }
+
+          const isOrderCancelled = admissionResult.statusDisposition?.cancelled === true;
+          if (isOrderCancelled) {
+            console.warn(
+              `[ChargeCard] RECONCILIATION REQUIRED: Order ${input.orderId} is cancelled, but Stripe payment ${paymentIntent.id} was captured and admitted. Preserving cancelled lifecycle state.`
+            );
           }
 
           try {
@@ -3387,16 +3395,22 @@ export const appRouter = router({
             );
           }
 
-          try {
-            await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
-              actorDisplayName: "Admin charge",
-              actualEventTimestamp: paidAt,
-              reason: "stripe_charge_succeeded",
-            });
-          } catch (err) {
+          if (!isOrderCancelled) {
+            try {
+              await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
+                actorDisplayName: "Admin charge",
+                actualEventTimestamp: paidAt,
+                reason: "stripe_charge_succeeded",
+              });
+            } catch (err) {
+              console.warn(
+                "[ChargeCard] Failed to record pickup completed operations event:",
+                err
+              );
+            }
+          } else {
             console.warn(
-              "[ChargeCard] Failed to record pickup completed operations event:",
-              err
+              `[ChargeCard] Skipping pickup completed operations event for cancelled order ${input.orderId}.`
             );
           }
 
@@ -3536,10 +3550,12 @@ export const appRouter = router({
           }
 
           return {
-            success: true,
+            success: true as const,
             paymentIntentId: paymentIntent.id,
             isFirstPaidOrder: !hasPaidBefore,
             receiptUrl,
+            ...(isOrderCancelled ? { reconciliationRequired: true as const } : {}),
+            statusDisposition: admissionResult.statusDisposition,
           };
         } catch (err: any) {
           console.error(
@@ -3548,15 +3564,15 @@ export const appRouter = router({
           );
           if (paymentIntent?.id) {
             return {
-              success: false,
+              success: false as const,
               paymentIntentId: paymentIntent.id,
-              reconciliationRequired: true,
+              reconciliationRequired: true as const,
               error:
                 `Payment was captured by Stripe (${paymentIntent.id}), but an error occurred: ${err.message || "Unknown error"}. Payment reconciliation is required. Do not retry the charge blindly.`,
             };
           }
           return {
-            success: false,
+            success: false as const,
             error:
               err.message || "Payment failed. Card may have been declined.",
           };

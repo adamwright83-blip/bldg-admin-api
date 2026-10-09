@@ -57,7 +57,7 @@ async function insertPaidOrder(input: {
       amountReceivedCents: 4000,
       currency: "usd",
     },
-    orderPatch: { total: "40.00", status: "delivered" },
+    orderPatch: { total: "40.00" },
   });
 }
 

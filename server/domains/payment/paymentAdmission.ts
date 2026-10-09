@@ -7,6 +7,53 @@ import {
   type AuthorityReceipt,
   type AuthorityTransaction,
 } from "../../platform/authority/authorityReceipt";
+import {
+  admitOrderProcessingStatusInTransaction,
+  type PaymentAdmissionStatusDisposition,
+} from "../orders/orderLifecycleService";
+
+export const AUTHORIZED_PAYMENT_ORDER_PATCH_KEYS = [
+  "total",
+  "isFirstPaidOrder",
+  "platformFeeCents",
+  "vendorPayoutCents",
+  "stripeConnectedAccountIdSnapshot",
+  "vendorNameSnapshot",
+  "routingPrioritySnapshot",
+] as const;
+
+export type AuthorizedPaymentOrderPatchKey =
+  typeof AUTHORIZED_PAYMENT_ORDER_PATCH_KEYS[number];
+
+export type NativeStripePaymentOrderPatch = {
+  total?: string;
+  isFirstPaidOrder?: boolean;
+  platformFeeCents?: number | null;
+  vendorPayoutCents?: number | null;
+  stripeConnectedAccountIdSnapshot?: string | null;
+  vendorNameSnapshot?: string | null;
+  routingPrioritySnapshot?: number | null;
+};
+
+export type NativePaymentAdmissionResult = AuthorityReceipt & {
+  statusDisposition: PaymentAdmissionStatusDisposition;
+};
+
+export function validatePaymentOrderPatch(
+  orderPatch: Record<string, unknown> | undefined
+): void {
+  if (!orderPatch) return;
+  const patchKeys = Object.keys(orderPatch);
+  for (const key of patchKeys) {
+    if (
+      !(AUTHORIZED_PAYMENT_ORDER_PATCH_KEYS as readonly string[]).includes(key)
+    ) {
+      throw new Error(
+        `Unauthorized field '${key}' in payment admission orderPatch. Payment admission only permits: ${AUTHORIZED_PAYMENT_ORDER_PATCH_KEYS.join(", ")}.`
+      );
+    }
+  }
+}
 
 export async function prepareNativeStripePaymentTenant(input: {
   tenantId: string;
@@ -58,10 +105,10 @@ export async function admitNativeStripePayment(input: {
   orderId: number;
   paymentIntentId: string;
   paidAt: Date;
-  orderPatch: Partial<typeof orders.$inferInsert>;
+  orderPatch?: NativeStripePaymentOrderPatch;
   actorId?: string | null;
   capture?: StripeCaptureEvidence;
-}): Promise<AuthorityReceipt> {
+}): Promise<NativePaymentAdmissionResult> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -71,12 +118,19 @@ export async function admitNativeStripePayment(input: {
   if (!paymentIntentId)
     throw new Error("Stripe payment admission requires PaymentIntent evidence");
 
+  validatePaymentOrderPatch(input.orderPatch as Record<string, unknown>);
   validateCaptureOwnership(input.capture, tenantId, input.orderId);
   if (input.capture) validateStripeCapture(input.capture, paymentIntentId);
 
   return db.transaction(async tx => {
     const [order] = await tx
-      .select({ id: orders.id, tenantId: orders.tenantId, paid: orders.paid, stripePaymentIntentId: orders.stripePaymentIntentId })
+      .select({
+        id: orders.id,
+        tenantId: orders.tenantId,
+        paid: orders.paid,
+        stripePaymentIntentId: orders.stripePaymentIntentId,
+        status: orders.status,
+      })
       .from(orders)
       .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, tenantId)))
       .for("update")
@@ -86,8 +140,6 @@ export async function admitNativeStripePayment(input: {
     if (order.stripePaymentIntentId && order.stripePaymentIntentId !== paymentIntentId)
       throw new Error("Provider capture cannot replace the native order payment identity.");
     const replay = await lockNativeProviderBinding(tx, tenantId, input.orderId, paymentIntentId);
-    if (input.orderPatch.tenantId !== undefined && input.orderPatch.tenantId !== tenantId)
-      throw new Error("Payment cannot change native order tenant authority.");
     let receipt = await admitAuthorityClaimWith(tx, {
       tenantId,
       claimType: "payment_verified",
@@ -107,17 +159,36 @@ export async function admitNativeStripePayment(input: {
     if (input.capture)
       receipt = await persistStripeCapture(tx, receipt, input.capture);
 
+    // Payment domain exclusively controls paid, paidAt, and stripePaymentIntentId,
+    // plus the allowlisted financial snapshot fields from orderPatch.
+    // Payment domain does NOT assign or touch status.
+    const sanitizedPatch: Partial<typeof orders.$inferInsert> = {};
+    if (input.orderPatch) {
+      for (const key of AUTHORIZED_PAYMENT_ORDER_PATCH_KEYS) {
+        if (key in input.orderPatch && (input.orderPatch as any)[key] !== undefined) {
+          (sanitizedPatch as any)[key] = (input.orderPatch as any)[key];
+        }
+      }
+    }
+
     await tx
       .update(orders)
       .set({
-        ...input.orderPatch,
+        ...sanitizedPatch,
         paid: replay && order.paid === false ? false : true,
         paidAt: input.paidAt,
         stripePaymentIntentId: paymentIntentId,
       })
       .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, tenantId)));
 
-    return receipt;
+    // Orders domain owns status transition via narrow transactional helper
+    const statusDisposition = await admitOrderProcessingStatusInTransaction(
+      tx,
+      order,
+      tenantId
+    );
+
+    return Object.assign(receipt, { statusDisposition });
   });
 }
 

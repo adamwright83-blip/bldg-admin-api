@@ -118,7 +118,7 @@ describe("paymentAdmission authority", () => {
     ).rejects.toThrow("Tenant order not found for payment admission");
   });
 
-  it("admits valid Stripe payment atomically projecting paid, paidAt, and stripePaymentIntentId", async () => {
+  it("admits valid Stripe payment atomically projecting payment fields and delegating status to Orders helper", async () => {
     const paidAt = new Date("2026-10-06T19:00:00.000Z");
     const admittedAt = new Date("2026-10-06T19:00:01.000Z");
     const mockTx = {
@@ -128,7 +128,7 @@ describe("paymentAdmission authority", () => {
       for: vi.fn().mockReturnThis(),
       limit: vi
         .fn()
-        .mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a" }])
+        .mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a", status: "new", paid: false, stripePaymentIntentId: null }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           {
@@ -167,7 +167,6 @@ describe("paymentAdmission authority", () => {
       paidAt,
       orderPatch: {
         total: "45.00",
-        status: "processing",
       },
       actorId: "admin-user-1",
     });
@@ -179,22 +178,133 @@ describe("paymentAdmission authority", () => {
     expect(receipt.sourceRef).toBe("pi_real_123");
     expect(receipt.tenantId).toBe("tenant-a");
 
-    expect(mockTx.update).toHaveBeenCalledWith(orders);
-    expect(mockTx.set).toHaveBeenCalledWith({
+    // Payment write owns total, paid, paidAt, stripePaymentIntentId — NOT status
+    expect(mockTx.set).toHaveBeenNthCalledWith(1, {
       total: "45.00",
-      status: "processing",
       paid: true,
       paidAt,
       stripePaymentIntentId: "pi_real_123",
     });
+
+    // Orders helper write owns status: "processing"
+    expect(mockTx.set).toHaveBeenNthCalledWith(2, {
+      status: "processing",
+    });
+
+    expect(receipt.statusDisposition).toEqual({
+      previousStatus: "new",
+      resultingStatus: "processing",
+      transitioned: true,
+      preservedExistingStatus: false,
+      cancelled: false,
+    });
   });
+
+  it("rejects status in orderPatch at runtime before any database mutation", async () => {
+    vi.mocked(getDb).mockResolvedValueOnce({} as any);
+    await expect(
+      admitNativeStripePayment({
+        tenantId: "tenant-a",
+        orderId: 101,
+        paymentIntentId: "pi_123",
+        paidAt: new Date(),
+        orderPatch: { status: "processing" } as any,
+      })
+    ).rejects.toThrow(/Unauthorized field 'status'/);
+  });
+
+  it("rejects tenantId in orderPatch at runtime before any database mutation", async () => {
+    vi.mocked(getDb).mockResolvedValueOnce({} as any);
+    await expect(
+      admitNativeStripePayment({
+        tenantId: "tenant-a",
+        orderId: 101,
+        paymentIntentId: "pi_123",
+        paidAt: new Date(),
+        orderPatch: { tenantId: "tenant-b" } as any,
+      })
+    ).rejects.toThrow(/Unauthorized field 'tenantId'/);
+  });
+
+  it("preserves collected, processing, ready, delivered, and cancelled statuses without setting processing", async () => {
+    const statuses = ["collected", "processing", "ready", "delivered", "cancelled"] as const;
+
+    for (const preservedStatus of statuses) {
+      const paidAt = new Date("2026-10-06T19:00:00.000Z");
+      const mockTx = {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        for: vi.fn().mockReturnThis(),
+        limit: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a", status: preservedStatus, paid: false, stripePaymentIntentId: null }])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            {
+              id: "auth-101",
+              tenantId: "tenant-a",
+              claimType: "payment_verified",
+              subjectType: "order",
+              subjectId: "101",
+              sourceType: "stripe_payment_intent",
+              sourceRef: `pi_${preservedStatus}`,
+              actorType: "system",
+              actorId: null,
+              evidenceClass: "authoritative_external",
+              verificationClass: "VERIFIED",
+              admissionPolicy: "native_stripe_payment_v1",
+              occurredAt: paidAt,
+              admittedAt: paidAt,
+              metadataJson: { orderId: 101 },
+              idempotencyKey: `payment_verified:order:101:stripe_payment_intent:pi_${preservedStatus}`,
+            },
+          ]),
+        insert: vi.fn().mockReturnThis(),
+        values: vi.fn().mockReturnThis(),
+        onDuplicateKeyUpdate: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+      };
+      vi.mocked(getDb).mockResolvedValueOnce({
+        transaction: vi.fn((cb: any) => cb(mockTx)),
+      } as any);
+
+      const receipt = await admitNativeStripePayment({
+        tenantId: "tenant-a",
+        orderId: 101,
+        paymentIntentId: `pi_${preservedStatus}`,
+        paidAt,
+        orderPatch: { total: "50.00" },
+      });
+
+      // Payment write occurs exactly once
+      expect(mockTx.set).toHaveBeenCalledTimes(1);
+      expect(mockTx.set).toHaveBeenCalledWith({
+        total: "50.00",
+        paid: true,
+        paidAt,
+        stripePaymentIntentId: `pi_${preservedStatus}`,
+      });
+
+      // Orders helper does NOT write status
+      expect(receipt.statusDisposition).toEqual({
+        previousStatus: preservedStatus,
+        resultingStatus: preservedStatus,
+        transitioned: false,
+        preservedExistingStatus: true,
+        cancelled: preservedStatus === "cancelled",
+      });
+    }
+  });
+
   it("does not project paid state when authority receipt persistence fails", async () => {
     const mockTx = {
       select: vi.fn().mockReturnThis(),
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       for: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a" }]).mockResolvedValue([]),
+      limit: vi.fn().mockResolvedValueOnce([{ id: 101, tenantId: "tenant-a", status: "new" }]).mockResolvedValue([]),
       insert: vi.fn().mockReturnThis(),
       values: vi.fn().mockReturnThis(),
       onDuplicateKeyUpdate: vi.fn(async () => {
@@ -213,7 +323,7 @@ describe("paymentAdmission authority", () => {
         orderId: 101,
         paymentIntentId: "pi_provider_succeeded",
         paidAt: new Date("2026-10-07T02:40:00.000Z"),
-        orderPatch: { total: "45.00", status: "processing" },
+        orderPatch: { total: "45.00" },
       })
     ).rejects.toThrow("receipt persistence failed");
 
