@@ -40,9 +40,9 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Mitch** | Autonomous game producer and game development agent. Managed directly by Adam (President does not manage Mitch). | `server/mitch/` |
 | **Day Line** | Operator's prioritized daily schedule, commitments, and active work agenda. | `server/dayDirector/`, `server/goldline/dayline/` |
 | **Mission Director** | Sole deterministic ranker for candidate operational work and sales missions. | `server/missionDirector/` |
-| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/goldlineWorld/`, `server/experience/goldline/driver/`, `server/field/outreach/`, `server/field/scout/`, `server/companions/` |
-| **Lantern City** | Visual interactive city map composing authoritative business projections onto 2.5D visual landmarks. | `server/lanternCity/`, `server/goldlineWorld/lanternCityOverviewService.ts` |
-| **Tower Wars** | Game mode where towers represent economic activity, consuming canonical admitted payment facts. | `server/towerWars/` |
+| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/experience/goldline/world/`, `server/experience/goldline/driver/`, `server/field/outreach/`, `server/field/scout/`, `server/companions/` |
+| **Lantern City** | Visual interactive city map composing authoritative business projections onto 2.5D visual landmarks. | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` |
+| **Tower Wars** | Game mode where towers represent economic activity, consuming canonical admitted payment facts. | `server/experience/goldline/modes/towerWars/` |
 | **Legacy Quarantine** | Quarantined historical compatibility code and database migration fixtures from DayForge. | `server/legacyDayforge*` |
 
 ---
@@ -102,8 +102,8 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Daphne preference learning or correction store | `server/daphne/` | Check PR #495 holds before modifying active files! Daphne cannot fabricate business truth. |
 | President executive proposals | `server/president/` | Preserve approval gates; President does not direct Mitch. |
 | Mitch game producer logic | `server/mitch/` | Managed directly by Adam; do not conflate with shared builder tools. |
-| Lantern City visual map & building display | `server/lanternCity/`, `server/goldlineWorld/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |
-| Tower Wars gameplay mechanics | `server/towerWars/` | Consumes admitted payment evidence; cannot admit payments. |
+| Lantern City visual map & building display | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |
+| Tower Wars gameplay mechanics | `server/experience/goldline/modes/towerWars/` | Consumes admitted payment evidence; cannot admit payments. |
 | Action execution, retry, or worker leasing | `server/platform/execution/worker.ts`, `server/platform/authority/actionExecutionGate.ts` | Workers orchestrate domain commands; they do not invent business policy. |
 
 ---

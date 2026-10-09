@@ -39,7 +39,7 @@ describe("three-fact authority slice", () => {
 
   it("creates account-win authority in the same mission transaction and makes Goldline require it", () => {
     const missions = source("server/commercialMissions/commercialMissionStore.ts");
-    const worldStore = source("server/goldlineWorld/worldEventStore.ts");
+    const worldStore = source("server/experience/goldline/world/worldEventStore.ts");
     const worldContract = source("shared/goldlineWorld.ts");
     expect(missions).toContain('claimType: "account_won"');
     expect(missions).toContain("authorityReceiptId: winAuthority.id");

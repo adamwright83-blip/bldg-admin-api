@@ -21,7 +21,7 @@ import {
   describeWorldPresentation,
   orderByProminence,
 } from "@shared/goldlineWorldPresentation";
-import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../../server/experience/lanternCity/cityWorldService";
 import { TerritoryChrome } from "@/components/goldline/TerritoryWorldLayer";
 import {
   CampaignChronicleList,

@@ -9,7 +9,7 @@ import {
 import { getDb } from "../../db";
 import { parseCsv, type CsvRecord } from "../../externalSystems/csvIngestion";
 import { enqueueEconomicSnapshot } from "./browserSync/worldOutbox";
-import { findPhysicalEntityIdByAddress } from "../../goldlineWorld/entityLookup";
+import { findPhysicalEntityIdByAddress } from "../../experience/goldline/world/entityLookup";
 import {
   requireCleanCloudTenantId,
   upsertCleanCloudPaidOrderWith,

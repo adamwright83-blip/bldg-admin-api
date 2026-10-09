@@ -24,7 +24,7 @@ import { chromium, type Page, type Request } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { googleWorldService } from "../server/google/googleWorldService";
-import { compileAuthoritativeEvents } from "../server/towerWars/towerWarsService";
+import { compileAuthoritativeEvents } from "../server/experience/goldline/modes/towerWars/towerWarsService";
 import { compileTowerWarsState } from "../shared/towerWars";
 
 const origin = process.env.LIVING_LA_ORIGIN || "http://localhost:3000";

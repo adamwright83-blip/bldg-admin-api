@@ -1,0 +1,841 @@
+[
+  {
+    "oldPath": "server/goldlineWorld/campaignService.concurrency.test.ts",
+    "newPath": "server/experience/goldline/world/campaignService.concurrency.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "../../drizzle/schema",
+      "../../shared/goldlineCampaign",
+      "../../shared/goldlineCampaignCompiler",
+      "../field/types",
+      "../../shared/goldlineTravelTruth",
+      "./campaignService"
+    ],
+    "writeTargets": [
+      "table",
+      "table"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/campaignService.ts",
+    "newPath": "server/experience/goldline/world/campaignService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineCampaign",
+      "../../shared/goldlineCampaignCompiler",
+      "../../shared/goldlineCampaignObjectives",
+      "../../shared/goldlineCampaignPacing",
+      "../../shared/goldlineCampaignBindings",
+      "../../shared/goldlineCampaignRevisions",
+      "../../shared/goldlineCampaignEndings",
+      "../../shared/goldlineTravelTruth",
+      "../db",
+      "../mysqlErrors",
+      "../field/fieldTodayService",
+      "./worldEventStore",
+      "./territoryService",
+      "./campaignTravelAdapter"
+    ],
+    "writeTargets": [
+      "goldlineCampaignInstances",
+      "goldlineCampaignRevisions",
+      "goldlineCampaignInstances",
+      "goldlineCampaignInstances",
+      "goldlineCampaignInstances",
+      "goldlineFictionAssignments"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/campaignTravelAdapter.ts",
+    "newPath": "server/integrations/googleMaps/campaignTravelAdapter.ts",
+    "responsibility": "Bounded provider travel transport; disabled in test/CI, explicit unavailable state",
+    "imports": [
+      "../_core/env",
+      "../../shared/goldlineTravelTruth",
+      "../../shared/goldlineTravelTruth"
+    ],
+    "writeTargets": [
+      "first"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterEventBindingRouter.ts",
+    "newPath": "server/experience/goldline/world/chapterEventBindingRouter.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "zod",
+      "../_core/trpc",
+      "../towerWars/towerWarsService",
+      "./chapterEventBindingService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterEventBindingService.test.ts",
+    "newPath": "server/experience/goldline/world/chapterEventBindingService.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "./chapterEventBindingService",
+      "../../shared/towerWars"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterEventBindingService.ts",
+    "newPath": "server/experience/goldline/world/chapterEventBindingService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../db",
+      "../../shared/towerWars"
+    ],
+    "writeTargets": [
+      "goldlineChapterEventBindings",
+      "goldlineChapterEventBindings"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterHostIntegration.test.ts",
+    "newPath": "server/experience/goldline/world/chapterHostIntegration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "../_core/context",
+      "./chapterStateRouter",
+      "./chapterEventBindingRouter",
+      "./echoFollowUpRouter",
+      "../../shared/goldlineChapterState"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterIntegration.test.ts",
+    "newPath": "server/experience/goldline/world/chapterIntegration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "./chapterStateService",
+      "./chapterEventBindingService",
+      "./echoFollowUpService",
+      "./chapterOutcomeBranchService",
+      "../../shared/goldlineChapterState",
+      "../../shared/towerWars"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterOutcomeBranchService.test.ts",
+    "newPath": "server/experience/goldline/world/chapterOutcomeBranchService.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "./chapterOutcomeBranchService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterOutcomeBranchService.ts",
+    "newPath": "server/experience/goldline/world/chapterOutcomeBranchService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "../../shared/goldlineProgression"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterStateRouter.ts",
+    "newPath": "server/experience/goldline/world/chapterStateRouter.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "zod",
+      "../_core/trpc",
+      "../../shared/goldlineChapterState",
+      "./chapterStateService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterStateService.test.ts",
+    "newPath": "server/experience/goldline/world/chapterStateService.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "./chapterStateService",
+      "../../shared/goldlineChapterState"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/chapterStateService.ts",
+    "newPath": "server/experience/goldline/world/chapterStateService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../db",
+      "../../shared/goldlineChapterState"
+    ],
+    "writeTargets": [
+      "goldlineChapterStates",
+      "goldlineChapterStates"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/cityWorldService.ts",
+    "newPath": "server/experience/lanternCity/cityWorldService.ts",
+    "responsibility": "Lantern City read/presentation composition from canonical sources, derived operation state only",
+    "imports": [
+      "drizzle-orm",
+      "../../shared/goldlineEconomicProjection",
+      "../../drizzle/schema",
+      "../../shared/goldlineWorld",
+      "../../shared/goldlineWorldPresentation",
+      "../../shared/goldlineObligations",
+      "../geography/geographicTruthService",
+      "../geography/physicalIdentityResolver",
+      "../db",
+      "../geography/provisionalPropertyEntities"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/deterministicJournalExtraction.ts",
+    "newPath": "server/field/journal/deterministicJournalExtraction.ts",
+    "responsibility": "Durable operator-reported field journal/evidence application; cannot admit native Orders/Payment/conversion",
+    "imports": [
+      "../../shared/fieldJournal",
+      "../_core/proofMode",
+      "../../shared/goldlineTemporal"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/echoFollowUpRouter.ts",
+    "newPath": "server/domains/commercial/followUps/echoFollowUpRouter.ts",
+    "responsibility": "Verbatim tenant/operator-scoped canonical Commercial follow-up reader/brief",
+    "imports": [
+      "../_core/trpc",
+      "./echoFollowUpService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/echoFollowUpService.test.ts",
+    "newPath": "server/domains/commercial/followUps/echoFollowUpService.test.ts",
+    "responsibility": "Verbatim tenant/operator-scoped canonical Commercial follow-up reader/brief",
+    "imports": [
+      "vitest",
+      "./echoFollowUpService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/echoFollowUpService.ts",
+    "newPath": "server/domains/commercial/followUps/echoFollowUpService.ts",
+    "responsibility": "Verbatim tenant/operator-scoped canonical Commercial follow-up reader/brief",
+    "imports": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../db"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/entityLookup.ts",
+    "newPath": "server/experience/goldline/world/entityLookup.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../db",
+      "../geography/physicalIdentityResolver"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/fieldCommitmentService.ts",
+    "newPath": "server/field/journal/fieldCommitmentService.ts",
+    "responsibility": "Durable operator-reported field journal/evidence application; cannot admit native Orders/Payment/conversion",
+    "imports": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/fieldJournal",
+      "../../shared/goldlineTemporal",
+      "../../shared/goldlineObligations",
+      "./worldEventStore",
+      "./futurePressureService",
+      "./entityLookup",
+      "../db"
+    ],
+    "writeTargets": [
+      "quote",
+      "goldlineWorldEvents"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/fieldJournalProcessingService.ts",
+    "newPath": "server/field/journal/fieldJournalProcessingService.ts",
+    "responsibility": "Durable operator-reported field journal/evidence application; cannot admit native Orders/Payment/conversion",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/fieldJournal",
+      "../_core/env",
+      "../_core/proofMode",
+      "./deterministicJournalExtraction",
+      "../_core/llm",
+      "../_core/voiceTranscription",
+      "../commercialMissions/driverSalesMotivationService",
+      "../db",
+      "../storage",
+      "./fieldCommitmentService"
+    ],
+    "writeTargets": [
+      "key",
+      "driverSalesJournals",
+      "driverSalesJournals",
+      "fieldJournalExtractions",
+      "driverSalesJournals",
+      "driverSalesJournals"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/frontierIntelligenceService.test.ts",
+    "newPath": "server/field/targeting/frontierIntelligenceService.test.ts",
+    "responsibility": "Provider-sourced target research plus bounded candidate ranking, no canonical fact mutation",
+    "imports": [
+      "vitest",
+      "../procurement/googlePlacesDiscoveryConnector",
+      "./frontierIntelligenceService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/frontierIntelligenceService.ts",
+    "newPath": "server/field/targeting/frontierIntelligenceService.ts",
+    "responsibility": "Provider-sourced target research plus bounded candidate ranking, no canonical fact mutation",
+    "imports": [
+      "../_core/llm",
+      "../_core/env",
+      "../procurement/googlePlacesDiscoveryConnector",
+      "../../shared/lanternTerritories"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/futurePressureService.test.ts",
+    "newPath": "server/experience/goldline/world/futurePressureService.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "../../shared/goldlineWorld",
+      "./futurePressureService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/futurePressureService.ts",
+    "newPath": "server/experience/goldline/world/futurePressureService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineObligations",
+      "../../shared/goldlineFuturePressure",
+      "../../shared/goldlineWorld",
+      "../../shared/goldlineTemporal",
+      "../db"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/goldlineCampaignMigration.test.ts",
+    "newPath": "server/experience/goldline/world/goldlineCampaignMigration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/goldlineLivingWorldMigration.test.ts",
+    "newPath": "server/experience/goldline/world/goldlineLivingWorldMigration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/goldlineProofWorld.ts",
+    "newPath": "server/experience/goldline/world/goldlineProofWorld.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "../_core/proofMode",
+      "../../scripts/goldline-living-world-proof-seed"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/goldlineTerritoryMigration.test.ts",
+    "newPath": "server/experience/goldline/world/goldlineTerritoryMigration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/goldlineWorldRouter.ts",
+    "newPath": "server/composition/goldlineWorldRouter.ts",
+    "responsibility": "Existing authenticated mixed route registration, calls owning applications",
+    "imports": [
+      "zod",
+      "../_core/trpc",
+      "./worldEventStore",
+      "../field/propertyDiscovery/towerForgeWorkflow",
+      "./cityWorldService",
+      "./territoryService",
+      "./campaignService",
+      "./goldlineProofWorld",
+      "./frontierIntelligenceService",
+      "./lanternCityOverviewService",
+      "../behavioralLedger/behavioralLedger",
+      "../../shared/actionGrammar",
+      "../../shared/fictionEligibilityCatalog",
+      "../../shared/behavioralExperimentPolicy",
+      "../behavioralExperiment/assignPresentation"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/journalWorldActionService.test.ts",
+    "newPath": "server/experience/goldline/world/journalWorldActionService.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "./journalWorldActionService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/journalWorldActionService.ts",
+    "newPath": "server/experience/goldline/world/journalWorldActionService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "../../shared/fieldJournal",
+      "../../shared/goldlineWorld",
+      "./entityLookup",
+      "./worldEventStore"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/lanternCityOverviewService.test.ts",
+    "newPath": "server/experience/lanternCity/lanternCityOverviewService.test.ts",
+    "responsibility": "Lantern City read/presentation composition from canonical sources, derived operation state only",
+    "imports": [
+      "vitest",
+      "./lanternCityOverviewService",
+      "../../shared/lanternTerritories",
+      "../../shared/lanternDecayForecast"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/lanternCityOverviewService.ts",
+    "newPath": "server/experience/lanternCity/lanternCityOverviewService.ts",
+    "responsibility": "Lantern City read/presentation composition from canonical sources, derived operation state only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineCampaignRuntime",
+      "../../shared/lanternTerritories",
+      "../../shared/lanternTerritoryVisualState",
+      "../../shared/lanternDecayForecast",
+      "../analytics/analyticsQueries",
+      "../db",
+      "../geography/geographicTruthService",
+      "../nightShift/authoredDayService",
+      "../../shared/rekindlingEvents",
+      "./campaignService",
+      "./territoryService",
+      "./worldEventStore",
+      "../strategy/todayFeaturedService"
+    ],
+    "writeTargets": [
+      "goldlineLanternOperations"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/lootWalk.test.ts",
+    "newPath": "server/experience/goldline/world/lootWalk.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "../../shared/fieldJournal",
+      "./fieldCommitmentService",
+      "./journalWorldActionService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/oneSaveFile.test.ts",
+    "newPath": "server/experience/goldline/world/oneSaveFile.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../geography/physicalIdentityResolver"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/phaseAWorldThinks.integration.test.ts",
+    "newPath": "server/experience/goldline/world/phaseAWorldThinks.integration.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "vitest",
+      "../../drizzle/schema",
+      "../db",
+      "../geography/geographicTruthService",
+      "./fieldJournalProcessingService",
+      "./futurePressureService",
+      "./cityWorldService",
+      "../field/fieldTodayService",
+      "../../shared/goldlineObligations"
+    ],
+    "writeTargets": [
+      "driverSalesJournals",
+      "physicalEntities",
+      "physicalEntityAliases",
+      "goldlineWorldEvents",
+      "driverSalesJournals",
+      "physicalEntityAliases",
+      "physicalEntities"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/proofModeBoundary.test.ts",
+    "newPath": "server/experience/goldline/world/proofModeBoundary.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "../_core/proofMode",
+      "../experience/goldline/builder/towerImageProvider",
+      "./deterministicJournalExtraction"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/schema.sql",
+    "newPath": "server/platform/persistence/goldlineCompatibilitySchema.sql",
+    "responsibility": "Historical mixed production bootstrap DDL; no runtime policy ownership and no deployed identifier change",
+    "imports": [],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/territoryService.ts",
+    "newPath": "server/experience/goldline/world/territoryService.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineTerritoryCompiler",
+      "../../shared/goldlineTerritories",
+      "../../shared/goldlineWorld",
+      "../db",
+      "../mysqlErrors",
+      "./cityWorldService",
+      "./worldEventStore"
+    ],
+    "writeTargets": [
+      "goldlineTerritoryDefinitions"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/worldEventIdempotency.test.ts",
+    "newPath": "server/experience/goldline/world/worldEventIdempotency.test.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "vitest",
+      "./worldEventStore"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/goldlineWorld/worldEventStore.ts",
+    "newPath": "server/experience/goldline/world/worldEventStore.ts",
+    "responsibility": "Goldline derived world/campaign/chapter state or its existing contract; game tables only",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/goldlineWorld",
+      "../../shared/goldlineWorld",
+      "../db",
+      "../mysqlErrors",
+      "../../shared/goldlineEconomicProjection",
+      "../platform/authority/authorityReceipt"
+    ],
+    "writeTargets": [
+      "key",
+      "goldlineWorldEvents",
+      "goldlineEventReceipts"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/impactSchema.sql",
+    "newPath": "server/experience/goldline/modes/towerWars/impactSchema.sql",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/impactStore.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/impactStore.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "drizzle-orm/mysql-core",
+      "../../drizzle/schema",
+      "../../shared/towerWars",
+      "../../shared/towerWarsImpacts",
+      "../db",
+      "date-fns-tz",
+      "../../shared/towerWarsSeasons"
+    ],
+    "writeTargets": [
+      "seasonRevisions",
+      "towerImpacts"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/paymentBoundary.integration.test.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/paymentBoundary.integration.test.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "node:crypto",
+      "drizzle-orm",
+      "vitest",
+      "../../drizzle/schema",
+      "../db",
+      "../domains/orders/orderLifecycleService",
+      "../domains/payment/paymentAdmission",
+      "./towerWarsService"
+    ],
+    "writeTargets": [
+      "orders",
+      "orders"
+    ],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/paymentReadArchitecture.test.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/paymentReadArchitecture.test.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "node:fs",
+      "vitest"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/sandboxGate.test.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/sandboxGate.test.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "vitest",
+      "./sandboxGate"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/sandboxGate.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/sandboxGate.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "@trpc/server",
+      "../dashboardZoned"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/towerWarsRouter.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/towerWarsRouter.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "../planning/dayDirector/towerWarsPromiseService",
+      "zod",
+      "../_core/trpc",
+      "./towerWarsService",
+      "../planning/dayDirector/dayDirectorActor",
+      "@shared/sandboxScenarios",
+      "@shared/towerWarsSettlement",
+      "./sandboxGate",
+      "../dashboardZoned",
+      "./impactStore"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/towerWarsService.test.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/towerWarsService.test.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "vitest",
+      "./towerWarsService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/towerWars/towerWarsService.ts",
+    "newPath": "server/experience/goldline/modes/towerWars/towerWarsService.ts",
+    "responsibility": "Canonical-economics-consuming game mode/impact projection; Planning promise owner extracted in #517",
+    "imports": [
+      "../analytics/canonicalRevenue",
+      "../analytics/paidOrderLedger",
+      "../planning/dayDirector/towerWarsPromiseService",
+      "../../shared/buildings",
+      "../customerAssets/customerIdentity",
+      "../dashboardZoned",
+      "../db",
+      "../../shared/propertyTowers",
+      "../../shared/towerWars",
+      "../../shared/goldlineGameConfig",
+      "../../shared/towerWarsSettlement",
+      "../../shared/towerWarsImpacts",
+      "./impactStore",
+      "../../shared/towerWarsSeasons",
+      "date-fns"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/lanternCity/lanternCityRouter.test.ts",
+    "newPath": "server/experience/lanternCity/lanternCityRouter.test.ts",
+    "responsibility": "Read-only objective marks and authenticated projection route",
+    "imports": [
+      "vitest",
+      "./lanternCityRouter"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/lanternCity/lanternCityRouter.ts",
+    "newPath": "server/experience/lanternCity/lanternCityRouter.ts",
+    "responsibility": "Read-only objective marks and authenticated projection route",
+    "imports": [
+      "../_core/trpc",
+      "../agents/persistentOperator/identity",
+      "./objectiveMarksService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/lanternCity/objectiveMarksService.test.ts",
+    "newPath": "server/experience/lanternCity/objectiveMarksService.test.ts",
+    "responsibility": "Read-only objective marks and authenticated projection route",
+    "imports": [
+      "node:fs",
+      "vitest",
+      "../../shared/campaignRun",
+      "../../shared/currentDayLine",
+      "./objectiveMarksService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  },
+  {
+    "oldPath": "server/lanternCity/objectiveMarksService.ts",
+    "newPath": "server/experience/lanternCity/objectiveMarksService.ts",
+    "responsibility": "Read-only objective marks and authenticated projection route",
+    "imports": [
+      "drizzle-orm",
+      "../../drizzle/schema",
+      "../../shared/campaignRun",
+      "../../shared/lanternCityObjectiveMarks",
+      "../../shared/currentDayLine",
+      "../campaignRuns/campaignRunService",
+      "../db",
+      "../planning/dayline/currentDayLineService"
+    ],
+    "writeTargets": [],
+    "requiredValidation": "Equivalent 34-file/202-assertion world/driver/overview/identity/provider/promise/schema selection, matched 14 MySQL, TypeScript/four gates and hosted CI; preserve exact baseline exceptions"
+  }
+]

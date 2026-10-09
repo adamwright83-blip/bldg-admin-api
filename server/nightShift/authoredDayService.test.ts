@@ -14,7 +14,7 @@ vi.mock("../db", () => ({ getDb: mocks.getDb }));
 vi.mock("../field/fieldTodayService", () => ({
   getFieldToday: mocks.getFieldToday,
 }));
-vi.mock("../goldlineWorld/futurePressureService", () => ({
+vi.mock("../experience/goldline/world/futurePressureService", () => ({
   listFuturePressure: mocks.listFuturePressure,
 }));
 vi.mock("../geography/geographicTruthService", () => ({

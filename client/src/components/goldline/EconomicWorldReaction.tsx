@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
-import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
+import type { CityWorldEntity } from "../../../../server/experience/lanternCity/cityWorldService";
 import { currentEconomicRevenueCents } from "@shared/goldlineEconomicProjection";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 

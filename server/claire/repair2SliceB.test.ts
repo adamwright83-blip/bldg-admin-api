@@ -296,7 +296,7 @@ describe("Slice B — unrelated model consumers are untouched", () => {
       "server/planning/dayDirector/dayDirectorService.ts",
       "server/claire/analysis/conversationEvaluator.ts",
       "server/salesIntel/salesIntelExtraction.ts",
-      "server/goldlineWorld/fieldJournalProcessingService.ts",
+      "server/field/journal/fieldJournalProcessingService.ts",
     ]) {
       expect(readFileSync(file, "utf8")).toContain("ENV.anthropicModel");
     }

@@ -1,7 +1,7 @@
 -- Driver sales motivation: score events, daily journals, and playbook sources.
 --
 -- Same never-applied-migration bug documented in
--- server/goldlineWorld/schema.sql: these tables were introduced in
+-- server/platform/persistence/goldlineCompatibilitySchema.sql: these tables were introduced in
 -- drizzle/0047_driver_sales_motivation.sql and drizzle/0061 (which added
 -- transcript/location columns to driver_sales_journals), but
 -- scripts/migrate.mjs never runs drizzle/*.sql, so production never had

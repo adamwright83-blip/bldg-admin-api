@@ -16,7 +16,7 @@ const inspector = read("./WorldEntityInspector.tsx");
 /** Collapsed whitespace, so prose assertions survive reformatting. */
 const inspectorProse = inspector.replace(/\s+/g, " ");
 const service = readFileSync(
-  join(__dirname, "../../../../../server/goldlineWorld/cityWorldService.ts"),
+  join(__dirname, "../../../../../server/experience/lanternCity/cityWorldService.ts"),
   "utf8"
 );
 
@@ -104,7 +104,7 @@ describe("recovery stays honest at both ends", () => {
 
   it("refuses to attach a world event to a guessed building", () => {
     const lookup = readFileSync(
-      join(__dirname, "../../../../../server/goldlineWorld/entityLookup.ts"),
+      join(__dirname, "../../../../../server/experience/goldline/world/entityLookup.ts"),
       "utf8"
     );
     expect(lookup).toContain("unique.size === 1");

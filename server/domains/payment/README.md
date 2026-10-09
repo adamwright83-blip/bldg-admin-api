@@ -24,7 +24,7 @@ Authoritative business domain owner for native payment admission, immutable capt
 ## DOWNSTREAM CONSUMERS
 - Orders delivery gate (requiring payment admission before delivery)
 - Canonical revenue analytics (`server/analytics/canonicalRevenue.ts`)
-- Tower Wars economic banking (`server/towerWars/towerWarsService.ts`)
+- Tower Wars economic banking (`server/experience/goldline/modes/towerWars/towerWarsService.ts`)
 
 ## MUST NEVER OWN
 - Order status lifecycle transitions (owned by Orders).

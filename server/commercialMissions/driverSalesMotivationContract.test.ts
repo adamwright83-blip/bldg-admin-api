@@ -13,7 +13,7 @@ const missionPage = readFileSync(new URL("../../client/src/pages/CommercialSales
 const admin = readFileSync(new URL("../../client/src/pages/CommercialMissionAdmin.tsx", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../../drizzle/0047_driver_sales_motivation.sql", import.meta.url), "utf8");
 const livingWorldMigration = readFileSync(new URL("../../drizzle/0061_goldline_living_business_world.sql", import.meta.url), "utf8");
-const processing = readFileSync(new URL("../goldlineWorld/fieldJournalProcessingService.ts", import.meta.url), "utf8");
+const processing = readFileSync(new URL("../field/journal/fieldJournalProcessingService.ts", import.meta.url), "utf8");
 
 describe("driver sales motivation contract", () => {
   it("persists an idempotent rolling 30-day score and prevents repeated calls from farming full credit", () => {

@@ -1,0 +1,409 @@
+import { reconcileLedgerSpan } from "../../../../analytics/canonicalRevenue";
+import { loadPaidOrderLedger } from "../../../../analytics/paidOrderLedger";
+import { listTowerWarsPromises } from "../../../../planning/dayDirector/towerWarsPromiseService";
+import { resolveBuildingEvidence } from "../../../../../shared/buildings";
+import { customerIdentityHash } from "../../../../customerAssets/customerIdentity";
+import {
+  getBusinessDayWindow,
+  getDashboardTimeZone,
+  zonedDayStartUtc,
+  zonedYmd,
+} from "../../../../dashboardZoned";
+import { getDb } from "../../../../db";
+import { normalizePropertyTower } from "../../../../../shared/propertyTowers";
+import {
+  compileTowerWarsState,
+  compareTowerWarsEvents,
+  type TowerWarsBuildingId,
+  type TowerWarsBusinessEvent,
+  type TowerWarsRevenueSource,
+} from "../../../../../shared/towerWars";
+import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "../../../../../shared/goldlineGameConfig";
+import { settleTowerWars } from "../../../../../shared/towerWarsSettlement";
+import { impactForAttack } from "../../../../../shared/towerWarsImpacts";
+import { persistCanonicalImpacts, persistSeasonRevisions } from "./impactStore";
+import { rivalryHistory, rivalrySeasonWindow } from "../../../../../shared/towerWarsSeasons";
+import { addDays, format, parseISO } from "date-fns";
+
+export type TowerWarsCandidate = {
+  sourceKey: string;
+  occurredAt: Date;
+  orderId: string | number | null;
+  address: string | null;
+  buildingSlug: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerIdentity: string | null;
+  cents: number;
+  source: TowerWarsRevenueSource;
+  authoritative: boolean;
+  exclusionReason: string | null;
+  sourceEvidence: Record<string, string | number | boolean | null>;
+};
+
+/** Records the slug/address contradiction on the event so it is never silent. */
+function buildingConflictNote(
+  address: string | null | undefined,
+  slug: string | null | undefined
+): string | null {
+  const { conflict } = resolveBuildingEvidence(address, slug);
+  return conflict
+    ? `slug:${conflict.slugBuilding} vs address:${conflict.addressBuilding}`
+    : null;
+}
+
+function buildingIdFor(
+  candidate: Pick<TowerWarsCandidate, "address" | "buildingSlug">
+): TowerWarsBuildingId | null {
+  const configured = resolveBuildingEvidence(
+    candidate.address,
+    candidate.buildingSlug
+  ).building;
+  const normalized = normalizePropertyTower(candidate.address, {
+    propertyGroup:
+      configured?.id === "opus_la" || configured?.id === "century_park_east"
+        ? configured.id
+        : undefined,
+  });
+  return normalized.propertyGroup === "unknown"
+    ? null
+    : normalized.propertyGroup;
+}
+
+function normalizedPhone(value: string | null): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+/**
+ * Conservative source precedence. Linked/identical evidence is collapsed;
+ * ambiguous same-person/same-value same-day CleanCloud evidence yields to the
+ * local Stripe event instead of creating a possible duplicate attack.
+ */
+export function compileAuthoritativeEvents(input: {
+  tenantId: string;
+  businessDate: string;
+  candidates: TowerWarsCandidate[];
+}): {
+  events: TowerWarsBusinessEvent[];
+  exclusions: Array<{ sourceKey: string; reason: string }>;
+} {
+  const exclusions: Array<{ sourceKey: string; reason: string }> = [];
+  const accepted: TowerWarsCandidate[] = [];
+  const seen = new Set<string>();
+  const sourcePriority: Record<TowerWarsRevenueSource, number> = {
+    stripe: 0,
+    local_order_payment: 1,
+    cleancloud: 2,
+    clearent_xplorpay: 2,
+  };
+  const ordered = [...input.candidates].sort(
+    (a, b) =>
+      sourcePriority[a.source] - sourcePriority[b.source] ||
+      a.occurredAt.getTime() - b.occurredAt.getTime() ||
+      a.sourceKey.localeCompare(b.sourceKey)
+  );
+
+  for (const candidate of ordered) {
+    if (!candidate.authoritative || candidate.exclusionReason) {
+      exclusions.push({
+        sourceKey: candidate.sourceKey,
+        reason: candidate.exclusionReason ?? "non_authoritative_timestamp",
+      });
+      continue;
+    }
+    if (!Number.isInteger(candidate.cents) || candidate.cents <= 0) {
+      exclusions.push({
+        sourceKey: candidate.sourceKey,
+        reason: "non_positive_order_value",
+      });
+      continue;
+    }
+    const buildingId = buildingIdFor(candidate);
+    if (!buildingId) {
+      exclusions.push({
+        sourceKey: candidate.sourceKey,
+        reason: "unresolved_building",
+      });
+      continue;
+    }
+    const explicitEconomicKey = String(
+      candidate.sourceEvidence.economicEventKey ?? candidate.sourceKey
+    );
+    if (seen.has(explicitEconomicKey)) {
+      exclusions.push({
+        sourceKey: candidate.sourceKey,
+        reason: "duplicate_economic_event",
+      });
+      continue;
+    }
+    const ambiguousDuplicate =
+      candidate.source === "cleancloud" ||
+      candidate.source === "clearent_xplorpay"
+        ? accepted.find(
+            existing =>
+              existing.source === "stripe" &&
+              existing.cents === candidate.cents &&
+              normalizedPhone(existing.customerPhone).length >= 7 &&
+              normalizedPhone(existing.customerPhone) ===
+                normalizedPhone(candidate.customerPhone)
+          )
+        : undefined;
+    if (ambiguousDuplicate) {
+      exclusions.push({
+        sourceKey: candidate.sourceKey,
+        reason: "possible_cross_source_duplicate",
+      });
+      continue;
+    }
+    seen.add(explicitEconomicKey);
+    accepted.push(candidate);
+  }
+
+  const events = accepted
+    .flatMap(candidate => {
+      const buildingId = buildingIdFor(candidate);
+      if (!buildingId) return [];
+      return [
+        {
+          eventId: candidate.sourceKey,
+          occurredAt: candidate.occurredAt.toISOString(),
+          businessDate: input.businessDate,
+          buildingId,
+          buildingDisplayName:
+            buildingId === "opus_la" ? "OPUS LA" : "Century Park East",
+          orderId: candidate.orderId,
+          customerIdentity: candidate.customerIdentity,
+          customerDisplayName: candidate.customerName,
+          customerPhone: candidate.customerPhone,
+          revenueSource: candidate.source,
+          realOrderValueCents: candidate.cents,
+          sourceEvidence: candidate.sourceEvidence,
+        } satisfies TowerWarsBusinessEvent,
+      ];
+    })
+    .sort(compareTowerWarsEvents);
+  return { events, exclusions };
+}
+
+/** Reality Bridge adapter: only receipt-admitted economic facts can become game candidates. */
+export async function loadTowerWarsEconomicCandidates(
+  tenantId: string,
+  start: Date,
+  end: Date
+): Promise<TowerWarsCandidate[]> {
+  if (!tenantId.trim()) throw new Error("Tower Wars economic reads require established tenant authority");
+  const ledger = await loadPaidOrderLedger({ tenantId, startUtc: start, endExclusiveUtc: end, timeZone: getDashboardTimeZone() });
+  const reconciled = reconcileLedgerSpan(ledger, { start: zonedYmd(start, getDashboardTimeZone()), end: zonedYmd(new Date(end.getTime() - 1), getDashboardTimeZone()) });
+  return reconciled.includedEvents.map(event => ({
+    sourceKey: event.eventKey,
+    occurredAt: event.occurredAt,
+    orderId: event.source === "laundry_butler" && event.orderNumber ? Number(event.orderNumber) : event.orderNumber ?? null,
+    address: event.address ?? null,
+    buildingSlug: event.building ?? null,
+    customerName: event.customerName,
+    customerPhone: event.identity.phone ?? null,
+    customerIdentity: customerIdentityHash(tenantId, {
+      phone: event.identity.phone ?? "", email: event.identity.email ?? null,
+      bldgUserId: event.identity.bldgUserId ?? null, cleancloudCustomerId: event.identity.cleancloudCustomerId ?? null, address: event.address ?? "", buildingSlug: event.building ?? null,
+    }),
+    cents: event.cents,
+    source: event.source === "laundry_butler" ? "stripe" : event.processor === "clearent" ? "clearent_xplorpay" : "cleancloud",
+    authoritative: true,
+    exclusionReason: null,
+    sourceEvidence: { economicEventKey: event.eventKey, authorityReceiptId: event.authorityReceiptId ?? null, stripePaymentIntentId: event.paymentEvidence?.sourceRef ?? null, cleancloudSourceRef: event.cleancloudEvidence?.sourceRef ?? null, buildingEvidenceConflict: buildingConflictNote(event.address,event.building) },
+  }));
+}
+
+function contributors(
+  events: TowerWarsBusinessEvent[],
+  buildingId: TowerWarsBuildingId
+) {
+  const grouped = new Map<
+    string,
+    {
+      customerIdentity: string | null;
+      customerDisplayName: string;
+      customerPhone: string | null;
+      contributedValueCents: number;
+      orderCount: number;
+      events: Array<{
+        eventId: string;
+        orderId: string | number | null;
+        occurredAt: string;
+        valueCents: number;
+      }>;
+    }
+  >();
+  for (const event of events.filter(item => item.buildingId === buildingId)) {
+    const key = event.customerIdentity ?? `unresolved:${event.eventId}`;
+    const entry = grouped.get(key) ?? {
+      customerIdentity: event.customerIdentity,
+      customerDisplayName: event.customerDisplayName ?? "Unresolved customer",
+      customerPhone: event.customerPhone,
+      contributedValueCents: 0,
+      orderCount: 0,
+      events: [],
+    };
+    entry.contributedValueCents += event.realOrderValueCents;
+    entry.orderCount += 1;
+    entry.events.push({
+      eventId: event.eventId,
+      orderId: event.orderId,
+      occurredAt: event.occurredAt,
+      valueCents: event.realOrderValueCents,
+    });
+    grouped.set(key, entry);
+  }
+  return Array.from(grouped.entries())
+    .map(([identityKey, entry]) => ({ identityKey, ...entry }))
+    .sort(
+      (a, b) =>
+        b.contributedValueCents - a.contributedValueCents ||
+        a.identityKey.localeCompare(b.identityKey)
+    );
+}
+
+export async function getTowerWarsToday(input: {
+  tenantId: string;
+  now?: Date;
+}) {
+  const bounds = getBusinessDayWindow(input.now);
+  const season = rivalrySeasonWindow(bounds.businessDate);
+  const candidates = await loadTowerWarsEconomicCandidates(
+      input.tenantId,
+      season.startUtc,
+      bounds.endExclusiveUtc
+    );
+  const compiled: ReturnType<typeof compileAuthoritativeEvents> = { events: [], exclusions: [] };
+  for (const date of Array.from(new Set(candidates.map(c => zonedYmd(c.occurredAt, bounds.timeZone)))).sort()) {
+    const day = compileAuthoritativeEvents({ tenantId: input.tenantId, businessDate: date,
+      candidates: candidates.filter(c => zonedYmd(c.occurredAt, bounds.timeZone) === date) });
+    compiled.events.push(...day.events); compiled.exclusions.push(...day.exclusions);
+  }
+  const state = compileTowerWarsState(compiled.events);
+  const [promises, db] = await Promise.all([
+    listTowerWarsPromises(input.tenantId),
+    getDb(),
+  ]);
+  const sourceBreakdown = (buildingId: TowerWarsBuildingId) =>
+    compiled.events
+      .filter(event => event.buildingId === buildingId)
+      .reduce<
+        Record<string, number>
+      >((totals, event) => ({ ...totals, [event.revenueSource]: (totals[event.revenueSource] ?? 0) + event.realOrderValueCents }), {});
+  return {
+    tenantId: input.tenantId,
+    businessDate: bounds.businessDate,
+    seasonId: season.seasonId,
+    timeZone: bounds.timeZone,
+    window: {
+      startUtc: season.startUtc.toISOString(),
+      endExclusiveUtc: bounds.endExclusiveUtc.toISOString(),
+    },
+    thresholdCents: TOWER_WARS_ATTACK_THRESHOLD_CENTS,
+    evidenceSufficient: Boolean(db),
+    ledger: compiled.events,
+    exclusions: compiled.exclusions,
+    state,
+    sourceBreakdown: {
+      opus_la: sourceBreakdown("opus_la"),
+      century_park_east: sourceBreakdown("century_park_east"),
+    },
+    contributors: {
+      opus_la: contributors(compiled.events, "opus_la"),
+      century_park_east: contributors(compiled.events, "century_park_east"),
+    },
+    promises,
+  };
+}
+
+/** How far back a settlement reads by default. */
+export const TOWER_WARS_SETTLEMENT_HISTORY_DAYS = 180;
+
+/**
+ * Today's match plus the permanent strata underneath it.
+ *
+ * Each business day is compiled SEPARATELY through `compileAuthoritativeEvents`
+ * rather than compiling the whole window at once. That is deliberate: the
+ * cross-source duplicate guard in that function compares candidates without a
+ * date bound, so a single multi-month compile would start flagging a stripe
+ * order and a CleanCloud order with the same amount and phone as duplicates
+ * even when they are weeks apart. Per-day compilation keeps its semantics
+ * exactly as they behave in production today.
+ */
+export async function getTowerWarsSettlement(input: {
+  tenantId: string;
+  now?: Date;
+  historyDays?: number;
+}) {
+  const timeZone = getDashboardTimeZone();
+  const bounds = getBusinessDayWindow(input.now, timeZone);
+  const historyDays = Math.max(
+    1,
+    input.historyDays ?? TOWER_WARS_SETTLEMENT_HISTORY_DAYS
+  );
+  // Permanent facade memory cannot expire at a rolling query cutoff. Load all
+  // canonical evidence through this replay boundary; corrections rebuild it.
+  const startUtc = new Date(0);
+
+  const db = await getDb();
+  if (!db) {
+    return {
+      evidenceSufficient: false,
+      settlement: settleTowerWars({
+        events: [],
+        todayBusinessDate: bounds.businessDate,
+      }),
+      businessDate: bounds.businessDate,
+      timeZone,
+      historyDays,
+      impacts: [],
+    };
+  }
+
+  const candidates = await loadTowerWarsEconomicCandidates(
+    input.tenantId,
+    startUtc,
+    bounds.endExclusiveUtc
+  );
+
+  const byBusinessDate = new Map<string, TowerWarsCandidate[]>();
+  for (const candidate of candidates) {
+    const businessDate = zonedYmd(candidate.occurredAt, timeZone);
+    const bucket = byBusinessDate.get(businessDate);
+    if (bucket) bucket.push(candidate);
+    else byBusinessDate.set(businessDate, [candidate]);
+  }
+
+  const events: TowerWarsBusinessEvent[] = [];
+  for (const [businessDate, dayCandidates] of Array.from(
+    byBusinessDate.entries()
+  )) {
+    events.push(
+      ...compileAuthoritativeEvents({
+        tenantId: input.tenantId,
+        businessDate,
+        candidates: dayCandidates,
+      }).events
+    );
+  }
+
+  const seasons = rivalryHistory(events, bounds.businessDate);
+  if (!input.now) await persistSeasonRevisions(input.tenantId, seasons);
+  const attacks = seasons.flatMap(season => season.state.attacks);
+  const impacts = await persistCanonicalImpacts(input.tenantId, attacks, {
+    persist: !input.now, before: bounds.endExclusiveUtc,
+  });
+
+  return {
+    evidenceSufficient: true,
+    impacts,
+    settlement: settleTowerWars({
+      events,
+      todayBusinessDate: bounds.businessDate,
+    }),
+    businessDate: bounds.businessDate,
+    timeZone,
+    historyDays,
+  };
+}

@@ -6,7 +6,7 @@ import { mysqlTable, varchar } from "drizzle-orm/mysql-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { InsertCleancloudPaidOrder } from "../../../../drizzle/schema";
 import { getDb, resetDbForTesting, setDbForTesting } from "../../../db";
-import { appendGoldlineWorldEvent } from "../../../goldlineWorld/worldEventStore";
+import { appendGoldlineWorldEvent } from "../../../experience/goldline/world/worldEventStore";
 import {
   claimNextEconomicOutbox,
   drainEconomicOutbox,
@@ -132,7 +132,7 @@ describe.skipIf(!DATABASE_URL)("CleanCloud economic outbox — real MySQL", () =
       bigNumberStrings: true,
     });
     await applySqlFile("./schema.sql");
-    await applySqlFile("../../../goldlineWorld/schema.sql");
+    await applySqlFile("../../../platform/persistence/goldlineCompatibilitySchema.sql");
     await pool.query(
       "CREATE TABLE program_a_slice2_domain_commits (id VARCHAR(64) PRIMARY KEY)"
     );

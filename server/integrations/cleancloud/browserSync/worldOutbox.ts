@@ -4,7 +4,7 @@ import { int, json, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-cor
 import type { InsertCleancloudPaidOrder } from "../../../../drizzle/schema";
 import { getDb } from "../../../db";
 import { customerIdentityHash } from "../../../customerAssets/customerIdentity";
-import { appendGoldlineWorldEvent, type AppendGoldlineWorldEvent } from "../../../goldlineWorld/worldEventStore";
+import { appendGoldlineWorldEvent, type AppendGoldlineWorldEvent } from "../../../experience/goldline/world/worldEventStore";
 import {
   admitCleanCloudPaidObservationWith,
   requireCleanCloudTenantId,

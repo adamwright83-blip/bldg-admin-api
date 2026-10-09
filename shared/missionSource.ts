@@ -7,9 +7,9 @@
  * This is a documentation/typing layer over FOUR mission sources that
  * already exist and already work:
  *   - FIELD            → server/field/getFieldMoves.ts (FieldMoveCandidate)
- *   - Cold Call         → server/driverGameWorld/coldCallBurstService.ts (ColdCallTarget)
- *   - Recovery/Rekindle → server/driverGameWorld/driverGameWorldService.ts (DriverGameWorldNode)
- *   - Expansion Scout   → server/driverGameWorld/expansionScoutService.ts (ScoutDiscovery)
+ *   - Cold Call         → server/field/outreach/coldCallBurstService.ts (ColdCallTarget)
+ *   - Recovery/Rekindle → server/experience/goldline/driver/driverGameWorldService.ts (DriverGameWorldNode)
+ *   - Expansion Scout   → server/field/scout/expansionScoutService.ts (ScoutDiscovery)
  *
  * None of those four services are refactored to literally implement
  * MissionSourceAdapter this run — each already has a working, tested,

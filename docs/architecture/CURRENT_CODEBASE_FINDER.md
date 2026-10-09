@@ -32,8 +32,8 @@ Code wins if this file becomes stale.
 | Claire | `server/claire/` |
 | Brain V2 action gateway | `server/claire/brain/actions/gateway.ts` |
 | Brain V2 authority grants | `server/claire/brain/executive/grants.ts` |
-| Goldline world | `server/goldlineWorld/` |
-| Lantern City server reads | `server/lanternCity/` |
+| Goldline world | `server/experience/goldline/world/` |
+| Lantern City server reads | `server/experience/lanternCity/` |
 | Live Lantern City client default | `client/src/components/admin/control-room/LanternCityIslands/` |
 | SaaS tenancy | `server/saas/`, `server/platform/tenancy/tenantIdentity.ts` |
 | HELD procurement | `server/procurement/` |
