@@ -10,7 +10,7 @@ const source = fs.readFileSync(
 
 describe("JOYSTICK public start", () => {
   it("routes a fresh customer through tenant provisioning, not tenant-bound Goldline onboarding", () => {
-    expect(source).toContain('const START_PATH = "/dayforge-onboarding";');
+    expect(source).toContain('const START_PATH = "/joystick-start";');
     expect(source).not.toContain('const START_PATH = "/onboarding";');
   });
 });

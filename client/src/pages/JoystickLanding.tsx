@@ -1,10 +1,18 @@
 /* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
+import { useEffect } from "react";
 import "./joystick-landing.css";
 import { captureProductEvent } from "@/lib/posthog";
 
 const START_PATH = "/joystick-start";
 
 export default function JoystickLanding() {
+  useEffect(() => {
+    captureProductEvent("landing_page_visited", {
+      path: typeof window !== "undefined" ? window.location.pathname : "/joystick",
+      source: "joystick_landing",
+    });
+  }, []);
+
   return (
     <main className="joystick-landing">
       <div
