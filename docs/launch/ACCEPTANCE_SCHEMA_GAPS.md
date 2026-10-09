@@ -8,6 +8,7 @@ The existing numbered DDL already defines the required schema:
 | --- | --- |
 | `drizzle/0027_operations_events.sql` | Operations event table and read indexes |
 | `drizzle/0036_territory_intelligence.sql` | Territory operator profiles, scan sessions, scan results |
+| `drizzle/0038_commercial_mission_field.sql` | Commercial visit outcome fields, field states, checklist and phone handoff tables |
 | `drizzle/0055_sales_intel_source_registry.sql` | Sales source registry, nullable artifact registry column and index |
 | `drizzle/0056_sales_intel_teachings.sql` | Sales teaching corpus |
 
@@ -17,4 +18,4 @@ The production bootstrap explicitly does not replay every numbered migration. Th
 
 The independent acceptance environment can apply these same existing definitions using the strictly guarded `scripts/acceptance-schema-compat.mjs` helper on its own branch. That helper requires an explicit localhost `joystick_real_acceptance` database and cannot apply changes to production. Final launch evidence must disclose this compatibility setup and the held production repair.
 
-Validation: `node --check scripts/migrate.mjs` passed. Real MySQL validation is recorded with the hosted/disposable acceptance run when executed; syntax checking alone is not database execution evidence.
+Validation: `node --check scripts/migrate.mjs` passed. The updated candidate ran `DATABASE_URL=mysql://root:root@127.0.0.1:3418/joystick_schema_acceptance_repair node scripts/migrate.mjs` twice against an independent disposable MySQL database, proving repeat bootstrap. Direct real SQL reads passed for operations, territory, source registry, teaching, checklist, field-state and handoff tables plus all seven 0038 visit fields and artifact `sourceRegistryId`. The disposable database was dropped afterward. These are REAL MYSQL INTEGRATION results, not browser or production deployment evidence.
