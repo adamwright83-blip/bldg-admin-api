@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import type { DayPlanStop } from "@/pages/driver/goldlineDayPlanModel";
+import { recordClaireInteraction } from "@/lib/posthog";
 import "./driver-chapter.css";
 
 export function DriverStopChapter({
@@ -71,7 +72,7 @@ export function DriverStopChapter({
       ? "I have physically collected this customer's order."
       : "I have physically handed this order to the customer or their approved location."
     : "I have completed this task in the real world.";
-  const cityUrl = `https://admin.bldg.chat/growth/lantern-city${stop.physicalEntityId ? `?entity=${encodeURIComponent(stop.physicalEntityId)}` : ""}`;
+  const cityUrl = `/growth/lantern-city${stop.physicalEntityId ? `?entity=${encodeURIComponent(stop.physicalEntityId)}` : ""}`;
   async function callClaireForMission() {
     if (
       action?.type !== "commercial" ||
@@ -80,6 +81,7 @@ export function DriverStopChapter({
     )
       return;
     setClaireCallState("calling");
+    recordClaireInteraction({ source: "stop_chapter", missionId: action.missionId });
     setClaireCallError(null);
     try {
       await onCallClaireForMission(action.missionId);

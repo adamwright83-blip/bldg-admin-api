@@ -11,10 +11,10 @@
 
 | ID | Severity | Area | Issue Description | Customer Impact | Evidence / Reproduction | Acceptance Criteria | PR / Commit | Status |
 |---|---|---|---|---|---|---|---|---|
-| ISS-001 | P0 | Landing Routing | Visiting `/` on standard hosts renders legacy concierge (`HeldLanding`) instead of JOYSTICK | New visitors to the domain see laundry concierge and never see JOYSTICK or start flow | `client/src/App.tsx` routes non-driver, non-vendor to `HeldLandingRoute` | Visiting `/` on non-held/non-butler host renders `JoystickLanding` | PR #527 | In Progress |
-| ISS-002 | P1 | Test Suite | `client/src/pages/JoystickLanding.test.ts` fails asserting legacy `START_PATH = "/dayforge-onboarding"` | Vitest suite fails in CI/local runs | `pnpm test client/src/pages/JoystickLanding.test.ts` exits with code 1 | Test asserts `START_PATH = "/joystick-start"` and passes cleanly | PR #527 | In Progress |
-| ISS-003 | P1 | Onboarding / First Mission | `FirstMissionDriver.tsx` and `GoldlineGameNav.tsx` contain hardcoded `https://admin.bldg.chat/growth/lantern-city` | Trial customers on any other host/domain lose authentication and are stranded on external host | `FirstMissionDriver.tsx` lines 29, 40 and `GoldlineGameNav.tsx` line 4 | Origin-relative path `/growth/lantern-city` used everywhere | PR #527 | In Progress |
-| ISS-004 | P2 | Telemetry | Missing key PostHog launch events (`landing_page_visited`, `first_mission_started`, `returning_session`) | Cannot track trial funnel conversion or activation drop-off | Audit of `captureProductEvent` calls in client | Key lifecycle events instrumented with tenant attribution | PR #528 | Scheduled |
+| ISS-001 | P0 | Landing Routing | Visiting `/` on standard hosts renders legacy concierge (`HeldLanding`) instead of JOYSTICK | New visitors to the domain see laundry concierge and never see JOYSTICK or start flow | `client/src/App.tsx` routes non-driver, non-vendor to `HeldLandingRoute` | Visiting `/` on non-held/non-butler host renders `JoystickLanding` | PR #527 (`e8f2dfc9`) | RESOLVED |
+| ISS-002 | P1 | Test Suite | `client/src/pages/JoystickLanding.test.ts` fails asserting legacy `START_PATH = "/dayforge-onboarding"` | Vitest suite fails in CI/local runs | `pnpm test client/src/pages/JoystickLanding.test.ts` exits with code 1 | Test asserts `START_PATH = "/joystick-start"` and passes cleanly | PR #527 (`e8f2dfc9`) | RESOLVED |
+| ISS-003 | P1 | Onboarding / First Mission | `FirstMissionDriver.tsx` and `GoldlineGameNav.tsx` contain hardcoded `https://admin.bldg.chat/growth/lantern-city` | Trial customers on any other host/domain lose authentication and are stranded on external host | `FirstMissionDriver.tsx` lines 29, 40 and `GoldlineGameNav.tsx` line 4 | Origin-relative path `/growth/lantern-city` used everywhere | PR #527 (`e8f2dfc9`) | RESOLVED |
+| ISS-004 | P2 | Telemetry | Missing key PostHog launch events (`landing_page_visited`, `first_mission_started`, `returning_session`, etc.) | Cannot track trial funnel conversion or activation drop-off | Audit of `captureProductEvent` calls in client | Key lifecycle events instrumented with tenant attribution | PR #528 | In Progress |
 | ISS-005 | P1 | First Action Experience | Journey from onboarding reveal to first real-world action and Day Line reflection needs seamless feedback | Trial customer needs immediate clarity on their first objective and earn progress without third-party integration | Audit of `/play` and `/growth/lantern-city` after acquisition | First action immediately visible, executable, updates Day Line and rewards progress | PR #529 | Scheduled |
 
 ---
@@ -38,4 +38,5 @@ All 6 tests must pass before launch readiness signoff.
 
 | PR # | Branch | Summary | Merged SHA | Status |
 |---|---|---|---|---|
-| #527 | `fix/launch-landing-routing` | Fix public landing route, JoystickLanding vitest, and origin-relative links | TBD | In Progress |
+| #527 | `fix/launch-landing-routing` | Fix public landing route, JoystickLanding vitest, and origin-relative links | `e8f2dfc9` | MERGED |
+| #528 | `feat/launch-analytics-posthog` | Complete PostHog lifecycle telemetry: onboarding, mission start, Claire calls, returning session | TBD | In Progress |

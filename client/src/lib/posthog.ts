@@ -139,6 +139,17 @@ export function captureProductEvent(
   });
 }
 
+export function recordClaireInteraction(properties?: Record<string, unknown>): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const storageKey = "joystick_claire_interacted";
+  const hasInteracted = window.localStorage.getItem(storageKey);
+  if (!hasInteracted) {
+    window.localStorage.setItem(storageKey, "true");
+    captureProductEvent("first_claire_interaction", properties);
+  }
+  captureProductEvent("claire_interaction", properties);
+}
+
 export function captureClientException(
   error: unknown,
   properties?: Record<string, string>
