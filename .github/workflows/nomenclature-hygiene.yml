@@ -28,3 +28,6 @@ jobs:
         env:
           DOMAIN_BOUNDARY_RATCHET_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/check-domain-boundaries.mjs
+      - name: Verify domain-boundary ratchet tests
+        run: node --test scripts/check-domain-boundaries.test.mjs
+
