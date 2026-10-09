@@ -4,17 +4,17 @@ import {
   dayDirectorProcessingLocations,
   dayDirectorPromptStates,
   towerWarsPromises,
-} from "../../drizzle/schema";
+} from "../../../drizzle/schema";
 
 const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
-vi.mock("../db", () => ({ getDb: mocks.getDb }));
+vi.mock("../../db", () => ({ getDb: mocks.getDb }));
 
-import { dayDirectorActorId } from "../planning/dayDirector/dayDirectorActor";
+import { dayDirectorActorId } from "./dayDirectorActor";
 import {
   completeDayDirectorCommitment,
   getDayDirectorState,
-} from "../planning/dayDirector/dayDirectorService";
-import { activateTowerWarsPromise } from "./towerWarsService";
+} from "./dayDirectorService";
+import { activateTowerWarsPromise } from "./towerWarsPromiseService";
 
 type Row = Record<string, any>;
 

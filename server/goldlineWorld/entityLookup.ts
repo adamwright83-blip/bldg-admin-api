@@ -10,7 +10,7 @@
 import { and, eq } from "drizzle-orm";
 import { physicalEntities, physicalEntityAliases, physicalEntityBindings } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { normalizePhysicalAlias, physicalAliasesMatch } from "./identityResolver";
+import { normalizePhysicalAlias, physicalAliasesMatch } from "../geography/physicalIdentityResolver";
 
 export async function findPhysicalEntityIdByAddress(input: {
   tenantId: string;

@@ -7,7 +7,7 @@ import {
   physicalAliasesMatch,
   resolvePhysicalIdentity,
   type PhysicalIdentityCandidate,
-} from "./identityResolver";
+} from "../geography/physicalIdentityResolver";
 
 const louise: PhysicalIdentityCandidate = {
   physicalEntityId: "building-louise",
@@ -109,7 +109,7 @@ describe("one building keeps one save file", () => {
 
 describe("a second journal about the same place cannot fork the save file", () => {
   const forge = readFileSync(
-    join(__dirname, "../worldForge/worldForgeService.ts"),
+    join(__dirname, "../field/propertyDiscovery/towerForgeWorkflow.ts"),
     "utf8"
   );
 

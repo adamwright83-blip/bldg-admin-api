@@ -7,7 +7,7 @@ import {
 import {
   DeterministicTestTowerImageProvider,
   defaultTowerImageProvider,
-} from "../worldForge/towerImageProvider";
+} from "../experience/goldline/builder/towerImageProvider";
 import { extractFieldJournalDeterministically } from "./deterministicJournalExtraction";
 
 const original = {

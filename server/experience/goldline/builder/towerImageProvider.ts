@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { goldlineProofModeEnabled } from "../_core/proofMode";
+import { goldlineProofModeEnabled } from "../../../_core/proofMode";
 
 export type TowerImageRequest = {
   physicalEntityId: string;

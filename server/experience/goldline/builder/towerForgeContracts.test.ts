@@ -1,5 +1,6 @@
+import { selectPlaceCandidate } from "../../../geography/propertyDiscoveryContracts";
 import { describe, expect, it } from "vitest";
-import { canTransitionTowerForge, generateWeaponCandidates, selectPlaceCandidate } from "./worldForgeContracts";
+import { canTransitionTowerForge, generateWeaponCandidates } from "../../../../shared/towerForgeContracts";
 
 const place = (id: string, name: string, address: string) => ({
   provider: "google_places" as const,

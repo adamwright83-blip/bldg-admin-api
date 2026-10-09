@@ -6,7 +6,7 @@ import { getDb } from "../db";
 import { listLegacyDayforgeToday } from "../legacyDayforgeToday/legacyDayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
-import { listForgeJobs } from "../worldForge/worldForgeService";
+import { listForgeJobs } from "./propertyDiscovery/towerForgeWorkflow";
 import { listFuturePressure } from "../goldlineWorld/futurePressureService";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 

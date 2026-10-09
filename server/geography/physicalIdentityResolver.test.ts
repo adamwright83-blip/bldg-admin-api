@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePhysicalIdentity, type PhysicalIdentityCandidate } from "./identityResolver";
+import { resolvePhysicalIdentity, type PhysicalIdentityCandidate } from "./physicalIdentityResolver";
 
 const candidates: PhysicalIdentityCandidate[] = [
   {
