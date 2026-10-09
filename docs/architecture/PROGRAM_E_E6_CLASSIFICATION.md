@@ -1,3 +1,4 @@
+<!-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. -->
 # Program E: Slice E6 Classification — Legacy DayForge Quarantine
 
 This document classifies the eight historical `legacyDayforge*` roots in `server/` before consolidation into `server/legacy/dayforge/`.
