@@ -204,7 +204,7 @@ describe("real MySQL multi-row SQL safety and predicate grouping", () => {
       .toSQL();
 
     // Verify SQL strictly uses <=> and has no unbounded "IS NULL OR" fragment
-    expect(compiled.sql).toContain("`tenant_id` <=> ?");
+    expect(compiled.sql).toContain("`orders`.`tenantId` <=> ?");
     expect(compiled.sql).not.toContain("IS NULL OR");
 
     // Execute guarded update targeting targetNullId with expectedTenantId: null
