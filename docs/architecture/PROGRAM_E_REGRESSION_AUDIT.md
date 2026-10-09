@@ -148,6 +148,20 @@ The actual hosted pre-E legacy [run 37844902234](https://github.com/adamwright83
 
 Hosted first-head run evidence: worker [37869436846](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436846), Daphne [37869436817](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436817), and nomenclature [37869436869](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436869) pass. Sales [37869436814](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869436814) fails only the matched baseline CSV assertion. The later mobile [37869702515](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37869702515) log confirms the identical baseline bundle failure. These run SHAs precede the final audit commit; final-head checks still must be reviewed. Superseded fast and legacy runs were cancelled by workflow concurrency, never represented as passing.
 
+## Final-head infrastructure findings
+
+On repair head `bf18244bd435329872082fbee8097b50f880bfb9`, [fast run 37870378159](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37870378159) had:
+
+- `fast-contracts`, job 113627107050, 01:34:54–01:39:56 UTC, cancelled during clean production migrations after all preceding contract groups passed.
+- `fast-smoke-world`, job 113627107439, 01:35:10–01:40:30 UTC, cancelled during the browser micro gate.
+- Both check-run annotation APIs explicitly report: “The job has exceeded the maximum execution time of 5m0s”. This is **INFRASTRUCTURE**, not a passing or failed assertion. The five-minute settings predate Program E. Remaining stages remain unverified until rerun.
+
+Necessary validation infrastructure repair: allow 20 minutes for the large fast-contracts chain and 15 minutes for the three-spec world browser chain. Campaign and territory budgets stay five minutes. No test, step, expectation or architecture guard is removed or relaxed.
+
+The final legacy [run 37870378116](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37870378116) reproduces exactly the same 20 protected baseline failures, with 2328 passes across 210 files. Campaign/territory browser checks, worker, Daphne, nomenclature and all SaaS jobs pass on that head. Sales and mobile retain only their independently reproduced baseline exceptions.
+
+Matched native-domain MySQL: the eight relocated Orders/Payment/Commercial files pass all 21 assertions. Including `server/orders.integration.test.ts` and `server/ordersStatusTransition.integration.test.ts` yields identical 10-file results on both revisions: 24 pass / 3 fail. The three additional baseline fixtures omit tenant authority (two) or matching Payment admission (one); business admission rules remain intact.
+
 ## Remaining gate dependencies and unavailable portions
 
 - Final-head hosted CI, repair/audit merge, latest-main fetch and exact recovery SHA must still be verified.
