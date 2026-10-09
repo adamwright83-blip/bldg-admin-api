@@ -17,6 +17,12 @@ The audit inspected variable names and presence only; it did not print secret va
 
 This establishes absence from the inspected acceptance configuration. It does not assert that no credentials exist in unrelated external services. Unrelated payment credentials must not be reused.
 
+## Railway scope check
+
+Read-only Railway project/service discovery found two accessible projects. `dev-new` has only a production environment and no services. The locally linked `supportive-creation` project has only a production environment, containing `bldg-admin-api` from this repository, infrastructure, temporary examination/report services, and the JOYSTICK retention cron. None is an established isolated JOYSTICK SaaS billing test application/environment.
+
+Production and unrelated temporary-service variable values were deliberately not inspected or reused. Their Stripe configuration and account ownership remain **UNINSPECTED**, not proven absent. A production service or `mysql-codex-test` database name does not establish a safe JOYSTICK Stripe test account. No eligible external test configuration was discovered, so the exact blocker remains valid JOYSTICK-owned test credentials and test-price/webhook setup in the acceptance environment. This finding must not be generalized to “all external credentials are absent.” No Railway configuration was changed or service restarted.
+
 ## Exact requirements to unblock
 
 1. `DAYFORGE_BILLING_STRIPE_SECRET_KEY`: a valid Stripe **test-mode** secret key for a verified JOYSTICK-owned account, with account identity established before any provider operation. Never use Laundry Farm's account.
@@ -38,4 +44,4 @@ The suite refuses a database whose name does not contain `billing_lifecycle`. It
 
 The injected `fakeStripe` adapter fabricates Checkout, subscription retrieval, and signature verification. Its configurable fixture deliberately uses a nine-day trial and synthetic prices. Consequently, even a passing run is **REAL MYSQL INTEGRATION PASSED**, not proof of a seven-day/$49 provider plan, actual card-on-file behavior, real webhook signatures, or absence of early Stripe charges.
 
-The program's final evidence record must attach the actual hosted run URL, PR, and exact tested SHA. Until that run is observed, this document records available executable coverage and does not claim it passed. Provider acceptance remains BLOCKED regardless of the database integration result.
+Hosted execution: [launch run 37971466617](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/37971466617), PR #534, exact source SHA `0b1556b5937fc76b41613b3a3faae239a512a2d1`. Billing lifecycle: **REAL MYSQL INTEGRATION PASSED**, 2 tests. Provider acceptance remains **BLOCKED** regardless of the database integration result.
