@@ -35,12 +35,12 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **Platform Authority & Execution** | Durable outbox, action execution gates, leases, retries, and authority receipts. | `server/platform/authority/`, `server/platform/execution/` |
 | **Integrations** | External provider transport: CleanCloud (operational evidence), Stripe (card processing), Twilio (SMS/voice). | `server/integrations/cleancloud/`, `server/twilioPlatform/` |
 | **Claire** | Operator-facing conversational intelligence, chief-of-staff briefing, call handling, and prompt generation. | `server/claire/` |
-| **Daphne** | Operator preference learning, explicit correction ledger, causal model, and consent evidence. | `server/daphne/` |
+| **Daphne** | Operator preference learning, explicit correction ledger, causal model, and consent evidence. | `server/agents/daphne/` |
 | **President** | Autonomous executive improvement, source-backed reasoning, and project proposals. Reports to Adam. | `server/president/` |
 | **Mitch** | Autonomous game producer and game development agent. Managed directly by Adam (President does not manage Mitch). | `server/mitch/` |
-| **Day Line** | Operator's prioritized daily schedule, commitments, and active work agenda. | `server/dayDirector/`, `server/goldline/dayline/` |
-| **Mission Director** | Sole deterministic ranker for candidate operational work and sales missions. | `server/missionDirector/` |
-| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/experience/goldline/world/`, `server/experience/goldline/driver/`, `server/field/outreach/`, `server/field/scout/`, `server/companions/` |
+| **Day Line** | Operator's prioritized daily schedule, commitments, and active work agenda. | `server/planning/dayDirector/`, `server/planning/dayline/` |
+| **Mission Director** | Sole deterministic ranker for candidate operational work and sales missions. | `server/planning/missionDirector/` |
+| **Experience / Goldline** | Game world state, chapter progression, fiction packs, driver game progression, and companion interactions. | `server/experience/goldline/world/`, `server/experience/driverGameWorld/`, `server/field/targeting/`, `server/field/journal/`, `server/companions/` |
 | **Lantern City** | Visual interactive city map composing authoritative business projections onto 2.5D visual landmarks. | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` |
 | **Tower Wars** | Game mode where towers represent economic activity, consuming canonical admitted payment facts. | `server/experience/goldline/modes/towerWars/` |
 | **Legacy Quarantine** | Quarantined historical compatibility code and database migration fixtures from DayForge. | `server/legacy/dayforge/` |
@@ -97,9 +97,9 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Stripe webhook ingestion | `server/intake-stripe.ts` | Provider transport only; domain admission must cross Payment boundary. |
 | CleanCloud sync or customer assimilation | `server/integrations/cleancloud/` | CleanCloud is external evidence; do not treat as native payment. |
 | Commercial account conversion or pipeline stages | `server/domains/commercial/` | Commercial `won` is NOT paid revenue. |
-| Deterministic daily mission ranking | `server/missionDirector/` | Sole deterministic ranker; Persistent Operator proposes, Mission Director ranks. |
+| Deterministic daily mission ranking | `server/planning/missionDirector/` | Sole deterministic ranker; Persistent Operator proposes, Mission Director ranks. |
 | Claire conversation rules or prompts | `server/claire/turn/`, `server/claire/proactive/` | Check PR #495 holds before modifying active files! Claire must not bypass domain ports. |
-| Daphne preference learning or correction store | `server/daphne/` | Check PR #495 holds before modifying active files! Daphne cannot fabricate business truth. |
+| Daphne preference learning or correction store | `server/agents/daphne/` | Check PR #495 holds before modifying active files! Daphne cannot fabricate business truth. |
 | President executive proposals | `server/president/` | Preserve approval gates; President does not direct Mitch. |
 | Mitch game producer logic | `server/mitch/` | Managed directly by Adam; do not conflate with shared builder tools. |
 | Lantern City visual map & building display | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |

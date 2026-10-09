@@ -13,19 +13,20 @@
 
 Programs A–D are certified on production source main `85415cb7292e6803092cb5fe835f4f0325f7907c`, after C20 (#498). The final documentation/test checkpoint records exact-head and post-merge proof. Read [Program D certification](./PROGRAM_D_CERTIFICATION.md) and its classified inventory for the actual scope, explicit historical ownership/amount holds, protected heads and four proven baseline test failures. This is architecture certification, not an all-tests-green or business-release claim.
 
-Program E remains the separately scoped post-convergence roadmap; it was not started by this campaign. Older snapshot/remaining-work sections below are historical context and must be reconciled against the certification report and live main before new work.
+## Program E execution update — 2026-10-08
 
-## Snapshot
+Program E (LLM Legibility, Physical Repository Reorganization, and Cold-Model Certification) is actively executing:
+- **E0 (Classification & Protected Work Register):** MERGED (#501)
+- **E1 (Canonical Root Narrative ARCHITECTURE.md & Subsystem Contracts):** MERGED (#502)
+- **E2 (Core Business Domains: Payment, Orders, Commercial):** MERGED (#505, #506, #508)
+- **E3 (Platform Authority, Tenancy, Execution, Integrations):** MERGED (#507, #509, #510)
+- **E4 (Planning & Agents Subsystems):** MERGED (#511, #512, #514)
+- **E5 (Experience & Game Relocation: Orders, World Split, Geography/Planning, Modes):** MERGED (#515, #516, #517, #518)
+- **E6 (Legacy DayForge Quarantine Consolidation into `server/legacy/dayforge/`):** MERGED (#519)
+- **E7 (Architecture Documentation Audit & Ratchet Synchronization):** IN PROGRESS (#520)
+- **E8 (Independent Cold-Model Certification):** PENDING
 
-Snapshot main when this document was created:
-
-`b146df4c356de982d44c158d75fbbe65b6daf25e`
-
-Snapshot commit:
-
-`Program B / Slice 5 — Tower Wars economic reality boundary (#473)`
-
-Main may have advanced. Do not assume this SHA is still current.
+Current verified main: `835200c2aae3d729c13b30fe9d9dcfd6e15d862d` (post-PR #519).
 
 Primary supporting audit docs:
 

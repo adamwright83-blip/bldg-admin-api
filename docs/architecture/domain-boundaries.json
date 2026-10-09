@@ -98,7 +98,7 @@
       "paths": [
         "server/saas",
         "server/platform/tenancy",
-        "server/joystick/tenantIdentity.ts"
+        "server/platform/tenancy/tenantIdentity.ts"
       ]
     },
     {
@@ -113,6 +113,12 @@
       "paths": [
         "server/president",
         "server/mitch"
+      ]
+    },
+    {
+      "domain": "legacy",
+      "paths": [
+        "server/legacy/dayforge"
       ]
     }
   ],
@@ -328,7 +334,7 @@
         "Automated inference without operator confirmation",
         "Claire unverified generation"
       ],
-      "legacyCompatibilityExceptions": "Protected under PR #495 active workstream."
+      "legacyCompatibilityExceptions": "PR #495 merged into main; explicit correction ledger and consent evidence active in server/agents/daphne/."
     }
   ]
 }
