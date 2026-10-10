@@ -5,7 +5,7 @@ import { daphneObservations, daphneGoals } from "../../../drizzle/schema";
 import { normalizeDaphneObservationInput as normalizeDaphneObservation } from "./observationStore";
 import { createDaphneGoal, setDaphneMetaPreference } from "./goalsPreferences";
 import { deleteDaphneV2UserData, exportDaphneV2UserData } from "./privacy";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const describeMysql=process.env.DATABASE_URL?describe:describe.skip;
 describeMysql("Daphne complete privacy history",()=>{
@@ -42,5 +42,26 @@ describeMysql("Daphne complete privacy history",()=>{
   expect(erased.canonicalHistory.metaPreferences).toEqual([]);
   expect(erased.canonicalHistory.goals).toEqual([]);
   expect((await exportDaphneV2UserData({...scope,canonicalOperatorId:"b"})).canonicalHistory.observations).toHaveLength(1);
+ });
+ it("rolls back the whole erasure when a later delete fails",async()=>{
+  const db=await getDb(); if(!db) throw new Error("No disposable test database");
+  const row=normalizeDaphneObservation({...scope,actorType:"user",observationKind:"user_statement",
+   evidenceChannel:"stated",sourceType:"privacy_certification",sourceReference:"rollback",
+   occurredAt:new Date(),idempotencyKey:"rollback"});
+  await db.insert(daphneObservations).values(row);
+  await setDaphneMetaPreference({...scope,preferenceKey:"response_detail",value:0.2,sourceObservationId:row.id});
+  // The identifier and scope literal are generated exclusively from UUIDs.
+  const trigger=`daphne_erase_${randomUUID().replaceAll("-","")}`;
+  await db.execute(sql.raw(`CREATE TRIGGER ${trigger} BEFORE DELETE ON daphne_observations
+   FOR EACH ROW BEGIN IF OLD.tenantId = '${tenantId}' THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'certification delete failure'; END IF; END`));
+  try {
+   await expect(deleteDaphneV2UserData(scope)).rejects.toThrow();
+   const exported=await exportDaphneV2UserData(scope);
+   expect(exported.canonicalHistory.observations).toHaveLength(1);
+   expect(exported.canonicalHistory.metaPreferences).toHaveLength(1);
+  } finally {
+   await db.execute(sql.raw(`DROP TRIGGER ${trigger}`));
+  }
  });
 });
