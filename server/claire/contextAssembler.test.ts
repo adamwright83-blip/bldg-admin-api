@@ -16,6 +16,12 @@ vi.mock("../commercialMissions/commercialMissionFieldService", () => ({
 vi.mock("../missionSalesBrief/missionSalesBriefService", () => ({
   ensureCurrentMissionSalesBrief: mocks.ensureCurrentMissionSalesBrief,
 }));
+// Keep the test deterministic without querying an unmigrated tenant registry.
+vi.mock("../saas/tenantIdentityService", () => ({
+  loadTenantBusinessIdentity: async () => ({
+    businessName: "Fixture Laundry", brandName: "Fixture Laundry",
+  }),
+}));
 vi.mock("./macroGoalService", () => ({ getActiveMacroGoal: mocks.getActiveMacroGoal }));
 vi.mock("./campaignAwareness", () => ({ getClaireCampaignSummary: mocks.getClaireCampaignSummary }));
 
