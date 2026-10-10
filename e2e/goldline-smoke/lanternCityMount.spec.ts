@@ -40,11 +40,13 @@ test.describe("Lantern City V6 route and retained workflows", () => {
         };
       };
       return {
-        geography: await summary("geographicTruth.atlas"),
+        geography: await summary("geographicTruth.myAtlas"),
         territories: await summary("goldlineWorld.territories"),
       };
     });
     console.log("[Lantern City proof-data availability]", JSON.stringify(proof));
+    expect(proof.geography.status, "tenant-scoped atlas must be authorized").toBe(200);
+    expect(proof.territories.status, "tenant-scoped territories must be authorized").toBe(200);
 
     await expect
       .poll(() =>
