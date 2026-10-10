@@ -1,15 +1,15 @@
-import { recordDaphneObservation } from "./observationStore";
+import { randomUUID } from "node:crypto";
+import { getDaphneObservationsByIds, recordDaphneObservation, type DaphneObservationRecord } from "./observationStore";
 import {
-  listDaphneEpistemicClaims,
+  getDaphneEpistemicClaimById,
   recordDaphneEpistemicClaim,
   type DaphneEpistemicClaimRecord,
 } from "./epistemicStore";
-import { listDaphneObservations } from "./observationStore";
 import { recordDaphneMetricEvent } from "./metrics";
 
 export type DaphneClaimInspection = {
   claim: DaphneEpistemicClaimRecord;
-  sourceObservations: Awaited<ReturnType<typeof listDaphneObservations>>;
+  sourceObservations: DaphneObservationRecord[];
   explanation: {
     claimType: string;
     epistemicStatus: string;
@@ -22,19 +22,17 @@ export type DaphneClaimInspection = {
 };
 
 async function requireClaim(input:{tenantId:string;canonicalOperatorId:string;claimId:string}):Promise<DaphneEpistemicClaimRecord>{
-  const claims=await listDaphneEpistemicClaims({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500});
-  const claim=claims.find(c=>c.id===input.claimId);
+  const claim=await getDaphneEpistemicClaimById(input);
   if(!claim) throw new Error("Daphne claim not found");
   return claim;
 }
 
 export async function inspectDaphneClaim(input:{tenantId:string;canonicalOperatorId:string;claimId:string}):Promise<DaphneClaimInspection>{
   const claim=await requireClaim(input);
-  const observations=await listDaphneObservations({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500});
-  const source=new Set(claim.sourceObservationIds);
+  const sourceObservations=await getDaphneObservationsByIds({...input,observationIds:claim.sourceObservationIds});
   return {
     claim,
-    sourceObservations:observations.filter(o=>source.has(o.id)),
+    sourceObservations,
     explanation:{
       claimType:claim.claimType,epistemicStatus:claim.epistemicStatus,causalEvidenceStatus:claim.causalEvidenceStatus,
       evidenceCount:claim.sourceObservationIds.length+claim.supportingEvidence.length,counterEvidenceCount:claim.counterEvidence.length,
@@ -54,7 +52,7 @@ async function userDisposition(input:{
    actorType:"user",actorId:input.actorId,observationKind:"correction",evidenceChannel:"stated",verificationStatus:"attested",
    sourceType:"daphne_inspector",sourceReference:`claim:${old.id}`,occurredAt:now,
    payload:{claimId:old.id,disposition:input.kind,correctedClaim:input.correctedClaim??null},
-   idempotencyKey:`claim-disposition:${old.id}:${input.kind}:${now.toISOString()}`
+   idempotencyKey:`claim-disposition:${old.id}:${input.kind}:${randomUUID()}`
  });
  const result=await recordDaphneEpistemicClaim({
    tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:old.agentId,
