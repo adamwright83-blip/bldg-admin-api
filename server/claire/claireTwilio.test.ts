@@ -89,7 +89,7 @@ describe("Daphne release-safety: slow consolidation cannot delay Twilio speech",
     const twilio = readFileSync("server/claire/claireTwilio.ts", "utf8");
     const claireTurn = readFileSync("server/claire/turn/claireTurn.ts", "utf8");
     for (const source of [twilio, claireTurn]) {
-      expect(source).not.toMatch(/\\brunDaphneConsolidationBatch\\s*\\(/);
+      expect(source).not.toMatch(/\brunDaphneConsolidationBatch\s*\(/);
       expect(source).toContain("await ingestDaphneConversation({");
     }
     expect(twilio).toContain("const twiml = await withinBudget(job, TURN_BUDGET_MS)");
