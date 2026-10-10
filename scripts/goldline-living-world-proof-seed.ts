@@ -33,8 +33,8 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "../server/db";
 import {
-  getGeographicTruth,
   normalizeSourceAddress,
+  syncGeographicEntities,
 } from "../server/geography/geographicTruthService";
 import { stableTerritoryKey } from "../shared/goldlineTerritories";
 
@@ -364,11 +364,11 @@ async function seed() {
   );
 
   /**
-   * The customer's geographic row is created by the app's own identity sync
-   * rather than by guessing its key here, then given fixture coordinates. That
-   * way this fixture cannot drift from how real customers are identified.
+   * Reconcile through the canonical entity-location WRITER before assigning
+   * test-only coordinates. getGeographicTruth is intentionally read-only and
+   * must never manufacture entities during a customer atlas read.
    */
-  await getGeographicTruth({ tenantId: TENANT });
+  await syncGeographicEntities(TENANT);
   await db
     .update(entityLocations)
     .set({
