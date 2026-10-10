@@ -497,3 +497,43 @@ No release gates are weakened. Existing operator-consented
 Real phone acceptance remains BLOCKED until the complete stack reaches
 production through a lawful release and human calls generate durable receipts.
 Expanded learned behavioral selection is BLOCKED — OPERATOR APPROVAL REQUIRED.
+
+## October 10, 2026 — Repaired Release Baseline and Daphne Stack Rebase
+
+PR #549 (`fix(release): repair baseline Claire, world and CleanCloud checks`)
+was merged into `main` with squash commit
+`671e8514bec817581901deed1084dfee245ea376`.
+The legacy-compatibility, Fast Goldline world smoke, Daphne acceptance,
+CleanCloud sales-truth, and SaaS schema release workflows passed on that
+baseline before the merge; the separate mobile regression suite was also
+running at merge time and must be independently checked.
+
+All five Daphne PR source trees were rebuilt on the repaired `main` without
+altering their exact changed-file blobs, in original stack order:
+
+| PR | Rebasing head before this docs update | Parent |
+| --- | --- | --- |
+| #541 | `b1fdf2688cc37b1e9341246c4e2744cb566a8aab` | main `671e8514` |
+| #542 | `c9caa6cfcce5f024316943d42a6b7433655467a5` | #541 |
+| #543 | `0f74e79c7dd8a6fe29888b49a47f45441d2d983e` | #542 |
+| #544 | `ef993ba28a8a863b57ea794831ddbc5de797bc9f` | #543 |
+| #545 | `1d352e9ecf8b1537ba1ae4d5fd87436fc7a7644e` | #544 |
+
+The old Daphne #545 and new #545 full source trees were independently
+compared across 5,178 tracked file blobs: the **only 16 differences** are
+the precise files changed by merged PR #549. All Daphne source and test
+blobs are preserved. The original branch heads were saved in
+`backup/daphne-pr{541,542,543,544,545}-pre-baseline-20261010`
+before ref updates. Original #535, payments admission, tenant authorization,
+President, Mitch and `scripts/migrate.mjs` were not edited.
+
+**Release safeguards**: the new ingestion and consolidation switches
+(`DAPHNE_V2_CONVERSATION_INGESTION_ENABLED` and
+`DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED`) remain independently default-off.
+Neither is configured in the Railway production service. The
+`DAPHNE_V2_CLAIRE_ENABLED` flag does not activate either new path.
+
+This entry records a **CODE COMPLETE / NOT DEPLOYED** pre-release
+checkpoint, not LIVE ACCEPTED. Verify new CI on the rebased PR heads,
+merge in order through all required checks, confirm the final production
+SHA, and then run real phone calls with durable receipts.
