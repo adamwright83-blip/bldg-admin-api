@@ -11,6 +11,7 @@ import {
   type OperatorAdaptationDecision,
 } from "./adaptationContract";
 import type { DaphneAdaptationUseReceipt } from "./adaptationReceipts";
+import { loadDaphneMetaPreferences, daphneAdaptationAllowed } from "../daphne/goalsPreferences";
 
 export type OperatorRepresentativeAdaptationPolicy = {
   enabled: boolean;
@@ -109,6 +110,9 @@ export async function loadOperatorAdaptationDecisionForUser(input: {
     subsystem: "daphne_stage3b",
   });
   if (!resolution.ok) return null;
+  if(!daphneAdaptationAllowed(await loadDaphneMetaPreferences({
+    tenantId:input.tenantId,canonicalOperatorId:resolution.identity.canonicalOperatorId,
+  }))) return null;
   const directives = await listActiveOperatorRepresentativeDirectives({
     tenantId: input.tenantId,
     canonicalOperatorId: resolution.identity.canonicalOperatorId,

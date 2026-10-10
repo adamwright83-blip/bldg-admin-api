@@ -33,7 +33,7 @@ export async function buildDaphneV2OperatorCard(input:{
  const asOf=input.asOf??new Date();
  const [observations,claims,goals,metaPreferences,interventions,outcomes]=await Promise.all([
   listDaphneObservations({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500}),
-  listDaphneEpistemicClaims({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500}),
+  listDaphneEpistemicClaims({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500,excludeConsolidationReceipts:true}),
   listActiveDaphneGoals({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId}),
   loadDaphneMetaPreferences({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId}),
   listDaphneInterventions({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500}),
@@ -43,7 +43,7 @@ export async function buildDaphneV2OperatorCard(input:{
   o.tenantId===input.tenantId && o.canonicalOperatorId===input.canonicalOperatorId &&
   (o.agentId===null || o.agentId===input.agentId) &&
   ["verified","attested"].includes(o.verificationStatus));
- const currentClaims=resolveDaphneCurrentClaims({...input,claims,asOf});
+ const currentClaims=resolveDaphneCurrentClaims({...input,claims:claims.filter(c=>c.scope?.purpose!=="consolidation_receipt"),asOf});
  const state=deriveDaphneFastState({observations:scopedObservations,asOf});
  const context=deriveDaphneContext({observations:scopedObservations,asOf});
  const relationship=deriveDaphneRelationship({observations:scopedObservations,agentId:input.agentId,asOf});

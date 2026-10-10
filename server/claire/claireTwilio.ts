@@ -55,6 +55,9 @@ import {
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
+import { ingestDaphneConversation } from "../agents/daphne/conversationIngestion";
+import { runDaphneConsolidationBatch } from "../agents/daphne/consolidationWorker";
+import { captureExplicitDaphnePreferenceCorrections } from "../agents/daphne/explicitPreferenceCorrection";
 import {
   runClaireTurn,
   looksUnfinished,
@@ -532,6 +535,7 @@ function boundedHints(hints: string | null | undefined): string {
 export function preDriveConversationTwiML(input: {
   text: string;
   token: string;
+  sourceEventId?: string;
   opening?: boolean;
   hints?: string | null;
   /** Listen without speaking — the operator paused mid-thought. */
@@ -540,7 +544,7 @@ export function preDriveConversationTwiML(input: {
   const response = new twilio.twiml.VoiceResponse();
   const gather = response.gather({
     input: ["speech"],
-    action: `${publicBaseUrl()}${PRE_DRIVE_PATH}?token=${encodeURIComponent(input.token)}`,
+    action: `${publicBaseUrl()}${PRE_DRIVE_PATH}?token=${encodeURIComponent(input.token)}${input.sourceEventId ? `&daphneEvent=${encodeURIComponent(input.sourceEventId)}` : ""}`,
     method: "POST",
     language: "en-US",
     speechModel: "experimental_conversations",
@@ -566,6 +570,11 @@ export function preDriveConversationTwiML(input: {
  * Gather is the production opening. Conversation Relay is selected only when
  * its capability is CONFIGURED (flag explicitly on). Flag off returns Gather.
  */
+function renderDaphneGather(input: Parameters<typeof preDriveConversationTwiML>[0]): string {
+  // Each rendered Gather gets one source ID, retained by signed webhook retries.
+  return preDriveConversationTwiML({ ...input, sourceEventId: input.sourceEventId ?? randomUUID() });
+}
+
 function openingVoiceTwiml(input: {
   text: string;
   token: string;
@@ -575,7 +584,7 @@ function openingVoiceTwiml(input: {
   return renderClaireOpeningVoice({
     ...input,
     publicBaseUrl: publicBaseUrl(),
-    renderGather: preDriveConversationTwiML,
+    renderGather: renderDaphneGather,
   });
 }
 
@@ -711,7 +720,7 @@ function voiceTurnDocument(input: {
     listenOnly,
     gatherTwiml: endCall
       ? speakAndHangUp(input.speak)
-      : preDriveConversationTwiML({
+      : renderDaphneGather({
           text: listenOnly ? "" : input.speak,
           token: input.token,
           hints: input.hints,
@@ -743,11 +752,14 @@ export function runAuthoritativeClaireVoiceTurn(input: {
   rawTranscript: string | null;
   allowFragmentWait: boolean;
   callSid?: string;
+  sourceEventId?: string;
   token: string;
+  sourceConfirmed?: boolean;
   /** Slice A: when Twilio's webhook arrived — the proxy for end-of-speech. */
   webhookReceivedAtMs: number;
 }): Promise<AuthoritativeClaireVoiceTurnResult> {
   const { conversationId, conversation, token } = input;
+  const daphneSourceId=input.sourceEventId ?? `voice:${conversationId}:${conversation.turns+1}`;
   return (async () => {
     try {
       if (!conversation.inboundContextReady) {
@@ -947,6 +959,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               utterance: turnUtterance,
               state: conversation,
               conversationKey: callStateKey(conversationId),
+              sourceEventId:daphneSourceId,
+              sourceConfirmed:input.sourceConfirmed,
               brief: conversation.brief,
               context: conversation.context,
               allowFragmentWait: input.allowFragmentWait,
@@ -1077,6 +1091,22 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        * raw provider webhook — and skipped entirely for holds and empty semantic turns.
        */
       const observation = observationUtteranceForBrain(result);
+      if(input.sourceConfirmed!==false && observation.observe && observation.completeness==="complete" && !looksUnfinished(observation.assembledText)){
+        const memory=await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
+          conversationId:callStateKey(conversationId),turnId:daphneSourceId,
+          utterance:observation.assembledText,completed:true}).catch(()=>({status:"persistence_failed" as const}));
+        if(memory.status==="persisted") await runDaphneConsolidationBatch({observationId:memory.observationId,limit:1}).catch(()=>undefined);
+        if(brainV2LiveHandled){
+          const preference=await captureExplicitDaphnePreferenceCorrections({tenantId:conversation.tenantId,
+            operatorUserId:conversation.actorId,conversationId:callStateKey(conversationId),turnId:daphneSourceId,
+            utterance:observation.assembledText});
+          if(preference.corrections.length && preference.status!=="disabled"){
+            result={...result,speak:preference.readbackVerified
+              ? "That preference is saved for future calls."
+              : "I understand, but I couldn't save that preference for future calls."};
+          }
+        }
+      }
       if (
         observation.observe &&
         !brainV2LiveHandled &&
@@ -1753,7 +1783,7 @@ export async function renderConversationRelayConnectAction(input: {
     if (callSid) conversation.relayCallSid = callSid;
     conversation.touchedAt = Date.now();
     await saveCall(claims.conversationId, conversation);
-    return preDriveConversationTwiML({
+    return renderDaphneGather({
       text: "",
       token: input.token,
       hints: conversation.hints,
@@ -1883,7 +1913,7 @@ export function registerClaireRoutes(app: Express): void {
             turnKey: `empty-${conversation.turns}-${conversation.consecutiveEmptyTranscripts ?? 0}`,
           });
           return res.send(
-            preDriveConversationTwiML({ text: prompt, token, hints: conversation.hints })
+            renderDaphneGather({ text: prompt, token, hints: conversation.hints })
           );
         }
       } else {
@@ -1943,6 +1973,11 @@ export function registerClaireRoutes(app: Express): void {
         callSid,
         token,
         webhookReceivedAtMs,
+        sourceEventId: typeof req.query.daphneEvent === "string" && /^[a-f0-9-]{36}$/i.test(req.query.daphneEvent)
+          ? `gather:${callSid}:${req.query.daphneEvent}` : undefined,
+        sourceConfirmed: (req.body as Record<string,unknown>)?.Confidence == null ||
+          (req.body as Record<string,unknown>).Confidence === "" ||
+          Number((req.body as Record<string,unknown>).Confidence)>=0.5,
       });
       const twiml = await withinBudget(job, TURN_BUDGET_MS);
       logVoiceTurnTiming({
@@ -1981,7 +2016,7 @@ export function registerClaireRoutes(app: Express): void {
       if (!job) {
         const conversation = await loadCall(claims.conversationId);
         return res.send(
-          preDriveConversationTwiML({
+          renderDaphneGather({
             text: "I lost that last thought. Say it again?",
             token,
             hints: conversation?.hints,
@@ -2000,7 +2035,7 @@ export function registerClaireRoutes(app: Express): void {
       if (twiml) return res.send(twiml);
       if (attempt >= 3) {
         return res.send(
-          preDriveConversationTwiML({ text: "That's taking too long, so I stopped. Nothing changed. Ask me again?", token })
+          renderDaphneGather({ text: "That's taking too long, so I stopped. Nothing changed. Ask me again?", token })
         );
       }
       return res.send(stillWorkingTwiML(token, attempt));

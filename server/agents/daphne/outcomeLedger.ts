@@ -51,8 +51,8 @@ function record(row:typeof daphneOutcomes.$inferSelect):DaphneOutcomeRecord {
     observedAt:row.observedAt.toISOString(),idempotencyKey:row.idempotencyKey,createdAt:row.createdAt.toISOString()
   };
 }
-export async function recordDaphneOutcome(input:RecordDaphneOutcomeInput):Promise<DaphneOutcomeRecord>{
-  validateDaphneOutcome(input); const db=await getDb(); if(!db) throw new Error("Database unavailable");
+export async function recordDaphneOutcome(input:RecordDaphneOutcomeInput,persistence?:Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>,"select"|"insert">):Promise<DaphneOutcomeRecord>{
+  validateDaphneOutcome(input); const db=persistence??await getDb(); if(!db) throw new Error("Database unavailable");
   const rowId=id(input);
   await db.insert(daphneOutcomes).values({
     id:rowId,tenantId:req(input.tenantId,"tenantId",64),canonicalOperatorId:req(input.canonicalOperatorId,"canonicalOperatorId",191),
@@ -64,15 +64,15 @@ export async function recordDaphneOutcome(input:RecordDaphneOutcomeInput):Promis
   }).onDuplicateKeyUpdate({set:{id:rowId}});
   const [row]=await db.select().from(daphneOutcomes).where(eq(daphneOutcomes.id,rowId)).limit(1);
   if(!row) throw new Error("Daphne outcome did not persist");
-  await recordDaphneMetricEvent({
+  if(!persistence) await recordDaphneMetricEvent({
     tenantId:row.tenantId,canonicalOperatorId:row.canonicalOperatorId,eventName:"outcome_linked",
     properties:{outcomeClass:row.outcomeClass,measureKey:row.measureKey,verificationStatus:row.verificationStatus},
     sourceReference:row.id,occurredAt:row.observedAt,idempotencyKey:`outcome:${row.id}`
   }).catch(()=>undefined);
   return record(row);
 }
-export async function listDaphneOutcomes(input:{tenantId:string;canonicalOperatorId:string;limit?:number}):Promise<DaphneOutcomeRecord[]>{
-  const db=await getDb(); if(!db) throw new Error("Database unavailable");
+export async function listDaphneOutcomes(input:{tenantId:string;canonicalOperatorId:string;limit?:number},persistence?:Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>,"select">):Promise<DaphneOutcomeRecord[]>{
+  const db=persistence??await getDb(); if(!db) throw new Error("Database unavailable");
   const rows=await db.select().from(daphneOutcomes).where(and(
     eq(daphneOutcomes.tenantId,req(input.tenantId,"tenantId",64)),
     eq(daphneOutcomes.canonicalOperatorId,req(input.canonicalOperatorId,"canonicalOperatorId",191))

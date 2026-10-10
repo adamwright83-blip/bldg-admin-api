@@ -63,6 +63,16 @@ describe("Daphne outcome feedback to future policy decision", () => {
     });
   });
 
+  it("includes independently verified burden in later decision scores",()=>{
+    const success=outcomes([1,1,1,1]);
+    const burden=success.map((row,index)=>({...row,id:`burden${index}`,idempotencyKey:`burden${index}`,
+      outcomeClass:"burden" as const,measureKey:"burden",value:index<2?1:0}));
+    const result=preview([...success,...burden]);
+    expect(result.status).toBe("evaluated");
+    expect(result.action).toBe("ask");
+    expect(result.evidenceRefs).toContain("burden2");
+  });
+
   it("abstains when only one candidate has verified evidence", () => {
     const rows = outcomes([1, 1]);
     expect(preview(rows)).toMatchObject({

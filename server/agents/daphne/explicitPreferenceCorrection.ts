@@ -39,6 +39,7 @@ export function detectExplicitDaphnePreferenceCorrections(
   const text = utterance.trim();
   const lower = text.toLowerCase();
   if (!text) return [];
+  if (/["“”]|\b(?:hypothetical|pretend|imagine|joking|sarcastic|said)\b/i.test(text)) return [];
 
   // Avoid treating a hypothetical question as a durable instruction.
   if (
@@ -50,6 +51,10 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   const out: DaphneExplicitPreferenceCorrection[] = [];
+
+  if (/^(?:I prefer Claire to ask one question at a time|Please ask (?:me )?one question at a time)[.!]?$/i.test(text)) {
+    pushUnique(out, { preferenceKey: "question_batch_size", value: 1, evidenceText: text });
+  }
 
   if (
     /\b(?:stop|don't|do not)\s+(?:repeating|repeat)\s+(?:yourself|things|questions?|advice)?\b/i.test(text) ||
@@ -273,6 +278,7 @@ export async function captureExplicitDaphnePreferenceCorrections(input: {
       preferenceKey: correction.preferenceKey,
       value: correction.value,
       sourceObservationId: observed.id,
+      deduplicateSource: true,
     });
   }
   } catch {

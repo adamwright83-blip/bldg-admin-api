@@ -153,6 +153,7 @@ import {
 } from "../../agents/operatorRepresentative/adaptationReceipts";
 import {
   loadDaphneClaireGuidance,
+  isDaphneV2ClaireEnabled,
   type DaphneClaireGuidance,
 } from "../../agents/daphne/claireAdapter";
 import {
@@ -160,6 +161,9 @@ import {
   detectExplicitDaphnePreferenceCorrections,
   type DaphneExplicitPreferenceCaptureResult,
 } from "../../agents/daphne/explicitPreferenceCorrection";
+import { ingestDaphneConversation } from "../../agents/daphne/conversationIngestion";
+import { runDaphneConsolidationBatch } from "../../agents/daphne/consolidationWorker";
+import { recordDaphneStage3bExecution, loadDaphneStage3bRecommendation } from "../../agents/daphne/stage3bLearning";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -228,6 +232,9 @@ export type ClaireTurnInput = {
   utterance: string;
   state: ClaireTurnState;
   conversationKey: string;
+  /** Stable transport event identity, when supplied by an authoritative adapter. */
+  sourceEventId?: string;
+  sourceConfirmed?: boolean;
   brief?: string | null;
   context?: ClaireDriveContext | null;
   /** False flushes a held phone fragment as a complete thought (the caller went quiet). */
@@ -700,6 +707,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   let utterance = input.utterance.trim();
   let thoughtCompleteness: NonNullable<ClaireTurnResult["thoughtCompleteness"]> = "complete";
+  let durableInputComplete = input.sourceConfirmed !== false;
   if (input.surface === "voice") {
     const allowWait = input.allowFragmentWait !== false;
     const incoming = utterance;
@@ -736,6 +744,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     utterance = combined;
     const budgetSpent = holds >= CONTINUATION_MAX_HOLDS && (unfinished || shouldHoldForContinuation(combined, { awaitingReply }));
+    durableInputComplete = input.sourceConfirmed !== false && !unfinished && !budgetSpent;
     thoughtCompleteness = !allowWait || budgetSpent ? "forced_flush" : "complete";
     state.pendingFragment = null;
     state.fragmentHolds = 0;
@@ -744,14 +753,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Explicit user-authored style corrections are persisted only after the
   // completed utterance boundary. Incomplete voice fragments returned above,
   // so they cannot accidentally become durable preferences.
-  const daphnePreferenceTurnId = `${input.conversationKey}:${(state.claireTurnCount ?? 0) + 1}`;
+  const daphnePreferenceTurnId = input.sourceEventId ?? `${input.conversationKey}:${(state.claireTurnCount ?? 0) + 1}`;
+  const memoryCapture=await ingestDaphneConversation({
+    tenantId:input.tenantId,operatorUserId:input.operatorUserId,utterance,
+    conversationId:input.conversationKey,turnId:daphnePreferenceTurnId,
+    completed:durableInputComplete,
+  }).catch(()=>({status:"persistence_failed" as const}));
+  if(memoryCapture.status==="persisted") await runDaphneConsolidationBatch({
+    observationId:memoryCapture.observationId,limit:1,
+  }).catch(()=>undefined);
   const daphnePreferenceResult: DaphneExplicitPreferenceCaptureResult = await (
     deps.captureDaphneV2PreferenceCorrections ??
     captureExplicitDaphnePreferenceCorrections
   )({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-    utterance,
+    utterance:durableInputComplete?utterance:"",
     conversationId: input.conversationKey,
     turnId: daphnePreferenceTurnId,
   }).catch(() => ({
@@ -1153,6 +1170,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     operatorAdaptationDecision?.behaviorClass === DAPHNE_STAGE3B_BEHAVIOR_CLASS;
 
   if (daphneMayAskInstead && operatorAdaptationDecision) {
+    // Evidence informs the decision record, never overrides the explicit directive.
+    const learningRecommendation = isDaphneV2ClaireEnabled(input.tenantId) ? await loadDaphneStage3bRecommendation({
+      tenantId:input.tenantId,canonicalOperatorId:operatorAdaptationDecision.canonicalOperatorId,
+    }).catch(()=>null) : null;
     // Causal proof is fail-closed: Claire switches branch only after the
     // idempotent use receipt is durable. A persistence failure leaves the
     // exact parent-main behavior unchanged.
@@ -1167,6 +1188,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       operatorAdaptation =
         buildDaphneClarificationApplicationResult(operatorAdaptationDecision);
       closedDecisionBranch = "clarify";
+      await recordDaphneStage3bExecution(receipt,learningRecommendation).catch(()=>{
+        console.warn("[Daphne] Stage 3B learning receipt unavailable; no outcome success inferred");
+      });
     }
   }
 

@@ -63,6 +63,9 @@ export async function deleteDaphneV2UserData(input:{tenantId:string;canonicalOpe
   eq(table.tenantId,input.tenantId),eq(table.canonicalOperatorId,input.canonicalOperatorId)
  );
  await db.transaction(async tx=>{
+ // Serialize erasure with workers before deleting any derived representation.
+ await tx.select({id:daphneObservations.id}).from(daphneObservations)
+  .where(where(daphneObservations)).for("update");
  await tx.delete(daphneOutcomes).where(where(daphneOutcomes));
  await tx.delete(daphneInterventions).where(where(daphneInterventions));
  await tx.delete(daphneMetaPreferences).where(where(daphneMetaPreferences));
