@@ -1092,7 +1092,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        */
       const observation = observationUtteranceForBrain(result);
       if(input.sourceConfirmed!==false && observation.observe && observation.completeness==="complete" && !looksUnfinished(observation.assembledText)){
-        const memory=await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
+        await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
           conversationId:callStateKey(conversationId),turnId:daphneSourceId,
           utterance:observation.assembledText,completed:true}).catch(()=>({status:"persistence_failed" as const}));
         // The observation is durable. The gated background worker will
