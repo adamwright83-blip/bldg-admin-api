@@ -91,6 +91,15 @@ export function buildCleanCloudCsvSheetPlan(input: {
   let skippedRowCount = 0;
 
   for (const row of rows) {
+    // Sheet reporting is a narrow card-paid view. An explicit unpaid flag
+    // outranks an inconsistent populated payment-date column; do not turn
+    // stale/date-only CSV evidence into a paid card sale. The canonical
+    // CleanCloud importer and payment-admission paths remain unchanged.
+    const paidFlag = String(row["Paid"] ?? "").trim().toLowerCase();
+    if (["0", "false", "no", "unpaid"].includes(paidFlag)) {
+      skippedRowCount += 1;
+      continue;
+    }
     const result = normalizeCleanCloudPaidOrderRow(row, {
       sourceFileName: input.sourceFileName,
       sourceReportType: input.sourceReportType,
