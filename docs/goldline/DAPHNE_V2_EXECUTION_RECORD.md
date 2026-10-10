@@ -93,7 +93,8 @@ or authorization, PR #535, President, Mitch or unrelated workstreams.
 - PR #541: `793f9fbe`, current-knowledge/outcome-evidence repairs. Daphne durable
   acceptance CI succeeded in run `38013082293`.
 - PR #542: `ebe99f48` plus `72ce36eb`, complete privacy history and transactional
-  erasure, including a real MySQL failure/rollback test. CI pending at publication.
+  erasure, including a real MySQL failure/rollback test. Daphne acceptance CI
+  succeeded in run `38013465629`; other release checks remain pending at publication.
 - Neither PR is merged or deployed. Main remains `1bed5fbc...`.
 - Combined local verification branch: `codex/daphne-v2-combined-verification`.
   The workflow additions were combined explicitly; no test was removed.
