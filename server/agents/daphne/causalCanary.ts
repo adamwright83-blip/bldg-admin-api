@@ -27,7 +27,7 @@ export function planDaphneProductionCanary(input:{
  if(!enabled(input.tenantId,env)) return {status:"disabled" as const,reason:"tenant_canary_off"};
  if(pref(input.preferences,"safe_experimentation")!==true) return {status:"disabled" as const,reason:"user_experimentation_not_enabled"};
  const allowed=new Set<string>(DAPHNE_CAUSAL_CANARY_ACTIONS);
- const actions=input.actions.filter(a=>allowed.has(a.key)).map(a=>({...a,risk:"low" as const,irreversible:false,touchesBusinessTruth:false,touchesNarrativeDisclosure:false}));
+ const actions=input.actions.filter(a=>allowed.has(a.key));
  if(!actions.some(a=>a.key==="no_intervention")){
   actions.push({key:"no_intervention",risk:"low",estimatedUtility:0,uncertainty:.5,burden:0,irreversible:false,touchesBusinessTruth:false,touchesNarrativeDisclosure:false});
  }

@@ -11,6 +11,13 @@ function pref(key: DaphneMetaPreferenceRecord["preferenceKey"], value: unknown):
 }
 
 describe("Daphne V2 Operator Card", () => {
+  it("keeps adaptation disabled after revocation instead of restoring defaults", () => {
+    const card=compileDaphneOperatorCard({tenantId:"t",canonicalOperatorId:"o",agentId:"claire",
+      generatedAt:new Date(),person:[],state:null,context:null,goals:[],relationship:null,
+      metaPreferences:{adaptation_enabled:{...pref("adaptation_enabled",true),status:"revoked"}},
+      hypotheses:[],responseModel:[]});
+    expect(card.metaPreferences.adaptation_enabled).toBe(false);
+  });
   it("is explicitly compiled, noncanonical, and cannot mutate business or narrative truth", () => {
     const card = compileDaphneOperatorCard({
       tenantId: "t", canonicalOperatorId: "o", agentId: "claire",
