@@ -308,6 +308,15 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
   test("JOYSTICK Home owns one header above the embedded Lantern City at the reported viewport", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === "mobile", "The reported overlap is the desktop admin world");
+    // This is a DOM/chrome overlap test, not a WebGL render test. Keep its
+    // strict header and viewport invariants while avoiding CI's slow software
+    // GPU pipeline. The separate world animation tests still exercise WebGL.
+    await page.addInitScript(() => {
+      const get = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+        return /webgl/i.test(type) ? null : (get as (...a: unknown[]) => RenderingContext | null).call(this, type, ...rest);
+      } as typeof HTMLCanvasElement.prototype.getContext;
+    });
 
     await signIn(page, "admin");
     await page.setViewportSize({ width: 675, height: 422 });
