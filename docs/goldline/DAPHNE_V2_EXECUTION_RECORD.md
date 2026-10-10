@@ -333,3 +333,25 @@ versions, consolidation completion claims, card evidence, and Stage 3B original
 use/intervention/outcome IDs. Fail on false save acknowledgment, old preference
 reuse, cross-scope data, stale correction, lost warnings or unauthorized behavior.
 Never label these pending human interactions LIVE ACCEPTED.
+
+## October 9 Scoped Inspector Follow-up (PR #544)
+
+This is a stacked follow-up to PR #543, whose published head is
+`2a2d57a65bfbc03cc177570e6e3907c102bfd390`.
+The separate branch `fix/daphne-v2-scoped-inspection-controls` preserves the
+Codex pushed work without overwriting any uncommitted local editor changes.
+
+- Claim inspection/correction/rejection now uses an exact tenant/operator-scoped
+  claim-ID lookup instead of searching only the newest 500 claims.
+- Linked source observations are retrieved through tenant/operator-scoped ID
+  batches rather than the 500-row recent-history window.
+- Inspector disposition and control API observations now use unique event keys,
+  avoiding collisions between distinct same-millisecond operator actions.
+- A new disposable-MySQL regression case inserts 505 newer claims and evidence
+  records, then asserts historical inspection, correction and cross-operator denial.
+- This follow-up makes no changes to the original Stage 3B intervention target,
+  learning authority, payment, tenant authorization, schema, or unrelated work.
+
+No live phone call, merge, production rollout, new intervention target or
+experimental consent was performed. The final status remains dependent on the
+fresh PR #544 CI results, legal merge/release gates, and actual deployment.
