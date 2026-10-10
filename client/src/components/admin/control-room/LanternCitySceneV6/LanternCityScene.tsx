@@ -151,7 +151,7 @@ export default function LanternCityScene({
   const [rekindle, setRekindle] = useState(false);
   const [search, setSearch] = useState("");
   const transition = useWorldTransition();
-  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
+  const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
     staleTime: 30000,
     refetchInterval: 15000,
   });
