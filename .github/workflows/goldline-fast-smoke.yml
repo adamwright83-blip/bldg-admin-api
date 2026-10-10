@@ -223,6 +223,10 @@ jobs:
       - name: Prove Daphne causal chain through authenticated production entrypoints
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
+          # Disposable acceptance must explicitly opt in to the new pipeline;
+          # the older Claire gate does not enable ingestion or its worker.
+          DAPHNE_V2_CONVERSATION_INGESTION_ENABLED: "true"
+          DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED: "true"
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/agents/operatorRepresentative/daphneStage3b.mysql.integration.test.ts
