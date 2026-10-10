@@ -10,6 +10,10 @@ const hoisted = vi.hoisted(() => {
     create: vi.fn(async () => ({ sid: "CA_test" })),
     commitment: vi.fn(async (_input: { state: Record<string, unknown> }) => ({ kind: "not_applicable" as string, speak: "" })),
     followUp: vi.fn(async () => "Follow-up answer."),
+    decisionStoreUnavailable: false,
+    failedDecisionWrite: vi.fn(async () => {
+      throw new Error("Decision store has not been migrated");
+    }),
   };
 });
 
@@ -84,6 +88,18 @@ vi.mock("./conversation/pipeline", () => ({
   handleRecordingStatus: vi.fn(async () => undefined),
 }));
 vi.mock("./conversation/twilioSignature", () => ({ isValidTwilioWebhook: () => true }));
+vi.mock("./turn/decisionRecord", async importOriginal => {
+  const actual = await importOriginal<typeof import("./turn/decisionRecord")>();
+  return {
+    ...actual,
+    createInMemoryClaireDecisionStore: () => {
+      const store = actual.createInMemoryClaireDecisionStore();
+      return hoisted.decisionStoreUnavailable
+        ? { ...store, write: hoisted.failedDecisionWrite }
+        : store;
+    },
+  };
+});
 vi.mock("./voiceCommitmentLoop", async importOriginal => ({
   ...(await importOriginal<typeof import("./voiceCommitmentLoop")>()),
   handleVoiceCommitmentTurn: hoisted.commitment,
@@ -159,9 +175,12 @@ beforeEach(() => {
   vi.useFakeTimers({ now: FIXTURE_NOW, toFake: ["Date"] });
   hoisted.commitment.mockClear();
   hoisted.followUp.mockClear();
+  hoisted.decisionStoreUnavailable = false;
+  hoisted.failedDecisionWrite.mockClear();
 });
 afterEach(() => {
   setCommunicationReceiptStoreForTests(null);
+  hoisted.decisionStoreUnavailable = false;
   vi.useRealTimers();
 });
 
@@ -228,16 +247,19 @@ describe("live Claire call answers business questions in the call (U)", () => {
   });
 
   it("fails closed on dated-work intake before the durable decision store has been migrated", async () => {
-    // This legacy unit suite intentionally runs before MySQL migrations.
-    // It must never claim a proposal or a save when durable decision recording fails.
+    // Unit mode supplies an in-memory decision store. Explicitly simulate the
+    // unavailable durable store so this proves the production failure path.
+    hoisted.decisionStoreUnavailable = true;
     const handlers = routes();
     const token = await startCall();
     const proposed = await say(handlers, token, "Add reviewing last month's revenue tomorrow.");
+    expect(hoisted.failedDecisionWrite).toHaveBeenCalledTimes(1);
     expect(proposed).toContain("Nothing changed.");
     expect(proposed).not.toMatch(/Want me to put that on the Day Line|Added:|Done/);
     expect(hoisted.commitment).not.toHaveBeenCalled();
     const saved = await say(handlers, token, "Yes.");
     expect(saved).not.toMatch(/Added:|Done/);
+    expect(hoisted.commitment).not.toHaveBeenCalled();
   });
 
   it("ordinary conversation still reaches Claire's normal follow-up", async () => {
