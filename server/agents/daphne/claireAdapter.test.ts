@@ -26,4 +26,5 @@ describe("Daphne V2 Claire adapter",()=>{
   expect(s).toContain("do not repeat a question");
  });
  it("honors explicit adaptation disablement",()=>expect(buildDaphneClairePromptSection({...base,metaPreferences:{adaptation_enabled:false}})).toBeNull());
+ it("honors memory recall disablement",()=>expect(buildDaphneClairePromptSection({...base,metaPreferences:{memory_recall:false}})).toBeNull());
 });

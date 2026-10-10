@@ -61,10 +61,7 @@ export function previewDaphneOutcomeInformedPolicy(input: {
     if (!supporting && !option.hardBlocked) missingActions.push(option.key);
     if (supporting) {
       estimate.sourceObservationIds.forEach(ref => sourceRefs.add(ref));
-      eligibleOutcomes.filter(o => input.interventions.some(i =>
-        i.id === o.interventionId && i.chosenAction === option.key &&
-        i.contextKey === input.contextKey
-      ) && o.measureKey === "started").forEach(o => sourceRefs.add(o.id));
+      estimate.sourceOutcomeIds.forEach(ref => sourceRefs.add(ref));
     }
     return {
       key: option.key,

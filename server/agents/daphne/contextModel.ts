@@ -134,9 +134,13 @@ export function deriveDaphneContext(input: {
   asOf: Date;
   previousRegimeKey?: string | null;
   minConsecutiveEvidence?: number;
+  ttlMinutes?: number;
 }): DaphneContext {
+  const ttlMinutes = Math.max(5, Math.min(input.ttlMinutes ?? 120, 24 * 60));
   const relevant = input.observations
-    .filter(item => Date.parse(item.occurredAt) <= input.asOf.getTime())
+    .filter(item => Date.parse(item.occurredAt) <= input.asOf.getTime() &&
+      Date.parse(item.occurredAt) > input.asOf.getTime() - ttlMinutes * 60_000 &&
+      ["attested", "verified"].includes(item.verificationStatus))
     .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
   const latest = relevant[0];
 
