@@ -109,6 +109,7 @@ export const daphneRouter=router({
   }),
  learnedPolicyPreview:legacyDayforgeTenantMemberProcedure
   .input(z.object({
+    agentId:z.string().trim().min(1).max(128).default("claire"),
     policyVersion:z.string().trim().min(1).max(64),
     contextKey:z.string().trim().min(1).max(191),
     options:z.array(z.object({
@@ -129,7 +130,8 @@ export const daphneRouter=router({
         listDaphneInterventions({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,limit:500}),
         listDaphneOutcomes({tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,limit:500}),
       ]);
-      return previewDaphneOutcomeInformedPolicy({...input,interventions,outcomes});
+      return previewDaphneOutcomeInformedPolicy({...input,
+        interventions:interventions.filter(i=>i.agentId===input.agentId),outcomes});
     }catch(e){identityFailure(e);}
   }),
  policyPreview:legacyDayforgeTenantMemberProcedure
