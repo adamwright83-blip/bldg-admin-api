@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity";
 import { isDaphneV2ClaireEnabled } from "./claireAdapter";
+import { isDaphneConversationIngestionEnabled } from "./releaseSafety";
 import {
   loadDaphneMetaPreferences,
   daphneAdaptationAllowed,
@@ -108,7 +109,7 @@ export async function ingestDaphneConversation(input: {
         item => item.kind !== "preference"
       )
     : [];
-  if (!items.length || !isDaphneV2ClaireEnabled(input.tenantId))
+  if (!items.length || !isDaphneConversationIngestionEnabled(input.tenantId) || !isDaphneV2ClaireEnabled(input.tenantId))
     return { status: "ineligible" as const };
   const raw = input.operatorUserId.trim();
   if (!raw) return { status: "identity_unresolved" as const };
