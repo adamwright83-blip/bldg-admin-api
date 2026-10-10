@@ -10,6 +10,10 @@ import { getDb } from "../../db";
 import { recordDaphneEpistemicClaim } from "./epistemicStore";
 import { createDaphneGoal, setDaphneMetaPreference } from "./goalsPreferences";
 import { isDaphneV2ClaireEnabled } from "./claireAdapter";
+import {
+  daphneReleaseTenantAllowlist,
+  isDaphneConsolidationWorkerConfigured,
+} from "./releaseSafety";
 import type { DaphneConversationItem } from "./conversationIngestion";
 import { recordDaphneMetricEvent } from "./metrics";
 import { ingestVerifiedDaphneStage3bOutcome } from "./stage3bLearning";
@@ -24,6 +28,9 @@ export async function runDaphneConsolidationBatch(
     .split(",")
     .map(value => value.trim())
     .filter(Boolean);
+  // A preexisting Daphne flag never implicitly enables the NEW worker.
+  if (!isDaphneConsolidationWorkerConfigured()) return { processed: 0 };
+  const workerTenants = daphneReleaseTenantAllowlist("DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS");
   const globallyEnabled = isDaphneV2ClaireEnabled("");
   if (!globallyEnabled && !enabledTenants.length) return { processed: 0 };
   const db = await getDb();
@@ -87,6 +94,8 @@ export async function runDaphneConsolidationBatch(
           conditions.push(eq(daphneObservations.id, input.observationId));
         if (!globallyEnabled)
           conditions.push(inArray(daphneObservations.tenantId, enabledTenants));
+        if (workerTenants.length)
+          conditions.push(inArray(daphneObservations.tenantId, workerTenants));
         const rows = await tx
           .select()
           .from(daphneObservations)
@@ -428,6 +437,7 @@ export async function runDaphneConsolidationBatch(
 }
 
 export function startDaphneConsolidationWorker() {
+  if (!isDaphneConsolidationWorkerConfigured()) return async () => {};
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
