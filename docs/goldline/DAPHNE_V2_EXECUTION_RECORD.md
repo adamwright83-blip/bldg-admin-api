@@ -447,3 +447,53 @@ release protections allow a safe merge, and phone acceptance remains blocked
 until real conversations yield matching durable receipts. Outcome-informed
 experimental selection outside the established `ask_instead` authority remains
 approval-blocked.
+
+## Daphne Release-Safety Addendum — PR #545
+
+**Verdict: CODE COMPLETE / NOT DEPLOYED.** Stacked after #544
+`a2f56bb319e2407ed1bd7b60106e98fb76e821c8`. PR #545 remains OPEN.
+This change deliberately DOES NOT merge or deploy any PR, adjust release
+protections, authorize new learning targets, alter PR #535, payment admission,
+tenant identity/authorization, President, or Mitch.
+
+**Independent default-OFF activation controls:**
+
+- `DAPHNE_V2_CONVERSATION_INGESTION_ENABLED=true` activates eligible
+  operator-authored ordinary-memory capture. Optional
+  `DAPHNE_V2_CONVERSATION_INGESTION_TENANTS=tenant-a,tenant-b` restricts
+  the enabled path to that explicit subset. With the enable flag absent,
+  no ordinary-conversation observation is captured.
+- `DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED=true` allows scheduled
+  materialization of eligible observations. Optional
+  `DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS=tenant-a,tenant-b` restricts
+  worker claims to that subset in SQL. With the enable flag absent,
+  the server starts **no** Daphne consolidation worker and the batch
+  processor returns zero before touching the database.
+- The original `DAPHNE_V2_CLAIRE_ENABLED` and preexisting consent,
+  identity, adaptation and tenant gates remain separate prerequisites.
+  They **never implicitly switch on** either new capability.
+- Each new enable flag set to true with no allowlist is explicit
+  all-tenant activation: deploy with both unset/false; for the initial
+  canary set both switches explicitly and both lists to one tenant ID.
+
+**Voice latency boundary:** `claireTurn.ts` and `claireTwilio.ts` retain
+awaited durable observation writes but no longer invoke or await
+`runDaphneConsolidationBatch`. The independently scheduled worker handles
+all derived materialization, and slow/failed batches cannot hold Claire's
+11-second Twilio response budget. Fresh-call memory test sequencing now
+executes the worker separately between independently initialized calls.
+
+**Tests added/changed:** deterministic default-off and cross-tenant flag
+checks; a worker SQL tenant allowlist real-MySQL test; a voice-response
+regression prohibiting any synchronous consolidation call in the real
+Claire/Twilio modules; and adjusted longitudinal MySQL tests with explicit
+background processing. Disposable Daphne CI explicitly enables the new
+features **only for the acceptance runner**; that does not modify Railway
+configuration.
+
+**Release hold:** Red legacy and world-smoke gates still block merge.
+No release gates are weakened. Existing operator-consented
+`pattern:explicit_deferral_dismissal` / `ask_instead` authority is unchanged.
+Real phone acceptance remains BLOCKED until the complete stack reaches
+production through a lawful release and human calls generate durable receipts.
+Expanded learned behavioral selection is BLOCKED — OPERATOR APPROVAL REQUIRED.
