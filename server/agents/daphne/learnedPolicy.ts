@@ -39,7 +39,7 @@ export function previewDaphneOutcomeInformedPolicy(input: {
   }
   // Disputed and rejected outcomes must never teach Daphne.
   const eligibleOutcomes = input.outcomes.filter(o =>
-    o.verificationStatus === "verified" && o.outcomeClass === "proximal"
+    o.verificationStatus === "verified" && ["proximal", "burden"].includes(o.outcomeClass)
   );
   const estimates = buildDaphneResponseModel({
     interventions: input.interventions,

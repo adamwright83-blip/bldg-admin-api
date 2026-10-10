@@ -42,6 +42,13 @@ describe("Daphne V2 explicit preference correction parser", () => {
     ]);
   });
 
+  it("captures a direct question-batch preference but not quoted or hypothetical instructions",()=>{
+    expect(detectExplicitDaphnePreferenceCorrections("I prefer Claire to ask one question at a time.")).toEqual([
+      expect.objectContaining({preferenceKey:"question_batch_size",value:1})]);
+    expect(detectExplicitDaphnePreferenceCorrections('Claire said "keep your answers shorter".')).toEqual([]);
+    expect(detectExplicitDaphnePreferenceCorrections("Imagine I said give me more detail.")).toEqual([]);
+  });
+
   it("does not turn a hypothetical question into a preference", () => {
     expect(
       detectExplicitDaphnePreferenceCorrections(
@@ -114,6 +121,7 @@ describe("Daphne V2 explicit preference correction parser", () => {
     expect(result.readbackVerified).toBe(true);
     expect(recordObservation).toHaveBeenCalledTimes(1);
     expect(setPreference).toHaveBeenCalledWith({
+      deduplicateSource: true,
       tenantId: "tenant-a",
       canonicalOperatorId: "operator-a",
       preferenceKey: "avoid_repetition",

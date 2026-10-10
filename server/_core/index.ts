@@ -69,6 +69,7 @@ import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/browserSync/cleancloudDirectScheduler";
 import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../agents/persistentOperator/autonomousWorkerService";
+import { startDaphneConsolidationWorker } from "../agents/daphne/consolidationWorker";
 import { registerPresidentAgentRoutes } from "../president/httpRoutes";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -908,6 +909,8 @@ async function startServer() {
       server.once("close", stopOutbox);
     }
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_AUTONOMOUS_WORKERS === "1") {
+      const stopDaphne=startDaphneConsolidationWorker();
+      server.once("close",()=>{void stopDaphne();});
       const stopAutonomousWorkers = startAutonomousPersistentOperatorWorkers();
       server.once("close", () => {
         void stopAutonomousWorkers();
