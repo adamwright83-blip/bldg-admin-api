@@ -152,6 +152,22 @@ describeMysql("Daphne actual scheduled consolidation executor", () => {
     expect(JSON.stringify(denied)).not.toContain("secret shop");
     expect(denied.metaPreferences.adaptation_enabled).toBe(false);
   }, 25_000); // polling allows 10s; exercise both scheduled workers under CI load
+  it("consolidates only allowlisted tenants even when older Daphne is globally enabled", async () => {
+    const allowed = scope();
+    const excluded = scope();
+    await seed(allowed, "I own a bakery.", "worker-allow");
+    await seed(excluded, "I own a laundromat.", "worker-exclude");
+    const prior = process.env.DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS;
+    try {
+      process.env.DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS = allowed.tenantId;
+      expect((await runDaphneConsolidationBatch({limit:20})).processed).toBe(1);
+      expect(await receipts(allowed)).toHaveLength(1);
+      expect(await receipts(excluded)).toHaveLength(0);
+    } finally {
+      if (prior === undefined) delete process.env.DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS;
+      else process.env.DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS = prior;
+    }
+  }, 25_000);
   it("recovers pending work after a claimed database connection crashes", async () => {
     const s = scope();
     const observation = await seed(s, "I own a laundromat.", "crash");
