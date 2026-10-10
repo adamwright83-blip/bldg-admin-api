@@ -157,7 +157,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       });
       const errors: string[] = [];
       page.on("pageerror", e => errors.push(String(e)));
-      const atlas = page.waitForResponse(r => r.url().includes("geographicTruth.atlas"));
+      const atlas = page.waitForResponse(r => r.url().includes("geographicTruth.myAtlas"));
       await page.goto(url, { waitUntil: "commit" });
       const board = page.locator(`[data-lantern-city="${scene}"]`);
       await expect(board).toBeVisible({ timeout: 30_000 });
