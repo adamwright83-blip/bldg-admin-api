@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import type { DaphneResponseSummary } from "./operatorCard";
 import type { DaphneInterventionRecord } from "./interventionLedger";
 import type { DaphneOutcomeRecord } from "./outcomeLedger";
 import { recordDaphneEpistemicClaim } from "./epistemicStore";
+import { getDb } from "../../db";
 
 export type DaphneResponseEstimate = DaphneResponseSummary & {
   n: number;
@@ -71,14 +73,14 @@ export function buildDaphneResponseModel(input:{
   }));
 }
 
-export async function persistDaphneResponseEstimate(input:{tenantId:string;canonicalOperatorId:string;estimate:DaphneResponseEstimate;modelVersion:string}):Promise<void>{
+export async function persistDaphneResponseEstimate(input:{tenantId:string;canonicalOperatorId:string;agentId?:string;estimate:DaphneResponseEstimate;modelVersion:string},persistence?:Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>,"select"|"insert">):Promise<void>{
   if(!input.estimate.sourceObservationIds.length) return;
   await recordDaphneEpistemicClaim({
-    tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,claimType:"association_estimate",
+    tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,claimType:"association_estimate",
     claimKey:`response:${input.estimate.actionKey}:${input.estimate.contextKey}`,claim:input.estimate,
     sourceObservationIds:input.estimate.sourceObservationIds,contextApplicability:{contextKeys:[input.estimate.contextKey],distinctContextCount:1},
     uncertainty:{epistemic:input.estimate.n?Number((1/Math.sqrt(input.estimate.n)).toFixed(4)):1},
     epistemicStatus:"association_only",causalEvidenceStatus:"observational",modelVersion:input.modelVersion,
-    idempotencyKey:`response:${input.estimate.actionKey}:${input.estimate.contextKey}:${input.estimate.n}`
-  });
+    idempotencyKey:`response:${createHash("sha256").update(JSON.stringify(input.estimate)).digest("hex")}`
+  },persistence);
 }

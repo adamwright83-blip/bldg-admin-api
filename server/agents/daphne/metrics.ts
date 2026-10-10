@@ -18,6 +18,7 @@ export const DAPHNE_METRIC_EVENTS = [
   "experiment_assignment",
   "privacy_export",
   "privacy_erasure",
+  "consolidation_failed",
 ] as const;
 export type DaphneMetricEventName=(typeof DAPHNE_METRIC_EVENTS)[number];
 
@@ -27,8 +28,8 @@ function metricId(tenantId:string,key:string){return `dmetric_${createHash("sha2
 export async function recordDaphneMetricEvent(input:{
  tenantId:string;canonicalOperatorId?:string|null;agentId?:string|null;eventName:DaphneMetricEventName;
  properties?:Record<string,unknown>|null;sourceReference?:string|null;occurredAt?:Date;idempotencyKey:string;
-}):Promise<void>{
- const db=await getDb(); if(!db) throw new Error("Database unavailable");
+},persistence?:Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>,"insert">):Promise<void>{
+ const db=persistence??await getDb(); if(!db) throw new Error("Database unavailable");
  const tenantId=req(input.tenantId,"tenantId",64),key=req(input.idempotencyKey,"idempotencyKey",191);
  const id=metricId(tenantId,key);
  await db.insert(daphneMetricEvents).values({

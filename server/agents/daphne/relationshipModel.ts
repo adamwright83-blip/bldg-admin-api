@@ -83,14 +83,17 @@ export function deriveDaphneRelationship(input: {
     rupture: [] as string[],
   };
 
+  const unresolved = new Set<string>();
   for (const event of events) {
     const kind = eventKind(event);
     if (!kind) continue;
-    out[kind].push(...eventValues(event));
+    const values = eventValues(event);
+    out[kind].push(...values);
+    if (kind === "rupture") values.forEach(value => unresolved.add(value));
+    if (kind === "repair") values.forEach(value => unresolved.delete(value));
   }
 
-  const repaired = new Set(out.repair);
-  const unresolvedRuptures = Array.from(new Set(out.rupture)).filter(item => !repaired.has(item));
+  const unresolvedRuptures = Array.from(unresolved);
 
   return {
     agentId,

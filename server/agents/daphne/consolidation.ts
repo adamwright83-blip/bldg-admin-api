@@ -16,7 +16,7 @@ export function resolveDaphneCurrentClaims(input: {
  const superseded = new Set(eligible.filter(c => c.claimType === "supersession" &&
   !["rejected", "superseded"].includes(c.epistemicStatus)).map(c => c.supersedesClaimId));
  const byId = new Map(eligible.map(c => [c.id, c]));
- return eligible.filter(c => !superseded.has(c.id) &&
+ const current=eligible.filter(c => !superseded.has(c.id) &&
   !["rejected", "superseded", "contradicted"].includes(c.epistemicStatus) &&
   (!c.validUntil || Date.parse(c.validUntil) > input.asOf.getTime())
  ).flatMap(c => {
@@ -29,6 +29,17 @@ export function resolveDaphneCurrentClaims(input: {
   return [{...c, claimType: "direct_fact" as const, claim: value as Record<string, unknown>,
     counterEvidence: c.counterEvidence.filter(e => e.supersededClaimId !== c.supersedesClaimId)}];
  });
+ const explicitKeys=new Set(current.filter(c=>c.claimType==="direct_fact" &&
+  (c.humanPinned || c.supportingEvidence.some(e=>e.explicitCorrection===true))).map(c=>c.claimKey));
+ const resolved: DaphneEpistemicClaimRecord[]=[];
+ for(const claim of current){
+  if(explicitKeys.has(claim.claimKey) && claim.claimType!=="direct_fact") continue;
+  const duplicate=claim.claimType==="direct_fact"?resolved.find(c=>c.claimType==="direct_fact" &&
+   c.claimKey===claim.claimKey && c.agentId===claim.agentId && JSON.stringify(c.claim)===JSON.stringify(claim.claim)):undefined;
+  if(duplicate) duplicate.sourceObservationIds=Array.from(new Set([...duplicate.sourceObservationIds,...claim.sourceObservationIds]));
+  else resolved.push({...claim,sourceObservationIds:[...claim.sourceObservationIds]});
+ }
+ return resolved;
 }
 
 export type DaphneConsolidationPlan = {

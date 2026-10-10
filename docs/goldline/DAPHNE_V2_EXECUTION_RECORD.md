@@ -158,3 +158,178 @@ eligibility gates. Preserve receipt-before-behavior, disabled/revoked controls,
 tenant/operator scope, warning preservation and all denial cases. Do not apply
 that proposed comparison merely because it is written here. This is not a new
 approval system or an authorization receipt.
+
+## October 9 Runtime Completion Execution
+
+This section supersedes the earlier remaining-contract inventory where stated;
+the earlier repair/verification history above is retained. Main was fetched
+again and remains `1bed5fbc9bf0e2c614d968ba760fadafd098ee0b`. PRs #541/#542
+remain OPEN at their recorded heads. PR #535 and unrelated work were untouched.
+Working branch: `codex/daphne-v2-runtime-completion`, based on the preserved
+combined verification commit `9347fd99129fd99a435eea2761dc3d91a2f3bdd0`.
+
+### Implemented Contracts
+
+| Contract | Implementation And Durable Proof | Release Status |
+| --- | --- | --- |
+| A Ordinary conversation ingestion | Completed Claire turns resolve existing canonical identity, classify bounded explicit statements, append minimal scoped observations, and materialize facts/goals/context/relationship evidence. Actual independent turn A/B/C/D tests prove laundromat recall, bakery correction, and fresh retrieval through controlled model output. Signed Gather event IDs deduplicate retries; unconfirmed/unfinished input, hypothetical/quoted text, missing identity and storage failure do not create memory. | VERIFIED END TO END locally; unmerged, not deployed |
+| B Durable consolidation | Existing immutable observations are work items; existing derived claims are completion receipts, not a second memory or queue. Startup registers a scheduled executor. Transactional bounded batches use SKIP LOCKED, operator serialization, atomic derived writes/receipt, durable 30-second failure backoff and five-attempt dead-letter metrics. Restart, connection crash, concurrent executors, late old evidence, revoked processing, feature-gate pause and erasure overlap are exercised against MySQL. | VERIFIED END TO END locally; production worker startup cannot be certified until release |
+| C Outcome-informed learning | Actual authorized Stage 3B clarification selection appends an execution observation and InterventionLedger entry linked to the original authorization/use receipt. Independently verified scoped system measurements feed atomic OutcomeLedger and ResponseModel updates; the scheduler consumes eligible observations automatically. Subsequent actual Claire decisions load evidence before the receipted branch and retain it in the intervention decision record. | Permissible plumbing VERIFIED END TO END locally; changed live selection BLOCKED - OPERATOR APPROVAL |
+
+Outcome tests supply explicit independent system measurements. They are not real
+customer successes or live phone acceptance. `branch_selected` means the runtime
+selected clarification, not that speech was delivered/heard or that work started.
+Only the existing explicit `ask_instead` directive controls that branch. Learned
+scores/recommendations cannot turn it off or authorize another action. Exam 5's
+live behavioral effect is therefore NOT passed by the recommendation test.
+
+### Additional Repairs And Scope
+
+- Transaction-aware writes reuse existing stores so consolidation/outcome
+  materialization cannot leave partial results after rollback.
+- Concurrent preference versions retry unique-key collisions and return their
+  actual value. Explicit source retries cannot overwrite a newer correction;
+  durable latest-source readback still governs success acknowledgment.
+- Explicit one-question preference uses the existing correction/readback path.
+  Completed Brain V2-owned voice results also capture preference declarations
+  and replace unsupported success acknowledgments with durable-readback results.
+- Duplicate direct facts coalesce only in the current projection with combined
+  provenance; raw claims stay immutable. Explicit corrections outrank conflicting
+  inference. A late older observation cannot restore superseded ownership.
+- Relationship repair is chronological: an earlier repair cannot erase a later
+  rupture. Actual Claire relationship ingestion and another-agent exclusion pass.
+- Worker completion claims are filtered in SQL before the bounded card retrieval
+  limit. No model runs in the scheduled worker; card reads remain bounded.
+- Verified burden measurements now participate in policy evidence. Agent prose,
+  unverified/wrong-agent evidence, wrong operator/tenant, undefined measurements
+  and out-of-window evidence are rejected. Outcome storage failure is retry-safe.
+- Erasure locks source observations before derived deletes. Worker failure
+  telemetry also locks/checks the surviving source, preventing delayed failure
+  bookkeeping from resurrecting erased operator data.
+
+Files added: `conversationIngestion.ts`, its unit suite,
+`consolidationWorker.ts`, its MySQL scheduled-executor suite, and
+`stage3bLearning.ts`, under `server/agents/daphne/`. Existing Daphne stores,
+adapter/projection/metrics/privacy modules, authorized Claire turn/voice
+integration, Stage 3B loader/test, and Daphne acceptance workflow are updated.
+No schema, commercial records, tenant authority, payment authority, migration
+runner, President, Mitch, or new behavioral target was changed.
+
+### Current Capability Matrix
+
+| Capability | Current Evidence | Remaining Boundary |
+| --- | --- | --- |
+| Ordinary facts and correction | Real Claire ingestion, independent durable recall, immutable supersession | Bounded explicit grammar deliberately abstains outside supported syntax; no arbitrary transcript inference |
+| Person | Existing multi-context distribution and evidence gates preserved | No sensitive hidden trait inference or automatic personality experiment added |
+| State/Context | Actual conversation context plus TTL/disputed-evidence tests | Human live quality acceptance pending |
+| Goals | Actual operator-authored goal capture/current card/future prompt; supersession in executor | Does not create or alter business-domain goals |
+| MetaPreferences | Actual style reversal, one-question guidance, concurrent writes, readback and revocation | Human fresh-call acceptance pending |
+| Hypotheses | Competing/uncertain hypotheses retained; explicit correction precedence | Unknown is allowed, not an invented stable identity |
+| Relationship | Actual scoped rupture/repair capture, chronological current projection | Evidence-only; no Narrative disclosure authority |
+| Privacy/controls | Existing scoped inspect/correct/reject APIs, complete export, transactional erase and worker overlap | No destructive production acceptance performed |
+| Learning | Executed branch linkage, scheduled verified outcomes, provenance, atomic estimates, later decision evidence | Only observational association; expanded live choice requires approval |
+| Operations | Automatic startup registration; bounded batches, crash/retry/denial receipts and private failure metrics | Large-scale load benchmark and deployed worker telemetry not yet certified |
+
+### Verification And Release Classification
+
+Local focused verification: 40 suites / 189 unit/runtime-boundary tests PASS.
+Final six-file MySQL run: 32 PASS, including six actual-executor tests and
+worker gate/erasure-overlap coverage. The later recall-revocation tightening
+also passed the 12-test authenticated Stage 3B/runtime suite again.
+CI results are recorded below after completion.
+TypeScript and nomenclature/domain/tenant/vertical ratchets PASS. Model boundary
+is controlled in generated-answer tests; no external model-quality claim follows.
+
+Broad Claire/Operator Representative: 159 suites, 2058 PASS, 20 FAIL. The exact
+same 20 failures reproduced again on untouched main in the same nine suites
+(205 PASS / 20 FAIL in that nine-suite baseline invocation). These are proven
+preexisting failures, not reasons to weaken identity/customer-truth guards.
+Existing PR #476 owns a separate fixture-repair workstream; it was not taken over.
+
+World baseline was built from untouched main in an isolated managed worktree,
+using disposable MySQL, the repository's release migrations, deterministic proof
+seed/server, CI environment and the exact three-spec Playwright command. Results:
+16 PASS, seven failures, seven skips and 12 not run due to serial-suite failures.
+Four missing `.lc-lantern` failures, missing `.gl-world-title`, and mobile composed
+city geometry all reproduce. Desktop mount initially hit server-start ECONNREFUSED;
+rerunning that exact desktop test after readiness reproduced the same composed
+city geometry failure as CI. The initial startup error is environmental; the
+seven established browser assertion failures are proven preexisting on main.
+Operator Representative's six desktop/mobile browser checks passed on main.
+No world implementation or release assertion was altered.
+
+Release checks for #541 and #542 still fail `release-journey` and
+`fast-smoke-world`; Daphne-specific CI passes. No force merge, administrative
+bypass, unapproved production flag change or direct deployment was performed.
+
+### Current Fourteen Exams
+
+| Exam | Status | Exact Evidence / Limit |
+| --- | --- | --- |
+| 1 Remember | VERIFIED END TO END locally | `daphneV2RuntimeCorrection.mysql.integration.test.ts`: actual ordinary Claire fact and independent controlled-model recall |
+| 2 Correct | VERIFIED END TO END locally | Same runtime suite plus `certification.mysql.integration.test.ts`: corrected fact, immutable history, current projection and later retrieval |
+| 3 Change style | VERIFIED END TO END locally | Durable readback, actual generated routing and deterministic concise-board path |
+| 4 Reverse style | VERIFIED END TO END locally | Fresh-call 0.85 reversal; old detail preference loses authority |
+| 5 Outcomes | BLOCKED - OPERATOR APPROVAL | `daphneStage3b.mysql.integration.test.ts`: actual permitted execution, verified outcome scheduling, atomic retry, later pre-branch evidence; no unauthorized learned behavior |
+| 6 Abstain | TESTED IN ISOLATION plus durable negatives | Ineligible conversation parser, competing/high-uncertainty card, disputed/duplicate/conflicting outcome gates |
+| 7 Consolidate | VERIFIED END TO END locally | `consolidationWorker.mysql.integration.test.ts`: actual scheduler, longitudinal history, correction/expiry/revocation, restart, concurrent workers, crash and failure retry |
+| 8 Relationship repair | VERIFIED END TO END locally | Actual Claire rupture/repair turns, fresh card, other-agent exclusion; chronological rupture regression |
+| 9 Consent/revocation | VERIFIED END TO END locally | Fresh disabled guidance, Stage 3B revoke/non-use, revoked worker denial, disabled gate preserves pending work |
+| 10 Isolation | VERIFIED END TO END locally | Existing authenticated Stage 3B tenant/operator checks, canonical identity negatives, outcome and agent-scoped card tests |
+| 11 Authority | TESTED IN ISOLATION / runtime gates | Narrative read-only boundary, no business writes, original receipt-before-branch, exact target restriction and expandedBehaviorEnabled=false |
+| 12 Recovery | VERIFIED END TO END locally | Failed memory write has no memory success; preference readback failures; worker crash/backoff/rollback; outcome retry; atomic privacy failure and worker overlap |
+| 13 Production | DEPLOYED baseline only | Actual Railway source remains main `1bed5fbc...`; new executor and repairs not deployed |
+| 14 Real Claire | BLOCKED - HUMAN LIVE TEST | Script above plus fact/goal/repair tests below; requires safe release first |
+
+### Exact Learning Approval Request (Not Authorization)
+
+1. Target: only `pattern:explicit_deferral_dismissal`; one existing ambiguous
+   pending-continuation selection dimension, not general Claire persuasion.
+2. Behavior: bounded comparison of current `ask_instead` clarification versus
+   unchanged baseline/no Daphne adaptation. No new phrasing/action class.
+3. Missing authority: current directive explicitly mandates ask-instead. Neither
+   observational scores nor a policy preview authorizes withholding that choice.
+4. Consent: separately affirmative experimentation consent AND operator approval
+   of this comparison; adaptation consent alone is insufficient.
+5. Scope: named canonical operator and tenant allowlist, no global enable.
+6. Safety: ordinary low-risk pending continuation only; no payment, identity,
+   business-truth changes, essential-warning suppression or Narrative disclosure.
+7. Receipts: approval/directive version, executed SHA, assignment/comparator,
+   selection probability, source decision, original use receipt BEFORE behavior,
+   execution stage and rollback result. Existing receipt mechanism remains owner.
+8. Outcomes: predeclare measurement semantics/source before canary. Proposed
+   proximal measure is resolution of the same pending ambiguity within 30 minutes;
+   burden must be independently measured, not agent-generated praise or silence.
+   Existing `started`/`burden` plumbing accepts only verified linked measurements;
+   no live producer has been certified to supply these proposed semantics.
+9. Causality: minimum independent samples, conflict abstention, missing outcomes
+   unknown, comparator support and propensity checks. Association is not effect.
+10. Rollback: revoke directive or disable tenant flag immediately; retain audit
+    history, prevent later use, and honor separate memory/privacy controls.
+11. Acceptance: same-target permitted difference, wrong scope/agent/target denied,
+    revocation immediate, receipt/storage failure baseline-safe, no disclosure or
+    commercial mutation, verified window/source and duplicate/conflict negatives.
+12. Canary: only after approval and green release gates, one named operator/tenant,
+    no global experiment; human phone validation and privacy-safe receipt review
+    before considering any broader scope. This proposal has NOT been activated.
+
+### Production And Remaining Human Tests
+
+Fresh Railway read confirms service `9d63863a-2626-47a0-bd65-c3ba8db54258`,
+environment `330bff45-7d21-4cdf-be04-b38cea76fcfb`, deployment
+`4e15e58c-ab10-4dbe-b145-b06e2989881b` SUCCESS at main `1bed5fbc...`.
+Current flag read: `DAPHNE_V2_CLAIRE_ENABLED=true`; tenant allowlist unset;
+Stage 3B adaptation flag and causal-canary flag/allowlist unset. No new worker
+can be described as production-running from this old SHA.
+
+After safe deployment, execute the preference A-F phone script above. Additionally,
+say "I own a laundromat"; end the call; on an independent call ask for relevant
+business context, then correct ownership and verify fresh-call corrected recall.
+Declare the stated customer goal and deliveries-today context; verify current
+card/source and eventual State expiration. State "You misunderstood me" then
+"That's what I meant, thanks"; inspect only the Claire relationship. Record
+deployed SHA, call/conversation IDs, immutable observations, preferences/current
+versions, consolidation completion claims, card evidence, and Stage 3B original
+use/intervention/outcome IDs. Fail on false save acknowledgment, old preference
+reuse, cross-scope data, stale correction, lost warnings or unauthorized behavior.
+Never label these pending human interactions LIVE ACCEPTED.

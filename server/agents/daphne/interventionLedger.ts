@@ -169,8 +169,8 @@ export async function listDaphneInterventions(input: {
   tenantId: string;
   canonicalOperatorId: string;
   limit?: number;
-}): Promise<DaphneInterventionRecord[]> {
-  const db = await getDb();
+}, persistence?: Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>,"select">): Promise<DaphneInterventionRecord[]> {
+  const db = persistence ?? await getDb();
   if (!db) throw new Error("Database unavailable");
   const rows = await db.select().from(daphneInterventions).where(and(
     eq(daphneInterventions.tenantId, required(input.tenantId, "tenantId", 64)),

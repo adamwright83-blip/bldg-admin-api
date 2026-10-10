@@ -42,4 +42,10 @@ describe("Daphne V2 dyadic Relationship", () => {
     expect(value.unresolvedRuptures).toEqual([]);
     expect(value.sourceObservationIds).toEqual(["e1", "e2"]);
   });
+  it("does not let an earlier repair erase a later rupture",()=>{
+    const relationship=deriveDaphneRelationship({agentId:"claire",asOf:new Date("2026-10-07T09:00:00Z"),
+      observations:[rel("e1","claire","rupture","question"),rel("e2","claire","repair","question"),rel("e3","claire","rupture","question")]});
+    expect(relationship.unresolvedRuptures).toEqual(["question"]);
+    expect(relationship.repairs).toEqual(["question"]);
+  });
 });
