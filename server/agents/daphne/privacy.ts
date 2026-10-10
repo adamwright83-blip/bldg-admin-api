@@ -14,6 +14,23 @@ import { listActiveDaphneGoals, loadDaphneMetaPreferences } from "./goalsPrefere
 import { recordDaphneMetricEvent } from "./metrics";
 
 export async function exportDaphneV2UserData(input:{tenantId:string;canonicalOperatorId:string}){
+ const db=await getDb(); if(!db) throw new Error("Database unavailable");
+ // The bounded read model below is convenient for clients; it is not a full
+ // privacy export. Preserve all canonical history in one database snapshot.
+ const canonicalHistory=await db.transaction(async tx=>{
+  const where=(table:{tenantId:any;canonicalOperatorId:any})=>and(
+   eq(table.tenantId,input.tenantId),eq(table.canonicalOperatorId,input.canonicalOperatorId)
+  );
+  return {
+   observations:await tx.select().from(daphneObservations).where(where(daphneObservations)),
+   epistemicClaims:await tx.select().from(daphneEpistemicClaims).where(where(daphneEpistemicClaims)),
+   goals:await tx.select().from(daphneGoals).where(where(daphneGoals)),
+   metaPreferences:await tx.select().from(daphneMetaPreferences).where(where(daphneMetaPreferences)),
+   interventions:await tx.select().from(daphneInterventions).where(where(daphneInterventions)),
+   outcomes:await tx.select().from(daphneOutcomes).where(where(daphneOutcomes)),
+   metricEvents:await tx.select().from(daphneMetricEvents).where(where(daphneMetricEvents)),
+  };
+ });
  const [evidence,goals,metaPreferences]=await Promise.all([
   loadDaphneEvidenceBundle({...input,limit:500}),
   listActiveDaphneGoals(input),
@@ -30,6 +47,8 @@ export async function exportDaphneV2UserData(input:{tenantId:string;canonicalOpe
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,
   observations:evidence.observations,epistemicClaims:evidence.claims,interventions:evidence.interventions,outcomes:evidence.outcomes,
   goals,metaPreferences,
+  canonicalHistory,
+  readModelLimits:{evidenceLimit:500,goals:"active_only",metaPreferences:"latest_only"},
  };
 }
 
@@ -43,16 +62,18 @@ export async function deleteDaphneV2UserData(input:{tenantId:string;canonicalOpe
  const where=(table:{tenantId:any;canonicalOperatorId:any})=>and(
   eq(table.tenantId,input.tenantId),eq(table.canonicalOperatorId,input.canonicalOperatorId)
  );
- await db.delete(daphneOutcomes).where(where(daphneOutcomes));
- await db.delete(daphneInterventions).where(where(daphneInterventions));
- await db.delete(daphneMetaPreferences).where(where(daphneMetaPreferences));
- await db.delete(daphneGoals).where(where(daphneGoals));
- await db.delete(daphneEpistemicClaims).where(where(daphneEpistemicClaims));
- await db.delete(daphneObservations).where(where(daphneObservations));
- await db.delete(daphneMetricEvents).where(and(
+ await db.transaction(async tx=>{
+ await tx.delete(daphneOutcomes).where(where(daphneOutcomes));
+ await tx.delete(daphneInterventions).where(where(daphneInterventions));
+ await tx.delete(daphneMetaPreferences).where(where(daphneMetaPreferences));
+ await tx.delete(daphneGoals).where(where(daphneGoals));
+ await tx.delete(daphneEpistemicClaims).where(where(daphneEpistemicClaims));
+ await tx.delete(daphneObservations).where(where(daphneObservations));
+ await tx.delete(daphneMetricEvents).where(and(
   eq(daphneMetricEvents.tenantId,input.tenantId),
   eq(daphneMetricEvents.canonicalOperatorId,input.canonicalOperatorId)
  ));
+ });
  const erasedAt=new Date();
  await recordDaphneMetricEvent({
    tenantId:input.tenantId,canonicalOperatorId:null,eventName:"privacy_erasure",
