@@ -355,3 +355,51 @@ Codex pushed work without overwriting any uncommitted local editor changes.
 No live phone call, merge, production rollout, new intervention target or
 experimental consent was performed. The final status remains dependent on the
 fresh PR #544 CI results, legal merge/release gates, and actual deployment.
+
+## October 9 — Rebasing and Release Hold (after PR #544)
+
+**Current certification verdict: CODE COMPLETE / NOT DEPLOYED.**
+This is the code/integration candidate, **not** a claim of live acceptance.
+Outstanding user-approved expansion of learned behavior remains disabled;
+Exam 5's experimental/live-selection portion is BLOCKED — OPERATOR APPROVAL.
+Human phone acceptance is BLOCKED until this complete stack is deployed and
+real independent calls produce corroborating durable receipts.
+
+Fetched and confirmed `main@1bed5fbc9bf0e2c614d968ba760fadafd098ee0b`.
+All four original PRs were retained. The stack has explicit ancestry:
+
+| PR | Branch | Rebased commit before this documentation update | Base |
+| --- | --- | --- | --- |
+| #541 | `codex/daphne-v2-certification` | `793f9fbe4e4bb0fc74dd716b5315fc0772eeeea4` | `main` |
+| #542 | `codex/daphne-v2-privacy-history` | `469afa6f21533436996941a1c7a1aa15088e49cd` | #541 |
+| #543 | `codex/daphne-v2-runtime-completion` | `7c402aea9210beb15ca77b097bafce23b27ea71d` | #542 |
+| #544 | `fix/daphne-v2-scoped-inspection-controls` | `4326c5e01da1c165cfaff006316c68587290ad9b` | #543 |
+
+All original source-tree snapshots from #543 and #544 were preserved exactly.
+#542 was reconstructed as the existing verified combined tree containing
+#541's changes plus the full #542 privacy implementation; the #542 privacy
+source/test blobs matched the original PR. Its workflow retains both suites.
+Original pre-rebase heads remain recoverable via:
+
+- `backup/daphne-v2-pr542-pre-rebase-20261009` — `72ce36eb777a77d3031e1959dacaf7796111fa83`
+- `backup/daphne-v2-pr543-pre-rebase-20261009` — `2a2d57a65bfbc03cc177570e6e3907c102bfd390`
+- `backup/daphne-v2-pr544-pre-rebase-20261009` — `babb5af58f9ac16f9b16108d271861d80af9f752`
+
+The remote GitHub branches were updated with expected-head SHA leases.
+A local Codex worktree on the operator's Mac is **not accessible** from this
+environment. No claim is made that its uncommitted changes were copied or
+backed up. Do not reset that local worktree; preserve any remaining local edits
+to `backup/daphne-v2-post-limit-20261009` from that machine.
+
+**Release hold:** Historical `release-journey` Claire failures (20) and
+`fast-smoke-world` browser failures (seven) were reproduced on untouched
+main by the previous Codex execution, documented above. Do not weaken
+these tests or bypass red required gates. A separate CleanCloud CSV sales-truth
+failure on PR #543 was observed and not yet independently baseline-classified.
+No merge through red gates, production deployment, authorization change,
+PR #535 modification or phone call occurred as part of this rebase.
+
+Fresh Daphne CI and real disposable-MySQL suite execution are required on the
+**final #544 head**. Record actual run URLs and conclusions before further
+release actions. The latest #544 head after this documentation commit is
+available in the PR and must be used rather than the snapshot SHA above.
