@@ -12,6 +12,8 @@ export type DaphneResponseSummary = {
   expectedProximalOutcome: number | null;
   burdenEstimate: number | null;
   sourceClaimIds: string[];
+  sourceObservationIds?: string[];
+  sourceOutcomeIds?: string[];
 };
 
 export type DaphneOperatorCard = {
@@ -61,6 +63,7 @@ export function compileDaphneOperatorCard(input: {
   responseModel: DaphneResponseSummary[];
 }): DaphneOperatorCard {
   const personalityInferenceEnabled =
+    input.metaPreferences.personality_inference?.status !== "revoked" &&
     activePreference(input.metaPreferences, "personality_inference") !== false;
   const crossAgentSharingEnabled =
     activePreference(input.metaPreferences, "cross_agent_sharing") === true;
@@ -78,6 +81,12 @@ export function compileDaphneOperatorCard(input: {
     if (item?.status === "active") evidenceRefs.add(item.sourceObservationId);
   });
   input.relationship?.sourceObservationIds.forEach(id => evidenceRefs.add(id));
+  input.hypotheses.forEach(set => set.hypotheses.forEach(h => evidenceRefs.add(h.claimId)));
+  input.responseModel.forEach(model => {
+    model.sourceClaimIds.forEach(id => evidenceRefs.add(id));
+    model.sourceObservationIds?.forEach(id => evidenceRefs.add(id));
+    model.sourceOutcomeIds?.forEach(id => evidenceRefs.add(id));
+  });
 
   return {
     kind: "compiled_daphne_operator_card",
@@ -93,10 +102,12 @@ export function compileDaphneOperatorCard(input: {
     relationship: input.relationship,
     metaPreferences: Object.fromEntries(
       Object.entries(input.metaPreferences)
-        .filter(([, value]) => value?.status === "active")
-        .map(([key, value]) => [key, value!.value])
+        .filter(([key, value]) => value?.status === "active" ||
+          (key === "adaptation_enabled" && value?.status === "revoked"))
+        .map(([key, value]) => [key, value!.status === "revoked" ? false : value!.value])
     ) as Partial<Record<DaphneMetaPreferenceKey, unknown>>,
-    hypotheses: personalityInferenceEnabled ? input.hypotheses : [],
+    hypotheses: personalityInferenceEnabled ? input.hypotheses : input.hypotheses
+      .filter(set => set.hypotheses.every(h => h.claimType === "direct_fact")),
     responseModel: input.responseModel,
     guardrails: {
       mayMutateBusinessTruth: false,

@@ -1,6 +1,36 @@
 import type { DaphneObservationRecord } from "./observationStore";
 import type { DaphneEpistemicClaimRecord } from "./epistemicStore";
 
+/** Resolve append-only user dispositions without rewriting historical claims. */
+export function resolveDaphneCurrentClaims(input: {
+ claims: DaphneEpistemicClaimRecord[];
+ tenantId: string; canonicalOperatorId: string; agentId: string; asOf: Date;
+}): DaphneEpistemicClaimRecord[] {
+ const eligible = input.claims.filter(c =>
+  c.tenantId === input.tenantId && c.canonicalOperatorId === input.canonicalOperatorId &&
+  (c.agentId === null || c.agentId === input.agentId) &&
+  Date.parse(c.createdAt) <= input.asOf.getTime() &&
+  (!c.validFrom || Date.parse(c.validFrom) <= input.asOf.getTime())
+ );
+ // An expired replacement must not resurrect what the operator rejected.
+ const superseded = new Set(eligible.filter(c => c.claimType === "supersession" &&
+  !["rejected", "superseded"].includes(c.epistemicStatus)).map(c => c.supersedesClaimId));
+ const byId = new Map(eligible.map(c => [c.id, c]));
+ return eligible.filter(c => !superseded.has(c.id) &&
+  !["rejected", "superseded", "contradicted"].includes(c.epistemicStatus) &&
+  (!c.validUntil || Date.parse(c.validUntil) > input.asOf.getTime())
+ ).flatMap(c => {
+  if (c.claimType !== "supersession") return [c];
+  if (c.claim.userDisposition !== "corrected" || !c.supersedesClaimId) return [];
+  const original = byId.get(c.supersedesClaimId);
+  const value = c.claim.value;
+  if (!original || !value || typeof value !== "object" || Array.isArray(value)) return [];
+  // A correction is an explicit statement, never a newly certified inference.
+  return [{...c, claimType: "direct_fact" as const, claim: value as Record<string, unknown>,
+    counterEvidence: c.counterEvidence.filter(e => e.supersededClaimId !== c.supersedesClaimId)}];
+ });
+}
+
 export type DaphneConsolidationPlan = {
  generatedAt:string;
  retainedObservationIds:string[];

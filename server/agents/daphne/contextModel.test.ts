@@ -14,7 +14,7 @@ function obs(id: string, occurredAt: string, context: Record<string, unknown>): 
     agentId: "claire",
     observationKind: "system_context_event",
     evidenceChannel: "system_record",
-    verificationStatus: "unverified",
+    verificationStatus: "verified",
     sourceType: "turn_context",
     sourceReference: id,
     occurredAt,
@@ -27,6 +27,12 @@ function obs(id: string, occurredAt: string, context: Record<string, unknown>): 
 }
 
 describe("Daphne V2 Context/regime model", () => {
+  it("expires old context and excludes unverified observations", () => {
+    const old=obs("old","2026-10-07T08:00:00Z",{taskMode:"execution"});
+    expect(deriveDaphneContext({observations:[old],asOf:new Date("2026-10-08T08:00:00Z")}).taskMode).toBe("unknown");
+    expect(deriveDaphneContext({observations:[{...old,verificationStatus:"unverified"}],
+      asOf:new Date("2026-10-07T08:01:00Z")}).sourceObservationIds).toEqual([]);
+  });
   it("uses structured situation fields rather than free-text personality inference", () => {
     const value = deriveDaphneContext({
       observations: [

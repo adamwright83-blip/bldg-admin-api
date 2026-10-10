@@ -52,7 +52,8 @@ jobs:
       - name: Verify Daphne receipts, style rendering and Stage 3B branch
         run: >-
           pnpm vitest run
-          server/agents/daphne/explicitPreferenceCorrection.test.ts
+          server/agents/daphne
+          server/narratorOs/daphneRelationshipContext.test.ts
           server/claire/proactive/boardService.test.ts
           server/claire/turn/daphneV2RuntimeCorrection.test.ts
           server/claire/turn/daphneAdaptation.test.ts
@@ -62,3 +63,6 @@ jobs:
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/claire/turn/daphneV2RuntimeCorrection.mysql.integration.test.ts
+          server/agents/daphne/certification.mysql.integration.test.ts
+          server/agents/daphne/learnedPolicy.mysql.integration.test.ts
+          server/agents/operatorRepresentative/daphneStage3b.mysql.integration.test.ts

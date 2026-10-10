@@ -11,6 +11,7 @@ import { listDaphneOutcomes } from "./outcomeLedger";
 import { buildDaphneResponseModel } from "./responseModel";
 import type { DaphnePersonDistribution } from "./personModel";
 import { recordDaphneMetricEvent } from "./metrics";
+import { resolveDaphneCurrentClaims } from "./consolidation";
 
 function asPersonDistribution(claim: DaphneEpistemicClaimRecord): DaphnePersonDistribution | null {
   if (claim.claimType !== "person_distribution_estimate") return null;
@@ -38,14 +39,19 @@ export async function buildDaphneV2OperatorCard(input:{
   listDaphneInterventions({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500}),
   listDaphneOutcomes({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,limit:500}),
  ]);
- const state=deriveDaphneFastState({observations,asOf});
- const context=deriveDaphneContext({observations,asOf});
- const relationship=deriveDaphneRelationship({observations,agentId:input.agentId,asOf});
- const person=claims.map(asPersonDistribution).filter((v):v is DaphnePersonDistribution=>Boolean(v));
- const claimKeys=Array.from(new Set(claims.map(c=>c.claimKey)));
- const hypotheses=claimKeys.map(claimKey=>buildDaphneHypothesisSet({claimKey,claims}));
+ const scopedObservations=observations.filter(o =>
+  o.tenantId===input.tenantId && o.canonicalOperatorId===input.canonicalOperatorId &&
+  (o.agentId===null || o.agentId===input.agentId) &&
+  ["verified","attested"].includes(o.verificationStatus));
+ const currentClaims=resolveDaphneCurrentClaims({...input,claims,asOf});
+ const state=deriveDaphneFastState({observations:scopedObservations,asOf});
+ const context=deriveDaphneContext({observations:scopedObservations,asOf});
+ const relationship=deriveDaphneRelationship({observations:scopedObservations,agentId:input.agentId,asOf});
+ const person=currentClaims.map(asPersonDistribution).filter((v):v is DaphnePersonDistribution=>Boolean(v));
+ const claimKeys=Array.from(new Set(currentClaims.map(c=>c.claimKey)));
+ const hypotheses=claimKeys.map(claimKey=>buildDaphneHypothesisSet({claimKey,claims:currentClaims}));
  const responseModel=buildDaphneResponseModel({
-  interventions,outcomes,successMeasureKey:"started",burdenMeasureKey:"burden"
+  interventions:interventions.filter(i=>i.agentId===input.agentId),outcomes,successMeasureKey:"started",burdenMeasureKey:"burden"
  });
  const card=compileDaphneOperatorCard({
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,generatedAt:asOf,

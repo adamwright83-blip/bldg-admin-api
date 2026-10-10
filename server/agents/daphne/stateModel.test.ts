@@ -18,7 +18,7 @@ function observation(overrides: Partial<DaphneObservationRecord> = {}): DaphneOb
     agentId: "claire",
     observationKind: "system_context_event",
     evidenceChannel: "system_record",
-    verificationStatus: "unverified",
+    verificationStatus: "verified",
     sourceType: "claire_turn",
     sourceReference: "turn:1",
     occurredAt: "2026-10-07T08:00:00.000Z",
@@ -37,6 +37,19 @@ function observation(overrides: Partial<DaphneObservationRecord> = {}): DaphneOb
 }
 
 describe("Daphne V2 fast State", () => {
+  it("does not renew yesterday's state when compiling a fresh card", () => {
+    const state = deriveDaphneFastState({observations:[observation()],
+      asOf:new Date("2026-10-08T08:05:00Z")});
+    expect(state.currentGoal).toBeNull();
+    expect(state.receptivity).toBe("unknown");
+    expect(state.sourceObservationIds).toEqual([]);
+  });
+
+  it("does not promote disputed or unverified context into current state", () => {
+    const state = deriveDaphneFastState({observations:[observation({verificationStatus:"disputed"})],
+      asOf:new Date("2026-10-07T08:05:00Z")});
+    expect(state.currentGoal).toBeNull();
+  });
   it("derives operational state from structured evidence without inventing psychology", () => {
     const state = deriveDaphneFastState({
       observations: [observation()],
