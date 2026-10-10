@@ -31,6 +31,9 @@ jobs:
     env:
       CI: "true"
       NODE_ENV: ci
+      # Disposable CI only: production rollout flags remain absent/off.
+      DAPHNE_V2_CONVERSATION_INGESTION_ENABLED: "true"
+      DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED: "true"
       DATABASE_URL: mysql://root:root@127.0.0.1:3306/legacy_dayforge_release
       DAYFORGE_RELEASE_DB: "1"
       DAYFORGE_RELEASE_TEST_MODE: "1"
