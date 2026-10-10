@@ -151,7 +151,7 @@ describeMysql("Daphne actual scheduled consolidation executor", () => {
     const denied = await buildDaphneV2OperatorCard({ ...s, agentId: "claire" });
     expect(JSON.stringify(denied)).not.toContain("secret shop");
     expect(denied.metaPreferences.adaptation_enabled).toBe(false);
-  });
+  }, 25_000); // polling allows 10s; exercise both scheduled workers under CI load
   it("recovers pending work after a claimed database connection crashes", async () => {
     const s = scope();
     const observation = await seed(s, "I own a laundromat.", "crash");
