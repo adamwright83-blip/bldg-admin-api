@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
@@ -61,7 +62,7 @@ export const daphneRouter=router({
      operatorUserId:ctx.user.openId,actorType:"user",actorId:ctx.user.openId,
      observationKind:"preference_declaration",evidenceChannel:"stated",verificationStatus:"attested",
      sourceType:"daphne_control_api",sourceReference:`control:${input.key}`,occurredAt:new Date(),
-     payload:{preferenceKey:input.key,value:input.value},idempotencyKey:`control:${input.key}:${Date.now()}`
+     payload:{preferenceKey:input.key,value:input.value},idempotencyKey:`control:${input.key}:${randomUUID()}`
     });
     return await setDaphneMetaPreference({
      tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,
