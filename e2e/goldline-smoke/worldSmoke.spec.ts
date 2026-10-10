@@ -306,25 +306,28 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await expect(page.locator(".lc-tether").first()).toBeAttached();
   });
 
-  test("admin Lantern City has one top-left chrome owner at the reported viewport", async ({ page }, testInfo) => {
+  test("JOYSTICK Home owns one header above the embedded Lantern City at the reported viewport", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === "mobile", "The reported overlap is the desktop admin world");
 
     await signIn(page, "admin");
     await page.setViewportSize({ width: 675, height: 422 });
-    // localhost proof routing exposes the same command-center home at /home;
-    // admin.bldg.chat maps / and /home to this same AdminHostApp world surface.
     await page.goto("/home");
-    await expect(page.locator('[data-lantern-city="islands"]')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".gl-world-title")).toBeVisible();
+    await expect(page.locator(".jh-page")).toBeVisible({ timeout: 30_000 });
+    const header = page.locator(".jh-page > .jh-topbar");
+    await expect(header).toHaveCount(1);
+    const brand = header.locator(".jh-brand");
+    await expect(brand).toBeVisible();
 
-    // The embedded island scene must not paint a second header/stats row or
-    // tower shortcut stack underneath the shell-owned Laundry Farm title.
-    const island = page.locator('[data-lantern-city="islands"]');
+    // The embedded game cannot render another header, duplicate utility row,
+    // or a second copy of the home brand inside its transformed scene.
+    const island = page.locator(".jh-world-stage [data-lantern-city=\"islands\"]");
+    await expect(island).toBeVisible({ timeout: 30_000 });
     await expect(island.locator("header")).toHaveCount(0);
+    await expect(island.locator(".jh-brand, .gl-world-title, .gl-world-utility-menu")).toHaveCount(0);
     await expect(island.getByRole("button", { name: "OPUS LA floors" })).toHaveCount(0);
     await expect(island.getByRole("button", { name: "Century Park East floors" })).toHaveCount(0);
 
-    const titleBox = await page.locator(".gl-world-title").boundingBox();
+    const titleBox = await brand.boundingBox();
     expect(titleBox).not.toBeNull();
     expect(titleBox!.x).toBeGreaterThanOrEqual(0);
     expect(titleBox!.y).toBeGreaterThanOrEqual(0);
@@ -339,7 +342,8 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     });
 
     await page.setViewportSize({ width: 1440, height: 900 });
-    await expect(page.locator(".gl-world-title")).toBeVisible();
+    await expect(header).toHaveCount(1);
+    await expect(brand).toBeVisible();
     await page.screenshot({
       path: `${artifactDir}/lantern-city-admin-chrome-1440x900.png`,
       fullPage: false,
