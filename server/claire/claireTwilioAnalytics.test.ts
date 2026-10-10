@@ -29,7 +29,7 @@ vi.mock("../_core/env", () => ({
 vi.mock("../db", async importOriginal => ({
   ...(await importOriginal<typeof import("../db")>()),
   getUserByOpenId: async (openId: string) =>
-    openId === "operator-1" ? ({ openId, tenantId: "tenant-1", role: "admin" } as never) : undefined,
+    openId === "operator-1" ? ({ id: 1, openId, tenantId: "tenant-1", role: "admin" } as never) : undefined,
 }));
 
 vi.mock("twilio", async importOriginal => {
@@ -111,6 +111,7 @@ vi.mock("../analytics/businessQuery", async importOriginal => {
 
 import { FIXTURE_NOW } from "../analytics/businessLedgerFixture";
 import { registerClaireRoutes, startClairePreDriveCall } from "./claireTwilio";
+import { createMemoryCommunicationReceiptStore, setCommunicationReceiptStoreForTests } from "../twilioPlatform/communicationReceipts";
 
 type Handler = (req: unknown, res: unknown) => Promise<unknown>;
 
@@ -154,11 +155,13 @@ async function say(handlers: Map<string, Handler>, token: string, speech: string
 }
 
 beforeEach(() => {
+  setCommunicationReceiptStoreForTests(createMemoryCommunicationReceiptStore());
   vi.useFakeTimers({ now: FIXTURE_NOW, toFake: ["Date"] });
   hoisted.commitment.mockClear();
   hoisted.followUp.mockClear();
 });
 afterEach(() => {
+  setCommunicationReceiptStoreForTests(null);
   vi.useRealTimers();
 });
 
@@ -224,16 +227,17 @@ describe("live Claire call answers business questions in the call (U)", () => {
     expect(hoisted.commitment).toHaveBeenCalledTimes(2);
   });
 
-  it("dated work becomes one briefing proposal, and a save that fails is never spoken as saved", async () => {
+  it("fails closed on dated-work intake before the durable decision store has been migrated", async () => {
+    // This legacy unit suite intentionally runs before MySQL migrations.
+    // It must never claim a proposal or a save when durable decision recording fails.
     const handlers = routes();
     const token = await startCall();
     const proposed = await say(handlers, token, "Add reviewing last month's revenue tomorrow.");
-    expect(proposed).toContain("Tomorrow: add reviewing last month's revenue.");
-    expect(proposed).toContain("Want me to put that on the Day Line?");
+    expect(proposed).toContain("Nothing changed.");
+    expect(proposed).not.toMatch(/Want me to put that on the Day Line|Added:|Done/);
     expect(hoisted.commitment).not.toHaveBeenCalled();
     const saved = await say(handlers, token, "Yes.");
-    expect(saved).toContain("nothing saved");
-    expect(saved).not.toMatch(/\bDone\b/);
+    expect(saved).not.toMatch(/Added:|Done/);
   });
 
   it("ordinary conversation still reaches Claire's normal follow-up", async () => {

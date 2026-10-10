@@ -4,6 +4,7 @@ import type { ClaireRelationshipEvent } from "../character/types";
 import { recordConfirmedVisitEvidence } from "./evidenceSources";
 import { evaluateProgression } from "./evaluate";
 import { groupCustomerOrderTruth, mergeCustomerOrderTruth } from "../../geography/customerOrderTruth";
+import type { AuthorityReceipt } from "../../authority/authorityReceipt";
 import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
 import { executePersonalTurn } from "./personalReveal";
 import { recordProgressionEvidence, refreshProgression } from "./service";
@@ -19,10 +20,28 @@ const oct = (n: number, hour = 15) => new Date(Date.UTC(2026, 9, n, hour));
 function truthProgress(orders: Array<{ id: number; phone: string; slug: string | null; at: Date }>) {
   const records = mergeCustomerOrderTruth({
     native: orders.map(o => ({
-      id: o.id, status: "completed", createdAt: o.at, firstName: "R", lastName: String(o.id), phone: o.phone,
-      email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug, bldgUserId: null, paid: true,
+      id: o.id, tenantId: "t1", status: "completed", createdAt: o.at,
+      firstName: "R", lastName: String(o.id), phone: o.phone,
+      email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug,
+      bldgUserId: null, paid: true,
       stripePaymentIntentId: `pi_test_${o.id}`, total: "30",
     })),
+    nativePaymentAuthorityReceipts: new Map<number, AuthorityReceipt>(
+      orders.map(o => [o.id, {
+        id: `fixture-captured-${o.id}`, tenantId: "t1",
+        claimType: "payment_verified", subjectType: "order",
+        subjectId: String(o.id), sourceType: "stripe_payment_intent",
+        sourceRef: `pi_test_${o.id}`, actorType: "system", actorId: null,
+        evidenceClass: "authoritative_external", verificationClass: "VERIFIED",
+        admissionPolicy: "native_stripe_payment_v1",
+        occurredAt: o.at.toISOString(), admittedAt: o.at.toISOString(),
+        metadata: {
+          captureEvidence: "stripe_amount_received_v1",
+          capturedCurrency: "usd", capturedAmountCents: 3000,
+        },
+        idempotencyKey: `fixture-captured-${o.id}`,
+      }])
+    ),
   });
   return deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", records));
 }

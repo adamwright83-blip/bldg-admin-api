@@ -472,7 +472,10 @@ describe("no new autonomous dialer", () => {
     expect(production).not.toMatch(/twilio\s*\(/);
     expect(production).not.toMatch(/getTwilioPlatformClient/);
     expect(production).not.toMatch(/weeklyMission|nightShift|autonomousTriggers/);
-    expect(twilio.match(/client!\.calls\.create\(/g)).toHaveLength(2);
+    // Call creation moved to the shared provider; do not require the old direct Twilio seam.
+    const provider = readFileSync("server/twilioPlatform/claireCallProvider.ts", "utf8");
+    expect(provider.split("client.calls.create(")).toHaveLength(2);
+    expect(twilio.split("placeClaireOutboundCall(").length).toBeGreaterThanOrEqual(3);
     expect(twilio).not.toMatch(/setInterval\s*\(/);
     expect(twilio).not.toMatch(/every fifteen/i);
     const preDrive = twilio.slice(
