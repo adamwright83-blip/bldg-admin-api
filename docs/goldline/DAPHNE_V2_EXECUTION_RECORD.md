@@ -403,3 +403,47 @@ Fresh Daphne CI and real disposable-MySQL suite execution are required on the
 **final #544 head**. Record actual run URLs and conclusions before further
 release actions. The latest #544 head after this documentation commit is
 available in the PR and must be used rather than the snapshot SHA above.
+
+## Post-Rebase Acceptance Timing Remediation
+
+Fresh CI on the first stacked rebase produced:
+
+- #542 Daphne/real-MySQL workflow **PASS**: run
+  [38027005502](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027005502).
+- #543 fresh MySQL acceptance initially **FAIL**: run
+  [38027010634](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027010634),
+  one of 32 cases exceeded Vitest's 5-second *test harness* default.
+- #544 initial rebased MySQL acceptance also **FAIL**: run
+  [38027039329](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027039329),
+  same 5-second harness timeout; 32 tests passed, one timed out.
+
+The failing scheduled-worker test polls for an observable durable result with
+a 10-second `until()` bound and checks worker concurrency, longitudinal
+correction/expiry, revocation and idempotency. An inherited 5-second global
+Vitest timeout contradicted that bounded test contract on shared CI.
+The integration test now has an explicit 25-second outer timeout; its
+assertions and production worker implementation are unchanged. No legacy,
+world-smoke, tenant/security, billing or payment gate was modified.
+This test correction is **not** evidence of a passing new run until GitHub CI
+reports success.
+
+Updated stack heads after the test correction, *before this final documentation
+commit*:
+
+- #541 `793f9fbe4e4bb0fc74dd716b5315fc0772eeeea4` on main
+- #542 `469afa6f21533436996941a1c7a1aa15088e49cd` on #541
+- #543 `fdafd6e8e5e2fc8a988bb8a509df78124d4f20d4` on #542
+- #544 `38b41b472b5de347bfcf6f409d88cfe9180a2174` on #543
+
+#544's seven original commits were replayed with the #543 test fix
+preserved through each resulting tree. The initial rebased #544 head was
+additionally preserved as
+`backup/daphne-v2-pr544-before-worker-timeout-20261009`.
+Use the latest PR #544 head SHA after the documentation commit for final CI.
+
+**Release verdict remains CODE COMPLETE / NOT DEPLOYED.**
+Never mark LIVE ACCEPTED. Production remains on main until all applicable
+release protections allow a safe merge, and phone acceptance remains blocked
+until real conversations yield matching durable receipts. Outcome-informed
+experimental selection outside the established `ask_instead` authority remains
+approval-blocked.
