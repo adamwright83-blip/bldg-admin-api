@@ -754,7 +754,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // completed utterance boundary. Incomplete voice fragments returned above,
   // so they cannot accidentally become durable preferences.
   const daphnePreferenceTurnId = input.sourceEventId ?? `${input.conversationKey}:${(state.claireTurnCount ?? 0) + 1}`;
-  const memoryCapture=await ingestDaphneConversation({
+  await ingestDaphneConversation({
     tenantId:input.tenantId,operatorUserId:input.operatorUserId,utterance,
     conversationId:input.conversationKey,turnId:daphnePreferenceTurnId,
     completed:durableInputComplete,
