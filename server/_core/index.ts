@@ -70,6 +70,7 @@ import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/brows
 import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../agents/persistentOperator/autonomousWorkerService";
 import { startDaphneConsolidationWorker } from "../agents/daphne/consolidationWorker";
+import { isDaphneConsolidationWorkerConfigured } from "../agents/daphne/releaseSafety";
 import { registerPresidentAgentRoutes } from "../president/httpRoutes";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -909,8 +910,11 @@ async function startServer() {
       server.once("close", stopOutbox);
     }
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_AUTONOMOUS_WORKERS === "1") {
-      const stopDaphne=startDaphneConsolidationWorker();
-      server.once("close",()=>{void stopDaphne();});
+      // New memory consolidation is opt-in independently of existing Daphne style features.
+      if (isDaphneConsolidationWorkerConfigured()) {
+        const stopDaphne = startDaphneConsolidationWorker();
+        server.once("close", () => { void stopDaphne(); });
+      }
       const stopAutonomousWorkers = startAutonomousPersistentOperatorWorkers();
       server.once("close", () => {
         void stopAutonomousWorkers();

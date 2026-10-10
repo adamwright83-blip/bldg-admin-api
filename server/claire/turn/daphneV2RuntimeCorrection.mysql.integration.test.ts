@@ -18,6 +18,7 @@ import { loadDaphneMetaPreferences, setDaphneMetaPreference } from "../../agents
 import { listDaphneObservations } from "../../agents/daphne/observationStore";
 import { buildDaphneV2OperatorCard } from "../../agents/daphne/engine";
 import { ingestDaphneConversation } from "../../agents/daphne/conversationIngestion";
+import { runDaphneConsolidationBatch } from "../../agents/daphne/consolidationWorker";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { deleteTenantData, planTenantDeletion } from "../../saas/tenantLifecycle";
 
@@ -219,12 +220,15 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
     const original={...turnInput("I own a laundromat.","ordinary-a"),sourceEventId:"signed-gather-source"};
     await runClaireTurn(original,first.overrides);
     await runClaireTurn({...original,state:{claireTurnCount:4}},first.overrides);
+    // The independently scheduled worker, never Claire, materializes evidence.
+    await runDaphneConsolidationBatch({limit:50});
     const observations=await listDaphneObservations({tenantId,canonicalOperatorId,limit:500});
     expect(observations.filter(o=>o.sourceType==="claire_conversation_ingestion" && o.actorType==="user")).toHaveLength(1);
     const second=harness(true);
     const answer=await runClaireTurn(turnInput("What should I do next?","ordinary-b"),second.overrides);
     expect(answer.speak).toContain("laundromat");
     await runClaireTurn(turnInput("Actually I own a bakery.","ordinary-c"),harness().overrides);
+    await runDaphneConsolidationBatch({limit:50});
     const fourth=harness(true);
     const corrected=await runClaireTurn(turnInput("What should I do next?","ordinary-d"),fourth.overrides);
     expect(corrected.speak).toContain("bakery");
@@ -413,8 +417,10 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
     await runClaireTurn(turnInput("I'm working on deliveries today.",`state-${suffix}`),h.overrides);
     await runClaireTurn(turnInput("I prefer Claire to ask one question at a time.",`question-${suffix}`),h.overrides);
     await runClaireTurn(turnInput("You misunderstood me.",`rupture-${suffix}`),h.overrides);
+    await runDaphneConsolidationBatch({limit:50});
     expect((await buildDaphneV2OperatorCard(scope)).relationship.unresolvedRuptures).toContain("instruction_misunderstanding");
     await runClaireTurn(turnInput("That's what I meant, thanks.",`repair-${suffix}`),h.overrides);
+    await runDaphneConsolidationBatch({limit:50});
     const card=await buildDaphneV2OperatorCard(scope);
     expect(card.goals[0].statement).toContain("five new customers");
     expect(card.state?.currentGoal).toContain("deliveries today");

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
 import { safeClaireBrainV3Fallback } from "./brainV3";
+// Deliberately never settles: regression guard for Claire's live voice reply.
+// This mock must not be reached by a completed voice turn.
+vi.mock("../../agents/daphne/consolidationWorker", () => ({
+  runDaphneConsolidationBatch: () => new Promise<never>(() => {}),
+}));
+
 
 function context() {
   return {
@@ -109,6 +115,30 @@ function depsForRuntimeLoop(memory: { concise: boolean }) {
 
   return { events, capture, load, followUp, overrides };
 }
+
+describe("Daphne V2 voice consolidation latency boundary", () => {
+  it("responds to a completed voice utterance even when consolidation can never resolve", async () => {
+    const h = depsForRuntimeLoop({ concise: false });
+    const voice = runClaireTurn({
+      tenantId: "tenant-a",
+      operatorUserId: "adam",
+      dayDirectorActorId: "1",
+      surface: "voice",
+      utterance: "Keep your answers shorter from now on.",
+      allowFragmentWait: false,
+      state: {} as ClaireTurnState,
+      conversationKey: "voice-slow-worker",
+      brief: "b",
+      context: context(),
+    }, h.overrides);
+    const result = await Promise.race([
+      voice.then(turn => turn.speak),
+      new Promise<string>(resolve => setTimeout(() => resolve("VOICE_TIMEOUT"), 3_000)),
+    ]);
+    expect(result).not.toBe("VOICE_TIMEOUT");
+    expect(result).toContain("I'll keep my answers shorter");
+  }, 6_000);
+});
 
 describe("Daphne V2 real Claire correction loop", () => {
   it("persists Turn A correction before reloading Daphne and changes the next call's generated response", async () => {
