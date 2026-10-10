@@ -90,6 +90,16 @@ export const GOLDLINE_CAPABILITY_REGISTRY: GoldlineCapability[] = [
     permissionLevel: "operator",
     implementation: "answerClaireBusinessTurn",
   },
+  {
+    id: "operator_sms.send",
+    domain: "communications",
+    description:
+      "Send a plain-text artifact to the authenticated operator's server-bound phone number. Claire may send referential artifacts and supported named artifacts such as today's Dayline; she cannot choose an arbitrary destination.",
+    status: "SUPPORTED",
+    allowedSurfaces: ["phone"],
+    permissionLevel: "operator",
+    implementation: "sendOperatorArtifact",
+  },
 ];
 
 export function getGoldlineCapability(id: string): GoldlineCapability | undefined {
@@ -102,10 +112,14 @@ export function capabilityIsActionable(id: string): boolean {
 }
 
 export function formatCapabilityBriefing(
-  capabilities: readonly GoldlineCapability[] = GOLDLINE_CAPABILITY_REGISTRY
+  capabilities: readonly GoldlineCapability[] = GOLDLINE_CAPABILITY_REGISTRY,
+  surface?: GoldlineCapabilitySurface
 ): string {
-  const supported = capabilities.filter(item => item.status === "SUPPORTED").map(item => item.id);
-  const unsupported = capabilities
+  const visible = surface
+    ? capabilities.filter(item => item.allowedSurfaces.includes(surface))
+    : capabilities;
+  const supported = visible.filter(item => item.status === "SUPPORTED").map(item => item.id);
+  const unsupported = visible
     .filter(item => item.status === "UNSUPPORTED" || item.status === "PENDING_IMPLEMENTATION")
     .map(item => item.id);
   return [
@@ -113,7 +127,7 @@ export function formatCapabilityBriefing(
     unsupported.length
       ? `Not yet supported: ${unsupported.join(", ")}. If asked, say so and offer engineering; never pretend.`
       : "",
-    "The registry is authoritative.",
+    "Registry authoritative.",
   ]
     .filter(Boolean)
     .join(" ");
