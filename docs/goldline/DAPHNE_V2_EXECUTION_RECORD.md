@@ -333,3 +333,117 @@ versions, consolidation completion claims, card evidence, and Stage 3B original
 use/intervention/outcome IDs. Fail on false save acknowledgment, old preference
 reuse, cross-scope data, stale correction, lost warnings or unauthorized behavior.
 Never label these pending human interactions LIVE ACCEPTED.
+
+## October 9 Scoped Inspector Follow-up (PR #544)
+
+This is a stacked follow-up to PR #543, whose published head is
+`2a2d57a65bfbc03cc177570e6e3907c102bfd390`.
+The separate branch `fix/daphne-v2-scoped-inspection-controls` preserves the
+Codex pushed work without overwriting any uncommitted local editor changes.
+
+- Claim inspection/correction/rejection now uses an exact tenant/operator-scoped
+  claim-ID lookup instead of searching only the newest 500 claims.
+- Linked source observations are retrieved through tenant/operator-scoped ID
+  batches rather than the 500-row recent-history window.
+- Inspector disposition and control API observations now use unique event keys,
+  avoiding collisions between distinct same-millisecond operator actions.
+- A new disposable-MySQL regression case inserts 505 newer claims and evidence
+  records, then asserts historical inspection, correction and cross-operator denial.
+- This follow-up makes no changes to the original Stage 3B intervention target,
+  learning authority, payment, tenant authorization, schema, or unrelated work.
+
+No live phone call, merge, production rollout, new intervention target or
+experimental consent was performed. The final status remains dependent on the
+fresh PR #544 CI results, legal merge/release gates, and actual deployment.
+
+## October 9 — Rebasing and Release Hold (after PR #544)
+
+**Current certification verdict: CODE COMPLETE / NOT DEPLOYED.**
+This is the code/integration candidate, **not** a claim of live acceptance.
+Outstanding user-approved expansion of learned behavior remains disabled;
+Exam 5's experimental/live-selection portion is BLOCKED — OPERATOR APPROVAL.
+Human phone acceptance is BLOCKED until this complete stack is deployed and
+real independent calls produce corroborating durable receipts.
+
+Fetched and confirmed `main@1bed5fbc9bf0e2c614d968ba760fadafd098ee0b`.
+All four original PRs were retained. The stack has explicit ancestry:
+
+| PR | Branch | Rebased commit before this documentation update | Base |
+| --- | --- | --- | --- |
+| #541 | `codex/daphne-v2-certification` | `793f9fbe4e4bb0fc74dd716b5315fc0772eeeea4` | `main` |
+| #542 | `codex/daphne-v2-privacy-history` | `469afa6f21533436996941a1c7a1aa15088e49cd` | #541 |
+| #543 | `codex/daphne-v2-runtime-completion` | `7c402aea9210beb15ca77b097bafce23b27ea71d` | #542 |
+| #544 | `fix/daphne-v2-scoped-inspection-controls` | `4326c5e01da1c165cfaff006316c68587290ad9b` | #543 |
+
+All original source-tree snapshots from #543 and #544 were preserved exactly.
+#542 was reconstructed as the existing verified combined tree containing
+#541's changes plus the full #542 privacy implementation; the #542 privacy
+source/test blobs matched the original PR. Its workflow retains both suites.
+Original pre-rebase heads remain recoverable via:
+
+- `backup/daphne-v2-pr542-pre-rebase-20261009` — `72ce36eb777a77d3031e1959dacaf7796111fa83`
+- `backup/daphne-v2-pr543-pre-rebase-20261009` — `2a2d57a65bfbc03cc177570e6e3907c102bfd390`
+- `backup/daphne-v2-pr544-pre-rebase-20261009` — `babb5af58f9ac16f9b16108d271861d80af9f752`
+
+The remote GitHub branches were updated with expected-head SHA leases.
+A local Codex worktree on the operator's Mac is **not accessible** from this
+environment. No claim is made that its uncommitted changes were copied or
+backed up. Do not reset that local worktree; preserve any remaining local edits
+to `backup/daphne-v2-post-limit-20261009` from that machine.
+
+**Release hold:** Historical `release-journey` Claire failures (20) and
+`fast-smoke-world` browser failures (seven) were reproduced on untouched
+main by the previous Codex execution, documented above. Do not weaken
+these tests or bypass red required gates. A separate CleanCloud CSV sales-truth
+failure on PR #543 was observed and not yet independently baseline-classified.
+No merge through red gates, production deployment, authorization change,
+PR #535 modification or phone call occurred as part of this rebase.
+
+Fresh Daphne CI and real disposable-MySQL suite execution are required on the
+**final #544 head**. Record actual run URLs and conclusions before further
+release actions. The latest #544 head after this documentation commit is
+available in the PR and must be used rather than the snapshot SHA above.
+
+## Post-Rebase Acceptance Timing Remediation
+
+Fresh CI on the first stacked rebase produced:
+
+- #542 Daphne/real-MySQL workflow **PASS**: run
+  [38027005502](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027005502).
+- #543 fresh MySQL acceptance initially **FAIL**: run
+  [38027010634](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027010634),
+  one of 32 cases exceeded Vitest's 5-second *test harness* default.
+- #544 initial rebased MySQL acceptance also **FAIL**: run
+  [38027039329](https://github.com/adamwright83-blip/bldg-admin-api/actions/runs/38027039329),
+  same 5-second harness timeout; 32 tests passed, one timed out.
+
+The failing scheduled-worker test polls for an observable durable result with
+a 10-second `until()` bound and checks worker concurrency, longitudinal
+correction/expiry, revocation and idempotency. An inherited 5-second global
+Vitest timeout contradicted that bounded test contract on shared CI.
+The integration test now has an explicit 25-second outer timeout; its
+assertions and production worker implementation are unchanged. No legacy,
+world-smoke, tenant/security, billing or payment gate was modified.
+This test correction is **not** evidence of a passing new run until GitHub CI
+reports success.
+
+Updated stack heads after the test correction, *before this final documentation
+commit*:
+
+- #541 `793f9fbe4e4bb0fc74dd716b5315fc0772eeeea4` on main
+- #542 `469afa6f21533436996941a1c7a1aa15088e49cd` on #541
+- #543 `fdafd6e8e5e2fc8a988bb8a509df78124d4f20d4` on #542
+- #544 `38b41b472b5de347bfcf6f409d88cfe9180a2174` on #543
+
+#544's seven original commits were replayed with the #543 test fix
+preserved through each resulting tree. The initial rebased #544 head was
+additionally preserved as
+`backup/daphne-v2-pr544-before-worker-timeout-20261009`.
+Use the latest PR #544 head SHA after the documentation commit for final CI.
+
+**Release verdict remains CODE COMPLETE / NOT DEPLOYED.**
+Never mark LIVE ACCEPTED. Production remains on main until all applicable
+release protections allow a safe merge, and phone acceptance remains blocked
+until real conversations yield matching durable receipts. Outcome-informed
+experimental selection outside the established `ask_instead` authority remains
+approval-blocked.

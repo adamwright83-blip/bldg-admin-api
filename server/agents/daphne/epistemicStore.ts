@@ -384,3 +384,26 @@ export async function listDaphneEpistemicClaims(input: {
 
   return rows.map(toRecord);
 }
+
+/**
+ * Exact, tenant/operator-scoped inspection lookup. Historical claims must stay
+ * inspectable and correctable even after more than 500 newer claims exist.
+ * This is deliberately separate from the bounded recent-history list API.
+ */
+export async function getDaphneEpistemicClaimById(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  claimId: string;
+}): Promise<DaphneEpistemicClaimRecord | null> {
+  const tenantId = required(input.tenantId, "tenantId", 64);
+  const canonicalOperatorId = required(input.canonicalOperatorId, "canonicalOperatorId", 191);
+  const claimId = required(input.claimId, "claimId", 64);
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [row] = await db.select().from(daphneEpistemicClaims).where(and(
+    eq(daphneEpistemicClaims.tenantId, tenantId),
+    eq(daphneEpistemicClaims.canonicalOperatorId, canonicalOperatorId),
+    eq(daphneEpistemicClaims.id, claimId),
+  )).limit(1);
+  return row ? toRecord(row) : null;
+}
