@@ -162,7 +162,7 @@ import {
   type DaphneExplicitPreferenceCaptureResult,
 } from "../../agents/daphne/explicitPreferenceCorrection";
 import { ingestDaphneConversation } from "../../agents/daphne/conversationIngestion";
-import { runDaphneConsolidationBatch } from "../../agents/daphne/consolidationWorker";
+
 import { recordDaphneStage3bExecution, loadDaphneStage3bRecommendation } from "../../agents/daphne/stage3bLearning";
 
 /**
@@ -759,9 +759,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     conversationId:input.conversationKey,turnId:daphnePreferenceTurnId,
     completed:durableInputComplete,
   }).catch(()=>({status:"persistence_failed" as const}));
-  if(memoryCapture.status==="persisted") await runDaphneConsolidationBatch({
-    observationId:memoryCapture.observationId,limit:1,
-  }).catch(()=>undefined);
+  // Durable ingestion writes the work item; the separately gated worker owns
+  // consolidation. Never wait for the worker on the Claire answer path.
   const daphnePreferenceResult: DaphneExplicitPreferenceCaptureResult = await (
     deps.captureDaphneV2PreferenceCorrections ??
     captureExplicitDaphnePreferenceCorrections
