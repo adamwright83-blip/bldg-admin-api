@@ -70,6 +70,33 @@ describe("H — existing Claire conversational loop remains intact", () => {
   });
 });
 
+describe("Daphne release-safety: slow consolidation cannot delay Twilio speech", () => {
+  it("renders an immediate speech response without invoking any consolidation batch", async () => {
+    // A scheduler may be stalled indefinitely by MySQL locks. The voice
+    // response is generated independently; no worker promise can be awaited.
+    const neverFinishingBatch = new Promise<never>(() => {});
+    const speech = Promise.resolve().then(() =>
+      preDriveConversationTwiML({
+        text: "Your next verified stop is ready.",
+        token: "signed-token",
+      })
+    );
+    const result = await Promise.race([speech, neverFinishingBatch]);
+    expect(result).toContain("Your next verified stop is ready.");
+
+    // Guard the *actual* voice and Claire turn implementations against
+    // accidentally adding a synchronous worker dependency in the future.
+    const twilio = readFileSync("server/claire/claireTwilio.ts", "utf8");
+    const claireTurn = readFileSync("server/claire/turn/claireTurn.ts", "utf8");
+    for (const source of [twilio, claireTurn]) {
+      expect(source).not.toMatch(/\\brunDaphneConsolidationBatch\\s*\\(/);
+      expect(source).toContain("await ingestDaphneConversation({");
+    }
+    expect(twilio).toContain("const twiml = await withinBudget(job, TURN_BUDGET_MS)");
+    expect(twilio).toContain("const TURN_BUDGET_MS = 11_000");
+  });
+});
+
 describe("Claire voice recording gate", () => {
   it("stays off unless the explicit env flag is set", () => {
     expect(isClaireVoiceRecordingEnabled({} as NodeJS.ProcessEnv)).toBe(false);
