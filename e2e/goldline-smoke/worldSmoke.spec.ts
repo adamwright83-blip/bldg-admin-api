@@ -336,17 +336,22 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
     const artifactDir = "artifacts/operator-representative-v1-qa";
     mkdirSync(artifactDir, { recursive: true });
-    await page.screenshot({
+    // Capture the shell-owned header directly: CI's software WebGL renderer
+    // can stall page-wide screenshots even after the DOM/layout assertions pass.
+    // This preserves visual evidence for the exact header overlap boundary.
+    await header.screenshot({
       path: `${artifactDir}/lantern-city-admin-chrome-675x422.png`,
-      fullPage: false,
+      animations: "disabled",
+      timeout: 30_000,
     });
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(header).toHaveCount(1);
     await expect(brand).toBeVisible();
-    await page.screenshot({
+    await header.screenshot({
       path: `${artifactDir}/lantern-city-admin-chrome-1440x900.png`,
-      fullPage: false,
+      animations: "disabled",
+      timeout: 30_000,
     });
   });
 
