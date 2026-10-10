@@ -63,6 +63,8 @@ Railway project `293ee4d1-ee4f-4701-8a56-18ad120009a2`, production service
 seven Daphne stores. This confirms startup schema checks, not a live learning
 loop. No standalone Daphne consolidation worker was found in the inspected
 runtime. Deployment status of the repairs is recorded after merge.
+`CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED`, `DAPHNE_V2_CAUSAL_CANARY_ENABLED`
+and its tenant allowlist are unset: their existing gates therefore remain off.
 
 ## Human Phone Acceptance
 
@@ -85,3 +87,73 @@ independent calls; record call/conversation IDs and correlate durable receipts.
 
 No changes to `scripts/migrate.mjs`, payment/capture authority, tenant identity
 or authorization, PR #535, President, Mitch or unrelated workstreams.
+
+## Git And Gate Record
+
+- PR #541: `793f9fbe`, current-knowledge/outcome-evidence repairs. Daphne durable
+  acceptance CI succeeded in run `38013082293`.
+- PR #542: `ebe99f48` plus `72ce36eb`, complete privacy history and transactional
+  erasure, including a real MySQL failure/rollback test. CI pending at publication.
+- Neither PR is merged or deployed. Main remains `1bed5fbc...`.
+- Combined local verification branch: `codex/daphne-v2-combined-verification`.
+  The workflow additions were combined explicitly; no test was removed.
+- Release gate run `38013082323` failed: 20 failures, 2335 passes. All 20 failures
+  reproduced on untouched `origin/main` in the same nine Claire suites. Broad
+  local Claire/Operator Representative run: 2058 passed, 20 failed. These include
+  missing deterministic DB mocks, synthetic dialing fixtures rejected by real
+  identity guards, customer-truth/progression fixtures and pending-proposal tests.
+  No identity guard or business authority was weakened to accommodate fixtures.
+- World smoke run `38013082358` failed with seven browser failures involving
+  absent `.lc-lantern` elements and world mount/chrome expectations. Those logs
+  were inspected; this run was not reproduced locally, so baseline equivalence
+  for browser failures is not certified. No frontend file changed in these PRs.
+- Merge/deployment is held while release checks are red. A passing Daphne job
+  does not substitute for release readiness.
+
+## Integrated Exam Accounting
+
+| Exam | Status | Limit |
+| --- | --- | --- |
+| 1 Remember | TESTED IN ISOLATION | Durable statement/claim/card path; general Claire fact capture not connected |
+| 2 Correct | VERIFIED END TO END locally through card/prompt | Historical fact retained; actual phone output pending |
+| 3 Change style | VERIFIED END TO END in MySQL runtime tests | Controlled generator boundary; human phone pending |
+| 4 Reverse style | VERIFIED END TO END in MySQL runtime tests | Human phone pending |
+| 5 Learn from outcomes | TESTED IN ISOLATION | Durable preview changes; subsequent live behavior loop not implemented |
+| 6 Unsupported inference | TESTED IN ISOLATION | Competing/uncertain hypotheses and ineligible outcomes abstain |
+| 7 Consolidate history | TESTED IN ISOLATION | Current correction projection and expiry; no durable Dreamer execution |
+| 8 Relationship repair | TESTED IN ISOLATION | Structured derivation exists; actual repair ingestion unverified |
+| 9 Consent | VERIFIED END TO END in MySQL runtime tests | Stage 3B revocation and fresh revoked-control read; not live accepted |
+| 10 Isolation | VERIFIED END TO END in MySQL tests | Tenant/operator/directive isolation plus agent-specific card checks |
+| 11 Authority | TESTED IN ISOLATION | Existing Narrative/business boundary and Stage 3B rejection tests |
+| 12 Recover | VERIFIED END TO END for tested storage failures | Preference failures and transactional erasure rollback; Dreamer failure path absent |
+| 13 Production configuration | DEPLOYED baseline inspected | Running SHA/flag/startup schema verified; repairs not deployed |
+| 14 Real Claire | BLOCKED | REQUIRES HUMAN LIVE CALL |
+
+## Privacy Slice
+
+PR #542 adds `canonicalHistory`, a complete transactional snapshot of all seven
+Daphne-owned stores, while retaining the older client read model with explicit
+limits. Two real MySQL tests verify 505 observations, preference history,
+completed goals, operator isolation, successful erasure and rollback after a
+later deletion fails. No business or Narrative store is part of erasure.
+Combined local verification passed: 121 unit tests, 17 real-MySQL tests,
+TypeScript, and the four architecture ratchets. All local test/compile sessions
+completed. No production flags were changed and no phone call was placed.
+
+## Learning Authority Boundary
+
+The present live directive chooses `ask_instead`; it does not authorize the
+offline canary's `brief_response` or `offer_next_step` behaviors. There is no
+certified production assignment/outcome pipeline with comparable alternatives.
+That is an implementation gap as well as an authority constraint, not a passed
+learning exam disguised as a preview.
+
+Before any experimental expansion, prepare operator review for a bounded
+comparison on `pattern:explicit_deferral_dismissal` only: existing `ask_instead`
+versus existing baseline/no adaptation, under active directive and explicit
+experimentation consent. Specify the predeclared proximal measure/window,
+execution evidence, propensity logs, minimum independent samples and causal
+eligibility gates. Preserve receipt-before-behavior, disabled/revoked controls,
+tenant/operator scope, warning preservation and all denial cases. Do not apply
+that proposed comparison merely because it is written here. This is not a new
+approval system or an authorization receipt.
