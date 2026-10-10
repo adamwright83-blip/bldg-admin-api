@@ -17,6 +17,7 @@ import {
 import { loadDaphneMetaPreferences, setDaphneMetaPreference } from "../../agents/daphne/goalsPreferences";
 import { listDaphneObservations } from "../../agents/daphne/observationStore";
 import { buildDaphneV2OperatorCard } from "../../agents/daphne/engine";
+import { ingestDaphneConversation } from "../../agents/daphne/conversationIngestion";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { deleteTenantData, planTenantDeletion } from "../../saas/tenantLifecycle";
 
@@ -107,12 +108,14 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
     }
   }, 120_000);
 
-  function harness() {
+  function harness(factAware=false) {
     const order: string[] = [];
     const providerPrompts: string[] = [];
     const invokeText = vi.fn(async (request: any) => {
       const systemPrompt = String(request.messages?.[0]?.content ?? "");
       providerPrompts.push(systemPrompt);
+      if(factAware && systemPrompt.includes("I own laundromat")) return "Your laundromat is the context for this decision.";
+      if(factAware && systemPrompt.includes("I own bakery")) return "Your bakery is the context for this decision.";
       return systemPrompt.includes(
         "STYLE INSTRUCTION: keep the response concise; give one main point or action unless the operator asks for more."
       )
@@ -209,6 +212,44 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
     conversationKey,
     brief: "Visit The Louise.",
     context: context(operatorOpenId),
+  });
+
+  it("ingests ordinary facts through Claire and recalls corrected knowledge in independent calls",async()=>{
+    const first=harness(true);
+    const original={...turnInput("I own a laundromat.","ordinary-a"),sourceEventId:"signed-gather-source"};
+    await runClaireTurn(original,first.overrides);
+    await runClaireTurn({...original,state:{claireTurnCount:4}},first.overrides);
+    const observations=await listDaphneObservations({tenantId,canonicalOperatorId,limit:500});
+    expect(observations.filter(o=>o.sourceType==="claire_conversation_ingestion" && o.actorType==="user")).toHaveLength(1);
+    const second=harness(true);
+    const answer=await runClaireTurn(turnInput("What should I do next?","ordinary-b"),second.overrides);
+    expect(answer.speak).toContain("laundromat");
+    await runClaireTurn(turnInput("Actually I own a bakery.","ordinary-c"),harness().overrides);
+    const fourth=harness(true);
+    const corrected=await runClaireTurn(turnInput("What should I do next?","ordinary-d"),fourth.overrides);
+    expect(corrected.speak).toContain("bakery");
+    expect(fourth.providerPrompts.join(" ")).not.toContain("I own laundromat");
+  });
+
+  it("refuses missing identity, foreign tenant identity, incomplete and hypothetical evidence without false memory acknowledgment",async()=>{
+    const base={tenantId,operatorUserId:operatorOpenId,conversationId:"negative",turnId:"negative",completed:true,utterance:"I own a laundromat."};
+    expect((await ingestDaphneConversation({...base,operatorUserId:"missing-user"})).status).toBe("identity_unresolved");
+    expect((await ingestDaphneConversation({...base,operatorUserId:""})).status).toBe("identity_unresolved");
+    expect((await ingestDaphneConversation({...base,tenantId:`${tenantId}-foreign`})).status).toBe("ineligible");
+    expect((await ingestDaphneConversation({...base,completed:false})).status).toBe("ineligible");
+    expect((await ingestDaphneConversation({...base,utterance:"Imagine I own a laundromat."})).status).toBe("ineligible");
+    await runClaireTurn({...turnInput("I own a grocery store.","unconfirmed", "voice"),sourceConfirmed:false,allowFragmentWait:false},harness().overrides);
+    expect(JSON.stringify(await buildDaphneV2OperatorCard({tenantId,canonicalOperatorId,agentId:"claire"}))).not.toContain("grocery store");
+    const trigger=`daphne_ingest_fail_${suffix}`;
+    await db.query(`CREATE TRIGGER ${trigger} BEFORE INSERT ON daphne_observations FOR EACH ROW
+      BEGIN IF NEW.tenantId='${tenantId}' AND NEW.sourceType='claire_conversation_ingestion' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ingestion failure'; END IF; END`);
+    try{
+      const h=harness(true);
+      const result=await runClaireTurn(turnInput("I own a grocery store.","write-failure"),h.overrides);
+      expect(result.speak).not.toMatch(/remember|saved|recorded/i);
+      expect(JSON.stringify(await buildDaphneV2OperatorCard({tenantId,canonicalOperatorId,agentId:"claire"}))).not.toContain("grocery store");
+    }finally{await db.query(`DROP TRIGGER IF EXISTS ${trigger}`);}
   });
 
   it("uses the tenant canary and refuses to persist an incomplete voice fragment", async () => {
@@ -364,6 +405,38 @@ describeMysql("Daphne V2 correction -> durable state -> later Claire generation"
       "EXPLICIT CORRECTION: do not repeat a question, recommendation, or explanation the operator already answered or acted on unless new evidence makes repetition necessary."
     );
   }, 60_000);
+
+  it("consolidates goals, temporary context, explicit question preference and scoped relationship repair from actual independent Claire turns", async () => {
+    const h=harness();
+    const scope={tenantId,canonicalOperatorId,agentId:"claire"};
+    await runClaireTurn(turnInput("My goal is to get five new customers this month.",`goal-${suffix}`),h.overrides);
+    await runClaireTurn(turnInput("I'm working on deliveries today.",`state-${suffix}`),h.overrides);
+    await runClaireTurn(turnInput("I prefer Claire to ask one question at a time.",`question-${suffix}`),h.overrides);
+    await runClaireTurn(turnInput("You misunderstood me.",`rupture-${suffix}`),h.overrides);
+    expect((await buildDaphneV2OperatorCard(scope)).relationship.unresolvedRuptures).toContain("instruction_misunderstanding");
+    await runClaireTurn(turnInput("That's what I meant, thanks.",`repair-${suffix}`),h.overrides);
+    const card=await buildDaphneV2OperatorCard(scope);
+    expect(card.goals[0].statement).toContain("five new customers");
+    expect(card.state?.currentGoal).toContain("deliveries today");
+    expect(card.metaPreferences.question_batch_size).toBe(1);
+    expect(card.relationship.unresolvedRuptures).toEqual([]);
+    expect(card.relationship.repairs).toContain("instruction_misunderstanding");
+    const other=await buildDaphneV2OperatorCard({...scope,agentId:"another-agent"});
+    expect(other.relationship.repairs).toEqual([]);
+    expect(other.relationship.sourceObservationIds).toEqual([]);
+    await runClaireTurn(turnInput("What should I do about The Louise?",`goal-recall-${suffix}`),h.overrides);
+    expect(h.providerPrompts.at(-1)).toContain("five new customers");
+    expect(h.providerPrompts.at(-1)).toContain("one question at a time");
+  },60_000);
+
+  it("serializes competing preference versions without acknowledging somebody else's value",async()=>{
+    const scope={tenantId,canonicalOperatorId};
+    const sources=await listDaphneObservations({...scope,limit:500});
+    const writes=await Promise.all([.2,.85,.4].map(value=>setDaphneMetaPreference({...scope,preferenceKey:"response_detail",value,sourceObservationId:sources[0].id})));
+    expect(new Set(writes.map(w=>w.version)).size).toBe(3);
+    expect(writes.map(w=>w.value)).toEqual([.2,.85,.4]);
+    expect((await loadDaphneMetaPreferences(scope)).response_detail?.version).toBe(Math.max(...writes.map(w=>w.version)));
+  });
 
   it("LIVE REPRO: durable concise style survives a new call and reaches deterministic board, then reverses", async () => {
     const h = harness();

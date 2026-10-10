@@ -19,6 +19,12 @@ describe("Daphne V2 goals and MetaPreferences", () => {
     expect(() => validateDaphneMetaPreferenceValue("safe_experimentation", "yes")).toThrow(/boolean/);
     expect(() => validateDaphneMetaPreferenceValue("safe_experimentation", true)).not.toThrow();
   });
+  it("denies adaptation when memory recall is disabled or revoked",()=>{
+    const base={id:"p",tenantId:"t",canonicalOperatorId:"o",preferenceKey:"memory_recall" as const,
+      version:1,sourceObservationId:"obs",createdAt:new Date().toISOString()};
+    expect(daphneAdaptationAllowed({memory_recall:{...base,value:false,status:"active"}})).toBe(false);
+    expect(daphneAdaptationAllowed({memory_recall:{...base,value:true,status:"revoked"}})).toBe(false);
+  });
 
   it("requires normalized continuous style controls", () => {
     expect(() => validateDaphneMetaPreferenceValue("response_directness", 1.2)).toThrow(/\[0,1\]/);

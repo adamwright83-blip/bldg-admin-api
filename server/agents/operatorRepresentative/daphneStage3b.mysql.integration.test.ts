@@ -8,9 +8,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { systemRouter } from "../../_core/systemRouter";
-import {
-  loadOperatorAdaptationDecisionForUser,
-} from "./adaptation";
+import { loadOperatorAdaptationDecisionForUser } from "./adaptation";
 import {
   DAPHNE_STAGE3B_BEHAVIOR_CLASS,
   DAPHNE_STAGE3B_TARGET_KEY,
@@ -19,7 +17,18 @@ import {
   listDaphneAdaptationReceipts,
   recordDaphneAdaptationUse,
 } from "./adaptationReceipts";
-import { deleteTenantData, planTenantDeletion } from "../../saas/tenantLifecycle";
+import {
+  deleteTenantData,
+  planTenantDeletion,
+} from "../../saas/tenantLifecycle";
+import { listDaphneInterventions } from "../daphne/interventionLedger";
+import { recordDaphneObservation } from "../daphne/observationStore";
+import {
+  ingestVerifiedDaphneStage3bOutcome,
+  loadDaphneStage3bRecommendation,
+} from "../daphne/stage3bLearning";
+import { startDaphneConsolidationWorker } from "../daphne/consolidationWorker";
+import { listDaphneOutcomes } from "../daphne/outcomeLedger";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeMysql = DATABASE_URL ? describe : describe.skip;
@@ -159,7 +168,9 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
   }, 120_000);
 
   it("proves baseline -> production directive -> Claire use receipt -> revoke -> future non-use", async () => {
-    const caller = systemRouter.createCaller(ctx(tenantA, operatorA, operatorAId));
+    const caller = systemRouter.createCaller(
+      ctx(tenantA, operatorA, operatorAId)
+    );
 
     // Baseline uses the production Claire desk path and creates the same
     // pre-existing pending state that the adapted turn will later exercise.
@@ -195,9 +206,8 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     process.env.CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED = "false";
     const disabled = await caller.operatorRepresentative.adaptationStatus();
     expect(
-      disabled.lifecycle.find(
-        item => item.directiveId === savedDirective.id
-      )?.lifecycle
+      disabled.lifecycle.find(item => item.directiveId === savedDirective.id)
+        ?.lifecycle
     ).toBe("disabled");
 
     const flagOffConversation = `flag-off-${suffix}`;
@@ -215,9 +225,8 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     process.env.CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED = "*";
     const beforeUse = await caller.operatorRepresentative.adaptationStatus();
     expect(
-      beforeUse.lifecycle.find(
-        item => item.directiveId === savedDirective.id
-      )?.lifecycle
+      beforeUse.lifecycle.find(item => item.directiveId === savedDirective.id)
+        ?.lifecycle
     ).toBe("wired_unused");
 
     // Production Claire turn entry: first establish the real pending proposal,
@@ -263,7 +272,9 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
       question: "Are you using this?",
       focusedItemId: target!.id,
     });
-    expect(usedTalk.reply).toMatch(/durable receipt proves Claire used this 1 time/i);
+    expect(usedTalk.reply).toMatch(
+      /durable receipt proves Claire used this 1 time/i
+    );
 
     // Replay proof reuses the exact durable conversation + turn identity.
     const decision = await loadOperatorAdaptationDecisionForUser({
@@ -364,8 +375,219 @@ describeMysql("Daphne Stage 3B authenticated causal chain", () => {
     const callerA2 = systemRouter.createCaller(
       ctx(tenantA, operatorA2, operatorA2Id)
     );
-    const callerB = systemRouter.createCaller(ctx(tenantB, operatorB, operatorBId));
-    expect((await callerA2.operatorRepresentative.adaptationStatus()).lifecycle).toEqual([]);
-    expect((await callerB.operatorRepresentative.adaptationStatus()).lifecycle).toEqual([]);
+    const callerB = systemRouter.createCaller(
+      ctx(tenantB, operatorB, operatorBId)
+    );
+    expect(
+      (await callerA2.operatorRepresentative.adaptationStatus()).lifecycle
+    ).toEqual([]);
+    expect(
+      (await callerB.operatorRepresentative.adaptationStatus()).lifecycle
+    ).toEqual([]);
   });
+  it("links actual Claire execution to independently verified outcomes and later receipt evidence without inventing authority", async () => {
+    const oldDaphne = process.env.DAPHNE_V2_CLAIRE_ENABLED;
+    process.env.DAPHNE_V2_CLAIRE_ENABLED = "true";
+    try {
+      const caller = systemRouter.createCaller(
+        ctx(tenantA, operatorA, operatorAId)
+      );
+      const home = await caller.operatorRepresentative.home();
+      const target = home.learning.find(
+        i => i.targetKey === DAPHNE_STAGE3B_TARGET_KEY
+      )!;
+      const directive = await caller.operatorRepresentative.directive({
+        itemId: target.id,
+        kind: "ask_instead",
+      });
+      const decision = await loadOperatorAdaptationDecisionForUser({
+        tenantId: tenantA,
+        operatorUserId: operatorA,
+      });
+      expect(decision).not.toBeNull();
+      const scope = {
+        tenantId: tenantA,
+        canonicalOperatorId: decision!.canonicalOperatorId,
+      };
+      let previousScore: number | null = null;
+      for (let index = 0; index < 3; index++) {
+        const conversationId = `learning-${suffix}-${index}`;
+        await caller.claire.talk({
+          utterance: "add a task to call Dana",
+          conversationId,
+        });
+        const turn = await caller.claire.talk({
+          utterance: "maybe",
+          conversationId,
+        });
+        expect(turn.operatorAdaptation?.branch).toBe("clarify");
+        const interventions = await listDaphneInterventions({
+          ...scope,
+          limit: 500,
+        });
+        const intervention = interventions.find(i =>
+          i.decisionPointId.includes(conversationId)
+        )!;
+        expect(intervention.policyReceipt).toMatchObject({
+          executionStatus: "branch_selected",
+          targetKey: DAPHNE_STAGE3B_TARGET_KEY,
+          expandedBehaviorEnabled: false,
+          evidenceDecisionPhase: "before_authorized_branch",
+          appliedAuthority: "explicit_ask_instead_directive",
+        });
+        if (index === 2)
+          expect(intervention.policyReceipt?.recommendation).toMatchObject({
+            status: "evaluated",
+            sampleCounts: { ask_instead: 2 },
+          });
+        for (const measureKey of ["started", "burden"]) {
+          const evidence = await recordDaphneObservation({
+            ...scope,
+            agentId: "claire",
+            actorType: "system",
+            observationKind: "verified_operational_outcome",
+            evidenceChannel: "system_record",
+            verificationStatus: "verified",
+            sourceType: "independent_acceptance_measurement",
+            sourceReference: `measure-${index}-${measureKey}`,
+            occurredAt: new Date(),
+            payload: {
+              interventionId: intervention.id,
+              measureKey,
+              value:
+                measureKey === "started"
+                  ? index < 2
+                    ? 1
+                    : 0
+                  : index < 2
+                    ? 0
+                    : 1,
+            },
+            idempotencyKey: `verified-${index}-${measureKey}`,
+          });
+          if (index === 0 && measureKey === "started") {
+            const trigger = `daphne_outcome_failure_${suffix}`;
+            await db.query(`CREATE TRIGGER ${trigger} BEFORE INSERT ON daphne_outcomes FOR EACH ROW
+              BEGIN IF NEW.tenantId='${tenantA}' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='outcome failure'; END IF; END`);
+            try {
+              await expect(
+                ingestVerifiedDaphneStage3bOutcome({
+                  ...scope,
+                  observationId: evidence.id,
+                })
+              ).rejects.toThrow();
+              expect(
+                (await listDaphneOutcomes(scope)).some(
+                  o => o.sourceReference === evidence.id
+                )
+              ).toBe(false);
+            } finally {
+              await db.query(`DROP TRIGGER IF EXISTS ${trigger}`);
+            }
+            const stop = startDaphneConsolidationWorker();
+            try {
+              const deadline = Date.now() + 10_000;
+              while (
+                !(await listDaphneOutcomes(scope)).some(
+                  o => o.sourceReference === evidence.id
+                )
+              ) {
+                if (Date.now() > deadline)
+                  throw new Error("Scheduled outcome ingestion did not finish");
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
+            } finally {
+              await stop();
+            }
+          }
+          const learned = await ingestVerifiedDaphneStage3bOutcome({
+            ...scope,
+            observationId: evidence.id,
+          });
+          const duplicate = await ingestVerifiedDaphneStage3bOutcome({
+            ...scope,
+            observationId: evidence.id,
+          });
+          expect(duplicate.outcome.id).toBe(learned.outcome.id);
+          await expect(
+            ingestVerifiedDaphneStage3bOutcome({
+              ...scope,
+              canonicalOperatorId: "foreign",
+              observationId: evidence.id,
+            })
+          ).rejects.toThrow();
+          await expect(
+            ingestVerifiedDaphneStage3bOutcome({
+              ...scope,
+              tenantId: tenantB,
+              observationId: evidence.id,
+            })
+          ).rejects.toThrow();
+          if (index === 0 && measureKey === "started") {
+            for (const [key, override] of Object.entries({
+              agent: { actorType: "agent" as const },
+              unverified: { verificationStatus: "unverified" as const },
+              wrongAgent: { agentId: "other" },
+              expired: { occurredAt: new Date(Date.now() + 31 * 60_000) },
+              invented: {
+                payload: {
+                  interventionId: intervention.id,
+                  measureKey: "engagement",
+                  value: 1,
+                },
+              },
+            })) {
+              const invalid = await recordDaphneObservation({
+                ...scope,
+                agentId: "claire",
+                actorType: "system",
+                observationKind: "verified_operational_outcome",
+                evidenceChannel: "system_record",
+                verificationStatus: "verified",
+                sourceType: "negative_fixture",
+                sourceReference: key,
+                occurredAt: new Date(),
+                payload: {
+                  interventionId: intervention.id,
+                  measureKey: "started",
+                  value: 1,
+                },
+                idempotencyKey: `invalid:${key}`,
+                ...override,
+              });
+              await expect(
+                ingestVerifiedDaphneStage3bOutcome({
+                  ...scope,
+                  observationId: invalid.id,
+                })
+              ).rejects.toThrow();
+            }
+          }
+        }
+        const recommendation = await loadDaphneStage3bRecommendation(scope);
+        if (index === 1) {
+          expect(recommendation.status).toBe("evaluated");
+          if (recommendation.status === "evaluated")
+            previousScore = recommendation.decision.score;
+        }
+        if (index === 2) {
+          expect(recommendation.status).toBe("evaluated");
+          if (recommendation.status === "evaluated")
+            expect(recommendation.decision.score!).toBeLessThan(previousScore!);
+        }
+      }
+      await caller.operatorRepresentative.revokeDirective({
+        directiveId: directive.id,
+      });
+      expect(
+        await loadOperatorAdaptationDecisionForUser({
+          tenantId: tenantA,
+          operatorUserId: operatorA,
+        })
+      ).toBeNull();
+    } finally {
+      if (oldDaphne === undefined) delete process.env.DAPHNE_V2_CLAIRE_ENABLED;
+      else process.env.DAPHNE_V2_CLAIRE_ENABLED = oldDaphne;
+    }
+  }, 60_000);
 });

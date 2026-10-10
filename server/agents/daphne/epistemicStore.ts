@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { daphneEpistemicClaims } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { recordDaphneMetricEvent } from "./metrics";
@@ -300,10 +300,11 @@ function toRecord(
  * replacement of the historical derivation.
  */
 export async function recordDaphneEpistemicClaim(
-  input: RecordDaphneEpistemicClaimInput
+  input: RecordDaphneEpistemicClaimInput,
+  persistence?: Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>, "insert" | "select">
 ): Promise<DaphneEpistemicClaimRecord> {
   const normalized = normalizeDaphneEpistemicClaim(input);
-  const db = await getDb();
+  const db = persistence ?? await getDb();
   if (!db) throw new Error("Database unavailable");
 
   await db
@@ -327,7 +328,7 @@ export async function recordDaphneEpistemicClaim(
     .limit(1);
 
   if (!row) throw new Error("Daphne epistemic claim did not persist");
-  await recordDaphneMetricEvent({
+  if(!persistence) await recordDaphneMetricEvent({
     tenantId: normalized.tenantId,
     canonicalOperatorId: normalized.canonicalOperatorId,
     agentId: normalized.agentId,
@@ -345,6 +346,7 @@ export async function listDaphneEpistemicClaims(input: {
   claimType?: DaphneClaimType;
   agentId?: string;
   claimKey?: string;
+  excludeConsolidationReceipts?: boolean;
   limit?: number;
 }): Promise<DaphneEpistemicClaimRecord[]> {
   const tenantId = required(input.tenantId, "tenantId", 64);
@@ -368,6 +370,9 @@ export async function listDaphneEpistemicClaims(input: {
   }
   if (input.claimKey?.trim()) {
     predicates.push(eq(daphneEpistemicClaims.claimKey, input.claimKey.trim()));
+  }
+  if (input.excludeConsolidationReceipts) {
+    predicates.push(sql`coalesce(json_unquote(json_extract(${daphneEpistemicClaims.scopeJson}, '$.purpose')), '') <> 'consolidation_receipt'`);
   }
 
   const rows = await db
