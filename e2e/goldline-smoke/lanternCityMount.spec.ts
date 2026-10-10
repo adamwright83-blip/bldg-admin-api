@@ -44,9 +44,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
         territories: await summary("goldlineWorld.territories"),
       };
     });
-    if (proof.geography.status !== 200 || proof.territories.status !== 200) {
-      console.log("[Lantern City proof-data availability]", JSON.stringify(proof));
-    }
+    console.log("[Lantern City proof-data availability]", JSON.stringify(proof));
 
     await expect
       .poll(() =>
