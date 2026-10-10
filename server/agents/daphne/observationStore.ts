@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { daphneObservations } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { recordDaphneMetricEvent } from "./metrics";
@@ -257,4 +257,35 @@ export async function listDaphneObservations(input: {
     .limit(Math.max(1, Math.min(input.limit ?? 100, 500)));
 
   return rows.map(toRecord);
+}
+
+/**
+ * Source-evidence retrieval by exact IDs, scoped to this operator and tenant.
+ * Unlike the recent-history endpoint, this never silently drops older sources
+ * when the operator has accumulated more than 500 observations.
+ */
+export async function getDaphneObservationsByIds(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  observationIds: readonly string[];
+}): Promise<DaphneObservationRecord[]> {
+  const tenantId = required(input.tenantId, "tenantId", 64);
+  const canonicalOperatorId = required(input.canonicalOperatorId, "canonicalOperatorId", 191);
+  const ids = [...new Set(input.observationIds.map(id => id.trim()).filter(Boolean))];
+  if (!ids.length) return [];
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const found = new Map<string, DaphneObservationRecord>();
+  for (let start = 0; start < ids.length; start += 100) {
+    const rows = await db.select().from(daphneObservations).where(and(
+      eq(daphneObservations.tenantId, tenantId),
+      eq(daphneObservations.canonicalOperatorId, canonicalOperatorId),
+      inArray(daphneObservations.id, ids.slice(start, start + 100)),
+    ));
+    for (const row of rows) found.set(row.id, toRecord(row));
+  }
+  return ids.flatMap(id => {
+    const observation = found.get(id);
+    return observation ? [observation] : [];
+  });
 }
