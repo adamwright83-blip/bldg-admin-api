@@ -9,6 +9,7 @@ import { CLAIRE_DEFAULT_RELATIONSHIP_STATE } from "../character/types";
 import { CLAIRE_CANON } from "../character/characterDefinition";
 import { runClaireTurn, type ClaireTurnDeps } from "../turn/claireTurn";
 import { groupCustomerOrderTruth, mergeCustomerOrderTruth } from "../../geography/customerOrderTruth";
+import type { AuthorityReceipt } from "../../authority/authorityReceipt";
 import { AUTHORED_DIALOGUE } from "./authoredDialogue";
 import { setProgressionStoreForTesting } from "./drizzleStore";
 import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
@@ -164,7 +165,7 @@ describe("2. the authorized fact must entail the answer", () => {
 
 describe("3. canonical customer/order truth", () => {
     const native = (id: number, phone: string, slug: string | null, at: Date, extra = {}) => ({
-    id, status: "completed", createdAt: at, firstName: "A", lastName: "B", phone, email: null, address: `${id} Main St`, unit: String(id),
+    id, tenantId: "t1", status: "completed", createdAt: at, firstName: "A", lastName: "B", phone, email: null, address: `${id} Main St`, unit: String(id),
     buildingSlug: slug, bldgUserId: null, paid: true, stripePaymentIntentId: `pi_test_${id}`, total: "30", ...extra,
   });
   // Imported three days after the order occurred unless a test says otherwise.
@@ -172,8 +173,31 @@ describe("3. canonical customer/order truth", () => {
     cleancloudOrderId: orderId, sourceReportType: report, customerName: "Pat Smith", paid: true, placedAtUtc: at, buildingSlug: null,
     createdAt: new Date(at.getTime() + 3 * 86_400_000), ...extra,
   });
-  const derive = (opts: Parameters<typeof mergeCustomerOrderTruth>[0]) =>
-    deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", mergeCustomerOrderTruth(opts)));
+  const derive = (opts: Parameters<typeof mergeCustomerOrderTruth>[0]) => {
+    // Only an explicitly admitted, matching provider receipt licenses paid progress.
+    // These are synthetic TEST receipts, never inferred by the production reader.
+    const admitted = new Map<number, AuthorityReceipt>(
+      (opts.native ?? []).filter(row => row.stripePaymentIntentId?.trim()).map(row => [
+        row.id, {
+          id: `fixture-captured-${row.id}`, tenantId: "t1",
+          claimType: "payment_verified", subjectType: "order",
+          subjectId: String(row.id), sourceType: "stripe_payment_intent",
+          sourceRef: row.stripePaymentIntentId!, actorType: "system", actorId: null,
+          evidenceClass: "authoritative_external", verificationClass: "VERIFIED",
+          admissionPolicy: "native_stripe_payment_v1",
+          occurredAt: row.createdAt.toISOString(), admittedAt: row.createdAt.toISOString(),
+          metadata: {
+            captureEvidence: "stripe_amount_received_v1",
+            capturedCurrency: "usd", capturedAmountCents: 3000,
+          },
+          idempotencyKey: `fixture-captured-${row.id}`,
+        },
+      ])
+    );
+    return deriveProgressFromOrderTruth(groupCustomerOrderTruth(
+      "t1", mergeCustomerOrderTruth({ ...opts, nativePaymentAuthorityReceipts: admitted })
+    ));
+  };
 
   it("includes native Laundry Butler orders, not just CleanCloud", () => {
     const out = derive({ native: [native(1, "310-555-0101", null, oct(10))] });
