@@ -73,7 +73,7 @@ export default function LanternCityV7({
   const [selected, setSelected] = useState<string[] | null>(null);
   const [tower, setTower] = useState<string | null>(null);
 
-  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 10_000, refetchInterval: 15_000, retry: 1 });
+  const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, { staleTime: 10_000, refetchInterval: 15_000, retry: 1 });
   const usingSample = import.meta.env.DEV && atlas.isError;
   // every customer is their own lantern; the tower view also counts residents not yet on the map
   const allCustomers = useMemo<GeographicCustomer[]>(

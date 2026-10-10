@@ -26,6 +26,28 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     await page.goto("/growth/lantern-city?scene=v6");
     await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();
     await expect(page.locator("[data-scene-world]")).toBeVisible();
+    // Diagnose proof-data availability without logging customer records.
+    const proof = await page.evaluate(async () => {
+      const summary = async (name: string) => {
+        const response = await fetch(`/api/trpc/system.${name}`, { credentials: "include" });
+        const body = await response.json().catch(() => ({}));
+        const value = body?.result?.data?.json ?? body?.result?.data ?? {};
+        return {
+          status: response.status,
+          customerCount: Array.isArray(value.customers) ? value.customers.length : undefined,
+          territoriesCount: Array.isArray(value) ? value.length : undefined,
+          error: body?.error?.message ?? null,
+        };
+      };
+      return {
+        geography: await summary("geographicTruth.myAtlas"),
+        territories: await summary("goldlineWorld.territories"),
+      };
+    });
+    console.log("[Lantern City proof-data availability]", JSON.stringify(proof));
+    expect(proof.geography.status, "tenant-scoped atlas must be authorized").toBe(200);
+    expect(proof.territories.status, "tenant-scoped territories must be authorized").toBe(200);
+
     await expect
       .poll(() =>
         page
