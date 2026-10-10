@@ -56,7 +56,7 @@ import {
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { ingestDaphneConversation } from "../agents/daphne/conversationIngestion";
-import { runDaphneConsolidationBatch } from "../agents/daphne/consolidationWorker";
+
 import { captureExplicitDaphnePreferenceCorrections } from "../agents/daphne/explicitPreferenceCorrection";
 import {
   runClaireTurn,
@@ -1095,7 +1095,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         const memory=await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
           conversationId:callStateKey(conversationId),turnId:daphneSourceId,
           utterance:observation.assembledText,completed:true}).catch(()=>({status:"persistence_failed" as const}));
-        if(memory.status==="persisted") await runDaphneConsolidationBatch({observationId:memory.observationId,limit:1}).catch(()=>undefined);
+        // The observation is durable. The gated background worker will
+        // consolidate it without delaying Twilio speech or the 11s turn budget.
         if(brainV2LiveHandled){
           const preference=await captureExplicitDaphnePreferenceCorrections({tenantId:conversation.tenantId,
             operatorUserId:conversation.actorId,conversationId:callStateKey(conversationId),turnId:daphneSourceId,
