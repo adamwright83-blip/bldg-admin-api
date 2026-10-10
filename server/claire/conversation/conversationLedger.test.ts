@@ -15,8 +15,8 @@ vi.mock("../analysis/conversationEvaluator", async importOriginal => {
 });
 // A referenced action has a durable authority read in production; this
 // deterministic conversation fixture supplies the corresponding evidence.
-vi.mock("../../dayDirector/dayDirectorService", async importOriginal => ({
-  ...(await importOriginal<typeof import("../../dayDirector/dayDirectorService")>()),
+vi.mock("../../planning/dayDirector/dayDirectorService", async importOriginal => ({
+  ...(await importOriginal<typeof import("../../planning/dayDirector/dayDirectorService")>()),
   readDayDirectorActionEvidence: async (input: { actionIds: string[] }) =>
     input.actionIds.includes("commitment-1")
       ? [{ id: "commitment-1", title: "Add the walk", status: "active",
