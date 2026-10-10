@@ -7,6 +7,7 @@ import {
   type ActiveCustomerLoaders,
 } from "./activeCustomerMetric";
 import type { CleanCloudOrderRow, NativeOrderRow } from "../analytics/paidOrderLedger";
+import { withFixturePaymentAuthority } from "../analytics/businessLedgerFixture";
 
 const now = new Date("2026-09-15T02:00:00.000Z");
 const observation = (source: "laundry_butler" | "cleancloud", phone: string | null, email: string | null) => ({ source, phone, email });
@@ -43,7 +44,7 @@ function cleanCloudRow(id: string, phone: string | null): CleanCloudOrderRow {
 }
 
 function loaders(lb: NativeOrderRow[] | Error, cc: CleanCloudOrderRow[] | Error): ActiveCustomerLoaders {
-  return {
+  return withFixturePaymentAuthority({
     laundry_butler: async () => {
       if (lb instanceof Error) throw lb;
       return lb;
@@ -52,7 +53,7 @@ function loaders(lb: NativeOrderRow[] | Error, cc: CleanCloudOrderRow[] | Error)
       if (cc instanceof Error) throw cc;
       return cc;
     },
-  };
+  });
 }
 
 describe("active customer metric", () => {
