@@ -66,3 +66,4 @@ jobs:
           server/agents/daphne/certification.mysql.integration.test.ts
           server/agents/daphne/learnedPolicy.mysql.integration.test.ts
           server/agents/operatorRepresentative/daphneStage3b.mysql.integration.test.ts
+          server/agents/daphne/privacy.mysql.integration.test.ts
