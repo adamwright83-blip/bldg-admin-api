@@ -60,14 +60,85 @@ export function goldenTrailGeometry(count: number) {
   return { height, path, anchors };
 }
 
-export function climbAvatarPosition(completed: number, count: number) {
+export interface CheckpointDefinition {
+  index: number;
+  x: number;
+  y: number;
+  scale: number;
+  label: string;
+  landmarkName: string;
+}
+
+export const FIVE_DAY_CHECKPOINTS: CheckpointDefinition[] = [
+  { index: 0, x: 14, y: 84, scale: 1.15, label: "START", landmarkName: "Foreground Steps" },
+  { index: 1, x: 48, y: 73, scale: 0.95, label: "DAY 1", landmarkName: "Ancient Puzzle Terrace" },
+  { index: 2, x: 58, y: 58, scale: 0.80, label: "DAY 2", landmarkName: "Emerald Leaf Terrace" },
+  { index: 3, x: 46, y: 44, scale: 0.65, label: "DAY 3", landmarkName: "Slide & Cascades Bridge" },
+  { index: 4, x: 32, y: 31, scale: 0.50, label: "DAY 4", landmarkName: "Treasure Ledges" },
+  { index: 5, x: 62, y: 16.5, scale: 0.38, label: "DAY 5", landmarkName: "Citadel of Kingdoms Gate" },
+];
+
+export interface RoutePositionResult {
+  fraction: number;
+  overallFraction: number;
+  x: number;
+  y: number;
+  bottomPercent: number;
+  scale: number;
+  currentDaySection: number;
+  sectionFraction: number;
+  isCastleUnlocked: boolean;
+}
+
+export function calculateFiveDayRoutePosition(
+  completedToday: number,
+  totalToday: number,
+  dayNumber: number = 1,
+  completedPriorDays: number = 0
+): RoutePositionResult {
+  const boundedDay = Math.min(5, Math.max(1, dayNumber));
+  const dayFraction = totalToday > 0 ? Math.min(1, Math.max(0, completedToday / totalToday)) : 0;
+  const overallFraction = Math.min(1, (completedPriorDays + dayFraction) / 5);
+
+  const startPt = FIVE_DAY_CHECKPOINTS[boundedDay - 1];
+  const endPt = FIVE_DAY_CHECKPOINTS[boundedDay];
+
+  const x = startPt.x + (endPt.x - startPt.x) * dayFraction;
+  const y = startPt.y + (endPt.y - startPt.y) * dayFraction;
+  const scale = startPt.scale + (endPt.scale - startPt.scale) * dayFraction;
+
+  return {
+    fraction: dayFraction,
+    overallFraction,
+    x,
+    y,
+    bottomPercent: 7 + 83 * dayFraction,
+    scale,
+    currentDaySection: boundedDay,
+    sectionFraction: dayFraction,
+    isCastleUnlocked: completedPriorDays >= 4 && dayFraction >= 1,
+  };
+}
+
+export function climbAvatarPosition(
+  completed: number,
+  count: number,
+  dayNumber: number = 1,
+  completedPriorDays: number = 0
+) {
   const fraction = count > 0 ? Math.min(1, Math.max(0, completed / count)) : 0;
+  const route = calculateFiveDayRoutePosition(completed, count, dayNumber, completedPriorDays);
   return {
     fraction,
     /** Separate climb from the schedule: 0 = ground, 1 = summit. */
     bottomPercent: 7 + 83 * fraction,
     /** Perspective reduction, always facing up the climb. */
     scale: 1 - 0.48 * fraction,
+    x: route.x,
+    y: route.y,
+    routeScale: route.scale,
+    daySection: route.currentDaySection,
+    isCastleUnlocked: route.isCastleUnlocked,
   };
 }
 

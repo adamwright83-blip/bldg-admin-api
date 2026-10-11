@@ -3,11 +3,15 @@ import { trpc } from "@/lib/trpc";
 import {
   Check,
   ChevronRight,
+  ClipboardList,
   CloudUpload,
   Compass,
-  Menu,
-  X,
   Flame,
+  Map as MapIcon,
+  Menu,
+  Package as PackageIcon,
+  Sun,
+  X,
 } from "lucide-react";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
@@ -362,38 +366,79 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}${artPreview ? " gdp-shell--v2" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
-      <button
-        type="button"
-        className="gdp-build-mission-cta"
-        onClick={() => setBuildMissionOpen(true)}
-        data-testid="build-mission-cta"
-      >
-        BUILD MISSION
-      </button>
+      {!artPreview && (
+        <button
+          type="button"
+          className="gdp-build-mission-cta"
+          onClick={() => setBuildMissionOpen(true)}
+          data-testid="build-mission-cta"
+        >
+          BUILD MISSION
+        </button>
+      )}
       <BuildMissionSheet
         open={buildMissionOpen}
         onOpenChange={setBuildMissionOpen}
       />
-      <header className="gdp-header">
-        <div className="gdp-brand">
-          <Compass />
-          <strong>GOLDLINE</strong>
-          <small>SMALL ACTIONS. A WORLD CHANGED.</small>
-        </div>
-        {artPreview && (
-          <div className="gdp-v2-claire-label" aria-label="Claire, AI guide">
-            <strong>CLAIRE</strong>
-            <small>AI GUIDE</small>
+      {artPreview ? (
+        <header className="gdp-v2-header">
+          <div className="gdp-v2-user-avatar" title="Explorer profile">
+            <img src="/goldline/dayline-v1/avatar/idle.png" alt="Explorer Profile" />
           </div>
-        )}
-        <p>
-          {plan.authoredDay?.headline ??
-            (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
-          {!plan.authoredDay?.headline && dateHeading(props.businessDate)}
-          {plan.authoredDay?.headline
-            ? ` · ${dateHeading(props.businessDate)}`
-            : null}
-        </p>
+          <div className="gdp-v2-header-brand">
+            <span className="gdp-v2-brand-goldline">
+              GOLD<Compass size={14} className="gdp-v2-brand-compass" />LINE
+            </span>
+            <span className="gdp-v2-brand-subtitle">DAY LINE</span>
+            <span className="gdp-v2-brand-date">
+              <Sun size={11} /> {dateHeading(props.businessDate)}
+            </span>
+          </div>
+          <div className="gdp-v2-header-actions">
+            <button
+              type="button"
+              className="gdp-v2-map-btn"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open Navigation Menu"
+            >
+              <MapIcon size={17} />
+            </button>
+            <button
+              type="button"
+              className="gdp-v2-claire-control"
+              onClick={() => {
+                callClaireForMission.mutate({
+                  actionSlotId: plan.stops[0]?.id ?? "day-line",
+                  urgency: "normal",
+                });
+              }}
+              aria-label="Claire, AI Guide"
+              data-testid="claire-lantern-badge"
+            >
+              <img
+                src="/goldline/dayline-v2/ui/claire-lantern-badge.webp"
+                alt="Claire"
+                className="gdp-v2-claire-img"
+              />
+              <span className="gdp-v2-claire-label-text">CLAIRE</span>
+            </button>
+          </div>
+        </header>
+      ) : (
+        <header className="gdp-header">
+          <div className="gdp-brand">
+            <Compass />
+            <strong>GOLDLINE</strong>
+            <small>SMALL ACTIONS. A WORLD CHANGED.</small>
+          </div>
+          <p>
+            {plan.authoredDay?.headline ??
+              (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
+            {!plan.authoredDay?.headline && dateHeading(props.businessDate)}
+            {plan.authoredDay?.headline
+              ? ` · ${dateHeading(props.businessDate)}`
+              : null}
+          </p>
         {plan.authoredDay?.framing ? (
           <p
             className="gdp-authored-framing"
@@ -587,22 +632,27 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </span>
         </button>
       </header>
+      )}
 
-      <DriverVehicleDrawer
-        completed={completedCount}
-        total={plan.stops.length}
-        cargo={props.cargoFixture}
-      />
-      <div className="gdp-chapter-invite">
-        <span>
-          <Flame />
-          <strong>THE LANTERN RUN</strong>
-          <small>Three lanterns. Find your rhythm.</small>
-        </span>
-        <button type="button" onClick={() => setPlaying(true)}>
-          PLAY <ChevronRight size={15} />
-        </button>
-      </div>
+      {!artPreview && (
+        <>
+          <DriverVehicleDrawer
+            completed={completedCount}
+            total={plan.stops.length}
+            cargo={props.cargoFixture}
+          />
+          <div className="gdp-chapter-invite">
+            <span>
+              <Flame />
+              <strong>THE LANTERN RUN</strong>
+              <small>Three lanterns. Find your rhythm.</small>
+            </span>
+            <button type="button" onClick={() => setPlaying(true)}>
+              PLAY <ChevronRight size={15} />
+            </button>
+          </div>
+        </>
+      )}
       {props.loadError && (
         <div className="gdp-load-error" role="alert">
           <strong>Your route needs a connection.</strong>
@@ -706,6 +756,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           isLoading={props.isLoading}
           onSelect={setActiveStop}
           onEnterExistingChapter={props.onEnterChapter}
+          onEnterOverworld={props.onEnterWorld}
           isDriving={props.isDriving ?? true}
           allowWalkingAnimation={Boolean(props.allowWalkingAnimation && props.isDriving === false)}
         />
@@ -973,15 +1024,66 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       </section>
 
       )}
-      {artPreview && (
-        <button type="button" className="gdp-v3-nav-toggle"
-          onClick={() => setWorldNavigationOpen(open => !open)}
-          aria-label={worldNavigationOpen ? "Close GOLDLINE navigation" : "Open GOLDLINE navigation"}
-          aria-expanded={worldNavigationOpen}
-        ><Compass size={23} /><span>{worldNavigationOpen ? "CLOSE" : "WORLD"}</span></button>
+      {artPreview ? (
+        <nav className="gdp-v2-bottom-dock" aria-label="Goldline Navigation">
+          <button
+            type="button"
+            className="gdp-v2-dock-item"
+            onClick={() => window.location.assign("/growth/lantern-city")}
+          >
+            <MapIcon size={20} />
+            <span>LANTERN CITY</span>
+          </button>
+          <button
+            type="button"
+            className="gdp-v2-dock-item is-active"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            <span className="gdp-v2-active-compass">
+              <Compass size={22} />
+            </span>
+            <span>DAY LINE</span>
+          </button>
+          <button
+            type="button"
+            className="gdp-v2-dock-item"
+            onClick={() => props.onOpenWeek?.()}
+          >
+            <PackageIcon size={20} />
+            <span>COLLECTION</span>
+          </button>
+          <button
+            type="button"
+            className="gdp-v2-dock-item"
+            onClick={() => setWorldNavigationOpen(open => !open)}
+          >
+            <span className="gdp-v2-briefings-icon-wrap">
+              <ClipboardList size={20} />
+              <span className="gdp-v2-briefing-dot" />
+            </span>
+            <span>BRIEFINGS</span>
+          </button>
+        </nav>
+      ) : (
+        <>
+          <button type="button" className="gdp-v3-nav-toggle"
+            onClick={() => setWorldNavigationOpen(open => !open)}
+            aria-label={worldNavigationOpen ? "Close GOLDLINE navigation" : "Open GOLDLINE navigation"}
+            aria-expanded={worldNavigationOpen}
+          ><Compass size={23} /><span>{worldNavigationOpen ? "CLOSE" : "WORLD"}</span></button>
+          <div className="gdp-v3-classic-nav">
+            <GoldlineGameNav
+              active="day"
+              onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              onWeek={props.onOpenWeek}
+              onPlay={() => { setWorldNavigationOpen(false); setPlaying(true); }}
+              onJournal={props.onOpenJournal ?? props.onEnterOperations}
+            />
+          </div>
+        </>
       )}
-      {(!artPreview || worldNavigationOpen) && (
-        <div className={artPreview ? "gdp-v3-nav-layer" : "gdp-v3-classic-nav"}>
+      {artPreview && worldNavigationOpen && (
+        <div className="gdp-v3-nav-layer">
           <GoldlineGameNav
             active="day"
             onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
@@ -1019,13 +1121,15 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       )}
       {playing && <LanternRun onClose={() => setPlaying(false)} />}
 
-      <footer className="gdp-world-entry">
-        <button type="button" onClick={() => props.onEnterWorld()}>
-          <span>ENTER</span>
-          <span>THE WORLD</span>
-          <ChevronRight />
-        </button>
-      </footer>
+      {!artPreview && (
+        <footer className="gdp-world-entry">
+          <button type="button" onClick={() => props.onEnterWorld()}>
+            <span>ENTER</span>
+            <span>THE WORLD</span>
+            <ChevronRight />
+          </button>
+        </footer>
+      )}
     </main>
   );
 }

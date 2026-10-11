@@ -657,18 +657,14 @@ body {
  * the clean fantasy scene. Functional menus remain reachable via the compass.
  */
 .gdp-shell.gdp-shell--v2 {
-  background-color: #cce3dd !important;
-  background-image:
-    linear-gradient(180deg, #dcf2e61a 0%, transparent 30%, #071e2211 100%),
-    url("/goldline/dayline-v1/background/world-clean.png") !important;
-  background-size: 100% 100%, 153% auto !important;
-  background-position: center top, 77% top !important;
-  background-repeat: no-repeat, repeat-y !important;
-  padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
-  color: #2c271e;
+  background-color: #0b131c !important;
+  background-image: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #ffffff;
 }
 .gdp-shell.gdp-shell--v2::before {
-  background: linear-gradient(#ffedc51c, transparent 190px) !important;
+  display: none !important;
 }
 .gdp-shell--v2 .gdp-header {
   position: relative !important;
@@ -817,11 +813,10 @@ body {
   font-size: 11px;
 }
 .gdp-shell--v2 .gdp-vehicle-key {
-  top: auto !important;
-  bottom: calc(96px + env(safe-area-inset-bottom)) !important;
-  left: 2px !important;
-  scale: .69;
-  transform-origin: left bottom;
+  display: none !important;
+}
+.gdp-shell--v2 .gdp-v2-operations {
+  display: none !important;
 }
 .gdp-shell--v2 .gdp-world-tools { display: none !important; }
 .gdp-shell--v2 .gdp-import { display: none !important; }
@@ -829,21 +824,241 @@ body {
   .gdp-shell--v2 .gdp-brand strong { font-size: 25px !important; }
 }
 
-/* Approved v2 composition: protect the logo and physical inscriptions from
-   historical positioned header controls and fixed dashboard callouts. */
-.gdp-shell.gdp-shell--v2 { background-size: 100% 100%, 135% auto !important; background-position: center top, center top !important; }
-.gdp-shell.gdp-shell--v2 .gdp-header { min-height: 140px !important; }
-.gdp-shell.gdp-shell--v2 .gdp-header .gdp-brand { position: static !important; width: 100% !important; padding: 0 55px !important; margin: 0 !important; transform: none !important; }
-.gdp-shell.gdp-shell--v2 .gdp-header .gdp-brand strong { font-size: clamp(27px,7.8vw,36px) !important; white-space: nowrap; }
-.gdp-shell.gdp-shell--v2 .gdp-brand svg { display: none; }
-.gdp-shell.gdp-shell--v2 .gdp-header .gdp-brand small { text-align: center; }
-.gdp-shell.gdp-shell--v2 .gdp-header > p { text-align: center !important; }
-.gdp-shell.gdp-shell--v2 .gdp-header .gdp-v2-claire-label { top: 15px !important; right: 7px !important; width: 46px !important; font-size: 10px; }
-.gdp-shell.gdp-shell--v2 .gdp-build-mission-cta { position: absolute !important; top: 93px !important; bottom: auto !important; left: 12px !important; min-height: 34px !important; padding: 5px 9px !important; font-size: 9px !important; }
-.gdp-shell.gdp-shell--v2 .gdp-v3-nav-toggle { width: 44px; height: 44px; right: 6px; bottom: 18px; padding: 3px; }
-.gdp-shell.gdp-shell--v2 .gdp-v3-nav-toggle span { font-size: 7px; }
-.gdp-shell.gdp-shell--v2 .gdp-v3-nav-toggle svg { width: 18px; height: 18px; }
-.gdp-shell.gdp-shell--v2 .gdp-dayline-disclosure { top: 78px !important; left: 12px !important; }
-.gdp-shell.gdp-shell--v2:has(.gdp-dayline-disclosure) .gdp-build-mission-cta { top: 116px !important; }
-.gdp-shell.gdp-shell--v2:has(.gdp-dayline-disclosure) .gdp-header { min-height: 164px !important; }
-.gdp-shell.gdp-shell--v2 { background-image: linear-gradient(180deg,#dcf2e61a,transparent 30%,#071e2211), url('/goldline/dayline-v2/background/world-clean.webp') !important; }
+/* Approved v2 Header and Bottom Navigation */
+.gdp-shell--v2 {
+  background: #0b131c !important;
+  min-height: 100dvh;
+}
+
+.gdp-shell--v2 .gdp-header {
+  display: none !important;
+}
+
+.gdp-v2-header {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  height: 68px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 4px;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(8, 12, 16, 0.75) 0%, rgba(8, 12, 16, 0.25) 75%, transparent 100%);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.gdp-v2-user-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #dfc377;
+  box-shadow: 0 0 10px rgba(223, 195, 119, 0.45);
+  overflow: hidden;
+  background: #141f28;
+  flex-shrink: 0;
+}
+
+.gdp-v2-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gdp-v2-header-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.gdp-v2-brand-goldline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: Georgia, serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2.2px;
+  color: #f5d77f;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
+.gdp-v2-brand-compass {
+  color: #ffd253;
+  margin: 0 1px;
+}
+
+.gdp-v2-brand-subtitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #dfc377;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.gdp-v2-brand-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff8dc;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  margin-top: 1px;
+}
+
+.gdp-v2-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.gdp-v2-map-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(14, 20, 28, 0.7);
+  border: 1.5px solid #dfc377;
+  color: #f5d77f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease;
+}
+
+.gdp-v2-map-btn:hover {
+  transform: scale(1.06);
+  border-color: #ffd253;
+}
+
+/* Claire's Distinct Interaction Graphic (Lantern Badge) */
+.gdp-v2-claire-control {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gdp-v2-claire-control:hover {
+  transform: scale(1.08) translateY(-1px);
+}
+
+.gdp-v2-claire-control:active {
+  transform: scale(0.94) translateY(1px);
+}
+
+.gdp-v2-claire-img {
+  width: 38px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(223, 195, 119, 0.65));
+}
+
+.gdp-v2-claire-label-text {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #dfc377;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  margin-top: -2px;
+}
+
+/* Approved v2 Bottom Dock */
+.gdp-v2-bottom-dock {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  height: 64px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: linear-gradient(180deg, rgba(16, 22, 30, 0.92) 0%, rgba(8, 12, 16, 0.98) 100%);
+  border-top: 1px solid rgba(220, 185, 110, 0.4);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+}
+
+.gdp-v2-dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  transition: color 0.15s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gdp-v2-dock-item:hover {
+  color: #ffd253;
+}
+
+.gdp-v2-dock-item.is-active {
+  color: #f5d77f;
+}
+
+.gdp-v2-active-compass {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(223, 195, 119, 0.3) 0%, transparent 70%);
+  border: 1px solid #dfc377;
+  color: #ffd253;
+  box-shadow: 0 0 10px rgba(223, 195, 119, 0.5);
+  margin-top: -8px;
+}
+
+.gdp-v2-dock-item.is-active span:last-child {
+  border-bottom: 2px solid #dfc377;
+  padding-bottom: 1px;
+}
+
+.gdp-v2-briefings-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.gdp-v2-briefing-dot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 4px #dc2626;
+}
+
