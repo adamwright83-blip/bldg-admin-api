@@ -583,3 +583,225 @@
   .gdp-v4-art-scene { transition: none; }
   .gdp-v4-avatar { transition: none !important; }
 }
+
+
+/*
+ * APPROVED ACTION-CARD MATERIALS — restore the original illustrated object UI.
+ * The earlier tan arrow-shaped cards were an unauthorized visual substitution.
+ * These plates reproduce the dark, gold-edged graphic inscriptions from the
+ * approved pickup bag / red sales slide / blue-gold chest / leaf / stone puzzle.
+ * Mission copy remains LIVE HTML sourced from the canonical Day Line projection.
+ * Never render a fixed customer/address baked into a source image.
+ */
+.gdp-v3-world .gdp-v3-action {
+  --card-ink: #fff9e9;
+  --card-muted: #eee2c4;
+  --card-accent: #f5c878;
+  --card-edge: #be8e38;
+  --card-deep: #0a273a;
+  --card-highlight: #164765;
+  box-sizing: border-box;
+  position: relative;
+  width: min(61%, 268px);
+  min-height: 102px;
+  color: var(--card-ink) !important;
+  border: 2px solid var(--card-edge) !important;
+  border-radius: 9px 12px 9px 12px !important;
+  clip-path: none !important;
+  background:
+    radial-gradient(ellipse at 14% -20%, #ffffff29, transparent 65%),
+    linear-gradient(150deg, var(--card-highlight) 0%, var(--card-deep) 77%) !important;
+  box-shadow:
+    0 7px 0 -3px #604320,
+    0 12px 18px #091e2780,
+    inset 0 0 0 2px #3f2a1388,
+    inset 0 2px 10px #fff2b318 !important;
+  transform: rotate(-.65deg);
+  text-shadow: 0 1px 2px #050e1599;
+  overflow: visible;
+  transition: filter .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.gdp-v3-world .gdp-v3-action:nth-child(odd) {
+  align-self: flex-end;
+  margin: 0 1.5% 0 0;
+  transform: rotate(.6deg);
+}
+.gdp-v3-world .gdp-v3-action:nth-child(even) {
+  align-self: flex-start;
+  margin: 0 0 0 1.5%;
+  transform: rotate(-.8deg);
+}
+.gdp-v3-world .gdp-v3-action::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  inset: 5px;
+  border: 1px solid #ffdea44a;
+  border-radius: 5px 8px 5px 8px;
+  background:
+    radial-gradient(circle at 7px 7px, #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 7px) 7px, #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
+    radial-gradient(circle at 7px calc(100% - 7px), #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px);
+}
+.gdp-v3-world .gdp-v3-action::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: -5px;
+  border: 1px solid #ffdf9a71;
+  border-radius: 12px;
+}
+.gdp-v3-world .gdp-v3-action-entry {
+  position: relative;
+  z-index: 4;
+  min-height: 100px;
+  width: 100%;
+  padding: 14px 14px 14px 18px;
+  color: var(--card-ink) !important;
+  text-align: left;
+  background: transparent !important;
+  border: none !important;
+}
+.gdp-v3-world .gdp-v3-action-stamp {
+  display: flex;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+  color: var(--card-muted) !important;
+  font: 750 10px/1.15 Inter, system-ui, sans-serif;
+  letter-spacing: .035em;
+  text-shadow: 0 1px 1px #0006;
+}
+.gdp-v3-world .gdp-v3-action-stamp b {
+  color: var(--card-accent) !important;
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+.gdp-v3-world .gdp-v3-action-stamp em {
+  background: linear-gradient(#ffea9c,#db9f37) !important;
+  border: 1px solid #ffe6a4;
+  border-radius: 9px;
+  color: #35230d;
+  font-size: 9px;
+  box-shadow: 0 0 9px #f3b85d55;
+}
+.gdp-v3-world .gdp-v3-action-entry strong {
+  display: block;
+  color: #fffdf4 !important;
+  font: 830 clamp(14px, 3.7vw, 18px)/1.18 Inter, system-ui, sans-serif;
+  letter-spacing: -.015em;
+  text-shadow: 0 1px 3px #000a;
+}
+.gdp-v3-world .gdp-v3-action-entry small {
+  color: var(--card-muted) !important;
+  font: 520 11px/1.26 Inter, system-ui, sans-serif;
+  opacity: .98;
+  overflow-wrap: anywhere;
+}
+.gdp-v3-world .gdp-v3-completion { color: #bcf6bf !important; }
+.gdp-v3-world .gdp-v3-action--up_next {
+  outline: 2px solid #ffdd8f;
+  outline-offset: 2px;
+  filter: drop-shadow(0 0 7px #fdd76e88);
+}
+.gdp-v3-world .gdp-v3-action:focus-within {
+  outline: 3px solid #fff4c2;
+  outline-offset: 3px;
+}
+@media (hover: hover) {
+  .gdp-v3-world .gdp-v3-action:hover {
+    transform: translateY(-2px) rotate(0deg);
+    filter: brightness(1.13);
+  }
+}
+/* The inscription changes MATERIAL with the game object, not its data model. */
+.gdp-v3-world .gdp-v3-landmark--pickup .gdp-v3-action {
+  --card-edge: #cfaf65; --card-accent: #e1efff;
+  --card-deep: #0b1b35; --card-highlight: #18385b; --card-muted: #d1e3ef;
+  border-radius: 13px 9px 11px 7px !important;
+  background:
+    repeating-linear-gradient(90deg, #ffffff07 0 1px, transparent 1px 5px),
+    linear-gradient(145deg, #31577c, #102743 44%, #101b2f 96%) !important;
+}
+.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action {
+  --card-edge: #f9c166; --card-accent: #fff1b0; --card-muted: #ffe9df;
+  --card-deep: #650a0f; --card-highlight: #d63320;
+  border-radius: 18px 7px 18px 8px !important;
+  background:
+    radial-gradient(ellipse at 50% -55%, #ffdf8944, transparent 62%),
+    linear-gradient(160deg, #e3422e 0%, #a31318 48%, #540912 100%) !important;
+  box-shadow:
+    0 6px 0 -2px #7e2f12,
+    0 13px 17px #300b1180,
+    inset 0 0 0 2px #7c111e,
+    inset 0 5px 10px #ffcf7233 !important;
+}
+.gdp-v3-world .gdp-v3-landmark--dropoff .gdp-v3-action {
+  --card-edge: #f7d47d; --card-accent: #ffeab6; --card-muted: #e1e8f5;
+  --card-deep: #0a1a32; --card-highlight: #223955;
+  border-radius: 4px 5px 4px 5px !important;
+  border-width: 3px !important;
+  background: linear-gradient(160deg,#254164,#101f3b 52%,#0d1932) !important;
+}
+.gdp-v3-world .gdp-v3-landmark--growth .gdp-v3-action {
+  --card-edge: #d7b75f; --card-accent: #efffbf; --card-muted: #dcf3cb;
+  --card-deep: #063b29; --card-highlight: #20874d;
+  border-radius: 38% 8% 26% 9% / 18% 20% 22% 20% !important;
+  background:
+    repeating-linear-gradient(135deg,transparent 0 19px,#fff1a11c 20px 21px,transparent 22px 40px),
+    linear-gradient(145deg,#2e954d,#075937 60%,#063829) !important;
+}
+.gdp-v3-world .gdp-v3-landmark--marketing .gdp-v3-action {
+  --card-edge: #e3c576; --card-accent: #f6d6ff; --card-muted: #f0e0f0;
+  --card-deep: #1b173c; --card-highlight: #463076;
+  border-radius: 3px 11px 3px 11px !important;
+  background: linear-gradient(145deg,#514080,#231b49 59%,#111a35) !important;
+}
+.gdp-v3-world .gdp-v3-landmark--generic .gdp-v3-action {
+  --card-edge: #c9aa70; --card-deep: #24312e;
+  --card-highlight: #40564a; --card-muted: #eef1db;
+  background: linear-gradient(145deg,#40564a,#23352e) !important;
+}
+/* In a string of sales stops the label rails belong to ONE waterslide.
+   Never multiply the illustration or flatten the missions into one action. */
+.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-inscriptions {
+  position: relative;
+}
+.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-inscriptions::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+  top: 9%;
+  bottom: 9%;
+  right: 5%;
+  width: 3px;
+  border-left: 3px solid #efbc6480;
+  border-right: 1px solid #fff7b88f;
+  border-radius: 3px;
+  box-shadow: 0 0 11px #eb862a55;
+}
+.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action:nth-child(even),
+.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action:nth-child(odd) {
+  align-self: flex-end;
+  margin: 0 1.8% 0 0;
+}
+.gdp-v3-world .gdp-v3-landmark-count {
+  background: linear-gradient(#264348,#0d2a38);
+  border: 2px solid #dfb671;
+  color: #ffe2a4;
+  border-radius: 10px 4px 10px 4px;
+  font: 800 10px/1.2 Inter, system-ui, sans-serif;
+  text-shadow: 0 1px 3px #0007;
+}
+@media(max-width:430px) {
+  .gdp-v3-world .gdp-v3-action { width: 64%; min-height: 94px; }
+  .gdp-v3-world .gdp-v3-action-entry { min-height: 90px; padding: 10px 11px 11px 14px; }
+  .gdp-v3-world .gdp-v3-action-stamp { font-size: 9px; gap: 3px 5px; }
+  .gdp-v3-world .gdp-v3-action-stamp b { font-size: 9px; }
+  .gdp-v3-world .gdp-v3-action-entry strong { font-size: 14px; }
+  .gdp-v3-world .gdp-v3-action-entry small { font-size: 10px; }
+}
