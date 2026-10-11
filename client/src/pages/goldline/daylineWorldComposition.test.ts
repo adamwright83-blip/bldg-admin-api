@@ -6,6 +6,8 @@ import {
   climbAvatarPosition,
   completedFromProjection,
   goldenTrailGeometry,
+  groupConsecutiveActionSlots,
+  presentationLabelForUpcoming,
   shouldPlayClimb,
   visualStateForStop,
 } from "./daylineWorldComposition";
@@ -46,7 +48,7 @@ describe("GOLDLINE dynamic Action Slot composition", () => {
   it("treats verified completion as a prerequisite for revealing an opened object", () => {
     const upcoming = { id: "A", status: "ready" as const };
     const completed = { id: "A", status: "completed" as const };
-    expect(visualStateForStop(upcoming, "A", true)).toBe("now");
+    expect(visualStateForStop(upcoming, "A", true)).toBe("up_next");
     expect(visualStateForStop(completed, null, false)).toBe("ready_to_open");
     expect(visualStateForStop(completed, null, true)).toBe("opened");
     expect(visualStateForStop({ id: "B", status: "blocked" }, null, true)).toBe("blocked");
@@ -62,6 +64,26 @@ describe("GOLDLINE dynamic Action Slot composition", () => {
       { status: "ready" },
       { status: "completed" },
     ])).toBe(2);
+  });
+
+  it("reuses one landmark for adjacent same-kind work but preserves separate IDs", () => {
+    const stops = [
+      { id: "sale:1", kind: "sales" as const },
+      { id: "sale:2", kind: "sales" as const },
+      { id: "sale:3", kind: "sales" as const },
+      { id: "growth:1", kind: "growth" as const },
+      { id: "growth:2", kind: "growth" as const },
+      { id: "sale:4", kind: "sales" as const },
+    ];
+    const groups = groupConsecutiveActionSlots(stops);
+    expect(groups.map(group => group.kind)).toEqual(["sales", "growth", "sales"]);
+    expect(groups.map(group => group.items.length)).toEqual([3, 2, 1]);
+    expect(groups.flatMap(group => group.items.map(({stop}) => stop.id)))
+      .toEqual(stops.map(stop => stop.id));
+    expect(groups.flatMap(group => group.items.map(({index}) => index)))
+      .toEqual([0, 1, 2, 3, 4, 5]);
+    expect(presentationLabelForUpcoming(true)).toBe("NEXT");
+    expect(presentationLabelForUpcoming(false)).toBe("PLANNED");
   });
 
   it("retains duplicate address slots because each business ID is distinct", () => {
