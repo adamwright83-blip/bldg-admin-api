@@ -8,6 +8,9 @@ on:
       - "client/src/pages/driver/GoldlineDriverController.tsx"
       - "client/src/pages/Driver.tsx"
       - "client/src/pages/goldline/**"
+      - "public/goldline/dayline-v2/**"
+      - "client/public/goldline/dayline-v2"
+      - "playwright.dayline-art.config.ts"
       - "client/src/components/driver/**"
       - "client/src/components/admin/control-room/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
@@ -138,6 +141,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: mobile-dayline-graphic-contracts
+            command: >-
+              pnpm vitest run
+              client/src/pages/goldline/daylineWorldComposition.test.ts
+              client/src/pages/goldline/daylineActionCardGraphics.test.ts
+              client/src/pages/goldline/daylineAssetStability.test.ts
+              client/src/pages/goldline/daylineVisualContract.test.ts
+              client/src/pages/driver/goldlineDayPlanModel.test.ts
+              client/src/pages/driver/goldlineDriverModel.test.ts
+              shared/goldlineTruthContract.test.ts
+              shared/goldlineActionContract.test.ts
           - name: mobile-business-loop-contracts
             command: >-
               pnpm vitest run
@@ -264,6 +278,8 @@ jobs:
               e2e/goldline/driverHomeWorldComposition.spec.ts
               e2e/goldline/mobileTypographyFloor.spec.ts
               e2e/goldline/pixel9Layout.spec.ts
+          - name: mobile-dayline-graphic-actions
+            command: pnpm exec playwright test --config playwright.dayline-art.config.ts
           - name: mobile-day-entry-core
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts

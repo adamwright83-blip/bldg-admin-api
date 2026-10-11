@@ -24,7 +24,7 @@ import { projectStopsOntoCampaign } from "@shared/goldlineCampaignRuntime";
 
 export type LiveAdventureObjective = {
   id: string;
-  kind: "sales" | "growth";
+  kind: "sales" | "growth" | "marketing";
   title: string;
   sourceLabel: string;
   dueAt: string | null;
@@ -63,6 +63,7 @@ type FieldTodaySource = {
 };
 
 const LIVE_OBJECTIVE_KINDS = [
+  "marketing_challenge",
   "follow_up",
   "mission_dispatch",
   "customer_recovery",
@@ -73,6 +74,7 @@ const LIVE_OBJECTIVE_KINDS = [
 ];
 
 const LIVE_OBJECTIVE_SOURCE_LABELS: Record<string, string> = {
+  marketing_challenge: "Marketing challenge",
   customer_recovery: "Dormant relationship",
   contextual_move: "Field discovery",
   field_commitment: "Field promise",
@@ -94,7 +96,7 @@ export function liveObjectivesFromFieldToday(
     .filter(item => LIVE_OBJECTIVE_KINDS.includes(item.kind))
     .map(item => ({
       id: item.id,
-      kind:
+      kind: item.kind === "marketing_challenge" ? "marketing" :
         item.kind === "customer_recovery" || item.kind === "contextual_move"
           ? ("growth" as const)
           : ("sales" as const),
@@ -129,7 +131,8 @@ export type DayPlanStopKind =
   | "sales"
   | "prep"
   | "processing"
-  | "growth";
+  | "growth"
+  | "marketing";
 export type DayPlanSource =
   | "laundry_butler"
   | "cleancloud"
@@ -560,6 +563,7 @@ export function buildDayPlanProjection(input: {
     prep: 0,
     processing: 0,
     growth: 0,
+    marketing: 0,
   };
   for (const stop of stops) counts[stop.kind] += 1;
   return {
@@ -570,7 +574,7 @@ export function buildDayPlanProjection(input: {
     cleanCloudCount: stops.filter(stop => stop.source === "cleancloud").length,
     growthCoverage: stops.some(
       stop =>
-        stop.kind === "growth" ||
+        stop.kind === "growth" || stop.kind === "marketing" ||
         (stop.kind === "sales" && stop.status === "ready")
     )
       ? "covered"

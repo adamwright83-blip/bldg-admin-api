@@ -13,7 +13,7 @@ export type ActionSlotVisualState =
 /**
  * Intentionally no string matching on titles, contacts, or customer names:
  * "Post Zeely Ad" is not proof of an Instagram marketing challenge.
- * A future typed marketing classification may be added at the projection seam.
+ * Marketing requires the explicit typed classification at the projection seam.
  */
 export function artForDayPlanKind(kind: DayPlanStopKind): ActionSlotArt {
   switch (kind) {
@@ -21,6 +21,7 @@ export function artForDayPlanKind(kind: DayPlanStopKind): ActionSlotArt {
     case "dropoff": return "dropoff";
     case "sales": return "sales";
     case "growth": return "growth";
+    case "marketing": return "marketing";
     default: return "generic";
   }
 }

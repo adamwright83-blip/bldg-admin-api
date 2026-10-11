@@ -151,6 +151,7 @@ const KIND_LABEL = {
   prep: "PREP TASK",
   processing: "PROCESSING",
   growth: "GROWTH",
+  marketing: "MARKETING CHALLENGE",
 } as const;
 
 function dateHeading(ymd: string): string {
@@ -702,6 +703,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       {artPreview ? (
         <DaylineWorldCompositor
           stops={plan.stops}
+          isLoading={props.isLoading}
           onSelect={setActiveStop}
           onEnterExistingChapter={props.onEnterChapter}
           isDriving={props.isDriving ?? true}
