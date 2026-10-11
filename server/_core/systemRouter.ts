@@ -56,6 +56,7 @@ import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../planning/missionDirector/missionDirectorRouter";
 import { currentDayLineRouter } from "../planning/dayline/currentDayLineRouter";
 import { lanternCityRouter } from "../experience/lanternCity/lanternCityRouter";
+import { hiddenGameEligibilityRouter } from "../experience/hiddenGame/hiddenGameEligibilityRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
@@ -123,6 +124,7 @@ export const systemRouter = router({
   persistentOperator: persistentOperatorRouter,
   operatorRepresentative: operatorRepresentativeRouter,
   lanternCity: lanternCityRouter,
+  hiddenGame: hiddenGameEligibilityRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
   missionSalesBrief: missionSalesBriefRouter,

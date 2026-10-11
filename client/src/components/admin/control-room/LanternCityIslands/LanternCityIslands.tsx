@@ -9,6 +9,8 @@ import {
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
+import { presentTile } from "../SmallComforts/logic/gate";
+import { useGateQuery } from "../SmallComforts/useGateQuery";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
 
@@ -56,6 +58,8 @@ export default function LanternCityIslands({
   const [failed, setFailed] = useState(false);
   const [stats, setStats] = useState<{ islands: number; open: number; lanterns: number } | null>(null);
   const [island, setIsland] = useState<IslandInfo | null>(null);
+  // Read only while the Hollywood card is open: the read evaluates today's unlock.
+  const tinCanTile = presentTile(useGateQuery({ enabled: island?.name === "Hollywood" }));
   const [hover, setHover] = useState<{ keys: string[]; x: number; y: number; tower?: string } | null>(null);
   const [tower, setTower] = useState<string | null>(null);
   const [inSuitcase, setInSuitcase] = useState(false);
@@ -168,6 +172,15 @@ export default function LanternCityIslands({
             <button type="button" className={styles.tinCanEntry} onClick={() => board.current?.enterSmallComforts()}>
               <img src="/assets/joystick-home/tin-can-house.webp" alt="" width="80" height="54" />
               <span>Tin Can House · Small Comforts</span>
+              {tinCanTile.state !== "unknown" ? (
+                <span
+                  className={styles.tinCanState}
+                  data-state={tinCanTile.state}
+                  title={tinCanTile.label}
+                >
+                  {tinCanTile.state === "lit" ? "Open" : "Locked"}
+                </span>
+              ) : null}
             </button>
           ) : null}
           <button type="button" onClick={() => { setIsland(null); board.current?.board(); }}>Back to the board</button>

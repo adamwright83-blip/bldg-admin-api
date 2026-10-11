@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import "./smallComfortsPlate.css";
+import { presentGate } from "./logic/gate";
+import { useGateQuery } from "./useGateQuery";
 
 type Ripple = { id: number; x: number; y: number };
 
@@ -13,6 +15,10 @@ type Ripple = { id: number; x: number; y: number };
 export default function SmallComforts({ onExit }: { onExit: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const [ripple, setRipple] = useState<Ripple | null>(null);
+  // The server decides what is open. Nothing here can open a chapter.
+  const gate = presentGate(useGateQuery());
+  const [chapter, setChapter] = useState<number | null>(null);
+  const [latchWiggle, setLatchWiggle] = useState(0);
 
   useEffect(() => {
     const el = root.current;
@@ -53,6 +59,8 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
 
   const makeRipple = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
+    // Behind the gate a tap does nothing but the latch.
+    if (root.current?.dataset.gate !== "open") return;
     const rect = event.currentTarget.getBoundingClientRect();
     setRipple({
       id: Date.now(),
@@ -61,11 +69,21 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
     });
   };
 
+  const wiggleLatch = () => {
+    setLatchWiggle(n => n + 1);
+    latchClick();
+  };
+
+  // The scene stays behind the gate, dimmed. The gate only decides whether
+  // the player can reach it.
+  const playing = gate.kind === "open" && chapter !== null;
+
   return (
     <div
       ref={root}
       className="scp-root"
       data-small-comforts="plate"
+      data-gate={playing ? "open" : gate.kind}
       onPointerDown={makeRipple}
     >
       <div className="scp-world" aria-label="Small Comforts">
@@ -107,10 +125,82 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
         Lantern City
       </button>
 
-      <div className="scp-hint">
-        <b>SMALL COMFORTS</b>
-        <span>Move to look around · tap for a little light</span>
-      </div>
+      {playing ? (
+        <div className="scp-hint">
+          <b>SMALL COMFORTS</b>
+          <span>Move to look around · tap for a little light</span>
+        </div>
+      ) : (
+        <div className="scp-gate" role="status" aria-live="polite">
+          {gate.kind === "open" ? (
+            <>
+              <h2 className="scp-gate-title">Pick a chapter</h2>
+              <ul className="scp-tags">
+                {gate.tags.map(tag => (
+                  <li key={tag.chapter}>
+                    {tag.state === "open" ? (
+                      <button
+                        type="button"
+                        className="scp-tag scp-tag-open"
+                        onClick={() => setChapter(tag.chapter)}
+                      >
+                        {tag.label}
+                      </button>
+                    ) : (
+                      <span
+                        className={`scp-tag scp-tag-${tag.state}`}
+                        aria-label={tag.state === "shut" ? "Not yet" : tag.label ?? undefined}
+                      >
+                        {tag.label ?? ""}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                key={latchWiggle}
+                className={`scp-latch${latchWiggle ? " scp-latch-wiggle" : ""}`}
+                onClick={wiggleLatch}
+                aria-label="The suitcase latch"
+                disabled={gate.kind === "loading"}
+              />
+              <p className="scp-gate-line">{gate.message}</p>
+              {gate.kind === "locked" && gate.progress ? (
+                <p className="scp-gate-progress">{gate.progress}</p>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** One soft click on the latch. Procedural, optional: any audio failure is silence. */
+function latchClick() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(220, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.07);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.08);
+    osc.onended = () => void ctx.close().catch(() => undefined);
+  } catch {
+    // Sound is a courtesy.
+  }
 }

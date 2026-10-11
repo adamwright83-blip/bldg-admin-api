@@ -4807,6 +4807,17 @@ await assertRequiredColumns("daphne_metric_events", [
   "createdAt",
 ]);
 
+// hidden_game.lost_property — chapter unlock ledger. Production boot does
+// not replay numbered Drizzle migrations, so the table is admitted here.
+await applyHistoricalCreateTables(
+  "../drizzle/0128_hidden_game_chapter_unlocks.sql",
+  "Hidden game chapter unlock ledger"
+);
+await assertRequiredColumns("hidden_game_chapter_unlocks", [
+  "id", "tenant_id", "operator_id", "chapter", "unlocked_on_local_date",
+  "evidence_json", "created_at",
+]);
+
 // Mitch v1 — Game Production Operating System tables
 await applyHistoricalCreateTables(
   "../drizzle/0108_mitch_game_production.sql",
