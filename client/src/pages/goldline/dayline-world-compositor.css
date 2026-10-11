@@ -1,517 +1,298 @@
-/* GOLDLINE Day Line — Approved v2 Adventure Composition */
-
+/* Artwork coordinates are measured on the approved 941 × 1672 scene.
+ * The outer Driver viewport/scale is deliberately owned by existing styles. */
 .gdp-illustrated-world {
   position: relative;
   isolation: isolate;
+  container-type: inline-size;
   width: 100%;
   max-width: 430px;
-  min-height: 844px;
   margin: 0 auto;
-  color: #fff8dc;
+  color: white;
   overflow: hidden;
   background: #0d161f;
 }
-
 .gdp-art-scene {
   position: relative;
   width: 100%;
-  height: 844px;
+  aspect-ratio: 941 / 1672;
   overflow: hidden;
 }
-
-@media (min-height: 900px) {
-  .gdp-illustrated-world {
-    min-height: 932px;
-  }
-  .gdp-art-scene {
-    height: 932px;
-  }
+.gdp-art-scene[data-scene-ready="false"] {
+  visibility: hidden;
 }
-
-/* Background: Continuous single fantasy environment, no repeating seams */
 .gdp-scene-backdrop {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background-image: url("/goldline/dayline-v2/background/dayline-adventure-world.webp");
-  background-size: cover;
-  background-position: center top;
-  background-repeat: no-repeat;
+  background: url("/goldline/dayline-v2/background/dayline-adventure-world.webp")
+    center top / 100% 100% no-repeat;
   pointer-events: none;
 }
-
-/* Loading / error status banner */
 .gdp-art-status {
   position: absolute;
-  top: 74px;
-  left: 16px;
-  right: 16px;
+  top: 15%;
+  left: 10%;
+  right: 10%;
   z-index: 50;
-  background: rgba(23, 54, 51, 0.95);
+  padding: 12px;
   border: 1px solid #d4af37;
-  padding: 10px 14px;
   border-radius: 8px;
+  background: #173633f2;
   color: #fff7d9;
-  font: 600 13px/1.4 system-ui, -apple-system, sans-serif;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  font:
+    600 13px/1.4 system-ui,
+    sans-serif;
 }
 .gdp-art-status button {
   padding: 4px 8px;
-  margin-left: 8px;
   color: #fce28b;
   text-decoration: underline;
-  background: transparent;
-  border: none;
-  cursor: pointer;
 }
-
-/* Destination: Golden Castle with arrival landing and locked gate */
-.gdp-castle-destination {
-  position: absolute;
-  top: 9%;
-  left: 52%;
-  transform: translateX(-50%);
-  z-index: 6;
-  pointer-events: auto;
-}
-
-.gdp-castle-portal-landing {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(14, 20, 28, 0.88);
-  border: 1px solid rgba(220, 185, 110, 0.7);
-  border-radius: 20px;
-  padding: 4px 10px 4px 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 12px rgba(220, 185, 110, 0.3);
-  backdrop-filter: blur(4px);
-}
-
-.gdp-castle-lock-halo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #dfc377, #9b7e32);
-  color: #141b22;
-  box-shadow: 0 0 8px rgba(223, 195, 119, 0.8);
-}
-
-.gdp-castle-arrival-pill {
-  display: flex;
-  flex-direction: column;
-}
-
-.gdp-castle-arrival-pill strong {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: #fff3c4;
-}
-
-.gdp-castle-arrival-pill small {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #d4af37;
-}
-
-/* Walkable 5-Section Route: connecting start to 5 checkpoints and castle */
-.gdp-walkable-route {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.gdp-walkable-route svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.gdp-walk-track {
-  fill: none;
-  stroke: rgba(220, 185, 110, 0.4);
-  stroke-width: 3.5;
-  stroke-dasharray: 4 3;
-  vector-effect: non-scaling-stroke;
-}
-
-.gdp-walk-glow {
-  fill: none;
-  stroke: #ffde83;
-  stroke-width: 2.5;
-  vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 5px #ffd253);
-}
-
-/* Checkpoint Beacons */
-.gdp-route-beacon {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  z-index: 4;
-}
-
-.gdp-beacon-core {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ffde83;
-  border: 1.5px solid #ffffff;
-  box-shadow: 0 0 8px #ffb300, 0 0 14px rgba(255, 215, 0, 0.6);
-}
-
-.gdp-beacon-tag {
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: #fff3c4;
-  background: rgba(12, 18, 25, 0.85);
-  border: 1px solid rgba(220, 185, 110, 0.6);
-  padding: 1px 4px;
-  border-radius: 4px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.gdp-route-beacon.is-completed .gdp-beacon-core {
-  background: #4ade80;
-  box-shadow: 0 0 8px #22c55e, 0 0 14px rgba(34, 197, 94, 0.6);
-}
-
-/* Large Foreground Adventurer Explorer */
+.gdp-approved-art-layer,
 .gdp-world-avatar {
   position: absolute;
-  z-index: 8;
-  pointer-events: none;
-  width: 72px;
-  height: 110px;
-  transform-origin: center bottom;
-  filter: drop-shadow(0 8px 6px rgba(0, 0, 0, 0.75));
-}
-
-.gdp-world-avatar img {
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  display: block;
+  pointer-events: none;
 }
-
-/* World Objects Container */
+.gdp-approved-art-layer {
+  z-index: 2;
+}
+.gdp-world-avatar {
+  z-index: 5;
+  transform-origin: 19% 89%;
+}
 .gdp-world-objects {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 6;
   pointer-events: none;
 }
-
 .gdp-object-environment {
   position: static;
   pointer-events: none;
 }
-
-/* Compact, Dark Angular Mission Plaques */
 .gdp-object {
+  --category-color: #fbd168;
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  width: 52%;
-  max-width: 215px;
-  padding: 0;
+  display: grid;
+  grid-template-columns: 9.5cqw 1fr;
+  align-items: start;
+  padding: 1.25cqw 0.5cqw 1.1cqw 0.95cqw;
   margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
   cursor: pointer;
   pointer-events: auto;
-  border: 1px solid rgba(220, 185, 110, 0.65);
-  border-radius: 7px;
-  background: linear-gradient(135deg, rgba(14, 20, 28, 0.92) 0%, rgba(9, 14, 20, 0.96) 100%);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  text-align: left;
-  color: #ffffff;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  filter: drop-shadow(0 0.2cqw 0.7cqw #1a160d80);
   -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(4px);
-  outline: none;
 }
-
-.gdp-object:hover,
-.gdp-object:focus,
 .gdp-object:focus-visible {
-  transform: translateY(-2px) scale(1.02);
-  border-color: #ffd253;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 12px rgba(255, 210, 83, 0.4);
-  outline: none;
+  outline: 0.4cqw solid white;
+  outline-offset: 0.5cqw;
 }
-
-.gdp-object:active {
-  transform: translateY(0) scale(0.98);
+.gdp-object:hover .gdp-plaque-art path {
+  stroke: #ffeeb5;
 }
-
-/* Time Pin Leader attached to plaque */
-.gdp-plaque-pin {
+.gdp-plaque-art {
   position: absolute;
-  right: calc(100% + 5px);
-  top: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  pointer-events: none;
-  white-space: nowrap;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: visible;
 }
-
-.gdp-pin-dot {
-  width: 7px;
-  height: 7px;
+.gdp-plaque-art path {
+  fill: #0a141cf2;
+  stroke: #dca53d;
+  stroke-width: 1.8;
+}
+.gdp-object--pickup {
+  --category-color: #9bdcfc;
+  grid-template-columns: 8.1cqw 1fr;
+}
+.gdp-object--sales {
+  --category-color: #ff858e;
+}
+.gdp-object--growth {
+  --category-color: #8af5b2;
+}
+.gdp-object--marketing {
+  --category-color: #ef81ff;
+}
+.gdp-category-icon-wrap {
+  display: grid;
+  place-items: center;
+  width: 7cqw;
+  height: 7cqw;
+  border: 0;
   border-radius: 50%;
-  background: #ffde83;
-  box-shadow: 0 0 6px #ffb300;
+  margin-top: 0.1cqw;
+  color: var(--category-color);
+  overflow: hidden;
+  background: transparent;
 }
-
-.gdp-pin-time {
-  font-size: 9px;
-  font-weight: 800;
-  color: #ffde83;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+.gdp-category-icon-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-
-.gdp-pin-stem {
-  width: 10px;
-  height: 1px;
-  background: linear-gradient(90deg, #ffde83, rgba(220, 185, 110, 0.4));
-}
-
-/* Programmatic Surface inside Plaque (background: 0, border: 0) */
 .gdp-object-surface {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 8px;
-  background-color: rgba(0, 0, 0, 0) !important;
-  border-top-width: 0px !important;
-  border-right-width: 0px !important;
-  border-bottom-width: 0px !important;
-  border-left-width: 0px !important;
-  border-style: none !important;
-  color: #ffffff;
+  gap: 0.15cqw;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  font-family: Arial, sans-serif;
 }
-
 .gdp-object-category {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 2px;
-}
-
-.gdp-category-icon-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-}
-
-.gdp-object--pickup .gdp-category-icon-wrap {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: #ffffff;
-}
-.gdp-object--pickup .gdp-object-category b {
-  color: #38bdf8;
-}
-
-.gdp-object--dropoff .gdp-category-icon-wrap {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  color: #ffffff;
-}
-.gdp-object--dropoff .gdp-object-category b {
-  color: #fbbf24;
-}
-
-.gdp-object--sales .gdp-category-icon-wrap {
-  background: linear-gradient(135deg, #e11d48, #be123c);
-  color: #ffffff;
-}
-.gdp-object--sales .gdp-object-category b {
-  color: #fb7185;
-}
-
-.gdp-object--growth .gdp-category-icon-wrap {
-  background: linear-gradient(135deg, #059669, #047857);
-  color: #ffffff;
-}
-.gdp-object--growth .gdp-object-category b {
-  color: #34d399;
-}
-
-.gdp-object--marketing .gdp-category-icon-wrap {
-  background: linear-gradient(135deg, #9333ea, #7e22ce);
-  color: #ffffff;
-}
-.gdp-object--marketing .gdp-object-category b {
-  color: #c084fc;
-}
-
-.gdp-object-category b {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-}
-
-.gdp-category-chevron {
-  margin-left: auto;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.gdp-object-surface strong {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: #ffffff;
+  display: block;
+  margin: -0.2cqw 0 0.1cqw;
+  color: var(--category-color);
+  font:
+    700 3cqw/1.12 "Arial Narrow",
+    Impact,
+    sans-serif;
+  letter-spacing: -0.02em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-
-.gdp-object-address {
-  font-size: 10px;
-  font-weight: 500;
-  color: #cfd8dc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.gdp-object-category svg {
+  display: block;
 }
-
-.gdp-object-time {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 9.5px;
-  font-weight: 600;
-  color: #d4af37;
-  margin-top: 2px;
+.gdp-object--marketing .gdp-object-category {
+  font-size: 2.65cqw;
+  letter-spacing: -0.03em;
 }
-
-.gdp-object-status {
-  font-size: 8.5px;
-  font-weight: 800;
-  color: #4ade80;
-}
-
-/* Specific Positions on the approved v2 scene */
-.gdp-object--pickup {
-  top: 15.5%;
-  left: 18%;
-}
-
-.gdp-object--dropoff {
-  top: 24.5%;
-  left: 54%;
-}
-
-.gdp-object--sales {
-  top: 38%;
-  left: 50%;
-}
-
-.gdp-object--growth {
-  top: 57%;
-  left: 56%;
-}
-
 .gdp-object--marketing {
-  top: 71%;
-  left: 48%;
+  padding-top: 1cqw;
+  padding-bottom: 0.5cqw;
 }
-
-/* "ENTER OVERWORLD" CTA Container */
-.gdp-overworld-cta-container {
+.gdp-object--marketing .gdp-object-surface {
+  padding-top: 1.2cqw;
+}
+.gdp-object-surface strong,
+.gdp-object-address,
+.gdp-object-detail {
+  color: #f5f5f3;
+  font-size: 1.96cqw;
+  font-weight: 400;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.gdp-object-status {
+  color: var(--category-color);
+  font:
+    700 1.35cqw/1.2 Arial,
+    sans-serif;
+  margin-top: 0.25cqw;
+}
+.gdp-plaque-pin {
   position: absolute;
-  bottom: 82px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
-  width: calc(100% - 32px);
-  max-width: 380px;
-  display: flex;
-  justify-content: center;
-  pointer-events: auto;
-}
-
-.gdp-enter-overworld-btn {
-  position: relative;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 18px;
-  background: linear-gradient(135deg, #1b2e24 0%, #101c16 100%);
-  border: 1.5px solid #d4af37;
-  border-radius: 28px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), 0 0 16px rgba(212, 175, 55, 0.4);
-  color: #ffffff;
-  cursor: pointer;
+  z-index: -1;
+  pointer-events: none;
+}
+.gdp-pin-dot {
+  width: 3.61cqw;
+  height: 3.61cqw;
+  border: 0;
+  border-radius: 50%;
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
 }
-
-.gdp-enter-overworld-btn:hover {
-  transform: scale(1.02);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.8), 0 0 24px rgba(212, 175, 55, 0.6);
-  border-color: #ffd253;
-}
-
-.gdp-enter-overworld-btn:active {
-  transform: scale(0.98);
-}
-
-.gdp-overworld-btn-flare {
-  position: absolute;
-  top: 0;
-  left: -50%;
-  width: 50%;
+.gdp-pin-dot svg {
+  display: block;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-  transform: skewX(-20deg);
-  animation: gdp-flare-pass 3.5s infinite;
+}
+.gdp-pin-time {
+  position: absolute;
+  left: 3.4cqw;
+  top: -2.1cqw;
+  width: 10.2cqw;
+  color: #09131a;
+  white-space: pre-line;
+  font:
+    700 2.66cqw/1.02 Arial,
+    sans-serif;
+  text-shadow:
+    0 0 1cqw white,
+    0 0 2cqw #fffad2,
+    0 0 3cqw #fff8af;
+}
+.gdp-pin-stem {
+  position: absolute;
+  left: 50%;
+  top: -2.9cqw;
+  height: 15cqw;
+  width: 0.25cqw;
+  background: linear-gradient(
+    transparent,
+    #fff6ab 18%,
+    #ffe75c 70%,
+    transparent
+  );
+  box-shadow: 0 0 1cqw 0.4cqw #ffdc4970;
+}
+.gdp-dayline-continuation {
+  position: relative;
+  background: #142021;
+}
+.gdp-dayline-continuation[data-scene-ready="false"] {
+  visibility: hidden;
+}
+.gdp-dayline-continuation .gdp-plaque-pin {
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdp-world-avatar {
+    transition: none !important;
+  }
 }
 
-@keyframes gdp-flare-pass {
-  0% { left: -50%; }
-  35%, 100% { left: 150%; }
+/* Repeated work shares the scenery but each source keeps a bounded card. */
+.gdp-object[data-layout="list"] {
+  height: 11.69cqw;
+  padding-top: 0.8cqw;
+  padding-bottom: 0.7cqw;
+}
+.gdp-object[data-layout="list"] .gdp-object-surface {
+  padding-top: 0;
+}
+.gdp-object[data-layout="list"] .gdp-object-surface strong,
+.gdp-object[data-layout="list"] .gdp-object-address,
+.gdp-object[data-layout="list"] .gdp-object-detail {
+  -webkit-line-clamp: 1;
+}
+.gdp-object[data-layout="list"][data-visual-state="ready_to_open"]
+  .gdp-object-detail,
+.gdp-object[data-layout="list"][data-visual-state="blocked"] .gdp-object-detail,
+.gdp-object[data-layout="list"][data-visual-state="unknown"]
+  .gdp-object-detail {
+  display: none;
+}
+.gdp-object-surface strong,
+.gdp-object-address,
+.gdp-object-detail {
+  letter-spacing: -0.02em;
+}
+.gdp-plaque-pin--growth .gdp-pin-time {
+  left: 4.15cqw;
+  font-size: 2.4cqw;
+}
+.gdp-plaque-pin[data-pin-layout="landmark"] .gdp-pin-stem {
+  display: none;
 }
 
-.gdp-overworld-btn-icon {
-  color: #ffd253;
-  flex-shrink: 0;
-}
-
-.gdp-overworld-btn-text {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-}
-
-.gdp-overworld-btn-text strong {
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 1.2px;
-  color: #fff3c4;
-}
-
-.gdp-overworld-btn-text small {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  color: #d4af37;
-}
+.gdp-object-address { letter-spacing: -.035em; }

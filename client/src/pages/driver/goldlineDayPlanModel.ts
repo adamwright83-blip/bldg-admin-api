@@ -157,6 +157,8 @@ export type DayPlanStop = {
   source: DayPlanSource;
   sourceLabel: string;
   timeLabel: string;
+  /** Known source facts shown beneath the live title/address. */
+  displayDetail?: string | null;
   sortKey: string;
   estimatedMinutes: number | null;
   status: "upcoming" | "ready" | "blocked" | "completed" | "cancelled";
@@ -248,6 +250,10 @@ function nativeStop(order: Order, kind: "pickup" | "dropoff"): DayPlanStop {
     source: "laundry_butler",
     sourceLabel: "Laundry Butler",
     timeLabel: window,
+    displayDetail: [
+      order.bagCount != null ? `${order.bagCount} ${order.bagCount === 1 ? "bag" : "bags"}` : null,
+      order.weightLbs != null && Number.isFinite(Number(order.weightLbs)) ? `${Number(order.weightLbs)} lb` : null,
+    ].filter(Boolean).join(" • ") || null,
     sortKey: timeSortKey(window, "60:00"),
     estimatedMinutes: null,
     status: completed ? "completed" : "upcoming",

@@ -1,39 +1,30 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  BarChart3,
-  Camera,
-  ChevronRight,
-  Compass,
-  Leaf,
-  LockKeyhole,
-  Package,
-  Sparkles,
-} from "lucide-react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Package } from "lucide-react";
 import type { DayPlanStop } from "../driver/goldlineDayPlanModel";
 import {
   climbAvatarPosition,
   groupConsecutiveActionSlots,
   shouldPlayClimb,
   visualStateForStop,
-  FIVE_DAY_CHECKPOINTS,
-  calculateFiveDayRoutePosition,
   type ActionSlotArt,
 } from "./daylineWorldComposition";
+import { approvedDaylinePlacements } from "./approvedDaylineLayout";
 import "./dayline-world-compositor.css";
 
-const ART_ROOT = "/goldline/dayline-v1";
 const RESTORED_ROOT = "/goldline/dayline-v2";
+const APPROVED = `${RESTORED_ROOT}/ui/approved-reference.png`;
+const BACKDROP = `${RESTORED_ROOT}/background/dayline-adventure-world.webp`;
 
+/** Retained asset catalog for other Day Line surfaces. The scene plate already
+ * contains these landmarks, so this compositor paints each landmark once. */
 export function daylineObjectSource(kind: ActionSlotArt) {
   if (kind === "generic") return null;
   if (kind === "sales") return `${RESTORED_ROOT}/objects/sales-course.webp`;
   return `${RESTORED_ROOT}/objects/${kind}.webp`;
 }
 
-// Cache successfully decoded sources across async day changes.
 const decoded = new Set<string>();
 const pending = new Map<string, Promise<void>>();
-
 function decodeSource(source: string): Promise<void> {
   if (decoded.has(source)) return Promise.resolve();
   const existing = pending.get(source);
@@ -56,40 +47,14 @@ function decodeSource(source: string): Promise<void> {
   pending.set(source, promise);
   return promise;
 }
-
-function useDaylineArtReady(stops: readonly DayPlanStop[], animate: boolean) {
-  const groups = groupConsecutiveActionSlots(stops);
-  const sources = [
-    `${RESTORED_ROOT}/background/dayline-adventure-world.webp`,
-    `${RESTORED_ROOT}/background/world-clean.webp`,
-    `${ART_ROOT}/avatar/idle.png`,
-    `${RESTORED_ROOT}/ui/claire-lantern-badge.webp`,
-    ...(groups.some(group =>
-      ["pickup", "dropoff", "growth"].includes(group.kind)
-    )
-      ? [`${RESTORED_ROOT}/scenery/foreground-cutouts-atlas.webp`]
-      : []),
-    ...[
-      ...new Set(
-        groups.flatMap(group => {
-          const source = daylineObjectSource(group.kind);
-          return source ? [source] : [];
-        })
-      ),
-    ],
-    ...(animate
-      ? Array.from({ length: 5 }, (_, i) => `${ART_ROOT}/avatar/walk-0${i}.png`)
-      : []),
-  ];
-  const key = sources.join("|");
+function useDaylineArtReady() {
   const [, setRevision] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
-    Promise.all(sources.map(decodeSource))
+    Promise.all([BACKDROP, APPROVED].map(decodeSource))
       .then(() => {
         if (!cancelled) setRevision(value => value + 1);
       })
@@ -99,10 +64,9 @@ function useDaylineArtReady(stops: readonly DayPlanStop[], animate: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [key, attempt]);
-
+  }, [attempt]);
   return {
-    ready: sources.every(source => decoded.has(source)),
+    ready: decoded.has(BACKDROP) && decoded.has(APPROVED),
     failed,
     retry: () => setAttempt(value => value + 1),
   };
@@ -116,8 +80,10 @@ export type DaylineWorldCompositorProps = {
   onEnterExistingChapter?: () => void;
   onEnterOverworld?: () => void;
   isLoading?: boolean;
-  dayNumber?: number; // 1 to 5 (default 1)
-  completedPriorDays?: number; // 0 to 4 (default 0)
+  dayNumber?: number;
+  completedPriorDays?: number;
+  sceneHeader?: React.ReactNode;
+  sceneFooter?: React.ReactNode;
 };
 
 function artLabel(kind: ActionSlotArt) {
@@ -130,219 +96,232 @@ function artLabel(kind: ActionSlotArt) {
     generic: "ACTION",
   }[kind];
 }
-
 function KindIcon({ kind }: { kind: ActionSlotArt }) {
-  if (kind === "sales") return <BarChart3 size={15} aria-hidden="true" />;
-  if (kind === "growth") return <Leaf size={15} aria-hidden="true" />;
-  if (kind === "marketing") return <Camera size={15} aria-hidden="true" />;
-  return <Package size={15} aria-hidden="true" />;
+  const boxes = {
+    pickup: [208, 267, 66, 68],
+    dropoff: [642, 414, 70, 70],
+    sales: [571, 693, 70, 70],
+    growth: [641, 973, 68, 70],
+    marketing: [572, 1246, 67, 68],
+  };
+  if (kind === "generic") return <Package aria-hidden="true" />;
+  return (
+    <svg viewBox={boxes[kind].join(" ")} aria-hidden="true">
+      <image href={APPROVED} width="941" height="1672" />
+    </svg>
+  );
+}
+function CategoryHeading({ kind }: { kind: ActionSlotArt }) {
+  const id = `dayline-category-${useId().replace(/:/g, "")}`;
+  const boxes = {
+    pickup: [283, 265, 123, 29],
+    dropoff: [728, 413, 131, 31],
+    sales: [658, 694, 177, 31],
+    growth: [725, 979, 126, 31],
+    marketing: [658, 1260, 224, 30],
+  };
+  if (kind === "generic") return <>{artLabel(kind)}</>;
+  const [x, y, width, height] = boxes[kind];
+  return (
+    <svg
+      viewBox={`${x} ${y} ${width} ${height}`}
+      style={{
+        width: `${(width / 941) * 100}cqw`,
+        height: `${(height / 941) * 100}cqw`,
+      }}
+      role="img"
+      aria-label={artLabel(kind)}
+    >
+      <defs>
+        <filter id={id} colorInterpolationFilters="sRGB">
+          <feColorMatrix
+            type="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  .8 .8 .8 0 -.5"
+          />
+        </filter>
+      </defs>
+      <image href={APPROVED} width="941" height="1672" filter={`url(#${id})`} />
+    </svg>
+  );
+}
+function PinArtwork({ kind }: { kind: ActionSlotArt }) {
+  const boxes = {
+    pickup: [85, 283, 34, 34],
+    dropoff: [526, 432, 34, 34],
+    sales: [307, 684, 34, 34],
+    growth: [498, 1013, 34, 34],
+    marketing: [483, 1246, 34, 34],
+    generic: [85, 283, 34, 34],
+  };
+  return (
+    <svg viewBox={boxes[kind].join(" ")} aria-hidden="true">
+      <image href={APPROVED} width="941" height="1672" />
+    </svg>
+  );
 }
 
-/**
- * Compact, dark angular mission plaque positioned in the fantasy environment.
- * The outer button provides the faceted dark plate and gold border.
- * The inner surface provides clean live typography with 0px border / transparent background.
- */
+/** Compact a real time window for its two-line marker; never supply a time that
+ * is absent from the projection. The full source label remains in aria-label. */
+export function daylinePinLabel(value: string) {
+  if (/^flexible (today|window)$/i.test(value)) return "FLEX\nTODAY";
+  const window = value.match(
+    /^(\d{1,2})(?::00)?\s*(AM|PM)?\s*[–—-]\s*(\d{1,2})(?::00)?\s*(AM|PM)$/i
+  );
+  if (window) {
+    const [, start, startPeriod, end, endPeriod] = window;
+    return startPeriod && startPeriod.toUpperCase() !== endPeriod.toUpperCase()
+      ? `${start} ${startPeriod.toUpperCase()}–\n${end} ${endPeriod.toUpperCase()}`
+      : `${start}–${end}\n${endPeriod.toUpperCase()}`;
+  }
+  return value.replace(/\s+(AM|PM)$/i, "\n$1");
+}
+
 function ActionObject({
   stop,
-  nextId,
   kind,
-  index,
-  totalCount,
+  nextId,
+  placement,
   onSelect,
-  customPosition,
+  originTop = 0,
 }: {
   stop: DayPlanStop;
-  nextId: string | null;
   kind: ActionSlotArt;
-  index: number;
-  totalCount: number;
+  nextId: string | null;
+  placement: ReturnType<typeof approvedDaylinePlacements>[number];
   onSelect: DaylineWorldCompositorProps["onSelect"];
-  customPosition?: { top: string; left: string };
+  originTop?: number;
 }) {
-  const source = daylineObjectSource(kind);
   const state = visualStateForStop(stop, nextId, false);
   const address =
     stop.address?.trim() && stop.address.trim() !== stop.title.trim()
       ? stop.address
       : null;
-
+  const status =
+    stop.status === "completed"
+      ? "✓ VERIFIED"
+      : stop.status === "cancelled"
+        ? "CANCELLED"
+        : stop.status === "blocked"
+          ? "BLOCKED"
+          : stop.attentionState === "needs_details"
+            ? "NEEDS DETAILS"
+            : null;
   return (
-    <button
-      type="button"
-      className={`gdp-object gdp-object--${kind}`}
-      data-testid={`day-plan-stop-${stop.id}`}
-      data-action-slot-id={stop.id}
-      data-object-kind={kind}
-      data-visual-state={state}
-      data-object-ready={!source || decoded.has(source)}
-      style={customPosition ? { top: customPosition.top, left: customPosition.left } : undefined}
-      aria-label={`${artLabel(kind)}: ${stop.title}. ${address ?? ""} ${stop.timeLabel}. ${stop.status === "completed" ? "Verified complete" : stop.status}`}
-      onClick={() => onSelect(stop)}
-    >
-      <span className="gdp-plaque-pin" aria-hidden="true">
-        <span className="gdp-pin-dot" />
-        <span className="gdp-pin-time">{stop.timeLabel}</span>
+    <>
+      <span
+        className={`gdp-plaque-pin gdp-plaque-pin--${kind}`}
+        data-pin-layout={placement.height === 110 ? "list" : "landmark"}
+        style={{
+          left: `${(placement.pinLeft / 941) * 100}%`,
+          top: originTop
+            ? `${((placement.pinTop - originTop) / 941) * 100}cqw`
+            : `${(placement.pinTop / 1672) * 100}%`,
+        }}
+        aria-hidden="true"
+      >
         <span className="gdp-pin-stem" />
-      </span>
-
-      {/* Hidden landmark image reference for static verification tests */}
-      {source && (
-        <img
-          className="gdp-object-landmark-ref"
-          src={source}
-          alt=""
-          loading="eager"
-          decoding="sync"
-          draggable={false}
-          style={{ display: "none" }}
-        />
-      )}
-
-      <span className="gdp-object-surface">
-        <span className="gdp-object-category">
-          <span className="gdp-category-icon-wrap">
-            <KindIcon kind={kind} />
-          </span>
-          <b>{artLabel(kind)}</b>
-          <ChevronRight size={13} className="gdp-category-chevron" />
+        <span className="gdp-pin-dot">
+          <PinArtwork kind={kind} />
         </span>
-        <strong title={stop.title}>{stop.title}</strong>
-        {address && (
-          <span className="gdp-object-address" title={address}>
-            {address}
-          </span>
-        )}
-        <span className="gdp-object-time">
-          {stop.timeLabel}
-          <span className="gdp-object-status">
-            {stop.status === "completed"
-              ? "✓ VERIFIED"
-              : stop.status === "cancelled"
-                ? "CANCELLED"
-                : stop.status === "blocked"
-                  ? "BLOCKED"
-                  : stop.attentionState === "needs_details"
-                    ? "NEEDS DETAILS"
-                    : state === "up_next"
-                      ? "NEXT ›"
-                      : null}
-          </span>
-        </span>
+        <span className="gdp-pin-time">{daylinePinLabel(stop.timeLabel)}</span>
       </span>
-    </button>
+      <button
+        type="button"
+        className={`gdp-object gdp-object--${kind}`}
+        data-testid={`day-plan-stop-${stop.id}`}
+        data-action-slot-id={stop.id}
+        data-object-kind={kind}
+        data-layout={placement.height === 110 ? "list" : "landmark"}
+        data-visual-state={state}
+        data-object-ready="true"
+        style={{
+          left: `${(placement.left / 941) * 100}%`,
+          top: originTop
+            ? `${((placement.top - originTop) / 941) * 100}cqw`
+            : `${(placement.top / 1672) * 100}%`,
+          width: `${(placement.width / 941) * 100}%`,
+          minHeight: `${(placement.height / 941) * 100}cqw`,
+        }}
+        aria-label={`${artLabel(kind)}: ${stop.title}. ${address ?? ""} ${stop.timeLabel}. ${status ?? stop.status}`}
+        onClick={() => onSelect(stop)}
+      >
+        <svg
+          className="gdp-plaque-art"
+          viewBox="0 0 320 128"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M64 1H273L319 44V90L282 127H64C29 127 1 99 1 64S29 1 64 1Z" />
+        </svg>
+        <span className="gdp-category-icon-wrap">
+          <KindIcon kind={kind} />
+        </span>
+        <span className="gdp-object-surface">
+          <b className="gdp-object-category">
+            <CategoryHeading kind={kind} />
+          </b>
+          <strong title={stop.title}>{stop.title}</strong>
+          {address && (
+            <span className="gdp-object-address" title={address}>
+              {address}
+            </span>
+          )}
+          {stop.displayDetail && (
+            <span className="gdp-object-detail">{stop.displayDetail}</span>
+          )}
+          {status && <span className="gdp-object-status">{status}</span>}
+        </span>
+      </button>
+    </>
   );
 }
 
-function getPlaquePosition(
-  stop: DayPlanStop,
-  index: number,
-  allStops: readonly DayPlanStop[]
-): { top: string; left: string } {
-  const total = allStops.length;
-  const isAllSales = allStops.every(s => s.kind === "sales");
+const HERO_OUTLINE =
+  "M186 797L212 791L242 800L253 817L251 840L242 858L265 878L281 882L298 905L305 951L315 976L320 1008L326 1026L331 1049L327 1075L322 1090L311 1096L302 1070L293 1037L275 1002L276 1055L284 1102L270 1151L282 1204L276 1240L262 1282L261 1320L254 1354L241 1383L211 1396L193 1398L178 1391L179 1371L190 1341L195 1299L197 1251L178 1229L162 1263L133 1303L115 1329L109 1363L98 1382L90 1415L76 1448L81 1472L67 1508L52 1507L39 1478L32 1453L40 1428L45 1398L58 1369L67 1329L78 1281L88 1232L103 1187L104 1147L82 1127L68 1114L56 1094L51 1070L55 1037L58 1005L61 973L75 940L85 925L107 905L127 890L145 879L162 875L174 858L171 837L176 815Z";
 
-  if (isAllSales) {
-    if (total <= 4) {
-      return {
-        top: `${33 + index * 7}%`,
-        left: "48%",
-      };
-    }
-    return {
-      top: `${23 + index * 6.3}%`,
-      left: "46%",
-    };
-  }
-
-  // Count how many of this kind came before index
-  const kindIndex = allStops.slice(0, index).filter(s => s.kind === stop.kind).length;
-
-  if (total <= 5) {
-    if (stop.kind === "pickup") return { top: "15.5%", left: "18%" };
-    if (stop.kind === "dropoff") return { top: "24.5%", left: "54%" };
-    if (stop.kind === "sales") return { top: `${38 + kindIndex * 6.5}%`, left: "50%" };
-    if (stop.kind === "growth") return { top: "57%", left: "56%" };
-    if (stop.kind === "marketing") return { top: "71%", left: "48%" };
-    return { top: `${40 + index * 6}%`, left: "48%" };
-  }
-
-  // For > 5 mixed stops (e.g. 8 stops in art-eight):
-  // Distinct vertical slices so no horizontal collision occurs:
-  if (stop.kind === "pickup") {
-    return {
-      top: `${13 + kindIndex * 6.5}%`,
-      left: "16%",
-    };
-  }
-  if (stop.kind === "dropoff") {
-    return {
-      top: `${25.5 + kindIndex * 7}%`,
-      left: "52%",
-    };
-  }
-  if (stop.kind === "sales") {
-    return {
-      top: `${40.5 + kindIndex * 7.5}%`,
-      left: "48%",
-    };
-  }
-  if (stop.kind === "growth") {
-    return {
-      top: `${56.5 + kindIndex * 7}%`,
-      left: "56%",
-    };
-  }
-  if (stop.kind === "marketing") {
-    return {
-      top: `${68.5 + kindIndex * 7}%`,
-      left: "48%",
-    };
-  }
-  return { top: `${35 + index * 6}%`, left: "48%" };
-}
+// Preserve the approved painted environment, route, light, hero and static
+// chrome exactly. Always erase its sample business plaques and time/date text,
+// even on an empty day, before rendering real source data in their place.
+const SAMPLE_FIELDS = [
+  [196, 254, 280, 124],
+  [629, 400, 272, 123],
+  [557, 675, 306, 135],
+  [627, 959, 243, 113],
+  [557, 1236, 338, 88],
+  [110, 254, 77, 75],
+  [553, 405, 77, 69],
+  [330, 655, 98, 73],
+  [530, 992, 89, 64],
+  [508, 1221, 54, 65],
+  [285, 187, 178, 36],
+  [90, 18, 71, 38],
+  [725, 16, 165, 38],
+] as const;
 
 export function DaylineWorldCompositor({
   stops,
   onSelect,
   allowWalkingAnimation = false,
   isDriving = true,
-  onEnterExistingChapter,
-  onEnterOverworld,
   isLoading = false,
   dayNumber = 1,
   completedPriorDays = 0,
+  sceneHeader,
+  sceneFooter,
 }: DaylineWorldCompositorProps) {
   const reducedMotion = useReducedMotion();
-  const animate = allowWalkingAnimation && !isDriving && !reducedMotion;
-  const {
-    ready: imagesReady,
-    failed,
-    retry,
-  } = useDaylineArtReady(stops, animate);
+  const { ready: imagesReady, failed, retry } = useDaylineArtReady();
   const artReady = imagesReady && !isLoading;
   const [revealed, setRevealed] = useState(false);
-
   useEffect(() => {
     if (artReady) setRevealed(true);
   }, [artReady]);
-
-  const [walkerFrame, setWalkerFrame] = useState(0);
-  const [walking, setWalking] = useState(false);
-
   const completed = stops.filter(stop => stop.status === "completed").length;
   const previousCompleted = useRef<number | null>(null);
-  const previousIds = useRef<string>("");
-
-  const groups = useMemo(() => groupConsecutiveActionSlots(stops), [stops]);
-  const nextId =
-    stops.find(
-      stop => !["completed", "cancelled", "blocked"].includes(stop.status)
-    )?.id ?? null;
-
-  const avatar = climbAvatarPosition(completed, stops.length, dayNumber, completedPriorDays);
+  const previousIds = useRef("");
+  const [walking, setWalking] = useState(false);
   const ids = stops.map(stop => stop.id).join("|");
-
+  const animate = allowWalkingAnimation && !isDriving && !reducedMotion;
   useEffect(() => {
     const previous = previousCompleted.current;
     const sameDay = previousIds.current === ids;
@@ -356,30 +335,29 @@ export function DaylineWorldCompositor({
       !shouldPlayClimb(previous, completed, isDriving, reducedMotion)
     ) {
       setWalking(false);
-      setWalkerFrame(0);
       return;
     }
     setWalking(true);
-    let frame = 0;
-    const interval = window.setInterval(() => {
-      setWalkerFrame(++frame % 5);
-      if (frame >= 10) {
-        window.clearInterval(interval);
-        setWalking(false);
-        setWalkerFrame(0);
-      }
-    }, 125);
-    return () => window.clearInterval(interval);
+    const timer = window.setTimeout(() => setWalking(false), 1250);
+    return () => window.clearTimeout(timer);
   }, [animate, artReady, completed, ids, isDriving, reducedMotion]);
-
-  const handleOverworldClick = () => {
-    if (onEnterOverworld) {
-      onEnterOverworld();
-    } else if (onEnterExistingChapter) {
-      onEnterExistingChapter();
-    }
-  };
-
+  const avatar = climbAvatarPosition(
+    completed,
+    stops.length,
+    dayNumber,
+    completedPriorDays
+  );
+  const groups = useMemo(() => groupConsecutiveActionSlots(stops), [stops]);
+  const placements = useMemo(() => approvedDaylinePlacements(stops), [stops]);
+  const nextId =
+    stops.find(
+      stop => !["completed", "cancelled", "blocked"].includes(stop.status)
+    )?.id ?? null;
+  const clipId = `dayline-explorer-${useId().replace(/:/g, "")}`;
+  const sceneMask = `${clipId}-scene`;
+  const continuation = placements.findIndex(placement => placement.top > 1320);
+  const continuationTop =
+    continuation >= 0 ? placements[continuation].top - 30 : 0;
   return (
     <section
       className="gdp-v2-world gdp-v3-world gdp-illustrated-world"
@@ -398,136 +376,137 @@ export function DaylineWorldCompositor({
           )}
         </div>
       )}
-
       <div className="gdp-art-scene" data-scene-ready={artReady || revealed}>
-        {/* Background Fantasy World */}
         <div className="gdp-scene-backdrop" aria-hidden="true" />
-
-        {/* Castle Destination at Top: Locked until 5-day completion */}
-        <div
-          className="gdp-castle-destination"
-          data-castle-status={avatar.isCastleUnlocked ? "unlocked" : "locked"}
-          data-testid="castle-destination"
+        <svg
+          className="gdp-approved-art-layer"
+          viewBox="0 0 941 1672"
+          aria-hidden="true"
         >
-          <div className="gdp-castle-portal-landing">
-            <span className="gdp-castle-lock-halo">
-              <LockKeyhole size={18} className="gdp-castle-lock-icon" />
-            </span>
-            <div className="gdp-castle-arrival-pill">
-              <strong>{avatar.isCastleUnlocked ? "CITADEL OF KINGDOMS UNLOCKED" : "CITADEL OF KINGDOMS"}</strong>
-              <small>{avatar.isCastleUnlocked ? "ENTER REALM ›" : "LOCKED · 5-DAY DESTINATION"}</small>
-            </div>
-          </div>
-        </div>
-
-        {/* Visibly Walkable 5-Section Route connecting start to the 5 checkpoints & castle */}
-        <div className="gdp-walkable-route" aria-hidden="true">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-            {/* Perspective path: wider at foreground (bottom-left), narrower at distance (top) */}
-            <path
-              d="M 14 84 C 28 82, 38 78, 48 73 C 54 70, 56 64, 58 58 C 60 52, 52 48, 46 44 C 40 40, 34 36, 32 31 C 30 26, 50 20, 62 16.5"
-              className="gdp-walk-track"
+          <defs>
+            <mask
+              id={sceneMask}
+              maskUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width="941"
+              height="1672"
+            >
+              <rect width="941" height="1672" fill="white" />
+              {SAMPLE_FIELDS.map(([x, y, width, height], index) => (
+                <rect
+                  key={`${x}-${y}`}
+                  x={x}
+                  y={y}
+                  width={width}
+                  height={height}
+                  fill="black"
+                  filter={index >= 5 ? `url(#${sceneMask}-feather)` : undefined}
+                />
+              ))}
+              {avatar.fraction > 0 && (
+                <rect x="32" y="790" width="305" height="720" fill="black" />
+              )}
+            </mask>
+            <filter
+              id={`${sceneMask}-feather`}
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
+          </defs>
+          <image
+            href={APPROVED}
+            width="941"
+            height="1672"
+            mask={`url(#${sceneMask})`}
+          />
+        </svg>
+        {sceneHeader}
+        <svg
+          className="gdp-world-avatar"
+          viewBox="0 0 941 1672"
+          role="img"
+          aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
+          data-verified-progress={avatar.fraction}
+          style={{
+            transform: `translate(${avatar.x - 14}%, ${avatar.y - 84}%) scale(${avatar.routeScale / 1.15})`,
+            transition: walking && animate ? "transform 1.25s ease" : "none",
+          }}
+        >
+          <defs>
+            <clipPath id={clipId}>
+              <path d={HERO_OUTLINE} />
+            </clipPath>
+          </defs>
+          {avatar.fraction > 0 && (
+            <image
+              href={APPROVED}
+              width="941"
+              height="1672"
+              clipPath={`url(#${clipId})`}
             />
-            <path
-              d="M 14 84 C 28 82, 38 78, 48 73 C 54 70, 56 64, 58 58 C 60 52, 52 48, 46 44 C 40 40, 34 36, 32 31 C 30 26, 50 20, 62 16.5"
-              className="gdp-walk-glow"
-            />
-          </svg>
-
-          {/* 5 Daily Checkpoint Beacons */}
-          {FIVE_DAY_CHECKPOINTS.slice(1).map(cp => {
-            const isCompletedDay = cp.index <= completedPriorDays || (cp.index === dayNumber && avatar.fraction >= 1);
-            const isCurrentDay = cp.index === dayNumber;
-            return (
-              <div
-                key={cp.index}
-                className={`gdp-route-beacon gdp-route-beacon--day${cp.index}${isCompletedDay ? " is-completed" : ""}${isCurrentDay ? " is-current" : ""}`}
-                style={{ left: `${cp.x}%`, top: `${cp.y}%` }}
-                data-checkpoint-index={cp.index}
-              >
-                <span className="gdp-beacon-core" />
-                <span className="gdp-beacon-tag">{cp.label}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Foreground Male Adventurer: starts large in foreground, moves along 5 sections in perspective */}
-        {decoded.has(`${ART_ROOT}/avatar/idle.png`) && (
-          <div
-            className="gdp-world-avatar"
-            role="img"
-            aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
-            data-verified-progress={avatar.fraction}
-            style={{
-              left: `${avatar.x}%`,
-              top: `${avatar.y}%`,
-              transform: `translate(-50%, -100%) scale(${avatar.routeScale})`,
-              transition: walking && animate ? "left 1.25s ease, top 1.25s ease, transform 1.25s ease" : "none",
-            }}
-          >
-            <img
-              src={`${ART_ROOT}/avatar/${walking ? `walk-0${walkerFrame}` : "idle"}.png`}
-              alt="Adventurer explorer"
-              draggable={false}
-            />
-          </div>
-        )}
-
-        {/* Action Slots / Mission Plaques positioned next to their scenic landmarks */}
+          )}
+        </svg>
         <div className="gdp-world-objects">
-          {groups.map(group => {
-            const isSalesGroup = group.kind === "sales";
-            return (
-              <section
-                key={group.key}
-                className={`gdp-object-environment gdp-object-environment--${group.kind}${isSalesGroup ? " gdp-sales-environment" : ""}`}
-                data-art-landmark={group.kind}
-                data-group-ids={group.items.map(({ stop }) => stop.id).join(",")}
-              >
-                {group.items.map(({ stop, index }) => {
-                  const customPos = getPlaquePosition(stop, index, stops);
-
-                  return (
-                    <ActionObject
-                      key={stop.id}
-                      stop={stop}
-                      kind={group.kind}
-                      index={index}
-                      totalCount={stops.length}
-                      nextId={nextId}
-                      onSelect={onSelect}
-                      customPosition={customPos}
-                    />
-                  );
-                })}
-              </section>
-            );
-          })}
+          {groups.map(group => (
+            <section
+              key={group.key}
+              className={`gdp-object-environment gdp-object-environment--${group.kind}`}
+              data-art-landmark={group.kind}
+              data-group-ids={group.items.map(({ stop }) => stop.id).join(",")}
+            >
+              {group.items
+                .filter(({ index }) => placements[index].top <= 1320)
+                .map(({ stop, index }) => (
+                  <ActionObject
+                    key={stop.id}
+                    stop={stop}
+                    kind={group.kind}
+                    nextId={nextId}
+                    placement={placements[index]}
+                    onSelect={onSelect}
+                  />
+                ))}
+            </section>
+          ))}
         </div>
-
-        {/* Fun, inviting "ENTER OVERWORLD" CTA to access kingdoms for play */}
-        <div className="gdp-overworld-cta-container">
-          <button
-            type="button"
-            className="gdp-enter-overworld-btn"
-            onClick={handleOverworldClick}
-            data-testid="enter-overworld-cta"
-            aria-label="Enter Overworld to access kingdoms for play"
-          >
-            <span className="gdp-overworld-btn-flare" />
-            <Compass size={18} className="gdp-overworld-btn-icon" />
-            <span className="gdp-overworld-btn-text">
-              <strong>ENTER OVERWORLD</strong>
-              <small>ACCESS KINGDOMS FOR PLAY ›</small>
-            </span>
-          </button>
-        </div>
+        {sceneFooter}
       </div>
+      {continuation >= 0 && (
+        <div
+          className="gdp-dayline-continuation"
+          data-scene-ready={artReady || revealed}
+          style={{
+            height: `${((placements.at(-1)!.top - continuationTop + 180) / 941) * 100}cqw`,
+          }}
+          aria-label="More Day Line actions"
+        >
+          {groups.map(group => (
+            <React.Fragment key={group.key}>
+              {group.items
+                .filter(({ index }) => placements[index].top > 1320)
+                .map(({ stop, index }) => (
+                  <ActionObject
+                    key={stop.id}
+                    stop={stop}
+                    kind={group.kind}
+                    nextId={nextId}
+                    placement={placements[index]}
+                    originTop={continuationTop}
+                    onSelect={onSelect}
+                  />
+                ))}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
-
 function useReducedMotion() {
   const [reduced, setReduced] = useState(
     () =>

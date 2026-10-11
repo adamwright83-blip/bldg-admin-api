@@ -2,12 +2,21 @@
 import { useEffect, useState } from "react";
 import type { Order } from "@shared/types";
 import GoldlineDayPlan from "./GoldlineDayPlan";
+import ApprovedDaylineVisualFixture from "./ApprovedDaylineVisualFixture";
 import type {
   DayPlanStopKind,
   LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
 
 export default function DaylineGraphicFixture({ state }: { state: string }) {
+  return state === "art-approved" ? (
+    <ApprovedDaylineVisualFixture />
+  ) : (
+    <DynamicDaylineGraphicFixture state={state} />
+  );
+}
+
+function DynamicDaylineGraphicFixture({ state }: { state: string }) {
   const [loaded, setLoaded] = useState(false);
   const [completed, setCompleted] = useState(false);
   useEffect(() => {
@@ -15,26 +24,30 @@ export default function DaylineGraphicFixture({ state }: { state: string }) {
     return () => clearTimeout(timer);
   }, []);
   const kinds: DayPlanStopKind[] =
-    state === "art-one"
-      ? ["pickup"]
-      : state === "art-three"
-        ? ["pickup", "sales", "dropoff"]
-        : state === "art-sales"
-          ? ["sales", "sales", "sales", "sales"]
-          : state === "art-eight-sales"
-            ? Array(8).fill("sales")
-            : state === "art-eight"
-              ? [
-                  "pickup",
-                  "sales",
-                  "sales",
-                  "dropoff",
-                  "growth",
-                  "marketing",
-                  "pickup",
-                  "dropoff",
-                ]
-              : ["pickup", "sales", "dropoff", "growth", "marketing"];
+    state === "art-empty"
+      ? []
+      : state === "art-twelve-sales" || state === "art-twelve-long"
+        ? Array(12).fill("sales")
+        : state === "art-one"
+          ? ["pickup"]
+          : state === "art-three"
+            ? ["pickup", "sales", "dropoff"]
+            : state === "art-sales"
+              ? ["sales", "sales", "sales", "sales"]
+              : state === "art-eight-sales"
+                ? Array(8).fill("sales")
+                : state === "art-eight"
+                  ? [
+                      "pickup",
+                      "sales",
+                      "sales",
+                      "dropoff",
+                      "growth",
+                      "marketing",
+                      "pickup",
+                      "dropoff",
+                    ]
+                  : ["pickup", "sales", "dropoff", "growth", "marketing"];
   const pickups: Order[] = [],
     deliveries: Order[] = [],
     liveObjectives: LiveAdventureObjective[] = [];
@@ -42,7 +55,7 @@ export default function DaylineGraphicFixture({ state }: { state: string }) {
   kinds.forEach((kind, index) => {
     const id = 900 + index;
     const title =
-      state === "art-long"
+      state === "art-long" || state === "art-twelve-long"
         ? `The Very Long Customer and Property Management Company Name ${index + 1}`
         : [
             "North Terrace",
@@ -54,11 +67,12 @@ export default function DaylineGraphicFixture({ state }: { state: string }) {
     const address =
       state === "art-missing"
         ? null
-        : state === "art-long"
+        : state === "art-long" || state === "art-twelve-long"
           ? "4455 Los Feliz Boulevard, Building Seven, Suite 107, Los Angeles, California 90027, United States"
           : "4455 Los Feliz Blvd #107, Los Angeles, CA 90027";
     const done =
-      (state === "art-completed" && index % 2 === 0) ||
+      ((state === "art-completed" || state === "art-twelve-long") &&
+        index % 2 === 0) ||
       (completed && index === 0);
     if (kind === "pickup" || kind === "dropoff") {
       ids.push(`native-${kind}-${id}`);

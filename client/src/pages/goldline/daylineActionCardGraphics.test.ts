@@ -42,7 +42,11 @@ describe("illustrated mission objects", () => {
         /<button[^>]*data-action-slot-id="source-42"[\s\S]*?<\/button>/
       )?.[0];
       expect(object).toBeDefined();
-      expect(object).toContain(daylineObjectSource(kind));
+      expect(object).toContain(`data-object-kind="${kind}"`);
+      expect(object).toContain("gdp-plaque-art");
+      expect(html).toContain("approved-reference.png");
+      // Landmarks are already painted in the scene plate, not hidden duplicate PNGs.
+      expect(html).not.toContain("gdp-object-landmark-ref");
       expect(object).toContain(item.title);
       expect(object).toContain(item.address);
       expect(object).toContain(item.timeLabel);
