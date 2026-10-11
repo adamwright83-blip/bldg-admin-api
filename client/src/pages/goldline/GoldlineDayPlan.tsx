@@ -375,6 +375,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <strong>GOLDLINE</strong>
           <small>SMALL ACTIONS. A WORLD CHANGED.</small>
         </div>
+        {artPreview && (
+          <div className="gdp-v2-claire-label" aria-label="Claire, AI guide">
+            <strong>CLAIRE</strong>
+            <small>AI GUIDE</small>
+          </div>
+        )}
         <p>
           {plan.authoredDay?.headline ??
             (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
