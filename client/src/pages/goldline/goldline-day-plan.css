@@ -1616,3 +1616,21 @@
   color: #23303c;
 }
 .gdp-v2-commitment strong { width: 100%; }
+
+.gdp-v2-claire-label {
+  position: absolute;
+  z-index: 1;
+  top: max(18px,env(safe-area-inset-top));
+  right: 72px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #e3f2ff;
+  background: #13293bcc;
+  border: 1px solid #7fb2d899;
+  text-align: left;
+}
+.gdp-v2-claire-label strong { font: 800 12px/1.1 Inter, system-ui, sans-serif; }
+.gdp-v2-claire-label small { font-size: 8px; letter-spacing: .08em; }
+@media(max-width:390px) { .gdp-v2-claire-label { right: 64px; } }
