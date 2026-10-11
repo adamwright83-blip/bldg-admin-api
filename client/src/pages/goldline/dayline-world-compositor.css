@@ -507,8 +507,12 @@
 }
 .gdp-sales-structure:not(:last-child) {
   clip-path: inset(0 0 15% 0);
-  margin-bottom: -37%;
+  /* Overlap both cropped ends: 21% of 2079/756 at 84% scene width. */
+  margin-bottom: -49%;
 }
 .gdp-sales-structure + .gdp-sales-structure {
   clip-path: inset(6% 0 0 0);
+}
+.gdp-sales-structure + .gdp-sales-structure:not(:last-child) {
+  clip-path: inset(6% 0 15% 0);
 }
