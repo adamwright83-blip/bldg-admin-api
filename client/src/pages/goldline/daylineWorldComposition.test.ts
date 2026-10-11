@@ -13,7 +13,7 @@ import {
 describe("GOLDLINE dynamic Action Slot composition", () => {
   it.each([1, 2, 3, 5, 8, 10])("fits %i slots without adding, removing, or reordering them", count => {
     const scales = Array.from({ length: count }, (_, index) => actionSlotArtScale(index, count));
-    expect(scales.at(-1)).toBe(1);
+    expect(scales[scales.length - 1]).toBe(1);
     expect(scales[0]).toBeCloseTo(count <= 3 && count > 1 ? 0.9 : count > 3 ? 0.8 : 1);
     expect(scales.every((size, index) => index === 0 || size >= scales[index - 1])).toBe(true);
     expect(actionSlotAnchors(count)).toHaveLength(count);
