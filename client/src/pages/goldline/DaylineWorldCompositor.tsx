@@ -1,286 +1,413 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, ChevronRight, Compass, Leaf, Package } from "lucide-react";
 import type { DayPlanStop } from "../driver/goldlineDayPlanModel";
 import {
-  actionSlotArtScale,
-  artForDayPlanKind,
   climbAvatarPosition,
-  goldenTrailGeometry,
   groupConsecutiveActionSlots,
   shouldPlayClimb,
   visualStateForStop,
+  type ActionSlotArt,
 } from "./daylineWorldComposition";
 import "./dayline-world-compositor.css";
 
 const ART_ROOT = "/goldline/dayline-v1";
+const RESTORED_ROOT = "/goldline/dayline-v2";
+export function daylineObjectSource(kind: ActionSlotArt) {
+  if (kind === "generic") return null;
+  if (kind === "sales") return `${RESTORED_ROOT}/objects/sales-course.webp`;
+  return `${RESTORED_ROOT}/objects/${kind}.webp`;
+}
 
-/**
- * Only preload types present in today's canonical projection. Empty-to-full
- * async changes immediately hide the complete scene until the new artwork has
- * decoded; neither the climber nor the objects can pop independently.
- */
-function useDaylineArtReady(stops: readonly DayPlanStop[]) {
+// Cache successfully decoded sources across async day changes. Keep the current
+// scene visible while new categories load; a failed image is never "ready".
+const decoded = new Set<string>();
+const pending = new Map<string, Promise<void>>();
+function decodeSource(source: string): Promise<void> {
+  if (decoded.has(source)) return Promise.resolve();
+  const existing = pending.get(source);
+  if (existing) return existing;
+  const promise = new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    image.onload = async () => {
+      try {
+        if (image.decode) await image.decode();
+        if (!image.naturalWidth) throw new Error("Empty image");
+        decoded.add(source);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error(`Could not load ${source}`));
+    image.src = source;
+  }).finally(() => pending.delete(source));
+  pending.set(source, promise);
+  return promise;
+}
+function useDaylineArtReady(stops: readonly DayPlanStop[], animate: boolean) {
+  const groups = groupConsecutiveActionSlots(stops);
   const sources = [
+    `${RESTORED_ROOT}/background/world-clean.webp`,
     `${ART_ROOT}/avatar/idle.png`,
-    ...[...new Set(stops.map(stop => artForDayPlanKind(stop.kind)))]
-      .filter(kind => kind !== "generic")
-      .map(kind => `${ART_ROOT}/objects/${kind}.png`),
+    ...(groups.some(group =>
+      ["pickup", "dropoff", "growth"].includes(group.kind)
+    )
+      ? [`${RESTORED_ROOT}/scenery/foreground-cutouts-atlas.webp`]
+      : []),
+    ...(groups.some(group => group.kind === "sales" && group.items.length === 1)
+      ? [`${RESTORED_ROOT}/states/sales-open.webp`]
+      : []),
+    ...[
+      ...new Set(
+        groups.flatMap(group => {
+          const source =
+            group.kind === "sales" && group.items.length > 1
+              ? `${RESTORED_ROOT}/objects/sales-four.webp`
+              : daylineObjectSource(group.kind);
+          return source ? [source] : [];
+        })
+      ),
+    ],
+    ...(animate
+      ? Array.from({ length: 5 }, (_, i) => `${ART_ROOT}/avatar/walk-0${i}.png`)
+      : []),
   ];
   const key = sources.join("|");
-  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [, setRevision] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    Promise.all(sources.map(source => {
-      const image = new Image();
-      image.src = source;
-      return typeof image.decode === "function"
-        ? image.decode().catch(() => undefined)
-        : new Promise<void>(resolve => {
-            image.onload = () => resolve();
-            image.onerror = () => resolve();
-          });
-    })).then(() => {
-      if (!cancelled) setLoadedKey(key);
-    });
-    return () => { cancelled = true; };
-  }, [key]);
-  return loadedKey === key;
+    setFailed(false);
+    Promise.all(sources.map(decodeSource))
+      .then(() => {
+        if (!cancelled) setRevision(value => value + 1);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, attempt]);
+  return {
+    ready: sources.every(source => decoded.has(source)),
+    failed,
+    retry: () => setAttempt(value => value + 1),
+  };
 }
+
 type Props = {
   stops: readonly DayPlanStop[];
   onSelect: (stop: DayPlanStop) => void;
-  /** Must be explicitly provided by a trusted driving-state signal. */
   allowWalkingAnimation?: boolean;
   isDriving?: boolean;
   onEnterExistingChapter?: () => void;
+  isLoading?: boolean;
 };
+function artLabel(kind: ActionSlotArt) {
+  return {
+    pickup: "PICKUP",
+    dropoff: "DROPOFF",
+    sales: "SALES MISSION",
+    growth: "GROWTH",
+    marketing: "MARKETING CHALLENGE",
+    generic: "ACTION",
+  }[kind];
+}
+function KindIcon({ kind }: { kind: ActionSlotArt }) {
+  const Icon =
+    kind === "sales"
+      ? BarChart3
+      : kind === "growth"
+        ? Leaf
+        : kind === "marketing"
+          ? Compass
+          : Package;
+  return <Icon aria-hidden="true" />;
+}
 
-function objectImage(kind: ReturnType<typeof artForDayPlanKind>, open: boolean): string | null {
-  if (kind === "generic") return null;
-  return `${ART_ROOT}/${open ? "states" : "objects"}/${kind}${open ? "-open" : ""}.png`;
-}
-function displayAddress(stop: DayPlanStop) {
-  return stop.address && stop.address.trim() !== stop.title.trim() ? stop.address : null;
-}
-function artLabel(kind: ReturnType<typeof artForDayPlanKind>) {
-  switch (kind) {
-    case "sales": return "SALES MISSION";
-    case "pickup": return "PICKUP";
-    case "dropoff": return "DROPOFF";
-    case "growth": return "GROWTH";
-    case "marketing": return "MARKETING CHALLENGE";
-    default: return "ACTION SLOT";
-  }
+/** The button IS the illustrated object. All mission copy is inside its own
+ * measured physical surface. No sibling cards or common material rectangle. */
+function ActionObject({
+  stop,
+  nextId,
+  kind,
+  index,
+  onSelect,
+  inscriptionOnly = false,
+}: {
+  stop: DayPlanStop;
+  nextId: string | null;
+  kind: ActionSlotArt;
+  index: number;
+  onSelect: Props["onSelect"];
+  inscriptionOnly?: boolean;
+}) {
+  const source = daylineObjectSource(kind);
+  const state = visualStateForStop(stop, nextId, false);
+  const address =
+    stop.address?.trim() && stop.address.trim() !== stop.title.trim()
+      ? stop.address
+      : null;
+  return (
+    <button
+      type="button"
+      className={`gdp-object gdp-object--${kind}${inscriptionOnly ? ` gdp-sales-interaction gdp-sales-interaction--${index % 4}` : ""}`}
+      data-testid={`day-plan-stop-${stop.id}`}
+      data-action-slot-id={stop.id}
+      data-object-kind={kind}
+      data-visual-state={state}
+      data-object-ready={
+        inscriptionOnly
+          ? decoded.has(`${RESTORED_ROOT}/objects/sales-four.webp`)
+          : !source || decoded.has(source)
+      }
+      aria-label={`${artLabel(kind)}: ${stop.title}. ${address ?? ""} ${stop.timeLabel}. ${stop.status === "completed" ? "Verified complete" : stop.status}`}
+      onClick={() => onSelect(stop)}
+    >
+      {kind !== "sales" && kind !== "marketing" && kind !== "generic" && (
+        <span
+          className="gdp-terrain gdp-terrain--platform"
+          aria-hidden="true"
+        />
+      )}
+      {source && !inscriptionOnly && (
+        <img
+          className="gdp-object-art"
+          src={source}
+          alt=""
+          loading="eager"
+          decoding="sync"
+          draggable={false}
+        />
+      )}
+      <span className="gdp-object-surface">
+        <span className="gdp-object-category">
+          <KindIcon kind={kind} />
+          <b>{artLabel(kind)}</b>
+          <ChevronRight />
+        </span>
+        <strong title={stop.title}>{stop.title}</strong>
+        {address && (
+          <span className="gdp-object-address" title={address}>
+            {address}
+          </span>
+        )}
+        <span className="gdp-object-time">
+          {stop.timeLabel}
+          <span className="gdp-object-status">
+            {stop.status === "completed"
+              ? "✓ VERIFIED"
+              : stop.status === "cancelled"
+                ? "CANCELLED"
+                : stop.status === "blocked"
+                  ? "BLOCKED"
+                  : stop.attentionState === "needs_details"
+                    ? "NEEDS DETAILS"
+                    : state === "up_next"
+                      ? "NEXT ›"
+                      : null}
+          </span>
+        </span>
+      </span>
+      {kind === "growth" && (
+        <span className="gdp-terrain gdp-terrain--foliage" aria-hidden="true" />
+      )}
+    </button>
+  );
 }
 
-/**
- * The original daily projection keeps control of order, mission eligibility
- * and completion. This renderer only groups adjacent same-type entries into
- * ONE landmark. Every action remains separately selectable by its original id.
- */
 export function DaylineWorldCompositor({
   stops,
   onSelect,
   allowWalkingAnimation = false,
   isDriving = true,
   onEnterExistingChapter,
+  isLoading = false,
 }: Props) {
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const reducedMotion = useReducedMotion();
+  const animate = allowWalkingAnimation && !isDriving && !reducedMotion;
+  const {
+    ready: imagesReady,
+    failed,
+    retry,
+  } = useDaylineArtReady(stops, animate);
+  const artReady = imagesReady && !isLoading;
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (artReady) setRevealed(true);
+  }, [artReady]);
   const [walkerFrame, setWalkerFrame] = useState(0);
   const [walking, setWalking] = useState(false);
-  const reducedMotion = useReducedMotion();
-  const artReady = useDaylineArtReady(stops);
   const completed = stops.filter(stop => stop.status === "completed").length;
-  const previousCompleted = useRef(completed);
-  const geometry = useMemo(() => goldenTrailGeometry(stops.length), [stops.length]);
+  const previousCompleted = useRef<number | null>(null);
+  const previousIds = useRef<string>("");
   const groups = useMemo(() => groupConsecutiveActionSlots(stops), [stops]);
-  const nextId = stops.find(
-    stop => stop.status !== "completed" && stop.status !== "cancelled" && stop.status !== "blocked",
-  )?.id ?? null;
+  const nextId =
+    stops.find(
+      stop => !["completed", "cancelled", "blocked"].includes(stop.status)
+    )?.id ?? null;
   const avatar = climbAvatarPosition(completed, stops.length);
-  // Place the adventurer's feet on the independently rendered gold trail,
-  // reversing the vertical index because the operator climbs UP as the
-  // chronological schedule scrolls DOWN.
-  const climbAnchor = geometry.anchors[Math.max(
-    0, Math.min(geometry.anchors.length - 1, Math.round((1 - avatar.fraction) * (stops.length - 1))),
-  )];
-  const avatarLeftPercent = climbAnchor ? 1 + climbAnchor.x * 0.57 - 12 : 8;
-  // A sticky viewport anchor is crucial: the async day projection increases the
-  // route height by thousands of pixels. A bottom-% absolute element disappears
-  // below the fold as soon as those mission rows arrive.
-  const avatarTopVh = 55 - 30 * avatar.fraction;
-
+  const ids = stops.map(stop => stop.id).join("|");
   useEffect(() => {
     const previous = previousCompleted.current;
+    const sameDay = previousIds.current === ids;
     previousCompleted.current = completed;
-    if (!allowWalkingAnimation || !shouldPlayClimb(previous, completed, isDriving, reducedMotion)) {
+    previousIds.current = ids;
+    if (
+      !artReady ||
+      !animate ||
+      !sameDay ||
+      previous === null ||
+      !shouldPlayClimb(previous, completed, isDriving, reducedMotion)
+    ) {
       setWalking(false);
       setWalkerFrame(0);
       return;
     }
     setWalking(true);
-    let count = 0;
+    let frame = 0;
     const interval = window.setInterval(() => {
-      count += 1;
-      setWalkerFrame(count % 5);
-      if (count >= 7) {
+      setWalkerFrame(++frame % 5);
+      if (frame >= 10) {
         window.clearInterval(interval);
         setWalking(false);
         setWalkerFrame(0);
       }
     }, 125);
     return () => window.clearInterval(interval);
-  }, [allowWalkingAnimation, completed, isDriving, reducedMotion]);
-
-  const toggleOpened = (stopId: string) => {
-    setOpened(previous => {
-      const next = new Set(previous);
-      if (next.has(stopId)) next.delete(stopId);
-      else next.add(stopId);
-      return next;
-    });
-  };
+  }, [animate, artReady, completed, ids, isDriving, reducedMotion]);
 
   return (
-    <section className="gdp-v2-world gdp-v3-world" aria-label="Your GOLDLINE Action Slots" data-art-ready={artReady}>
-      {!artReady && <div className="gdp-v4-art-wait" role="status">Assembling your Day Line…</div>}
-      <div className={artReady ? "gdp-v4-art-scene is-ready" : "gdp-v4-art-scene"}>
-      {onEnterExistingChapter && (
-        <button
-          type="button"
-          className="gdp-v3-chapter"
-          onClick={onEnterExistingChapter}
-          aria-label="Enter unlocked GOLDLINE chapter"
-        >
-          <span>CHAPTER UNLOCKED</span>
-          <strong>ENTER ›</strong>
-        </button>
+    <section
+      className="gdp-v2-world gdp-v3-world gdp-illustrated-world"
+      aria-label="Your GOLDLINE Action Slots"
+      data-art-ready={artReady}
+    >
+      {!artReady && (
+        <div className="gdp-art-status" role={failed ? "alert" : "status"}>
+          {failed ? (
+            <>
+              Day Line artwork could not load.{" "}
+              <button onClick={retry}>Retry</button>
+            </>
+          ) : (
+            "Assembling your Day Line…"
+          )}
+        </div>
       )}
-      {stops.length > 0 && (
-        <svg
-          className="gdp-v2-trail gdp-v3-trail"
-          viewBox={`0 0 100 ${geometry.height}`}
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <path className="gdp-v2-trail-halo" d={geometry.path} />
-          <path className="gdp-v2-trail-core" d={geometry.path} />
-          {geometry.anchors.map((anchor, index) => (
-            <circle
-              key={stops[index].id}
-              cx={anchor.x} cy={anchor.y} r={4}
-              className={stops[index].status === "completed" ? "is-verified" : undefined}
+      <div className="gdp-art-scene" data-scene-ready={artReady || revealed}>
+        {onEnterExistingChapter && (
+          <button
+            className="gdp-world-chapter"
+            onClick={onEnterExistingChapter}
+          >
+            CHAPTER UNLOCKED · ENTER ›
+          </button>
+        )}
+        <div className="gdp-climb-route" aria-hidden="true">
+          <svg viewBox="0 0 70 400" preserveAspectRatio="none">
+            <path d="M35 0 C8 55 63 90 35 140 S8 230 35 280 S63 360 35 400" />
+          </svg>
+        </div>
+        {decoded.has(`${ART_ROOT}/avatar/idle.png`) && (
+          <div
+            className="gdp-world-avatar"
+            role="img"
+            aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
+            data-verified-progress={avatar.fraction}
+            style={{
+              top: `${56 - 28 * avatar.fraction}dvh`,
+              transform: `scale(${avatar.scale})`,
+              transition: walking && animate ? undefined : "none",
+            }}
+          >
+            <img
+              src={`${ART_ROOT}/avatar/${walking ? `walk-0${walkerFrame}` : "idle"}.png`}
+              alt=""
+              draggable={false}
             />
-          ))}
-        </svg>
-      )}
-      <div
-        className={`gdp-v2-avatar gdp-v3-avatar gdp-v4-avatar${walking ? " is-walking" : ""}`}
-        style={{
-          top: `${avatarTopVh}dvh`,
-          left: `${avatarLeftPercent}%`,
-          transform: `scale(${avatar.scale})`,
-          transition: isDriving || reducedMotion ? "none" : undefined,
-        }}
-        aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
-        role="img"
-      >
-        <img
-          src={`${ART_ROOT}/avatar/${walking ? `walk-${String(walkerFrame).padStart(2, "0")}` : "idle"}.png`}
-          alt=""
-        />
-      </div>
-      <div className="gdp-v3-landmarks">
-        {groups.map((group, groupIndex) => {
-          const featured = group.items.find(({ stop }) => stop.status !== "completed" && stop.status !== "cancelled")?.stop
-            ?? group.items[0].stop;
-          const allCompleted = group.items.every(({ stop }) => stop.status === "completed");
-          const groupOpened = allCompleted && group.items.every(({ stop }) => opened.has(stop.id));
-          const image = objectImage(group.kind, groupOpened);
-          const scale = actionSlotArtScale(group.items[0].index, stops.length);
-          const layoutStyle = {
-            "--group-size": group.items.length,
-            "--landmark-scale": scale,
-          } as CSSProperties;
-          return (
+          </div>
+        )}
+        <div className="gdp-world-objects">
+          {groups.map(group => (
             <section
               key={group.key}
-              className={`gdp-v3-landmark gdp-v3-landmark--${group.kind} gdp-v3-landmark--variant-${groupIndex % 3}`}
-              style={layoutStyle}
+              className={`gdp-object-environment gdp-object-environment--${group.kind}${group.kind === "sales" && group.items.length > 1 ? " gdp-sales-environment" : ""}`}
               data-art-landmark={group.kind}
               data-group-ids={group.items.map(({ stop }) => stop.id).join(",")}
             >
-              <button
-                type="button"
-                className="gdp-v3-landmark-object"
-                aria-label={`Enter ${artLabel(group.kind)}: ${featured.title}`}
-                onClick={() => onSelect(featured)}
-              >
-                <span className="gdp-v4-object-platform" aria-hidden="true" />
-                {image ? (
-                  <img src={image} alt="" loading="eager" decoding="sync" />
-                ) : (
-                  <span className="gdp-v3-generic-object" aria-hidden="true">✦</span>
-                )}
-                <span className="gdp-v4-object-foreground" aria-hidden="true" />
-              </button>
-              {group.items.length > 1 && (
-                <span className="gdp-v3-landmark-count">
-                  {group.items.length} {artLabel(group.kind)} OBJECTIVES
-                </span>
-              )}
-              <div className="gdp-v3-inscriptions">
-                {group.items.map(({ stop, index }) => {
-                  const state = visualStateForStop(stop, nextId, opened.has(stop.id));
-                  return (
+              {group.kind === "sales" && group.items.length > 1 ? (
+                Array.from(
+                  { length: Math.ceil(group.items.length / 4) },
+                  (_, chunk) => (
                     <div
-                      key={stop.id}
-                      className={`gdp-v3-action gdp-v3-action--${state}`}
-                      data-testid={`day-plan-stop-${stop.id}`}
-                      data-action-slot-id={stop.id}
-                      data-action-art-scale={actionSlotArtScale(index, stops.length).toFixed(3)}
-                      data-visual-state={state}
+                      className="gdp-sales-structure"
+                      key={group.items[chunk * 4].stop.id}
                     >
-                      <button
-                        className="gdp-v3-action-entry"
-                        type="button"
-                        onClick={() => onSelect(stop)}
-                        aria-label={`Open ${stop.title}`}
-                      >
-                        <span className="gdp-v3-action-stamp">
-                          <span>{stop.timeLabel}</span>
-                          <b>{artLabel(group.kind)}</b>
-                          {state === "up_next" && <em>NEXT</em>}
-                        </span>
-                        <strong>{stop.title}</strong>
-                        {displayAddress(stop) && <small>{stop.address}</small>}
-                        {stop.attentionState === "needs_details" && <small>LOCATION NEEDS DETAILS</small>}
-                        {stop.status === "completed" && <small className="gdp-v3-completion">✓ VERIFIED COMPLETE</small>}
-                      </button>
-                      {stop.status === "completed" && (
-                        <button
-                          type="button"
-                          className="gdp-v3-unseal"
-                          onClick={() => toggleOpened(stop.id)}
-                          aria-label={`${opened.has(stop.id) ? "Close" : "Open"} verified object for ${stop.title}`}
-                          aria-pressed={opened.has(stop.id)}
-                        >{opened.has(stop.id) ? "CLOSE" : "UNSEAL"} ✧</button>
-                      )}
+                      <img
+                        className="gdp-sales-structure-art"
+                        src={`${RESTORED_ROOT}/objects/sales-four.webp`}
+                        alt=""
+                        loading="eager"
+                        decoding="sync"
+                        draggable={false}
+                      />
+                      {group.items
+                        .slice(chunk * 4, chunk * 4 + 4)
+                        .map(({ stop }, bay) => (
+                          <ActionObject
+                            key={stop.id}
+                            stop={stop}
+                            kind="sales"
+                            index={bay}
+                            nextId={nextId}
+                            onSelect={onSelect}
+                            inscriptionOnly
+                          />
+                        ))}
                     </div>
-                  );
-                })}
-              </div>
+                  )
+                )
+              ) : (
+                <>
+                  {group.kind === "sales" && (
+                    <>
+                      <span className="gdp-sales-launch" aria-hidden="true" />
+                      <span
+                        className="gdp-sales-watercourse"
+                        aria-hidden="true"
+                      />
+                    </>
+                  )}
+                  {group.items.map(({ stop, index }) => (
+                    <ActionObject
+                      key={stop.id}
+                      stop={stop}
+                      kind={group.kind}
+                      index={index}
+                      nextId={nextId}
+                      onSelect={onSelect}
+                    />
+                  ))}
+                  {group.kind === "sales" && (
+                    <span className="gdp-sales-basin" aria-hidden="true" />
+                  )}
+                </>
+              )}
             </section>
-          );
-        })}
-      </div>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");

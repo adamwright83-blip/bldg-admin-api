@@ -3,10 +3,15 @@ import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import GoldlineDayPlan from "./GoldlineDayPlan";
 import { useState } from "react";
+import DaylineGraphicFixture from "./DaylineGraphicFixture";
 import type { DayDirectorCommitment } from "@shared/dayDirector";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  return state.startsWith("art-") ? <DaylineGraphicFixture state={state} /> : <LegacyDayPlanFixture state={state} />;
+}
+
+function LegacyDayPlanFixture({ state }: { state: string }) {
   const [completed, setCompleted] = useState<number[]>([]);
   const storagePrefix = `day-director-${state}`;
   const [commitments, setCommitments] = useState<DayDirectorCommitment[]>(() =>

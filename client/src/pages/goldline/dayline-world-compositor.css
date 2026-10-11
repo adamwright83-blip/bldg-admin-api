@@ -1,807 +1,514 @@
-/* Day Line v2 scene: light fantasy WORLD + readable, restrained dark inscriptions.
- * All background, object and route layers are separate. No baked-in Action Slots.
- * The entire scene is gated by VITE_GOLDLINE_DAYLINE_ART_V1 while runtime PNGs
- * are installed and visually certified.
- */
-.gdp-v2-world {
+/* Source-pixel surfaces belong to five distinct physical objects. Every rule is
+   scoped to this compositor, so historical driver/card CSS cannot supply a plate. */
+.gdp-illustrated-world {
   position: relative;
   isolation: isolate;
   width: 100%;
-  min-height: 260px;
-  padding: 84px 0 40px;
-  color: #fff4cf;
+  min-height: 560px;
+  padding: 24px 0 96px;
+  color: #fff8dc;
 }
-.gdp-v2-world::before {
-  content: "";
+.gdp-illustrated-world::before {
+  display: none;
+}
+.gdp-art-scene {
+  position: relative;
+}
+.gdp-art-status {
   position: absolute;
-  inset: 0;
-  z-index: -2;
-  background: url("/goldline/dayline-v1/background/world-clean.png") center top / 100% auto repeat-y;
+  top: 12px;
+  left: 20%;
+  right: 4%;
+  z-index: 10;
+  background: #173633ee;
+  padding: 12px;
+  border-radius: 8px;
+  color: #fff7d9;
+  font: 600 13px/1.4 system-ui;
+}
+.gdp-art-status button {
+  padding: 8px;
+  text-decoration: underline;
+}
+.gdp-world-chapter {
+  display: block;
+  margin: 0 12px 18px auto;
+  padding: 10px 12px;
+  background: #203e35;
+  color: #fff1b9;
+  border: 1px solid #dbbd6f;
+  border-radius: 5px;
+  font: 700 11px/1.3 system-ui;
+}
+.gdp-climb-route {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3%;
+  width: 15%;
   pointer-events: none;
+  z-index: 1;
 }
-.gdp-v2-summit {
-  position: absolute;
-  z-index: 3;
-  top: 14px;
-  left: 13%;
-}
-.gdp-v2-summit button {
-  min-height: 44px;
-  color: #fff6c2;
-  border: 1px solid #fff1ae;
-  background: #102a36db;
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-weight: 800;
-}
-.gdp-v2-trail {
-  position: absolute;
-  z-index: 0;
-  top: 84px;
-  left: 1%;
-  width: 57%;
-  height: calc(100% - 124px);
+.gdp-climb-route svg {
+  width: 100%;
+  height: 100%;
   overflow: visible;
-  pointer-events: none;
 }
-.gdp-v2-trail path {
+.gdp-climb-route path {
   fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  stroke: #ffde83;
+  stroke-width: 3;
   vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 4px #ffd253);
 }
-.gdp-v2-trail-halo {
-  stroke: #eda829;
-  stroke-width: 11px;
-  filter: drop-shadow(0 0 7px #ffcf66);
-}
-.gdp-v2-trail-core {
-  stroke: #fff7bf;
-  stroke-width: 3.5px;
-}
-.gdp-v2-trail circle {
-  fill: #fff9e5;
-  stroke: #e3a429;
-  stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px #ffcf76);
-}
-.gdp-v2-trail circle.is-verified { fill: #f5b74d; }
-.gdp-v2-avatar {
-  position: absolute;
-  z-index: 4;
-  left: 0;
-  width: min(24%, 135px);
-  aspect-ratio: 400 / 512;
-  transform-origin: bottom center;
-  transition: bottom 0.9s ease-out, transform 0.9s ease-out;
-  pointer-events: none;
-  filter: drop-shadow(0 6px 8px #071a1b77);
-}
-.gdp-v2-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.gdp-v2-avatar.is-walking img { animation: gdp-walker-lean 0.25s ease-in-out infinite alternate; }
-@keyframes gdp-walker-lean { to { translate: 0 -2px; } }
-.gdp-v2-slots {
-  position: relative;
-  z-index: 2;
-}
-.gdp-v2-slot {
-  --slot-accent: #b5d8f4;
-  position: relative;
-  width: 100%;
-  height: 176px;
-  isolation: isolate;
-}
-.gdp-v2-slot--dropoff { --slot-accent: #eac083; }
-.gdp-v2-slot--sales { --slot-accent: #faad90; }
-.gdp-v2-slot--growth { --slot-accent: #b6ecc6; }
-.gdp-v2-slot--marketing { --slot-accent: #e1c0f9; }
-.gdp-v2-slot--generic { --slot-accent: #f3e4b6; }
-.gdp-v2-art {
-  position: absolute;
-  z-index: 0;
-  top: 0;
-  left: 7%;
-  width: 66%;
-  height: 170px;
-  transform-origin: 38% 50%;
-  transition: transform 250ms ease-out;
-  pointer-events: none;
-}
-.gdp-v2-art img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 11px #14181c6e);
-}
-.gdp-v2-generic-art {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  width: 80%;
-  font-size: 56px;
-  color: #ffd68f;
-}
-.gdp-v2-inscription {
-  position: absolute;
-  z-index: 2;
-  right: 9px;
-  top: 30px;
-  width: clamp(145px, 49%, 255px);
-  padding: 10px 10px 11px;
-  border: 1px solid #e9cb855f;
-  border-radius: 14px 3px 14px 3px;
-  background: linear-gradient(120deg,#0a1b27ed,#131b2ee8);
-  box-shadow: 0 5px 14px #05101c6d;
-  font-family: Inter, system-ui, sans-serif;
-  text-align: left;
-}
-.gdp-v2-category,
-.gdp-v2-time {
-  display: block;
-  font-size: 10px;
-  font-weight: 780;
-  letter-spacing: 0.045em;
-}
-.gdp-v2-time { color: #eee9d9; margin-bottom: 3px; }
-.gdp-v2-category { color: var(--slot-accent); margin-bottom: 5px; }
-.gdp-v2-inscription > button:not(.gdp-v2-open-object) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 3px;
-  min-height: 44px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: white;
-  text-align: left;
-}
-.gdp-v2-inscription strong {
-  font-size: clamp(13px, 3.6vw, 17px);
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-.gdp-v2-inscription > button span { font-size: 23px; line-height: 1; }
-.gdp-v2-inscription small {
-  display: block;
-  font-size: 11px;
-  line-height: 1.25;
-  margin-top: 3px;
-  color: #e6e6dc;
-  overflow-wrap: anywhere;
-}
-.gdp-v2-now {
-  position: absolute;
-  top: -17px;
-  right: 3px;
-  background: #f2bf59;
-  color: #182432;
-  border-radius: 99px;
-  padding: 3px 12px;
-  box-shadow: 0 0 13px #ffd78f;
-  font-size: 11px;
-}
-.gdp-v2-slot--now .gdp-v2-inscription { border-color: #f2ca76; box-shadow: 0 0 22px #edb34588; }
-.gdp-v2-slot--verified_complete,
-.gdp-v2-slot--opened,
-.gdp-v2-slot--ready_to_open { opacity: 0.86; }
-.gdp-v2-verified,
-.gdp-v2-warning {
-  display: block;
-  margin-top: 4px;
-  font-size: 9px;
-  letter-spacing: .035em;
-  font-weight: 850;
-  color: #b4f3cc;
-}
-.gdp-v2-warning { color: #ffdc82; }
-.gdp-v2-open-object {
-  width: 100%;
-  min-height: 44px;
-  margin-top: 6px;
-  background: #243d48;
-  color: #f6e1aa;
-  border: 1px solid #bda471;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 800;
-}
-@media(max-width:420px) {
-  .gdp-v2-art { left: 1%; width: 70%; }
-  .gdp-v2-inscription { right: 6px; width: 50%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .gdp-v2-avatar, .gdp-v2-art { transition: none; }
-  .gdp-v2-avatar.is-walking img { animation: none; }
-}
-
-
-/* VISUAL QA PASS: landmarks are the interface, not an interchangeable row wallpaper.
- * One painted prop per adjacent kind, with individually actionable travel tags.
- * No independent backdrop, customer, route, or complete state is fabricated here.
- */
-.gdp-v3-world {
-  z-index: 2;
-  padding: 34px 0 150px;
-  overflow: visible;
-}
-.gdp-v3-world::before { display: none !important; }
-.gdp-v3-landmarks { position: relative; z-index: 2; }
-.gdp-v3-landmark {
-  --engraving: #302719;
-  --inscription-surface: #e4d2aa;
-  position: relative;
-  display: flow-root;
-  width: 100%;
-  min-height: calc(116px + var(--group-size) * 132px);
-  isolation: isolate;
-  margin-bottom: 44px;
-  overflow: visible;
-}
-.gdp-v3-landmark--sales { --inscription-surface: #f2d7a4; --engraving: #3d241d; }
-.gdp-v3-landmark--pickup { --inscription-surface: #c3d9d8; --engraving: #173647; }
-.gdp-v3-landmark--dropoff { --inscription-surface: #e4d1a1; --engraving: #43351a; }
-.gdp-v3-landmark--growth { --inscription-surface: #c7e2ad; --engraving: #1c4332; }
-.gdp-v3-landmark--marketing { --inscription-surface: #d9c8ac; --engraving: #3f3041; }
-.gdp-v3-landmark-object {
-  position: absolute;
-  z-index: 0;
-  top: 47%;
-  left: 4%;
-  transform: translateY(-50%) scale(var(--landmark-scale));
-  transform-origin: 43% center;
-  display: grid;
-  place-items: center;
-  width: 85%;
-  height: min(345px, 92%);
-  border: 0;
-  padding: 0;
-  background: transparent;
-  filter: drop-shadow(0 14px 12px #17292b50);
-  cursor: pointer;
-}
-.gdp-v3-landmark--variant-1 .gdp-v3-landmark-object { left: 10%; top: 54%; rotate: -1.8deg; }
-.gdp-v3-landmark--variant-2 .gdp-v3-landmark-object { left: 1%; top: 46%; rotate: 1.5deg; }
-.gdp-v3-landmark-object img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.gdp-v3-landmark-object:focus-visible { outline: 3px solid #ffd27e; outline-offset: 2px; }
-.gdp-v3-generic-object { font-size: 108px; color: #ffedab; text-shadow: 0 0 22px #c5a444; }
-.gdp-v3-landmark-count {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  max-width: 67%;
-  padding: 5px 11px;
-  color: #fff0b7;
-  background: #223b3ce5;
-  border: 1px solid #e6bc71;
-  border-radius: 12px 0 12px 0;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .05em;
-  box-shadow: 0 3px 9px #12282766;
-  z-index: 3;
-}
-.gdp-v3-inscriptions {
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-evenly;
-  gap: 18px;
-  padding: 59px 2.5% 38px;
-  min-height: calc(116px + var(--group-size) * 132px);
-}
-.gdp-v3-action {
-  position: relative;
-  pointer-events: auto;
-  width: min(58%, 245px);
-  min-height: 94px;
-  color: var(--engraving);
-  background: linear-gradient(154deg, #fff7dfed, var(--inscription-surface) 92%);
-  box-shadow: 0 5px 10px #0d291d72, inset 0 1px 2px #fff6e8;
-  clip-path: polygon(1% 10%, 94% 0%, 100% 76%, 90% 99%, 5% 96%, 0% 23%);
-  border: 1px solid transparent;
-  transform: rotate(1deg);
-}
-.gdp-v3-action:nth-child(odd) { align-self: flex-end; margin-right: 1.8%; transform: rotate(1.5deg); }
-.gdp-v3-action:nth-child(even) { align-self: flex-start; margin-left: 1%; transform: rotate(-1.3deg); }
-.gdp-v3-action::before {
-  position: absolute;
-  top: 3px;
-  left: 9px;
-  content: "✧";
-  color: #9c762f;
-  font-size: 16px;
-  pointer-events: none;
-}
-.gdp-v3-action-entry {
-  display: block;
-  width: 100%;
-  min-height: 89px;
-  padding: 11px 12px 13px 16px;
-  border: 0;
-  text-align: left;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-}
-.gdp-v3-action-stamp {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 7px;
-  font-size: 9px;
-  font-weight: 760;
-  line-height: 1.25;
-  color: #5e4d3a;
-}
-.gdp-v3-action-stamp > b { color: #835528; font-size: 9px; letter-spacing: .045em; }
-.gdp-v3-action-stamp em {
-  padding: 1px 6px;
-  background: #f3bd4f;
-  border-radius: 7px 0 7px 0;
-  color: #292517;
-  font-style: normal;
-  font-size: 9px;
-}
-.gdp-v3-action-entry strong {
-  display: block;
-  margin-top: 4px;
-  font: 800 clamp(13px, 3.8vw, 16px)/1.16 Inter, system-ui, sans-serif;
-  overflow-wrap: anywhere;
-}
-.gdp-v3-action-entry small {
-  display: block;
-  margin-top: 3px;
-  color: #3f4239;
-  font-size: 10px;
-  line-height: 1.26;
-  overflow-wrap: anywhere;
-}
-.gdp-v3-action--up_next {
-  filter: drop-shadow(0 0 10px #ffe18ab8);
-  outline: 1px solid #e6b755;
-}
-.gdp-v3-action--ready_to_open,.gdp-v3-action--opened { opacity: .83; }
-.gdp-v3-action--blocked { filter: grayscale(.36); }
-.gdp-v3-completion { color: #285c32 !important; font-weight: 850; }
-.gdp-v3-unseal {
-  position: absolute;
-  right: 5px;
-  bottom: 3px;
-  padding: 5px;
-  border: 0;
-  background: #224536;
-  border-radius: 5px;
-  color: #f9e1ad;
-  font-size: 9px;
-  font-weight: 800;
-}
-.gdp-v3-landmark--pickup .gdp-v3-action {
-  clip-path: polygon(8% 0%, 96% 1%, 100% 88%, 89% 100%, 0% 100%, 0% 11%);
-  background: linear-gradient(152deg, #e8f2eb 0%, #b6d6dc 96%);
-}
-.gdp-v3-landmark--dropoff .gdp-v3-action {
-  clip-path: polygon(11% 0%, 95% 2%, 100% 93%, 14% 100%, 0% 86%, 0% 15%);
-  background: linear-gradient(165deg, #fbf3dc, #d7b971);
-}
-.gdp-v3-landmark--sales .gdp-v3-action {
-  clip-path: polygon(0 17%, 80% 0, 100% 42%, 90% 98%, 2% 94%, 8% 60%);
-  background: linear-gradient(145deg, #fff1ce 0%, #d7ae72 100%);
-}
-.gdp-v3-landmark--growth .gdp-v3-action {
-  clip-path: polygon(0 46%, 12% 9%, 76% 0, 100% 46%, 84% 100%, 11% 91%);
-  background: linear-gradient(140deg, #f3f6d4, #b8d19e);
-}
-.gdp-v3-landmark--marketing .gdp-v3-action {
-  clip-path: polygon(4% 0%, 92% 5%, 100% 28%, 94% 100%, 0% 93%);
-  background: repeating-linear-gradient(100deg,#decbb4 0 14px,#d7c0a7 14px 15px,#e1ceb4 15px 29px);
-}
-.gdp-v3-landmark--generic .gdp-v3-action {
-  background: linear-gradient(135deg,#fff3dc,#d7c5ad);
-}
-.gdp-v3-chapter {
-  position: absolute;
-  top: 0;
-  right: 15px;
-  z-index: 10;
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  padding: 8px 11px;
-  border: 2px solid #e9c880;
-  border-radius: 4px 15px 5px 15px;
-  background: #253e36e8;
-  color: #fff4d2;
-  font: 800 10px/1.25 Inter,system-ui,sans-serif;
-}
-.gdp-v3-avatar {
-  z-index: 6;
-  width: clamp(75px, 25%, 140px);
-  transform-origin: bottom left;
-  filter: drop-shadow(0 7px 6px #2a241675);
-}
-.gdp-v3-trail { opacity: .8; z-index: 1; }
-@media (max-width: 430px) {
-  .gdp-v3-action { width: 62%; }
-  .gdp-v3-landmark { margin-bottom: 12px; }
-  .gdp-v3-landmark-object { width: 90%; left: 3%; }
-  .gdp-v3-action-entry strong { font-size: 13px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .gdp-v3-landmark-object,.gdp-v3-action { transition: none; animation: none; }
-}
-
-
-/* V4 cold-load acceptance: a scene is either decoded together or not visible.
- * Never use viewport-triggered lazy image loading for physical route objects.
- */
-.gdp-v4-art-wait {
-  position: absolute;
-  top: 52px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  max-width: 90%;
-  padding: 9px 14px;
-  border: 1px solid #d5b677;
-  border-radius: 18px;
-  background: #20463ae9;
-  color: #fff2cb;
-  font: 750 11px/1.3 Inter,system-ui,sans-serif;
-  box-shadow: 0 3px 12px #15272877;
-  white-space: nowrap;
-}
-.gdp-v4-art-scene {
-  position: relative;
-  width: 100%;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 220ms ease;
-}
-.gdp-v4-art-scene.is-ready {
-  visibility: visible;
-  opacity: 1;
-}
-.gdp-v4-avatar {
-  /* The previous absolute bottom-% calculation sent the walker thousands of
-   * pixels offscreen when async mission data increased the route height.
-   * Sticky keeps him on the route as its chronological rows scroll past. */
-  position: sticky !important;
-  bottom: auto !important;
-  display: block;
-  top: 55dvh;
-  height: clamp(110px, 27vw, 156px);
-  margin-bottom: -124px;
-  width: clamp(80px, 26vw, 146px);
-  transform-origin: center bottom;
+.gdp-world-avatar {
+  position: sticky;
+  top: 56dvh;
+  margin-left: -1%;
+  margin-bottom: -120px;
+  width: 20%;
+  height: 120px;
+  max-width: 88px;
   z-index: 8;
   pointer-events: none;
-  will-change: transform;
+  transform-origin: center bottom;
+  transition:
+    top 0.8s ease,
+    transform 0.8s ease;
+  filter: drop-shadow(0 6px 5px #16322899);
 }
-.gdp-v4-avatar img {
+.gdp-world-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.gdp-world-objects {
+  position: relative;
+  z-index: 2;
+  padding-top: 8px;
+}
+.gdp-object-environment {
+  position: relative;
+  margin: 0 0 20px;
+  isolation: isolate;
+}
+.gdp-illustrated-world .gdp-object {
+  position: relative;
+  display: block;
+  width: 84%;
+  margin: 0 1% 8px auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  color: #fffbe8;
+  aspect-ratio: 4 / 3;
+  text-align: left;
+  cursor: pointer;
+  isolation: isolate;
+  -webkit-tap-highlight-color: transparent;
+}
+.gdp-object-art {
+  position: relative;
+  z-index: 2;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-.gdp-v3-landmark-object {
-  overflow: visible;
-  isolation: isolate;
-}
-.gdp-v4-object-platform {
-  position: absolute;
-  z-index: -1;
-  left: 17%;
-  top: 40%;
-  width: 66%;
-  height: 35%;
-  border-top: 9px solid #f2d596;
-  border-radius: 30% 18% 32% 18%;
-  clip-path: polygon(11% 0, 87% 0, 100% 23%, 87% 84%, 50% 100%, 10% 78%, 0 27%);
-  background:
-    repeating-linear-gradient(174deg, transparent 0 22px, #3b423926 22px 25px),
-    linear-gradient(165deg, #a8a989 2%, #e2cf99 27%, #6b756b 58%, #394c4c 99%);
-  box-shadow: 0 18px 12px #243d3873, inset 0 4px 5px #f7e6c3;
-  transform: rotate(-5deg);
+  filter: drop-shadow(0 12px 9px #142c3580);
   pointer-events: none;
 }
-.gdp-v4-object-foreground {
+.gdp-object-surface {
   position: absolute;
-  z-index: 2;
-  left: 10%;
-  bottom: 5%;
-  width: 70%;
-  height: 12%;
-  pointer-events: none;
-  clip-path: polygon(0 50%, 18% 35%, 37% 53%, 54% 20%, 72% 50%, 100% 25%, 98% 100%, 0 100%);
-  background: linear-gradient(176deg, #dfc790ce, #6c8071ec 45%, #394e4db3);
-  filter: drop-shadow(0 -5px 5px #252f2f44);
-}
-.gdp-v3-landmark--sales .gdp-v3-landmark-object {
-  /* The slide launches from a stone ledge and disappears into the tier below;
-   * its original huge centre-sticker footprint visually erased the castle.
-   * Responsive placement leaves the operator route and addresses unobstructed. */
-  left: 11%;
-  top: 55%;
-  width: min(72%, 340px);
-  height: min(300px, 60vw);
-  transform: translateY(-50%) scale(var(--landmark-scale));
-  rotate: -3deg;
-}
-.gdp-v3-landmark--sales .gdp-v3-landmark-object img {
-  position: relative;
-  z-index: 1;
-  object-position: center center;
-  filter: drop-shadow(0 11px 9px #1e352e8c);
-  -webkit-mask-image: radial-gradient(ellipse 68% 69% at 50% 51%, #000 59%, #000 70%, transparent 100%);
-  mask-image: radial-gradient(ellipse 68% 69% at 50% 51%, #000 59%, #000 70%, transparent 100%);
-}
-.gdp-v3-landmark--sales .gdp-v4-object-platform {
-  left: 21%;
-  top: 13%;
-  width: 58%;
-  height: 54%;
-  transform: rotate(-9deg) skewY(-4deg);
-}
-.gdp-v3-landmark--sales .gdp-v4-object-foreground {
-  left: 25%;
-  bottom: 13%;
-  width: 56%;
-  height: 13%;
-}
-.gdp-v3-landmark--growth .gdp-v4-object-platform {
-  background: linear-gradient(155deg,#c4c596,#66845a 65%,#324c45);
-  border-color: #d0cd97;
-}
-.gdp-v3-landmark--pickup .gdp-v4-object-platform,
-.gdp-v3-landmark--dropoff .gdp-v4-object-platform {
-  border-color: #d6c596;
-  background: linear-gradient(158deg,#ded1a7,#647768 69%,#3c4741);
-}
-@media (max-width:430px) {
-  .gdp-v3-landmark--sales .gdp-v3-landmark-object {
-    width: 73%;
-    height: min(270px, 66vw);
-    left: 9%;
-  }
-  .gdp-v4-avatar { margin-bottom: -115px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .gdp-v4-art-scene { transition: none; }
-  .gdp-v4-avatar { transition: none !important; }
-}
-
-
-/*
- * APPROVED ACTION-CARD MATERIALS — restore the original illustrated object UI.
- * The earlier tan arrow-shaped cards were an unauthorized visual substitution.
- * These plates reproduce the dark, gold-edged graphic inscriptions from the
- * approved pickup bag / red sales slide / blue-gold chest / leaf / stone puzzle.
- * Mission copy remains LIVE HTML sourced from the canonical Day Line projection.
- * Never render a fixed customer/address baked into a source image.
- */
-.gdp-v3-world .gdp-v3-action {
-  --card-ink: #fff9e9;
-  --card-muted: #eee2c4;
-  --card-accent: #f5c878;
-  --card-edge: #be8e38;
-  --card-deep: #0a273a;
-  --card-highlight: #164765;
-  box-sizing: border-box;
-  position: relative;
-  width: min(61%, 268px);
-  min-height: 102px;
-  color: var(--card-ink) !important;
-  border: 2px solid var(--card-edge) !important;
-  border-radius: 9px 12px 9px 12px !important;
-  clip-path: none !important;
-  background:
-    radial-gradient(ellipse at 14% -20%, #ffffff29, transparent 65%),
-    linear-gradient(150deg, var(--card-highlight) 0%, var(--card-deep) 77%) !important;
-  box-shadow:
-    0 7px 0 -3px #604320,
-    0 12px 18px #091e2780,
-    inset 0 0 0 2px #3f2a1388,
-    inset 0 2px 10px #fff2b318 !important;
-  transform: rotate(-.65deg);
-  text-shadow: 0 1px 2px #050e1599;
-  overflow: visible;
-  transition: filter .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-.gdp-v3-world .gdp-v3-action:nth-child(odd) {
-  align-self: flex-end;
-  margin: 0 1.5% 0 0;
-  transform: rotate(.6deg);
-}
-.gdp-v3-world .gdp-v3-action:nth-child(even) {
-  align-self: flex-start;
-  margin: 0 0 0 1.5%;
-  transform: rotate(-.8deg);
-}
-.gdp-v3-world .gdp-v3-action::before {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  pointer-events: none;
-  inset: 5px;
-  border: 1px solid #ffdea44a;
-  border-radius: 5px 8px 5px 8px;
-  background:
-    radial-gradient(circle at 7px 7px, #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
-    radial-gradient(circle at calc(100% - 7px) 7px, #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
-    radial-gradient(circle at 7px calc(100% - 7px), #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px),
-    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), #fff2c2 0 1px, #aa7828 2px 3px, transparent 4px);
-}
-.gdp-v3-world .gdp-v3-action::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  inset: -5px;
-  border: 1px solid #ffdf9a71;
-  border-radius: 12px;
-}
-.gdp-v3-world .gdp-v3-action-entry {
-  position: relative;
   z-index: 4;
-  min-height: 100px;
-  width: 100%;
-  padding: 14px 14px 14px 18px;
-  color: var(--card-ink) !important;
-  text-align: left;
-  background: transparent !important;
-  border: none !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #fffbe8;
+  text-shadow:
+    0 1px 2px #07151b,
+    0 0 5px #07151bd0;
+  overflow: hidden;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
-.gdp-v3-world .gdp-v3-action-stamp {
+.gdp-object-category {
   display: flex;
   align-items: center;
-  gap: 4px 8px;
-  margin-bottom: 4px;
-  color: var(--card-muted) !important;
-  font: 750 10px/1.15 Inter, system-ui, sans-serif;
-  letter-spacing: .035em;
-  text-shadow: 0 1px 1px #0006;
+  gap: 4px;
+  font:
+    850 10px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.025em;
 }
-.gdp-v3-world .gdp-v3-action-stamp b {
-  color: var(--card-accent) !important;
-  font-size: 10px;
-  letter-spacing: .06em;
+.gdp-object-category svg {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  color: #ffe6a0;
 }
-.gdp-v3-world .gdp-v3-action-stamp em {
-  background: linear-gradient(#ffea9c,#db9f37) !important;
-  border: 1px solid #ffe6a4;
-  border-radius: 9px;
-  color: #35230d;
-  font-size: 9px;
-  box-shadow: 0 0 9px #f3b85d55;
+.gdp-object-category svg:last-child {
+  margin-left: auto;
 }
-.gdp-v3-world .gdp-v3-action-entry strong {
-  display: block;
-  color: #fffdf4 !important;
-  font: 830 clamp(14px, 3.7vw, 18px)/1.18 Inter, system-ui, sans-serif;
-  letter-spacing: -.015em;
-  text-shadow: 0 1px 3px #000a;
+.gdp-object-surface strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  margin-top: 3px;
+  font:
+    800 14px/1.15 system-ui,
+    sans-serif;
 }
-.gdp-v3-world .gdp-v3-action-entry small {
-  color: var(--card-muted) !important;
-  font: 520 11px/1.26 Inter, system-ui, sans-serif;
-  opacity: .98;
-  overflow-wrap: anywhere;
+.gdp-object-address {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 3px;
+  font:
+    550 11px/1.2 system-ui,
+    sans-serif;
 }
-.gdp-v3-world .gdp-v3-completion { color: #bcf6bf !important; }
-.gdp-v3-world .gdp-v3-action--up_next {
-  outline: 2px solid #ffdd8f;
-  outline-offset: 2px;
-  filter: drop-shadow(0 0 7px #fdd76e88);
+.gdp-object-time {
+  margin-top: 3px;
+  font:
+    750 11px/1.2 system-ui,
+    sans-serif;
 }
-.gdp-v3-world .gdp-v3-action:focus-within {
-  outline: 3px solid #fff4c2;
-  outline-offset: 3px;
+.gdp-object-status {
+  font:
+    850 9px/1.3 system-ui,
+    sans-serif;
+  color: #ffe5a4;
+  margin-top: 2px;
 }
-@media (hover: hover) {
-  .gdp-v3-world .gdp-v3-action:hover {
-    transform: translateY(-2px) rotate(0deg);
-    filter: brightness(1.13);
-  }
+.gdp-object-status:empty {
+  display: none;
 }
-/* The inscription changes MATERIAL with the game object, not its data model. */
-.gdp-v3-world .gdp-v3-landmark--pickup .gdp-v3-action {
-  --card-edge: #cfaf65; --card-accent: #e1efff;
-  --card-deep: #0b1b35; --card-highlight: #18385b; --card-muted: #d1e3ef;
-  border-radius: 13px 9px 11px 7px !important;
-  background:
-    repeating-linear-gradient(90deg, #ffffff07 0 1px, transparent 1px 5px),
-    linear-gradient(145deg, #31577c, #102743 44%, #101b2f 96%) !important;
+.gdp-object[data-visual-state="ready_to_open"] .gdp-object-status {
+  color: #cef5bc;
 }
-.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action {
-  --card-edge: #f9c166; --card-accent: #fff1b0; --card-muted: #ffe9df;
-  --card-deep: #650a0f; --card-highlight: #d63320;
-  border-radius: 18px 7px 18px 8px !important;
-  background:
-    radial-gradient(ellipse at 50% -55%, #ffdf8944, transparent 62%),
-    linear-gradient(160deg, #e3422e 0%, #a31318 48%, #540912 100%) !important;
-  box-shadow:
-    0 6px 0 -2px #7e2f12,
-    0 13px 17px #300b1180,
-    inset 0 0 0 2px #7c111e,
-    inset 0 5px 10px #ffcf7233 !important;
+.gdp-object[data-visual-state="blocked"] .gdp-object-art {
+  filter: saturate(0.6) drop-shadow(0 10px 8px #142c3580);
 }
-.gdp-v3-world .gdp-v3-landmark--dropoff .gdp-v3-action {
-  --card-edge: #f7d47d; --card-accent: #ffeab6; --card-muted: #e1e8f5;
-  --card-deep: #0a1a32; --card-highlight: #223955;
-  border-radius: 4px 5px 4px 5px !important;
-  border-width: 3px !important;
-  background: linear-gradient(160deg,#254164,#101f3b 52%,#0d1932) !important;
+.gdp-object:focus-visible {
+  outline: 3px solid #fff0a7;
+  outline-offset: -7px;
 }
-.gdp-v3-world .gdp-v3-landmark--growth .gdp-v3-action {
-  --card-edge: #d7b75f; --card-accent: #efffbf; --card-muted: #dcf3cb;
-  --card-deep: #063b29; --card-highlight: #20874d;
-  border-radius: 38% 8% 26% 9% / 18% 20% 22% 20% !important;
-  background:
-    repeating-linear-gradient(135deg,transparent 0 19px,#fff1a11c 20px 21px,transparent 22px 40px),
-    linear-gradient(145deg,#2e954d,#075937 60%,#063829) !important;
-}
-.gdp-v3-world .gdp-v3-landmark--marketing .gdp-v3-action {
-  --card-edge: #e3c576; --card-accent: #f6d6ff; --card-muted: #f0e0f0;
-  --card-deep: #1b173c; --card-highlight: #463076;
-  border-radius: 3px 11px 3px 11px !important;
-  background: linear-gradient(145deg,#514080,#231b49 59%,#111a35) !important;
-}
-.gdp-v3-world .gdp-v3-landmark--generic .gdp-v3-action {
-  --card-edge: #c9aa70; --card-deep: #24312e;
-  --card-highlight: #40564a; --card-muted: #eef1db;
-  background: linear-gradient(145deg,#40564a,#23352e) !important;
-}
-/* In a string of sales stops the label rails belong to ONE waterslide.
-   Never multiply the illustration or flatten the missions into one action. */
-.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-inscriptions {
-  position: relative;
-}
-.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-inscriptions::before {
-  content: "";
+.gdp-terrain {
   position: absolute;
   pointer-events: none;
+  background-image: url("/goldline/dayline-v2/scenery/foreground-cutouts-atlas.webp");
+  background-repeat: no-repeat;
+}
+/* The supplied atlas is sampled as scenery, never drawn as CSS stone. */
+.gdp-terrain--platform {
+  z-index: 1;
+  left: -4%;
+  top: 55%;
+  width: 108%;
+  height: 65%;
+  background-size: 300% auto;
+  background-position: right top;
+  filter: drop-shadow(0 9px 5px #20382977);
+}
+.gdp-object--pickup {
+  margin-bottom: 56px !important;
+}
+.gdp-object--pickup .gdp-object-surface {
+  left: 30%;
+  top: 48%;
+  width: 47%;
+  height: 23%;
+}
+.gdp-object--pickup .gdp-object-category {
+  font-size: 9px;
+}
+.gdp-object--pickup .gdp-object-address {
+  -webkit-line-clamp: 1;
+}
+.gdp-object--pickup .gdp-object-surface strong {
+  font-size: 13px;
+}
+.gdp-object--dropoff {
+  margin-bottom: 56px !important;
+}
+.gdp-object--dropoff .gdp-object-surface {
+  left: 21%;
+  top: 57%;
+  width: 58%;
+  height: 23%;
+}
+.gdp-object--growth {
+  aspect-ratio: 4 / 3;
+  margin-bottom: 32px !important;
+}
+.gdp-object--growth .gdp-object-surface {
+  left: 30%;
+  top: 37%;
+  width: 49%;
+  height: 33%;
+  transform: rotate(-10deg);
+}
+.gdp-object--growth .gdp-object-category {
+  color: #e1ffc1;
+}
+.gdp-terrain--foliage {
+  z-index: 3;
+  left: -8%;
+  top: 77%;
+  width: 60%;
+  height: 24%;
+  background-size: 360% auto;
+  background-position: right bottom;
+}
+.gdp-object--marketing .gdp-object-surface {
+  left: 23%;
+  top: 67%;
+  width: 53%;
+  height: 15%;
+}
+.gdp-object--marketing .gdp-object-category {
+  font-size: 9px;
+}
+.gdp-object--marketing .gdp-object-surface strong {
+  font-size: 13px;
+}
+.gdp-object--marketing .gdp-object-address {
+  -webkit-line-clamp: 1;
+}
+.gdp-object--generic {
+  min-height: 110px;
+  aspect-ratio: auto;
+}
+.gdp-object--generic .gdp-object-surface {
+  position: relative;
+  inset: auto;
+  padding: 12px;
+  background: #16312de8;
+  border-left: 2px solid #d0b879;
+}
+/* One connected watercourse per consecutive group. The repeated artwork is an
+   open-ended COURSE section, with no reservoir or termination pool of its own. */
+.gdp-object-environment--sales {
+  padding-top: 82px;
+  padding-bottom: 85px;
+}
+.gdp-illustrated-world .gdp-object--sales {
+  aspect-ratio: 3 / 4;
+  width: 83%;
+  margin: -15% 1% 0 auto;
+}
+.gdp-object--sales .gdp-object-surface {
+  left: 21%;
+  top: 62%;
+  width: 60%;
+  height: 16%;
+  transform: rotate(-13deg);
+  transform-origin: center;
+}
+.gdp-object--sales .gdp-object-surface strong {
+  font-size: 14px;
+}
+.gdp-object--sales .gdp-object-address {
+  -webkit-line-clamp: 1;
+}
+.gdp-sales-watercourse {
+  position: absolute;
   z-index: -1;
-  top: 9%;
-  bottom: 9%;
-  right: 5%;
-  width: 3px;
-  border-left: 3px solid #efbc6480;
-  border-right: 1px solid #fff7b88f;
-  border-radius: 3px;
-  box-shadow: 0 0 11px #eb862a55;
+  top: 10%;
+  bottom: 8%;
+  left: 40%;
+  width: 23%;
+  background: url("/goldline/dayline-v2/states/sales-open.webp") center center /
+    420% auto repeat-y;
+  clip-path: polygon(5% 0, 85% 0, 100% 100%, 0 100%);
 }
-.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action:nth-child(even),
-.gdp-v3-world .gdp-v3-landmark--sales .gdp-v3-action:nth-child(odd) {
-  align-self: flex-end;
-  margin: 0 1.8% 0 0;
+.gdp-sales-launch,
+.gdp-sales-basin {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  right: 1%;
+  width: 78%;
+  background-image: url("/goldline/dayline-v2/states/sales-open.webp");
+  background-repeat: no-repeat;
+  background-size: 100% auto;
 }
-.gdp-v3-world .gdp-v3-landmark-count {
-  background: linear-gradient(#264348,#0d2a38);
-  border: 2px solid #dfb671;
-  color: #ffe2a4;
-  border-radius: 10px 4px 10px 4px;
-  font: 800 10px/1.2 Inter, system-ui, sans-serif;
-  text-shadow: 0 1px 3px #0007;
+.gdp-sales-launch {
+  top: 0;
+  height: 130px;
+  background-position: center top;
 }
-@media(max-width:430px) {
-  .gdp-v3-world .gdp-v3-action { width: 64%; min-height: 94px; }
-  .gdp-v3-world .gdp-v3-action-entry { min-height: 90px; padding: 10px 11px 11px 14px; }
-  .gdp-v3-world .gdp-v3-action-stamp { font-size: 9px; gap: 3px 5px; }
-  .gdp-v3-world .gdp-v3-action-stamp b { font-size: 9px; }
-  .gdp-v3-world .gdp-v3-action-entry strong { font-size: 14px; }
-  .gdp-v3-world .gdp-v3-action-entry small { font-size: 10px; }
+.gdp-sales-basin {
+  bottom: 0;
+  height: 150px;
+  background-position: center bottom;
+}
+@media (min-width: 700px) {
+  .gdp-illustrated-world {
+    max-width: 540px;
+    margin: auto;
+  }
+  .gdp-object-surface strong {
+    font-size: 18px;
+  }
+  .gdp-object-address,
+  .gdp-object-time {
+    font-size: 13px;
+  }
+  .gdp-object-category {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdp-world-avatar {
+    transition: none;
+  }
+}
+.gdp-art-scene[data-scene-ready="false"] {
+  visibility: hidden;
+}
+.gdp-object[data-object-ready="false"] {
+  visibility: hidden;
+}
+.gdp-object-surface > * {
+  flex-shrink: 0;
+}
+.gdp-object-surface strong,
+.gdp-object-address,
+.gdp-object-time {
+  margin-top: 1px;
+}
+.gdp-object-address {
+  -webkit-line-clamp: 1;
+}
+.gdp-object-time {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+.gdp-object-status {
+  margin: 0;
+  white-space: nowrap;
+  font-size: 8px;
+}
+.gdp-object--dropoff .gdp-object-surface {
+  top: 56%;
+  height: 26%;
+}
+.gdp-object--pickup .gdp-object-surface {
+  top: 48%;
+  height: 23%;
+}
+.gdp-illustrated-world .gdp-object--marketing {
+  aspect-ratio: 1 / 1;
+}
+.gdp-object--marketing .gdp-object-surface {
+  left: 23%;
+  top: 55%;
+  width: 54%;
+  height: 27%;
+}
+.gdp-object--marketing .gdp-object-category {
+  font-size: 10px;
+}
+.gdp-object--marketing .gdp-object-surface strong {
+  font-size: 14px;
+}
+/* Multi-mission sales uses ONE full illustrated descending structure and four
+   hit areas measured against its actual differently curved walls. */
+.gdp-object-environment--sales.gdp-sales-environment {
+  padding: 0;
+}
+.gdp-sales-structure {
+  position: relative;
+  width: 84%;
+  margin: 0 1% 0 auto;
+  aspect-ratio: 756 / 2079;
+}
+.gdp-sales-structure-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 8px #142c3580);
+  pointer-events: none;
+}
+.gdp-illustrated-world .gdp-object.gdp-sales-interaction {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 20%;
+  aspect-ratio: auto;
+  margin: 0;
+}
+.gdp-sales-interaction .gdp-object-surface {
+  transform-origin: center;
+}
+.gdp-illustrated-world .gdp-sales-interaction--0 {
+  top: 6%;
+  height: 20%;
+}
+.gdp-sales-interaction--0 .gdp-object-surface {
+  left: 31%;
+  top: 57%;
+  width: 38%;
+  height: 34%;
+  transform: rotate(17deg);
+}
+.gdp-illustrated-world .gdp-sales-interaction--1 {
+  top: 27%;
+}
+.gdp-sales-interaction--1 .gdp-object-surface {
+  left: 32%;
+  top: 38%;
+  width: 47%;
+  height: 36%;
+  transform: rotate(-15deg);
+}
+.gdp-illustrated-world .gdp-sales-interaction--2 {
+  top: 47%;
+}
+.gdp-sales-interaction--2 .gdp-object-surface {
+  left: 22%;
+  top: 19%;
+  width: 44%;
+  height: 35%;
+  transform: rotate(16deg);
+}
+.gdp-illustrated-world .gdp-sales-interaction--3 {
+  top: 66%;
+}
+.gdp-sales-interaction--3 .gdp-object-surface {
+  left: 42%;
+  top: 19%;
+  width: 43%;
+  height: 35%;
+  transform: rotate(-20deg);
+}
+.gdp-sales-interaction .gdp-object-category {
+  font-size: 9px;
+  gap: 2px;
+  letter-spacing: 0;
+}
+.gdp-sales-interaction .gdp-object-category svg {
+  flex-basis: 11px;
+  width: 11px;
+  height: 11px;
+}
+.gdp-sales-interaction .gdp-object-surface strong {
+  font-size: 13px;
+}
+.gdp-sales-structure:not(:last-child) {
+  clip-path: inset(0 0 15% 0);
+  margin-bottom: -37%;
+}
+.gdp-sales-structure + .gdp-sales-structure {
+  clip-path: inset(6% 0 0 0);
 }
