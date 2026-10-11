@@ -261,8 +261,11 @@ function StopCard({
   );
 }
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
-  // Preview stays off until the runtime PNG pack is installed and visually certified.
-  const artPreview = import.meta.env.VITE_GOLDLINE_DAYLINE_ART_V1 === "1";
+  // GOLDLINE world is the default Day Line. The operator can switch to
+  // the previous layout with ?dayline=classic while visual QA continues.
+  const artPreview =
+    typeof window === "undefined" ||
+    new URLSearchParams(window.location.search).get("dayline") !== "classic";
   const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
