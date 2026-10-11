@@ -105,6 +105,7 @@ export function DaylineWorldCompositor({
         style={{
           bottom: `${avatar.bottomPercent}%`,
           transform: `scale(${avatar.scale})`,
+          transition: isDriving || reducedMotion ? "none" : undefined,
         }}
         aria-label={`Explorer: ${completed} of ${stops.length} Action Slots verified complete`}
         role="img"
