@@ -14,31 +14,37 @@ import "./dayline-world-compositor.css";
 
 const ART_ROOT = "/goldline/dayline-v1";
 
-const REQUIRED_ART = [
-  `${ART_ROOT}/avatar/idle.png`,
-  ...["pickup", "dropoff", "sales", "growth", "marketing"]
-    .map(kind => `${ART_ROOT}/objects/${kind}.png`),
-];
-
-/** The map, objects, and walker enter together—not in staggered image bursts. */
-function useDaylineArtReady() {
-  const [ready, setReady] = useState(false);
+/**
+ * Only preload types present in today's canonical projection. Empty-to-full
+ * async changes immediately hide the complete scene until the new artwork has
+ * decoded; neither the climber nor the objects can pop independently.
+ */
+function useDaylineArtReady(stops: readonly DayPlanStop[]) {
+  const sources = [
+    `${ART_ROOT}/avatar/idle.png`,
+    ...[...new Set(stops.map(stop => artForDayPlanKind(stop.kind)))]
+      .filter(kind => kind !== "generic")
+      .map(kind => `${ART_ROOT}/objects/${kind}.png`),
+  ];
+  const key = sources.join("|");
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    Promise.all(REQUIRED_ART.map(source => {
+    Promise.all(sources.map(source => {
       const image = new Image();
       image.src = source;
-      // decode() guarantees all visible layers have painted pixels before reveal.
       return typeof image.decode === "function"
         ? image.decode().catch(() => undefined)
         : new Promise<void>(resolve => {
             image.onload = () => resolve();
             image.onerror = () => resolve();
           });
-    })).then(() => { if (!cancelled) setReady(true); });
+    })).then(() => {
+      if (!cancelled) setLoadedKey(key);
+    });
     return () => { cancelled = true; };
-  }, []);
-  return ready;
+  }, [key]);
+  return loadedKey === key;
 }
 type Props = {
   stops: readonly DayPlanStop[];
@@ -83,7 +89,7 @@ export function DaylineWorldCompositor({
   const [walkerFrame, setWalkerFrame] = useState(0);
   const [walking, setWalking] = useState(false);
   const reducedMotion = useReducedMotion();
-  const artReady = useDaylineArtReady();
+  const artReady = useDaylineArtReady(stops);
   const completed = stops.filter(stop => stop.status === "completed").length;
   const previousCompleted = useRef(completed);
   const geometry = useMemo(() => goldenTrailGeometry(stops.length), [stops.length]);
