@@ -650,3 +650,181 @@ body {
     transition: none !important;
   }
 }
+
+
+/* V3 dayline visual-acceptance repair — applied AFTER historical polish.
+ * No old --gdp-world can leak Claire, Overland, manifest or Los Angeles into
+ * the clean fantasy scene. Functional menus remain reachable via the compass.
+ */
+.gdp-shell.gdp-shell--v2 {
+  background-color: #cce3dd !important;
+  background-image:
+    linear-gradient(180deg, #dcf2e61a 0%, transparent 30%, #071e2211 100%),
+    url("/goldline/dayline-v1/background/world-clean.png") !important;
+  background-size: 100% 100%, 153% auto !important;
+  background-position: center top, 77% top !important;
+  background-repeat: no-repeat, repeat-y !important;
+  padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+  color: #2c271e;
+}
+.gdp-shell.gdp-shell--v2::before {
+  background: linear-gradient(#ffedc51c, transparent 190px) !important;
+}
+.gdp-shell--v2 .gdp-header {
+  position: relative !important;
+  z-index: 12 !important;
+  padding: max(13px, env(safe-area-inset-top)) 11px 16px !important;
+  min-height: 108px !important;
+  margin: 0 !important;
+  background: linear-gradient(180deg, #132c3280, #19392b13 82%, transparent) !important;
+}
+.gdp-shell--v2 .gdp-brand {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  flex-wrap: wrap;
+  gap: 7px !important;
+}
+.gdp-shell--v2 .gdp-brand svg { width: 24px !important; height: 24px !important; }
+.gdp-shell--v2 .gdp-brand strong {
+  margin: 0 !important;
+  color: #ffeec5 !important;
+  font: 800 clamp(27px, 8vw, 35px)/1 Georgia, serif !important;
+  letter-spacing: -.035em !important;
+}
+.gdp-shell--v2 .gdp-brand small {
+  flex: 0 0 100%;
+  margin: 0 !important;
+  font-size: 0 !important;
+}
+.gdp-shell--v2 .gdp-brand small::after {
+  content: "DAY LINE";
+  color: #ffebbf;
+  font: 800 9px/1.2 Inter,system-ui,sans-serif;
+  letter-spacing: .24em;
+}
+.gdp-shell--v2 .gdp-header > p {
+  margin: 5px 0 0 !important;
+  color: #fff2d1;
+  font: 700 10px/1.35 Inter,system-ui,sans-serif !important;
+  text-shadow: 0 1px 5px #162e30;
+}
+.gdp-shell--v2 .gdp-brand + .gdp-v2-claire-label {
+  top: 13px !important;
+  right: 8px !important;
+  padding: 4px 6px !important;
+  opacity: .9;
+}
+.gdp-shell--v2 .gdp-dayline-disclosure {
+  position: absolute !important;
+  top: 70px !important;
+  left: 8px !important;
+  width: auto !important;
+  margin: 0 !important;
+  z-index: 16;
+  border: 1px solid #d9bf80a1;
+  background: #173934df;
+  color: #fff4d8;
+}
+.gdp-shell--v2 .gdp-dayline-disclosure summary {
+  min-height: 34px !important;
+  padding: 8px !important;
+  font-size: 9px;
+}
+.gdp-shell--v2 .gdp-dayline-disclosure[open] {
+  width: min(340px, calc(100vw - 24px)) !important;
+}
+.gdp-shell--v2 .gdp-v2-operations {
+  position: absolute !important;
+  top: 78px !important;
+  right: 8px !important;
+  left: auto !important;
+  width: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 6px !important;
+  z-index: 19;
+  font-size: 10px;
+  background: #203c39e7;
+  border-color: #e4c37a78;
+}
+.gdp-shell--v2 .gdp-v2-operations summary {
+  min-height: 34px !important;
+  padding: 0 4px;
+  font-size: 9px;
+}
+.gdp-shell--v2 .gdp-v2-operations[open] {
+  width: min(350px, calc(100vw - 20px)) !important;
+  padding: 8px !important;
+}
+.gdp-shell--v2 .gdp-chapter-entry {
+  display: none !important; /* real chapter still accessible at the summit */
+}
+.gdp-shell--v2 .gdp-game-nav { /* real controls inside the compass popover */
+  position: relative !important;
+  left: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  height: 70px !important;
+  padding: 3px !important;
+  background: #1b3940f2 !important;
+  border-radius: 14px !important;
+  border: 1px solid #e3bf7b !important;
+}
+.gdp-shell--v2 .gdp-game-nav button,
+.gdp-shell--v2 .gdp-game-nav a {
+  color: #ffebb9 !important;
+  text-shadow: none !important;
+  font-size: 9px !important;
+}
+.gdp-shell--v2 .gdp-game-nav svg { color: #f6d98b !important; }
+.gdp-shell--v2 .gdp-v3-nav-layer {
+  position: fixed;
+  z-index: 79;
+  bottom: calc(85px + env(safe-area-inset-bottom));
+  left: 8px;
+  right: 8px;
+  filter: drop-shadow(0 8px 17px #0b1b1f88);
+}
+.gdp-shell--v2 .gdp-v3-nav-toggle {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  right: 12px;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  padding: 5px;
+  border: 2px solid #f8d58a;
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 35%, #4e6258, #152c31 76%);
+  color: #f5dfad;
+  box-shadow: 0 0 0 4px #13272488,0 4px 14px #0008;
+}
+.gdp-shell--v2 .gdp-v3-nav-toggle span {
+  font: 800 9px/1 Inter,system-ui,sans-serif;
+  letter-spacing: .09em;
+}
+.gdp-shell--v2 .gdp-build-mission-cta {
+  left: 13px !important;
+  right: auto !important;
+  bottom: calc(25px + env(safe-area-inset-bottom)) !important;
+  min-height: 48px;
+  padding: 8px 13px;
+  border-radius: 12px 2px 13px 2px;
+  font-size: 11px;
+}
+.gdp-shell--v2 .gdp-vehicle-key {
+  top: auto !important;
+  bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+  left: 2px !important;
+  scale: .69;
+  transform-origin: left bottom;
+}
+.gdp-shell--v2 .gdp-world-tools { display: none !important; }
+.gdp-shell--v2 .gdp-import { display: none !important; }
+@media(max-width:390px) {
+  .gdp-shell--v2 .gdp-brand strong { font-size: 25px !important; }
+}
