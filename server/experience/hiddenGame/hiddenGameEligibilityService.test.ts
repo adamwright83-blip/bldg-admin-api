@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { projectCurrentDayLine, type CurrentDayLine } from "../../../shared/currentDayLine";
 import {
-  chapterToUnlock,
-  evaluateDayCompletion,
-  type ItemCompletion,
+  OBJECTIVES_PER_CHAPTER,
+  dedupeUnits,
+  isPreviewOperator,
+  resolveChapters,
+  type CompletedUnit,
+  type FirstVerifiedSale,
   type UnlockRecord,
 } from "../../../shared/hiddenGameEligibility";
 import {
@@ -17,224 +19,262 @@ const scope: HiddenGameScope = {
   tenantId: "tenant-a",
   canonicalOperatorId: "op-1",
   operatorId: "7",
+  operatorUserIds: ["open-1"],
 };
 
-function line(date: string, ids: string[], rankingStatus: CurrentDayLine["rankingStatus"] = "ranked") {
-  return projectCurrentDayLine({
-    businessDate: date,
-    rankingStatus,
-    rankedWorks: ids.map(id => ({ id, title: id, executionType: "mission" as const })),
-    designated: null,
-  });
-}
+const SALE: FirstVerifiedSale = { territoryId: "hollywood", occurredAt: "2026-10-01T18:00:00.000Z" };
+const unit = (key: string, completedAt: string): CompletedUnit => ({ key, completedAt });
+const at = (day: number, hour = 12) =>
+  `2026-10-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:00:00.000Z`;
 
-/** In-memory ledger with the same uniqueness the real table enforces. */
-function harness(initial: UnlockRecord[] = []) {
-  const ledger = [...initial];
-  let currentLine = line("2026-10-10", ["a", "b", "c"]);
-  let completion: Record<string, ItemCompletion> = {};
+/** In-memory harness with the same uniqueness the real table enforces. */
+function harness(init: { sale?: FirstVerifiedSale | null; units?: CompletedUnit[]; ledger?: UnlockRecord[] } = {}) {
+  const state = {
+    sale: init.sale === undefined ? null : init.sale,
+    units: init.units ?? [],
+    ledger: [...(init.ledger ?? [])],
+  };
   const deps: HiddenGameEligibilityDeps = {
-    readDayLine: vi.fn(async () => currentLine),
-    readCompletion: vi.fn(async () => new Map(Object.entries(completion))),
-    listUnlocks: vi.fn(async () => ledger.map(row => ({ ...row }))),
+    readFirstSale: vi.fn(async () => state.sale),
+    readCompletedUnits: vi.fn(async () => state.units),
+    listUnlocks: vi.fn(async () => state.ledger.map(row => ({ ...row }))),
     recordUnlock: vi.fn(async (_s, row) => {
-      const clash = ledger.some(
-        r => r.chapter === row.chapter || r.unlockedOnLocalDate === row.unlockedOnLocalDate
-      );
-      if (!clash) ledger.push({ chapter: row.chapter, unlockedOnLocalDate: row.unlockedOnLocalDate });
+      if (state.ledger.some(r => r.chapter === row.chapter)) return;
+      state.ledger.push({ chapter: row.chapter, openedAt: row.openedAt, unlockedOnLocalDate: row.unlockedOnLocalDate });
     }),
+    env: {},
   };
-  return {
-    deps,
-    ledger,
-    setLine(next: CurrentDayLine) {
-      currentLine = next;
-    },
-    setCompletion(next: Record<string, ItemCompletion>) {
-      completion = next;
-    },
-  };
+  return { state, deps };
 }
 
-const allDone = { a: "complete", b: "complete", c: "complete" } as const;
-
-describe("readHiddenGameEligibility", () => {
-  it("0 of 3 required complete: locked, nothing recorded", async () => {
-    const h = harness();
+describe("Chapter 1: the first verified sale", () => {
+  it("no sale: locked, next step is a sale, nothing recorded", async () => {
+    const h = harness({ units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4))] });
     const out = await readHiddenGameEligibility(scope, h.deps);
-    expect(out).toEqual({
+    expect(out).toMatchObject({
       unlockedChapters: 0,
-      todayComplete: false,
-      todayRequiredTotal: 3,
-      todayRequiredComplete: 0,
-      nextUnlockRequirement: "finish_today",
+      nextChapter: 1,
+      nextUnlockRequirement: "first_verified_sale",
+      objectivesRemaining: null,
+      preview: false,
     });
     expect(h.deps.recordUnlock).not.toHaveBeenCalled();
   });
 
-  it("2 of 3 is still locked", async () => {
-    const h = harness();
-    h.setCompletion({ a: "complete", b: "complete", c: "incomplete" });
-    const out = await readHiddenGameEligibility(scope, h.deps);
-    expect(out.unlockedChapters).toBe(0);
-    expect(out.todayRequiredComplete).toBe(2);
+  it("objectives alone never open Chapter 1", () => {
+    const resolved = resolveChapters({
+      firstSale: null,
+      units: Array.from({ length: 20 }, (_, i) => unit(`u${i}`, at(2, i))),
+      persisted: [],
+    });
+    expect(resolved).toEqual([]);
   });
 
-  it("3 of 3 unlocks chapter 1 and says come back tomorrow", async () => {
-    const h = harness();
-    h.setCompletion({ ...allDone });
+  it("a verified sale opens Chapter 1 the same read, with no Objectives required", async () => {
+    const h = harness({ sale: SALE });
     const out = await readHiddenGameEligibility(scope, h.deps);
     expect(out.unlockedChapters).toBe(1);
-    expect(out.todayComplete).toBe(true);
-    expect(out.nextUnlockRequirement).toBe("come_back_tomorrow");
-    expect(h.ledger).toEqual([{ chapter: 1, unlockedOnLocalDate: "2026-10-10" }]);
+    expect(out.firstSaleTerritoryId).toBe("hollywood");
+    expect(out.nextChapter).toBe(2);
+    expect(out.objectivesRemaining).toBe(OBJECTIVES_PER_CHAPTER);
+    expect(h.state.ledger).toHaveLength(1);
+    expect(h.state.ledger[0]).toMatchObject({ chapter: 1, openedAt: SALE.occurredAt });
+  });
+});
+
+describe("Chapters 2 and 3: completed Objectives", () => {
+  it("counts only Objectives completed AFTER the previous chapter opened", async () => {
+    const h = harness({
+      sale: SALE,
+      units: [unit("old1", at(1, 9)), unit("old2", "2026-09-30T00:00:00.000Z"), unit("n1", at(2))],
+    });
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(1);
+    expect(out.objectivesRemaining).toBe(2);
   });
 
-  it("a second finished day unlocks chapter 2", async () => {
-    const h = harness([{ chapter: 1, unlockedOnLocalDate: "2026-10-10" }]);
-    h.setLine(line("2026-10-11", ["a", "b", "c"]));
-    h.setCompletion({ ...allDone });
+  it("2 of 3 keeps Chapter 2 shut; the 3rd opens it", async () => {
+    const h = harness({ sale: SALE, units: [unit("a", at(2)), unit("b", at(3))] });
+    expect((await readHiddenGameEligibility(scope, h.deps)).unlockedChapters).toBe(1);
+    h.state.units.push(unit("c", at(4)));
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(2);
+    expect(h.state.ledger.find(r => r.chapter === 2)?.openedAt).toBe(at(4));
+  });
+
+  it("Chapter 3 counts from the moment Chapter 2 opened, not from the sale", async () => {
+    const h = harness({
+      sale: SALE,
+      units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4)), unit("d", at(5)), unit("e", at(6))],
+    });
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(2);
+    expect(out.objectivesRemaining).toBe(1);
+    h.state.units.push(unit("f", at(7)));
+    const full = await readHiddenGameEligibility(scope, h.deps);
+    expect(full.unlockedChapters).toBe(3);
+    expect(full.nextUnlockRequirement).toBe("all_unlocked");
+    expect(full.nextChapter).toBeNull();
+  });
+
+  it("a backlog opens each chapter in order on one read, never past Chapter 3", async () => {
+    const units = Array.from({ length: 30 }, (_, i) => unit(`u${i}`, at(2 + (i % 20), i % 24)));
+    const h = harness({ sale: SALE, units });
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(3);
+    expect(h.state.ledger.map(r => r.chapter).sort()).toEqual([1, 2, 3]);
+  });
+
+  it("the same underlying work counted by two ledgers is one Objective", () => {
+    const deduped = dedupeUnits([
+      unit("commitment:x", at(3, 10)),
+      unit("commitment:x", at(3, 11)),
+      unit("campaign_run:y", at(4)),
+    ]);
+    expect(deduped).toHaveLength(2);
+    expect(deduped[0]).toMatchObject({ key: "commitment:x", completedAt: at(3, 10) });
+  });
+
+  it("does not depend on when the game is opened", async () => {
+    const h = harness({ sale: SALE, units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4))] });
+    // First read happens much later; the answer is the same and anchored to the ledger.
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(2);
+    expect(h.state.ledger.find(r => r.chapter === 2)?.openedAt).toBe(at(4));
+  });
+
+  it("an optional floor ignores Objectives completed before it", async () => {
+    const h = harness({ sale: SALE, units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4))] });
+    h.deps.env = { countFrom: at(3, 13) };
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(1);
+    expect(out.objectivesRemaining).toBe(2);
+  });
+});
+
+describe("permanence and idempotency", () => {
+  it("re-reading never records twice", async () => {
+    const h = harness({ sale: SALE, units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4))] });
+    await readHiddenGameEligibility(scope, h.deps);
+    await readHiddenGameEligibility(scope, h.deps);
+    await readHiddenGameEligibility(scope, h.deps);
+    expect(h.state.ledger).toHaveLength(2);
+    expect(h.deps.recordUnlock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a chapter never re-locks when the ledgers stop supporting it", async () => {
+    const h = harness({ sale: SALE, units: [unit("a", at(2)), unit("b", at(3)), unit("c", at(4))] });
+    await readHiddenGameEligibility(scope, h.deps);
+    h.state.units = [];
+    h.state.sale = null;
     const out = await readHiddenGameEligibility(scope, h.deps);
     expect(out.unlockedChapters).toBe(2);
   });
 
-  it("reading the same day twice does not unlock a third chapter", async () => {
-    const h = harness([{ chapter: 1, unlockedOnLocalDate: "2026-10-10" }]);
-    h.setLine(line("2026-10-11", ["a", "b", "c"]));
-    h.setCompletion({ ...allDone });
-    await readHiddenGameEligibility(scope, h.deps);
-    const again = await readHiddenGameEligibility(scope, h.deps);
-    expect(again.unlockedChapters).toBe(2);
-    expect(h.ledger).toHaveLength(2);
-    expect(h.deps.recordUnlock).toHaveBeenCalledTimes(1);
-  });
-
-  it("un-completion after an unlock never re-locks", async () => {
-    const h = harness();
-    h.setCompletion({ ...allDone });
-    await readHiddenGameEligibility(scope, h.deps);
-    h.setCompletion({ a: "incomplete", b: "incomplete", c: "incomplete" });
-    const out = await readHiddenGameEligibility(scope, h.deps);
-    expect(out.unlockedChapters).toBe(1);
-    expect(out.todayComplete).toBe(false);
-  });
-
-  it("stops at chapter 3 and reports all_unlocked", async () => {
-    const h = harness([
-      { chapter: 1, unlockedOnLocalDate: "2026-10-08" },
-      { chapter: 2, unlockedOnLocalDate: "2026-10-09" },
-    ]);
-    h.setCompletion({ ...allDone });
-    const third = await readHiddenGameEligibility(scope, h.deps);
-    expect(third.unlockedChapters).toBe(3);
-    expect(third.nextUnlockRequirement).toBe("all_unlocked");
-    h.setLine(line("2026-10-11", ["a", "b", "c"]));
-    const fourth = await readHiddenGameEligibility(scope, h.deps);
-    expect(fourth.unlockedChapters).toBe(3);
-    expect(h.ledger).toHaveLength(3);
-  });
-
-  it("unknown completion counts as not complete", async () => {
-    const h = harness();
-    h.setCompletion({ a: "complete", b: "complete", c: "unknown" });
-    const out = await readHiddenGameEligibility(scope, h.deps);
-    expect(out.todayComplete).toBe(false);
-    expect(out.unlockedChapters).toBe(0);
-  });
-
-  it("a completion reader that throws leaves the day unfinished", async () => {
-    const h = harness();
-    (h.deps.readCompletion as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom"));
-    const out = await readHiddenGameEligibility(scope, h.deps);
-    expect(out.todayComplete).toBe(false);
-    expect(out.unlockedChapters).toBe(0);
-  });
-
-  it("an empty or unavailable Day Line is not a finished day", async () => {
-    for (const rankingStatus of ["no_plan", "unavailable"] as const) {
-      const h = harness();
-      h.setLine(line("2026-10-10", [], rankingStatus));
-      const out = await readHiddenGameEligibility(scope, h.deps);
-      expect(out.todayComplete).toBe(false);
-      expect(out.todayRequiredTotal).toBe(0);
-      expect(out.unlockedChapters).toBe(0);
-    }
-  });
-
-  it("an unranked line ignores stale items but keeps the designated one", () => {
-    const l = projectCurrentDayLine({
-      businessDate: "2026-10-10",
-      rankingStatus: "unavailable",
-      rankedWorks: [{ id: "ghost", title: "ghost" }],
-      designated: { id: "d", title: "designated" },
+  it("a permanent Chapter 2 anchors the count for Chapter 3 even if its Objectives vanish", async () => {
+    const h = harness({
+      sale: null,
+      ledger: [
+        { chapter: 1, openedAt: SALE.occurredAt, unlockedOnLocalDate: "2026-10-01" },
+        { chapter: 2, openedAt: at(4), unlockedOnLocalDate: "2026-10-04" },
+      ],
+      units: [unit("x", at(5)), unit("y", at(6)), unit("z", at(7))],
     });
-    const c = evaluateDayCompletion(l, new Map([["d", "complete"], ["ghost", "complete"]]));
-    expect(c.requiredIds).toEqual(["d"]);
-    expect(c.todayComplete).toBe(true);
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(3);
   });
 
+  it("a failing ledger read surfaces as an error and records nothing", async () => {
+    const h = harness({ sale: SALE });
+    (h.deps.readCompletedUnits as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("db down"));
+    await expect(readHiddenGameEligibility(scope, h.deps)).rejects.toThrow("db down");
+    expect(h.deps.recordUnlock).not.toHaveBeenCalled();
+    expect(h.state.ledger).toHaveLength(0);
+  });
+
+  it("Chapter 4 never opens", async () => {
+    const units = Array.from({ length: 200 }, (_, i) => unit(`u${i}`, at(2 + (i % 25), i % 24)));
+    const h = harness({ sale: SALE, units });
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out.unlockedChapters).toBe(3);
+    expect(h.state.ledger.some(r => r.chapter > 3)).toBe(false);
+  });
+});
+
+describe("developer preview", () => {
+  const ownerEnv = { openIds: "open-1, open-9", tenantId: "tenant-a" };
+
+  it("owner sees all chapters and nothing is read or written", async () => {
+    const h = harness();
+    h.deps.env = ownerEnv;
+    const out = await readHiddenGameEligibility(scope, h.deps);
+    expect(out).toMatchObject({ unlockedChapters: 3, preview: true, nextUnlockRequirement: "all_unlocked" });
+    expect(h.deps.readFirstSale).not.toHaveBeenCalled();
+    expect(h.deps.readCompletedUnits).not.toHaveBeenCalled();
+    expect(h.deps.listUnlocks).not.toHaveBeenCalled();
+    expect(h.deps.recordUnlock).not.toHaveBeenCalled();
+  });
+
+  it("is off unless BOTH env values are set", () => {
+    const base = { tenantId: "tenant-a", canonicalOpenIds: ["open-1"] };
+    expect(isPreviewOperator({ ...base, envOpenIds: "open-1", envTenantId: undefined })).toBe(false);
+    expect(isPreviewOperator({ ...base, envOpenIds: undefined, envTenantId: "tenant-a" })).toBe(false);
+    expect(isPreviewOperator({ ...base, envOpenIds: "", envTenantId: "tenant-a" })).toBe(false);
+    expect(isPreviewOperator({ ...base, envOpenIds: "open-1", envTenantId: "tenant-a" })).toBe(true);
+  });
+
+  it("another user in the same tenant gets the normal rules", async () => {
+    const h = harness();
+    h.deps.env = ownerEnv;
+    const out = await readHiddenGameEligibility({ ...scope, operatorUserIds: ["someone-else"] }, h.deps);
+    expect(out.preview).toBe(false);
+    expect(out.unlockedChapters).toBe(0);
+  });
+
+  it("the owner in a different tenant gets the normal rules", async () => {
+    const h = harness();
+    h.deps.env = ownerEnv;
+    const out = await readHiddenGameEligibility({ ...scope, tenantId: "tenant-b" }, h.deps);
+    expect(out.preview).toBe(false);
+  });
+});
+
+describe("scope and structure", () => {
   it("missing tenant or operator throws instead of defaulting", async () => {
     const h = harness();
-    await expect(
-      readHiddenGameEligibility({ ...scope, tenantId: "  " }, h.deps)
-    ).rejects.toThrow(/tenantId/);
-    await expect(
-      readHiddenGameEligibility({ ...scope, canonicalOperatorId: "" }, h.deps)
-    ).rejects.toThrow(/canonicalOperatorId/);
-    expect(h.deps.readDayLine).not.toHaveBeenCalled();
+    await expect(readHiddenGameEligibility({ ...scope, tenantId: "  " }, h.deps)).rejects.toThrow(/tenantId/);
+    await expect(readHiddenGameEligibility({ ...scope, canonicalOperatorId: "" }, h.deps)).rejects.toThrow(
+      /canonicalOperatorId/
+    );
+    expect(h.deps.readFirstSale).not.toHaveBeenCalled();
   });
 
-  it("passes the caller's scope to every reader", async () => {
-    const h = harness();
-    await readHiddenGameEligibility(scope, h.deps);
-    for (const fn of [h.deps.readDayLine, h.deps.listUnlocks]) {
-      expect(fn).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-a" }));
+  it("passes the caller's tenant to every reader", async () => {
+    const h = harness({ sale: SALE });
+    await readHiddenGameEligibility({ ...scope, tenantId: "tenant-z" }, h.deps);
+    for (const fn of [h.deps.readFirstSale, h.deps.readCompletedUnits, h.deps.listUnlocks]) {
+      expect(fn).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-z" }));
     }
   });
-});
 
-describe("chapterToUnlock", () => {
-  it("never opens twice for one day or past the last chapter", () => {
-    expect(chapterToUnlock({ existing: [], localDate: "d1", todayComplete: true })).toBe(1);
-    expect(
-      chapterToUnlock({
-        existing: [{ chapter: 1, unlockedOnLocalDate: "d1" }],
-        localDate: "d1",
-        todayComplete: true,
-      })
-    ).toBeNull();
-    expect(
-      chapterToUnlock({
-        existing: [
-          { chapter: 1, unlockedOnLocalDate: "d1" },
-          { chapter: 2, unlockedOnLocalDate: "d2" },
-          { chapter: 3, unlockedOnLocalDate: "d3" },
-        ],
-        localDate: "d4",
-        todayComplete: true,
-      })
-    ).toBeNull();
-  });
-});
-
-describe("structure", () => {
-  it("the service and router never import a mutation path", () => {
-    for (const file of [
-      "hiddenGameEligibilityService.ts",
-      "hiddenGameEligibilityRouter.ts",
-    ]) {
+  it("the service and router never import a business-write path", () => {
+    for (const file of ["hiddenGameEligibilityService.ts", "hiddenGameEligibilityRouter.ts"]) {
       const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
       expect(source).not.toMatch(/completeDayDirectorCommitment|bridgeDriverAction|transitionObjectiveStatus/);
       expect(source).not.toMatch(/COALESCE\(/i);
+      expect(source).not.toMatch(/\.update\(|\.delete\(/);
     }
   });
 
   it("the router exposes a query and no mutation", () => {
-    const source = readFileSync(
-      new URL("./hiddenGameEligibilityRouter.ts", import.meta.url),
-      "utf8"
-    );
+    const source = readFileSync(new URL("./hiddenGameEligibilityRouter.ts", import.meta.url), "utf8");
     expect(source).toMatch(/\.query\(/);
     expect(source).not.toMatch(/\.mutation\(/);
+  });
+
+  it("the unlock table keeps one row per chapter and no per-day limit", () => {
+    const sql = readFileSync(new URL("../../../drizzle/0128_hidden_game_chapter_unlocks.sql", import.meta.url), "utf8");
+    expect(sql).toMatch(/uq_hidden_game_unlock_chapter/);
+    expect(sql).not.toMatch(/uq_hidden_game_unlock_date/);
   });
 });

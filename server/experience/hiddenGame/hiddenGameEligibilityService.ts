@@ -1,51 +1,50 @@
 /**
- * hidden_game.lost_property: unlock eligibility reader.
+ * hidden_game.lost_property: unlock eligibility reader. (Spec v2 §2, system map §3a.)
  *
- * READ-ONLY toward the business. This module reads today's Day Line and the
- * completion records the owning systems already keep, then records one
+ * READ-ONLY toward the business. It reads the owning ledgers and records one
  * game-owned fact: that a chapter was opened. It never completes, marks or
- * changes any Day Line item, commitment, objective or campaign run.
+ * changes any sale, order, commitment, objective or campaign run.
  *
- * Completion is NOT a field of CurrentDayLine, so there is no single flag to
- * read. Each surfaced item is resolved through its own lineage, the same
- * lineage `currentDayLine.completeItem` uses to write completion:
+ *   Chapter 1  first VERIFIED sale: an order whose payment the platform has
+ *              admitted (customerOrderTruth `paid`, gated by an authority
+ *              receipt), at a customer location that classifies to a territory.
+ *              A bare "paid" flag, or a customer with no resolvable territory,
+ *              opens nothing.
+ *   Chapter 2/3  OBJECTIVES_PER_CHAPTER completed Objectives after the previous
+ *              chapter's condition was met, counted by ledger completion time
+ *              and de-duplicated by the underlying work.
  *
- *   commitment -> day_director_commitments.status === "completed"
- *   objective  -> goal_cycle_objectives.status === "completed"
- *   campaign   -> a campaign run for that campaign with status "complete"
- *                 whose completedAt falls on today's business date
- *   candidate  -> resolved to commitment or campaign through
- *                 resolveCandidateCompletionLineage, never read directly
- *
- * Anything that cannot be resolved is "unknown" and counts as not complete.
- *
- * Evaluation happens on read and is idempotent. There is no worker and no
- * cron. Unlocks are monotonic: the ledger is insert-only.
+ * Unlocks are insert-only and monotonic. The count does not depend on the
+ * player opening the game. Evaluation happens on read; no worker, no cron.
  */
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
-import { hiddenGameChapterUnlocks } from "../../../drizzle/schema";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
-  businessDateInZone,
-  type CurrentDayLine,
-  type CurrentDayLineItem,
-} from "../../../shared/currentDayLine";
+  dayDirectorCommitments,
+  entityLocations,
+  goalCycleObjectives,
+  goldlineCampaignRuns,
+  hiddenGameChapterUnlocks,
+} from "../../../drizzle/schema";
+import { classifyTerritory } from "../../../shared/lanternTerritories";
+import { businessDateInZone } from "../../../shared/currentDayLine";
 import {
-  chapterToUnlock,
-  evaluateDayCompletion,
+  chaptersToRecord,
+  isPreviewOperator,
+  previewEligibility,
   projectEligibility,
+  resolveChapters,
+  type CompletedUnit,
+  type FirstVerifiedSale,
   type HiddenGameEligibility,
-  type ItemCompletion,
   type UnlockRecord,
 } from "../../../shared/hiddenGameEligibility";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { getDb } from "../../db";
-import { listGoalCycleObjectives } from "../../agents/persistentOperator/objectiveStore";
-import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
-import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
-import { resolveCandidateCompletionLineage } from "../../planning/dayline/candidateCompletionLineage";
-import { readCurrentDayLine } from "../../planning/dayline/currentDayLineService";
-import { getLatestPlan } from "../../planning/missionDirector/missionDirectorService";
+import {
+  groupCustomerOrderTruth,
+  loadCustomerOrderTruth,
+} from "../../geography/customerOrderTruth";
 
 export type HiddenGameScope = {
   tenantId: string;
@@ -55,22 +54,20 @@ export type HiddenGameScope = {
   operatorId: string;
   operatorIds?: string[];
   /** Campaign Run owner ids (open ids), canonical first. */
-  operatorUserId?: string;
   operatorUserIds?: string[];
 };
 
 export type HiddenGameEligibilityDeps = {
-  readDayLine: (scope: HiddenGameScope) => Promise<CurrentDayLine>;
-  readCompletion: (
-    scope: HiddenGameScope,
-    line: CurrentDayLine
-  ) => Promise<Map<string, ItemCompletion>>;
+  readFirstSale: (scope: HiddenGameScope) => Promise<FirstVerifiedSale | null>;
+  readCompletedUnits: (scope: HiddenGameScope) => Promise<CompletedUnit[]>;
   listUnlocks: (scope: HiddenGameScope) => Promise<UnlockRecord[]>;
   /** Insert-only. Must tolerate a concurrent identical insert without throwing. */
   recordUnlock: (
     scope: HiddenGameScope,
     row: UnlockRecord & { evidence: Record<string, unknown> }
   ) => Promise<void>;
+  /** Owner-only preview switch. Injected so tests control the environment. */
+  env?: { openIds?: string; tenantId?: string; countFrom?: string };
 };
 
 function requireScope(scope: HiddenGameScope): void {
@@ -86,173 +83,187 @@ export async function readHiddenGameEligibility(
   deps: HiddenGameEligibilityDeps = defaultDeps
 ): Promise<HiddenGameEligibility> {
   requireScope(scope);
+  const env = deps.env ?? {
+    openIds: process.env.HIDDEN_GAME_PREVIEW_OPEN_IDS,
+    tenantId: process.env.HIDDEN_GAME_PREVIEW_TENANT_ID,
+    countFrom: process.env.HIDDEN_GAME_COUNT_FROM,
+  };
 
-  const line = await deps.readDayLine(scope);
-  const existing = await deps.listUnlocks(scope);
-
-  const completionMap = await deps.readCompletion(scope, line).catch(error => {
-    console.warn(
-      "[hidden-game] completion unavailable; treating the day as not finished",
-      error instanceof Error ? error.message : error
-    );
-    return new Map<string, ItemCompletion>();
-  });
-  const completion = evaluateDayCompletion(line, completionMap);
-
-  let unlocks = existing;
-  const toOpen = chapterToUnlock({
-    existing,
-    localDate: line.businessDate,
-    todayComplete: completion.todayComplete,
-  });
-  if (toOpen !== null) {
-    await deps.recordUnlock(scope, {
-      chapter: toOpen,
-      unlockedOnLocalDate: line.businessDate,
-      evidence: {
-        businessDate: line.businessDate,
-        requiredIds: completion.requiredIds,
-        required: completion.todayRequiredTotal,
-        complete: completion.todayRequiredComplete,
-      },
-    });
-    // Reread rather than assume: a concurrent read may have won the insert.
-    unlocks = await deps.listUnlocks(scope);
+  // Developer preview: answered before any ledger is read or written, so it
+  // cannot change a legitimate unlock record or touch business data.
+  if (
+    isPreviewOperator({
+      tenantId: scope.tenantId,
+      canonicalOpenIds: scope.operatorUserIds ?? [],
+      envOpenIds: env.openIds,
+      envTenantId: env.tenantId,
+    })
+  ) {
+    return previewEligibility();
   }
 
-  const unlockedChapters = unlocks.reduce((max, row) => Math.max(max, row.chapter), 0);
-  return projectEligibility({ unlockedChapters, completion });
+  const [firstSale, units, persisted] = await Promise.all([
+    deps.readFirstSale(scope),
+    deps.readCompletedUnits(scope),
+    deps.listUnlocks(scope),
+  ]);
+
+  const resolved = resolveChapters({
+    firstSale,
+    units,
+    persisted,
+    countFrom: env.countFrom ?? null,
+  });
+
+  const toRecord = chaptersToRecord(resolved, persisted);
+  const zone = getDashboardTimeZone();
+  for (const row of toRecord) {
+    await deps.recordUnlock(scope, {
+      chapter: row.chapter,
+      openedAt: row.openedAt,
+      unlockedOnLocalDate: businessDateInZone(new Date(), zone),
+      evidence: {
+        ruleVersion: 2,
+        openedAt: row.openedAt,
+        ...(row.chapter === 1
+          ? { firstSale }
+          : { objectivesCounted: units.length }),
+      },
+    });
+  }
+
+  // The permanent record wins: a chapter that was recorded stays open even if
+  // a ledger later stops supporting it.
+  const reread = toRecord.length ? await deps.listUnlocks(scope) : persisted;
+  const final = resolveChapters({
+    firstSale,
+    units,
+    persisted: reread,
+    countFrom: env.countFrom ?? null,
+  });
+  return projectEligibility({
+    resolved: final,
+    firstSale,
+    units,
+    countFrom: env.countFrom ?? null,
+  });
 }
 
 // ── Default dependencies ─────────────────────────────────────────
 
-async function readDayLineDefault(scope: HiddenGameScope): Promise<CurrentDayLine> {
-  return readCurrentDayLine({
-    tenantId: scope.tenantId,
-    operatorId: scope.operatorId,
-    ...(scope.operatorIds?.length ? { operatorIds: scope.operatorIds } : {}),
-    ...(scope.operatorUserId ? { operatorUserId: scope.operatorUserId } : {}),
-    ...(scope.operatorUserIds?.length ? { operatorUserIds: scope.operatorUserIds } : {}),
-  });
+async function readFirstSaleDefault(scope: HiddenGameScope): Promise<FirstVerifiedSale | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [records, locations] = await Promise.all([
+    loadCustomerOrderTruth(scope.tenantId),
+    db.select().from(entityLocations).where(eq(entityLocations.tenantId, scope.tenantId)),
+  ]);
+  const locationByKey = new Map(locations.map(row => [`${row.entityType}:${row.entityKey}`, row]));
+  let best: FirstVerifiedSale | null = null;
+  for (const [identityKey, group] of groupCustomerOrderTruth(scope.tenantId, records)) {
+    const location = locationByKey.get(`customer:${identityKey}`);
+    if (
+      !location ||
+      location.geocodeStatus !== "success" ||
+      location.latitude == null ||
+      location.longitude == null
+    ) {
+      continue;
+    }
+    const territory = classifyTerritory(Number(location.latitude), Number(location.longitude));
+    if (!territory) continue;
+    for (const record of group) {
+      // `paid` is already gated by an admitted payment / paid-observation receipt.
+      if (!record.paid || record.cancelled) continue;
+      const occurredAt = record.createdAt.toISOString();
+      if (!best || occurredAt < best.occurredAt) {
+        best = { territoryId: territory.id, occurredAt };
+      }
+    }
+  }
+  return best;
 }
 
-type LineageLike = NonNullable<CurrentDayLineItem["lineage"]>;
+function hasOperatorMission(metadata: unknown): boolean {
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as { operatorMission?: unknown }).operatorMission != null
+  );
+}
 
-async function readCompletionDefault(
-  scope: HiddenGameScope,
-  line: CurrentDayLine
-): Promise<Map<string, ItemCompletion>> {
-  const out = new Map<string, ItemCompletion>();
-  const items: CurrentDayLineItem[] = [...line.items];
-  if (line.designated && !items.some(item => item.id === line.designated!.id)) {
-    items.push(line.designated);
+async function readCompletedUnitsDefault(scope: HiddenGameScope): Promise<CompletedUnit[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const actorIds = [
+    ...new Set(
+      (scope.operatorIds?.length ? scope.operatorIds : [scope.operatorId])
+        .map(id => id.trim())
+        .filter(Boolean)
+    ),
+  ];
+  const ownerIds = [...new Set((scope.operatorUserIds ?? []).map(id => id.trim()).filter(Boolean))];
+
+  const [commitments, objectives, runs] = await Promise.all([
+    actorIds.length
+      ? db
+          .select()
+          .from(dayDirectorCommitments)
+          .where(
+            and(
+              eq(dayDirectorCommitments.tenantId, scope.tenantId),
+              inArray(dayDirectorCommitments.actorId, actorIds),
+              eq(dayDirectorCommitments.status, "completed"),
+              isNotNull(dayDirectorCommitments.completedAt)
+            )
+          )
+      : Promise.resolve([]),
+    db
+      .select()
+      .from(goalCycleObjectives)
+      .where(
+        and(
+          eq(goalCycleObjectives.tenantId, scope.tenantId),
+          eq(goalCycleObjectives.canonicalOperatorId, scope.canonicalOperatorId),
+          eq(goalCycleObjectives.status, "completed"),
+          isNotNull(goalCycleObjectives.completedAt)
+        )
+      ),
+    ownerIds.length
+      ? db
+          .select()
+          .from(goldlineCampaignRuns)
+          .where(
+            and(
+              eq(goldlineCampaignRuns.tenantId, scope.tenantId),
+              inArray(goldlineCampaignRuns.operatorUserId, ownerIds),
+              eq(goldlineCampaignRuns.status, "complete"),
+              isNotNull(goldlineCampaignRuns.completedAt)
+            )
+          )
+      : Promise.resolve([]),
+  ]);
+
+  const units: CompletedUnit[] = [];
+  const commitmentKeys = new Set<string>();
+  for (const row of commitments) {
+    // Day Line work only: growth commitments, or ones designated as an operator mission.
+    if (row.kind !== "growth" && !hasOperatorMission(row.metadataJson)) continue;
+    commitmentKeys.add(row.id);
+    units.push({ key: `commitment:${row.id}`, completedAt: row.completedAt!.toISOString() });
   }
-  if (items.length === 0) return out;
-
-  const zone = getDashboardTimeZone();
-  // Each source is read at most once, and only if some item needs it.
-  const memo = new Map<string, Promise<unknown>>();
-  const once = <T>(key: string, load: () => Promise<T>): Promise<T | null> => {
-    if (!memo.has(key)) memo.set(key, load().catch(() => null));
-    return memo.get(key) as Promise<T | null>;
-  };
-
-  const commitments = () =>
-    once("commitments", () =>
-      getDayDirectorState({
-        tenantId: scope.tenantId,
-        actorId: scope.operatorId,
-        actorIds: scope.operatorIds,
-        businessDate: line.businessDate,
-      })
-    );
-  const objectives = () =>
-    once("objectives", () =>
-      listGoalCycleObjectives({
-        tenantId: scope.tenantId,
-        businessDate: line.businessDate,
-      })
-    );
-  const runs = () =>
-    once("runs", () =>
-      listOperatorRunsForIdentities({
-        tenantId: scope.tenantId,
-        operatorUserIds: [
-          ...(scope.operatorUserIds ?? []),
-          ...(scope.operatorUserId ? [scope.operatorUserId] : []),
-        ],
-      })
-    );
-  const plan = () =>
-    once("plan", () =>
-      getLatestPlan({
-        tenantId: scope.tenantId,
-        operatorId: scope.operatorId,
-        operatorIds: scope.operatorIds,
-        businessDate: line.businessDate,
-      })
-    );
-
-  const resolveLineage = async (
-    lineage: LineageLike | null | undefined,
-    itemId: string
-  ): Promise<ItemCompletion> => {
-    if (!lineage) return "unknown";
-
-    if (lineage.kind === "commitment") {
-      const state = await commitments();
-      if (!state) return "unknown";
-      const commitmentId = lineage.commitmentId || itemId;
-      const found = state.commitments.find(c => c.id === commitmentId);
-      if (!found) return "unknown";
-      return found.status === "completed" ? "complete" : "incomplete";
-    }
-
-    if (lineage.kind === "objective") {
-      const list = await objectives();
-      if (!list) return "unknown";
-      const objectiveId = lineage.objectiveId || itemId;
-      const found = list.find(o => o.id === objectiveId);
-      if (!found) return "unknown";
-      return found.status === "completed" ? "complete" : "incomplete";
-    }
-
-    if (lineage.kind === "campaign") {
-      const all = await runs();
-      if (!all) return "unknown";
-      const campaignId = lineage.campaignId || itemId;
-      const forCampaign = all.filter(run => run.campaignId === campaignId);
-      if (forCampaign.length === 0) return "incomplete";
-      const finishedToday = forCampaign.some(
-        run =>
-          run.status === "complete" &&
-          run.completedAt != null &&
-          businessDateInZone(new Date(run.completedAt), zone) === line.businessDate
-      );
-      return finishedToday ? "complete" : "incomplete";
-    }
-
-    if (lineage.kind === "candidate") {
-      // Candidate is a planning projection, not a completion authority.
-      const latest = await plan();
-      const candidateId = lineage.candidateId || itemId;
-      const evidence =
-        latest?.outcome.workPlan?.ranking.find(
-          entry => entry.workId === candidateId && entry.eligible
-        ) ?? null;
-      if (!evidence) return "unknown";
-      const resolved = resolveCandidateCompletionLineage(evidence.sourceRefs);
-      if (!resolved) return "unknown";
-      return resolveLineage(resolved, itemId);
-    }
-
-    return "unknown";
-  };
-
-  for (const item of items) {
-    out.set(item.id, await resolveLineage(item.lineage, item.id));
+  for (const row of objectives) {
+    // An objective bridged from a commitment is the same work, not a second Objective.
+    const key =
+      row.actionTargetId && commitmentKeys.has(row.actionTargetId)
+        ? `commitment:${row.actionTargetId}`
+        : `objective:${row.id}`;
+    units.push({ key, completedAt: row.completedAt!.toISOString() });
   }
-  return out;
+  for (const row of runs) {
+    units.push({ key: `campaign_run:${row.id}`, completedAt: row.completedAt!.toISOString() });
+  }
+  return units;
 }
 
 async function listUnlocksDefault(scope: HiddenGameScope): Promise<UnlockRecord[]> {
@@ -267,10 +278,15 @@ async function listUnlocksDefault(scope: HiddenGameScope): Promise<UnlockRecord[
         eq(hiddenGameChapterUnlocks.operatorId, scope.canonicalOperatorId)
       )
     );
-  return rows.map(row => ({
-    chapter: row.chapter,
-    unlockedOnLocalDate: row.unlockedOnLocalDate,
-  }));
+  return rows.map(row => {
+    const evidence = row.evidenceJson as { openedAt?: unknown } | null;
+    return {
+      chapter: row.chapter,
+      unlockedOnLocalDate: row.unlockedOnLocalDate,
+      openedAt:
+        typeof evidence?.openedAt === "string" ? evidence.openedAt : row.createdAt.toISOString(),
+    };
+  });
 }
 
 async function recordUnlockDefault(
@@ -289,14 +305,14 @@ async function recordUnlockDefault(
       unlockedOnLocalDate: row.unlockedOnLocalDate,
       evidenceJson: row.evidence,
     })
-    // Two reads racing for the same chapter or the same day: the loser is a
-    // no-op, never an overwrite. The ledger is insert-only.
+    // Two reads racing for the same chapter: the loser is a no-op, never an
+    // overwrite. The ledger is insert-only.
     .onDuplicateKeyUpdate({ set: { id: sql`${hiddenGameChapterUnlocks.id}` } });
 }
 
 const defaultDeps: HiddenGameEligibilityDeps = {
-  readDayLine: readDayLineDefault,
-  readCompletion: readCompletionDefault,
+  readFirstSale: readFirstSaleDefault,
+  readCompletedUnits: readCompletedUnitsDefault,
   listUnlocks: listUnlocksDefault,
   recordUnlock: recordUnlockDefault,
 };

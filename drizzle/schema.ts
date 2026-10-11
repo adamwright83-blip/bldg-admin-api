@@ -10197,8 +10197,8 @@ export const presidentCandidateProjects = mysqlTable(
 /**
  * hidden_game.lost_property unlock ledger.
  *
- * One row per chapter opened. A chapter opens on the n-th distinct local day
- * the operator finished the Day Line. Rows are monotonic: nothing deletes or
+ * One row per chapter opened (spec v2 §2: Ch.1 on the first verified sale,
+ * Ch.2/3 after OBJECTIVES_PER_CHAPTER completed Objectives each). Rows are monotonic: nothing deletes or
  * updates them, so a later un-completion never re-locks a chapter. The game
  * reads this table through hiddenGameEligibilityService and never writes it.
  */
@@ -10218,11 +10218,6 @@ export const hiddenGameChapterUnlocks = mysqlTable(
       table.tenantId,
       table.operatorId,
       table.chapter
-    ),
-    dayOnce: uniqueIndex("uq_hidden_game_unlock_date").on(
-      table.tenantId,
-      table.operatorId,
-      table.unlockedOnLocalDate
     ),
   })
 );

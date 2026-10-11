@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import "./smallComfortsPlate.css";
-import { presentGate } from "./logic/gate";
+import { CONTENT_NOTE, presentGate } from "./logic/gate";
 import { useGateQuery } from "./useGateQuery";
 
 type Ripple = { id: number; x: number; y: number };
@@ -134,6 +134,7 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
         <div className="scp-gate" role="status" aria-live="polite">
           {gate.kind === "open" ? (
             <>
+              {gate.preview ? <span className="scp-ribbon">Preview</span> : null}
               <h2 className="scp-gate-title">Pick a chapter</h2>
               <ul className="scp-tags">
                 {gate.tags.map(tag => (
@@ -157,6 +158,7 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
                   </li>
                 ))}
               </ul>
+              <p className="scp-gate-progress">{CONTENT_NOTE}</p>
             </>
           ) : (
             <>
@@ -169,9 +171,7 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
                 disabled={gate.kind === "loading"}
               />
               <p className="scp-gate-line">{gate.message}</p>
-              {gate.kind === "locked" && gate.progress ? (
-                <p className="scp-gate-progress">{gate.progress}</p>
-              ) : null}
+              <p className="scp-gate-progress">{CONTENT_NOTE}</p>
             </>
           )}
         </div>

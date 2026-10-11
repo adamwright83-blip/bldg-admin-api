@@ -1,5 +1,5 @@
 /**
- * Small Comforts: what the unlock gate looks like.
+ * Small Comforts: what the unlock gate looks like. (Spec v2 §2.)
  *
  * Pure. The server decides whether a chapter is open; this only turns that
  * answer into what the player sees. The game never calls a mutation and has
@@ -10,10 +10,11 @@
 
 export type GateEligibility = {
   unlockedChapters: number;
-  todayComplete: boolean;
-  todayRequiredTotal: number;
-  todayRequiredComplete: number;
-  nextUnlockRequirement: "finish_today" | "come_back_tomorrow" | "all_unlocked";
+  nextChapter: number | null;
+  objectivesRemaining: number | null;
+  firstSaleTerritoryId: string | null;
+  nextUnlockRequirement: "first_verified_sale" | "complete_objectives" | "all_unlocked";
+  preview: boolean;
 };
 
 export type GateQueryState =
@@ -23,9 +24,14 @@ export type GateQueryState =
 
 export const PLAYABLE_CHAPTERS = 3;
 
+/** Shown wherever the game is offered (spec §2, system map §3a.9). Nothing more specific. */
+export const CONTENT_NOTE = "Contains mature themes.";
+
+export const SHUT_COPY = "The suitcase is shut for now.";
+
 export type ChapterTag = {
   chapter: number;
-  state: "open" | "tomorrow" | "shut" | "mystery";
+  state: "open" | "next" | "shut" | "mystery";
   /** What is printed on the luggage tag. Null when nothing is printed. */
   label: string | null;
 };
@@ -33,20 +39,20 @@ export type ChapterTag = {
 export type GateView =
   | { kind: "loading"; message: string }
   | { kind: "unavailable"; message: string }
-  | { kind: "locked"; message: string; progress: string | null }
-  | { kind: "open"; tags: ChapterTag[]; playable: number[] };
+  | { kind: "locked"; message: string }
+  | { kind: "open"; tags: ChapterTag[]; playable: number[]; preview: boolean };
 
-export const LOCKED_COPY = "Finish today's line to open the suitcase.";
-export const UNAVAILABLE_COPY = "The suitcase is shut for now.";
-
-export function chapterTags(unlockedChapters: number): ChapterTag[] {
-  const unlocked = Math.max(0, Math.min(PLAYABLE_CHAPTERS, Math.floor(unlockedChapters)));
+export function chapterTags(input: {
+  unlockedChapters: number;
+  objectivesRemaining: number | null;
+}): ChapterTag[] {
+  const unlocked = Math.max(0, Math.min(PLAYABLE_CHAPTERS, Math.floor(input.unlockedChapters)));
   const tags: ChapterTag[] = [];
   for (let chapter = 1; chapter <= PLAYABLE_CHAPTERS; chapter += 1) {
     if (chapter <= unlocked) {
       tags.push({ chapter, state: "open", label: `Chapter ${chapter}` });
-    } else if (chapter === unlocked + 1) {
-      tags.push({ chapter, state: "tomorrow", label: "Tomorrow" });
+    } else if (chapter === unlocked + 1 && input.objectivesRemaining != null) {
+      tags.push({ chapter, state: "next", label: `${Math.max(0, input.objectivesRemaining)} to go` });
     } else {
       tags.push({ chapter, state: "shut", label: null });
     }
@@ -56,26 +62,16 @@ export function chapterTags(unlockedChapters: number): ChapterTag[] {
 }
 
 export function presentGate(query: GateQueryState): GateView {
-  if (query.status === "loading") {
-    return { kind: "loading", message: "Opening Small Comforts…" };
-  }
-  if (query.status === "error") {
-    return { kind: "unavailable", message: UNAVAILABLE_COPY };
-  }
+  if (query.status === "loading") return { kind: "loading", message: "Opening Small Comforts…" };
+  if (query.status === "error") return { kind: "unavailable", message: SHUT_COPY };
   const { data } = query;
-  if (data.unlockedChapters < 1) {
-    const total = data.todayRequiredTotal;
-    return {
-      kind: "locked",
-      message: LOCKED_COPY,
-      progress: total > 0 ? `${data.todayRequiredComplete} / ${total}` : null,
-    };
-  }
-  const tags = chapterTags(data.unlockedChapters);
+  if (data.unlockedChapters < 1) return { kind: "locked", message: SHUT_COPY };
+  const tags = chapterTags(data);
   return {
     kind: "open",
     tags,
     playable: tags.filter(tag => tag.state === "open").map(tag => tag.chapter),
+    preview: data.preview === true,
   };
 }
 
@@ -83,9 +79,10 @@ export function presentGate(query: GateQueryState): GateView {
 export function presentTile(query: GateQueryState): {
   state: "lit" | "locked" | "unknown";
   label: string;
+  note: string;
 } {
-  if (query.status !== "success") return { state: "unknown", label: "" };
+  if (query.status !== "success") return { state: "unknown", label: "", note: CONTENT_NOTE };
   return query.data.unlockedChapters >= 1
-    ? { state: "lit", label: "Open" }
-    : { state: "locked", label: "Finish today's line" };
+    ? { state: "lit", label: query.data.preview ? "Preview" : "Open", note: CONTENT_NOTE }
+    : { state: "locked", label: "Locked", note: CONTENT_NOTE };
 }

@@ -3,7 +3,7 @@
  *
  * One query, no mutation. The game reads whether a chapter is open; the
  * unlock itself is recorded server-side by the read, from business records
- * the game cannot touch.
+ * the game cannot touch. Unlock rules: spec v2 section 2.
  */
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
@@ -28,7 +28,6 @@ export const hiddenGameEligibilityRouter = router({
       canonicalOperatorId: identity.canonicalOperatorId,
       operatorId: identity.dayDirectorActorId,
       operatorIds: [...new Set(identity.dayDirectorActorIds)],
-      operatorUserId: campaignOperatorUserIds[0],
       operatorUserIds: campaignOperatorUserIds,
     });
   }),

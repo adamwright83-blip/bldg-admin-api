@@ -407,3 +407,9 @@
 .tinCanState[data-state="locked"] {
   color: #8d8478;
 }
+
+.tinCanNote {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  opacity: .7;
+}

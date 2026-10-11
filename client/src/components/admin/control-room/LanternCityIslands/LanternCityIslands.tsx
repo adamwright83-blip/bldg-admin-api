@@ -169,6 +169,7 @@ export default function LanternCityIslands({
               : "Still under cloud. The first customer here clears the island."}
           </p>
           {island.name === "Hollywood" ? (
+            <>
             <button type="button" className={styles.tinCanEntry} onClick={() => board.current?.enterSmallComforts()}>
               <img src="/assets/joystick-home/tin-can-house.webp" alt="" width="80" height="54" />
               <span>Tin Can House · Small Comforts</span>
@@ -178,10 +179,12 @@ export default function LanternCityIslands({
                   data-state={tinCanTile.state}
                   title={tinCanTile.label}
                 >
-                  {tinCanTile.state === "lit" ? "Open" : "Locked"}
+                  {tinCanTile.label}
                 </span>
               ) : null}
             </button>
+            <p className={styles.tinCanNote}>{tinCanTile.note}</p>
+            </>
           ) : null}
           <button type="button" onClick={() => { setIsland(null); board.current?.board(); }}>Back to the board</button>
         </section>
