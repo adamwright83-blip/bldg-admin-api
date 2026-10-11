@@ -64,6 +64,13 @@ export function DaylineWorldCompositor({
     stop => stop.status !== "completed" && stop.status !== "cancelled" && stop.status !== "blocked",
   )?.id ?? null;
   const avatar = climbAvatarPosition(completed, stops.length);
+  // Place the adventurer's feet on the independently rendered gold trail,
+  // reversing the vertical index because the operator climbs UP as the
+  // chronological schedule scrolls DOWN.
+  const climbAnchor = geometry.anchors[Math.max(
+    0, Math.min(geometry.anchors.length - 1, Math.round((1 - avatar.fraction) * (stops.length - 1))),
+  )];
+  const avatarLeftPercent = climbAnchor ? 1 + climbAnchor.x * 0.57 - 12 : 8;
 
   useEffect(() => {
     const previous = previousCompleted.current;
@@ -131,7 +138,7 @@ export function DaylineWorldCompositor({
         className={`gdp-v2-avatar gdp-v3-avatar${walking ? " is-walking" : ""}`}
         style={{
           bottom: `${avatar.bottomPercent}%`,
-          left: `${8 + 7 * Math.sin(avatar.fraction * Math.PI * 2)}%`,
+          left: `${avatarLeftPercent}%`,
           transform: `scale(${avatar.scale})`,
           transition: isDriving || reducedMotion ? "none" : undefined,
         }}
