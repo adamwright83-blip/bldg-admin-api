@@ -270,6 +270,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [worldNavigationOpen, setWorldNavigationOpen] = useState(false);
   const [buildMissionOpen, setBuildMissionOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
