@@ -443,3 +443,143 @@
 @media (prefers-reduced-motion: reduce) {
   .gdp-v3-landmark-object,.gdp-v3-action { transition: none; animation: none; }
 }
+
+
+/* V4 cold-load acceptance: a scene is either decoded together or not visible.
+ * Never use viewport-triggered lazy image loading for physical route objects.
+ */
+.gdp-v4-art-wait {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: 90%;
+  padding: 9px 14px;
+  border: 1px solid #d5b677;
+  border-radius: 18px;
+  background: #20463ae9;
+  color: #fff2cb;
+  font: 750 11px/1.3 Inter,system-ui,sans-serif;
+  box-shadow: 0 3px 12px #15272877;
+  white-space: nowrap;
+}
+.gdp-v4-art-scene {
+  position: relative;
+  width: 100%;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.gdp-v4-art-scene.is-ready {
+  visibility: visible;
+  opacity: 1;
+}
+.gdp-v4-avatar {
+  /* The previous absolute bottom-% calculation sent the walker thousands of
+   * pixels offscreen when async mission data increased the route height.
+   * Sticky keeps him on the route as its chronological rows scroll past. */
+  position: sticky !important;
+  bottom: auto !important;
+  display: block;
+  top: 55dvh;
+  height: clamp(110px, 27vw, 156px);
+  margin-bottom: -124px;
+  width: clamp(80px, 26vw, 146px);
+  transform-origin: center bottom;
+  z-index: 8;
+  pointer-events: none;
+  will-change: transform;
+}
+.gdp-v4-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.gdp-v3-landmark-object {
+  overflow: visible;
+  isolation: isolate;
+}
+.gdp-v4-object-platform {
+  position: absolute;
+  z-index: -1;
+  left: 17%;
+  top: 40%;
+  width: 66%;
+  height: 35%;
+  border-top: 9px solid #f2d596;
+  border-radius: 30% 18% 32% 18%;
+  clip-path: polygon(11% 0, 87% 0, 100% 23%, 87% 84%, 50% 100%, 10% 78%, 0 27%);
+  background:
+    repeating-linear-gradient(174deg, transparent 0 22px, #3b423926 22px 25px),
+    linear-gradient(165deg, #a8a989 2%, #e2cf99 27%, #6b756b 58%, #394c4c 99%);
+  box-shadow: 0 18px 12px #243d3873, inset 0 4px 5px #f7e6c3;
+  transform: rotate(-5deg);
+  pointer-events: none;
+}
+.gdp-v4-object-foreground {
+  position: absolute;
+  z-index: 2;
+  left: 10%;
+  bottom: 5%;
+  width: 70%;
+  height: 12%;
+  pointer-events: none;
+  clip-path: polygon(0 50%, 18% 35%, 37% 53%, 54% 20%, 72% 50%, 100% 25%, 98% 100%, 0 100%);
+  background: linear-gradient(176deg, #dfc790ce, #6c8071ec 45%, #394e4db3);
+  filter: drop-shadow(0 -5px 5px #252f2f44);
+}
+.gdp-v3-landmark--sales .gdp-v3-landmark-object {
+  /* The slide launches from a stone ledge and disappears into the tier below;
+   * its original huge centre-sticker footprint visually erased the castle.
+   * Responsive placement leaves the operator route and addresses unobstructed. */
+  left: 11%;
+  top: 55%;
+  width: min(72%, 340px);
+  height: min(300px, 60vw);
+  transform: translateY(-50%) scale(var(--landmark-scale));
+  rotate: -3deg;
+}
+.gdp-v3-landmark--sales .gdp-v3-landmark-object img {
+  position: relative;
+  z-index: 1;
+  object-position: center center;
+  filter: drop-shadow(0 11px 9px #1e352e8c);
+  -webkit-mask-image: radial-gradient(ellipse 68% 69% at 50% 51%, #000 59%, #000 70%, transparent 100%);
+  mask-image: radial-gradient(ellipse 68% 69% at 50% 51%, #000 59%, #000 70%, transparent 100%);
+}
+.gdp-v3-landmark--sales .gdp-v4-object-platform {
+  left: 21%;
+  top: 13%;
+  width: 58%;
+  height: 54%;
+  transform: rotate(-9deg) skewY(-4deg);
+}
+.gdp-v3-landmark--sales .gdp-v4-object-foreground {
+  left: 25%;
+  bottom: 13%;
+  width: 56%;
+  height: 13%;
+}
+.gdp-v3-landmark--growth .gdp-v4-object-platform {
+  background: linear-gradient(155deg,#c4c596,#66845a 65%,#324c45);
+  border-color: #d0cd97;
+}
+.gdp-v3-landmark--pickup .gdp-v4-object-platform,
+.gdp-v3-landmark--dropoff .gdp-v4-object-platform {
+  border-color: #d6c596;
+  background: linear-gradient(158deg,#ded1a7,#647768 69%,#3c4741);
+}
+@media (max-width:430px) {
+  .gdp-v3-landmark--sales .gdp-v3-landmark-object {
+    width: 73%;
+    height: min(270px, 66vw);
+    left: 9%;
+  }
+  .gdp-v4-avatar { margin-bottom: -115px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdp-v4-art-scene { transition: none; }
+  .gdp-v4-avatar { transition: none !important; }
+}
