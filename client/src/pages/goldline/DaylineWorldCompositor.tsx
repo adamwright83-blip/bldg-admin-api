@@ -13,6 +13,33 @@ import {
 import "./dayline-world-compositor.css";
 
 const ART_ROOT = "/goldline/dayline-v1";
+
+const REQUIRED_ART = [
+  `${ART_ROOT}/avatar/idle.png`,
+  ...["pickup", "dropoff", "sales", "growth", "marketing"]
+    .map(kind => `${ART_ROOT}/objects/${kind}.png`),
+];
+
+/** The map, objects, and walker enter together—not in staggered image bursts. */
+function useDaylineArtReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(REQUIRED_ART.map(source => {
+      const image = new Image();
+      image.src = source;
+      // decode() guarantees all visible layers have painted pixels before reveal.
+      return typeof image.decode === "function"
+        ? image.decode().catch(() => undefined)
+        : new Promise<void>(resolve => {
+            image.onload = () => resolve();
+            image.onerror = () => resolve();
+          });
+    })).then(() => { if (!cancelled) setReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+  return ready;
+}
 type Props = {
   stops: readonly DayPlanStop[];
   onSelect: (stop: DayPlanStop) => void;
@@ -56,6 +83,7 @@ export function DaylineWorldCompositor({
   const [walkerFrame, setWalkerFrame] = useState(0);
   const [walking, setWalking] = useState(false);
   const reducedMotion = useReducedMotion();
+  const artReady = useDaylineArtReady();
   const completed = stops.filter(stop => stop.status === "completed").length;
   const previousCompleted = useRef(completed);
   const geometry = useMemo(() => goldenTrailGeometry(stops.length), [stops.length]);
@@ -71,6 +99,10 @@ export function DaylineWorldCompositor({
     0, Math.min(geometry.anchors.length - 1, Math.round((1 - avatar.fraction) * (stops.length - 1))),
   )];
   const avatarLeftPercent = climbAnchor ? 1 + climbAnchor.x * 0.57 - 12 : 8;
+  // A sticky viewport anchor is crucial: the async day projection increases the
+  // route height by thousands of pixels. A bottom-% absolute element disappears
+  // below the fold as soon as those mission rows arrive.
+  const avatarTopVh = 55 - 30 * avatar.fraction;
 
   useEffect(() => {
     const previous = previousCompleted.current;
@@ -104,7 +136,9 @@ export function DaylineWorldCompositor({
   };
 
   return (
-    <section className="gdp-v2-world gdp-v3-world" aria-label="Your GOLDLINE Action Slots">
+    <section className="gdp-v2-world gdp-v3-world" aria-label="Your GOLDLINE Action Slots" data-art-ready={artReady}>
+      {!artReady && <div className="gdp-v4-art-wait" role="status">Assembling your Day Line…</div>}
+      <div className={artReady ? "gdp-v4-art-scene is-ready" : "gdp-v4-art-scene"}>
       {onEnterExistingChapter && (
         <button
           type="button"
@@ -135,9 +169,9 @@ export function DaylineWorldCompositor({
         </svg>
       )}
       <div
-        className={`gdp-v2-avatar gdp-v3-avatar${walking ? " is-walking" : ""}`}
+        className={`gdp-v2-avatar gdp-v3-avatar gdp-v4-avatar${walking ? " is-walking" : ""}`}
         style={{
-          bottom: `${avatar.bottomPercent}%`,
+          top: `${avatarTopVh}dvh`,
           left: `${avatarLeftPercent}%`,
           transform: `scale(${avatar.scale})`,
           transition: isDriving || reducedMotion ? "none" : undefined,
@@ -176,11 +210,13 @@ export function DaylineWorldCompositor({
                 aria-label={`Enter ${artLabel(group.kind)}: ${featured.title}`}
                 onClick={() => onSelect(featured)}
               >
+                <span className="gdp-v4-object-platform" aria-hidden="true" />
                 {image ? (
-                  <img src={image} alt="" loading={groupIndex > 1 ? "lazy" : "eager"} />
+                  <img src={image} alt="" loading="eager" decoding="sync" />
                 ) : (
                   <span className="gdp-v3-generic-object" aria-hidden="true">✦</span>
                 )}
+                <span className="gdp-v4-object-foreground" aria-hidden="true" />
               </button>
               {group.items.length > 1 && (
                 <span className="gdp-v3-landmark-count">
@@ -231,6 +267,7 @@ export function DaylineWorldCompositor({
             </section>
           );
         })}
+      </div>
       </div>
     </section>
   );
