@@ -40,6 +40,7 @@ import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
 import "./goldline-day-plan.css";
+import { DaylineWorldCompositor } from "./DaylineWorldCompositor";
 
 function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
   const presented = presentCurrentDayLine(line);
@@ -127,6 +128,9 @@ export type GoldlineDayPlanProps = {
   }>;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
+  /** Independent travel state is required before optional walking animations can run. */
+  isDriving?: boolean;
+  allowWalkingAnimation?: boolean;
   /** Compact Campaign Run identity on the Day Line, when a run exists. */
   campaignRunCard?: {
     title: string;
@@ -257,6 +261,8 @@ function StopCard({
   );
 }
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
+  // Preview stays off until the runtime PNG pack is installed and visually certified.
+  const artPreview = import.meta.env.VITE_GOLDLINE_DAYLINE_ART_V1 === "1";
   const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -348,7 +354,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
 
   return (
     <main
-      className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}`}
+      className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}${artPreview ? " gdp-shell--v2" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <button
@@ -366,9 +372,15 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       <header className="gdp-header">
         <div className="gdp-brand">
           <Compass />
-          <strong>GOLDLINE DRIVER</strong>
+          <strong>GOLDLINE</strong>
           <small>SMALL ACTIONS. A WORLD CHANGED.</small>
         </div>
+        {artPreview && (
+          <div className="gdp-v2-claire-label" aria-label="Claire, AI guide">
+            <strong>CLAIRE</strong>
+            <small>AI GUIDE</small>
+          </div>
+        )}
         <p>
           {plan.authoredDay?.headline ??
             (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
@@ -418,7 +430,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         ) : null}
         {props.currentDayLine ? (
-          <CurrentDayLineBlock line={props.currentDayLine} />
+          <details className="gdp-dayline-disclosure">
+            <summary>DAY LINE DETAILS</summary>
+            <CurrentDayLineBlock line={props.currentDayLine} />
+          </details>
         ) : null}
         {props.weeklyReadiness?.length ? (
           <section
@@ -604,7 +619,92 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <small>Operator-attested observation · {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}. No sale or revenue verified.</small>
         </section>
       )}
-      <section className="gdp-route" aria-label="Today's Gold Line">
+      {artPreview && (
+        <details className="gdp-v2-operations" data-testid="goldline-world-operations">
+          <summary>FIELD OPERATIONS</summary>
+          {props.isLoading && <p>Charting today's Day Line…</p>}
+          {plan.stops.length === 0 && !props.isLoading && (
+            <p>No Action Slots yet. Import your route or add an existing commitment.</p>
+          )}
+          <div className="gdp-v2-operations-actions">
+            <button type="button" onClick={props.onOpenImport}>IMPORT OR ADD STOPS</button>
+            <button type="button" onClick={props.onEnterOperations}>FIELD OPERATIONS</button>
+            <button type="button" onClick={props.onOpenJournal ?? props.onEnterOperations}>JOURNAL</button>
+          </div>
+          {plan.growthCoverage !== "covered" &&
+            !props.dismissedPromptKeys?.includes("growth-intake") &&
+            !proposal && props.onProposeCommitment && (
+            <div className="gdp-v2-commitment">
+              <label htmlFor="gdp-v2-commitment-text">What needs to move forward today?</label>
+              <textarea
+                id="gdp-v2-commitment-text"
+                value={truthText}
+                onChange={event => setTruthText(event.target.value)}
+              />
+              <button
+                type="button"
+                disabled={directorBusy || !truthText.trim()}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    setDirectorError(null);
+                    setProposal(await props.onProposeCommitment!(truthText));
+                  } catch {
+                    setDirectorError("Could not prepare your commitment. Text preserved.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >
+                REVIEW COMMITMENT
+              </button>
+            </div>
+          )}
+          {proposal && (
+            <div className="gdp-v2-commitment">
+              <strong>{proposal.title}</strong>
+              {proposal.question && <p>{proposal.question}</p>}
+              <button
+                type="button"
+                disabled={directorBusy || !props.onAcceptProposal}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    setDirectorError(null);
+                    await props.onAcceptProposal?.(proposal);
+                    setProposal(null);
+                    setTruthText("");
+                  } catch {
+                    setDirectorError("Could not add commitment; retry.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >ADD TO DAY</button>
+              <button
+                type="button"
+                disabled={directorBusy}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    await props.onDismissProposal?.(proposal.promptKey);
+                    setProposal(null);
+                  } catch {
+                    setDirectorError("Could not dismiss this prompt.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >NOT NOW</button>
+            </div>
+          )}
+          {directorError && <p role="alert">{directorError}</p>}
+        </details>
+      )}
+      {artPreview ? (
+        <DaylineWorldCompositor
+          stops={plan.stops}
+          onSelect={setActiveStop}
+          onEnterExistingChapter={props.onEnterChapter}
+          isDriving={props.isDriving ?? true}
+          allowWalkingAnimation={Boolean(props.allowWalkingAnimation && props.isDriving === false)}
+        />
+      ) : (
+        <section className="gdp-route" aria-label="Today's Gold Line">
         <svg
           className="gdp-line"
           viewBox="0 0 100 1000"
@@ -827,7 +927,8 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         )}
       </section>
-
+      )}
+      {!artPreview && (
       <section className="gdp-next-up" data-testid="day-plan-next-up">
         <div>
           <small>NEXT UP</small>
@@ -865,6 +966,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </button>
       </section>
 
+      )}
       <GoldlineGameNav
         active="day"
         onYourDay={() => window.scrollTo({ top: 0, behavior: "smooth" })}

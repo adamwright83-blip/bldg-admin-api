@@ -1,0 +1,223 @@
+/* Day Line v2 scene: light fantasy WORLD + readable, restrained dark inscriptions.
+ * All background, object and route layers are separate. No baked-in Action Slots.
+ * The entire scene is gated by VITE_GOLDLINE_DAYLINE_ART_V1 while runtime PNGs
+ * are installed and visually certified.
+ */
+.gdp-v2-world {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 260px;
+  padding: 84px 0 40px;
+  color: #fff4cf;
+}
+.gdp-v2-world::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: url("/goldline/dayline-v1/background/world-clean.png") center top / 100% auto repeat-y;
+  pointer-events: none;
+}
+.gdp-v2-summit {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  left: 13%;
+}
+.gdp-v2-summit button {
+  min-height: 44px;
+  color: #fff6c2;
+  border: 1px solid #fff1ae;
+  background: #102a36db;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+.gdp-v2-trail {
+  position: absolute;
+  z-index: 0;
+  top: 84px;
+  left: 1%;
+  width: 57%;
+  height: calc(100% - 124px);
+  overflow: visible;
+  pointer-events: none;
+}
+.gdp-v2-trail path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.gdp-v2-trail-halo {
+  stroke: #eda829;
+  stroke-width: 11px;
+  filter: drop-shadow(0 0 7px #ffcf66);
+}
+.gdp-v2-trail-core {
+  stroke: #fff7bf;
+  stroke-width: 3.5px;
+}
+.gdp-v2-trail circle {
+  fill: #fff9e5;
+  stroke: #e3a429;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px #ffcf76);
+}
+.gdp-v2-trail circle.is-verified { fill: #f5b74d; }
+.gdp-v2-avatar {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  width: min(24%, 135px);
+  aspect-ratio: 400 / 512;
+  transform-origin: bottom center;
+  transition: bottom 0.9s ease-out, transform 0.9s ease-out;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 8px #071a1b77);
+}
+.gdp-v2-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.gdp-v2-avatar.is-walking img { animation: gdp-walker-lean 0.25s ease-in-out infinite alternate; }
+@keyframes gdp-walker-lean { to { translate: 0 -2px; } }
+.gdp-v2-slots {
+  position: relative;
+  z-index: 2;
+}
+.gdp-v2-slot {
+  --slot-accent: #b5d8f4;
+  position: relative;
+  width: 100%;
+  height: 176px;
+  isolation: isolate;
+}
+.gdp-v2-slot--dropoff { --slot-accent: #eac083; }
+.gdp-v2-slot--sales { --slot-accent: #faad90; }
+.gdp-v2-slot--growth { --slot-accent: #b6ecc6; }
+.gdp-v2-slot--marketing { --slot-accent: #e1c0f9; }
+.gdp-v2-slot--generic { --slot-accent: #f3e4b6; }
+.gdp-v2-art {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 7%;
+  width: 66%;
+  height: 170px;
+  transform-origin: 38% 50%;
+  transition: transform 250ms ease-out;
+  pointer-events: none;
+}
+.gdp-v2-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 11px #14181c6e);
+}
+.gdp-v2-generic-art {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  width: 80%;
+  font-size: 56px;
+  color: #ffd68f;
+}
+.gdp-v2-inscription {
+  position: absolute;
+  z-index: 2;
+  right: 9px;
+  top: 30px;
+  width: clamp(145px, 49%, 255px);
+  padding: 10px 10px 11px;
+  border: 1px solid #e9cb855f;
+  border-radius: 14px 3px 14px 3px;
+  background: linear-gradient(120deg,#0a1b27ed,#131b2ee8);
+  box-shadow: 0 5px 14px #05101c6d;
+  font-family: Inter, system-ui, sans-serif;
+  text-align: left;
+}
+.gdp-v2-category,
+.gdp-v2-time {
+  display: block;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.045em;
+}
+.gdp-v2-time { color: #eee9d9; margin-bottom: 3px; }
+.gdp-v2-category { color: var(--slot-accent); margin-bottom: 5px; }
+.gdp-v2-inscription > button:not(.gdp-v2-open-object) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  min-height: 44px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: white;
+  text-align: left;
+}
+.gdp-v2-inscription strong {
+  font-size: clamp(13px, 3.6vw, 17px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.gdp-v2-inscription > button span { font-size: 23px; line-height: 1; }
+.gdp-v2-inscription small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 3px;
+  color: #e6e6dc;
+  overflow-wrap: anywhere;
+}
+.gdp-v2-now {
+  position: absolute;
+  top: -17px;
+  right: 3px;
+  background: #f2bf59;
+  color: #182432;
+  border-radius: 99px;
+  padding: 3px 12px;
+  box-shadow: 0 0 13px #ffd78f;
+  font-size: 11px;
+}
+.gdp-v2-slot--now .gdp-v2-inscription { border-color: #f2ca76; box-shadow: 0 0 22px #edb34588; }
+.gdp-v2-slot--verified_complete,
+.gdp-v2-slot--opened,
+.gdp-v2-slot--ready_to_open { opacity: 0.86; }
+.gdp-v2-verified,
+.gdp-v2-warning {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  letter-spacing: .035em;
+  font-weight: 850;
+  color: #b4f3cc;
+}
+.gdp-v2-warning { color: #ffdc82; }
+.gdp-v2-open-object {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 6px;
+  background: #243d48;
+  color: #f6e1aa;
+  border: 1px solid #bda471;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+@media(max-width:420px) {
+  .gdp-v2-art { left: 1%; width: 70%; }
+  .gdp-v2-inscription { right: 6px; width: 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdp-v2-avatar, .gdp-v2-art { transition: none; }
+  .gdp-v2-avatar.is-walking img { animation: none; }
+}
