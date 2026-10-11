@@ -270,6 +270,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [worldNavigationOpen, setWorldNavigationOpen] = useState(false);
   const [buildMissionOpen, setBuildMissionOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
@@ -970,13 +971,24 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       </section>
 
       )}
-      <GoldlineGameNav
-        active="day"
-        onYourDay={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        onWeek={props.onOpenWeek}
-        onPlay={() => setPlaying(true)}
-        onJournal={props.onOpenJournal ?? props.onEnterOperations}
-      />
+      {artPreview && (
+        <button type="button" className="gdp-v3-nav-toggle"
+          onClick={() => setWorldNavigationOpen(open => !open)}
+          aria-label={worldNavigationOpen ? "Close GOLDLINE navigation" : "Open GOLDLINE navigation"}
+          aria-expanded={worldNavigationOpen}
+        ><Compass size={23} /><span>{worldNavigationOpen ? "CLOSE" : "WORLD"}</span></button>
+      )}
+      {(!artPreview || worldNavigationOpen) && (
+        <div className={artPreview ? "gdp-v3-nav-layer" : "gdp-v3-classic-nav"}>
+          <GoldlineGameNav
+            active="day"
+            onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            onWeek={props.onOpenWeek}
+            onPlay={() => { setWorldNavigationOpen(false); setPlaying(true); }}
+            onJournal={props.onOpenJournal ?? props.onEnterOperations}
+          />
+        </div>
+      )}
       {activeStop && (
         <DriverStopChapter
           stop={activeStop}

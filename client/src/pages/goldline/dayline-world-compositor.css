@@ -221,3 +221,225 @@
   .gdp-v2-avatar, .gdp-v2-art { transition: none; }
   .gdp-v2-avatar.is-walking img { animation: none; }
 }
+
+
+/* VISUAL QA PASS: landmarks are the interface, not an interchangeable row wallpaper.
+ * One painted prop per adjacent kind, with individually actionable travel tags.
+ * No independent backdrop, customer, route, or complete state is fabricated here.
+ */
+.gdp-v3-world {
+  z-index: 2;
+  padding: 34px 0 150px;
+  overflow: visible;
+}
+.gdp-v3-world::before { display: none !important; }
+.gdp-v3-landmarks { position: relative; z-index: 2; }
+.gdp-v3-landmark {
+  --engraving: #302719;
+  --inscription-surface: #e4d2aa;
+  position: relative;
+  display: flow-root;
+  width: 100%;
+  min-height: calc(116px + var(--group-size) * 132px);
+  isolation: isolate;
+  margin-bottom: 44px;
+  overflow: visible;
+}
+.gdp-v3-landmark--sales { --inscription-surface: #f2d7a4; --engraving: #3d241d; }
+.gdp-v3-landmark--pickup { --inscription-surface: #c3d9d8; --engraving: #173647; }
+.gdp-v3-landmark--dropoff { --inscription-surface: #e4d1a1; --engraving: #43351a; }
+.gdp-v3-landmark--growth { --inscription-surface: #c7e2ad; --engraving: #1c4332; }
+.gdp-v3-landmark--marketing { --inscription-surface: #d9c8ac; --engraving: #3f3041; }
+.gdp-v3-landmark-object {
+  position: absolute;
+  z-index: 0;
+  top: 47%;
+  left: 4%;
+  transform: translateY(-50%) scale(var(--landmark-scale));
+  transform-origin: 43% center;
+  display: grid;
+  place-items: center;
+  width: 85%;
+  height: min(345px, 92%);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  filter: drop-shadow(0 14px 12px #17292b50);
+  cursor: pointer;
+}
+.gdp-v3-landmark--variant-1 .gdp-v3-landmark-object { left: 10%; top: 54%; rotate: -1.8deg; }
+.gdp-v3-landmark--variant-2 .gdp-v3-landmark-object { left: 1%; top: 46%; rotate: 1.5deg; }
+.gdp-v3-landmark-object img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.gdp-v3-landmark-object:focus-visible { outline: 3px solid #ffd27e; outline-offset: 2px; }
+.gdp-v3-generic-object { font-size: 108px; color: #ffedab; text-shadow: 0 0 22px #c5a444; }
+.gdp-v3-landmark-count {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  max-width: 67%;
+  padding: 5px 11px;
+  color: #fff0b7;
+  background: #223b3ce5;
+  border: 1px solid #e6bc71;
+  border-radius: 12px 0 12px 0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  box-shadow: 0 3px 9px #12282766;
+  z-index: 3;
+}
+.gdp-v3-inscriptions {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 18px;
+  padding: 59px 2.5% 38px;
+  min-height: calc(116px + var(--group-size) * 132px);
+}
+.gdp-v3-action {
+  position: relative;
+  pointer-events: auto;
+  width: min(58%, 245px);
+  min-height: 94px;
+  color: var(--engraving);
+  background: linear-gradient(154deg, #fff7dfed, var(--inscription-surface) 92%);
+  box-shadow: 0 5px 10px #0d291d72, inset 0 1px 2px #fff6e8;
+  clip-path: polygon(1% 10%, 94% 0%, 100% 76%, 90% 99%, 5% 96%, 0% 23%);
+  border: 1px solid transparent;
+  transform: rotate(1deg);
+}
+.gdp-v3-action:nth-child(odd) { align-self: flex-end; margin-right: 1.8%; transform: rotate(1.5deg); }
+.gdp-v3-action:nth-child(even) { align-self: flex-start; margin-left: 1%; transform: rotate(-1.3deg); }
+.gdp-v3-action::before {
+  position: absolute;
+  top: 3px;
+  left: 9px;
+  content: "✧";
+  color: #9c762f;
+  font-size: 16px;
+  pointer-events: none;
+}
+.gdp-v3-action-entry {
+  display: block;
+  width: 100%;
+  min-height: 89px;
+  padding: 11px 12px 13px 16px;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.gdp-v3-action-stamp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  font-size: 9px;
+  font-weight: 760;
+  line-height: 1.25;
+  color: #5e4d3a;
+}
+.gdp-v3-action-stamp > b { color: #835528; font-size: 9px; letter-spacing: .045em; }
+.gdp-v3-action-stamp em {
+  padding: 1px 6px;
+  background: #f3bd4f;
+  border-radius: 7px 0 7px 0;
+  color: #292517;
+  font-style: normal;
+  font-size: 9px;
+}
+.gdp-v3-action-entry strong {
+  display: block;
+  margin-top: 4px;
+  font: 800 clamp(13px, 3.8vw, 16px)/1.16 Inter, system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.gdp-v3-action-entry small {
+  display: block;
+  margin-top: 3px;
+  color: #3f4239;
+  font-size: 10px;
+  line-height: 1.26;
+  overflow-wrap: anywhere;
+}
+.gdp-v3-action--up_next {
+  filter: drop-shadow(0 0 10px #ffe18ab8);
+  outline: 1px solid #e6b755;
+}
+.gdp-v3-action--ready_to_open,.gdp-v3-action--opened { opacity: .83; }
+.gdp-v3-action--blocked { filter: grayscale(.36); }
+.gdp-v3-completion { color: #285c32 !important; font-weight: 850; }
+.gdp-v3-unseal {
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  padding: 5px;
+  border: 0;
+  background: #224536;
+  border-radius: 5px;
+  color: #f9e1ad;
+  font-size: 9px;
+  font-weight: 800;
+}
+.gdp-v3-landmark--pickup .gdp-v3-action {
+  clip-path: polygon(8% 0%, 96% 1%, 100% 88%, 89% 100%, 0% 100%, 0% 11%);
+  background: linear-gradient(152deg, #e8f2eb 0%, #b6d6dc 96%);
+}
+.gdp-v3-landmark--dropoff .gdp-v3-action {
+  clip-path: polygon(11% 0%, 95% 2%, 100% 93%, 14% 100%, 0% 86%, 0% 15%);
+  background: linear-gradient(165deg, #fbf3dc, #d7b971);
+}
+.gdp-v3-landmark--sales .gdp-v3-action {
+  clip-path: polygon(0 17%, 80% 0, 100% 42%, 90% 98%, 2% 94%, 8% 60%);
+  background: linear-gradient(145deg, #fff1ce 0%, #d7ae72 100%);
+}
+.gdp-v3-landmark--growth .gdp-v3-action {
+  clip-path: polygon(0 46%, 12% 9%, 76% 0, 100% 46%, 84% 100%, 11% 91%);
+  background: linear-gradient(140deg, #f3f6d4, #b8d19e);
+}
+.gdp-v3-landmark--marketing .gdp-v3-action {
+  clip-path: polygon(4% 0%, 92% 5%, 100% 28%, 94% 100%, 0% 93%);
+  background: repeating-linear-gradient(100deg,#decbb4 0 14px,#d7c0a7 14px 15px,#e1ceb4 15px 29px);
+}
+.gdp-v3-landmark--generic .gdp-v3-action {
+  background: linear-gradient(135deg,#fff3dc,#d7c5ad);
+}
+.gdp-v3-chapter {
+  position: absolute;
+  top: 0;
+  right: 15px;
+  z-index: 10;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 8px 11px;
+  border: 2px solid #e9c880;
+  border-radius: 4px 15px 5px 15px;
+  background: #253e36e8;
+  color: #fff4d2;
+  font: 800 10px/1.25 Inter,system-ui,sans-serif;
+}
+.gdp-v3-avatar {
+  z-index: 6;
+  width: clamp(75px, 25%, 140px);
+  transform-origin: bottom left;
+  filter: drop-shadow(0 7px 6px #2a241675);
+}
+.gdp-v3-trail { opacity: .8; z-index: 1; }
+@media (max-width: 430px) {
+  .gdp-v3-action { width: 62%; }
+  .gdp-v3-landmark { margin-bottom: 12px; }
+  .gdp-v3-landmark-object { width: 90%; left: 3%; }
+  .gdp-v3-action-entry strong { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdp-v3-landmark-object,.gdp-v3-action { transition: none; animation: none; }
+}

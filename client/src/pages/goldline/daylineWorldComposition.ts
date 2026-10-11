@@ -8,7 +8,7 @@ import type { DayPlanStop, DayPlanStopKind } from "../driver/goldlineDayPlanMode
 
 export type ActionSlotArt = "pickup" | "dropoff" | "sales" | "growth" | "marketing" | "generic";
 export type ActionSlotVisualState =
-  | "planned" | "now" | "blocked" | "verified_complete" | "ready_to_open" | "opened" | "unknown";
+  | "planned" | "up_next" | "now" | "blocked" | "verified_complete" | "ready_to_open" | "opened" | "unknown";
 
 /**
  * Intentionally no string matching on titles, contacts, or customer names:
@@ -78,7 +78,8 @@ export function visualStateForStop(
   if (stop.status === "completed") return isOpened ? "opened" : "ready_to_open";
   if (stop.status === "cancelled" || stop.status === "blocked") return "blocked";
   if (stop.attentionState === "needs_details") return "unknown";
-  if (stop.id === activeId) return "now";
+  // An uncompleted itinerary item is NEXT, not proof the operator is there now.
+  if (stop.id === activeId) return "up_next";
   return "planned";
 }
 
@@ -98,4 +99,31 @@ export function shouldPlayClimb(
 /** A presentation read, never an operational or fulfillment write. */
 export function completedFromProjection(stops: readonly Pick<DayPlanStop, "status">[]): number {
   return stops.filter(stop => stop.status === "completed").length;
+}
+
+/**
+ * Consecutive objectives of one kind inhabit ONE illustrated landmark.
+ * Keep every source id/order and a separate clickable target per objective:
+ * five sales calls must not produce five identical waterslide PNGs.
+ */
+export function groupConsecutiveActionSlots<T extends { id: string; kind: DayPlanStopKind }>(
+  stops: readonly T[],
+): Array<{ kind: ActionSlotArt; key: string; items: Array<{ stop: T; index: number }> }> {
+  const groups: Array<{ kind: ActionSlotArt; key: string; items: Array<{ stop: T; index: number }> }> = [];
+  for (let index = 0; index < stops.length; index++) {
+    const stop = stops[index];
+    const kind = artForDayPlanKind(stop.kind);
+    const previous = groups[groups.length - 1];
+    if (previous && previous.kind === kind) {
+      previous.items.push({ stop, index });
+    } else {
+      groups.push({ kind, key: stop.id, items: [{ stop, index }] });
+    }
+  }
+  return groups;
+}
+
+/** Explicit action status is not implied by a scheduled time or screen opening. */
+export function presentationLabelForUpcoming(isNext: boolean): "NEXT" | "PLANNED" {
+  return isNext ? "NEXT" : "PLANNED";
 }
