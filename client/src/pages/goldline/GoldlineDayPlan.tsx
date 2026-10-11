@@ -613,6 +613,82 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <small>Operator-attested observation · {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}. No sale or revenue verified.</small>
         </section>
       )}
+      {artPreview && (
+        <details className="gdp-v2-operations" data-testid="goldline-world-operations">
+          <summary>FIELD OPERATIONS</summary>
+          {props.isLoading && <p>Charting today's Day Line…</p>}
+          {plan.stops.length === 0 && !props.isLoading && (
+            <p>No Action Slots yet. Import your route or add an existing commitment.</p>
+          )}
+          <div className="gdp-v2-operations-actions">
+            <button type="button" onClick={props.onOpenImport}>IMPORT OR ADD STOPS</button>
+            <button type="button" onClick={props.onEnterOperations}>FIELD OPERATIONS</button>
+            <button type="button" onClick={props.onOpenJournal ?? props.onEnterOperations}>JOURNAL</button>
+          </div>
+          {plan.growthCoverage !== "covered" &&
+            !props.dismissedPromptKeys?.includes("growth-intake") &&
+            !proposal && props.onProposeCommitment && (
+            <div className="gdp-v2-commitment">
+              <label htmlFor="gdp-v2-commitment-text">What needs to move forward today?</label>
+              <textarea
+                id="gdp-v2-commitment-text"
+                value={truthText}
+                onChange={event => setTruthText(event.target.value)}
+              />
+              <button
+                type="button"
+                disabled={directorBusy || !truthText.trim()}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    setDirectorError(null);
+                    setProposal(await props.onProposeCommitment!(truthText));
+                  } catch {
+                    setDirectorError("Could not prepare your commitment. Text preserved.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >
+                REVIEW COMMITMENT
+              </button>
+            </div>
+          )}
+          {proposal && (
+            <div className="gdp-v2-commitment">
+              <strong>{proposal.title}</strong>
+              {proposal.question && <p>{proposal.question}</p>}
+              <button
+                type="button"
+                disabled={directorBusy || !props.onAcceptProposal}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    setDirectorError(null);
+                    await props.onAcceptProposal?.(proposal);
+                    setProposal(null);
+                    setTruthText("");
+                  } catch {
+                    setDirectorError("Could not add commitment; retry.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >ADD TO DAY</button>
+              <button
+                type="button"
+                disabled={directorBusy}
+                onClick={async () => {
+                  setDirectorBusy(true);
+                  try {
+                    await props.onDismissProposal?.(proposal.promptKey);
+                    setProposal(null);
+                  } catch {
+                    setDirectorError("Could not dismiss this prompt.");
+                  } finally { setDirectorBusy(false); }
+                }}
+              >NOT NOW</button>
+            </div>
+          )}
+          {directorError && <p role="alert">{directorError}</p>}
+        </details>
+      )}
       {artPreview ? (
         <DaylineWorldCompositor
           stops={plan.stops}
