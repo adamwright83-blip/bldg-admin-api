@@ -3280,6 +3280,8 @@ const [externalIngestionColumns] = await conn.execute("SELECT COLUMN_TYPE FROM i
 if (!String(externalIngestionColumns[0]?.COLUMN_TYPE).includes("'browser'")) {
   await runRequired(`ALTER TABLE external_operational_orders MODIFY ingestionMethod enum('screenshot','manual','voice','browser') NOT NULL`, "External browser ingestion method");
 }
+const intakeSql = await readFile(new URL("../server/integrations/cleancloud/intake/schema.sql", import.meta.url), "utf8");
+for (const statement of intakeSql.split(";").map(value => value.trim()).filter(Boolean)) await runRequired(statement, "CleanCloud intake pilot schema");
 const pickupSql = await readFile(new URL("../server/integrations/cleancloud/pickups/schema.sql", import.meta.url), "utf8");
 for (const statement of pickupSql.split(";").map(value => value.trim()).filter(Boolean)) await runRequired(statement, "CleanCloud driver pickup schema");
 await assertRequiredColumns("external_operational_orders", [

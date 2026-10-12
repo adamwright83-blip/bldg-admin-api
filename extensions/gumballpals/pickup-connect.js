@@ -35,6 +35,9 @@ byId("pickup-prepare").addEventListener("click", async () => {
       "capture",
       { storeLabel: context.binding.storeLabel },
     ]);
+    // Preserve server holds when a new unpacked extension has empty local storage.
+    const existing=await rpc(goldlineTab,"pickups.connection");
+    if(!byId("pickup-holds").value.trim()&&existing.connection?.excludedOrderIds?.length)byId("pickup-holds").value=existing.connection.excludedOrderIds.join(", ");
     const excludedOrderIds = holds();
     if (excludedOrderIds.some(id => !/^[1-9]\d{0,15}$/.test(id)))
       throw new Error("Held order IDs must be numbers, separated by commas.");

@@ -6,6 +6,9 @@ const files = [
   "manifest.json",
   "worker.js",
   "pickup-page.js",
+  "intake-page.js",
+  "intake-worker.js",
+  "intake-connect.js",
   "pickup-worker.js",
   "pickup-connect.js",
   "core.js",
@@ -27,4 +30,4 @@ await writeFile(
   new URL("../client/public/gumballpals.zip", import.meta.url),
   zipSync(entries)
 );
-console.log("Packaged Gumballpals: eleven allowlisted runtime files.");
+console.log("Packaged Gumballpals: fourteen allowlisted runtime files.");

@@ -1,11 +1,17 @@
 import { GOLDLINE, CLEANCLOUD, MAX_BYTES } from "./core.js";
 
 export async function runInTab(tabId, func, args = []) {
+  // Chrome rejects undefined script arguments. GET requests deliberately omit
+  // input, so remove only absent trailing arguments without shifting payloads.
+  const scriptArgs = [...args];
+  while (scriptArgs.length && scriptArgs.at(-1) === undefined) scriptArgs.pop();
+  if (scriptArgs.some(value => value === undefined))
+    throw new Error("Missing browser operation argument.");
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     world: "ISOLATED",
     func,
-    args,
+    args: scriptArgs,
   });
   const result = results.find(r => r.frameId === 0)?.result;
   if (!result || !result.ok)
@@ -96,16 +102,18 @@ export async function prepareSource(range, reportType = "orders_sales") {
     stage = `selecting ${reportLabel}`;
     // Vue Multiselect opens on mousedown, not click. HTMLElement.click()
     // skips that event and leaves all options hidden.
-    reportSelect.querySelector(".multiselect__select").dispatchEvent(
-      new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
-    );
+    reportSelect
+      .querySelector(".multiselect__select")
+      .dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        })
+      );
     clickOne(
       await wait(() => {
-        const es = exact(
-          reportSelect,
-          ".multiselect__option",
-          reportLabel
-        );
+        const es = exact(reportSelect, ".multiselect__option", reportLabel);
         return es.length ? es : null;
       })
     );
@@ -288,6 +296,13 @@ export async function goldlineRequest(operation, input) {
     if (location.origin !== "https://admin.bldg.chat")
       throw new Error("Unexpected Goldline origin.");
     const methods = {
+      "intake.connection": "GET",
+      "intake.authorize": "POST",
+      "intake.pause": "POST",
+      "intake.connect": "POST",
+      "intake.capture": "POST",
+      "intake.claim": "POST",
+      "intake.receipt": "POST",
       "pickups.connection": "GET",
       "pickups.connect": "POST",
       "pickups.capture": "POST",
@@ -320,7 +335,9 @@ export async function goldlineRequest(operation, input) {
           method === "POST" ? { "Content-Type": "application/json" } : {},
         body: method === "POST" ? JSON.stringify({ json: input }) : undefined,
         signal: AbortSignal.timeout(
-          operation === "import" || operation === "recordWitness" ? 120000 : 15000
+          operation === "import" || operation === "recordWitness"
+            ? 120000
+            : 15000
         ),
       }
     );
@@ -345,11 +362,16 @@ export async function goldlineRequest(operation, input) {
 export async function readMetricsOverview(range) {
   let stage = "opening reporting";
   try {
-    if (location.origin !== "https://cleancloudapp.com" || location.pathname !== "/store")
+    if (
+      location.origin !== "https://cleancloudapp.com" ||
+      location.pathname !== "/store"
+    )
       throw new Error("Open the signed-in gumball store.");
     const pause = () => new Promise(r => setTimeout(r, 100));
     const visible = e =>
-      e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
+      e &&
+      e.getClientRects().length &&
+      getComputedStyle(e).visibility !== "hidden";
     const wait = async predicate => {
       for (let i = 0; i < 100; i++) {
         const value = predicate();
@@ -364,7 +386,9 @@ export async function readMetricsOverview(range) {
       [...root.querySelectorAll(selector)].filter(
         e => visible(e) && e.textContent.trim() === text
       );
-    const storeLabel = document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim();
+    const storeLabel = document.title
+      .replace(/\s*\|\s*CleanCloud\s*$/, "")
+      .trim();
     if (!storeLabel || !document.title.endsWith("CleanCloud"))
       throw new Error("Sign into gumball first.");
     if (!visible(document.querySelector("#metricsContainer"))) {
@@ -396,7 +420,8 @@ export async function readMetricsOverview(range) {
       );
     stage = "opening Overview";
     const overview = exact(overviewRoot, "a, button", "Overview");
-    if (overview.length > 1) throw new Error("Ambiguous Overview control. Capture stopped.");
+    if (overview.length > 1)
+      throw new Error("Ambiguous Overview control. Capture stopped.");
     if (overview.length === 1) overview[0].click();
     // The click can replace #metricsContainer asynchronously. Do not accept the
     // still-visible previous panel; wait until the Overview's core labels exist.
@@ -419,10 +444,14 @@ export async function readMetricsOverview(range) {
       const nodes = [...metrics.querySelectorAll("*")].filter(
         el => visible(el) && directText(el) === label
       );
-      if (nodes.length > 1) throw new Error(`${label} appeared more than once.`);
+      if (nodes.length > 1)
+        throw new Error(`${label} appeared more than once.`);
       if (nodes.length === 0) continue;
       const sibling = nodes[0].nextElementSibling;
-      const value = sibling && visible(sibling) ? sibling.textContent.trim().replace(/\s+/g, " ") : "";
+      const value =
+        sibling && visible(sibling)
+          ? sibling.textContent.trim().replace(/\s+/g, " ")
+          : "";
       if (!value || value.length > 40 || labels.includes(value))
         throw new Error(`${label} had no unambiguous value.`);
       fields.push({ label, valueText: value });
@@ -443,8 +472,18 @@ export async function readMetricsOverview(range) {
     const mentions = (text, iso) => {
       const [year, month, day] = iso.split("-").map(Number);
       const names = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
       ];
       const name = names[month - 1];
       return [
@@ -471,11 +510,14 @@ export async function readMetricsOverview(range) {
       .map(el => ({ el, text: el.textContent.trim().replace(/\s+/g, " ") }));
     const uniqueByText = new Map();
     for (const candidate of candidates) {
-      if (!uniqueByText.has(candidate.text)) uniqueByText.set(candidate.text, candidate);
+      if (!uniqueByText.has(candidate.text))
+        uniqueByText.set(candidate.text, candidate);
     }
     const unique = [...uniqueByText.values()];
-    const primary = unique.filter(candidate =>
-      mentions(candidate.text, range.from) && mentions(candidate.text, range.to)
+    const primary = unique.filter(
+      candidate =>
+        mentions(candidate.text, range.from) &&
+        mentions(candidate.text, range.to)
     );
     if (primary.length !== 1)
       throw new Error(
@@ -493,7 +535,9 @@ export async function readMetricsOverview(range) {
     const viewportWidth =
       window.innerWidth || document.documentElement?.clientWidth || 0;
     if (!viewportHeight || !viewportWidth)
-      throw new Error("The dashboard viewport could not be verified. Nothing was saved.");
+      throw new Error(
+        "The dashboard viewport could not be verified. Nothing was saved."
+      );
     const offscreen = proofNodes.some(node => {
       const rect = node.getBoundingClientRect();
       return (
@@ -515,15 +559,25 @@ export async function readMetricsOverview(range) {
     const clips = value => /^(?:auto|scroll|hidden|clip)$/i.test(value || "");
     const fullyUnclippedByAncestors = node => {
       const rect = node.getBoundingClientRect();
-      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      for (
+        let parent = node.parentElement;
+        parent;
+        parent = parent.parentElement
+      ) {
         const style = getComputedStyle(parent);
         const parentRect = parent.getBoundingClientRect?.();
         if (!parentRect) continue;
         const overflowX = style.overflowX || style.overflow || "visible";
         const overflowY = style.overflowY || style.overflow || "visible";
-        if (clips(overflowX) && (rect.left < parentRect.left || rect.right > parentRect.right))
+        if (
+          clips(overflowX) &&
+          (rect.left < parentRect.left || rect.right > parentRect.right)
+        )
           return false;
-        if (clips(overflowY) && (rect.top < parentRect.top || rect.bottom > parentRect.bottom))
+        if (
+          clips(overflowY) &&
+          (rect.top < parentRect.top || rect.bottom > parentRect.bottom)
+        )
           return false;
       }
       return true;
@@ -552,14 +606,20 @@ export async function readMetricsOverview(range) {
         return Boolean(top && (top === node || node.contains?.(top)));
       });
     };
-    if (proofNodes.some(node => !fullyUnclippedByAncestors(node) || !notOccluded(node)))
+    if (
+      proofNodes.some(
+        node => !fullyUnclippedByAncestors(node) || !notOccluded(node)
+      )
+    )
       throw new Error(
         "The proven dashboard totals are clipped or covered in the visible screenshot. Nothing was saved."
       );
     // Do not infer a comparison period from an unrelated second date string.
     // Until the observed Overview DOM gives us a direct relationship between
     // comparison totals and their date control, comparison truth is withheld.
-    const primaryFields = fields.filter(field => !field.label.startsWith("Comparison "));
+    const primaryFields = fields.filter(
+      field => !field.label.startsWith("Comparison ")
+    );
     return {
       ok: true,
       value: {
@@ -579,12 +639,18 @@ export function assertCleanCloudScreenshotTarget(tab) {
   try {
     url = new URL(tab?.url || "");
   } catch {
-    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+    throw new Error(
+      "Screenshot refused. The tab is not the signed-in CleanCloud store."
+    );
   }
   if (url.origin !== "https://cleancloudapp.com" || url.pathname !== "/store")
-    throw new Error("Screenshot refused. The tab is not the signed-in CleanCloud store.");
+    throw new Error(
+      "Screenshot refused. The tab is not the signed-in CleanCloud store."
+    );
   if (!tab.active)
-    throw new Error("Screenshot refused. The store tab is not the visible tab.");
+    throw new Error(
+      "Screenshot refused. The store tab is not the visible tab."
+    );
 }
 
 export const sites = { GOLDLINE, CLEANCLOUD, MAX_BYTES };

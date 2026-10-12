@@ -1,3 +1,4 @@
+import {INTAKE_ALARM,resumeIntakeWorker,runIntakeWorker} from "./intake-worker.js";
 import { PICKUP_ALARM, resumePickupWorker, runPickupWorker } from "./pickup-worker.js";
 import { validateExportUrl } from "./core.js";
 import { nextDailyRun, scheduleDue, SCHEDULE_NAME } from "./schedule.js";
@@ -87,3 +88,9 @@ chrome.runtime.onStartup.addListener(() => void resumePickupWorker());
 chrome.runtime.onInstalled.addListener(() => void resumePickupWorker());
 chrome.storage.onChanged.addListener((changes,area) => { if(area === "local" && changes.pickupConnection) void resumePickupWorker(); });
 void resumePickupWorker();
+
+chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===INTAKE_ALARM)void runIntakeWorker();});
+chrome.runtime.onStartup.addListener(()=>void resumeIntakeWorker());
+chrome.runtime.onInstalled.addListener(()=>void resumeIntakeWorker());
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==="local"&&changes.intakeConnection)void resumeIntakeWorker();});
+void resumeIntakeWorker();

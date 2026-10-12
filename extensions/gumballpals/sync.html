@@ -9,7 +9,7 @@
   <body>
     <main>
       <header>
-        <p class="eyebrow">GUMBALLPALS 0.2.0 · BROWSER CONNECTION</p>
+        <p class="eyebrow">GUMBALLPALS 0.3.0 · BROWSER CONNECTION</p>
         <h1>Your real work.<br />Your living city.</h1>
         <p>
           Bring Laundry Farm orders into Goldline. Your gumball login stays
@@ -97,6 +97,13 @@
         <button id="disable-schedule" class="secondary">Pause daily sync</button>
         <p id="schedule-status" role="status">Daily sync is off.</p>
       </section>
+    <section class="card">
+      <h2>CleanCloud intake pilot</h2>
+      <p>Enter actual pounds or garments in Goldline admin Intake. Gumball prepares the exact CleanCloud Detail order. Inspect it in this browser, then approve its displayed total from Goldline. Submission may charge the saved card under your CleanCloud settings. Each submission requires approval.</p>
+      <button id="intake-connect">Connect intake pilot for this paired account</button>
+      <button id="intake-pause" class="secondary">Pause intake worker</button>
+      <p id="intake-status" role="status">Intake pilot is not connected.</p>
+    </section>
       <footer>
         Keep this tab open while syncing. A normal gumball report download
         may remain in Chrome; you never need to upload or manage it. No
@@ -106,6 +113,7 @@
         </button>
       </footer>
     </main>
+    <script type="module" src="intake-connect.js"></script>
     <script type="module" src="sync.js"></script>
     <script type="module" src="pickup-connect.js"></script>
   </body>
