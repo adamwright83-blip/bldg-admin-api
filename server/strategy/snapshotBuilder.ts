@@ -105,10 +105,12 @@ export async function buildStrategySnapshot(
   const budget = options.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
 
   // 1. Gather Macro Goal
-  const macroGoalRecord = await getActiveMacroGoal({
-    tenantId,
-    operatorUserId: (options as any).operatorUserId ?? "owner",
-  }).catch(() => null);
+  // The special "owner" alias in macroGoalStore is tenant-wide, not a
+  // resolved operator. Never read an arbitrary operator's goal through it.
+  const resolvedOperatorUserId = options.operatorUserId?.trim();
+  const macroGoalRecord = resolvedOperatorUserId && resolvedOperatorUserId !== "owner"
+    ? await getActiveMacroGoal({ tenantId, operatorUserId: resolvedOperatorUserId }).catch(() => null)
+    : null;
   // A missing operator goal is not a target of 50 customers.
   const goalTarget = macroGoalRecord?.targetValue ?? null;
   const goalMetricType = (macroGoalRecord as any)?.metricKey ?? (macroGoalRecord as any)?.metricType ?? "active_customers";
