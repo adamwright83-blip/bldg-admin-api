@@ -147,6 +147,22 @@ function makeDeps(llmResponses: unknown[] = [], sourceOverrides: Partial<typeof 
   };
 }
 
+describe("comparison integrity", () => {
+  it("does not compare revenue when the operator requested a non-comparable metric", async () => {
+    const deps = makeDeps([
+      makePlannerResponse({ metricIds: ["repeat_customer_count"], compareToPrevious: true }),
+      makeAnswererResponse({ answer: "Repeat customers are not directly comparable in this view." }),
+    ]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "How many repeat customers versus last month?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("comparison for the requested metric");
+    expect(deps.liveSource.getMetricComparison).not.toHaveBeenCalled();
+  });
+});
+
 describe("unsupported analytics never masquerade as revenue", () => {
   it("fails closed when the planner proposes an unavailable derived metric", async () => {
     const deps = makeDeps([makePlannerResponse({ metricIds: ["profit_margin_unavailable"] })]);
