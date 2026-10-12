@@ -199,8 +199,12 @@ export async function sequenceDailyMissions(
       if (activePlay.hypothesis.includes("property") || activePlay.businessName.toLowerCase().includes("property")) {
         // Luxury building field outing
         const targetAccounts = accounts.filter((a: any) => a.status === "Contested" || a.status === "Wait");
-        const cluster = activePlay.geography ?? "Downtown Core";
-        const stopCount = Math.min(config.maxStopsPerOuting, targetAccounts.length > 0 ? targetAccounts.length : 3);
+        // No verified target accounts means no fabricated three-stop outing.
+        if (targetAccounts.length === 0) {
+          unresolvedIssues.push("Property expansion needs verified eligible account targets before scheduling a field outing.");
+        } else {
+        const cluster = activePlay.geography ?? "Verified property targets";
+        const stopCount = Math.min(config.maxStopsPerOuting, targetAccounts.length);
         const dedupeKey = `growth:${activePlay.id}:${input.businessDate}:${cluster}`;
 
         candidateGrowthMissions.push({
@@ -217,19 +221,21 @@ export async function sequenceDailyMissions(
             tenantId: input.tenantId,
             playType: "property_expansion",
             accountName: cluster,
-            verifiedContext: {
-              units: 250,
-              propertyManagerName: "On-site Manager",
-            },
+            // The route-level mission has no verified single-property context.
+            verifiedContext: {},
           }),
         });
+        }
       } else if (
         activePlay.businessName.toLowerCase().includes("print") ||
         activePlay.businessName.toLowerCase().includes("door") ||
         activePlay.spendCategory === "print_order"
       ) {
         // Door tag campaign (may require spend)
-        const cluster = activePlay.geography ?? "Hillside Doors";
+        const cluster = activePlay.geography;
+        if (!cluster) {
+          unresolvedIssues.push("Door-tag deployment requires an explicit verified geography; no target location was provided.");
+        } else {
         const dedupeKey = `growth:${activePlay.id}:${input.businessDate}:doortags`;
         candidateGrowthMissions.push({
           title: `Door-Tag Deployment: ${cluster}`,
@@ -250,6 +256,7 @@ export async function sequenceDailyMissions(
             },
           }),
         });
+        }
       } else {
         // Default growth mission under active play
         const dedupeKey = `growth:${activePlay.id}:${input.businessDate}:sweep`;
