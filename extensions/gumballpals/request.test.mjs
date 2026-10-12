@@ -32,3 +32,16 @@ test("actual UI request omits absent script arguments and preserves supplied pay
     ["receipt", { tenantId: "test", requestId: "test-request" }],
   ]);
 });
+
+
+test("worker GET requests omit undefined arguments at the Chrome scripting boundary", async () => {
+ const {runInTab}=await import("./browser.js");
+ const calls=[];
+ globalThis.chrome={scripting:{executeScript:async options=>{assert.ok(options.args.every(value=>value!==undefined));calls.push(options.args);return [{frameId:0,result:{ok:true,value:"ok"}}];}}};
+ try {
+ await runInTab(42,()=>{},["intake.connection",undefined]);
+ await runInTab(42,()=>{},["pickups.connection",undefined]);
+ await runInTab(42,()=>{},["intake.claim",{bindingId:"fixture"}]);
+ assert.deepEqual(calls,[["intake.connection"],["pickups.connection"],["intake.claim",{bindingId:"fixture"}]]);
+ } finally {delete globalThis.chrome;}
+});
