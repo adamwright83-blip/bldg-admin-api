@@ -16,6 +16,16 @@ export type SalesInsightArtifact = {
   comparisonPeriod: { from: string; to: string };
   precision: "exact";
   speech: string;
+  /** Recommendation only: no Day Line write, offer spend, or external outreach. */
+  recommendedChallenge: {
+    kind: "marketing_challenge";
+    status: "proposal_only";
+    title: string;
+    why: string;
+    completionCondition: string;
+    sourceObservationReference: string;
+    requiresOperatorApproval: true;
+  } | null;
   series: Array<{ from: string; to: string; cents: number }>;
 };
 
@@ -75,6 +85,21 @@ export function selectSalesInsight(
     { from: result.period.start, to: result.period.end, cents: current },
   ];
   const observationReference = `sales-trend:${createHash("sha256").update(JSON.stringify({ scope, series, canonicalObservation: result.coverage?.observationReference })).digest("hex")}`;
+  // Revenue decline is observed. Its cause is not. Propose investigation,
+  // never claim churn or a weak campaign caused the decline without evidence.
+  // The existing proactive board already speaks artifact.speech and therefore
+  // surfaces this proposal without creating or modifying any missions.
+  const recommendedChallenge: SalesInsightArtifact["recommendedChallenge"] = percent < 0
+    ? {
+        kind: "marketing_challenge",
+        status: "proposal_only",
+        title: "Diagnose the paid-revenue decline",
+        why: `Verified ${scope} paid revenue declined ${Math.abs(percent)}% between two completed months. The cause has not been established.`,
+        completionCondition: "Review customer reorders, acquired-customer activity and sales follow-ups; identify one evidenced growth bottleneck and propose a measurable recovery experiment.",
+        sourceObservationReference: observationReference,
+        requiresOperatorApproval: true,
+      }
+    : null;
   return {
     kind: "sales_trend",
     observationReference,
@@ -87,7 +112,8 @@ export function selectSalesInsight(
       to: result.comparisonPeriod.end,
     },
     series,
-    speech: `${result.period.label} closed at $${(current / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })} in ${scope === "Laundry Farm total" ? "Laundry Farm paid revenue" : "CleanCloud paid revenue"}${strongest ? ", the strongest completed month in recorded history," : ","} ${Math.abs(percent)}% ${percent > 0 ? "above" : "below"} ${result.comparisonPeriod.label}.`,
+    recommendedChallenge,
+    speech: `${result.period.label} closed at ${(current / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })} in ${scope === "Laundry Farm total" ? "Laundry Farm paid revenue" : "CleanCloud paid revenue"}${strongest ? ", the strongest completed month in recorded history," : ","} ${Math.abs(percent)}% ${percent > 0 ? "above" : "below"} ${result.comparisonPeriod.label}.${recommendedChallenge ? " I'd suggest a marketing challenge to investigate the decline before choosing an outreach tactic. Want me to help plan it?" : ""}`,
   };
 }
 
