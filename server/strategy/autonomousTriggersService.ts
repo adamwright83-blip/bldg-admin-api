@@ -8,10 +8,6 @@ import { getTodayFeaturedOperation } from "./todayFeaturedService";
 import { getOrCreatePathOffer } from "./playGenerator";
 import { lintVerdictLanguage } from "./verdictLint";
 import { lintCeoLanguage } from "../claire/disappointmentLint";
-import {
-  isWarmthEmissionAllowed,
-  recordClaireMissionOutcomeEvents,
-} from "../claire/character/relationshipEmitters";
 
 export type TriggerType =
   | "morning"
@@ -142,9 +138,13 @@ export async function triggerMorning(input: {
 
 /**
  * 2. Mission Completion Trigger:
- * Updates world state & evidence.
+ * A strategy mission completion request is not itself evidence that a mission
+ * was completed. In particular, these string strategy IDs cannot be passed
+ * to the numeric commercial-visit relationship-event recorder.
+ * This telemetry-only trigger never mutates mission/world state or emits warmth.
+ * Canonical completion and operator identity must be verified at the owning
+ * domain boundary before any relationship event can be recorded.
  * GUARANTEE: NO outbound Claire call is triggered by completion.
- * Emits G1 allowlisted warmth event for next natural call.
  */
 export async function triggerMissionCompletion(input: {
   tenantId: string;
@@ -158,25 +158,6 @@ export async function triggerMissionCompletion(input: {
 }> {
   const dedupeKey = dedupeKeyFor(input.tenantId, "mission_completion", `${input.businessDate}:${input.missionId}`);
 
-  // Emit allowlisted G1 warmth event
-  const warmthEventEmitted = isWarmthEmissionAllowed({
-    eventType: "operator_follow_through",
-    summary: `Verified completed commitment ${input.missionId}`,
-    provenance: "mission_completion",
-  });
-  if (warmthEventEmitted) {
-    try {
-      await recordClaireMissionOutcomeEvents({
-        tenantId: input.tenantId,
-        operatorUserId: "operator",
-        missionId: 1,
-        outcome: "completed",
-      });
-    } catch {
-      // Non-fatal
-    }
-  }
-
   const id = `trig_${randomUUID().slice(0, 12)}`;
   const now = new Date().toISOString();
 
@@ -187,25 +168,28 @@ export async function triggerMissionCompletion(input: {
     businessDate: input.businessDate,
     dedupeKey,
     snapshotId: null,
-    outcome: "success",
+    outcome: "noop",
     detail: {
       missionId: input.missionId,
-      placedOutboundCall: false, // Guardrail: strictly false
-      warmthEventEmitted,
+      completionVerified: false,
+      reason: "Completion not verified by authoritative mission state; no world update or relationship event",
+      placedOutboundCall: false,
+      warmthEventEmitted: false,
     },
     executedAt: now,
   });
 
   return {
-    worldUpdated: true,
+    worldUpdated: false,
     placedOutboundCall: false, // STRICT GUARANTEE: NO CALL PLACED
-    warmthEventEmitted,
+    warmthEventEmitted: false,
   };
 }
 
 /**
  * 3. Mission Skip Trigger:
- * Marks mission outstanding, proposes reschedule, routes to Recovery.
+ * Records a mission skip signal only. It does NOT currently create a durable
+ * recovery item or reschedule; return values must not falsely claim otherwise.
  * GUARANTEE: No push notification with judgment, NO phone call.
  */
 export async function triggerMissionSkip(input: {
@@ -230,11 +214,12 @@ export async function triggerMissionSkip(input: {
     businessDate: input.businessDate,
     dedupeKey,
     snapshotId: null,
-    outcome: "success",
+    outcome: "noop",
     detail: {
       missionId: input.missionId,
-      routedToRecovery: true,
-      rescheduleProposed: true,
+      reason: "Skip observed; no recovery or rescheduling write executed",
+      routedToRecovery: false,
+      rescheduleProposed: false,
       sentNotification: false,
       placedCall: false,
     },
@@ -242,8 +227,8 @@ export async function triggerMissionSkip(input: {
   });
 
   return {
-    routedToRecovery: true,
-    rescheduleProposed: true,
+    routedToRecovery: false,
+    rescheduleProposed: false,
     sentNotification: false, // NO JUDGMENT PUSH NOTIFICATION
     placedCall: false,        // NO CALL
   };
