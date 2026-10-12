@@ -140,14 +140,30 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     expect(snapshot1.contentHash).toBe(computeContentHash(snapshot1.payload));
   });
 
-  it("detects pipeline gaps including no-next-action on live opportunities", async () => {
+  it("does not fabricate an opportunity or no-next-action gap when the commercial feed is unavailable", async () => {
     const snapshot = await buildStrategySnapshot(tenantA);
-    const gaps = snapshot.payload.detectedGaps;
+    expect(snapshot.payload.opportunities).toEqual([]);
+    expect(snapshot.payload.detectedGaps.some(g => g.type === "no_next_action")).toBe(false);
+    expect(snapshot.payload.unresolved.some(u => u.source === "strategySnapshot.operationalCoverage")).toBe(true);
+  });
 
-    expect(gaps.length).toBeGreaterThan(0);
-    const noNextActionGap = gaps.find(g => g.type === "no_next_action");
-    expect(noNextActionGap).toBeDefined();
-    expect(noNextActionGap?.description).toContain("no next action scheduled");
+  it("does not manufacture property activations, capacity, commitments, or outcomes", async () => {
+    const snapshot = await buildStrategySnapshot(tenantA, { now: new Date("2026-09-16T12:00:00Z") });
+    const { payload, provenance } = snapshot;
+    expect(payload.activation).toEqual([]);
+    expect(payload.capacity).toEqual({
+      weeklyCapacityPounds: null,
+      reservedPounds: null,
+      availablePounds: null,
+      utilizationPercent: null,
+    });
+    expect(payload.campaigns).toEqual([]);
+    expect(payload.commitments.today).toEqual([]);
+    expect(payload.commitments.history14Days).toEqual({ kept: null, missed: null, total: null });
+    expect(payload.recentOutcomes).toEqual([]);
+    expect(payload.constraints).toEqual([]);
+    expect(provenance["capacity.availablePounds"].source).toBe("unavailable");
+    expect(JSON.stringify(payload)).not.toMatch(/Wilshire Grand|Broadway Lofts|Marcus K\./);
   });
 
   it("guardrail.G9.tenant_isolation: snapshots are strictly isolated across tenants", async () => {
