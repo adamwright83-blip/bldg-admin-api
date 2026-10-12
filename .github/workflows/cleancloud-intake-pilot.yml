@@ -38,7 +38,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec vitest run shared/cleancloudIntake.test.ts
-      - run: node --test extensions/gumballpals/intake-page.test.mjs
+      - run: node --test extensions/gumballpals/intake-page.test.mjs extensions/gumballpals/request.test.mjs
       - run: pnpm exec vitest run --config vitest.integration.config.ts server/integrations/cleancloud/intake/intakeFlow.mysql.integration.test.ts
         env:
           DATABASE_URL: mysql://root:intake-test-only@127.0.0.1:3397/intake_test

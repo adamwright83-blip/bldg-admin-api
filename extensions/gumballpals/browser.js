@@ -137,15 +137,10 @@ export async function prepareSource(range, reportType = "orders_sales") {
     stage = "locating the open date calendar (build 0.1.6)";
     // The picker can be portalled outside the report container. Match its
     // input-derived calendar ID, and require exactly one visible instance.
-    const calendarId =
-      dateInput.id.replace(/-input$/, "") + "-picker-container-DatePicker";
+    const calendarId = dateInput.id.replace(/-input$/, "") + "-picker-container-DatePicker";
     const picker = await wait(() => {
-      const calendars = [
-        ...document.querySelectorAll(".datetimepicker"),
-      ].filter(
-        e =>
-          visible(e) &&
-          [...e.querySelectorAll("[id]")].some(node => node.id === calendarId)
+      const calendars = [...document.querySelectorAll(".datetimepicker")].filter(e =>
+        visible(e) && [...e.querySelectorAll("[id]")].some(node => node.id === calendarId)
       );
       return calendars.length === 1 ? calendars[0] : null;
     });
@@ -169,19 +164,12 @@ export async function prepareSource(range, reportType = "orders_sales") {
       for (let i = 0; i < 25; i++) {
         const labels = await wait(() => {
           const values = [
-            ...picker.querySelectorAll(
-              ".datepicker-container-label .custom-button-content"
-            ),
-          ]
-            .filter(visible)
-            .map(e => e.textContent.trim());
-          const animating =
-            picker.matches(
-              '[class*="-enter-active"], [class*="-leave-active"]'
-            ) ||
-            picker.querySelector(
-              '[class*="-enter-active"], [class*="-leave-active"]'
-            );
+          ...picker.querySelectorAll(
+            ".datepicker-container-label .custom-button-content"
+          ),
+          ].filter(visible).map(e => e.textContent.trim());
+          const animating = picker.matches('[class*="-enter-active"], [class*="-leave-active"]') ||
+            picker.querySelector('[class*="-enter-active"], [class*="-leave-active"]');
           return !animating && values.length === 2 ? values : null;
         });
         const currentMonth = monthNames.indexOf(labels[0]) + 1,
@@ -190,16 +178,10 @@ export async function prepareSource(range, reportType = "orders_sales") {
           throw new Error("Unrecognized calendar.");
         const delta = (year - currentYear) * 12 + month - currentMonth;
         if (!delta) {
-          clickOne(
-            await wait(() => {
-              const days = exact(
-                picker,
-                "button.datepicker-day.enable",
-                String(day)
-              );
-              return days.length === 1 ? days : null;
-            })
-          );
+          clickOne(await wait(() => {
+            const days = exact(picker, "button.datepicker-day.enable", String(day));
+            return days.length === 1 ? days : null;
+          }));
           await pause();
           return;
         }
@@ -209,13 +191,8 @@ export async function prepareSource(range, reportType = "orders_sales") {
         if (!arrow || arrow.disabled) throw new Error("Date is unavailable.");
         arrow.click();
         await wait(() => {
-          const values = [
-            ...picker.querySelectorAll(
-              ".datepicker-container-label .custom-button-content"
-            ),
-          ]
-            .filter(visible)
-            .map(e => e.textContent.trim());
+          const values = [...picker.querySelectorAll(".datepicker-container-label .custom-button-content")]
+            .filter(visible).map(e => e.textContent.trim());
           return values.length === 2 && values.join("|") !== labels.join("|");
         });
       }
