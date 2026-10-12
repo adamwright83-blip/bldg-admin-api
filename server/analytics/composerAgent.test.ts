@@ -147,6 +147,34 @@ function makeDeps(llmResponses: unknown[] = [], sourceOverrides: Partial<typeof 
   };
 }
 
+describe("unsupported analytics never masquerade as revenue", () => {
+  it("fails closed when the planner proposes an unavailable derived metric", async () => {
+    const deps = makeDeps([makePlannerResponse({ metricIds: ["profit_margin_unavailable"] })]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "What was our operating profit margin last month?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("won't substitute revenue");
+    expect(result.headline).toBeNull();
+    expect(result.chart).toBeNull();
+    expect(result.table).toBeNull();
+    expect(deps.invokeLLM).toHaveBeenCalledTimes(1);
+    expect(result.meta.tenantId).toBe("tenant_a");
+  });
+
+  it("does not silently drop a missing metric from a multi-metric request", async () => {
+    const deps = makeDeps([makePlannerResponse({ metricIds: ["revenue_paid_stripe", "labor_cost_unavailable"] })]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "What was revenue minus labor cost?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("can't calculate");
+    expect(result.headline).toBeNull();
+  });
+});
+
 // ── Step 1: History bug fix ───────────────────────────────────────────────────
 
 describe("history bug fix", () => {
