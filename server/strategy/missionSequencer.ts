@@ -89,7 +89,7 @@ export async function sequenceDailyMissions(
 
   // 1. Get active strategic path
   const activePlayId = getActiveStrategicPath(input.tenantId);
-  const activePlay = activePlayId ? getStrategyPlayById(activePlayId) : null;
+  const activePlay = activePlayId ? getStrategyPlayById(activePlayId, input.tenantId) : null;
 
   // 2. Identify candidate support opportunities (Support Allowance)
   // Supports: urgent customer service, ready-to-order customers, second-order due
