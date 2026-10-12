@@ -109,7 +109,8 @@ export async function buildStrategySnapshot(
     tenantId,
     operatorUserId: (options as any).operatorUserId ?? "owner",
   }).catch(() => null);
-  const goalTarget = macroGoalRecord?.targetValue ?? 50;
+  // A missing operator goal is not a target of 50 customers.
+  const goalTarget = macroGoalRecord?.targetValue ?? null;
   const goalMetricType = (macroGoalRecord as any)?.metricKey ?? (macroGoalRecord as any)?.metricType ?? "active_customers";
   const goalTargetDate = (macroGoalRecord as any)?.targetDate ?? null;
 
@@ -148,7 +149,7 @@ export async function buildStrategySnapshot(
   else if (goalMetricType === "paid_orders_per_period") currentValue = growthMetrics.paidOrders.count;
   else if (goalMetricType === "net_sales_per_period") currentValue = Math.round(growthMetrics.netSales.amountCents / 100);
 
-  const gap = Math.max(0, goalTarget - currentValue);
+  const gap = goalTarget === null ? null : Math.max(0, goalTarget - currentValue);
 
   // 3. Gather Playground Rules & MTD Spend
   const playground = await getActivePlaygroundRules(tenantId);
@@ -163,7 +164,9 @@ export async function buildStrategySnapshot(
     const diffMs = new Date(goalTargetDate).getTime() - now.getTime();
     weeksRemaining = Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)));
   }
-  const unitsNeededPerWeek = Math.ceil(unitsRemaining / weeksRemaining);
+  const unitsNeededPerWeek = unitsRemaining === null
+    ? null
+    : Math.ceil(unitsRemaining / weeksRemaining);
 
   const customerLoad: CustomerAggregateLoad =
     options.customerAggregateLoad ??
@@ -245,6 +248,13 @@ export async function buildStrategySnapshot(
 
   // 15. Unresolved Issues & Staleness Detection
   const unresolved: Array<{ source: string; issue: string; severity: "warning" | "error" }> = [];
+  if (goalTarget === null) {
+    unresolved.push({
+      source: "macroGoalService",
+      issue: "No verified active macro goal for this operator; target, gap, and weekly target are unavailable.",
+      severity: "warning",
+    });
+  }
   const staleness: Record<string, StalenessRecord> = {};
 
   // Strategy does not invent its own CleanCloud clock. The canonical B1 source-
@@ -328,8 +338,10 @@ export async function buildStrategySnapshot(
   const canonicalDef = ACTIVE_CUSTOMER_DEFINITION;
   const provenance: Record<string, ProvenanceRecord> = {
     "goal.currentValue": {
-      source: "macroGoalService",
-      queryOrDefinition: `MacroGoal(metricType: ${goalMetricType}, target: ${goalTarget})`,
+      source: macroGoalRecord ? "macroGoalService" : "unavailable",
+      queryOrDefinition: macroGoalRecord
+        ? `MacroGoal(metricType: ${goalMetricType}, target: ${goalTarget})`
+        : "No verified active operator macro goal",
       computedAt,
       sampleSize: 1,
     },
