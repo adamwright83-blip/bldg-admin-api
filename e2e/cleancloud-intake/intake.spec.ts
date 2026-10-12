@@ -78,7 +78,7 @@ test("phone intake requires inspection approval and uncertain outcome only offer
   await page.getByRole("checkbox").check();
   await expect(approve).toBeEnabled();
   await page.screenshot({
-    path: "/private/tmp/cleancloud-intake-phone-review.png",
+    path: testInfo.outputPath("cleancloud-intake-phone-review.png"),
     fullPage: true,
   });
   await approve.click();
