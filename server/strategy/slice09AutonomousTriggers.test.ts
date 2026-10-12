@@ -56,27 +56,37 @@ describe("Slice 9: Autonomous Triggers", () => {
     expect(run2.featuredOperationId).toBe(run1.featuredOperationId);
   });
 
-  it("guardrail.completion_does_not_place_call: mission completion updates world but places zero calls", async () => {
+  it("completion request does not fake world progress, warmth, or commercial mission identity", async () => {
     const result = await triggerMissionCompletion({
       tenantId,
       missionId: "mis_field_01",
       businessDate,
     });
 
-    expect(result.worldUpdated).toBe(true);
-    expect(result.placedOutboundCall).toBe(false); // STRICT GUARANTEE: Zero calls on completion!
-    expect(result.warmthEventEmitted).toBe(true); // Allowlisted G1 warmth queued for next natural conversation
+    expect(result.worldUpdated).toBe(false);
+    expect(result.placedOutboundCall).toBe(false);
+    expect(result.warmthEventEmitted).toBe(false);
+    const [run] = getTriggerRuns(tenantId).filter(item => item.triggerType === "mission_completion");
+    expect(run?.outcome).toBe("noop");
+    expect(run?.detail.missionId).toBe("mis_field_01");
+    expect(run?.detail.completionVerified).toBe(false);
+    expect(JSON.stringify(run)).not.toContain('"missionId":1');
+    expect(JSON.stringify(run)).not.toContain('"operatorUserId":"operator"');
   });
 
-  it("skip routes to reschedule and Recovery without push notification or call", async () => {
+  it("skip reports no recovery or reschedule when neither write occurred", async () => {
     const result = await triggerMissionSkip({
       tenantId,
       missionId: "mis_field_02",
       businessDate,
     });
 
-    expect(result.routedToRecovery).toBe(true);
-    expect(result.rescheduleProposed).toBe(true);
+    expect(result.routedToRecovery).toBe(false);
+    expect(result.rescheduleProposed).toBe(false);
+    const [run] = getTriggerRuns(tenantId).filter(item => item.triggerType === "mission_skip");
+    expect(run?.outcome).toBe("noop");
+    expect(run?.detail.routedToRecovery).toBe(false);
+    expect(run?.detail.rescheduleProposed).toBe(false);
     expect(result.sentNotification).toBe(false); // NO judgment push notification
     expect(result.placedCall).toBe(false);        // NO phone call
   });
@@ -124,6 +134,11 @@ describe("Slice 9: Autonomous Triggers", () => {
     // Verify provenance is attached
     expect(result.dawn.provenance.source).toContain("triggerWeeklyDawn");
     expect(result.dawn.provenance.computedAt).toBeDefined();
+    expect(result.dawn.routesChanged).toEqual([]);
+    expect(result.dawn.territoryState).toEqual({ captured: null, contested: null, closed: null });
+    expect(result.dawn.commitmentsKeptCount).toBeNull();
+    expect(result.dawn.recoveryVisibleItem).toBeNull();
+    expect(result.dawn.worldNarrative).not.toMatch(/Greystar|four commitments|two routes/);
   });
 
   it("business-local date handling across daylight saving transitions", async () => {

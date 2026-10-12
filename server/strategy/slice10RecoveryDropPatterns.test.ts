@@ -216,7 +216,7 @@ describe("Slice 10: Recovery and Drop Patterns", () => {
     });
 
     expect(resolved.item.state).toBe("repaired");
-    expect(resolved.warmthEventEmitted).toBe(true);
+    expect(resolved.warmthEventEmitted).toBe(false); // No verified commercial mission ID / operator authority here
   });
 
   it("tenant isolation: recovery items and drop patterns are strictly isolated", async () => {
