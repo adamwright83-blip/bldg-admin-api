@@ -3,10 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { dropPatternFlags, recoveryItems } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { lintDisappointmentFraming } from "../claire/disappointmentLint";
-import {
-  isWarmthEmissionAllowed,
-  recordClaireMissionOutcomeEvents,
-} from "../claire/character/relationshipEmitters";
 
 export type RecoveryItemState =
   | "visible"
@@ -158,26 +154,11 @@ export async function resolveRecoveryItem(input: {
     item.state = "repaired";
     item.resolvedAt = now.toISOString();
 
-    // Guardrail G1: Completion of a repaired commitment is an allowlisted warmth event
-    if (
-      isWarmthEmissionAllowed({
-        eventType: "operator_follow_through",
-        summary: `Repaired commitment: ${item.title}`,
-        provenance: "recovery:repair",
-      })
-    ) {
-      try {
-        await recordClaireMissionOutcomeEvents({
-          tenantId: input.tenantId,
-          operatorUserId: "operator",
-          missionId: 1,
-          outcome: "repaired_completed",
-        });
-        warmthEventEmitted = true;
-      } catch {
-        // Non-fatal
-      }
-    }
+    // The recovery reference is not a verified numeric commercial mission ID
+    // and no canonical operator identity is supplied here. Do not manufacture
+    // a relationship win under mission 1 / operator "operator". The repairing
+    // action can be recorded separately only after its own durable verification.
+    warmthEventEmitted = false;
   } else if (input.action === "reschedule") {
     if (!input.rescheduledToDate) {
       throw new Error("Rescheduling a recovery item requires a rescheduledToDate.");
