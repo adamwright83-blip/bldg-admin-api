@@ -134,6 +134,11 @@ describe("Slice 9: Autonomous Triggers", () => {
     // Verify provenance is attached
     expect(result.dawn.provenance.source).toContain("triggerWeeklyDawn");
     expect(result.dawn.provenance.computedAt).toBeDefined();
+    expect(result.dawn.routesChanged).toEqual([]);
+    expect(result.dawn.territoryState).toEqual({ captured: null, contested: null, closed: null });
+    expect(result.dawn.commitmentsKeptCount).toBeNull();
+    expect(result.dawn.recoveryVisibleItem).toBeNull();
+    expect(result.dawn.worldNarrative).not.toMatch(/Greystar|four commitments|two routes/);
   });
 
   it("business-local date handling across daylight saving transitions", async () => {
