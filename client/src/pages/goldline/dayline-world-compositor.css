@@ -1,12 +1,47 @@
-/* Artwork coordinates are measured on the approved 941 × 1672 scene.
- * The outer Driver viewport/scale is deliberately owned by existing styles. */
+/* Keep the source artwork proportional while the world fills the measured
+ * viewport. This restores the phone-sizing contract from #39 and #102; later
+ * desktop polish and fixed 430px art limits must not shrink the live Day Line. */
+main.gdp-shell.gdp-shell--v2 {
+  width: var(--goldline-vvw, 100%);
+  max-width: none;
+  min-height: 0;
+}
+.gdp-viewport-frame {
+  position: relative;
+  isolation: isolate;
+  min-height: var(--goldline-vvh, 100dvh);
+  padding-bottom: 17.4283cqw;
+  background: #142021;
+}
+.gdp-viewport-frame > .gdp-art-scene {
+  margin-bottom: -17.4283cqw;
+  mask-image: linear-gradient(#000 calc(100% - 10cqw), transparent);
+}
+.gdp-viewport-frame[data-scene-ready="false"] {
+  visibility: hidden;
+}
+.gdp-viewport-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("/goldline/dayline-v2/background/dayline-adventure-world.webp")
+    center bottom / cover no-repeat;
+  filter: blur(8px);
+  transform: scale(1.03);
+  pointer-events: none;
+}
+.gdp-viewport-frame > .gdp-approved-dock {
+  top: auto;
+  bottom: 3.8257cqw;
+  height: 13.6026cqw;
+}
 .gdp-illustrated-world {
   position: relative;
   isolation: isolate;
   container-type: inline-size;
   width: 100%;
-  max-width: 430px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   color: white;
   overflow: hidden;
   background: #0d161f;
@@ -295,4 +330,6 @@
   display: none;
 }
 
-.gdp-object-address { letter-spacing: -.035em; }
+.gdp-object-address {
+  letter-spacing: -0.035em;
+}
