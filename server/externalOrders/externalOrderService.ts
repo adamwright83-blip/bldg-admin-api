@@ -192,7 +192,10 @@ export async function listExternalOrders(input: {
   tenantId: string;
   scheduledDate?: string;
 }): Promise<ExternalOperationalOrder[]> {
-  const database = await db();
+  // Reads also feed Claire's Field Today projection; they must not create
+  // schema as a side effect. Production boot owns the required migration.
+  const database = await getDb();
+  if (!database) throw new Error("Database not available");
   const filters = [
     eq(externalOperationalOrders.tenantId, input.tenantId),
     eq(externalOperationalOrders.reviewState, "confirmed"),
