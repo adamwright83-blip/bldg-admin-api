@@ -31,6 +31,27 @@ describe("Slice 6: Plays, Deterministic Ranking, Path Offers, and Path Choice", 
     _clearChoiceStore();
   });
 
+  it("refuses a non-existent strategy play instead of silently making it active", async () => {
+    await expect(chooseStrategicPath({
+      tenantId,
+      playId: "unregistered_mission",
+      surface: "map",
+    })).rejects.toThrow("existing play belonging to the authorized tenant");
+    expect(getActiveStrategicPath(tenantId)).toBeNull();
+  });
+
+  it("refuses selection of another tenant's registered play", async () => {
+    const snapshot = await buildStrategySnapshot(tenantId);
+    const offered = await generateCandidatePlays(tenantId, snapshot);
+    expect(offered.length).toBeGreaterThan(0);
+    await expect(chooseStrategicPath({
+      tenantId: tenantB,
+      playId: offered[0].id,
+      surface: "map",
+    })).rejects.toThrow("authorized tenant");
+    expect(getActiveStrategicPath(tenantB)).toBeNull();
+  });
+
   it("deterministic ranking produces identical score and breakdown across multiple runs", async () => {
     const snapshot = await buildStrategySnapshot(tenantId);
     const candidate: PlayCandidateInput = {
