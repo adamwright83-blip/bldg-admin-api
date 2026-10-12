@@ -25,6 +25,8 @@ import {
   type ProactiveObligation,
 } from "../../../shared/claireProactive";
 import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
+import { observedChurnHistory } from "./observedChurnHistory";
+import type { CustomerHistoryObservation } from "../../../shared/customerChurn";
 import { isStrategyFeatureEnabled, STRATEGY_FLAGS } from "../../../shared/strategyFeatureFlags";
 import { requiresSpendClearance } from "../../strategy/spendClearance";
 import {
@@ -214,6 +216,7 @@ export async function ensureOperatorBoard(input: {
   const rules = await loadDoctrine(input.tenantId, input.operatorUserId);
   let created = 0;
 
+  const verifiedHistoryByIdentity = new Map<string, CustomerHistoryObservation[]>();
   let customers: CustomerEvidence[] = [];
   try {
     const ledger = await loadPaidOrderLedger({
@@ -226,6 +229,8 @@ export async function ensureOperatorBoard(input: {
       .filter(group => group.matched && group.records.some(record => record.cents > 0))
       .map(group => {
         const sorted = group.records.filter(record => record.cents > 0).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+        const history = observedChurnHistory(sorted);
+        if (history) verifiedHistoryByIdentity.set(group.identityId, history);
         const last = sorted[sorted.length - 1]!;
         const intervals = sorted
           .slice(1)
@@ -273,16 +278,14 @@ export async function ensureOperatorBoard(input: {
     const current = await loadObligations(input.tenantId, input.operatorUserId);
     const check = isDormantEligible(customer, rules, today, current);
     if (!check.eligible) continue;
+    // Single-order, ambiguous-ID and incomplete histories cannot support a
+    // churn score. Never invent an order cadence, order IDs, or $50 purchases.
+    const history = verifiedHistoryByIdentity.get(customer.identityKey);
+    if (!history) continue;
     const score = scoreCustomerChurn({
       customerKey: customer.identityKey,
       customerName: customer.displayName,
-      history: Array.from({ length: Math.max(2, customer.paidOrderCount) }, (_, index) => ({
-        orderId: index + 1,
-        serviceAt: `${addDaysYmd(customer.lastPaidOn, -14 * (customer.paidOrderCount - index))}T12:00:00.000Z`,
-        valueCents: 5000,
-        weightLbs: null,
-        serviceType: "wash_fold" as const,
-      })),
+      history,
       now: new Date(`${today}T16:00:00.000Z`),
     });
     const draft = buildWinBackDraft({
