@@ -14,9 +14,12 @@ export function observedChurnHistory(
   const seen = new Set<number>();
   const history: CustomerHistoryObservation[] = [];
   for (const record of paid) {
+    // Payment timestamps are not evidence of an order-placement date.
+    // Abstain unless the canonical order event includes placedAt.
     const id = record.orderNumber?.trim();
     if (!id || !/^[1-9]\d*$/.test(id) || !record.serviceType ||
-        !Number.isFinite(record.cents) || !Number.isFinite(record.occurredAt.getTime())) {
+        !Number.isFinite(record.cents) || !record.placedAt ||
+        !Number.isFinite(record.placedAt.getTime())) {
       return null;
     }
     const orderId = Number(id);
@@ -24,7 +27,7 @@ export function observedChurnHistory(
     seen.add(orderId);
     history.push({
       orderId,
-      serviceAt: record.occurredAt,
+      serviceAt: record.placedAt,
       valueCents: record.cents,
       weightLbs: null,
       serviceType: record.serviceType,
