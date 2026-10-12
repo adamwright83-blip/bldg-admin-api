@@ -1,3 +1,4 @@
+import { CleancloudIntakePanel } from "@/components/CleancloudIntakePanel";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -2385,6 +2386,7 @@ function IntakeTab({
     return (
       <div>
         <h2 className="text-lg font-semibold mb-4">Intake</h2>
+        <CleancloudIntakePanel />
         {receiptCta}
         <p className="text-black/40 text-center mt-10">
           No collected orders awaiting intake.
@@ -2396,6 +2398,7 @@ function IntakeTab({
   return (
     <div>
       <h2 className="text-lg font-semibold mb-4">Intake</h2>
+      <CleancloudIntakePanel />
       {receiptCta}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

@@ -82,3 +82,7 @@ Verified: input/domain checks, driver Maps/counts/retry browser tests, grounded
 pickup/Detail browser fixtures, and real local MySQL command/idempotency/tenant
 proofs. Real CleanCloud Collected verification awaits the first actual pickup;
 no uncollected live orders were changed during implementation.
+
+## Intake pilot 0.3.0
+
+The owner can prepare CleanCloud Detail orders from Goldline admin Intake, inspect the draft, and explicitly approve its exact source total. See [INTAKE-PILOT.md](INTAKE-PILOT.md) for setup, limitations, and recovery. No unattended submission mode is enabled.

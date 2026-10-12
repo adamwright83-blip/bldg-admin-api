@@ -1,0 +1,46 @@
+name: CleanCloud intake pilot
+on:
+  pull_request:
+    paths:
+      - 'shared/cleancloudIntake*'
+      - 'server/integrations/cleancloud/intake/**'
+      - 'extensions/gumballpals/**'
+      - 'client/src/components/CleancloudIntakePanel.tsx'
+      - 'e2e/cleancloud-intake/**'
+      - '.github/workflows/cleancloud-intake-pilot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  intake-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: intake-test-only
+          MYSQL_DATABASE: intake_test
+        ports:
+          - 3397:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec vitest run shared/cleancloudIntake.test.ts
+      - run: node --test extensions/gumballpals/intake-page.test.mjs
+      - run: pnpm exec vitest run --config vitest.integration.config.ts server/integrations/cleancloud/intake/intakeFlow.mysql.integration.test.ts
+        env:
+          DATABASE_URL: mysql://root:intake-test-only@127.0.0.1:3397/intake_test
+      - run: pnpm exec playwright test --config e2e/cleancloud-intake/playwright.config.ts
+      - run: pnpm check
