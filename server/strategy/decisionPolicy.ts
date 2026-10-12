@@ -69,7 +69,7 @@ export function scoreStrategyPlay(
 
   // 2. Urgency and Speed to First Paid Order
   let urgencyAndSpeed = 15;
-  if (play.primaryMetric === payload.goal.metricType) {
+  if (payload.goal.target !== null && play.primaryMetric === payload.goal.metricType) {
     urgencyAndSpeed += 10; // Matches operator's active goal
   }
 
