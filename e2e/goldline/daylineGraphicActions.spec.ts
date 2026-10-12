@@ -228,10 +228,21 @@ test("approved scene retains source geometry and each native task dialog", async
   expect(scene.height / scene.width).toBeCloseTo(1672 / 941, 2);
   for (const [kind, left, top, width] of expected) {
     const card = page.locator(`.gdp-object--${kind}`);
-    const box = (await card.boundingBox())!;
-    expect((box.x - scene.x) / scene.width).toBeCloseTo(left / 941, 2);
-    expect((box.y - scene.y) / scene.height).toBeCloseTo(top / 1672, 2);
-    expect(box.width / scene.width).toBeCloseTo(width / 941, 2);
+    await card.scrollIntoViewIfNeeded();
+    const geometry = await card.evaluate(element => {
+      const cardRect = element.getBoundingClientRect();
+      const sceneRect = element
+        .closest(".gdp-art-scene")!
+        .getBoundingClientRect();
+      return {
+        left: (cardRect.x - sceneRect.x) / sceneRect.width,
+        top: (cardRect.y - sceneRect.y) / sceneRect.height,
+        width: cardRect.width / sceneRect.width,
+      };
+    });
+    expect(geometry.left).toBeCloseTo(left / 941, 2);
+    expect(geometry.top).toBeCloseTo(top / 1672, 2);
+    expect(geometry.width).toBeCloseTo(width / 941, 2);
     await card.click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
