@@ -157,6 +157,25 @@ describe("Slice 7: Mission Sequencing, Opportunity Follow-Through, and Sales Pre
     expect(mission.preparedSalesPrep.completionCondition).toContain("Confirm a launch date");
   });
 
+  it("does not invent field stops when the property account feed has no verified targets", async () => {
+    await chooseStrategicPath({
+      tenantId,
+      playId: "play_prop_expansion_01",
+      surface: "map",
+    });
+    const snapshot = createFixtureSnapshot({ accounts: [] });
+    const result = await sequenceDailyMissions({
+      tenantId,
+      actorId: "operator_adam",
+      businessDate,
+      snapshot,
+    });
+    expect(result.growthMissions).toEqual([]);
+    expect(result.unresolvedIssues).toContain(
+      "Property expansion needs verified eligible account targets before scheduling a field outing."
+    );
+  });
+
   it("guardrail.G6.sequencer_respects_ceiling: spend-dependent mission over ceiling is blocked", async () => {
     // Set ceiling to $20
     await setPlaygroundRules({
