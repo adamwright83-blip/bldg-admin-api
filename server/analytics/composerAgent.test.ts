@@ -405,18 +405,20 @@ describe("customer revenue ranking", () => {
   });
 });
 
-// ── Unknown metricIds fallback ────────────────────────────────────────────────
+// ── Unsupported metric IDs fail closed; never silently switch measures ────────
 
 describe("metric ID validation", () => {
-  it("falls back to revenue_paid_stripe when LLM returns unknown metric IDs", async () => {
+  it("does not substitute revenue when the model returns unknown metric IDs", async () => {
     const planWithBadIds = makePlannerResponse({ metricIds: ["nonexistent_metric", "another_fake"] });
     const liveSpy = { ...mockLiveSource, getRevenueSummary: vi.fn().mockResolvedValue(mockRevenue) };
     const deps = makeDeps([planWithBadIds, makeAnswererResponse()], liveSpy);
 
-    await runComposerTurn({ tenantId: "tenant_a", question: "Revenue?", history: [] }, deps);
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Revenue?", history: [] }, deps);
 
-    // Should call getRevenueSummary (the fallback) rather than throwing
-    expect(liveSpy.getRevenueSummary).toHaveBeenCalled();
+    expect(liveSpy.getRevenueSummary).not.toHaveBeenCalled();
+    expect(result.answer).toContain("won't substitute revenue");
+    expect(result.headline).toBeNull();
+    expect(deps.invokeLLM).toHaveBeenCalledTimes(1);
   });
 });
 
