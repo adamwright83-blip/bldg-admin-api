@@ -12,7 +12,7 @@ const catalog = [
 ];
 test("phone intake requires inspection approval and uncertain outcome only offers read-only check", async ({
   page,
-}) => {
+}, testInfo) => {
   let state = "detail",
     submitted = false;
   const calls: any[] = [];
