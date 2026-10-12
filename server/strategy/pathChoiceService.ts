@@ -53,7 +53,10 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
     throw new Error("Voice path choice requires an explicit read-back and spoken confirmation before recording.");
   }
 
-  const play = getStrategyPlayById(input.playId);
+  const play = getStrategyPlayById(input.playId, input.tenantId);
+  if (!play) {
+    throw new Error("Strategy path choice requires an existing play belonging to the authorized tenant");
+  }
   const previousPlayId = activePlayByTenant.get(input.tenantId) ?? null;
 
   // Set play to chosen -> active
