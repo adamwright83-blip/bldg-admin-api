@@ -222,18 +222,22 @@ export function registerStrategyPlay(play: StrategyPlay): void {
   playStore.set(play.id, play);
 }
 
-export function getStrategyPlayById(playId: string): StrategyPlay | null {
+export function getStrategyPlayById(playId: string, tenantId?: string): StrategyPlay | null {
   const existing = playStore.get(playId);
-  if (existing) return existing;
+  if (existing) {
+    return tenantId && existing.tenantId !== tenantId ? null : existing;
+  }
 
-  // Synthesize a fallback StrategyPlay if playId is known
-  if (playId.startsWith("play_")) {
+  // Legacy fixtures use implied play IDs. This compatibility fallback must
+  // never be permitted to create tenant-"default" plays in a live product.
+  const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  if (isTest && playId.startsWith("play_")) {
     const isDoor = playId.includes("door");
     const isExpensive = playId.includes("expensive");
     const now = new Date();
     const fallback: StrategyPlay = {
       id: playId,
-      tenantId: "default",
+      tenantId: tenantId ?? "test-fixture",
       businessName: isDoor ? "Door-Tag Acquisition" : "Luxury Property Expansion",
       worldName: isDoor ? "The Low Pass" : "The High Gates",
       hypothesis: isDoor ? "Deploy door tags for local resident acquisition" : "Expand into luxury properties for resident amenity acquisition",
