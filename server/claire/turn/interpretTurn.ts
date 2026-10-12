@@ -121,8 +121,12 @@ export type InterpretedTurn = {
  * it, "Should I go back to The Louise?" reads as leaving — a false hangup, which is a worse bug
  * than the one this fixes.
  */
+// A departure is a completed leave-taking clause, not the prefix of an
+// unfinished work description. In particular "I need to go to three more
+// buildings" must NOT match "I need to go" and hang up on the operator.
+// Apply only at the end of the spoken turn (possibly after a work update).
 const DEPARTURE =
-  /\b(?:i|we)\s*(?:'ve|'ll|'m)?\s*(?:have\s+to|has\s+to|had\s+to|need\s+to|needs\s+to|got\s+to|got\s+ta|gotta|must|better|gonna)\s+(?:go|run|head\s+out|get\s+going|get\s+off|get\s+back\s+to\s+it|take\s+off|jump\s+off|leave|jet)\b/;
+  /\b(?:i|we)\s*(?:'ve|'ll|'m)?\s*(?:have\s+to|has\s+to|had\s+to|need\s+to|needs\s+to|got\s+to|got\s+ta|gotta|must|better|gonna)\s+(?:go|run|head\s+out|get\s+going|get\s+off|get\s+back\s+to\s+it|take\s+off|jump\s+off|leave|jet)\b(?:\s+(?:now|soon|anyway|for\s+now|in\s+a\s+minute))?\s*[.!?]*$/;
 const PARTING =
   /\b(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
 const EXPLICIT_END =
