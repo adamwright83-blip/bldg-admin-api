@@ -11,6 +11,7 @@ import {
   getStrategySnapshotById,
 } from "./snapshotBuilder";
 import { setPlaygroundRules } from "./playgroundRulesService";
+import { scoreStrategyPlay, type PlayCandidateInput } from "./decisionPolicy";
 
 describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () => {
   const tenantA = "tenant_slice04_a";
@@ -90,6 +91,33 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     expect(snapshot.payload.growthPlan.unitsNeededPerWeek).toBeNull();
     expect(snapshot.payload.unresolved.some(item => item.source === "macroGoalService")).toBe(true);
     expect(snapshot.provenance["goal.currentValue"].source).toBe("unavailable");
+  });
+
+  it("does not reward a phantom operator goal in the play ranking", async () => {
+    const snapshot = await buildStrategySnapshot("tenant_no_goal_rank", {
+      now: new Date("2026-09-16T12:00:00Z"),
+      customerAggregates: [],
+    });
+    const candidate: PlayCandidateInput = {
+      templateKey: "property_expansion",
+      businessName: "Verified property outreach",
+      worldName: "The Gate",
+      hypothesis: "Field visits could win property access",
+      primaryMetric: "active_customers",
+      geography: "silverlake",
+      stopsCount: 2,
+      isClustered: true,
+      estimatedInitiationCost: 40,
+      estimatedSpendCents: 0,
+      spendCategory: "other",
+      confidence: "medium",
+    };
+    expect(snapshot.payload.goal.target).toBeNull();
+    const unknownGoalScore = scoreStrategyPlay(candidate, snapshot);
+    expect(unknownGoalScore.urgencyAndSpeed).toBe(15);
+    snapshot.payload.goal.target = 35;
+    const verifiedGoalScore = scoreStrategyPlay(candidate, snapshot);
+    expect(verifiedGoalScore.urgencyAndSpeed).toBe(25);
   });
 
   it("guardrail.G12.net_active_change_and_acquisition_side_by_side", async () => {
