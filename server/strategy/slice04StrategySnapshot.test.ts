@@ -11,6 +11,7 @@ import {
   getStrategySnapshotById,
 } from "./snapshotBuilder";
 import { setPlaygroundRules } from "./playgroundRulesService";
+import { scoreStrategyPlay, type PlayCandidateInput } from "./decisionPolicy";
 
 describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () => {
   const tenantA = "tenant_slice04_a";
@@ -57,7 +58,7 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const { provenance } = snapshot;
 
     expect(provenance["goal.currentValue"]).toBeDefined();
-    expect(provenance["goal.currentValue"].source).toBe("macroGoalService");
+    expect(provenance["goal.currentValue"].source).toBe("unavailable");
     expect(provenance["goal.currentValue"].computedAt).toBeDefined();
 
     expect(provenance["goal.newPayingCustomers"]).toBeDefined();
@@ -76,6 +77,47 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const prov = await getSnapshotProvenance(tenantA, snapshot.id, "goal.newPayingCustomers");
     expect(prov).toBeDefined();
     expect(prov?.source).toBe("growthMetrics.newPayingCustomers");
+  });
+
+  it("does not manufacture a 50-customer target when no operator goal is registered", async () => {
+    const snapshot = await buildStrategySnapshot("tenant_goal_not_set", {
+      now: new Date("2026-09-16T12:00:00Z"),
+      customerAggregates: [],
+    });
+    expect(snapshot.payload.goal.target).toBeNull();
+    expect(snapshot.payload.goal.targetValue).toBeNull();
+    expect(snapshot.payload.goal.gap).toBeNull();
+    expect(snapshot.payload.growthPlan.unitsRemaining).toBeNull();
+    expect(snapshot.payload.growthPlan.unitsNeededPerWeek).toBeNull();
+    expect(snapshot.payload.unresolved.some(item => item.source === "macroGoalService")).toBe(true);
+    expect(snapshot.provenance["goal.currentValue"].source).toBe("unavailable");
+  });
+
+  it("does not reward a phantom operator goal in the play ranking", async () => {
+    const snapshot = await buildStrategySnapshot("tenant_no_goal_rank", {
+      now: new Date("2026-09-16T12:00:00Z"),
+      customerAggregates: [],
+    });
+    const candidate: PlayCandidateInput = {
+      templateKey: "property_expansion",
+      businessName: "Verified property outreach",
+      worldName: "The Gate",
+      hypothesis: "Field visits could win property access",
+      primaryMetric: "active_customers",
+      geography: "silverlake",
+      stopsCount: 2,
+      isClustered: true,
+      estimatedInitiationCost: 40,
+      estimatedSpendCents: 0,
+      spendCategory: "other",
+      confidence: "medium",
+    };
+    expect(snapshot.payload.goal.target).toBeNull();
+    const unknownGoalScore = scoreStrategyPlay(candidate, snapshot);
+    expect(unknownGoalScore.urgencyAndSpeed).toBe(15);
+    snapshot.payload.goal.target = 35;
+    const verifiedGoalScore = scoreStrategyPlay(candidate, snapshot);
+    expect(verifiedGoalScore.urgencyAndSpeed).toBe(25);
   });
 
   it("guardrail.G12.net_active_change_and_acquisition_side_by_side", async () => {
@@ -140,14 +182,30 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     expect(snapshot1.contentHash).toBe(computeContentHash(snapshot1.payload));
   });
 
-  it("detects pipeline gaps including no-next-action on live opportunities", async () => {
+  it("does not fabricate an opportunity or no-next-action gap when the commercial feed is unavailable", async () => {
     const snapshot = await buildStrategySnapshot(tenantA);
-    const gaps = snapshot.payload.detectedGaps;
+    expect(snapshot.payload.opportunities).toEqual([]);
+    expect(snapshot.payload.detectedGaps.some(g => g.type === "no_next_action")).toBe(false);
+    expect(snapshot.payload.unresolved.some(u => u.source === "strategySnapshot.operationalCoverage")).toBe(true);
+  });
 
-    expect(gaps.length).toBeGreaterThan(0);
-    const noNextActionGap = gaps.find(g => g.type === "no_next_action");
-    expect(noNextActionGap).toBeDefined();
-    expect(noNextActionGap?.description).toContain("no next action scheduled");
+  it("does not manufacture property activations, capacity, commitments, or outcomes", async () => {
+    const snapshot = await buildStrategySnapshot(tenantA, { now: new Date("2026-09-16T12:00:00Z") });
+    const { payload, provenance } = snapshot;
+    expect(payload.activation).toEqual([]);
+    expect(payload.capacity).toEqual({
+      weeklyCapacityPounds: null,
+      reservedPounds: null,
+      availablePounds: null,
+      utilizationPercent: null,
+    });
+    expect(payload.campaigns).toEqual([]);
+    expect(payload.commitments.today).toEqual([]);
+    expect(payload.commitments.history14Days).toEqual({ kept: null, missed: null, total: null });
+    expect(payload.recentOutcomes).toEqual([]);
+    expect(payload.constraints).toEqual([]);
+    expect(provenance["capacity.availablePounds"].source).toBe("unavailable");
+    expect(JSON.stringify(payload)).not.toMatch(/Wilshire Grand|Broadway Lofts|Marcus K\./);
   });
 
   it("guardrail.G9.tenant_isolation: snapshots are strictly isolated across tenants", async () => {

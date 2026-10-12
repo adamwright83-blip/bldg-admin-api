@@ -47,18 +47,18 @@ export type OpportunityGap = {
 export type StrategySnapshotPayload = {
   goal: {
     metricType: GoalMetricType;
-    target: number;
-    targetValue?: number;
+    target: number | null;
+    targetValue?: number | null;
     targetDate: string | null;
     currentValue: number;
-    gap: number;
+    gap: number | null;
     newPayingCustomers: number;
     netActiveChange: number;
     secondaryTargets?: Record<string, number>;
   };
   growthPlan: {
-    unitsRemaining: number;
-    unitsNeededPerWeek: number;
+    unitsRemaining: number | null;
+    unitsNeededPerWeek: number | null;
     limitingStage: string;
     stages: FunnelStageItem[];
     nextActions: string[];
@@ -130,10 +130,10 @@ export type StrategySnapshotPayload = {
     blockedReason?: string | null;
   }>;
   capacity: {
-    weeklyCapacityPounds: number;
-    reservedPounds: number;
-    availablePounds: number;
-    utilizationPercent: number;
+    weeklyCapacityPounds: number | null;
+    reservedPounds: number | null;
+    availablePounds: number | null;
+    utilizationPercent: number | null;
   };
   campaigns: Array<{
     campaignId: string;
@@ -150,9 +150,9 @@ export type StrategySnapshotPayload = {
       scheduledAt?: string | null;
     }>;
     history14Days: {
-      kept: number;
-      missed: number;
-      total: number;
+      kept: number | null;
+      missed: number | null;
+      total: number | null;
     };
   };
   recentOutcomes: Array<{
