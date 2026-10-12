@@ -47,18 +47,18 @@ export type OpportunityGap = {
 export type StrategySnapshotPayload = {
   goal: {
     metricType: GoalMetricType;
-    target: number;
-    targetValue?: number;
+    target: number | null;
+    targetValue?: number | null;
     targetDate: string | null;
     currentValue: number;
-    gap: number;
+    gap: number | null;
     newPayingCustomers: number;
     netActiveChange: number;
     secondaryTargets?: Record<string, number>;
   };
   growthPlan: {
-    unitsRemaining: number;
-    unitsNeededPerWeek: number;
+    unitsRemaining: number | null;
+    unitsNeededPerWeek: number | null;
     limitingStage: string;
     stages: FunnelStageItem[];
     nextActions: string[];
