@@ -30,6 +30,28 @@ const context: ClaireDriveContext = {
   mission: null,
 };
 
+describe("2026-10-11 Sunday callback context relevance regression", () => {
+  it.each([
+    "We have our Sunday meeting, which we have every week to plan the week.",
+    "This is our Sunday weekly planning meeting.",
+    "I was talking about our meeting, not a building contact.",
+    "I have a meeting to plan the week's missions.",
+  ])("does not substitute an unrelated property contact for a planning statement: %s", utterance => {
+    const spoken = conservativeClaireFollowUp({ utterance, brief: null, context });
+    expect(spoken).not.toContain("Today's context identifies");
+    expect(spoken).not.toContain("The Wilshire");
+  });
+  it("still answers a genuine person lookup without inventing a name", () => {
+    const spoken = conservativeClaireFollowUp({
+      utterance: "Who am I meeting?",
+      brief: null,
+      context,
+    });
+    expect(spoken).toContain("The Wilshire");
+    expect(spoken).toContain("does not name a specific person");
+  });
+});
+
 describe("Claire pre-drive conversation", () => {
   it.each(["Got it", "I'm good", "That's enough", "End the call", "goodbye"])(
     "recognizes a natural close: %s",
