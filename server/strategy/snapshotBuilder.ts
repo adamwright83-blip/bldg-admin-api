@@ -212,39 +212,14 @@ export async function buildStrategySnapshot(
   // is unique to strategy types and has no live mapping. Empty, not guessed.
   const accounts: StrategySnapshotPayload["accounts"] = [];
 
-  // 8. Opportunities & Detected Gaps
-  const opportunities = [
-    {
-      id: "opp_101",
-      title: "Wilshire Grand Property Manager Intro",
-      stage: "property_pitch",
-      lastMeaningfulInteraction: new Date(now.getTime() - 4 * 86400000).toISOString(),
-      nextAction: "Drop sample kit and resident welcome cards to front desk",
-      nextActionDue: new Date(now.getTime() + 86400000).toISOString(),
-      source: "field_walkin",
-      permissionState: "granted" as const,
-    },
-    {
-      id: "opp_102",
-      title: "Broadway Lofts Resident Access Followup",
-      stage: "access_negotiation",
-      lastMeaningfulInteraction: new Date(now.getTime() - 10 * 86400000).toISOString(),
-      nextAction: null, // Triggers "no_next_action" gap!
-      nextActionDue: null,
-      source: "commercial_lead",
-      permissionState: "pending" as const,
-    },
-  ];
-
-  const detectedGaps: OpportunityGap[] = [
-    {
-      type: "no_next_action",
-      opportunityId: "opp_102",
-      description: "Broadway Lofts Resident Access Followup has no next action scheduled.",
-    },
-  ];
+  // No production reader currently supplies these optional operational sections.
+  // Treat them as unobserved, not as zero activity or demo-derived facts.
+  // A future adapter must attach canonical source identifiers and coverage before
+  // populating any of these fields.
+  const opportunities: StrategySnapshotPayload["opportunities"] = [];
+  const detectedGaps: OpportunityGap[] = [];
   const firstOrderNoSecond = repeatPipeline.recentFirstOrderCustomers.find(
-    c => !c.hasSecondOrder
+    customer => !customer.hasSecondOrder
   );
   if (firstOrderNoSecond) {
     detectedGaps.push({
@@ -253,86 +228,20 @@ export async function buildStrategySnapshot(
       description: `Customer ${firstOrderNoSecond.id} has a first paid order and no second paid order in observed history.`,
     });
   }
-
-  // 9. Activation (laundry template)
-  const activation = [
-    {
-      propertyId: "bldg_century_plaza",
-      propertyName: "The Century Plaza",
-      approvalStatus: "approved" as const,
-      residentCommunicationAllowed: true,
-      qrKitsDeployed: true,
-      firstOrderCount: 3,
-      blockedReason: null,
-    },
-    {
-      propertyId: "bldg_wilshire_grand",
-      propertyName: "Wilshire Grand Residences",
-      approvalStatus: "pending" as const,
-      residentCommunicationAllowed: false,
-      qrKitsDeployed: false,
-      firstOrderCount: 0,
-      blockedReason: "Property manager requested formal certificate of insurance before lobby placement",
-    },
-  ];
-
-  // 10. Capacity
-  const capacity = {
-    weeklyCapacityPounds: 1200,
-    reservedPounds: 450,
-    availablePounds: 750,
-    utilizationPercent: 37.5,
+  const activation: StrategySnapshotPayload["activation"] = [];
+  const capacity: StrategySnapshotPayload["capacity"] = {
+    weeklyCapacityPounds: null,
+    reservedPounds: null,
+    availablePounds: null,
+    utilizationPercent: null,
   };
-
-  // 11. Campaigns
-  const campaigns = [
-    {
-      campaignId: "camp_downtown_activation",
-      title: "Downtown Corridor Commercial Expansion",
-      status: "active",
-      objective: "Expand route density along Wilshire & Broadway corridors",
-    },
-  ];
-
-  // 12. Commitments (today & 14-day history)
-  const commitments = {
-    today: [
-      {
-        id: "comm_1",
-        title: "Deliver sample kit to Wilshire Grand front desk",
-        kind: "growth",
-        status: "pending",
-        scheduledAt: new Date(now.getTime() + 2 * 3600000).toISOString(),
-      },
-    ],
-    history14Days: {
-      kept: 12,
-      missed: 2,
-      total: 14,
-    },
+  const campaigns: StrategySnapshotPayload["campaigns"] = [];
+  const commitments: StrategySnapshotPayload["commitments"] = {
+    today: [],
+    history14Days: { kept: null, missed: null, total: null },
   };
-
-  // 13. Recent Outcomes (last 14 days)
-  const recentOutcomes = [
-    {
-      id: "out_1",
-      occurredAt: new Date(now.getTime() - 2 * 86400000).toISOString(),
-      type: "order_delivered",
-      summary: "First order delivered successfully for Marcus K. at Century Plaza",
-    },
-  ];
-
-  // 14. Constraints
-  const constraints = [
-    {
-      type: "route_window",
-      description: "Afternoon pickup & delivery route locked 2:00 PM - 5:30 PM",
-    },
-    {
-      type: "capacity_cap",
-      description: "Single-day commercial intake capped at 300 lbs",
-    },
-  ];
+  const recentOutcomes: StrategySnapshotPayload["recentOutcomes"] = [];
+  const constraints: StrategySnapshotPayload["constraints"] = [];
 
   // 15. Unresolved Issues & Staleness Detection
   const unresolved: Array<{ source: string; issue: string; severity: "warning" | "error" }> = [];
@@ -375,6 +284,11 @@ export async function buildStrategySnapshot(
   unresolved.push({
     source: "strategySnapshot.accounts",
     issue: ACCOUNTS_STATE_UNMAPPED_ISSUE,
+    severity: "warning",
+  });
+  unresolved.push({
+    source: "strategySnapshot.operationalCoverage",
+    issue: "Opportunities, property activation, campaigns, commitments, outcomes, constraints, and capacity lack connected canonical operational readers; they are unobserved, not evidence of no work or no capacity.",
     severity: "warning",
   });
   unresolved.push({
@@ -458,8 +372,8 @@ export async function buildStrategySnapshot(
       computedAt,
     },
     "capacity.availablePounds": {
-      source: "commercialServiceExpectations",
-      queryOrDefinition: "weeklyCapacityPounds - reservedPounds",
+      source: "unavailable",
+      queryOrDefinition: "No verified operational capacity reader is connected; do not infer pounds available.",
       computedAt,
     },
     "customers.dormantEligible": {
@@ -605,6 +519,9 @@ export async function buildStrategySnapshot(
     if (payload.campaigns.length > 1) {
       payload.campaigns = payload.campaigns.slice(0, 1);
       truncationDetails.push("campaigns truncated to 1");
+    }
+    if (truncationDetails.length === 0) {
+      truncationDetails.push("Token budget exceeded, but no optional list rows can safely be truncated.");
     }
 
     estimatedTokens = estimateTokenCount(canonicalJsonStringify(payload));
