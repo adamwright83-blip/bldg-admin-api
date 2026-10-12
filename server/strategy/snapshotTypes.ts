@@ -130,10 +130,10 @@ export type StrategySnapshotPayload = {
     blockedReason?: string | null;
   }>;
   capacity: {
-    weeklyCapacityPounds: number;
-    reservedPounds: number;
-    availablePounds: number;
-    utilizationPercent: number;
+    weeklyCapacityPounds: number | null;
+    reservedPounds: number | null;
+    availablePounds: number | null;
+    utilizationPercent: number | null;
   };
   campaigns: Array<{
     campaignId: string;
@@ -150,9 +150,9 @@ export type StrategySnapshotPayload = {
       scheduledAt?: string | null;
     }>;
     history14Days: {
-      kept: number;
-      missed: number;
-      total: number;
+      kept: number | null;
+      missed: number | null;
+      total: number | null;
     };
   };
   recentOutcomes: Array<{
