@@ -615,11 +615,15 @@ async function executeMetrics(
   const needsRepeat = ids.has("repeat_customer_count");
   const needsCustomerRevenue = ids.has("top_customer_revenue");
   const needsCompleteness = plan.intent === "completeness";
-  const needsComparison = plan.compareToPrevious;
+  const comparisonMetricId = plan.metricIds.find(id => METRICS[id]?.supportsComparison);
+  const needsComparison = plan.compareToPrevious && Boolean(comparisonMetricId);
 
   const groupBy = plan.groupBy;
 
   const unavailable = results.unavailable;
+  if (plan.compareToPrevious && !comparisonMetricId) {
+    unavailable.push("comparison for the requested metric");
+  }
   const [revenue, stats, openOrders, repeatCustomers, customerRevenue, comparison, completeness] =
     await Promise.all([
       settle("revenue", needsRevenue, () => source.getRevenueSummary(tenantId, { range, groupBy }), unavailable),
@@ -637,7 +641,7 @@ async function executeMetrics(
         needsComparison,
         () =>
           source.getMetricComparison(tenantId, {
-            metricId: plan.metricIds.find((id) => METRICS[id]?.supportsComparison) ?? "revenue_paid_stripe",
+            metricId: comparisonMetricId!,
             currentRange: range,
             groupBy,
           }),
