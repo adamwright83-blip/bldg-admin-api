@@ -843,14 +843,27 @@ export async function runComposerTurn(
     typeof planContent === "string" ? planContent : JSON.stringify(planContent)
   );
 
-  // Validate metric IDs against registry (drop unknown ones, fallback to revenue).
+  // Never silently answer an unsupported question with revenue. The metric
+  // registry is a safety boundary, not permission to replace the user's intent.
   const validMetricIds = rawPlan.metricIds.filter((id) => METRICS[id]);
+  const unknownMetricIds = rawPlan.metricIds.filter((id) => !METRICS[id]);
   const inferredTopCustomer = isTopCustomerQuestion(question);
-  const metricIds = inferredTopCustomer
-    ? ["top_customer_revenue"]
-    : validMetricIds.length > 0
-      ? validMetricIds
-      : ["revenue_paid_stripe"];
+  if (
+    rawPlan.intent !== "completeness" &&
+    !inferredTopCustomer &&
+    (validMetricIds.length === 0 || unknownMetricIds.length > 0)
+  ) {
+    const range = normalizeRange(rawPlan.range);
+    return {
+      answer: "I can't calculate that metric from the connected data yet. I won't substitute revenue or guess a number.",
+      headline: null,
+      chart: null,
+      table: null,
+      actions: [],
+      meta: { ...buildQueryMeta(validMetricIds, tenantId, demoMode), dateRange: range },
+    };
+  }
+  const metricIds = inferredTopCustomer ? ["top_customer_revenue"] : validMetricIds;
   const plan: PlannerOutput = { ...rawPlan, metricIds };
 
   // Clamp/validate date range.
