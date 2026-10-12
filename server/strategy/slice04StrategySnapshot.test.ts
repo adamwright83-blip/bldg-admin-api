@@ -57,7 +57,7 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const { provenance } = snapshot;
 
     expect(provenance["goal.currentValue"]).toBeDefined();
-    expect(provenance["goal.currentValue"].source).toBe("macroGoalService");
+    expect(provenance["goal.currentValue"].source).toBe("unavailable");
     expect(provenance["goal.currentValue"].computedAt).toBeDefined();
 
     expect(provenance["goal.newPayingCustomers"]).toBeDefined();
@@ -76,6 +76,20 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const prov = await getSnapshotProvenance(tenantA, snapshot.id, "goal.newPayingCustomers");
     expect(prov).toBeDefined();
     expect(prov?.source).toBe("growthMetrics.newPayingCustomers");
+  });
+
+  it("does not manufacture a 50-customer target when no operator goal is registered", async () => {
+    const snapshot = await buildStrategySnapshot("tenant_goal_not_set", {
+      now: new Date("2026-09-16T12:00:00Z"),
+      customerAggregates: [],
+    });
+    expect(snapshot.payload.goal.target).toBeNull();
+    expect(snapshot.payload.goal.targetValue).toBeNull();
+    expect(snapshot.payload.goal.gap).toBeNull();
+    expect(snapshot.payload.growthPlan.unitsRemaining).toBeNull();
+    expect(snapshot.payload.growthPlan.unitsNeededPerWeek).toBeNull();
+    expect(snapshot.payload.unresolved.some(item => item.source === "macroGoalService")).toBe(true);
+    expect(snapshot.provenance["goal.currentValue"].source).toBe("unavailable");
   });
 
   it("guardrail.G12.net_active_change_and_acquisition_side_by_side", async () => {
