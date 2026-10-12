@@ -1,3 +1,4 @@
+import type { PickupCounts } from "@shared/cleancloudPickup";
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -41,12 +42,18 @@ import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
 import "./goldline-day-plan.css";
 import { DaylineWorldCompositor } from "./DaylineWorldCompositor";
-import { ApprovedDaylineDock, ApprovedDaylineHeader } from "./ApprovedDaylineChrome";
+import {
+  ApprovedDaylineDock,
+  ApprovedDaylineHeader,
+} from "./ApprovedDaylineChrome";
 
 function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
   const presented = presentCurrentDayLine(line);
   return (
-    <div data-testid="current-day-line" data-ranking-status={presented.rankingStatus}>
+    <div
+      data-testid="current-day-line"
+      data-ranking-status={presented.rankingStatus}
+    >
       <p>
         <strong>Today</strong>
       </p>
@@ -67,7 +74,8 @@ function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
       )}
       {presented.designated ? (
         <p data-testid="current-day-line-designated">
-          {executionTypeLabel(presented.designated.executionType)} · {presented.designated.title}
+          {executionTypeLabel(presented.designated.executionType)} ·{" "}
+          {presented.designated.title}
         </p>
       ) : null}
     </div>
@@ -89,7 +97,11 @@ export type GoldlineDayPlanProps = {
   isLoading?: boolean;
   loadError?: string | null;
   onRetry?: () => void;
-  onResolveStop?: (stop: DayPlanStop) => Promise<boolean>;
+  onResolveStop?: (
+    stop: DayPlanStop,
+    counts?: PickupCounts
+  ) => Promise<boolean>;
+  onRetryPickup?: (stop: DayPlanStop) => Promise<void>;
   onArchiveStop?: (stop: DayPlanStop) => Promise<boolean>;
   onOpenJournal?: () => void;
   onOpenFirstMission?: () => void;
@@ -270,6 +282,20 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     new URLSearchParams(window.location.search).get("dayline") !== "classic";
   const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
+  function selectStop(stop: DayPlanStop) {
+    // Keep the pickup chapter open in this tab while Maps opens. Returning
+    // from navigation goes directly to the counts and Picked up action.
+    if (
+      stop.kind === "pickup" &&
+      stop.status !== "completed" &&
+      stop.status !== "cancelled" &&
+      stop.navigationUrl
+    ) {
+      window.open(stop.navigationUrl, "_blank", "noopener,noreferrer");
+    }
+    setActiveStop(stop);
+  }
+
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [worldNavigationOpen, setWorldNavigationOpen] = useState(false);
@@ -355,7 +381,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     ) ?? null;
   const startNext = () => {
     if (!nextStop) return props.onOpenImport();
-    setActiveStop(nextStop);
+    selectStop(nextStop);
   };
 
   return (
@@ -392,199 +418,206 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               ? ` · ${dateHeading(props.businessDate)}`
               : null}
           </p>
-        {plan.authoredDay?.framing ? (
-          <p
-            className="gdp-authored-framing"
-            data-testid="authored-day-framing"
-          >
-            {plan.authoredDay.framing}
-          </p>
-        ) : null}
-        {plan.missionPlan ? (
-          <div className="gdp-mission-plan" data-testid="mission-director-plan">
-            {plan.missionPlan.status === "planned" ? (
-              <>
-                <p>
-                  <strong>Tomorrow's growth mission:</strong>{" "}
-                  {plan.missionPlan.primary.title}
-                </p>
+          {plan.authoredDay?.framing ? (
+            <p
+              className="gdp-authored-framing"
+              data-testid="authored-day-framing"
+            >
+              {plan.authoredDay.framing}
+            </p>
+          ) : null}
+          {plan.missionPlan ? (
+            <div
+              className="gdp-mission-plan"
+              data-testid="mission-director-plan"
+            >
+              {plan.missionPlan.status === "planned" ? (
+                <>
+                  <p>
+                    <strong>Tomorrow's growth mission:</strong>{" "}
+                    {plan.missionPlan.primary.title}
+                  </p>
+                  <p className="gdp-mission-explanation">
+                    {plan.missionPlan.explanation}
+                  </p>
+                  <p className="gdp-mission-fallback">
+                    If the day changes: {plan.missionPlan.fallback.title}
+                  </p>
+                </>
+              ) : plan.missionPlan.status === "fallback_only" ? (
+                <>
+                  <p>
+                    <strong>Tomorrow's fallback mission:</strong>{" "}
+                    {plan.missionPlan.fallback.title}
+                  </p>
+                  <p className="gdp-mission-explanation">
+                    {plan.missionPlan.explanation}
+                  </p>
+                </>
+              ) : (
                 <p className="gdp-mission-explanation">
-                  {plan.missionPlan.explanation}
+                  {plan.missionPlan.remedy}
                 </p>
-                <p className="gdp-mission-fallback">
-                  If the day changes: {plan.missionPlan.fallback.title}
-                </p>
-              </>
-            ) : plan.missionPlan.status === "fallback_only" ? (
-              <>
-                <p>
-                  <strong>Tomorrow's fallback mission:</strong>{" "}
-                  {plan.missionPlan.fallback.title}
-                </p>
-                <p className="gdp-mission-explanation">
-                  {plan.missionPlan.explanation}
-                </p>
-              </>
-            ) : (
-              <p className="gdp-mission-explanation">
-                {plan.missionPlan.remedy}
+              )}
+            </div>
+          ) : null}
+          {props.currentDayLine ? (
+            <details className="gdp-dayline-disclosure">
+              <summary>DAY LINE DETAILS</summary>
+              <CurrentDayLineBlock line={props.currentDayLine} />
+            </details>
+          ) : null}
+          {props.weeklyReadiness?.length ? (
+            <section
+              className="gdp-weekly-readiness"
+              data-testid="weekly-readiness-due-today"
+              aria-label="Readiness due today"
+            >
+              <p>
+                <strong>Ready for what's next</strong>
               </p>
-            )}
-          </div>
-        ) : null}
-        {props.currentDayLine ? (
-          <details className="gdp-dayline-disclosure">
-            <summary>DAY LINE DETAILS</summary>
-            <CurrentDayLineBlock line={props.currentDayLine} />
-          </details>
-        ) : null}
-        {props.weeklyReadiness?.length ? (
-          <section
-            className="gdp-weekly-readiness"
-            data-testid="weekly-readiness-due-today"
-            aria-label="Readiness due today"
-          >
-            <p><strong>Ready for what's next</strong></p>
-            <ul>
-              {props.weeklyReadiness.map(item => (
-                <li
-                  key={`${item.neededForDate}:${item.text}`}
-                  data-readiness-status={item.status}
-                >
-                  <b>{item.text}</b>
-                  <small>
-                    {item.status.toUpperCase()} · for {item.missionTitle}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        {props.onEnterChapter ? (
-          <button
-            type="button"
-            className="gdp-chapter-entry"
-            onClick={props.onEnterChapter}
-            data-testid="enter-chapter-button"
-          >
-            A new Kingdom has opened — enter The Last Valet
-          </button>
-        ) : null}
-        {props.campaignRunCard ? (
-          <button
-            type="button"
-            className="gdp-campaign-run-card"
-            onClick={props.campaignRunCard.onOpen}
-            data-testid="bio-containment-day-line-card"
-          >
-            <img src={props.campaignRunCard.iconSrc} alt="" />
-            <span>
-              <small>CAMPAIGN RUN</small>
-              <b>{props.campaignRunCard.title}</b>
-            </span>
-          </button>
-        ) : null}
-        {props.rescueMissionCard ? (
-          <button
-            type="button"
-            className="gdp-campaign-run-card"
-            onClick={props.rescueMissionCard.onOpen}
-            data-testid="spirit-human-day-line-card"
-          >
-            <span>
-              <small>RESCUE · {props.rescueMissionCard.status.toUpperCase()}</small>
-              <b>{props.rescueMissionCard.title}</b>
-            </span>
-          </button>
-        ) : null}
-        <button
-          className="gdp-menu-button"
-          type="button"
-          onClick={() => setMenuOpen(value => !value)}
-          aria-label="Open menu"
-          aria-expanded={menuOpen}
-        >
-          {menuOpen ? <X /> : <Menu />}
-        </button>
-        {menuOpen && (
-          <div className="gdp-menu">
+              <ul>
+                {props.weeklyReadiness.map(item => (
+                  <li
+                    key={`${item.neededForDate}:${item.text}`}
+                    data-readiness-status={item.status}
+                  >
+                    <b>{item.text}</b>
+                    <small>
+                      {item.status.toUpperCase()} · for {item.missionTitle}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {props.onEnterChapter ? (
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                props.onOpenImport();
-              }}
+              className="gdp-chapter-entry"
+              onClick={props.onEnterChapter}
+              data-testid="enter-chapter-button"
             >
-              IMPORT ROUTE
+              A new Kingdom has opened — enter The Last Valet
             </button>
+          ) : null}
+          {props.campaignRunCard ? (
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                props.onEnterOperations();
-              }}
+              className="gdp-campaign-run-card"
+              onClick={props.campaignRunCard.onOpen}
+              data-testid="bio-containment-day-line-card"
             >
-              FIELD OPERATIONS
+              <img src={props.campaignRunCard.iconSrc} alt="" />
+              <span>
+                <small>CAMPAIGN RUN</small>
+                <b>{props.campaignRunCard.title}</b>
+              </span>
             </button>
+          ) : null}
+          {props.rescueMissionCard ? (
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                props.onEnterWorld();
-              }}
+              className="gdp-campaign-run-card"
+              onClick={props.rescueMissionCard.onOpen}
+              data-testid="spirit-human-day-line-card"
             >
-              EXPLORE OVERLAND
+              <span>
+                <small>
+                  RESCUE · {props.rescueMissionCard.status.toUpperCase()}
+                </small>
+                <b>{props.rescueMissionCard.title}</b>
+              </span>
             </button>
-            {props.onOpenFirstMission && (
-              <button type="button" onClick={props.onOpenFirstMission}>
-                SIDE QUEST · THE FIRST SPARK
+          ) : null}
+          <button
+            className="gdp-menu-button"
+            type="button"
+            onClick={() => setMenuOpen(value => !value)}
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X /> : <Menu />}
+          </button>
+          {menuOpen && (
+            <div className="gdp-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  props.onOpenImport();
+                }}
+              >
+                IMPORT ROUTE
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  props.onEnterOperations();
+                }}
+              >
+                FIELD OPERATIONS
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  props.onEnterWorld();
+                }}
+              >
+                EXPLORE OVERLAND
+              </button>
+              {props.onOpenFirstMission && (
+                <button type="button" onClick={props.onOpenFirstMission}>
+                  SIDE QUEST · THE FIRST SPARK
+                </button>
+              )}
+            </div>
+          )}
+          <div className="gdp-counts">
+            <div>
+              <strong>{plan.counts.pickup}</strong>
+              <span>PICKUPS</span>
+            </div>
+            <div>
+              <strong>{plan.counts.dropoff}</strong>
+              <span>DROPOFFS</span>
+            </div>
+            <div>
+              <strong>{plan.counts.sales}</strong>
+              <span>SALES STOPS</span>
+            </div>
+            <div>
+              <strong>{plan.counts.prep}</strong>
+              <span>PREP TASKS</span>
+            </div>
           </div>
-        )}
-        <div className="gdp-counts">
-          <div>
-            <strong>{plan.counts.pickup}</strong>
-            <span>PICKUPS</span>
+          <div className="gdp-summary">
+            <span>{plan.stops.length} STOPS</span>
+            <i>•</i>
+            <span>{plan.fixedWindowCount} FIXED WINDOWS</span>
+            <i>•</i>
+            <span className={plan.cleanCloudCount ? "is-synced" : "is-needed"}>
+              {plan.cleanCloudCount
+                ? `${plan.cleanCloudCount} CLEANCloud SYNCED`
+                : "IMPORT NEEDED"}
+            </span>
           </div>
-          <div>
-            <strong>{plan.counts.dropoff}</strong>
-            <span>DROPOFFS</span>
-          </div>
-          <div>
-            <strong>{plan.counts.sales}</strong>
-            <span>SALES STOPS</span>
-          </div>
-          <div>
-            <strong>{plan.counts.prep}</strong>
-            <span>PREP TASKS</span>
-          </div>
-        </div>
-        <div className="gdp-summary">
-          <span>{plan.stops.length} STOPS</span>
-          <i>•</i>
-          <span>{plan.fixedWindowCount} FIXED WINDOWS</span>
-          <i>•</i>
-          <span className={plan.cleanCloudCount ? "is-synced" : "is-needed"}>
-            {plan.cleanCloudCount
-              ? `${plan.cleanCloudCount} CLEANCloud SYNCED`
-              : "IMPORT NEEDED"}
-          </span>
-        </div>
-        <button
-          className={`gdp-import ${plan.cleanCloudCount ? "is-synced" : ""}`}
-          type="button"
-          onClick={props.onOpenImport}
-        >
-          <CloudUpload />
-          <span>
-            <strong>{plan.cleanCloudCount ? "CLEANCloud" : "IMPORT"}</strong>
-            {plan.cleanCloudCount
-              ? `${plan.cleanCloudCount} STOPS SYNCED`
-              : "TODAY'S ROUTE"}
-          </span>
-        </button>
-      </header>
+          <button
+            className={`gdp-import ${plan.cleanCloudCount ? "is-synced" : ""}`}
+            type="button"
+            onClick={props.onOpenImport}
+          >
+            <CloudUpload />
+            <span>
+              <strong>{plan.cleanCloudCount ? "CLEANCloud" : "IMPORT"}</strong>
+              {plan.cleanCloudCount
+                ? `${plan.cleanCloudCount} STOPS SYNCED`
+                : "TODAY'S ROUTE"}
+            </span>
+          </button>
+        </header>
       )}
 
       {!artPreview && (
@@ -621,51 +654,81 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       </div>
 
       {props.firstMissionEvidence && (
-        <section className="gdp-load-error" data-testid="day-line-first-mission-evidence" aria-label="Completed field evidence">
+        <section
+          className="gdp-load-error"
+          data-testid="day-line-first-mission-evidence"
+          aria-label="Completed field evidence"
+        >
           <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
           <p>{props.firstMissionEvidence.text}</p>
-          <small>Operator-attested observation · {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}. No sale or revenue verified.</small>
+          <small>
+            Operator-attested observation ·{" "}
+            {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}.
+            No sale or revenue verified.
+          </small>
         </section>
       )}
       {artPreview && (
-        <details className="gdp-v2-operations" data-testid="goldline-world-operations">
+        <details
+          className="gdp-v2-operations"
+          data-testid="goldline-world-operations"
+        >
           <summary>FIELD OPERATIONS</summary>
           {props.isLoading && <p>Charting today's Day Line…</p>}
           {plan.stops.length === 0 && !props.isLoading && (
-            <p>No Action Slots yet. Import your route or add an existing commitment.</p>
+            <p>
+              No Action Slots yet. Import your route or add an existing
+              commitment.
+            </p>
           )}
           <div className="gdp-v2-operations-actions">
-            <button type="button" onClick={props.onOpenImport}>IMPORT OR ADD STOPS</button>
-            <button type="button" onClick={props.onEnterOperations}>FIELD OPERATIONS</button>
-            <button type="button" onClick={props.onOpenJournal ?? props.onEnterOperations}>JOURNAL</button>
+            <button type="button" onClick={props.onOpenImport}>
+              IMPORT OR ADD STOPS
+            </button>
+            <button type="button" onClick={props.onEnterOperations}>
+              FIELD OPERATIONS
+            </button>
+            <button
+              type="button"
+              onClick={props.onOpenJournal ?? props.onEnterOperations}
+            >
+              JOURNAL
+            </button>
           </div>
           {plan.growthCoverage !== "covered" &&
             !props.dismissedPromptKeys?.includes("growth-intake") &&
-            !proposal && props.onProposeCommitment && (
-            <div className="gdp-v2-commitment">
-              <label htmlFor="gdp-v2-commitment-text">What needs to move forward today?</label>
-              <textarea
-                id="gdp-v2-commitment-text"
-                value={truthText}
-                onChange={event => setTruthText(event.target.value)}
-              />
-              <button
-                type="button"
-                disabled={directorBusy || !truthText.trim()}
-                onClick={async () => {
-                  setDirectorBusy(true);
-                  try {
-                    setDirectorError(null);
-                    setProposal(await props.onProposeCommitment!(truthText));
-                  } catch {
-                    setDirectorError("Could not prepare your commitment. Text preserved.");
-                  } finally { setDirectorBusy(false); }
-                }}
-              >
-                REVIEW COMMITMENT
-              </button>
-            </div>
-          )}
+            !proposal &&
+            props.onProposeCommitment && (
+              <div className="gdp-v2-commitment">
+                <label htmlFor="gdp-v2-commitment-text">
+                  What needs to move forward today?
+                </label>
+                <textarea
+                  id="gdp-v2-commitment-text"
+                  value={truthText}
+                  onChange={event => setTruthText(event.target.value)}
+                />
+                <button
+                  type="button"
+                  disabled={directorBusy || !truthText.trim()}
+                  onClick={async () => {
+                    setDirectorBusy(true);
+                    try {
+                      setDirectorError(null);
+                      setProposal(await props.onProposeCommitment!(truthText));
+                    } catch {
+                      setDirectorError(
+                        "Could not prepare your commitment. Text preserved."
+                      );
+                    } finally {
+                      setDirectorBusy(false);
+                    }
+                  }}
+                >
+                  REVIEW COMMITMENT
+                </button>
+              </div>
+            )}
           {proposal && (
             <div className="gdp-v2-commitment">
               <strong>{proposal.title}</strong>
@@ -682,9 +745,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                     setTruthText("");
                   } catch {
                     setDirectorError("Could not add commitment; retry.");
-                  } finally { setDirectorBusy(false); }
+                  } finally {
+                    setDirectorBusy(false);
+                  }
                 }}
-              >ADD TO DAY</button>
+              >
+                ADD TO DAY
+              </button>
               <button
                 type="button"
                 disabled={directorBusy}
@@ -695,9 +762,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                     setProposal(null);
                   } catch {
                     setDirectorError("Could not dismiss this prompt.");
-                  } finally { setDirectorBusy(false); }
+                  } finally {
+                    setDirectorBusy(false);
+                  }
                 }}
-              >NOT NOW</button>
+              >
+                NOT NOW
+              </button>
             </div>
           )}
           {directorError && <p role="alert">{directorError}</p>}
@@ -707,11 +778,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         <DaylineWorldCompositor
           stops={plan.stops}
           isLoading={props.isLoading}
-          onSelect={setActiveStop}
+          onSelect={selectStop}
           onEnterExistingChapter={props.onEnterChapter}
           onEnterOverworld={props.onEnterWorld}
           isDriving={props.isDriving ?? true}
-          allowWalkingAnimation={Boolean(props.allowWalkingAnimation && props.isDriving === false)}
+          allowWalkingAnimation={Boolean(
+            props.allowWalkingAnimation && props.isDriving === false
+          )}
           sceneHeader={
             <ApprovedDaylineHeader
               businessDate={props.businessDate}
@@ -719,7 +792,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               onToggleNavigation={() => setWorldNavigationOpen(open => !open)}
               onCallClaire={() => {
                 callClaireForMission.mutate({
-                  missionId: nextStop?.action?.type === "commercial" ? nextStop.action.missionId : undefined,
+                  missionId:
+                    nextStop?.action?.type === "commercial"
+                      ? nextStop.action.missionId
+                      : undefined,
                   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 });
               }}
@@ -728,7 +804,9 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           sceneFooter={
             <ApprovedDaylineDock
               navigationOpen={worldNavigationOpen}
-              onLanternCity={() => window.location.assign("/growth/lantern-city")}
+              onLanternCity={() =>
+                window.location.assign("/growth/lantern-city")
+              }
               onDayLine={() => {
                 setWorldNavigationOpen(false);
                 window.scrollTo({ top: 0, behavior: "smooth" });
@@ -740,328 +818,398 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         />
       ) : (
         <section className="gdp-route" aria-label="Today's Gold Line">
-        <svg
-          className="gdp-line"
-          viewBox="0 0 100 1000"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <path d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000" />
-          <path
-            className="gdp-line-complete"
-            pathLength="1"
-            strokeDasharray={`${progress} 1`}
-            d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000"
-          />
-        </svg>
-        {props.isLoading && (
-          <div className="gdp-empty">Charting today’s Gold Line…</div>
-        )}
-        {directorError && !proposal && (
-          <div className="gdp-director-error" role="alert">
-            {directorError}
-          </div>
-        )}
-        {!props.isLoading &&
-          plan.growthCoverage !== "covered" &&
-          !proposal &&
-          !props.dismissedPromptKeys?.includes("growth-intake") && (
-            <details className="gdp-director" data-testid="day-director-intake">
-              <summary>
-                ADD A COMMITMENT <ChevronRight size={16} />
-              </summary>
-              <strong>DAY DIRECTOR</strong>
-              <p>What has to move forward today?</p>
-              {!props.intelligenceAvailable && (
-                <small>
-                  Planning intelligence unavailable — operational route
-                  preserved. Add today’s commitment manually.
-                </small>
-              )}
-              <textarea
-                aria-label="Today's commitment"
-                value={truthText}
-                onChange={event => setTruthText(event.target.value)}
-                placeholder="Tell me what you committed to, promised, need to sell, or need to finish."
-              />
-              <div>
-                <button
-                  type="button"
-                  disabled={directorBusy || !truthText.trim()}
-                  onClick={async () => {
-                    if (!props.onProposeCommitment) return;
-                    setDirectorBusy(true);
-                    try {
-                      setDirectorError(null);
-                      setProposal(await props.onProposeCommitment(truthText));
-                    } catch {
-                      setDirectorError(
-                        "Could not prepare this commitment. Your text is kept; please try again."
-                      );
-                    } finally {
-                      setDirectorBusy(false);
-                    }
-                  }}
-                >
-                  {props.intelligenceAvailable ? "REVIEW PLAN" : "ADD MANUALLY"}
-                </button>
-                <button
-                  type="button"
-                  disabled={directorBusy}
-                  onClick={async () => {
-                    try {
-                      await props.onDismissProposal?.("growth-intake");
-                      setProposal(null);
-                    } catch {
-                      setDirectorError(
-                        "Could not dismiss this prompt. Please try again."
-                      );
-                    }
-                  }}
-                >
-                  NOT NOW
-                </button>
-              </div>
-            </details>
+          <svg
+            className="gdp-line"
+            viewBox="0 0 100 1000"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000" />
+            <path
+              className="gdp-line-complete"
+              pathLength="1"
+              strokeDasharray={`${progress} 1`}
+              d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000"
+            />
+          </svg>
+          {props.isLoading && (
+            <div className="gdp-empty">Charting today’s Gold Line…</div>
           )}
-        {proposal &&
-          !props.dismissedPromptKeys?.includes(proposal.promptKey) && (
-            <aside className="gdp-director" data-testid="day-director-proposal">
-              <strong>DAY DIRECTOR</strong>
-              <p>
-                {proposal.title}
-                {proposal.quantity ? ` · ${proposal.quantity}` : ""}
-              </p>
-              {proposal.question && <small>{proposal.question}</small>}
-              {directorError && (
-                <small className="gdp-director-error" role="alert">
-                  {directorError}
-                </small>
-              )}
-              <div>
-                <button
-                  type="button"
-                  disabled={directorBusy}
-                  onClick={async () => {
-                    setDirectorBusy(true);
-                    try {
-                      setDirectorError(null);
-                      await props.onAcceptProposal?.(proposal);
-                      setProposal(null);
-                      setTruthText("");
-                    } catch {
-                      setDirectorError(
-                        "Could not add this to Today. Please try again."
-                      );
-                    } finally {
-                      setDirectorBusy(false);
-                    }
-                  }}
-                >
-                  ADD TO PLAN
-                </button>
-                <button
-                  type="button"
-                  disabled={directorBusy}
-                  onClick={async () => {
-                    setDirectorBusy(true);
-                    try {
-                      setDirectorError(null);
-                      await props.onDismissProposal?.(proposal.promptKey);
-                      setProposal(null);
-                    } catch {
-                      setDirectorError(
-                        "Could not dismiss this prompt. Please try again."
-                      );
-                    } finally {
-                      setDirectorBusy(false);
-                    }
-                  }}
-                >
-                  NOT NOW
-                </button>
-              </div>
-            </aside>
+          {directorError && !proposal && (
+            <div className="gdp-director-error" role="alert">
+              {directorError}
+            </div>
           )}
-        {!props.isLoading && !props.loadError && plan.stops.length === 0 && (
-          <div className="gdp-empty">
-            <strong>
-              {props.onOpenFirstMission
-                ? "Your first objective is ready."
-                : "A blank page. Your next chapter."}
-            </strong>
-            <span>
-              {props.onOpenFirstMission
-                ? "Your scout mission is waiting. Complete your field observation to map your territory and uncover your world."
-                : "No stops are scheduled yet. Bring in your route, capture a field opportunity, or warm up with a Lantern Run."}
-            </span>
-            {props.onOpenFirstMission ? (
+          {!props.isLoading &&
+            plan.growthCoverage !== "covered" &&
+            !proposal &&
+            !props.dismissedPromptKeys?.includes("growth-intake") && (
+              <details
+                className="gdp-director"
+                data-testid="day-director-intake"
+              >
+                <summary>
+                  ADD A COMMITMENT <ChevronRight size={16} />
+                </summary>
+                <strong>DAY DIRECTOR</strong>
+                <p>What has to move forward today?</p>
+                {!props.intelligenceAvailable && (
+                  <small>
+                    Planning intelligence unavailable — operational route
+                    preserved. Add today’s commitment manually.
+                  </small>
+                )}
+                <textarea
+                  aria-label="Today's commitment"
+                  value={truthText}
+                  onChange={event => setTruthText(event.target.value)}
+                  placeholder="Tell me what you committed to, promised, need to sell, or need to finish."
+                />
+                <div>
+                  <button
+                    type="button"
+                    disabled={directorBusy || !truthText.trim()}
+                    onClick={async () => {
+                      if (!props.onProposeCommitment) return;
+                      setDirectorBusy(true);
+                      try {
+                        setDirectorError(null);
+                        setProposal(await props.onProposeCommitment(truthText));
+                      } catch {
+                        setDirectorError(
+                          "Could not prepare this commitment. Your text is kept; please try again."
+                        );
+                      } finally {
+                        setDirectorBusy(false);
+                      }
+                    }}
+                  >
+                    {props.intelligenceAvailable
+                      ? "REVIEW PLAN"
+                      : "ADD MANUALLY"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={directorBusy}
+                    onClick={async () => {
+                      try {
+                        await props.onDismissProposal?.("growth-intake");
+                        setProposal(null);
+                      } catch {
+                        setDirectorError(
+                          "Could not dismiss this prompt. Please try again."
+                        );
+                      }
+                    }}
+                  >
+                    NOT NOW
+                  </button>
+                </div>
+              </details>
+            )}
+          {proposal &&
+            !props.dismissedPromptKeys?.includes(proposal.promptKey) && (
+              <aside
+                className="gdp-director"
+                data-testid="day-director-proposal"
+              >
+                <strong>DAY DIRECTOR</strong>
+                <p>
+                  {proposal.title}
+                  {proposal.quantity ? ` · ${proposal.quantity}` : ""}
+                </p>
+                {proposal.question && <small>{proposal.question}</small>}
+                {directorError && (
+                  <small className="gdp-director-error" role="alert">
+                    {directorError}
+                  </small>
+                )}
+                <div>
+                  <button
+                    type="button"
+                    disabled={directorBusy}
+                    onClick={async () => {
+                      setDirectorBusy(true);
+                      try {
+                        setDirectorError(null);
+                        await props.onAcceptProposal?.(proposal);
+                        setProposal(null);
+                        setTruthText("");
+                      } catch {
+                        setDirectorError(
+                          "Could not add this to Today. Please try again."
+                        );
+                      } finally {
+                        setDirectorBusy(false);
+                      }
+                    }}
+                  >
+                    ADD TO PLAN
+                  </button>
+                  <button
+                    type="button"
+                    disabled={directorBusy}
+                    onClick={async () => {
+                      setDirectorBusy(true);
+                      try {
+                        setDirectorError(null);
+                        await props.onDismissProposal?.(proposal.promptKey);
+                        setProposal(null);
+                      } catch {
+                        setDirectorError(
+                          "Could not dismiss this prompt. Please try again."
+                        );
+                      } finally {
+                        setDirectorBusy(false);
+                      }
+                    }}
+                  >
+                    NOT NOW
+                  </button>
+                </div>
+              </aside>
+            )}
+          {!props.isLoading && !props.loadError && plan.stops.length === 0 && (
+            <div className="gdp-empty">
+              <strong>
+                {props.onOpenFirstMission
+                  ? "Your first objective is ready."
+                  : "A blank page. Your next chapter."}
+              </strong>
+              <span>
+                {props.onOpenFirstMission
+                  ? "Your scout mission is waiting. Complete your field observation to map your territory and uncover your world."
+                  : "No stops are scheduled yet. Bring in your route, capture a field opportunity, or warm up with a Lantern Run."}
+              </span>
+              {props.onOpenFirstMission ? (
+                <button
+                  type="button"
+                  className="gdp-first-mission-btn"
+                  onClick={props.onOpenFirstMission}
+                >
+                  BEGIN FIRST MISSION · THE FIRST SPARK{" "}
+                  <ChevronRight size={16} />
+                </button>
+              ) : (
+                <button type="button" onClick={props.onOpenImport}>
+                  IMPORT OR ADD STOPS <ChevronRight size={16} />
+                </button>
+              )}
               <button
                 type="button"
-                className="gdp-first-mission-btn"
-                onClick={props.onOpenFirstMission}
+                onClick={props.onOpenJournal ?? props.onEnterOperations}
               >
-                BEGIN FIRST MISSION · THE FIRST SPARK <ChevronRight size={16} />
+                OPEN FIELD JOURNAL
               </button>
-            ) : (
-              <button type="button" onClick={props.onOpenImport}>
-                IMPORT OR ADD STOPS <ChevronRight size={16} />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={props.onOpenJournal ?? props.onEnterOperations}
-            >
-              OPEN FIELD JOURNAL
-            </button>
-          </div>
-        )}
-        {plan.stops.map((stop, index) => (
-          <div className="gdp-route-step" key={stop.id}>
-            {index === completedCount && (
-              <div className="gdp-now">
-                <div>
-                  <strong>NOW</strong>
-                  <span>
-                    {now.toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  <small>Day-progress position</small>
-                </div>
-                <img
-                  src={operator}
-                  alt="Trailblazer at the current point in the day"
-                />
-              </div>
-            )}
-            <StopCard
-              stop={stop}
-              index={index}
-              onOpen={() => setActiveStop(stop)}
-            />
-          </div>
-        ))}
-        {completedCount === plan.stops.length && (
-          <div className="gdp-now">
-            <div>
-              <strong>NOW</strong>
-              <span>
-                {now.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </span>
-              <small>Day-progress position</small>
             </div>
-            <img
-              src={operator}
-              alt="Trailblazer at the current point in the day"
-            />
-          </div>
-        )}
-      </section>
+          )}
+          {plan.stops.map((stop, index) => (
+            <div className="gdp-route-step" key={stop.id}>
+              {index === completedCount && (
+                <div className="gdp-now">
+                  <div>
+                    <strong>NOW</strong>
+                    <span>
+                      {now.toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    <small>Day-progress position</small>
+                  </div>
+                  <img
+                    src={operator}
+                    alt="Trailblazer at the current point in the day"
+                  />
+                </div>
+              )}
+              <StopCard
+                stop={stop}
+                index={index}
+                onOpen={() => selectStop(stop)}
+              />
+            </div>
+          ))}
+          {completedCount === plan.stops.length && (
+            <div className="gdp-now">
+              <div>
+                <strong>NOW</strong>
+                <span>
+                  {now.toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <small>Day-progress position</small>
+              </div>
+              <img
+                src={operator}
+                alt="Trailblazer at the current point in the day"
+              />
+            </div>
+          )}
+        </section>
       )}
       {!artPreview && (
-      <section className="gdp-next-up" data-testid="day-plan-next-up">
-        <div>
-          <small>NEXT UP</small>
-          <strong>
-            {nextStop?.title ??
-              (props.onOpenFirstMission
-                ? "THE FIRST SPARK"
-                : "THE LINE IS OPEN")}
-          </strong>
-          <span>
+        <section className="gdp-next-up" data-testid="day-plan-next-up">
+          <div>
+            <small>NEXT UP</small>
+            <strong>
+              {nextStop?.title ??
+                (props.onOpenFirstMission
+                  ? "THE FIRST SPARK"
+                  : "THE LINE IS OPEN")}
+            </strong>
+            <span>
+              {nextStop
+                ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}`
+                : props.onOpenFirstMission
+                  ? "OPTIONAL SCOUT · TERRITORY UNMAPPED"
+                  : "NO SCHEDULED STOP"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={
+              nextStop
+                ? startNext
+                : props.onOpenFirstMission
+                  ? props.onOpenFirstMission
+                  : startNext
+            }
+            disabled={props.isLoading}
+          >
             {nextStop
-              ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}`
+              ? "OPEN CHAPTER"
               : props.onOpenFirstMission
-                ? "OPTIONAL SCOUT · TERRITORY UNMAPPED"
-                : "NO SCHEDULED STOP"}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={
-            nextStop
-              ? startNext
-              : props.onOpenFirstMission
-                ? props.onOpenFirstMission
-                : startNext
-          }
-          disabled={props.isLoading}
-        >
-          {nextStop
-            ? "OPEN CHAPTER"
-            : props.onOpenFirstMission
-              ? "START MISSION"
-              : "ADD STOPS"}{" "}
-          <ChevronRight />
-        </button>
-      </section>
-
+                ? "START MISSION"
+                : "ADD STOPS"}{" "}
+            <ChevronRight />
+          </button>
+        </section>
       )}
       {!artPreview && (
         <>
-          <button type="button" className="gdp-v3-nav-toggle"
+          <button
+            type="button"
+            className="gdp-v3-nav-toggle"
             onClick={() => setWorldNavigationOpen(open => !open)}
-            aria-label={worldNavigationOpen ? "Close GOLDLINE navigation" : "Open GOLDLINE navigation"}
+            aria-label={
+              worldNavigationOpen
+                ? "Close GOLDLINE navigation"
+                : "Open GOLDLINE navigation"
+            }
             aria-expanded={worldNavigationOpen}
-          ><Compass size={23} /><span>{worldNavigationOpen ? "CLOSE" : "WORLD"}</span></button>
+          >
+            <Compass size={23} />
+            <span>{worldNavigationOpen ? "CLOSE" : "WORLD"}</span>
+          </button>
           <div className="gdp-v3-classic-nav">
             <GoldlineGameNav
               active="day"
-              onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              onYourDay={() => {
+                setWorldNavigationOpen(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
               onWeek={props.onOpenWeek}
-              onPlay={() => { setWorldNavigationOpen(false); setPlaying(true); }}
+              onPlay={() => {
+                setWorldNavigationOpen(false);
+                setPlaying(true);
+              }}
               onJournal={props.onOpenJournal ?? props.onEnterOperations}
             />
           </div>
         </>
       )}
       {artPreview && worldNavigationOpen && (
-        <div className="gdp-v3-nav-layer gdp-approved-navigation" id="goldline-world-navigation">
+        <div
+          className="gdp-v3-nav-layer gdp-approved-navigation"
+          id="goldline-world-navigation"
+        >
           <GoldlineGameNav
             active="day"
-            onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            onYourDay={() => {
+              setWorldNavigationOpen(false);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             onWeek={props.onOpenWeek}
-            onPlay={() => { setWorldNavigationOpen(false); setPlaying(true); }}
+            onPlay={() => {
+              setWorldNavigationOpen(false);
+              setPlaying(true);
+            }}
             onJournal={props.onOpenJournal ?? props.onEnterOperations}
           />
           <div className="gdp-approved-navigation-actions">
-            <button type="button" data-testid="build-mission-cta" onClick={() => {
-              setWorldNavigationOpen(false);
-              setBuildMissionOpen(true);
-            }}>BUILD MISSION</button>
-            <button type="button" onClick={() => {
-              setWorldNavigationOpen(false);
-              props.onOpenImport();
-            }}>IMPORT OR ADD STOPS</button>
-            <button type="button" onClick={() => {
-              setWorldNavigationOpen(false);
-              props.onEnterOperations();
-            }}>FIELD OPERATIONS</button>
-            <button type="button" onClick={() => {
-              setWorldNavigationOpen(false);
-              props.onEnterWorld();
-            }}>EXPLORE OVERWORLD</button>
-            {props.onEnterChapter && <button type="button" onClick={() => {
-              setWorldNavigationOpen(false);
-              props.onEnterChapter?.();
-            }}>ENTER KINGDOM</button>}
-            {props.onOpenFirstMission && <button type="button" onClick={() => {
-              setWorldNavigationOpen(false);
-              props.onOpenFirstMission?.();
-            }}>THE FIRST SPARK</button>}
+            <button
+              type="button"
+              data-testid="build-mission-cta"
+              onClick={() => {
+                setWorldNavigationOpen(false);
+                setBuildMissionOpen(true);
+              }}
+            >
+              BUILD MISSION
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWorldNavigationOpen(false);
+                props.onOpenImport();
+              }}
+            >
+              IMPORT OR ADD STOPS
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWorldNavigationOpen(false);
+                props.onEnterOperations();
+              }}
+            >
+              FIELD OPERATIONS
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWorldNavigationOpen(false);
+                props.onEnterWorld();
+              }}
+            >
+              EXPLORE OVERWORLD
+            </button>
+            {props.onEnterChapter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWorldNavigationOpen(false);
+                  props.onEnterChapter?.();
+                }}
+              >
+                ENTER KINGDOM
+              </button>
+            )}
+            {props.onOpenFirstMission && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWorldNavigationOpen(false);
+                  props.onOpenFirstMission?.();
+                }}
+              >
+                THE FIRST SPARK
+              </button>
+            )}
           </div>
         </div>
       )}
       {activeStop && (
         <DriverStopChapter
-          stop={activeStop}
+          stop={
+            plan.stops.find(stop => stop.id === activeStop.id) ?? activeStop
+          }
           onClose={() => setActiveStop(null)}
           onResolve={props.onResolveStop}
+          onRetryPickup={props.onRetryPickup}
           onArchive={props.onArchiveStop}
           onCallClaireForMission={async missionId => {
             await callClaireForMission.mutateAsync({

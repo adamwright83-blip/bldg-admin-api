@@ -1,3 +1,8 @@
+import {
+  pickupCountsSchema,
+  pickupSyncLabel,
+  type PickupCounts,
+} from "@shared/cleancloudPickup";
 import { useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -17,6 +22,7 @@ export function DriverStopChapter({
   stop,
   onClose,
   onResolve,
+  onRetryPickup,
   onArchive,
   onEnter,
   onJournal,
@@ -25,7 +31,8 @@ export function DriverStopChapter({
 }: {
   stop: DayPlanStop;
   onClose: () => void;
-  onResolve?: (stop: DayPlanStop) => Promise<boolean>;
+  onResolve?: (stop: DayPlanStop, counts?: PickupCounts) => Promise<boolean>;
+  onRetryPickup?: (stop: DayPlanStop) => Promise<void>;
   onArchive?: (stop: DayPlanStop) => Promise<boolean>;
   onEnter: () => void;
   onJournal: () => void;
@@ -37,6 +44,17 @@ export function DriverStopChapter({
     () => document.activeElement as HTMLElement | null
   );
   const [confirmed, setConfirmed] = useState(false);
+  const [bags, setBags] = useState(
+    stop.pickupBridge?.bagCount?.toString() ?? ""
+  );
+  const [garments, setGarments] = useState(
+    stop.pickupBridge?.garmentCount?.toString() ?? ""
+  );
+  const bridgePickup = stop.kind === "pickup" && Boolean(stop.pickupBridge);
+  const counts = pickupCountsSchema.safeParse({
+    bagCount: bags === "" ? 0 : Number(bags),
+    garmentCount: garments === "" ? 0 : Number(garments),
+  });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +80,13 @@ export function DriverStopChapter({
     Boolean(onArchive);
   const isPickup = stop.kind === "pickup";
   const operational = isPickup || stop.kind === "dropoff";
-  const label = operational
-    ? isPickup
-      ? "CONFIRM PICKUP"
-      : "CONFIRM DELIVERY"
-    : "COMPLETE TASK";
+  const label = bridgePickup
+    ? "PICKED UP"
+    : operational
+      ? isPickup
+        ? "CONFIRM PICKUP"
+        : "CONFIRM DELIVERY"
+      : "COMPLETE TASK";
   const statement = operational
     ? isPickup
       ? "I have physically collected this customer's order."
@@ -81,7 +101,10 @@ export function DriverStopChapter({
     )
       return;
     setClaireCallState("calling");
-    recordClaireInteraction({ source: "stop_chapter", missionId: action.missionId });
+    recordClaireInteraction({
+      source: "stop_chapter",
+      missionId: action.missionId,
+    });
     setClaireCallError(null);
     try {
       await onCallClaireForMission(action.missionId);
@@ -96,12 +119,24 @@ export function DriverStopChapter({
     }
   }
   async function resolve() {
-    if (!confirmed || pending.current || !canResolve || paymentBlocked) return;
+    if (
+      (bridgePickup ? !counts.success : !confirmed) ||
+      pending.current ||
+      !canResolve ||
+      paymentBlocked
+    )
+      return;
     pending.current = true;
     setBusy(true);
     setError(null);
     try {
-      if (await onResolve?.(stop)) setSaved(true);
+      if (
+        await onResolve?.(
+          stop,
+          bridgePickup && counts.success ? counts.data : undefined
+        )
+      )
+        setSaved(true);
       else
         setError(
           "That outcome was not saved. Your stop is still open; try again when ready."
@@ -193,19 +228,57 @@ export function DriverStopChapter({
                 <Check size={18} />
                 <div>
                   <strong>
-                    {operational
-                      ? isPickup
-                        ? "Pickup recorded"
-                        : "Delivery recorded"
-                      : "Task recorded"}
+                    {bridgePickup && stop.pickupBridge
+                      ? pickupSyncLabel(stop.pickupBridge)
+                      : operational
+                        ? isPickup
+                          ? "Pickup recorded"
+                          : "Delivery recorded"
+                        : "Task recorded"}
                   </strong>
                   <p>
-                    {stop.source === "cleancloud"
-                      ? "Your imported route reflects this outcome. External billing stays with its source system."
-                      : "This outcome is saved to the shared business record. Your day can move forward."}
+                    {bridgePickup && stop.pickupBridge
+                      ? `${stop.pickupBridge.bagCount ?? bags} bags · ${stop.pickupBridge.garmentCount ?? garments} garments. ${stop.pickupBridge.state === "synced" ? "Collected was verified in CleanCloud Detail." : "Your pickup is saved while Gumball updates CleanCloud."}`
+                      : stop.source === "cleancloud"
+                        ? "Your imported route reflects this outcome. External billing stays with its source system."
+                        : "This outcome is saved to the shared business record. Your day can move forward."}
                   </p>
                 </div>
               </div>
+              {bridgePickup && stop.pickupBridge?.state === "attention" && (
+                <div>
+                  <p role="status" className="chapter-error">
+                    {stop.pickupBridge.error ||
+                      "CleanCloud needs to reconnect."}
+                  </p>
+                  <button
+                    className="chapter-primary"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError(null);
+                      try {
+                        await onRetryPickup?.(stop);
+                      } catch (cause) {
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "Could not retry."
+                        );
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    RETRY CLEANCLOUD SYNC
+                  </button>
+                  {error && (
+                    <p role="alert" className="chapter-error">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              )}
               <a
                 className="chapter-city"
                 href={cityUrl}
@@ -259,15 +332,51 @@ export function DriverStopChapter({
               )}
               {canResolve ? (
                 <>
-                  <label className="chapter-confirm">
-                    <input
-                      type="checkbox"
-                      checked={confirmed}
-                      onChange={event => setConfirmed(event.target.checked)}
-                      disabled={busy || paymentBlocked}
-                    />
-                    <span>{statement}</span>
-                  </label>
+                  {bridgePickup ? (
+                    <fieldset className="chapter-pickup-counts" disabled={busy}>
+                      <legend>What did you pick up?</legend>
+                      <label>
+                        Bags
+                        <input
+                          aria-label="Bags picked up"
+                          inputMode="numeric"
+                          type="number"
+                          min="0"
+                          max="999"
+                          step="1"
+                          value={bags}
+                          onChange={event => setBags(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Garments
+                        <input
+                          aria-label="Garments picked up"
+                          inputMode="numeric"
+                          type="number"
+                          min="0"
+                          max="9999"
+                          step="1"
+                          value={garments}
+                          onChange={event => setGarments(event.target.value)}
+                        />
+                      </label>
+                      <p>
+                        Press Picked up after you have physically collected this
+                        order.
+                      </p>
+                    </fieldset>
+                  ) : (
+                    <label className="chapter-confirm">
+                      <input
+                        type="checkbox"
+                        checked={confirmed}
+                        onChange={event => setConfirmed(event.target.checked)}
+                        disabled={busy || paymentBlocked}
+                      />
+                      <span>{statement}</span>
+                    </label>
+                  )}
                   {paymentBlocked && (
                     <p role="status" className="chapter-error">
                       Payment needs to be resolved before this delivery can be
@@ -276,7 +385,11 @@ export function DriverStopChapter({
                   )}
                   <button
                     className="chapter-primary"
-                    disabled={!confirmed || busy || paymentBlocked}
+                    disabled={
+                      (bridgePickup ? !counts.success : !confirmed) ||
+                      busy ||
+                      paymentBlocked
+                    }
                     onClick={resolve}
                   >
                     {busy ? "SAVING OUTCOME…" : label}

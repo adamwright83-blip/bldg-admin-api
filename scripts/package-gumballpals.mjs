@@ -5,6 +5,9 @@ import { zipSync } from "fflate";
 const files = [
   "manifest.json",
   "worker.js",
+  "pickup-page.js",
+  "pickup-worker.js",
+  "pickup-connect.js",
   "core.js",
   "browser.js",
   "schedule.js",
@@ -24,4 +27,4 @@ await writeFile(
   new URL("../client/public/gumballpals.zip", import.meta.url),
   zipSync(entries)
 );
-console.log("Packaged Gumballpals: eight allowlisted runtime files.");
+console.log("Packaged Gumballpals: eleven allowlisted runtime files.");

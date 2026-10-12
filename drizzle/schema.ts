@@ -5855,6 +5855,7 @@ export const externalOperationalOrders = mysqlTable(
       "screenshot",
       "manual",
       "voice",
+      "browser",
     ]).notNull(),
     externalOrderId: varchar("externalOrderId", { length: 191 }),
     jobKind: mysqlEnum("jobKind", ["pickup", "dropoff"]).notNull(),

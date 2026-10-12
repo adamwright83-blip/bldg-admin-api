@@ -9,7 +9,7 @@
   <body>
     <main>
       <header>
-        <p class="eyebrow">GUMBALLPALS 0.1.6 · BROWSER CONNECTION</p>
+        <p class="eyebrow">GUMBALLPALS 0.2.0 · BROWSER CONNECTION</p>
         <h1>Your real work.<br />Your living city.</h1>
         <p>
           Bring Laundry Farm orders into Goldline. Your gumball login stays
@@ -80,6 +80,16 @@
           >Open Lantern City</a
         >
       </section>
+      <section aria-labelledby="pickup-title">
+        <h2 id="pickup-title">Driver pickups</h2>
+        <p>Bring the current pickup queue into DAYLINE. Picked up in the driver app saves your bag/garment counts and requests Collected for that exact order. Gumball verifies that it appears in CleanCloud Detail.</p>
+        <label>Order IDs to hold <input id="pickup-holds" placeholder="For example: 123, 456" /></label>
+        <button id="pickup-prepare">Review driver pickup connection</button>
+        <ul id="pickup-review"></ul>
+        <button id="pickup-confirm" hidden>Connect driver pickups and Collected updates</button>
+        <button id="pickup-pause" class="secondary">Pause pickup worker</button>
+        <p id="pickup-status" role="status">Driver pickups are not connected.</p>
+      </section>
       <section aria-labelledby="schedule-title">
         <h2 id="schedule-title">A daily pulse</h2>
         <p>Automatically sync at 6:00 PM Los Angeles time. Chrome must be running and both accounts signed in. Missed runs catch up when Chrome reopens. First complete a manual import to verify your account and store.</p>
@@ -97,5 +107,6 @@
       </footer>
     </main>
     <script type="module" src="sync.js"></script>
+    <script type="module" src="pickup-connect.js"></script>
   </body>
 </html>

@@ -288,6 +288,12 @@ export async function goldlineRequest(operation, input) {
     if (location.origin !== "https://admin.bldg.chat")
       throw new Error("Unexpected Goldline origin.");
     const methods = {
+      "pickups.connection": "GET",
+      "pickups.connect": "POST",
+      "pickups.capture": "POST",
+      "pickups.claim": "POST",
+      "pickups.receipt": "POST",
+      "pickups.renew": "POST",
       context: "GET",
       pair: "POST",
       import: "POST",

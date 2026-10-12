@@ -1,3 +1,5 @@
+import { listExternalOrders } from "../externalOrders/externalOrderService";
+import { pickupDirectionsUrl } from "../../shared/cleancloudPickup";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, asc, eq, sql } from "drizzle-orm";
 import { commercialFollowUps, orders } from "../../drizzle/schema";
@@ -5,7 +7,10 @@ import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listLegacyDayforgeToday } from "../legacy/dayforge/today/legacyDayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
-import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
+import {
+  listRecoveryInterventions,
+  physicalEntityIdsForInterventions,
+} from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "./propertyDiscovery/towerForgeWorkflow";
 import { listFuturePressure } from "../experience/goldline/world/futurePressureService";
 import { findPhysicalEntityIdByAddress } from "../experience/goldline/world/entityLookup";
@@ -16,12 +21,31 @@ function moneyCents(value: unknown): number {
 }
 
 function businessDate(now: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
 }
 
-function zonedLocalToIso(date: string, hour: number, minute: number, timeZone: string): string | null {
+function zonedLocalToIso(
+  date: string,
+  hour: number,
+  minute: number,
+  timeZone: string
+): string | null {
   const [year, month, day] = date.split("-").map(Number);
-  if (!year || !month || !day || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  if (
+    !year ||
+    !month ||
+    !day ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  )
+    return null;
   const target = Date.UTC(year, month - 1, day, hour, minute, 0);
   let candidate = target;
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -36,7 +60,9 @@ function zonedLocalToIso(date: string, hour: number, minute: number, timeZone: s
   });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const parts = Object.fromEntries(
-      formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value])
+      formatter
+        .formatToParts(new Date(candidate))
+        .map(part => [part.type, part.value])
     );
     const observed = Date.UTC(
       Number(parts.year),
@@ -49,7 +75,9 @@ function zonedLocalToIso(date: string, hour: number, minute: number, timeZone: s
     candidate += target - observed;
   }
   const verification = Object.fromEntries(
-    formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value])
+    formatter
+      .formatToParts(new Date(candidate))
+      .map(part => [part.type, part.value])
   );
   if (
     Number(verification.year) !== year ||
@@ -57,11 +85,16 @@ function zonedLocalToIso(date: string, hour: number, minute: number, timeZone: s
     Number(verification.day) !== day ||
     Number(verification.hour) !== hour ||
     Number(verification.minute) !== minute
-  ) return null;
+  )
+    return null;
   return new Date(candidate).toISOString();
 }
 
-export function timeFromWindow(date: string, window: string | null, timeZone: string): string | null {
+export function timeFromWindow(
+  date: string,
+  window: string | null,
+  timeZone: string
+): string | null {
   const match = window?.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
   if (!match) return null;
   let hour = Number(match[1]);
@@ -73,16 +106,24 @@ export function timeFromWindow(date: string, window: string | null, timeZone: st
 }
 
 const urgencyRank: Record<FieldTodayItem["urgency"], number> = {
-  blocked: 0, overdue: 1, urgent: 2, scheduled: 3, flexible: 4, upcoming: 5,
+  blocked: 0,
+  overdue: 1,
+  urgent: 2,
+  scheduled: 3,
+  flexible: 4,
+  upcoming: 5,
 };
 
 export function sortFieldTimeline(items: FieldTodayItem[]): FieldTodayItem[] {
-  const unique = Array.from(new Map(items.map(item => [item.id, item])).values());
+  const unique = Array.from(
+    new Map(items.map(item => [item.id, item])).values()
+  );
   return unique.sort((a, b) => {
     const rank = urgencyRank[a.urgency] - urgencyRank[b.urgency];
     if (rank) return rank;
-    const time = (a.scheduledAt ? Date.parse(a.scheduledAt) : Number.MAX_SAFE_INTEGER)
-      - (b.scheduledAt ? Date.parse(b.scheduledAt) : Number.MAX_SAFE_INTEGER);
+    const time =
+      (a.scheduledAt ? Date.parse(a.scheduledAt) : Number.MAX_SAFE_INTEGER) -
+      (b.scheduledAt ? Date.parse(b.scheduledAt) : Number.MAX_SAFE_INTEGER);
     return time || a.id.localeCompare(b.id);
   });
 }
@@ -110,20 +151,44 @@ export async function getFieldToday(input: {
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const date = input.businessDate ?? businessDate(now, timeZone);
   const isFutureDate = date > businessDate(now, timeZone);
-  const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
-    db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
-    listLegacyDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
-    db.select({
-      id: commercialFollowUps.id,
-      assignedTo: commercialFollowUps.assignedTo,
-      completedAt: commercialFollowUps.completedAt,
-    }).from(commercialFollowUps).where(and(
-      eq(commercialFollowUps.tenantId, input.tenantId),
-      eq(commercialFollowUps.status, "completed")
-    )),
+  const [
+    orderRows,
+    commercialItems,
+    completedFollowUps,
+    recoveries,
+    forgeJobs,
+    pressure,
+    externalJobs,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(orders)
+      .where(
+        sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`
+      )
+      .orderBy(asc(orders.pickupDate), asc(orders.id)),
+    listLegacyDayforgeToday({
+      tenantId: input.tenantId,
+      userId: input.userId,
+      includeAllAssignees: input.includeAllAssignees,
+    }),
+    db
+      .select({
+        id: commercialFollowUps.id,
+        assignedTo: commercialFollowUps.assignedTo,
+        completedAt: commercialFollowUps.completedAt,
+      })
+      .from(commercialFollowUps)
+      .where(
+        and(
+          eq(commercialFollowUps.tenantId, input.tenantId),
+          eq(commercialFollowUps.status, "completed")
+        )
+      ),
     listRecoveryInterventions(input.tenantId),
     listForgeJobs({ tenantId: input.tenantId, limit: 50 }),
     listFuturePressure({ tenantId: input.tenantId, date }),
+    listExternalOrders({ tenantId: input.tenantId, scheduledDate: date }),
   ]);
   const timeline: FieldTodayItem[] = [];
   const authoritativeCompletedObjectiveIds = new Set<string>();
@@ -132,22 +197,38 @@ export async function getFieldToday(input: {
   // Goldline already knows the address. This is lookup-only: an unresolved
   // address stays null rather than creating a fake entity just to make the map
   // look complete.
-  const physicalAddresses = Array.from(new Set([
-    ...orderRows.map(order => order.address?.trim() ?? ""),
-    ...commercialItems.map(item => item.address?.trim() ?? ""),
-  ].filter(Boolean)));
+  const physicalAddresses = Array.from(
+    new Set(
+      [
+        ...orderRows.map(order => order.address?.trim() ?? ""),
+        ...externalJobs.map(order => order.address?.trim() ?? ""),
+        ...commercialItems.map(item => item.address?.trim() ?? ""),
+      ].filter(Boolean)
+    )
+  );
   const physicalEntityIdsByAddress = new Map<string, string | null>(
     await Promise.all(
-      physicalAddresses.map(async address => [
-        address,
-        await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address }),
-      ] as const)
+      physicalAddresses.map(
+        async address =>
+          [
+            address,
+            await findPhysicalEntityIdByAddress({
+              tenantId: input.tenantId,
+              address,
+            }),
+          ] as const
+      )
     )
   );
 
   for (const followUp of completedFollowUps) {
     if (!followUp.completedAt) continue;
-    if (!input.includeAllAssignees && followUp.assignedTo && followUp.assignedTo !== input.userId) continue;
+    if (
+      !input.includeAllAssignees &&
+      followUp.assignedTo &&
+      followUp.assignedTo !== input.userId
+    )
+      continue;
     if (businessDate(followUp.completedAt, timeZone) !== date) continue;
     authoritativeCompletedObjectiveIds.add(`follow-up:${followUp.id}`);
   }
@@ -155,7 +236,7 @@ export async function getFieldToday(input: {
     const name = `${order.firstName} ${order.lastName}`.trim() || "Customer";
     const orderAddressKey = order.address?.trim() ?? "";
     const orderPhysicalEntityId = orderAddressKey
-      ? physicalEntityIdsByAddress.get(orderAddressKey) ?? null
+      ? (physicalEntityIdsByAddress.get(orderAddressKey) ?? null)
       : null;
     if (
       order.pickupDate === date &&
@@ -166,46 +247,222 @@ export async function getFieldToday(input: {
     if (order.deliveryDate === date && order.status === "delivered") {
       authoritativeCompletedObjectiveIds.add(`delivery:${order.id}`);
     }
-    if (order.pickupDate === date && ["new", "intake-pending"].includes(order.status)) {
+    if (
+      order.pickupDate === date &&
+      ["new", "intake-pending"].includes(order.status)
+    ) {
       timeline.push({
-        id: `pickup:${order.id}`, kind: "pickup", source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
+        id: `pickup:${order.id}`,
+        kind: "pickup",
+        source: {
+          entityType: "order",
+          entityId: String(order.id),
+          sourceReference: `orders:${order.id}`,
+        },
         physicalEntityId: orderPhysicalEntityId,
-        scheduledAt: timeFromWindow(order.pickupDate, order.pickupTimeWindow, timeZone), urgency: "scheduled", title: `Pick up ${name}`, subtitle: order.serviceType === "wash_fold" ? "Laundry pickup" : "Dry-cleaning pickup", status: order.status,
-        destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
-        money: deterministicEstimate(moneyCents(order.total), `orders:${order.id}:total`, "high"), verificationClass: "VERIFIED",
-        actions: [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "start", label: "Mark collected", href: null, mutation: "field.orders.updateStatus:collected" }],
+        scheduledAt: timeFromWindow(
+          order.pickupDate,
+          order.pickupTimeWindow,
+          timeZone
+        ),
+        urgency: "scheduled",
+        title: `Pick up ${name}`,
+        subtitle:
+          order.serviceType === "wash_fold"
+            ? "Laundry pickup"
+            : "Dry-cleaning pickup",
+        status: order.status,
+        destination: {
+          address: order.address,
+          latitude: null,
+          longitude: null,
+        },
+        customer: { name, phone: order.phone, email: order.email },
+        money: deterministicEstimate(
+          moneyCents(order.total),
+          `orders:${order.id}:total`,
+          "high"
+        ),
+        verificationClass: "VERIFIED",
+        actions: [
+          {
+            type: "navigate",
+            label: "Navigate",
+            href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`,
+            mutation: null,
+          },
+          {
+            type: "start",
+            label: "Mark collected",
+            href: null,
+            mutation: "field.orders.updateStatus:collected",
+          },
+        ],
       });
     }
     if (order.deliveryDate === date && order.status === "ready") {
       const unpaid = !order.paid;
       timeline.push({
-        id: `${unpaid ? "payment-blocker" : "delivery"}:${order.id}`, kind: unpaid ? "payment_blocker" : "delivery",
-        source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
+        id: `${unpaid ? "payment-blocker" : "delivery"}:${order.id}`,
+        kind: unpaid ? "payment_blocker" : "delivery",
+        source: {
+          entityType: "order",
+          entityId: String(order.id),
+          sourceReference: `orders:${order.id}`,
+        },
         physicalEntityId: orderPhysicalEntityId,
-        scheduledAt: timeFromWindow(order.deliveryDate, order.deliveryTimeWindow, timeZone), urgency: unpaid ? "blocked" : "scheduled", title: unpaid ? `Payment blocks ${name}'s delivery` : `Deliver to ${name}`,
-        subtitle: unpaid ? "This order is ready but not paid. It cannot be presented as completed." : "Paid order ready for delivery", status: order.status,
-        destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
-        money: sourcedFact(moneyCents(order.total), `orders:${order.id}`), verificationClass: "VERIFIED",
+        scheduledAt: timeFromWindow(
+          order.deliveryDate,
+          order.deliveryTimeWindow,
+          timeZone
+        ),
+        urgency: unpaid ? "blocked" : "scheduled",
+        title: unpaid
+          ? `Payment blocks ${name}'s delivery`
+          : `Deliver to ${name}`,
+        subtitle: unpaid
+          ? "This order is ready but not paid. It cannot be presented as completed."
+          : "Paid order ready for delivery",
+        status: order.status,
+        destination: {
+          address: order.address,
+          latitude: null,
+          longitude: null,
+        },
+        customer: { name, phone: order.phone, email: order.email },
+        money: sourcedFact(moneyCents(order.total), `orders:${order.id}`),
+        verificationClass: "VERIFIED",
         actions: unpaid
-          ? [{ type: "payment", label: "Resolve payment", href: `/payment-reconciliation?orderId=${order.id}`, mutation: null }]
-          : [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "complete", label: "Mark delivered", href: null, mutation: "field.orders.updateStatus:delivered" }],
+          ? [
+              {
+                type: "payment",
+                label: "Resolve payment",
+                href: `/payment-reconciliation?orderId=${order.id}`,
+                mutation: null,
+              },
+            ]
+          : [
+              {
+                type: "navigate",
+                label: "Navigate",
+                href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`,
+                mutation: null,
+              },
+              {
+                type: "complete",
+                label: "Mark delivered",
+                href: null,
+                mutation: "field.orders.updateStatus:delivered",
+              },
+            ],
       });
     }
+  }
+  for (const job of externalJobs) {
+    if (job.operationalStatus === "completed") {
+      authoritativeCompletedObjectiveIds.add(`external-${job.id}`);
+      continue;
+    }
+    if (
+      job.operationalStatus !== "scheduled" ||
+      job.reviewState !== "confirmed"
+    )
+      continue;
+    timeline.push({
+      id: `external-${job.id}`,
+      kind: job.jobKind === "pickup" ? "pickup" : "delivery",
+      source: {
+        entityType: "external_operational_order",
+        entityId: job.id,
+        sourceReference: `external_operational_orders:${job.id}`,
+      },
+      physicalEntityId: job.address
+        ? (physicalEntityIdsByAddress.get(job.address.trim()) ?? null)
+        : null,
+      scheduledAt: timeFromWindow(date, job.windowStart, timeZone),
+      urgency: "scheduled",
+      title: `${job.jobKind === "pickup" ? "Pick up" : "Deliver to"} ${job.customerName}`,
+      subtitle: `CleanCloud order #${job.externalOrderId ?? "unknown"}`,
+      status: job.operationalStatus,
+      destination: job.address
+        ? { address: job.address, latitude: null, longitude: null }
+        : null,
+      customer: { name: job.customerName, phone: null, email: null },
+      money: null,
+      verificationClass: "VERIFIED",
+      whySourceOccurredAt: job.pickupBridge?.observedAt ?? job.createdAt,
+      actions: [
+        {
+          type: "navigate",
+          label: "Navigate",
+          href: pickupDirectionsUrl(job.address),
+          mutation: null,
+        },
+        { type: "open", label: "Open pickup", href: "/driver", mutation: null },
+      ],
+    });
   }
   for (const item of commercialItems) {
     const addressKey = item.address?.trim() ?? "";
     timeline.push({
       id: item.id,
-      kind: item.kind === "dispatch" ? "mission_dispatch" : item.kind === "follow_up" ? "follow_up" : "route_exception",
-      source: { entityType: item.kind === "follow_up" ? "commercial_follow_up" : "commercial_mission", entityId: item.followUpId ?? String(item.missionId), sourceReference: item.kind === "follow_up" ? `commercial_follow_ups:${item.followUpId}` : `commercial_missions:${item.missionId}` },
-      physicalEntityId: addressKey ? physicalEntityIdsByAddress.get(addressKey) ?? null : null,
-      scheduledAt: item.dueAt, urgency: item.urgency === "overdue" ? "overdue" : item.urgency === "urgent" ? "urgent" : item.urgency === "upcoming" ? "upcoming" : "flexible",
-      title: item.displayTitle ?? item.accountName, subtitle: item.note ?? item.missionCode, status: item.status,
-      destination: item.address ? { address: item.address, latitude: null, longitude: null } : null,
-      customer: { name: item.accountName, phone: item.phone, email: item.email },
-      money: item.estimatedValueCents == null ? null : deterministicEstimate(item.estimatedValueCents, `commercial_pipeline_records:${item.pipelineId}`, "medium"),
+      kind:
+        item.kind === "dispatch"
+          ? "mission_dispatch"
+          : item.kind === "follow_up"
+            ? "follow_up"
+            : "route_exception",
+      source: {
+        entityType:
+          item.kind === "follow_up"
+            ? "commercial_follow_up"
+            : "commercial_mission",
+        entityId: item.followUpId ?? String(item.missionId),
+        sourceReference:
+          item.kind === "follow_up"
+            ? `commercial_follow_ups:${item.followUpId}`
+            : `commercial_missions:${item.missionId}`,
+      },
+      physicalEntityId: addressKey
+        ? (physicalEntityIdsByAddress.get(addressKey) ?? null)
+        : null,
+      scheduledAt: item.dueAt,
+      urgency:
+        item.urgency === "overdue"
+          ? "overdue"
+          : item.urgency === "urgent"
+            ? "urgent"
+            : item.urgency === "upcoming"
+              ? "upcoming"
+              : "flexible",
+      title: item.displayTitle ?? item.accountName,
+      subtitle: item.note ?? item.missionCode,
+      status: item.status,
+      destination: item.address
+        ? { address: item.address, latitude: null, longitude: null }
+        : null,
+      customer: {
+        name: item.accountName,
+        phone: item.phone,
+        email: item.email,
+      },
+      money:
+        item.estimatedValueCents == null
+          ? null
+          : deterministicEstimate(
+              item.estimatedValueCents,
+              `commercial_pipeline_records:${item.pipelineId}`,
+              "medium"
+            ),
       verificationClass: "VERIFIED",
-      actions: [{ type: "open", label: "Open", href: item.destinationPath, mutation: null }],
+      actions: [
+        {
+          type: "open",
+          label: "Open",
+          href: item.destinationPath,
+          mutation: null,
+        },
+      ],
       missionId: item.missionId ?? null,
       pipelineId: item.pipelineId ?? null,
       destinationPath: item.destinationPath ?? null,
@@ -227,32 +484,85 @@ export async function getFieldToday(input: {
   );
   for (const recovery of openRecoveries) {
     timeline.push({
-      id: `recovery:${recovery.id}`, kind: "customer_recovery",
-      source: { entityType: "customer_recovery_intervention", entityId: recovery.id, sourceReference: `customer_recovery_interventions:${recovery.id}` },
+      id: `recovery:${recovery.id}`,
+      kind: "customer_recovery",
+      source: {
+        entityType: "customer_recovery_intervention",
+        entityId: recovery.id,
+        sourceReference: `customer_recovery_interventions:${recovery.id}`,
+      },
       physicalEntityId: recoveryEntities.get(recovery.id) ?? null,
-      scheduledAt: null, urgency: recovery.status === "approved" ? "urgent" : "flexible",
+      scheduledAt: null,
+      urgency: recovery.status === "approved" ? "urgent" : "flexible",
       title: `Recovery · ${recovery.customer.customerName}`,
-      subtitle: recovery.status === "contacted" ? "Signal sent; awaiting authoritative customer activity" : recovery.customer.recommendedAction,
-      status: recovery.status, destination: null,
-      customer: { name: recovery.customer.customerName, phone: null, email: null },
-      money: deterministicEstimate(recovery.customer.estimatedMonthlyImpactCents, `customer_churn_snapshots:${recovery.customer.id}`, recovery.customer.confidence),
+      subtitle:
+        recovery.status === "contacted"
+          ? "Signal sent; awaiting authoritative customer activity"
+          : recovery.customer.recommendedAction,
+      status: recovery.status,
+      destination: null,
+      customer: {
+        name: recovery.customer.customerName,
+        phone: null,
+        email: null,
+      },
+      money: deterministicEstimate(
+        recovery.customer.estimatedMonthlyImpactCents,
+        `customer_churn_snapshots:${recovery.customer.id}`,
+        recovery.customer.confidence
+      ),
       verificationClass: "VERIFIED",
-      actions: [{ type: "open", label: "Enter Recovery Path", href: recoveryEntities.get(recovery.id) ? `/growth/lantern-city?entity=${recoveryEntities.get(recovery.id)}` : "/growth/lantern-city", mutation: null }],
+      actions: [
+        {
+          type: "open",
+          label: "Enter Recovery Path",
+          href: recoveryEntities.get(recovery.id)
+            ? `/growth/lantern-city?entity=${recoveryEntities.get(recovery.id)}`
+            : "/growth/lantern-city",
+          mutation: null,
+        },
+      ],
     });
   }
-  for (const forge of forgeJobs.filter(job => ["review_ready", "generation_unconfigured", "published"].includes(job.state))) {
+  for (const forge of forgeJobs.filter(job =>
+    ["review_ready", "generation_unconfigured", "published"].includes(job.state)
+  )) {
     if (forge.state === "published") {
       authoritativeCompletedObjectiveIds.add(`forge:${forge.id}`);
     }
     timeline.push({
-      id: `forge:${forge.id}`, kind: "contextual_move",
-      source: { entityType: "tower_forge_job", entityId: forge.id, sourceReference: `tower_forge_jobs:${forge.id}` },
+      id: `forge:${forge.id}`,
+      kind: "contextual_move",
+      source: {
+        entityType: "tower_forge_job",
+        entityId: forge.id,
+        sourceReference: `tower_forge_jobs:${forge.id}`,
+      },
       physicalEntityId: forge.physicalEntityId ?? null,
-      scheduledAt: null, urgency: forge.state === "review_ready" ? "urgent" : "flexible",
-      title: forge.state === "published" ? "Published tower in Lantern City" : forge.state === "review_ready" ? "New tower discovered" : "Tower Forge awaiting art",
-      subtitle: forge.state.replaceAll("_", " "), status: forge.state, destination: null, customer: null, money: null,
+      scheduledAt: null,
+      urgency: forge.state === "review_ready" ? "urgent" : "flexible",
+      title:
+        forge.state === "published"
+          ? "Published tower in Lantern City"
+          : forge.state === "review_ready"
+            ? "New tower discovered"
+            : "Tower Forge awaiting art",
+      subtitle: forge.state.replaceAll("_", " "),
+      status: forge.state,
+      destination: null,
+      customer: null,
+      money: null,
       verificationClass: "VERIFIED",
-      actions: [{ type: "open", label: "Reveal in world", href: forge.physicalEntityId ? `/growth/lantern-city?entity=${forge.physicalEntityId}` : "/tower-forge", mutation: null }],
+      actions: [
+        {
+          type: "open",
+          label: "Reveal in world",
+          href: forge.physicalEntityId
+            ? `/growth/lantern-city?entity=${forge.physicalEntityId}`
+            : "/tower-forge",
+          mutation: null,
+        },
+      ],
     });
   }
   /*
@@ -276,40 +586,69 @@ export async function getFieldToday(input: {
       whySourceOccurredAt: item.sourceOccurredAt,
       scheduledAt: null,
       urgency: isPromise ? "urgent" : "flexible",
-      title: isPromise ? "A promise you made is due" : "Worth returning to today",
+      title: isPromise
+        ? "A promise you made is due"
+        : "Worth returning to today",
       subtitle: item.reason,
       status: "open",
       destination: null,
       customer: null,
       money: null,
       verificationClass: "ATTESTED",
-      actions: [{
-        type: "open",
-        label: isPromise ? "Open this promise" : "Reveal in world",
-        href: item.physicalEntityId
-          ? `/growth/lantern-city?entity=${item.physicalEntityId}`
-          : "/growth/lantern-city",
-        mutation: null,
-      }],
+      actions: [
+        {
+          type: "open",
+          label: isPromise ? "Open this promise" : "Reveal in world",
+          href: item.physicalEntityId
+            ? `/growth/lantern-city?entity=${item.physicalEntityId}`
+            : "/growth/lantern-city",
+          mutation: null,
+        },
+      ],
     });
   }
 
   const sorted = sortFieldTimeline(timeline);
-  const nextFixedCommitment = sorted
-    .filter(
-      item =>
-        item.scheduledAt &&
-        // Projecting a future date: the day's first scheduled item is "next",
-        // not the first item after the real present `now`. Projecting today:
-        // unchanged, still relative to the real present.
-        (isFutureDate || Date.parse(item.scheduledAt) >= now.getTime()) &&
-        ["pickup", "delivery", "job"].includes(item.kind)
-    )
-    .sort((a, b) => Date.parse(a.scheduledAt!) - Date.parse(b.scheduledAt!))[0] ?? null;
+  const nextFixedCommitment =
+    sorted
+      .filter(
+        item =>
+          item.scheduledAt &&
+          // Projecting a future date: the day's first scheduled item is "next",
+          // not the first item after the real present `now`. Projecting today:
+          // unchanged, still relative to the real present.
+          (isFutureDate || Date.parse(item.scheduledAt) >= now.getTime()) &&
+          ["pickup", "delivery", "job"].includes(item.kind)
+      )
+      .sort(
+        (a, b) => Date.parse(a.scheduledAt!) - Date.parse(b.scheduledAt!)
+      )[0] ?? null;
   return {
-    generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,
-    authoritativeCompletedObjectiveIds: Array.from(authoritativeCompletedObjectiveIds).sort(),
-    nextFixedCommitment, blockers: sorted.filter(item => item.urgency === "blocked"),
-    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs", "goldline_world_events", "physical_entity_aliases"] },
+    generatedAt: now.toISOString(),
+    businessDate: date,
+    currentUserId: input.userId,
+    timeline: sorted,
+    authoritativeCompletedObjectiveIds: Array.from(
+      authoritativeCompletedObjectiveIds
+    ).sort(),
+    nextFixedCommitment,
+    blockers: sorted.filter(item => item.urgency === "blocked"),
+    dataQuality: {
+      status: "partial",
+      warnings: [
+        "Laundry order addresses do not currently contain verified coordinates",
+        "Travel duration is unavailable until live routing is configured",
+      ],
+      sources: [
+        "orders",
+        "commercial_follow_ups",
+        "commercial_mission_dispatches",
+        "commercial_pipeline_records",
+        "customer_recovery_interventions",
+        "tower_forge_jobs",
+        "goldline_world_events",
+        "physical_entity_aliases",
+      ],
+    },
   };
 }
