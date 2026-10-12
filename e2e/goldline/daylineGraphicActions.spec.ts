@@ -100,6 +100,59 @@ for (const viewport of [
         expect(errors).toEqual([]);
       });
     }
+    test("post-ready projection updates retain the approved scene", async ({
+      page,
+    }) => {
+      await page.goto("/driver?goldlineDayPlanFixture=art-mixed");
+      const world = page.locator(".gdp-illustrated-world");
+      const scene = page.locator(".gdp-art-scene");
+      const objects = page.locator(".gdp-object");
+      await expect(world).toHaveAttribute("data-art-ready", "true");
+      await expect(objects).toHaveCount(5);
+      await expect(page.locator(".gdp-approved-art-layer")).toBeVisible();
+      await expect(page.locator(".gdp-approved-header")).toBeVisible();
+      await expect(page.locator(".gdp-approved-dock")).toBeVisible();
+
+      const initialScene = await scene.elementHandle();
+      const initialIds = await objects.evaluateAll(elements =>
+        elements.map(element => element.getAttribute("data-action-slot-id"))
+      );
+      expect(initialScene).not.toBeNull();
+
+      // The fixture delivers a new projection after the artwork is already
+      // visible. Updating verified status must preserve the restored renderer.
+      await page.getByTestId("fixture-record-completion").click();
+      await expect(objects.first()).toHaveAttribute(
+        "data-visual-state",
+        "ready_to_open"
+      );
+      await expect(world).toHaveAttribute("data-art-ready", "true");
+      expect(
+        await scene.evaluate(
+          (element, original) => element === original,
+          initialScene
+        )
+      ).toBe(true);
+      expect(
+        await objects.evaluateAll(elements =>
+          elements.map(element => element.getAttribute("data-action-slot-id"))
+        )
+      ).toEqual(initialIds);
+      await expect(page.locator(".gdp-approved-art-layer")).toBeVisible();
+      await expect(page.locator(".gdp-approved-header")).toBeVisible();
+      await expect(page.locator(".gdp-approved-dock")).toBeVisible();
+      await expect(
+        page.locator(
+          ".gdp-enter-overworld-btn, .gdp-castle-destination, .gdp-walkable-route, .gdp-v2-header"
+        )
+      ).toHaveCount(0);
+      await objects.first().click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toBeHidden();
+      await initialScene?.dispose();
+    });
+
     test("cold async load, scrolling and verified-only progress", async ({
       page,
     }) => {

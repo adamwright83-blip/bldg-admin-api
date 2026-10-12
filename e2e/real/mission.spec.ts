@@ -58,7 +58,8 @@ test("REAL acceptance 4/5: field evidence persists, replays once, and survives a
     await expect(page.getByRole("link",{name:"RETURN TO LANTERN CITY →"})).toHaveAttribute("href","/growth/lantern-city");
     await page.goto("/play");
     await expect(page.getByTestId("day-line-first-mission-evidence")).toContainText(observation);
-    await page.getByRole("button", {name:"OPEN FIELD JOURNAL",exact:true}).click();
+    await page.getByRole("button", {name:"Open Navigation Menu",exact:true}).click();
+    await page.getByRole("button", {name:"JOURNAL",exact:true}).click();
     await expect(page.getByTestId("journal-transcript")).toBeVisible();
     await page.getByRole("button", {name:"Close journal",exact:true}).click();
     await context.close();

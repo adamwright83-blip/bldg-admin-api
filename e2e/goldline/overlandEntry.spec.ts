@@ -24,10 +24,9 @@ test.describe("canonical driver entry", () => {
       page.getByRole("region", { name: "JOYSTICK overworld" })
     ).toHaveCount(0);
 
-    // Exercise the canonical diegetic Overland control that the driver actually
-    // sees. The legacy Day Plan menu is intentionally hidden by world-tool CSS;
-    // forcing it visible creates an overlapping, unreachable duplicate control.
-    const exploreOverland = page.getByRole("button", { name: "Enter Overland" });
+    // The approved map menu is the canonical entry to the existing Overworld.
+    await page.getByRole("button", { name: "Open Navigation Menu", exact: true }).click();
+    const exploreOverland = page.getByRole("button", { name: "EXPLORE OVERWORLD", exact: true });
     await expect(exploreOverland).toBeVisible({ timeout: 10_000 });
     await exploreOverland.click();
 
