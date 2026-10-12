@@ -8,6 +8,7 @@ function paid(orderNumber: string, cents: number, date: string): PaidOrderEvent 
     cents,
     businessDate: date.slice(0, 10),
     occurredAt: new Date(date),
+    placedAt: new Date(date),
     serviceType: "wash_fold",
     eventKey: `native:${orderNumber}`,
   } as PaidOrderEvent;
@@ -32,6 +33,7 @@ describe("proactive churn must use observed customer order histories", () => {
     const second=paid("42", 5000, "2026-06-15T09:00:00Z");
     expect(observedChurnHistory([first, { ...second, orderNumber: "ambiguous" }])).toBeNull();
     expect(observedChurnHistory([first, { ...second, serviceType: null }])).toBeNull();
+    expect(observedChurnHistory([first, { ...second, placedAt: null }])).toBeNull();
     expect(observedChurnHistory([first, { ...second, orderNumber: "41" }])).toBeNull();
   });
   it("ignores non-paid refund rows instead of inventing another service", () => {
