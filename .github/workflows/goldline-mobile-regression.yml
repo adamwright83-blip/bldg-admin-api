@@ -279,7 +279,7 @@ jobs:
               e2e/goldline/mobileTypographyFloor.spec.ts
               e2e/goldline/pixel9Layout.spec.ts
           - name: mobile-dayline-graphic-actions
-            command: pnpm exec playwright test --config playwright.dayline-art.config.ts
+            command: node --test extensions/gumballpals/pickup-page.test.mjs && pnpm exec playwright test --config playwright.dayline-art.config.ts
           - name: mobile-day-entry-core
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts

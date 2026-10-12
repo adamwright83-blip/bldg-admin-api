@@ -1,23 +1,13 @@
+import type { PickupBridgeView } from "./cleancloudPickup";
 /**
- * Externally-managed operational work.
- *
- * TRUTH BOUNDARY. A CleanCloud job is real work for a real customer, and
- * Goldline is allowed to know that. What it must never do is imply either of
- * the two things it cannot know:
- *
- *   1. that Laundry Butler originated the order (it did not — no payment, no
- *      customer relationship, no revenue attaches to it here), or
- *   2. that CleanCloud has been updated (this build has no CleanCloud API
- *      access at all, so the app cannot observe that system's state).
- *
- * Every state name below is chosen so neither claim can be made by accident.
- * In particular there is no `verified` reconciliation state: the operator can
- * tell us they updated CleanCloud, and that is the strongest statement
- * available. `reconciled` says a person did it. `verified` would say a machine
- * checked it, and nothing here can.
+ * External jobs never imply a native Laundry Butler order, payment or revenue.
+ * Manual reconciliation is an operator's statement. The optional pickupBridge
+ * separately records a browser worker's verified CleanCloud Detail receipt.
  */
-
-export const EXTERNAL_SOURCE_SYSTEMS = ["cleancloud", "manual_external"] as const;
+export const EXTERNAL_SOURCE_SYSTEMS = [
+  "cleancloud",
+  "manual_external",
+] as const;
 export type ExternalSourceSystem = (typeof EXTERNAL_SOURCE_SYSTEMS)[number];
 
 /**
@@ -25,8 +15,14 @@ export type ExternalSourceSystem = (typeof EXTERNAL_SOURCE_SYSTEMS)[number];
  * different confidence, and a later audit should be able to tell them apart
  * rather than finding one undifferentiated pile.
  */
-export const EXTERNAL_INGESTION_METHODS = ["screenshot", "manual", "voice"] as const;
-export type ExternalIngestionMethod = (typeof EXTERNAL_INGESTION_METHODS)[number];
+export const EXTERNAL_INGESTION_METHODS = [
+  "screenshot",
+  "manual",
+  "voice",
+  "browser",
+] as const;
+export type ExternalIngestionMethod =
+  (typeof EXTERNAL_INGESTION_METHODS)[number];
 
 export const EXTERNAL_JOB_KINDS = ["pickup", "dropoff"] as const;
 export type ExternalJobKind = (typeof EXTERNAL_JOB_KINDS)[number];
@@ -43,7 +39,8 @@ export type ExternalOperationalStatus =
 /**
  * External-system truth. `update_required` is the honest default the moment
  * physical work completes: the bag is in the car, and CleanCloud does not know
- * yet. Only the operator saying so moves it to `reconciled`.
+ * yet. Manual reconciliation records what the operator states. A verified browser
+ * pickup receipt also sets externalLastVerifiedAt in storage.
  */
 export const EXTERNAL_RECONCILIATION_STATUSES = [
   "update_required",
@@ -65,6 +62,7 @@ export const EXTERNAL_REVIEW_STATES = [
 export type ExternalReviewState = (typeof EXTERNAL_REVIEW_STATES)[number];
 
 export type ExternalOperationalOrder = {
+  pickupBridge?: PickupBridgeView;
   id: string;
   sourceSystem: ExternalSourceSystem;
   ingestionMethod: ExternalIngestionMethod;
@@ -127,7 +125,9 @@ export function formatExternalWindow(
 export function externalProvenanceLabel(
   order: Pick<ExternalOperationalOrder, "sourceSystem">
 ): string {
-  return order.sourceSystem === "cleancloud" ? "CLEAN CLOUD" : "EXTERNAL SOURCE";
+  return order.sourceSystem === "cleancloud"
+    ? "CLEAN CLOUD"
+    : "EXTERNAL SOURCE";
 }
 
 /**

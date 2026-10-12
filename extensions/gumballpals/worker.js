@@ -1,3 +1,4 @@
+import { PICKUP_ALARM, resumePickupWorker, runPickupWorker } from "./pickup-worker.js";
 import { validateExportUrl } from "./core.js";
 import { nextDailyRun, scheduleDue, SCHEDULE_NAME } from "./schedule.js";
 
@@ -80,3 +81,9 @@ chrome.downloads.onCreated.addListener(async item => {
     /* unrelated download; do not inspect or retain it */
   }
 });
+
+chrome.alarms.onAlarm.addListener(alarm => { if(alarm.name === PICKUP_ALARM) void runPickupWorker(); });
+chrome.runtime.onStartup.addListener(() => void resumePickupWorker());
+chrome.runtime.onInstalled.addListener(() => void resumePickupWorker());
+chrome.storage.onChanged.addListener((changes,area) => { if(area === "local" && changes.pickupConnection) void resumePickupWorker(); });
+void resumePickupWorker();

@@ -14,6 +14,10 @@ export default function Gumballpals() {
     retry: false,
     enabled: status.isSuccess,
   });
+  const driverPickups = trpc.system.gumball.pickups.connection.useQuery(
+    undefined,
+    { retry: false, refetchInterval: 30_000, enabled: status.isSuccess }
+  );
   const last = status.data?.binding?.lastSuccessAt;
   const stale = !last || Date.now() - new Date(last).getTime() > 26 * 3600000;
   return (
@@ -45,7 +49,8 @@ export default function Gumballpals() {
           ) : status.error ? (
             <p role="alert">
               Cannot verify your connection. The backend may be unavailable or
-              your session may have expired. <a href="/">Check Goldline sign-in</a>, then retry.
+              your session may have expired.{" "}
+              <a href="/">Check Goldline sign-in</a>, then retry.
             </p>
           ) : (
             <>
@@ -109,7 +114,44 @@ export default function Gumballpals() {
             Refresh status
           </button>
         </section>
-        <section style={{ background: "#fff", borderRadius: 24, padding: 24, margin: "24px 0" }}>
+        <section
+          style={{
+            background: "#e8f5ff",
+            borderRadius: 24,
+            padding: 24,
+            margin: "24px 0",
+          }}
+        >
+          <h2>Driver pickups</h2>
+          <p>
+            {driverPickups.data?.connection?.enabled
+              ? "The pickup feed is enabled for DAYLINE."
+              : "Connect driver pickups in the Gumballpals extension."}
+          </p>
+          {driverPickups.data?.connection?.capturedAt && (
+            <p>
+              Last pickup capture:{" "}
+              {new Date(
+                driverPickups.data.connection.capturedAt
+              ).toLocaleString("en-US", {
+                timeZone: "America/Los_Angeles",
+              })}{" "}
+              Pacific
+            </p>
+          )}
+          <p>
+            Picked up in DAYLINE saves bags and garments, then requests
+            Collected in CleanCloud. A fresh read of Detail verifies the update.
+          </p>
+        </section>
+        <section
+          style={{
+            background: "#fff",
+            borderRadius: 24,
+            padding: 24,
+            margin: "24px 0",
+          }}
+        >
           <h2>Latest sales</h2>
           {sales.isLoading ? <p>Loading sales…</p> : null}
           {sales.error ? <p role="alert">Sales could not be loaded.</p> : null}
@@ -119,9 +161,13 @@ export default function Gumballpals() {
           {sales.data && sales.data.sales.length > 0 ? (
             <ul>
               {sales.data.sales.map(sale => (
-                <li key={`${sale.at}-${sale.ingestedAt}-${sale.customerName}-${sale.amountCents}`}>
+                <li
+                  key={`${sale.at}-${sale.ingestedAt}-${sale.customerName}-${sale.amountCents}`}
+                >
                   {sale.at
-                    ? new Date(sale.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })
+                    ? new Date(sale.at).toLocaleString("en-US", {
+                        timeZone: "America/Los_Angeles",
+                      })
                     : "No payment time"}{" "}
                   Pacific · {sale.customerName} · $
                   {(sale.amountCents / 100).toFixed(2)} · imported{" "}
@@ -186,8 +232,9 @@ export default function Gumballpals() {
           sync receipt is not proof of complete historical coverage.
         </p>
         <p>
-          The extension reads reports and imports them into Goldline. It does
-          not charge customers, edit source orders, or send messages. Browser
+          Report sync reads CleanCloud reports. The optional driver pickup connection
+          presses Collected only after Picked up in DAYLINE. Gumball does not press
+          payment or card charge controls. Browser
           permissions: storage, scripting, download events and alarms, with
           access limited to the two connected sites.
         </p>

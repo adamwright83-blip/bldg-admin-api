@@ -3250,7 +3250,7 @@ await runRequired(
     id varchar(36) NOT NULL,
     tenantId varchar(64) NOT NULL DEFAULT 'default',
     sourceSystem enum('cleancloud','manual_external') NOT NULL,
-    ingestionMethod enum('screenshot','manual','voice') NOT NULL,
+    ingestionMethod enum('screenshot','manual','voice','browser') NOT NULL,
     externalOrderId varchar(191) NULL,
     jobKind enum('pickup','dropoff') NOT NULL,
     customerName varchar(191) NOT NULL,
@@ -3276,6 +3276,12 @@ await runRequired(
   )`,
   "CREATE TABLE external_operational_orders"
 );
+const [externalIngestionColumns] = await conn.execute("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'external_operational_orders' AND COLUMN_NAME = 'ingestionMethod'");
+if (!String(externalIngestionColumns[0]?.COLUMN_TYPE).includes("'browser'")) {
+  await runRequired(`ALTER TABLE external_operational_orders MODIFY ingestionMethod enum('screenshot','manual','voice','browser') NOT NULL`, "External browser ingestion method");
+}
+const pickupSql = await readFile(new URL("../server/integrations/cleancloud/pickups/schema.sql", import.meta.url), "utf8");
+for (const statement of pickupSql.split(";").map(value => value.trim()).filter(Boolean)) await runRequired(statement, "CleanCloud driver pickup schema");
 await assertRequiredColumns("external_operational_orders", [
   "id",
   "tenantId",

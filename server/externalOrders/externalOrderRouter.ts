@@ -19,7 +19,10 @@ const clockTime = z.string().regex(/^\d{2}:\d{2}$/);
 /** Screenshots arrive as data URLs — the same shape the vision path expects. */
 const dataUrl = z
   .string()
-  .regex(/^data:image\/(png|jpe?g|gif|webp);base64,/, "Expected an image data URL");
+  .regex(
+    /^data:image\/(png|jpe?g|gif|webp);base64,/,
+    "Expected an image data URL"
+  );
 
 const extractedJob = z.object({
   jobKind: z.enum(EXTERNAL_JOB_KINDS),
@@ -81,7 +84,7 @@ export const externalOrderRouter = router({
 
   /**
    * The physical work happened. Leaves reconciliation at `update_required`,
-   * because this app cannot tell CleanCloud anything.
+   * for manually imported jobs. Connected browser pickups use gumball.pickups.collected.
    */
   complete: legacyDayforgeTenantMemberProcedure
     .input(z.object({ id: z.string().uuid() }))

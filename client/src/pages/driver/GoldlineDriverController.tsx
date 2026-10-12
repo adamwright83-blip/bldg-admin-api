@@ -1,3 +1,4 @@
+import type { PickupCounts } from "@shared/cleancloudPickup";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -157,7 +158,10 @@ const GoldlineFictionHarness =
 export default function GoldlineDriverController({
   onOpenFirstMission,
   firstMissionEvidence,
-}: { onOpenFirstMission?: () => void; firstMissionEvidence?: { text: string; reportedAt: string } | null } = {}) {
+}: {
+  onOpenFirstMission?: () => void;
+  firstMissionEvidence?: { text: string; reportedAt: string } | null;
+} = {}) {
   const search = new URLSearchParams(window.location.search);
   if (GoldlineProgressionHarness && search.has("goldlineProgressionFixture")) {
     return (
@@ -182,7 +186,10 @@ export default function GoldlineDriverController({
     );
   }
   return (
-    <LiveGoldlineDriverController onOpenFirstMission={onOpenFirstMission} firstMissionEvidence={firstMissionEvidence} />
+    <LiveGoldlineDriverController
+      onOpenFirstMission={onOpenFirstMission}
+      firstMissionEvidence={firstMissionEvidence}
+    />
   );
 }
 
@@ -222,12 +229,18 @@ function LiveGoldlineDriverController({
    * world. Carries no business state — see checkpointStorage.ts.
    */
   const identity = trpc.auth.me.useQuery();
-  const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const requested = launchSearch.get("date");
+    if (!requested || !/^\d{4}-\d{2}-\d{2}$/.test(requested)) return getLocalYmd();
+    const date = new Date(`${requested}T12:00:00Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === requested ? requested : getLocalYmd();
+  });
   const [driverScene, setDriverScene] =
     useState<DriverScene>(initialDriverScene);
   const [coastalRunId, setCoastalRunId] = useState<string | null>(null);
-  const [waywardContactRunId, setWaywardContactRunId] =
-    useState<string | null>(null);
+  const [waywardContactRunId, setWaywardContactRunId] = useState<string | null>(
+    null
+  );
   const [stageReturnScene, setStageReturnScene] =
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
@@ -277,8 +290,10 @@ function LiveGoldlineDriverController({
     status: "ready" as const,
     dateField: "deliveryDate" as const,
   };
-  const pickups = trpc.system.field.orders.listByDate.useQuery(pickupQueryInput);
-  const deliveries = trpc.system.field.orders.listByDate.useQuery(deliveryQueryInput);
+  const pickups =
+    trpc.system.field.orders.listByDate.useQuery(pickupQueryInput);
+  const deliveries =
+    trpc.system.field.orders.listByDate.useQuery(deliveryQueryInput);
   const completedPickups = trpc.system.field.orders.listByDate.useQuery({
     date: selectedDate,
     status: "collected" as const,
@@ -379,6 +394,9 @@ function LiveGoldlineDriverController({
     trpc.system.externalOrders.createManual.useMutation();
   const completeExternalOrder =
     trpc.system.externalOrders.complete.useMutation();
+  const collectCleancloudPickup =
+    trpc.system.gumball.pickups.collected.useMutation();
+  const retryCleancloudPickup = trpc.system.gumball.pickups.retry.useMutation();
   const reconcileExternalOrder =
     trpc.system.externalOrders.reconcile.useMutation();
 
@@ -417,15 +435,17 @@ function LiveGoldlineDriverController({
     undefined,
     { staleTime: 15_000, retry: false }
   );
-  const rescueCandidates = trpc.system.spiritHumanRescue.listCandidates.useQuery(
-    undefined,
-    { staleTime: 30_000, retry: false }
-  );
+  const rescueCandidates =
+    trpc.system.spiritHumanRescue.listCandidates.useQuery(undefined, {
+      staleTime: 30_000,
+      retry: false,
+    });
   const bioContainmentRun = useMemo(() => {
     const runs = campaignRuns.data ?? [];
     return (
       runs.find(
-        run => run.fictionPackId === "bio_containment" && run.status === "active"
+        run =>
+          run.fictionPackId === "bio_containment" && run.status === "active"
       ) ??
       runs.find(run => run.fictionPackId === "bio_containment") ??
       null
@@ -529,10 +549,13 @@ function LiveGoldlineDriverController({
     undefined,
     { refetchInterval: 30_000, retry: false }
   );
-  const followUpQueue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, {
-    refetchInterval: 30_000,
-    retry: false,
-  });
+  const followUpQueue = trpc.system.legacyDayforgeToday.list.useQuery(
+    undefined,
+    {
+      refetchInterval: 30_000,
+      retry: false,
+    }
+  );
   const openChannelInput = { businessDate: selectedDate };
   const progressInput = {
     businessDate: selectedDate,
@@ -733,9 +756,13 @@ function LiveGoldlineDriverController({
       dispatches.refetch(),
       goldlineProgress.refetch(),
       utils.system.field.orders.listByStatus.invalidate({ status: "new" }),
-      utils.system.field.orders.listByStatus.invalidate({ status: "collected" }),
+      utils.system.field.orders.listByStatus.invalidate({
+        status: "collected",
+      }),
       utils.system.field.orders.listByStatus.invalidate({ status: "ready" }),
-      utils.system.field.orders.listByStatus.invalidate({ status: "delivered" }),
+      utils.system.field.orders.listByStatus.invalidate({
+        status: "delivered",
+      }),
       utils.admin.dashboardSummary.invalidate(),
       utils.system.businessWorld.get.invalidate(),
       utils.system.driverGameWorld.current.invalidate(),
@@ -1103,7 +1130,9 @@ function LiveGoldlineDriverController({
   }
 
   async function loadMissionDebriefAction(missionId: number) {
-    return utils.system.commercialMission.missionDebriefState.fetch({ missionId });
+    return utils.system.commercialMission.missionDebriefState.fetch({
+      missionId,
+    });
   }
 
   function openMissionDebriefAction(input: {
@@ -1117,7 +1146,9 @@ function LiveGoldlineDriverController({
   }
 
   async function finalizeMissionDebriefAction(
-    input: Parameters<NonNullable<GoldlineActionServices["finalizeMissionDebrief"]>>[0]
+    input: Parameters<
+      NonNullable<GoldlineActionServices["finalizeMissionDebrief"]>
+    >[0]
   ) {
     const state = await finalizeMissionDebriefMutation.mutateAsync(input);
     await Promise.all([
@@ -1212,10 +1243,13 @@ function LiveGoldlineDriverController({
   }
 
   async function recordParkingLotClerkAction(
-    input: Parameters<GoldlineActionServices["recordParkingLotClerkObservation"]>[0]
+    input: Parameters<
+      GoldlineActionServices["recordParkingLotClerkObservation"]
+    >[0]
   ): Promise<GoldlineVisitContext> {
     const next = await recordParkingLotClerk.mutateAsync(input);
-    if (!next) throw new Error("Parking-lot Clerk observation was not persisted");
+    if (!next)
+      throw new Error("Parking-lot Clerk observation was not persisted");
     return next;
   }
 
@@ -1447,7 +1481,10 @@ function LiveGoldlineDriverController({
     ...(deliveries.data ?? []),
   ];
 
-  async function resolveDayStop(stop: DayPlanStop): Promise<boolean> {
+  async function resolveDayStop(
+    stop: DayPlanStop,
+    counts?: PickupCounts
+  ): Promise<boolean> {
     if (stop.status === "blocked" || stop.status === "cancelled") return false;
     const action = stop.action;
     if (!action || action.type === "commercial") return false;
@@ -1455,6 +1492,16 @@ function LiveGoldlineDriverController({
       case "order":
         return handleResolveOrder(action.orderId, action.status);
       case "external": {
+        if (stop.pickupBridge) {
+          if (!counts)
+            throw new Error("Enter the bags or garments you picked up.");
+          const result = await collectCleancloudPickup.mutateAsync({
+            id: action.id,
+            counts,
+          });
+          await Promise.all([externalOrders.refetch(), fieldToday.refetch()]);
+          return result.success;
+        }
         const result = await completeExternalOrder.mutateAsync({
           id: action.id,
         });
@@ -1491,6 +1538,11 @@ function LiveGoldlineDriverController({
         firstMissionEvidence={firstMissionEvidence}
         onOpenJournal={() => setJournalOpen(true)}
         onResolveStop={resolveDayStop}
+        onRetryPickup={async stop => {
+          if (stop.action?.type !== "external") return;
+          await retryCleancloudPickup.mutateAsync({ id: stop.action.id });
+          await externalOrders.refetch();
+        }}
         onArchiveStop={async stop => {
           if (stop.action?.type !== "commercial") return false;
           await archiveSalesStop.mutateAsync({
@@ -1532,7 +1584,10 @@ function LiveGoldlineDriverController({
           authoredDay.data?.available ? authoredDay.data.authoredDay : null
         }
         missionPlan={missionDirectorPlan.data?.outcome ?? null}
-        currentDayLine={dayLineForSelectedDate(currentDayLine.data, selectedDate)}
+        currentDayLine={dayLineForSelectedDate(
+          currentDayLine.data,
+          selectedDate
+        )}
         weeklyReadiness={weeklyReadiness.data ?? []}
         onEnterChapter={
           kingdomTwoUnlocked
@@ -1678,10 +1733,11 @@ function LiveGoldlineDriverController({
   const behavioralSubject = campaignChapterGrammar
     ? behavioralSubjectFromGrammar(campaignChapterGrammar)
     : null;
-  const behavioralEvents = trpc.system.goldlineWorld.behavioralEventsForSubject.useQuery(
-    { correlationId: behavioralSubject ?? "" },
-    { enabled: Boolean(behavioralSubject), staleTime: 15_000, retry: false }
-  );
+  const behavioralEvents =
+    trpc.system.goldlineWorld.behavioralEventsForSubject.useQuery(
+      { correlationId: behavioralSubject ?? "" },
+      { enabled: Boolean(behavioralSubject), staleTime: 15_000, retry: false }
+    );
   const experimentalPresentation =
     trpc.system.goldlineWorld.experimentalPresentationAssignment.useQuery(
       {
@@ -1691,7 +1747,9 @@ function LiveGoldlineDriverController({
       },
       {
         enabled: Boolean(
-          behavioralSubject && currentCampaignChapter?.stableChapterId && campaignChapterGrammar
+          behavioralSubject &&
+            currentCampaignChapter?.stableChapterId &&
+            campaignChapterGrammar
         ),
         staleTime: 15_000,
         retry: false,
@@ -1724,7 +1782,11 @@ function LiveGoldlineDriverController({
   // A locked week must not redirect launch onto the brochure.
   if (weekOpen) {
     return (
-      <Suspense fallback={<div className="wb-shell" data-testid="week-brochure-loading" />}>
+      <Suspense
+        fallback={
+          <div className="wb-shell" data-testid="week-brochure-loading" />
+        }
+      >
         <WeekBrochure
           visit={readWeekVisit()}
           now={new Date()}
@@ -1772,14 +1834,19 @@ function LiveGoldlineDriverController({
             setDriverScene("colosseum");
           }}
           onEnterCoastalMarket={() => {
-            void beginCoastalRookHunt.mutateAsync({}).then(result => {
-              setCoastalRunId(result.runId);
-              setDriverScene("coastal-market");
-            }).catch(error => {
-              toast.error(
-                error instanceof Error ? error.message : "Could not begin the Rook hunt."
-              );
-            });
+            void beginCoastalRookHunt
+              .mutateAsync({})
+              .then(result => {
+                setCoastalRunId(result.runId);
+                setDriverScene("coastal-market");
+              })
+              .catch(error => {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not begin the Rook hunt."
+                );
+              });
           }}
           onEnterWayward={() => {
             if (progressionForOverworld?.capabilityRookContact?.granted) {
@@ -1787,14 +1854,19 @@ function LiveGoldlineDriverController({
               setDriverScene("wayward");
               return;
             }
-            void beginWaywardContactGate.mutateAsync({}).then(result => {
-              setWaywardContactRunId(result.runId);
-              setDriverScene("wayward");
-            }).catch(error => {
-              toast.error(
-                error instanceof Error ? error.message : "Could not begin the Wayward CONTACT gate."
-              );
-            });
+            void beginWaywardContactGate
+              .mutateAsync({})
+              .then(result => {
+                setWaywardContactRunId(result.runId);
+                setDriverScene("wayward");
+              })
+              .catch(error => {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not begin the Wayward CONTACT gate."
+                );
+              });
           }}
           onResolveOrder={handleResolveOrder}
           onOpenDayBriefing={() => setDayBriefingOpen(true)}
@@ -1808,22 +1880,31 @@ function LiveGoldlineDriverController({
 
   if (driverScene === "coastal-market") {
     return (
-      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#1b1410" }} />}>
+      <Suspense
+        fallback={
+          <div style={{ minHeight: "100dvh", background: "#1b1410" }} />
+        }
+      >
         {returnToDay}
         <CoastalMarketProofPage
           assetBase="/assets/goldline/coastal-market-three-proof/"
           onRookCaught={() => {
             if (!coastalRunId || completeCoastalRookCatch.isPending) return;
-            void completeCoastalRookCatch.mutateAsync({ runId: coastalRunId }).then(() => {
-              joinParty(identity.data?.openId ?? null, "rook");
-              setCoastalRunId(null);
-              void utils.system.goldlineProgression.get.invalidate();
-              setDriverScene("overworld");
-            }).catch(error => {
-              toast.error(
-                error instanceof Error ? error.message : "Rook ownership was not recorded."
-              );
-            });
+            void completeCoastalRookCatch
+              .mutateAsync({ runId: coastalRunId })
+              .then(() => {
+                joinParty(identity.data?.openId ?? null, "rook");
+                setCoastalRunId(null);
+                void utils.system.goldlineProgression.get.invalidate();
+                setDriverScene("overworld");
+              })
+              .catch(error => {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Rook ownership was not recorded."
+                );
+              });
           }}
         />
       </Suspense>
@@ -1845,7 +1926,8 @@ function LiveGoldlineDriverController({
             companionRookOwned: progressionForOverworld?.companionRookOwned,
           }}
           onContactGateComplete={() => {
-            if (!waywardContactRunId || completeWaywardContactGate.isPending) return;
+            if (!waywardContactRunId || completeWaywardContactGate.isPending)
+              return;
             void completeWaywardContactGate
               .mutateAsync({ runId: waywardContactRunId })
               .then(() => {
@@ -1854,7 +1936,9 @@ function LiveGoldlineDriverController({
               })
               .catch(error => {
                 toast.error(
-                  error instanceof Error ? error.message : "CONTACT was not recorded."
+                  error instanceof Error
+                    ? error.message
+                    : "CONTACT was not recorded."
                 );
               });
           }}
@@ -1935,14 +2019,20 @@ function LiveGoldlineDriverController({
             currentCampaignChapter?.fictionTemplateId ?? null
           }
           behavioralTenantId={behavioralEvents.data?.tenantId ?? null}
-          behavioralOperatorUserId={behavioralEvents.data?.operatorUserId ?? identity.data?.openId ?? null}
+          behavioralOperatorUserId={
+            behavioralEvents.data?.operatorUserId ??
+            identity.data?.openId ??
+            null
+          }
           behavioralLedgerEvents={behavioralEvents.data?.events ?? []}
           experimentalPreferredTemplateId={
             experimentalPresentation.data?.usedExperiment
               ? experimentalPresentation.data.preferredTemplateId
               : undefined
           }
-          experimentalAssignmentActive={Boolean(experimentalPresentation.data?.usedExperiment)}
+          experimentalAssignmentActive={Boolean(
+            experimentalPresentation.data?.usedExperiment
+          )}
           campaignChapterGrammar={campaignChapterGrammar}
           requestedGameplayHost={requestedGameplayHost}
           focusedCampaignObjectiveId={activeAdventureObjectiveId}

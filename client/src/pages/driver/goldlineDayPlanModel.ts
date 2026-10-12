@@ -1,3 +1,7 @@
+import {
+  pickupDirectionsUrl,
+  type PickupBridgeView,
+} from "@shared/cleancloudPickup";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import {
@@ -18,7 +22,10 @@ import type {
 } from "@shared/dayDirector";
 import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
-import { compileGoldlineAdventure, type TerritoryBundleHint } from "@shared/goldlineAdventure";
+import {
+  compileGoldlineAdventure,
+  type TerritoryBundleHint,
+} from "@shared/goldlineAdventure";
 import { applyAuthoredDayOrdering } from "@shared/authoredDay";
 import { projectStopsOntoCampaign } from "@shared/goldlineCampaignRuntime";
 
@@ -52,7 +59,11 @@ type FieldTodaySource = {
   status: string;
   urgency: string;
   scheduledAt: string | null;
-  destination: { address: string; latitude: number | null; longitude: number | null } | null;
+  destination: {
+    address: string;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
   physicalEntityId?: string | null;
   whySurfaced?: string | null;
   whySourceOccurredAt?: string | null;
@@ -96,10 +107,12 @@ export function liveObjectivesFromFieldToday(
     .filter(item => LIVE_OBJECTIVE_KINDS.includes(item.kind))
     .map(item => ({
       id: item.id,
-      kind: item.kind === "marketing_challenge" ? "marketing" :
-        item.kind === "customer_recovery" || item.kind === "contextual_move"
-          ? ("growth" as const)
-          : ("sales" as const),
+      kind:
+        item.kind === "marketing_challenge"
+          ? "marketing"
+          : item.kind === "customer_recovery" || item.kind === "contextual_move"
+            ? ("growth" as const)
+            : ("sales" as const),
       title: item.title,
       sourceLabel:
         LIVE_OBJECTIVE_SOURCE_LABELS[item.kind] ?? "Commercial commitment",
@@ -143,10 +156,16 @@ export type DayPlanSource =
   | "living_world";
 
 export type DayPlanStop = {
+  pickupBridge?: PickupBridgeView;
   /** Exact source identifiers for the existing write services. Never infer a
    * mutation from a title or from completion of a fictional encounter. */
   action?:
-    | { type: "order"; orderId: number; status: "collected" | "delivered"; eligible: boolean }
+    | {
+        type: "order";
+        orderId: number;
+        status: "collected" | "delivered";
+        eligible: boolean;
+      }
     | { type: "external"; id: string }
     | { type: "task"; missionId: string; taskId: string }
     | { type: "commitment"; id: string }
@@ -193,7 +212,10 @@ export type DayPlanProjection = {
   fixedWindowCount: number;
   cleanCloudCount: number;
   growthCoverage: "covered" | "underfilled" | "blocked" | "unknown";
-  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
+  authoredDay?: Pick<
+    AuthoredDayRecord,
+    "headline" | "framing" | "lines" | "status"
+  > | null;
   /**
    * Slice 4 — the Mission Director's primary/fallback growth mission for
    * this business date, when available. Rendering this is Slice 5's job
@@ -244,22 +266,37 @@ function nativeStop(order: Order, kind: "pickup" | "dropoff"): DayPlanStop {
       : order.status === "delivered";
   return {
     id: `native-${kind}-${order.id}`,
-    action: { type: "order", orderId: order.id, status: kind === "pickup" ? "collected" : "delivered", eligible: kind === "pickup" || Boolean(order.paid) },
+    action: {
+      type: "order",
+      orderId: order.id,
+      status: kind === "pickup" ? "collected" : "delivered",
+      eligible: kind === "pickup" || Boolean(order.paid),
+    },
     kind,
     title: nameForOrder(order),
     source: "laundry_butler",
     sourceLabel: "Laundry Butler",
     timeLabel: window,
-    displayDetail: [
-      order.bagCount != null ? `${order.bagCount} ${order.bagCount === 1 ? "bag" : "bags"}` : null,
-      order.weightLbs != null && Number.isFinite(Number(order.weightLbs)) ? `${Number(order.weightLbs)} lb` : null,
-    ].filter(Boolean).join(" • ") || null,
+    displayDetail:
+      [
+        order.bagCount != null
+          ? `${order.bagCount} ${order.bagCount === 1 ? "bag" : "bags"}`
+          : null,
+        order.weightLbs != null && Number.isFinite(Number(order.weightLbs))
+          ? `${Number(order.weightLbs)} lb`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" • ") || null,
     sortKey: timeSortKey(window, "60:00"),
     estimatedMinutes: null,
     status: completed ? "completed" : "upcoming",
     fixed: window !== "Time TBD",
     address: order.address || null,
-    navigationUrl: navigationUrl(order.address),
+    navigationUrl:
+      kind === "pickup"
+        ? pickupDirectionsUrl(order.address)
+        : navigationUrl(order.address),
     missionTarget: null,
     completedAt: completed ? String(order.updatedAt ?? "") || null : null,
   };
@@ -271,6 +308,11 @@ function externalStop(order: ExternalOperationalOrder): DayPlanStop | null {
     formatExternalWindow(order.windowStart, order.windowEnd) ?? "Time TBD";
   return {
     id: `external-${order.id}`,
+    pickupBridge: order.pickupBridge,
+    displayDetail:
+      order.pickupBridge?.bagCount != null
+        ? `${order.pickupBridge.bagCount} bags • ${order.pickupBridge.garmentCount ?? 0} garments`
+        : null,
     action: { type: "external", id: order.id },
     kind: order.jobKind,
     title: order.customerName,
@@ -288,7 +330,10 @@ function externalStop(order: ExternalOperationalOrder): DayPlanStop | null {
           : "upcoming",
     fixed: Boolean(order.windowStart || order.windowEnd),
     address: order.address,
-    navigationUrl: navigationUrl(order.address),
+    navigationUrl:
+      order.jobKind === "pickup"
+        ? pickupDirectionsUrl(order.address)
+        : navigationUrl(order.address),
     missionTarget: null,
     completedAt: order.completedAt,
   };
@@ -371,7 +416,10 @@ export function buildDayPlanProjection(input: {
   liveObjectives?: LiveAdventureObjective[];
   territoryBundles?: TerritoryBundleHint[];
   campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
-  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
+  authoredDay?: Pick<
+    AuthoredDayRecord,
+    "headline" | "framing" | "lines" | "status"
+  > | null;
   missionPlan?: MissionPlanOutcome | null;
 }): DayPlanProjection {
   const fixedCount = [
@@ -474,39 +522,45 @@ export function buildDayPlanProjection(input: {
         navigationUrl: null,
         missionTarget: null,
         completedAt: commitment.completedAt,
-        attentionState: commitment.detailState === "NEEDS_DETAILS" ? "needs_details" : "none",
+        attentionState:
+          commitment.detailState === "NEEDS_DETAILS" ? "needs_details" : "none",
         whySurfaced:
           commitment.detailState === "NEEDS_DETAILS"
             ? `Needs details: ${(commitment.missingDetails ?? []).join(", ") || commitment.detailNote || "more information"}`
             : undefined,
       })
     ),
-    ...(input.liveObjectives ?? []).map((objective): DayPlanStop => ({
-      id: `living-world-${objective.id}`,
-      kind: objective.kind,
-      title: objective.title,
-      source: "living_world",
-      action:
-        objective.missionId != null
-          ? { type: "commercial", missionId: objective.missionId }
-          : undefined,
-      sourceLabel: `${objective.sourceLabel} · ${objective.explanation}`,
-      timeLabel: objective.dueAt ? `Due ${new Date(objective.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Flexible today",
-      sortKey: objective.dueAt ?? `72:${objective.id}`,
-      estimatedMinutes: null,
-      status: objective.status === "ready" ? "ready" : objective.status,
-      fixed: Boolean(objective.dueAt),
-      address: objective.address,
-      latitude: objective.latitude,
-      longitude: objective.longitude,
-      physicalEntityId: objective.physicalEntityId,
-      navigationUrl: navigationUrl(objective.address),
-      missionTarget: null,
-      completedAt: objective.status === "completed" ? new Date().toISOString() : null,
-      whySurfaced: objective.explanation,
-      sourceEvidenceReference: objective.sourceEvidenceReference,
-      sourceOccurredAt: objective.sourceOccurredAt,
-    })),
+    ...(input.liveObjectives ?? []).map(
+      (objective): DayPlanStop => ({
+        id: `living-world-${objective.id}`,
+        kind: objective.kind,
+        title: objective.title,
+        source: "living_world",
+        action:
+          objective.missionId != null
+            ? { type: "commercial", missionId: objective.missionId }
+            : undefined,
+        sourceLabel: `${objective.sourceLabel} · ${objective.explanation}`,
+        timeLabel: objective.dueAt
+          ? `Due ${new Date(objective.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+          : "Flexible today",
+        sortKey: objective.dueAt ?? `72:${objective.id}`,
+        estimatedMinutes: null,
+        status: objective.status === "ready" ? "ready" : objective.status,
+        fixed: Boolean(objective.dueAt),
+        address: objective.address,
+        latitude: objective.latitude,
+        longitude: objective.longitude,
+        physicalEntityId: objective.physicalEntityId,
+        navigationUrl: navigationUrl(objective.address),
+        missionTarget: null,
+        completedAt:
+          objective.status === "completed" ? new Date().toISOString() : null,
+        whySurfaced: objective.explanation,
+        sourceEvidenceReference: objective.sourceEvidenceReference,
+        sourceOccurredAt: objective.sourceOccurredAt,
+      })
+    ),
   ];
   const pickups = baseStops.filter(
     stop => stop.kind === "pickup" && stop.status !== "cancelled"
@@ -550,17 +604,48 @@ export function buildDayPlanProjection(input: {
           date: input.businessDate,
           territoryBundles: input.territoryBundles,
           objectives: orderedBase.map(stop => ({
-            id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
-            kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
-            authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
-            status: stop.status === "completed" ? "completed" : stop.status === "blocked" || stop.status === "cancelled" ? "blocked" : "ready",
-            latitude: stop.latitude ?? null, longitude: stop.longitude ?? null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
+            id: stop.id,
+            physicalEntityId: stop.physicalEntityId ?? null,
+            kind:
+              stop.kind === "pickup"
+                ? "pickup"
+                : stop.kind === "dropoff"
+                  ? "delivery"
+                  : stop.source === "living_world" &&
+                      /recovery/i.test(stop.sourceLabel)
+                    ? "recovery"
+                    : stop.kind === "sales"
+                      ? "commercial_visit"
+                      : "field_capture",
+            authority: stop.fixed
+              ? "fixed_commitment"
+              : stop.source === "living_world"
+                ? "persisted_task"
+                : "derived_recommendation",
+            status:
+              stop.status === "completed"
+                ? "completed"
+                : stop.status === "blocked" || stop.status === "cancelled"
+                  ? "blocked"
+                  : "ready",
+            latitude: stop.latitude ?? null,
+            longitude: stop.longitude ?? null,
+            windowStart: stop.fixed ? stop.sortKey : null,
+            windowEnd: null,
             priority: stop.source === "living_world" ? 8 : stop.fixed ? 10 : 4,
-            explanation: stop.sourceLabel, sourceEvidenceReference: `${stop.source}:${stop.id}`,
+            explanation: stop.sourceLabel,
+            sourceEvidenceReference: `${stop.source}:${stop.id}`,
           })),
         });
-        const rank = new Map(compiled.ordered.map((objective, index) => [objective.id, index]));
-        return orderedBase.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
+        const rank = new Map(
+          compiled.ordered.map((objective, index) => [objective.id, index])
+        );
+        return orderedBase.sort(
+          (a, b) =>
+            (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+              (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) ||
+            a.sortKey.localeCompare(b.sortKey)
+        );
       })();
   const counts: Record<DayPlanStopKind, number> = {
     pickup: 0,
@@ -580,7 +665,8 @@ export function buildDayPlanProjection(input: {
     cleanCloudCount: stops.filter(stop => stop.source === "cleancloud").length,
     growthCoverage: stops.some(
       stop =>
-        stop.kind === "growth" || stop.kind === "marketing" ||
+        stop.kind === "growth" ||
+        stop.kind === "marketing" ||
         (stop.kind === "sales" && stop.status === "ready")
     )
       ? "covered"

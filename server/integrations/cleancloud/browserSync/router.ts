@@ -1,3 +1,4 @@
+import { cleancloudPickupRouter } from "../pickups/router";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
@@ -418,6 +419,7 @@ async function runRecordedImport<T>(
 }
 
 export const cleancloudBrowserSyncRouter = router({
+  pickups: cleancloudPickupRouter,
   context: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     const db = await requireDb();
     const [binding] = await db

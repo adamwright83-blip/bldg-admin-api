@@ -1,3 +1,4 @@
+import DriverPickupFixture from "./DriverPickupFixture";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
@@ -8,6 +9,7 @@ import type { DayDirectorCommitment } from "@shared/dayDirector";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  if (state.startsWith("pickup-bridge")) return <DriverPickupFixture failed={state.endsWith("failed")} />;
   return state.startsWith("art-") ? <DaylineGraphicFixture state={state} /> : <LegacyDayPlanFixture state={state} />;
 }
 

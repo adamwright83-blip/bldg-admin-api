@@ -12,7 +12,7 @@ The hosted entry route, backend registration, required migration and daily sched
 4. Choose an explicit period ending today or earlier in Los Angeles. Click **Connect and prepare sync** and grant access to the two named sites.
 5. Verify the source store and destination tenant, then confirm import. On an existing pairing the server will reject any different store. Watch the receipt, not just an animation.
 
-No copying files or cookies. The normal report download may remain in Chrome; the extension does not delete user files. Extraction may create entries in gumball's export history but cannot edit orders, charge payments, or send notifications.
+No copying files or cookies. The normal report download may remain in Chrome; the extension does not delete user files. Extraction may create entries in gumball's export history but cannot edit orders, charge payments, or send notifications in report sync. The separately enabled driver pickup connector is described below.
 
 ## Permissions
 
@@ -54,3 +54,31 @@ The dropdown, calendar selectors and one-store label are grounded in observed DO
 The database proof uses the already-running local `goldline-mysql` container and clones only three table structures from `goldline_daylight` into a uniquely named disposable database. It never uses the inherited `DATABASE_URL`, logs credentials, copies existing customer records, or changes the source database. The disposable test database is removed afterward.
 
 Live acceptance still requires: install approval, backend integration, real report capture, authorized import, repeat-import proof, interrupted request recovery, account mismatch checks, and direct Tower Wars/Lantern City verification. Never count fixture tests as this evidence.
+
+## Driver pickups — version 0.2.0
+
+The optional driver connection reads the complete Pickups table using observed
+CleanCloud controls, retains source order IDs and pickup windows, and admits
+those jobs to the external operational order store. Held order IDs are skipped.
+It refreshes the pickup feed each minute while Chrome is awake and signed in.
+The worker polls saved Picked up commands approximately every five seconds.
+
+DAYLINE opens Google Maps driving directions when an upcoming pickup is tapped.
+Returning leaves its pickup panel open. Bags and garments are saved with the
+physical pickup; a leased command requests Collected for that exact source row.
+Before clicking, the worker checks store, ID, name, address, schedule and lease.
+A fresh page read must find the matching order in Detail before the app reports
+CleanCloud synced. Uncertain results retain the physical pickup and counts;
+retries check Detail first and do not blindly repeat Collected. This connection
+never presses payment, weight, cleaning, ready or delivery controls.
+
+Update an existing unpacked installation by replacing its runtime files with
+the contents of the latest gumballpals.zip, then press Reload on its Chrome
+extensions entry. In the extension, enter held IDs, choose Review driver pickup
+connection, review the named account/store and rows, then Connect driver pickups
+and Collected updates. The existing two host permissions are reused.
+
+Verified: input/domain checks, driver Maps/counts/retry browser tests, grounded
+pickup/Detail browser fixtures, and real local MySQL command/idempotency/tenant
+proofs. Real CleanCloud Collected verification awaits the first actual pickup;
+no uncollected live orders were changed during implementation.

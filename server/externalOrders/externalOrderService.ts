@@ -1,3 +1,5 @@
+import { TRPCError } from "@trpc/server";
+import { pickupViews } from "../integrations/cleancloud/pickups/service";
 /**
  * Persistence and lifecycle for externally-managed operational work.
  *
@@ -35,12 +37,13 @@ async function ensureExternalOrdersSchema(
   if (!database) throw new Error("Database not available");
   if (!schemaReady) {
     schemaReady = database
-      .execute(sql.raw(`
+      .execute(
+        sql.raw(`
         CREATE TABLE IF NOT EXISTS external_operational_orders (
           id varchar(36) NOT NULL,
           tenantId varchar(64) NOT NULL DEFAULT 'default',
           sourceSystem enum('cleancloud','manual_external') NOT NULL,
-          ingestionMethod enum('screenshot','manual','voice') NOT NULL,
+          ingestionMethod enum('screenshot','manual','voice','browser') NOT NULL,
           externalOrderId varchar(191) NULL,
           jobKind enum('pickup','dropoff') NOT NULL,
           customerName varchar(191) NOT NULL,
@@ -64,7 +67,8 @@ async function ensureExternalOrdersSchema(
           INDEX idx_external_order_batch (importBatchId),
           INDEX idx_external_order_reconciliation (tenantId, reconciliationStatus)
         )
-      `))
+      `)
+      )
       .then(() => undefined)
       .catch(error => {
         schemaReady = null;
@@ -194,14 +198,20 @@ export async function listExternalOrders(input: {
     eq(externalOperationalOrders.reviewState, "confirmed"),
   ];
   if (input.scheduledDate) {
-    filters.push(eq(externalOperationalOrders.scheduledDate, input.scheduledDate));
+    filters.push(
+      eq(externalOperationalOrders.scheduledDate, input.scheduledDate)
+    );
   }
   const rows = await database
     .select()
     .from(externalOperationalOrders)
     .where(and(...filters))
     .orderBy(desc(externalOperationalOrders.createdAt));
-  return rows.map(view);
+  const pickups = await pickupViews(
+    input.tenantId,
+    rows.map(row => row.id)
+  );
+  return rows.map(row => ({ ...view(row), pickupBridge: pickups.get(row.id) }));
 }
 
 export async function completeExternalOrder(input: {
@@ -209,6 +219,29 @@ export async function completeExternalOrder(input: {
   id: string;
 }): Promise<ExternalOperationalOrder | null> {
   const database = await db();
+  const [existing] = await database
+    .select()
+    .from(externalOperationalOrders)
+    .where(
+      and(
+        eq(externalOperationalOrders.id, input.id),
+        eq(externalOperationalOrders.tenantId, input.tenantId)
+      )
+    );
+  if (
+    !existing ||
+    existing.reviewState !== "confirmed" ||
+    existing.operationalStatus === "cancelled"
+  )
+    return null;
+  const bridge = await pickupViews(input.tenantId, [input.id]);
+  if (bridge.has(input.id))
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Use Picked up in DAYLINE and enter the bags or garments collected.",
+    });
+  if (existing.operationalStatus === "completed") return view(existing);
   await database
     .update(externalOperationalOrders)
     .set({ operationalStatus: "completed", completedAt: new Date() })
@@ -221,7 +254,12 @@ export async function completeExternalOrder(input: {
   const [row] = await database
     .select()
     .from(externalOperationalOrders)
-    .where(eq(externalOperationalOrders.id, input.id));
+    .where(
+      and(
+        eq(externalOperationalOrders.id, input.id),
+        eq(externalOperationalOrders.tenantId, input.tenantId)
+      )
+    );
   return row ? view(row) : null;
 }
 
