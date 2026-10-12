@@ -85,9 +85,10 @@ export function scoreStrategyPlay(
   // Estimate required capacity (e.g. 50 lbs per stop)
   const estimatedPoundsNeeded = play.stopsCount * 50;
   const availablePounds = payload.capacity.availablePounds;
-  let capacityFeasibility = 20;
-  if (estimatedPoundsNeeded > availablePounds) {
-    capacityFeasibility = -50; // Infeasible: cannot service what we cannot fulfill
+  // Unknown capacity is not a fabricated zero (nor evidence of available room).
+  let capacityFeasibility = availablePounds === null ? 0 : 20;
+  if (availablePounds !== null && estimatedPoundsNeeded > availablePounds) {
+    capacityFeasibility = -50; // Verified shortage only
   }
 
   // 5. Initiation Effort Model
@@ -112,7 +113,8 @@ export function scoreStrategyPlay(
   // 8. Avoidance Signal
   // Check if commitments in this category have been deferred repeatedly
   let avoidancePenalty = 0;
-  const deferredRecently = payload.commitments.history14Days.missed > 3;
+  const missed = payload.commitments.history14Days.missed;
+  const deferredRecently = missed !== null && missed > 3;
   if (deferredRecently && play.templateKey === "door_tag_acquisition") {
     avoidancePenalty = -15;
   }
