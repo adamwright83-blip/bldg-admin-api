@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useVisualViewportSize } from "@/game/session/useVisualViewportSize";
 import { Package } from "lucide-react";
 import type { DayPlanStop } from "../driver/goldlineDayPlanModel";
 import {
@@ -309,6 +310,10 @@ export function DaylineWorldCompositor({
   sceneHeader,
   sceneFooter,
 }: DaylineWorldCompositorProps) {
+  const [worldElement, setWorldElement] = useState<HTMLElement | null>(null);
+  useVisualViewportSize(
+    worldElement?.closest<HTMLElement>(".gdp-shell") ?? worldElement
+  );
   const reducedMotion = useReducedMotion();
   const { ready: imagesReady, failed, retry } = useDaylineArtReady();
   const artReady = imagesReady && !isLoading;
@@ -360,6 +365,7 @@ export function DaylineWorldCompositor({
     continuation >= 0 ? placements[continuation].top - 30 : 0;
   return (
     <section
+      ref={setWorldElement}
       className="gdp-v2-world gdp-v3-world gdp-illustrated-world"
       aria-label="Your GOLDLINE Action Slots"
       data-art-ready={artReady}
@@ -376,103 +382,116 @@ export function DaylineWorldCompositor({
           )}
         </div>
       )}
-      <div className="gdp-art-scene" data-scene-ready={artReady || revealed}>
-        <div className="gdp-scene-backdrop" aria-hidden="true" />
-        <svg
-          className="gdp-approved-art-layer"
-          viewBox="0 0 941 1672"
-          aria-hidden="true"
-        >
-          <defs>
-            <mask
-              id={sceneMask}
-              maskUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width="941"
-              height="1672"
-            >
-              <rect width="941" height="1672" fill="white" />
-              {SAMPLE_FIELDS.map(([x, y, width, height], index) => (
-                <rect
-                  key={`${x}-${y}`}
-                  x={x}
-                  y={y}
-                  width={width}
-                  height={height}
-                  fill="black"
-                  filter={index >= 5 ? `url(#${sceneMask}-feather)` : undefined}
-                />
-              ))}
-              {avatar.fraction > 0 && (
-                <rect x="32" y="790" width="305" height="720" fill="black" />
-              )}
-            </mask>
-            <filter
-              id={`${sceneMask}-feather`}
-              x="-50%"
-              y="-50%"
-              width="200%"
-              height="200%"
-            >
-              <feGaussianBlur stdDeviation="3" />
-            </filter>
-          </defs>
-          <image
-            href={APPROVED}
-            width="941"
-            height="1672"
-            mask={`url(#${sceneMask})`}
-          />
-        </svg>
-        {sceneHeader}
-        <svg
-          className="gdp-world-avatar"
-          viewBox="0 0 941 1672"
-          role="img"
-          aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
-          data-verified-progress={avatar.fraction}
-          style={{
-            transform: `translate(${avatar.x - 14}%, ${avatar.y - 84}%) scale(${avatar.routeScale / 1.15})`,
-            transition: walking && animate ? "transform 1.25s ease" : "none",
-          }}
-        >
-          <defs>
-            <clipPath id={clipId}>
-              <path d={HERO_OUTLINE} />
-            </clipPath>
-          </defs>
-          {avatar.fraction > 0 && (
+      <div
+        className="gdp-viewport-frame"
+        data-scene-ready={artReady || revealed}
+      >
+        <div className="gdp-viewport-backdrop" aria-hidden="true" />
+        <div className="gdp-art-scene" data-scene-ready={artReady || revealed}>
+          <div className="gdp-scene-backdrop" aria-hidden="true" />
+          <svg
+            className="gdp-approved-art-layer"
+            viewBox="0 0 941 1672"
+            aria-hidden="true"
+          >
+            <defs>
+              <mask
+                id={sceneMask}
+                maskUnits="userSpaceOnUse"
+                x="0"
+                y="0"
+                width="941"
+                height="1672"
+              >
+                <rect width="941" height="1672" fill="white" />
+                {SAMPLE_FIELDS.map(([x, y, width, height], index) => (
+                  <rect
+                    key={`${x}-${y}`}
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    fill="black"
+                    filter={
+                      index >= 5 ? `url(#${sceneMask}-feather)` : undefined
+                    }
+                  />
+                ))}
+                {/* The responsive dock is native chrome at the frame bottom. */}
+                <rect x="0" y="1508" width="941" height="128" fill="black" />
+                <circle cx="375" cy="1537" r="64" fill="black" />
+                {avatar.fraction > 0 && (
+                  <rect x="32" y="790" width="305" height="720" fill="black" />
+                )}
+              </mask>
+              <filter
+                id={`${sceneMask}-feather`}
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="3" />
+              </filter>
+            </defs>
             <image
               href={APPROVED}
               width="941"
               height="1672"
-              clipPath={`url(#${clipId})`}
+              mask={`url(#${sceneMask})`}
             />
-          )}
-        </svg>
-        <div className="gdp-world-objects">
-          {groups.map(group => (
-            <section
-              key={group.key}
-              className={`gdp-object-environment gdp-object-environment--${group.kind}`}
-              data-art-landmark={group.kind}
-              data-group-ids={group.items.map(({ stop }) => stop.id).join(",")}
-            >
-              {group.items
-                .filter(({ index }) => placements[index].top <= 1320)
-                .map(({ stop, index }) => (
-                  <ActionObject
-                    key={stop.id}
-                    stop={stop}
-                    kind={group.kind}
-                    nextId={nextId}
-                    placement={placements[index]}
-                    onSelect={onSelect}
-                  />
-                ))}
-            </section>
-          ))}
+          </svg>
+          {sceneHeader}
+          <svg
+            className="gdp-world-avatar"
+            viewBox="0 0 941 1672"
+            role="img"
+            aria-label={`Explorer: ${completed} of ${stops.length} verified Action Slots`}
+            data-verified-progress={avatar.fraction}
+            style={{
+              transform: `translate(${avatar.x - 14}%, ${avatar.y - 84}%) scale(${avatar.routeScale / 1.15})`,
+              transition: walking && animate ? "transform 1.25s ease" : "none",
+            }}
+          >
+            <defs>
+              <clipPath id={clipId}>
+                <path d={HERO_OUTLINE} />
+              </clipPath>
+            </defs>
+            {avatar.fraction > 0 && (
+              <image
+                href={APPROVED}
+                width="941"
+                height="1672"
+                clipPath={`url(#${clipId})`}
+              />
+            )}
+          </svg>
+          <div className="gdp-world-objects">
+            {groups.map(group => (
+              <section
+                key={group.key}
+                className={`gdp-object-environment gdp-object-environment--${group.kind}`}
+                data-art-landmark={group.kind}
+                data-group-ids={group.items
+                  .map(({ stop }) => stop.id)
+                  .join(",")}
+              >
+                {group.items
+                  .filter(({ index }) => placements[index].top <= 1320)
+                  .map(({ stop, index }) => (
+                    <ActionObject
+                      key={stop.id}
+                      stop={stop}
+                      kind={group.kind}
+                      nextId={nextId}
+                      placement={placements[index]}
+                      onSelect={onSelect}
+                    />
+                  ))}
+              </section>
+            ))}
+          </div>
         </div>
         {sceneFooter}
       </div>
