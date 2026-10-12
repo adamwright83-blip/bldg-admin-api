@@ -25,7 +25,8 @@ export async function enterDriverOverland(page: Page) {
   await dismissDriverOnboarding(page);
   await page.goto("/driver");
   await expectDriverDayHome(page);
-  await page.getByRole("button", { name: "Enter Overland" }).click();
+  await page.getByRole("button", { name: "Open Navigation Menu", exact: true }).click();
+  await page.getByRole("button", { name: "EXPLORE OVERWORLD", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "JOYSTICK overworld" })
   ).toBeVisible({ timeout: 30_000 });

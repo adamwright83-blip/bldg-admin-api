@@ -47,7 +47,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
   test.beforeAll(async ({ request }) => {
     await resetGoldlineProofWorld(request);
   });
-  test("a fresh driver session opens today's Gold Line, with Overland one tap away", async ({ page }) => {
+  test("a fresh driver session opens today's Gold Line, with Overland reachable through approved navigation", async ({ page }) => {
     await signIn(page, "driver");
     await page.addInitScript(() => {
       window.localStorage.setItem("goldline:day1:dismissed", "1");
@@ -61,7 +61,8 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     // Claire owns the workday: the real day is home. Overland is chosen, not default.
     await expectDriverDayHome(page);
     await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Enter Overland" })).toBeVisible();
+    await page.getByRole("button", { name: "Open Navigation Menu", exact: true }).click();
+    await expect(page.getByRole("button", { name: "EXPLORE OVERWORLD", exact: true })).toBeVisible();
   });
 
   test("Overland is reachable from the day and returns to it", async ({ page }) => {

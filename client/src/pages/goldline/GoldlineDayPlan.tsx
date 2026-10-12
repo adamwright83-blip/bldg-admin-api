@@ -3,14 +3,10 @@ import { trpc } from "@/lib/trpc";
 import {
   Check,
   ChevronRight,
-  ClipboardList,
   CloudUpload,
   Compass,
   Flame,
-  Map as MapIcon,
   Menu,
-  Package as PackageIcon,
-  Sun,
   X,
 } from "lucide-react";
 import type { Order } from "@shared/types";
@@ -45,6 +41,7 @@ import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
 import "./goldline-day-plan.css";
 import { DaylineWorldCompositor } from "./DaylineWorldCompositor";
+import { ApprovedDaylineDock, ApprovedDaylineHeader } from "./ApprovedDaylineChrome";
 
 function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
   const presented = presentCurrentDayLine(line);
@@ -380,51 +377,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         open={buildMissionOpen}
         onOpenChange={setBuildMissionOpen}
       />
-      {artPreview ? (
-        <header className="gdp-v2-header">
-          <div className="gdp-v2-user-avatar" title="Explorer profile">
-            <img src="/goldline/dayline-v1/avatar/idle.png" alt="Explorer Profile" />
-          </div>
-          <div className="gdp-v2-header-brand">
-            <span className="gdp-v2-brand-goldline">
-              GOLD<Compass size={14} className="gdp-v2-brand-compass" />LINE
-            </span>
-            <span className="gdp-v2-brand-subtitle">DAY LINE</span>
-            <span className="gdp-v2-brand-date">
-              <Sun size={11} /> {dateHeading(props.businessDate)}
-            </span>
-          </div>
-          <div className="gdp-v2-header-actions">
-            <button
-              type="button"
-              className="gdp-v2-map-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open Navigation Menu"
-            >
-              <MapIcon size={17} />
-            </button>
-            <button
-              type="button"
-              className="gdp-v2-claire-control"
-              onClick={() => {
-                callClaireForMission.mutate({
-                  actionSlotId: plan.stops[0]?.id ?? "day-line",
-                  urgency: "normal",
-                });
-              }}
-              aria-label="Claire, AI Guide"
-              data-testid="claire-lantern-badge"
-            >
-              <img
-                src="/goldline/dayline-v2/ui/claire-lantern-badge.webp"
-                alt="Claire"
-                className="gdp-v2-claire-img"
-              />
-              <span className="gdp-v2-claire-label-text">CLAIRE</span>
-            </button>
-          </div>
-        </header>
-      ) : (
+      {!artPreview && (
         <header className="gdp-header">
           <div className="gdp-brand">
             <Compass />
@@ -759,6 +712,31 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           onEnterOverworld={props.onEnterWorld}
           isDriving={props.isDriving ?? true}
           allowWalkingAnimation={Boolean(props.allowWalkingAnimation && props.isDriving === false)}
+          sceneHeader={
+            <ApprovedDaylineHeader
+              businessDate={props.businessDate}
+              navigationOpen={worldNavigationOpen}
+              onToggleNavigation={() => setWorldNavigationOpen(open => !open)}
+              onCallClaire={() => {
+                callClaireForMission.mutate({
+                  missionId: nextStop?.action?.type === "commercial" ? nextStop.action.missionId : undefined,
+                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                });
+              }}
+            />
+          }
+          sceneFooter={
+            <ApprovedDaylineDock
+              navigationOpen={worldNavigationOpen}
+              onLanternCity={() => window.location.assign("/growth/lantern-city")}
+              onDayLine={() => {
+                setWorldNavigationOpen(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              onCollection={() => props.onOpenWeek?.()}
+              onBriefings={() => setWorldNavigationOpen(open => !open)}
+            />
+          }
         />
       ) : (
         <section className="gdp-route" aria-label="Today's Gold Line">
@@ -1024,47 +1002,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       </section>
 
       )}
-      {artPreview ? (
-        <nav className="gdp-v2-bottom-dock" aria-label="Goldline Navigation">
-          <button
-            type="button"
-            className="gdp-v2-dock-item"
-            onClick={() => window.location.assign("/growth/lantern-city")}
-          >
-            <MapIcon size={20} />
-            <span>LANTERN CITY</span>
-          </button>
-          <button
-            type="button"
-            className="gdp-v2-dock-item is-active"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          >
-            <span className="gdp-v2-active-compass">
-              <Compass size={22} />
-            </span>
-            <span>DAY LINE</span>
-          </button>
-          <button
-            type="button"
-            className="gdp-v2-dock-item"
-            onClick={() => props.onOpenWeek?.()}
-          >
-            <PackageIcon size={20} />
-            <span>COLLECTION</span>
-          </button>
-          <button
-            type="button"
-            className="gdp-v2-dock-item"
-            onClick={() => setWorldNavigationOpen(open => !open)}
-          >
-            <span className="gdp-v2-briefings-icon-wrap">
-              <ClipboardList size={20} />
-              <span className="gdp-v2-briefing-dot" />
-            </span>
-            <span>BRIEFINGS</span>
-          </button>
-        </nav>
-      ) : (
+      {!artPreview && (
         <>
           <button type="button" className="gdp-v3-nav-toggle"
             onClick={() => setWorldNavigationOpen(open => !open)}
@@ -1083,7 +1021,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </>
       )}
       {artPreview && worldNavigationOpen && (
-        <div className="gdp-v3-nav-layer">
+        <div className="gdp-v3-nav-layer gdp-approved-navigation" id="goldline-world-navigation">
           <GoldlineGameNav
             active="day"
             onYourDay={() => { setWorldNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
@@ -1091,6 +1029,32 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             onPlay={() => { setWorldNavigationOpen(false); setPlaying(true); }}
             onJournal={props.onOpenJournal ?? props.onEnterOperations}
           />
+          <div className="gdp-approved-navigation-actions">
+            <button type="button" data-testid="build-mission-cta" onClick={() => {
+              setWorldNavigationOpen(false);
+              setBuildMissionOpen(true);
+            }}>BUILD MISSION</button>
+            <button type="button" onClick={() => {
+              setWorldNavigationOpen(false);
+              props.onOpenImport();
+            }}>IMPORT OR ADD STOPS</button>
+            <button type="button" onClick={() => {
+              setWorldNavigationOpen(false);
+              props.onEnterOperations();
+            }}>FIELD OPERATIONS</button>
+            <button type="button" onClick={() => {
+              setWorldNavigationOpen(false);
+              props.onEnterWorld();
+            }}>EXPLORE OVERWORLD</button>
+            {props.onEnterChapter && <button type="button" onClick={() => {
+              setWorldNavigationOpen(false);
+              props.onEnterChapter?.();
+            }}>ENTER KINGDOM</button>}
+            {props.onOpenFirstMission && <button type="button" onClick={() => {
+              setWorldNavigationOpen(false);
+              props.onOpenFirstMission?.();
+            }}>THE FIRST SPARK</button>}
+          </div>
         </div>
       )}
       {activeStop && (

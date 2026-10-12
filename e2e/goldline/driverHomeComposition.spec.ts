@@ -7,21 +7,54 @@ test.describe("driver home playable-world composition", () => {
 
   test("world owns the phone while route landmarks and diegetic tools stay readable", async ({ page }) => {
     await page.goto("/driver?goldlineDayPlanFixture=active");
-
     const shell = page.locator(".gdp-shell");
-    await expect(shell).toBeVisible();
+    const scene = page.locator(".gdp-art-scene");
+    await expect(page.locator(".gdp-illustrated-world")).toHaveAttribute("data-art-ready", "true");
 
-    // The dashboard-era chrome must not re-enter the visual hierarchy.
-    await expect(page.locator(".gdp-menu-button")).toBeHidden();
-    await expect(page.locator(".gdp-counts")).toBeHidden();
-    await expect(page.locator(".gdp-summary")).toBeHidden();
-    await expect(page.locator(".gdp-chapter-invite")).toBeHidden();
+    for (const selector of [".gdp-menu-button", ".gdp-counts", ".gdp-summary", ".gdp-chapter-invite"]) {
+      await expect(page.locator(selector)).toBeHidden();
+    }
 
-    // BUILD MISSION must remain reachable on the live Day Line even though
-    // the old dashboard menu is deliberately hidden on phone.
-    await expect(page.getByTestId("build-mission-cta")).toBeVisible();
+    const shellBox = (await shell.boundingBox())!;
+    const sceneBox = (await scene.boundingBox())!;
+    expect(shellBox.width).toBeGreaterThanOrEqual(PHONE.width * 0.98);
+    expect(sceneBox.height / sceneBox.width).toBeCloseTo(1672 / 941, 2);
 
-    // Venue taps must never fail silently when the required target is missing.
+    // Each live stop remains a compact landmark with its own native action.
+    await expect(page.locator(".gdp-object")).toHaveCount(9);
+    const stop = page.locator(".gdp-object").first();
+    await expect(stop).toBeVisible();
+    const stopBox = (await stop.boundingBox())!;
+    expect(stopBox.width / sceneBox.width).toBeGreaterThan(0.2);
+    expect(stopBox.width / sceneBox.width).toBeLessThan(0.4);
+
+    await expect(scene.locator(".gdp-approved-art-layer image")).toHaveAttribute("href", /approved-reference\.png$/);
+    await expect(page.locator(".gdp-world-avatar")).toHaveAttribute("data-verified-progress", /0\.[0-9]+/);
+
+    for (const tool of [
+      page.getByRole("button", { name: "Open Navigation Menu", exact: true }),
+      page.getByRole("button", { name: "Claire, AI Guide", exact: true }),
+      ...["LANTERN CITY", "DAY LINE", "COLLECTION", "BRIEFINGS"].map(name =>
+        page.getByRole("button", { name, exact: true })
+      ),
+    ]) {
+      await expect(tool).toBeVisible();
+      const box = (await tool.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(-3);
+      expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width + 3);
+    }
+
+    const dock = page.getByRole("navigation", { name: "Goldline Navigation", exact: true });
+    const dockBox = (await dock.boundingBox())!;
+    expect(dockBox.height / sceneBox.width).toBeCloseTo(128 / 941, 2);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(2);
+
+    // The approved map control preserves the mission builder without adding
+    // dashboard chrome over the artwork.
+    await page.getByRole("button", { name: "Open Navigation Menu", exact: true }).click();
     await page.getByTestId("build-mission-cta").click();
     await page.getByRole("button", { name: /In-person mission/i }).click();
     await page.getByRole("button", { name: /Luxury living/i }).click();
@@ -29,52 +62,11 @@ test.describe("driver home playable-world composition", () => {
     await expect(page.getByLabel("Mission search location")).toBeFocused();
     await page.getByLabel("Close mission builder").click();
 
-    const shellBox = await shell.boundingBox();
-    expect(shellBox).not.toBeNull();
-    expect(shellBox!.width).toBeGreaterThanOrEqual(PHONE.width * 0.98);
+    const title = await stop.locator(".gdp-object-surface strong").textContent();
+    await stop.click();
+    await expect(page.getByRole("dialog").getByRole("heading")).toHaveText(title!);
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => window.scrollTo({ left: 0, top: 0, behavior: "instant" }));
 
-    // Stops are landmarks attached to the Gold Line, not full-width SaaS rows.
-    const stop = page.locator(".gdp-stop").first();
-    await expect(stop).toBeVisible();
-    const stopBox = await stop.boundingBox();
-    expect(stopBox).not.toBeNull();
-    expect(stopBox!.width).toBeLessThan(PHONE.width * 0.7);
-    expect(stopBox!.width).toBeGreaterThan(180);
-
-    // Trailblazer is a board piece; the old NOW diagnostic box is not visible.
-    await expect(page.locator(".gdp-now img").first()).toBeVisible();
-    await expect(page.locator(".gdp-now > div").first()).toBeHidden();
-
-    // Core world tools remain inside the phone canvas rather than clipping off-screen.
-    for (const selector of [
-      ".gdp-claire-tool",
-      ".gdp-manifest-tool",
-      ".gdp-overland-tool",
-      ".gdp-vehicle-key",
-    ]) {
-      const tool = page.locator(selector).first();
-      await expect(tool).toBeVisible();
-      const box = await tool.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(-3);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(PHONE.width + 3);
-    }
-
-    const nextUp = page.getByTestId("day-plan-next-up");
-    await expect(nextUp).toBeVisible();
-    const nextBox = await nextUp.boundingBox();
-    expect(nextBox).not.toBeNull();
-    expect(nextBox!.height).toBeLessThanOrEqual(90);
-
-    const nav = page.locator(".gdp-game-nav");
-    await expect(nav).toBeVisible();
-    const navBox = await nav.boundingBox();
-    expect(navBox).not.toBeNull();
-    expect(navBox!.height).toBeLessThanOrEqual(70);
-
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-    );
-    expect(overflow).toBeLessThanOrEqual(2);
   });
 });

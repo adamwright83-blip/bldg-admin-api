@@ -3,24 +3,22 @@ import { expect, test } from "@playwright/test";
 test.describe("driver home P1 safety fixes", () => {
   test("forced-mobile composition uses proportional readable sizing", async ({ page }) => {
     await page.goto("/driver?goldlineDayPlanFixture=active");
-
     const shell = page.locator(".gdp-shell");
     await expect(shell).toBeVisible();
     await shell.evaluate(element => element.classList.add("gdp-shell--forced-mobile"));
+    await expect(page.locator(".gdp-illustrated-world")).toHaveAttribute("data-art-ready", "true");
 
-    const stop = page.locator(".gdp-stop").first();
-    const title = page.locator(".gdp-card-copy h2").first();
-    await expect(stop).toBeVisible();
+    const stop = page.locator(".gdp-object").first();
+    const title = stop.locator(".gdp-object-surface strong");
     await expect(title).toBeVisible();
-
-    const stopBox = await stop.boundingBox();
-    expect(stopBox).not.toBeNull();
-    expect(stopBox!.width).toBeGreaterThan(250);
-
+    const sceneBox = (await page.locator(".gdp-art-scene").boundingBox())!;
+    const stopBox = (await stop.boundingBox())!;
+    expect(stopBox.width / sceneBox.width).toBeGreaterThan(0.2);
+    expect(stopBox.width / sceneBox.width).toBeLessThan(0.4);
     const titleSize = await title.evaluate(element =>
       Number.parseFloat(getComputedStyle(element).fontSize)
     );
-    expect(titleSize).toBeGreaterThanOrEqual(16);
+    expect(titleSize / sceneBox.width).toBeCloseTo(0.0196, 3);
 
     const shellStyles = await shell.evaluate(element => {
       const style = getComputedStyle(element);
@@ -30,35 +28,25 @@ test.describe("driver home P1 safety fixes", () => {
     expect(shellStyles.maxWidth).not.toBe("520px");
   });
 
-  test("real Kingdom 2 button markup stays visible, readable, and tappable", async ({ page }) => {
+  test("the real Kingdom action remains readable and tappable in approved navigation", async ({ page }) => {
     await page.goto("/driver?goldlineDayPlanFixture=active");
-    const shell = page.locator(".gdp-shell");
-    await expect(shell).toBeVisible();
-    await shell.evaluate(element => element.classList.add("gdp-shell--forced-mobile"));
-
-    await shell.evaluate(element => {
-      const button = document.createElement("button");
-      button.className = "gdp-chapter-entry";
-      button.type = "button";
-      button.dataset.testid = "enter-chapter-button";
-      button.textContent = "A new Kingdom has opened — enter The Last Valet";
-      button.addEventListener("click", () => {
-        document.body.dataset.chapterEntryClicked = "true";
-      });
-      element.appendChild(button);
-    });
-
-    const chapter = page.getByTestId("enter-chapter-button");
+    const map = page.getByRole("button", { name: "Open Navigation Menu", exact: true });
+    await expect(map).toHaveAttribute("aria-expanded", "false");
+    await map.click();
+    await expect(map).toHaveAttribute("aria-expanded", "true");
+    const chapter = page.getByRole("button", { name: "ENTER KINGDOM", exact: true });
     await expect(chapter).toBeVisible();
     await expect(chapter).toBeEnabled();
     const chapterFontSize = await chapter.evaluate(element =>
       Number.parseFloat(getComputedStyle(element).fontSize)
     );
-    expect(chapterFontSize).toBeGreaterThanOrEqual(12);
-
+    const missionFontSize = await page.getByTestId("build-mission-cta").evaluate(element =>
+      Number.parseFloat(getComputedStyle(element).fontSize)
+    );
+    expect(chapterFontSize).toBe(missionFontSize);
+    expect((await chapter.boundingBox())!.height).toBeGreaterThanOrEqual(40);
     await chapter.click();
-    await expect
-      .poll(() => page.evaluate(() => document.body.dataset.chapterEntryClicked))
-      .toBe("true");
+    await expect.poll(() => page.evaluate(() => document.body.dataset.chapterEntered)).toBe("true");
+    await expect(map).toHaveAttribute("aria-expanded", "false");
   });
 });

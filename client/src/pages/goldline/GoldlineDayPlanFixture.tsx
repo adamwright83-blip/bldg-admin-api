@@ -295,6 +295,9 @@ function LegacyDayPlanFixture({ state }: { state: string }) {
       onEnterWorld={() => {
         document.body.dataset.worldEntered = "true";
       }}
+      onEnterChapter={() => {
+        document.body.dataset.chapterEntered = "true";
+      }}
       onEnterColosseum={() => {
         document.body.dataset.colosseumEntered = "true";
       }}
