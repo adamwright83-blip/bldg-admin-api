@@ -299,9 +299,9 @@ export interface DawnSummary {
   headline: string;
   worldNarrative: string;
   routesChanged: Array<{ routeName: string; signal: string }>;
-  territoryState: { captured: number; contested: number; closed: number };
-  customerGrowth: { newCount: number; reactivatedCount: number };
-  commitmentsKeptCount: number;
+  territoryState: { captured: number | null; contested: number | null; closed: number | null };
+  customerGrowth: { newCount: number | null; reactivatedCount: number | null };
+  commitmentsKeptCount: number | null;
   recoveryVisibleItem: string | null;
   hasForkOffer: boolean;
   provenance: {
@@ -331,10 +331,11 @@ export async function triggerWeeklyDawn(input: {
   const snapshot = await getLatestStrategySnapshot(input.tenantId) ?? await buildStrategySnapshot(input.tenantId);
   const offer = await getOrCreatePathOffer(input.tenantId);
 
+  // Do not invent weekly routes, victories, or business commitments.
+  // A snapshot lacking live field-outcome feeds may still offer a fictional
+  // atmosphere, but cannot narrate unverified operational achievements.
   const worldNarrative =
-    `The lanterns hold steady across the lower avenue. ` +
-    `Two routes drew light this week while one path fell quiet. ` +
-    `The gates of Greystar stand open; four commitments held fast against the rain.`;
+    "Dawn reaches the Lower Avenue. The field reports are not yet verified.";
 
   // Verify narrative passes G5 and CEO lints
   const vLint = lintVerdictLanguage(worldNarrative);
@@ -350,21 +351,18 @@ export async function triggerWeeklyDawn(input: {
   const dawn: DawnSummary = {
     headline: "Dawn over the Lower Avenue",
     worldNarrative,
-    routesChanged: [
-      { routeName: "The High Gates", signal: "brighten" },
-      { routeName: "The Low Pass", signal: "dim" },
-    ],
+    routesChanged: [], // No verified route-change reader is connected.
     territoryState: {
-      captured: payload.accounts?.filter((a: any) => a.status === "Captured" || a.approvalStatus === "approved").length ?? 1,
-      contested: payload.accounts?.filter((a: any) => a.status === "Contested" || a.approvalStatus === "pending").length ?? 2,
-      closed: payload.accounts?.filter((a: any) => a.status === "Closed").length ?? 0,
+      captured: null,
+      contested: null,
+      closed: null,
     },
     customerGrowth: {
-      newCount: payload.growthMetrics?.newPayingCustomers?.count ?? 0,
-      reactivatedCount: payload.growthMetrics?.reactivatedCustomers?.count ?? 0,
+      newCount: payload.growthMetrics?.newPayingCustomers?.count ?? null,
+      reactivatedCount: payload.growthMetrics?.reactivatedCustomers?.count ?? null,
     },
-    commitmentsKeptCount: 4,
-    recoveryVisibleItem: "Grandview Follow-up",
+    commitmentsKeptCount: null, // No observed commitment-history feed.
+    recoveryVisibleItem: null, // No observed recovery feed.
     hasForkOffer: Boolean(offer),
     provenance: {
       computedAt: new Date().toISOString(),
