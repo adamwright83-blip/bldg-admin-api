@@ -125,6 +125,31 @@ describe("B. call ending is a first-class intent", () => {
     expect(isExplicitClaireCallEnd("Dana still hasn't replied, but I gotta go.")).toBe(true);
   });
 
+  it.each([
+    "I need to go to three more high-rises.",
+    "To finish Kingdom one, I have three high-rises left. I need to go to",
+    "I gotta go to Staples and pick up flyers.",
+    "I need to run the deliveries tomorrow.",
+    "I have to leave the samples at the building.",
+    "I need to go over the sales numbers.",
+    "I need to head out to Silver Lake.",
+    "I gotta go to three more buildings, then call those managers.",
+  ])("regression: incomplete or work-directed departure does not hang up: %s", utterance => {
+    expect(detectCallControl(utterance)).toBe("continue");
+    expect(isExplicitClaireCallEnd(utterance)).toBe(false);
+    expect(shouldEndClaireCallOnUtterance(utterance, { holding: false })).toBe(false);
+    expect(shouldEndClaireCallOnUtterance(utterance, { holding: true })).toBe(false);
+  });
+
+  it.each([
+    "I need to go now.",
+    "Dana still hasn't replied, but I gotta go.",
+    "I have to head out soon.",
+  ])("completed leave-taking still ends call: %s", utterance => {
+    expect(detectCallControl(utterance)).toBe("end");
+    expect(shouldEndClaireCallOnUtterance(utterance)).toBe(true);
+  });
+
   it("a judgment question containing 'I go' is NOT a departure (false-hangup guard)", () => {
     for (const utterance of [
       "Should I go back to The Louise?",
