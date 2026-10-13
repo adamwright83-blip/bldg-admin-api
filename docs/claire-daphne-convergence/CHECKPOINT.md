@@ -52,11 +52,13 @@ All compiler diagnostics and telemetry enum typing were resolved cleanly without
   - Verified across 30 test files and 366 tests in `server/claire/brain/tests/`.
 
 ### 2.4 Competing Brain Execution Elimination & HTTP Cutover Alignment
-- **Problem Statement:** `server/claire/claireRouter.ts` (the HTTP / desktop surface) passed `runLegacyAdapter` (`runClaireTurn`) as the adapter and fell back to `runLegacyAdapter` when `liveV2.active` was true, causing competing Brain execution.
+- **Problem Statement:** `server/claire/claireRouter.ts` (the HTTP / desktop surface) passed `runLegacyAdapter` (`runClaireTurn`) as the adapter and fell back to `runLegacyAdapter` when `liveV2.active` was true, causing competing Brain execution. Furthermore, on `active: false` with `reason: "execution_error"`, it unconditionally fell back to `runLegacyAdapter()`, retrying through V1 after Brain V2 execution failed.
 - **Implementation:**
   - In `server/claire/claireRouter.ts`: Wired `executeGrantBoundLegacyAdapter` and `brainV2CallControlResult`.
   - When Brain V2 is active, the legacy semantic router is completely bypassed; only the grant-bound canonical writer executes.
+  - Aligned desktop router with voice path (`claireTwilio.ts`): calls `shouldFallbackToClaireLegacy(liveV2)` and returns `brainV2ExecutionFailureResult()` on execution errors, strictly suppressing V1 legacy execution while preserving truthful failure speech. Normal V1 fallback is preserved for disabled or outside-live-scope lanes.
   - Added regression test in `server/claire/brain/tests/liveCutover.test.ts` (13/13 passing) proving multi-item grant scope creates authorized work without competing Brain execution across both voice and HTTP text surfaces.
+  - Added dedicated desktop router regression test `server/claire/claireRouterExecutionFailure.test.ts` (5/5 passing) proving V1 is never invoked after Brain V2 execution failure.
 
 ### 2.5 Governed Analytics Production-Path Suite
 - **Implementation:** `server/analytics/governedBusinessQuery.test.ts` (6/6 passing).
