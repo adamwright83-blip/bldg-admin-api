@@ -14,6 +14,8 @@ import { reviewStrategicQuality } from "./strategicQualityReview";
 import { assembleStrategicDiagnosis } from "./strategicDiagnosis";
 import { readStrategicDiagnosisInputs } from "./strategicEvidenceReaders";
 import {
+  latestStrategicProposal,
+  strategicResponses,
   latestStrategicDiagnosis,
   persistStrategicDiagnosis,
   persistStrategicProposal,
@@ -164,6 +166,10 @@ export async function prepareStrategicProposal(input: {
       f =>
         `${f.businessDate ?? f.weekday ?? ""}: ${f.title}${f.scheduleLabel ? ` ${f.scheduleLabel}` : ""} [${f.id}]`
     );
+  const current = await latestStrategicProposal(identity, horizon.weekStart);
+  const decisions = current ? await strategicResponses(identity, current.id) : [];
+  const closedGeneration = decisions.some(r => ["reject", "defer", "revise"].includes(r.action))
+    ? [current!.id, ...decisions.map(r => r.id).sort()] : null;
   const revision = createHash("sha256")
     .update(
       JSON.stringify({
@@ -174,6 +180,7 @@ export async function prepareStrategicProposal(input: {
         items,
         constraints,
         limitations,
+        closedGeneration,
       })
     )
     .digest("hex");
@@ -193,11 +200,16 @@ export async function prepareStrategicProposal(input: {
     diagnosis,
     items,
     constraints,
-    uncertainty: [...diagnosis.uncertainty, ...limitations],
+    uncertainty: [
+      ...diagnosis.uncertainty,
+      `Strategic quality review: ${diagnosis.quality.judgment}. ${diagnosis.quality.reasons.join(" ")} Financial impact is unproven.`,
+      ...limitations,
+    ],
     approvalState: "pending",
     opening: [
       diagnosis.currentCondition,
       diagnosis.diagnosis,
+      `This is a strategic hypothesis. Quality review: ${diagnosis.quality.judgment}; financial impact is unproven.`,
       `I recommend: ${diagnosis.selectedApproach}.`,
       `I also considered: ${diagnosis.options[1]?.approach}.`,
       items.length

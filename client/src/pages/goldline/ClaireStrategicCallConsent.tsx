@@ -11,6 +11,12 @@ export function ClaireStrategicCallConsent() {
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("17:00");
   const [message, setMessage] = useState("");
+  const saved = status.data?.authorization;
+  const savedDays: number[] = saved
+    ? ((typeof saved.allowedWeekdaysJson === "string"
+        ? JSON.parse(saved.allowedWeekdaysJson)
+        : saved.allowedWeekdaysJson) as number[])
+    : [];
   const busy = grant.isPending || revoke.isPending;
   return (
     <details style={{ marginTop: 18 }}>
@@ -25,6 +31,25 @@ export function ClaireStrategicCallConsent() {
         {status.data?.authorization
           ? "Weekday call permission is active."
           : "No weekday call permission is active."}
+      </p>
+      {saved && (
+        <p data-testid="saved-strategic-consent">
+          Saved permission:{" "}
+          {savedDays
+            .map(
+              day =>
+                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"][
+                  day - 1
+                ]
+            )
+            .join(", ")}
+          , {saved.allowedLocalStart}–{saved.allowedLocalEnd} in{" "}
+          {saved.timeZone}; maximum {saved.dailyLimit} call(s) per day.
+        </p>
+      )}
+      <p>
+        The fields below define a replacement window. Permission changes only
+        when you save it.
       </p>
       <fieldset>
         <legend>Allowed weekdays</legend>

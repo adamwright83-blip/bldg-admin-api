@@ -1,6 +1,13 @@
+import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
+import { addDaysYmd } from "../../../shared/weeklyMissionReadiness";
 import type { WeeklyPlanningSession } from "./session";
 import { clearWeeklySession, saveWeeklySession } from "./session";
-import { loadStrategicProposal } from "../../strategy/strategicStore";
+import {
+  loadStrategicProposal,
+  latestStrategicProposal,
+  originalStrategicProposal,
+  strategicResponses,
+} from "../../strategy/strategicStore";
 import {
   respondToStrategicProposal,
   reviseStrategicProposal,
@@ -37,19 +44,90 @@ export async function routeStrategicProposalTurn(input: {
       act: "REVISE",
       actionIds: [],
     };
-  const text = input.utterance.trim();
-  if (/\b(?:why|explain|evidence|alternatives)\b/i.test(text))
+  const current = await latestStrategicProposal(resolved.identity, p.weekStart);
+  if (current?.id !== p.id)
     return {
-      speak: `${p.diagnosis.diagnosis} I selected ${p.diagnosis.selectedApproach} because ${p.diagnosis.options[0]?.reason} I also considered ${p.diagnosis.options[1]?.approach}. Evidence: ${p.diagnosis.supportingEvidence.join(", ")}. ${p.uncertainty.join(" ")}`,
+      speak:
+        "This proposal was superseded. Refresh the prepared recommendation before deciding. No work was added.",
+      act: "REVISE",
+      actionIds: [],
+    };
+  const control = parseStrategicProposalControl(input.utterance);
+  const selectedOption = p.diagnosis.options.find(
+    o => o.id === p.diagnosis.selectedOptionId
+  );
+  const alternative = p.diagnosis.options.find(
+    o => o.id !== p.diagnosis.selectedOptionId
+  );
+  const quality = `Strategic quality review: ${p.diagnosis.quality.judgment}. ${p.diagnosis.quality.reasons.join(" ")} This is a strategic hypothesis, with no guaranteed financial impact.`;
+  const facts = p.diagnosis.evidence
+    .map(
+      e =>
+        `${e.description}: ${e.value === null ? "unknown" : String(e.value) + " " + e.unit}; ${e.classification}, ${e.quality}, from ${e.source}.`
+    )
+    .join(" ");
+  if (
+    control?.kind === "why" ||
+    control?.kind === "numbers" ||
+    control?.kind === "alternative" ||
+    control?.kind === "economics"
+  ) {
+    const explanation =
+      control.kind === "numbers"
+        ? facts
+        : control.kind === "alternative"
+          ? alternative
+            ? `The alternative is ${alternative.approach}. ${alternative.reason} ${alternative.economics} ${alternative.risk}`
+            : "No supported alternative has been prepared."
+          : control.kind === "economics"
+            ? `I do not know that this will make money. ${selectedOption?.economics ?? "The economics are unknown."} ${p.diagnosis.economicAssumptions.join(" ")} ${p.diagnosis.successMeasures.join(" ")}`
+            : `${p.diagnosis.diagnosis} I selected ${p.diagnosis.selectedApproach} because ${selectedOption?.reason ?? "the evidence is incomplete"}. ${facts}`;
+    return {
+      speak: `${explanation} ${quality} ${p.uncertainty.join(" ")}`,
       act: "AWAIT_CONFIRMATION",
       actionIds: [],
     };
-  const revision = /^change item (\d+) to (.+)$/i.exec(text);
-  if (revision) {
-    const item = p.items[Number(revision[1]) - 1];
+  }
+  if (control?.kind === "original") {
+    const original = await originalStrategicProposal(
+      resolved.identity,
+      p.weekStart
+    );
+    return {
+      speak: original
+        ? `Our original stored proposal was: ${original.items.map(i => `${i.businessDate}: ${i.title}`).join("; ")}. The currently held revision remains pending until explicitly approved.`
+        : "I cannot verify an original stored proposal.",
+      act: "AWAIT_CONFIRMATION",
+      actionIds: [],
+    };
+  }
+  if (control?.kind === "reminder")
+    return {
+      speak: `I still have the stored proposal and its revisions. ${p.items.map(i => `${i.businessDate}: ${i.title}`).join("; ")}. I cannot infer which earlier statement you mean; name it and I will check the record.`,
+      act: "AWAIT_CONFIRMATION",
+      actionIds: [],
+    };
+  if (control?.kind === "title" || control?.kind === "move") {
+    const item =
+      control.kind === "title" || control.index !== null
+        ? p.items[control.index! - 1]
+        : (p.items.find(i => i.id === input.session.strategicFocusedItemId) ??
+          (p.items.length === 1 ? p.items[0] : undefined));
     if (!item)
       return {
-        speak: "That item number is outside this proposal.",
+        speak:
+          "Which proposal item should I revise? Please name its number. No work was added.",
+        act: "REVISE",
+        actionIds: [],
+      };
+    if (
+      (await strategicResponses(resolved.identity, p.id)).some(
+        r => r.action === "approve"
+      )
+    )
+      return {
+        speak:
+          "This proposal already has accepted work. Change those commitments through the Day Line; I have not moved or rewritten anything.",
         act: "REVISE",
         actionIds: [],
       };
@@ -58,33 +136,36 @@ export async function routeStrategicProposalTurn(input: {
       proposalId: p.id,
       revision: p.revision,
       itemId: item.id,
-      title: revision[2]!,
+      title: control.kind === "title" ? control.title : item.title,
+      businessDate:
+        control.kind === "move"
+          ? addDaysYmd(p.weekStart, control.weekday)
+          : undefined,
       now: input.now,
       source: "authenticated_voice",
     });
+    input.session.strategicFocusedItemId = item.id;
     input.session.draft.pendingRecommendation = {
       proposalId: revised.id,
       revision: revised.revision,
       opening: revised.opening,
     };
     await saveWeeklySession(input.session);
-    return { speak: revised.opening, act: "REVISE", actionIds: [] };
+    return {
+      speak: revised.opening,
+      act: "REVISE",
+      actionIds: [],
+      presentedRecommendation: input.session.draft.pendingRecommendation,
+    };
   }
-  const selected = /^approve (?:only )?items? ([\d,\sand]+)$/i.exec(text);
-  const explicitAll =
-    /^(?:approve (?:the )?(?:plan|proposal|all items)|accept (?:the )?(?:plan|proposal))\.?$/i.test(
-      text
-    );
-  if (input.intent === "weekly_lock" || explicitAll || selected) {
-    const ids = selected
-      ? [...new Set(selected[1]!.match(/\d+/g)?.map(n => Number(n)) ?? [])]
+  if (control?.kind === "approve") {
+    const numbers = control.selection === "all" ? null : control.selection;
+    const ids = numbers
+      ? numbers
           .map(n => p.items[n - 1]?.id)
           .filter((id): id is string => Boolean(id))
       : p.items.map(i => i.id);
-    if (
-      selected &&
-      ids.length !== new Set(selected[1]!.match(/\d+/g) ?? []).size
-    )
+    if (!ids.length || (numbers && ids.length !== numbers.length))
       return {
         speak:
           "The selected item numbers do not match this proposal. No work was added.",
@@ -100,6 +181,10 @@ export async function routeStrategicProposalTurn(input: {
       source: "authenticated_voice",
       now: input.now,
     });
+    if (ids.length === 1) {
+      input.session.strategicFocusedItemId = ids[0];
+      await saveWeeklySession(input.session);
+    }
     if (!result.failedItems.length && ids.length === p.items.length)
       await clearWeeklySession(input.session);
     return {
@@ -114,18 +199,12 @@ export async function routeStrategicProposalTurn(input: {
       act: result.failedItems.length ? "REVISE" : "AWAIT_CONFIRMATION",
     };
   }
-  if (
-    input.intent === "weekly_cancel" ||
-    /^(?:reject (?:the )?(?:plan|proposal)|defer(?: (?:the )?(?:decision|plan|proposal))?)\.?$/i.test(
-      text
-    )
-  ) {
-    const action = /^defer/i.test(text) ? "defer" : "reject";
+  if (control?.kind === "reject" || control?.kind === "defer") {
     const result = await respondToStrategicProposal({
       identity: resolved.identity,
       proposalId: p.id,
       revision: p.revision,
-      action,
+      action: control.kind,
       source: "authenticated_voice",
       now: input.now,
     });
@@ -134,7 +213,7 @@ export async function routeStrategicProposalTurn(input: {
   }
   return {
     speak:
-      "The stored proposal is still pending. Approve the plan, approve item numbers, say change item number to a revised title, reject, defer, or ask why.",
+      "The stored proposal is still pending. Name the item numbers to approve or revise, explicitly approve the plan, reject, defer, or ask about the evidence. No work was added.",
     act: "AWAIT_CONFIRMATION",
     actionIds: [],
   };

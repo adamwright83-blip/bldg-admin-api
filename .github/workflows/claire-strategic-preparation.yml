@@ -8,6 +8,9 @@ on:
       - "server/planning/**"
       - "shared/strategic*"
       - "shared/claireRoleFeedback.ts"
+      - "client/src/App.tsx"
+      - "e2e/claire-acceptance/**"
+      - "playwright.claire-acceptance.config.ts"
       - "client/src/pages/goldline/Claire*"
       - "drizzle/0128_claire_strategic_preparation.sql"
       - "scripts/migrate.mjs"
@@ -46,7 +49,7 @@ jobs:
           pnpm vitest run server/strategy server/planning/missionDirector
           server/agents/persistentOperator
           server/claire/brain server/claire/weeklyMission server/claire/turn
-          server/agents/daphne/explicitPreferenceCorrection.test.ts
+          server/agents/daphne/explicitPreferenceCorrection.test.ts shared/strategicProposalControl.test.ts
       - name: Production boot migrations and idempotent second boot
         env:
           DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/claire_acceptance
@@ -67,8 +70,9 @@ jobs:
           JWT_SECRET: claire-strategy-test-key-000000000000000000000
           AUTONOMOUS_WORKERS_ENABLED: "1"
         run: >-
-          pnpm vitest run --config vitest.integration.config.ts
+          pnpm vitest run --config vitest.integration.config.ts --fileParallelism false
           server/strategy/strategicJourney.mysql.integration.test.ts
+          server/strategy/strategicReleaseAcceptance.mysql.integration.test.ts
       - name: Fourteen scenarios and separate blinded review packet
         run: node --import tsx scripts/evaluate-claire-strategy.ts
       - uses: actions/upload-artifact@v7
@@ -76,3 +80,57 @@ jobs:
         with:
           name: claire-strategy-evidence
           path: artifacts/claire-strategy/
+
+  authenticated-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: disposable_claire
+          MYSQL_DATABASE: joystick_real_acceptance
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pdisposable_claire"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/joystick_real_acceptance
+      JOYSTICK_ACCEPTANCE_DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/joystick_real_acceptance
+      ALLOW_TEST_DB: "1"
+      NODE_ENV: test
+      DOTENV_CONFIG_PATH: /dev/null
+      OWNER_OPEN_ID: none
+      JWT_SECRET: acceptance-jwt-secret-000000000000000000
+      APP_SHARED_API_SECRET: acceptance-app-secret-000000000000000000
+      ADMIN_PASSWORD: acceptance-admin
+      DRIVER_PASSWORD: acceptance-driver
+      AUTONOMOUS_WORKERS_ENABLED: "0"
+      GOLDLINE_AUTONOMOUS_WORKERS: "0"
+      ANTHROPIC_API_KEY: ""
+      OPENAI_API_KEY: ""
+      VITE_DAYFORGE_DEMO_MODE: "false"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/migrate.mjs
+      - run: node scripts/acceptance-schema-compat.mjs
+      - run: pnpm exec vite build --config vite.real.config.ts
+      - run: pnpm exec esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test --config playwright.claire-acceptance.config.ts
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: claire-authenticated-app-evidence
+          path: |
+            artifacts/claire-strategy/acceptance/
+            test-results/

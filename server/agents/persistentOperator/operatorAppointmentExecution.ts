@@ -1,3 +1,4 @@
+import { requireCallableStrategicProposal } from "../../strategy/strategicStore";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
@@ -211,6 +212,7 @@ export async function executeOperatorAppointment(
         ? await loadStrategicProposal(identity, storedId)
         : await prepareStrategicProposal({ identity, timeZone: step.timeZone, weekStart: step.weekStart, now });
       if (!proposal || Date.parse(proposal.expiresAt) <= now.getTime()) throw new Error("Scheduled strategic proposal is stale or unavailable; no call placed");
+      await requireCallableStrategicProposal(identity, proposal.id, now);
       const weekly = await beginWeeklyMission({ tenantId: identity.tenantId, operatorId: identity.weeklyOperatorId,
         operatorIdentities: identity.aliases.map(alias => ({ operatorId: alias.openId, dayDirectorActorId: String(alias.userId) })),
         dayDirectorActorId: identity.dayDirectorActorId, dayDirectorActorIds: identity.dayDirectorActorIds,
@@ -221,7 +223,7 @@ export async function executeOperatorAppointment(
       if (!store) {
         throw new Error("Operator appointment execution requires its durable store");
       }
-      const dispatchClaimed = await store.beginCallDispatch(step);
+      const dispatchClaimed = await store.beginCallDispatch(step, proposal.id);
       if (!dispatchClaimed) {
         throw new Error("Operator appointment call dispatch already attempted");
       }
@@ -236,6 +238,7 @@ export async function executeOperatorAppointment(
         weeklyPlanningSourceReference: context.source.sourceReference,
         weeklyPlanningAppointmentId: context.jobId,
         strategicProposalId: proposal.id,
+        strategicProposalRevision: proposal.revision,
       });
     },
   });

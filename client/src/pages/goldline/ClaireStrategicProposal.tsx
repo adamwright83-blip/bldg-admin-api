@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
 /** Authenticated in-app delivery; absence of call consent never hides prepared work. */
@@ -18,13 +18,17 @@ export function ClaireStrategicProposal() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const proposal = query.data?.proposal;
+  useEffect(() => {
+    setSelected([]);
+    setEdits({});
+  }, [proposal?.id]);
   const busy =
     respond.isPending ||
     revise.isPending ||
     refresh.isPending ||
     industry.isPending;
   const closed = query.data?.responses.some(
-    r => r.action === "reject" || r.action === "revise"
+    r => r.action === "reject" || r.action === "revise" || r.action === "defer"
   );
   const approvedIds = query.data?.approvedItemIds ?? [];
   const allApproved = Boolean(
@@ -120,6 +124,12 @@ export function ClaireStrategicProposal() {
           </p>
           <p>{proposal.diagnosis.currentCondition}</p>
           <p>{proposal.diagnosis.diagnosis}</p>
+          <p>
+            Strategic hypothesis · Quality review:{" "}
+            {proposal.diagnosis.quality.judgment}.{" "}
+            {proposal.diagnosis.quality.reasons.join(" ")} Financial impact is
+            unproven.
+          </p>
           <p>
             <strong>Recommended focus:</strong>{" "}
             {proposal.diagnosis.selectedApproach}
@@ -258,10 +268,16 @@ export function ClaireStrategicProposal() {
             >
               Approve selected
             </button>
-            <button disabled={busy} onClick={() => void decide("reject")}>
+            <button
+              disabled={busy || closed || approvedIds.length > 0}
+              onClick={() => void decide("reject")}
+            >
               Reject
             </button>
-            <button disabled={busy} onClick={() => void decide("defer")}>
+            <button
+              disabled={busy || closed || approvedIds.length > 0}
+              onClick={() => void decide("defer")}
+            >
               Defer
             </button>
           </div>

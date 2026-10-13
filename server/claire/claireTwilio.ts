@@ -1,3 +1,4 @@
+import { parseStrategicProposalControl } from "../../shared/strategicProposalControl";
 import { createHash, randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
@@ -174,6 +175,7 @@ type PreDriveConversation = ClaireTurnState & {
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
   strategicProposalId?: string | null;
+  strategicProposalRevision?: string | null;
   appointmentTimeZone?: string | null;
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
@@ -789,7 +791,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        * reasoning and before the artifact utility. A split utterance writes
        * only after the existing pending fragment assembles a complete command.
        */
-      const missionClass = classifyOperatorMissionVoiceTurn({
+      const preparedControl = conversation.strategicProposalId && parseStrategicProposalControl([conversation.pendingFragment, input.utterance].filter(Boolean).join(" "));
+      const missionClass = preparedControl ? { kind: "passthrough" as const } : classifyOperatorMissionVoiceTurn({
         pendingFragment: conversation.pendingFragment ?? null,
         utterance: input.utterance,
         allowFragmentWait: input.allowFragmentWait,
@@ -1314,6 +1317,7 @@ async function persistClaireVoiceConversation(input: {
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
   strategicProposalId?: string | null;
+  strategicProposalRevision?: string | null;
   appointmentTimeZone?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
@@ -1336,6 +1340,7 @@ async function persistClaireVoiceConversation(input: {
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference ?? null,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId ?? null,
     strategicProposalId: input.strategicProposalId ?? null,
+    strategicProposalRevision: input.strategicProposalRevision ?? null,
     appointmentTimeZone: input.appointmentTimeZone ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
@@ -1375,6 +1380,7 @@ export async function startClairePreDriveCall(input: {
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
   strategicProposalId?: string | null;
+  strategicProposalRevision?: string | null;
 }): Promise<{ callSid: string; brief: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1399,6 +1405,7 @@ export async function startClairePreDriveCall(input: {
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId,
     strategicProposalId: input.strategicProposalId,
+    strategicProposalRevision: input.strategicProposalRevision,
     appointmentTimeZone: input.timeZone ?? null,
   });
   try {

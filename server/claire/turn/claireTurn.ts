@@ -194,6 +194,7 @@ export type PendingBriefing = { parsed: ParsedBriefing; createdAt: number };
 export type ClaireTurnState = PendingProposalState &
   ClaireAnalyticsState & {
     strategicProposalId?: string | null;
+    strategicProposalRevision?: string | null;
     history?: ClaireTurnHistoryEntry[];
     pendingBriefing?: PendingBriefing | null;
     pendingAccountFollowUp?: PendingAccountFollowUp | null;
@@ -1413,6 +1414,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           now: deps.now(),
           timeZone: deps.timeZone(),
           weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+          expectedStrategicProposalId: state.strategicProposalId ?? undefined,
+          expectedStrategicProposalRevision: state.strategicProposalRevision ?? undefined,
           authoritativeIntent:
             brainV3.weeklyDisposition === "lock"
               ? "weekly_lock"
@@ -1422,6 +1425,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
       : null;
   if (weekly) {
+    if (weekly.presentedRecommendation) {
+      state.strategicProposalId = weekly.presentedRecommendation.proposalId;
+      state.strategicProposalRevision = weekly.presentedRecommendation.revision;
+    }
     mark("fallback", { fallbackReason: "weekly_planning" });
     if (weekly.receiptBackedCommit) {
       return finish({

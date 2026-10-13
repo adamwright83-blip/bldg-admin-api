@@ -1,0 +1,243 @@
+{
+  "config": {
+    "argv": [
+      "/Users/adamwrightpfi/.nvm/versions/node/v22.22.0/bin/node",
+      "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "playwright.claire-acceptance.config.ts"
+    ],
+    "configFile": "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api/playwright.claire-acceptance.config.ts",
+    "rootDir": "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api/e2e/claire-acceptance",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api/e2e/claire-acceptance",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "artifacts/claire-strategy/acceptance/browser-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.61.1",
+    "workers": 1,
+    "webServer": {
+      "command": "node dist/index.js",
+      "url": "http://127.0.0.1:4187",
+      "reuseExistingServer": false,
+      "timeout": 60000,
+      "env": {
+        "CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES": "false",
+        "CLAUDE_CODE_ENABLE_ASK_USER_QUESTION_TOOL": "true",
+        "COREPACK_ROOT": "/Users/adamwrightpfi/.nvm/versions/node/v22.22.0/lib/node_modules/corepack",
+        "CLAUDE_CODE_MESSAGING_TOKEN": "c7a24a9d2129f9b4d320e8ca861e4f05",
+        "CLAUDE_CODE_ORGANIZATION_UUID": "a47d162b-74f2-4279-ba18-605efa2328bc",
+        "NoDefaultCurrentDirectoryInExePath": "1",
+        "CLAUDE_EFFORT": "low",
+        "CLAUDE_CODE_ENTRYPOINT": "claude-desktop",
+        "BAGGAGE": "sentry-environment=production,sentry-release=Claude%402.37337.1,sentry-public_key=2f98127cbffe4740b1f767a2de77d23b,sentry-trace_id=2886e9bb51e0440b8b24aa45ce78a081,sentry-org_id=1158394",
+        "CLAUDE_CODE_HOST_SESSION_ID": "local_95d6d1df-14c0-4880-a94d-dd1ee4565515",
+        "CLAUDE_PREVIEW_CLASSIFIER_FLOOR": "1",
+        "CLAUDE_CODE_OAUTH_SCOPES": "user:inference user:file_upload user:profile user:sessions:claude_code user:plugins",
+        "SHELL": "/bin/zsh",
+        "CLAUDE_PID": "31095",
+        "CLAUDE_CODE_CHILD_SESSION": "1",
+        "CLAUDE_CODE_EAGER_FLUSH": "1",
+        "TMPDIR": "/var/folders/lh/c1g1pxzj6kgg8_vhf4vdtgj00000gn/T/",
+        "GOLDLINE_AUTONOMOUS_WORKERS": "0",
+        "ALLOW_TEST_DB": "1",
+        "CLAUDE_AGENT_SDK_VERSION": "0.3.295",
+        "MallocNanoZone": "0",
+        "CLAUDE_AGENT_SDK_MCP_NO_PREFIX": "0",
+        "USE_LOCAL_OAUTH": "",
+        "DOTENV_CONFIG_PATH": "/dev/null",
+        "GIT_EDITOR": "true",
+        "AI_AGENT": "claude-code_2-1-295_agent",
+        "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+        "USER": "adamwrightpfi",
+        "OPENAI_API_KEY": "",
+        "API_TIMEOUT_MS": "900000",
+        "COMMAND_MODE": "unix2003",
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+        "SSH_AUTH_SOCK": "/var/run/com.apple.launchd.wtmS4iNFmf/Listeners",
+        "__CF_USER_TEXT_ENCODING": "0x1F5:0x0:0x0",
+        "OWNER_OPEN_ID": "none",
+        "CLAUDE_CODE_DESKTOP_APP_VERSION": "2.37337.1",
+        "npm_config_verify_deps_before_run": "false",
+        "CLAUDE_CODE_SIMPLE": "0",
+        "CLAUDE_CODE_REPORT_FINDINGS": "1",
+        "PATH": "./node_modules/.bin:/Users/adamwrightpfi/.local/bin:/Users/adamwrightpfi/.antigravity-ide/antigravity-ide/bin:/opt/homebrew/opt/mysql-client/bin:/Users/adamwrightpfi/.nvm/versions/node/v22.22.0/bin:/Users/adamwrightpfi/.antigravity/antigravity/bin:/Library/PostgreSQL/17/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Library/Frameworks/Python.framework/Versions/3.12/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Users/adamwrightpfi/.nvm/versions/node/v20.20.0/bin:/Users/adamwrightpfi/Library/pnpm",
+        "VITE_DAYFORGE_DEMO_MODE": "false",
+        "MCP_CONNECTION_NONBLOCKING": "true",
+        "COREPACK_ENABLE_DOWNLOAD_PROMPT": "1",
+        "CLAUDE_CODE_TERMINAL_MCP_TOOLS": "mcp__ccd_turn__wrap_up",
+        "__CFBundleIdentifier": "com.anthropic.claudefordesktop",
+        "npm_command": "exec",
+        "PWD": "/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api",
+        "CLAUDE_CODE_USER_EMAIL": "adam.wright83@gmail.com",
+        "NODE_PATH": "/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/test/node_modules:/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/node_modules:/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/node_modules/.pnpm/@playwright+test@1.61.1/node_modules:/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/node_modules/.pnpm/node_modules",
+        "NODE_USE_SYSTEM_CA": "1",
+        "XPC_FLAGS": "0x0",
+        "NODE_ENV": "test",
+        "ANTHROPIC_API_KEY": "",
+        "CLAUDE_CODE_SESSION_ATTENDED": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XPC_SERVICE_NAME": "0",
+        "SHLVL": "1",
+        "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING": "true",
+        "HOME": "/Users/adamwrightpfi",
+        "AUTONOMOUS_WORKERS_ENABLED": "0",
+        "CLAUDE_CODE_DISABLE_CRON": "",
+        "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+        "CLAUDE_CODE_EXECPATH": "/Users/adamwrightpfi/Library/Application Support/Claude/claude-code/2.1.295/9d6405864fdc/claude.app/Contents/MacOS/claude",
+        "DISABLE_MICROCOMPACT": "1",
+        "MCP_SERVER_CONNECTION_BATCH_SIZE": "8",
+        "LOGNAME": "adamwrightpfi",
+        "PNPM_PACKAGE_NAME": "laundry-butler",
+        "DRIVER_PASSWORD": "acceptance-driver",
+        "COREPACK_ENABLE_AUTO_PIN": "0",
+        "npm_config_user_agent": "pnpm/10.4.1 npm/? node/v22.22.0 darwin arm64",
+        "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH": "1",
+        "CLAUDE_CODE_ACCOUNT_UUID": "0b6665e6-a6f6-4bff-b23c-94396d1ddf21",
+        "APP_SHARED_API_SECRET": "acceptance-app-secret-000000000000000000",
+        "CLAUDE_CODE_SESSION_ID": "48769be1-0ebd-4464-b579-bce11abafbab",
+        "DISABLE_AUTOUPDATER": "1",
+        "JWT_SECRET": "acceptance-jwt-secret-000000000000000000",
+        "JOYSTICK_ACCEPTANCE_DATABASE_URL": "mysql://root:claire_acceptance_test@127.0.0.1:33317/joystick_real_acceptance",
+        "ADMIN_PASSWORD": "acceptance-admin",
+        "OSLogRateLimit": "64",
+        "DATABASE_URL": "mysql://root:claire_acceptance_test@127.0.0.1:33317/joystick_real_acceptance",
+        "CLAUDECODE": "1",
+        "CLAUDE_CODE_MESSAGING_SOCKET": "/tmp/cc-socks/31095.sock",
+        "USE_STAGING_OAUTH": "",
+        "PORT": "4187",
+        "GOLDLINE_PROOF_MODE": "0",
+        "TWILIO_ACCOUNT_SID": "",
+        "TWILIO_AUTH_TOKEN": "",
+        "STRIPE_SECRET_KEY": "acceptance-placeholder-not-used",
+        "DAYFORGE_BILLING_STRIPE_SECRET_KEY": "sk_test_acceptance_placeholder_not_used",
+        "DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET": "whsec_acceptance_placeholder"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "strategy.spec.ts",
+      "file": "strategy.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "real authenticated Claire Desk decisions, consent reload, stale browser fences, and actual Day Line",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10272,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "Browser fixture: selected\n"
+                    },
+                    {
+                      "text": "Browser boundary: actual Day Line\n"
+                    },
+                    {
+                      "text": "Browser fixture: full\n"
+                    },
+                    {
+                      "text": "Browser fixture: edit\n"
+                    },
+                    {
+                      "text": "Browser fixture: Reject\n"
+                    },
+                    {
+                      "text": "Browser fixture: Defer\n"
+                    },
+                    {
+                      "text": "Browser fixture: expired\n"
+                    },
+                    {
+                      "text": "Browser fixture: stale\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-13T22:23:52.818Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "15e486682162e039917c-6b0284f838991f15cbde",
+          "file": "strategy.spec.ts",
+          "line": 19,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-13T22:23:47.268Z",
+    "duration": 16131.817000000001,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

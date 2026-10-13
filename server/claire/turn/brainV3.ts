@@ -1,3 +1,4 @@
+import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
@@ -508,8 +509,5 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 }
 
 function explicitPreparedControl(text: string): ClaireBrainV3WeeklyDisposition | null {
-  const value = text.trim();
-  if (/^(?:approve (?:the )?(?:plan|proposal|all items)|accept (?:the )?(?:plan|proposal))\.?$/i.test(value)) return "lock";
-  if (/^(?:approve (?:only )?items? [\d,\sand]+|change item \d+ to .+|reject (?:the )?(?:plan|proposal)|defer(?: (?:the )?(?:decision|plan|proposal))?|why(?: (?:the )?recommendation)?|explain(?: the recommendation)?)\.?$/i.test(value)) return "continue";
-  return null;
+  return parseStrategicProposalControl(text) ? "continue" : null;
 }

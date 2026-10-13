@@ -5,7 +5,7 @@
  */
 
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
-import { latestStrategicProposal, loadStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
+import { latestStrategicProposal, loadStrategicProposal, strategicResponses, requireCallableStrategicProposal, strategicProposalIsCallable } from "../../strategy/strategicStore";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   buildWeeklyMissionCard,
@@ -202,6 +202,11 @@ export async function beginWeeklyMission(
   const horizon = horizonFor(scope);
   const existing = await existingSession(scope, horizon);
   if (existing) {
+    if (existing.session.draft.pendingRecommendation) {
+      const resolved = await resolveCanonicalOperatorIdentity({ tenantId: scope.tenantId, source: { type: "open_id", value: scope.operatorId }, subsystem: "weekly.resume_proposal" });
+      if (!resolved.ok) throw new Error("Canonical operator unavailable");
+      await requireCallableStrategicProposal(resolved.identity, existing.session.draft.pendingRecommendation.proposalId, scope.now ?? new Date());
+    }
     await bindWeeklyAppointmentLineage(existing.session, scope);
     if (scope.preparedProposalIdOverride && existing.session.draft.pendingRecommendation?.proposalId !== scope.preparedProposalIdOverride) throw new Error("A different weekly conversation revision is already active");
     return {
@@ -223,7 +228,7 @@ export async function beginWeeklyMission(
     if (identity.ok) {
       const prepared = scope.preparedProposalIdOverride ? await loadStrategicProposal(identity.identity, scope.preparedProposalIdOverride) : await latestStrategicProposal(identity.identity, horizon.weekStart);
       const decisions = prepared ? await strategicResponses(identity.identity, prepared.id) : [];
-      if (prepared && prepared.weekStart === horizon.weekStart && Date.parse(prepared.expiresAt) > (scope.now ?? new Date()).getTime() && !decisions.some(r => ["reject", "revise"].includes(r.action))) {
+      if (prepared && prepared.weekStart === horizon.weekStart && strategicProposalIsCallable(prepared, decisions, scope.now ?? new Date()) && (await latestStrategicProposal(identity.identity, horizon.weekStart))?.id === prepared.id) {
         dossier.preparedRecommendation = { proposalId: prepared.id, revision: prepared.revision, opening: prepared.opening };
       }
     }

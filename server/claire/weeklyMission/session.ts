@@ -65,6 +65,8 @@ export type WeeklyPlanningSession = {
   operatorEvidence: string[];
   committedRefs: Record<string, WeeklyCommittedRef>;
   adjust: boolean;
+  /** Last explicitly selected proposal item; conversational reference, never approval. */
+  strategicFocusedItemId?: string;
   /** Durable source of the invitation/callback; distinct from accepted work. */
   appointmentLineage?: { sourceReference: string; appointmentId: string | null };
 };

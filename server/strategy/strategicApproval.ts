@@ -79,7 +79,7 @@ export async function respondToStrategicProposal(
     source: input.source,
     note: input.note ?? null,
   };
-  await recordStrategicResponse(response);
+  await recordStrategicResponse(response, now);
   if (input.action !== "approve")
     return {
       speech:
@@ -206,6 +206,7 @@ export async function reviseStrategicProposal(input: {
   revision: string;
   itemId: string;
   title: string;
+  businessDate?: string;
   now?: Date;
   source?: "authenticated_app" | "authenticated_voice";
 }): Promise<StrategicPlanningProposal> {
@@ -233,9 +234,27 @@ export async function reviseStrategicProposal(input: {
   const now = input.now ?? new Date();
   if (Date.parse(p.expiresAt) <= now.getTime())
     throw new Error("Proposal is stale; refresh before revising");
+  if (
+    input.businessDate &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate) ||
+      input.businessDate < p.businessDate ||
+      input.businessDate < p.weekStart ||
+      input.businessDate >
+        new Date(Date.parse(p.weekStart + "T00:00:00Z") + 4 * 86400000)
+          .toISOString()
+          .slice(0, 10))
+  )
+    throw new Error(
+      "Revision must remain in the proposal's remaining weekday horizon"
+    );
   const items = p.items.map(i =>
     i.id === input.itemId
-      ? { ...i, title: input.title.trim(), objective: input.title.trim() }
+      ? {
+          ...i,
+          title: input.title.trim(),
+          objective: input.title.trim() === i.title ? i.objective : input.title.trim(),
+          businessDate: input.businessDate ?? i.businessDate,
+        }
       : i
   );
   const revision = createHash("sha256")
@@ -243,31 +262,37 @@ export async function reviseStrategicProposal(input: {
       JSON.stringify([p.revision, items, input.identity.canonicalOperatorId])
     )
     .digest("hex");
-  await recordStrategicResponse({
-    id: `response_${revision.slice(0, 40)}`,
-    proposalId: p.id,
-    revision: p.revision,
-    tenantId: p.tenantId,
-    canonicalOperatorId: p.canonicalOperatorId,
-    operatorUserId: input.identity.canonicalOpenId,
-    action: "revise",
-    itemIds: [input.itemId],
-    source: input.source ?? "authenticated_app",
-    note: input.title.trim(),
-  });
-  return persistStrategicProposal({
-    ...p,
-    id: `proposal_${revision.slice(0, 40)}`,
-    revision,
-    items,
-    preparedAt: now.toISOString(),
-    expiresAt: p.expiresAt,
-    uncertainty: [
-      ...p.uncertainty,
-      `Operator revision to ${input.itemId}; original strategy hypothesis may need review.`,
-    ],
-    opening: `Revised pending proposal: ${items.map(i => `${i.businessDate}: ${i.title}`).join("; ")}. Approve selected items, revise, reject, or defer.`,
-  });
+  await recordStrategicResponse(
+    {
+      id: `response_${revision.slice(0, 40)}`,
+      proposalId: p.id,
+      revision: p.revision,
+      tenantId: p.tenantId,
+      canonicalOperatorId: p.canonicalOperatorId,
+      operatorUserId: input.identity.canonicalOpenId,
+      action: "revise",
+      itemIds: [input.itemId],
+      source: input.source ?? "authenticated_app",
+      note: input.title.trim(),
+    },
+    now
+  );
+  return persistStrategicProposal(
+    {
+      ...p,
+      id: `proposal_${revision.slice(0, 40)}`,
+      revision,
+      items,
+      preparedAt: now.toISOString(),
+      expiresAt: p.expiresAt,
+      uncertainty: [
+        ...p.uncertainty,
+        `Operator revision to ${input.itemId}; original strategy hypothesis may need review.`,
+      ],
+      opening: `Revised pending proposal: ${items.map(i => `${i.businessDate}: ${i.title}`).join("; ")}. Approve selected items, revise, reject, or defer.`,
+    },
+    p.id
+  );
 }
 
 /** Read port: application status requires canonical commitment plus persisted approval lineage. */

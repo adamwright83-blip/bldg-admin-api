@@ -1,3 +1,4 @@
+import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
 /**
  * Thin weekly-planning route. One seam for runClaireTurn.
  * An open weekly session is context, not automatic conversational authority.
@@ -52,7 +53,7 @@ export function arbitrateWeeklyTurnIntent(input: {
   const utterance = input.utterance.trim();
   const session = input.session;
 
-  if (session.draft.pendingRecommendation && /^(?:approve (?:the )?(?:plan|proposal|all items)|approve (?:only )?items? [\d,\sand]+|accept (?:the )?(?:plan|proposal)|change item \d+ to .+|reject (?:the )?(?:plan|proposal)|defer(?: (?:the )?(?:decision|plan|proposal))?|why|explain(?: the recommendation)?)\.?$/i.test(utterance)) return "weekly_continue";
+  if (session.draft.pendingRecommendation && parseStrategicProposalControl(utterance)) return "weekly_continue";
   if (isWeeklyCancel(utterance)) return "weekly_cancel";
   if (lockBindApplies(session, utterance)) return "weekly_lock";
   if (parseDayMove(utterance)) return "weekly_continue";
@@ -113,6 +114,7 @@ export type WeeklyRouteResult = {
   mutationReceipts?: MutationReceipt[];
   actionIds?: string[];
   act: WeeklyAct;
+  presentedRecommendation?: { proposalId: string; revision: string };
 };
 
 export async function routeActiveWeeklySession(
@@ -126,6 +128,8 @@ export async function routeActiveWeeklySession(
     now: Date;
     timeZone: string;
     weekStartOverride?: string;
+    expectedStrategicProposalId?: string;
+    expectedStrategicProposalRevision?: string;
     weeklyPlanningSourceReference?: string | null;
     weeklyPlanningAppointmentId?: string | null;
     /**
@@ -157,6 +161,11 @@ export async function routeActiveWeeklySession(
     now: input.now,
     timeZone: input.timeZone,
   });
+  if (input.expectedStrategicProposalId && (!session ||
+      session.draft.pendingRecommendation?.proposalId !== input.expectedStrategicProposalId ||
+      (input.expectedStrategicProposalRevision && session.draft.pendingRecommendation?.revision !== input.expectedStrategicProposalRevision))) {
+    return { speak: "The prepared revision held by this conversation has changed or closed. Open the current recommendation before deciding. No work was added.", act: "REVISE", actionIds: [] };
+  }
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
 
