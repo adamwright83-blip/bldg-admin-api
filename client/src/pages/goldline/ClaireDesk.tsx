@@ -1,5 +1,7 @@
 import type { SalesInsightArtifact } from "../../../../server/claire/proactive/salesInsights";
 import { FormEvent, useState } from "react";
+import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
+import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -95,6 +97,8 @@ export default function ClaireDesk() {
         This is not a second brain. Desktop just has room for more of the same
         operator, goals, field outcomes, and campaign truth.
       </p>
+      <ClaireStrategicProposal />
+      <ClaireStrategicCallConsent />
       {preview.data?.brief ? (
         <p
           data-testid="claire-desk-brief"

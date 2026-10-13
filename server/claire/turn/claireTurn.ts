@@ -192,6 +192,7 @@ export type PendingBriefing = { parsed: ParsedBriefing; createdAt: number };
 
 export type ClaireTurnState = PendingProposalState &
   ClaireAnalyticsState & {
+    strategicProposalId?: string | null;
     history?: ClaireTurnHistoryEntry[];
     pendingBriefing?: PendingBriefing | null;
     pendingAccountFollowUp?: PendingAccountFollowUp | null;
@@ -1004,6 +1005,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           operatorId: input.operatorUserId,
           utterance,
           recentTurns: history().slice(0, -1).slice(-12),
+          preparedStrategicProposal: Boolean(state.strategicProposalId),
           pending: {
             briefing: Boolean(state.pendingBriefing),
             accountFollowUp: Boolean(state.pendingAccountFollowUp),
@@ -1035,6 +1037,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ),
       weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
     },
+    preparedStrategicProposal: Boolean(state.strategicProposalId),
     hasActiveAnalyticsQuery: Boolean(state.analytics?.query || state.analytics?.pendingClarification),
     sessionKind: state.sessionKind,
     morningSession,
@@ -1132,6 +1135,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     closedDecisions.pendingActionRelationship.effectiveOutput;
   let closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
   let operatorAdaptation: DaphneAdaptationApplicationResult | undefined;
+  // A semantic correction with no proposed replacement invalidates held work,
+  // including when the closed decision abstains and asks for clarification.
+  if (brainV3.act === "correction" && brainV3.workDisposition === "none" && !brainV3.canonicalWork) {
+    state.pendingProposal = null;
+    state.pendingReminded = false;
+  }
+
   // Durable Daphne style corrections own their confirmation. A generic
   // doctrine "standing rule" response cannot prove an observation/write/read.
   if (

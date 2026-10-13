@@ -1,0 +1,78 @@
+name: Claire strategic preparation
+on:
+  pull_request:
+    paths:
+      - "server/strategy/**"
+      - "server/agents/persistentOperator/**"
+      - "server/claire/**"
+      - "server/planning/**"
+      - "shared/strategic*"
+      - "shared/claireRoleFeedback.ts"
+      - "client/src/pages/goldline/Claire*"
+      - "drizzle/0128_claire_strategic_preparation.sql"
+      - "scripts/migrate.mjs"
+      - ".github/workflows/claire-strategic-preparation.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connected-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: disposable_claire
+          MYSQL_DATABASE: claire_acceptance
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pdisposable_claire"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Strategy, authority, Mission Director and live routing regressions
+        run: >-
+          pnpm vitest run server/strategy server/planning/missionDirector
+          server/agents/persistentOperator/objectiveStore.test.ts
+          server/claire/brain server/claire/weeklyMission server/claire/turn
+          server/agents/daphne/explicitPreferenceCorrection.test.ts
+      - name: Production boot migrations and idempotent second boot
+        env:
+          DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/claire_acceptance
+        run: |
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs
+      - name: Real MySQL connected journey with controlled phone transport
+        env:
+          DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/claire_acceptance
+          ALLOW_TEST_DB: "1"
+          OWNER_OPEN_ID: none
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
+          TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+          TWILIO_AUTH_TOKEN: controlled_test_token
+          CLAIRE_TWILIO_FROM_NUMBER: "+15555550112"
+          CLAIRE_OPERATOR_PHONE: "+15555550111"
+          JWT_SECRET: claire-strategy-test-key-000000000000000000000
+          AUTONOMOUS_WORKERS_ENABLED: "1"
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/strategy/strategicJourney.mysql.integration.test.ts
+      - name: Fourteen scenarios and separate blinded review packet
+        run: node --import tsx scripts/evaluate-claire-strategy.ts
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: claire-strategy-evidence
+          path: artifacts/claire-strategy/

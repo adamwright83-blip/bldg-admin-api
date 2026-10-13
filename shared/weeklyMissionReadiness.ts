@@ -106,6 +106,8 @@ export type WeeklyDayDraft = {
 };
 
 export type WeeklyDraft = {
+  /** Pending strategy revision, never an approved primary or WeeklyIntent. */
+  pendingRecommendation?: { proposalId: string; revision: string; opening: string };
   weekStart: string;
   days: WeeklyDayDraft[];
 };

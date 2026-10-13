@@ -25,6 +25,7 @@ import {
 
 export type ClaireBrainV2LiveInput = {
   rawText: string;
+  preparedStrategicConversation?: boolean;
   assembledText?: string;
   completeness?: "complete" | "incomplete" | "forced_flush";
   state: WorkingMemorySource;
@@ -125,6 +126,7 @@ export async function runClaireBrainV2LiveTurn(
   input: ClaireBrainV2LiveInput,
   options: { env?: NodeJS.ProcessEnv } = {}
 ): Promise<ClaireBrainV2LiveResult> {
+  if (input.preparedStrategicConversation) return { active: false, reason: "outside_live_scope" };
   const env = options.env ?? process.env;
   if (!enabled(env)) return { active: false, reason: "disabled" };
   if (

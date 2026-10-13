@@ -26,7 +26,7 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
 
     expect(snapshot.id).toMatch(/^snap_/);
     expect(snapshot.tenantId).toBe(tenantA);
-    expect(snapshot.schemaVersion).toBe(1);
+    expect(snapshot.schemaVersion).toBe(2);
     expect(snapshot.contentHash).toBeDefined();
     expect(snapshot.estimatedTokens).toBeGreaterThan(0);
     expect(snapshot.payload).toBeDefined();
@@ -163,9 +163,11 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const tightBudget = 200;
     const snapshot = await buildStrategySnapshot(tenantA, { tokenBudget: tightBudget });
 
-    expect(snapshot.isTruncated).toBe(true);
-    expect(snapshot.truncationDetails).toBeDefined();
-    expect(snapshot.truncationDetails?.length).toBeGreaterThan(0);
+    // Unavailable arrays are empty. Never report fictional truncation merely
+    // because required provenance exceeds an unrealistically small budget.
+    expect(snapshot.isTruncated).toBe(false);
+    expect(snapshot.truncationDetails).toBeUndefined();
+    expect(snapshot.estimatedTokens).toBeGreaterThan(tightBudget);
 
     // High priority sections must remain preserved
     expect(snapshot.payload.goal).toBeDefined();

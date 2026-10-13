@@ -158,6 +158,18 @@ describe("Brain V2 grant-bound legacy adapter", () => {
     ).rejects.toThrow(/refuses unsupported action class/i);
     expect(commitMocks.commitBriefing).not.toHaveBeenCalled();
   });
+  it("October 13: rejects a proposal-shaped briefing grant without invoking the writer", async () => {
+    await expect(executeGrantBoundLegacyAdapter({ ...common, state: { pendingProposal: { title: "Call Dana" } } as any,
+      grant: grant({ actionClass: "commit_briefing", text: "Yes.", identity: "pending-proposal" }) })).rejects.toThrow(/pending briefing authority/);
+    expect(commitMocks.commitBriefing).not.toHaveBeenCalled();
+  });
+  it("October 13: rejects empty bounded Day Line scope and role feedback", async () => {
+    await expect(executeGrantBoundLegacyAdapter({ ...common, state: {} as any,
+      grant: grant({ actionClass: "propose_day_line", text: "I also need to call Dana Tuesday.", titles: [] }) })).rejects.toThrow(/bounded work scope/);
+    await expect(executeGrantBoundLegacyAdapter({ ...common, state: {} as any,
+      grant: grant({ actionClass: "propose_day_line", text: "You're supposed to proactively prepare my plan.", titles: ["Prepare my plan"] }) })).rejects.toThrow(/role feedback/i);
+    expect(commitMocks.commitBriefing).not.toHaveBeenCalled();
+  });
 
   it("uses indeterminate speech after a grant execution error and never claims nothing changed", () => {
     const result = brainV2ExecutionFailureResult({

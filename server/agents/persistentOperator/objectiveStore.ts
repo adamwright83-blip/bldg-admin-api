@@ -411,7 +411,7 @@ export function projectToGoldlineObjective(
   const status =
     objective.status === "completed"
       ? "completed"
-      : objective.status === "blocked"
+      : !["accepted", "in_progress"].includes(objective.status)
         ? "blocked"
         : "ready";
 
@@ -419,7 +419,7 @@ export function projectToGoldlineObjective(
     id: objective.id,
     physicalEntityId: objective.actionTargetId,
     kind,
-    authority: "persisted_task",
+    authority: objective.status === "presented" ? "derived_recommendation" : "persisted_task",
     status,
     latitude: null,
     longitude: null,

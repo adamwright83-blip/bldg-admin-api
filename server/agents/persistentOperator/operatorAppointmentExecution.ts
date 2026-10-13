@@ -1,3 +1,6 @@
+import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
+import { loadStrategicProposal } from "../../strategy/strategicStore";
+import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
 import { formatInTimeZone } from "date-fns-tz";
 import { startClairePreDriveCall } from "../../claire/claireTwilio";
 import { executePersistentOperatorAction } from "./actionExecution";
@@ -172,7 +175,7 @@ export async function executeOperatorAppointment(
     };
   }
 
-  if (step.unprompted && !insideSundayStandingWindow(step, now)) {
+  if (step.unprompted && step.appointmentKind !== "weekday_strategic_planning" && !insideSundayStandingWindow(step, now)) {
     return {
       skipped: "outside_authorized_sunday_window",
       weekStart: step.weekStart,
@@ -196,48 +199,24 @@ export async function executeOperatorAppointment(
       standingAuthorizationId: context.actor.standingAuthorizationId,
     },
     riskClass: "EXTERNAL_COMMUNICATION",
-    exactAction: SUNDAY_WEEKLY_PLANNING_ACTION,
+    exactAction: step.appointmentKind === "weekday_strategic_planning" ? WEEKDAY_STRATEGIC_PLANNING_ACTION : SUNDAY_WEEKLY_PLANNING_ACTION,
     sourceReference: context.source.sourceReference,
     idempotencyKey: context.idempotencyKey,
     standingAuthorizationId: context.actor.standingAuthorizationId,
     approvedByUserId,
     expiresAtMs: Date.now() + 5 * 60_000,
     execute: async () => {
-      let opening: string;
-      let sessionKind: "weekly_planning_invite" | "weekly_planning";
-      if (step.appointmentKind === "weekly_planning_callback") {
-        const weekly = await beginWeeklyMission({
-          tenantId: context.scope.tenantId,
-          operatorId: identity.weeklyOperatorId,
-          operatorIdentities: identity.aliases.map(alias => ({
-            operatorId: alias.openId,
-            dayDirectorActorId: String(alias.userId),
-          })),
-          dayDirectorActorId: identity.dayDirectorActorId,
-          dayDirectorActorIds: identity.dayDirectorActorIds,
-          timeZone: step.timeZone,
-          now,
-          weekStartOverride: step.weekStart,
-          weeklyPlanningSourceReference: context.source.sourceReference,
-          weeklyPlanningAppointmentId: context.jobId,
-        });
-        opening = weekly.speech;
-        sessionKind = "weekly_planning";
-      } else {
-        const pace = await macroGoalPaceLine({
-          tenantId: context.scope.tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
-          now,
-        });
-        opening = [
-          "The week isn't planned yet.",
-          pace,
-          "Want to do it now, or what time tonight?",
-        ]
-          .filter(Boolean)
-          .join(" ");
-        sessionKind = "weekly_planning_invite";
-      }
+      const storedId = step.sourceReference.startsWith("strategic_proposal:") ? step.sourceReference.slice("strategic_proposal:".length) : null;
+      const proposal = storedId
+        ? await loadStrategicProposal(identity, storedId)
+        : await prepareStrategicProposal({ identity, timeZone: step.timeZone, weekStart: step.weekStart, now });
+      if (!proposal || Date.parse(proposal.expiresAt) <= now.getTime()) throw new Error("Scheduled strategic proposal is stale or unavailable; no call placed");
+      const weekly = await beginWeeklyMission({ tenantId: identity.tenantId, operatorId: identity.weeklyOperatorId,
+        operatorIdentities: identity.aliases.map(alias => ({ operatorId: alias.openId, dayDirectorActorId: String(alias.userId) })),
+        dayDirectorActorId: identity.dayDirectorActorId, dayDirectorActorIds: identity.dayDirectorActorIds,
+        timeZone: step.timeZone, now, weekStartOverride: step.weekStart, preparedProposalIdOverride: proposal.id, weeklyPlanningSourceReference: context.source.sourceReference, weeklyPlanningAppointmentId: context.jobId });
+      const opening = weekly.speech;
+      const sessionKind = "weekly_planning" as const;
 
       if (!store) {
         throw new Error("Operator appointment execution requires its durable store");
@@ -256,6 +235,7 @@ export async function executeOperatorAppointment(
         weeklyPlanningWeekStart: step.weekStart,
         weeklyPlanningSourceReference: context.source.sourceReference,
         weeklyPlanningAppointmentId: context.jobId,
+        strategicProposalId: proposal.id,
       });
     },
   });

@@ -24,6 +24,7 @@ export type WeeklyDossier = {
    * loadWeeklyGrowthCandidates. Private planning input. Not a weekday and not a primary.
    */
   growthCandidates?: readonly WeeklyGrowthCandidate[];
+  preparedRecommendation?: WeeklyDraft["pendingRecommendation"];
   writesBusinessTruth: false;
 };
 
@@ -62,7 +63,9 @@ export async function loadWeeklyDossier(
 }
 
 export function draftFromDossier(dossier: WeeklyDossier): WeeklyDraft {
-  return emptyDraft(dossier.horizon, dossier.fixedConstraints);
+  const draft = emptyDraft(dossier.horizon, dossier.fixedConstraints);
+  if (dossier.preparedRecommendation) draft.pendingRecommendation = dossier.preparedRecommendation;
+  return draft;
 }
 
 /**

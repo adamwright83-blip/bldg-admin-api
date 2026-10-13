@@ -1,3 +1,4 @@
+import { readStrategicCandidates } from "../strategy/strategicCandidateAdapter";
 import { createHash } from "node:crypto";
 import { businessToday } from "../analytics/businessPeriods";
 import {
@@ -54,6 +55,15 @@ export async function loadWeeklyGrowthCandidates(
     observedAt: input.now.toISOString(),
     bundle,
   });
+  if (deps === productionDeps) {
+    try {
+      const strategic = await readStrategicCandidates(input);
+      assembled.candidates.push(...strategic);
+      assembled.sources.strategy_diagnosis = { status: "available", observedCount: strategic.length, eligibleCount: strategic.length, rankedCount: strategic.length, shownCount: strategic.length };
+    } catch (error) {
+      assembled.sources.strategy_diagnosis = { status: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+    }
+  }
   const generatedAt = input.now.toISOString();
   const fingerprint = createHash("sha256")
     .update(canonicalWeeklyGrowthFeed({ ...assembled, generatedAt, fingerprint: "" }))

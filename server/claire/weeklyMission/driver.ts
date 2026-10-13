@@ -4,6 +4,8 @@
  * Begin resumes an existing session. It does not restart one.
  */
 
+import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
+import { latestStrategicProposal, loadStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   buildWeeklyMissionCard,
@@ -29,6 +31,7 @@ import {
   loadWeeklySurface,
   newWeeklySession,
   saveWeeklySurface,
+  saveWeeklySession,
   type WeeklyPlanningSession,
 } from "./session";
 
@@ -47,6 +50,7 @@ export type WeeklyDriverScope = {
   weekStartOverride?: string;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
+  preparedProposalIdOverride?: string;
 };
 
 export type WeeklyDriverDeps = {
@@ -199,6 +203,7 @@ export async function beginWeeklyMission(
   const existing = await existingSession(scope, horizon);
   if (existing) {
     await bindWeeklyAppointmentLineage(existing.session, scope);
+    if (scope.preparedProposalIdOverride && existing.session.draft.pendingRecommendation?.proposalId !== scope.preparedProposalIdOverride) throw new Error("A different weekly conversation revision is already active");
     return {
       speech: resumeSpeech(existing.session),
       resumed: true,
@@ -213,6 +218,17 @@ export async function beginWeeklyMission(
     };
   }
   const dossier = await loadWeeklyDossier({ horizon }, readersFor(scope, deps));
+  if (!deps.factsForDates) {
+    const identity = await resolveCanonicalOperatorIdentity({ tenantId: scope.tenantId, source: { type: "open_id", value: scope.operatorId }, subsystem: "weekly.prepared_proposal" });
+    if (identity.ok) {
+      const prepared = scope.preparedProposalIdOverride ? await loadStrategicProposal(identity.identity, scope.preparedProposalIdOverride) : await latestStrategicProposal(identity.identity, horizon.weekStart);
+      const decisions = prepared ? await strategicResponses(identity.identity, prepared.id) : [];
+      if (prepared && prepared.weekStart === horizon.weekStart && Date.parse(prepared.expiresAt) > (scope.now ?? new Date()).getTime() && !decisions.some(r => ["reject", "revise"].includes(r.action))) {
+        dossier.preparedRecommendation = { proposalId: prepared.id, revision: prepared.revision, opening: prepared.opening };
+      }
+    }
+  }
+  if (scope.preparedProposalIdOverride && !dossier.preparedRecommendation) throw new Error("Prepared proposal unavailable for this weekly conversation");
   const session = newWeeklySession({
     tenantId: scope.tenantId,
     operatorId: scope.operatorId,
@@ -222,6 +238,11 @@ export async function beginWeeklyMission(
   });
   session.internalHypothesis = deriveInternalHypothesis(dossier);
   await bindWeeklyAppointmentLineage(session, scope);
+  if (session.draft.pendingRecommendation) {
+    session.phase = "awaiting_confirmation";
+    await saveWeeklySession(session);
+    return { speech: session.draft.pendingRecommendation.opening, resumed: false, card: await assembleCard(scope, deps) };
+  }
   const advanced = await advanceWeeklySession(
     { dossier, session, operatorUtterance: "" },
     {
@@ -374,6 +395,7 @@ function readersFor(scope: WeeklyDriverScope, deps: WeeklyDriverDeps): WeeklyDos
 }
 
 function resumeSpeech(session: WeeklyPlanningSession): string {
+  if (session.draft.pendingRecommendation) return session.draft.pendingRecommendation.opening;
   if (session.phase === "proposal" || session.phase === "awaiting_confirmation") {
     return speakProposal(session.draft);
   }

@@ -1,4 +1,17 @@
-import { describe, expect, it, beforeEach } from "vitest";
+
+// Unit fixtures explicitly configure industry, timezone and geography. These
+// mocks verify compatibility contracts; real persistence is tested separately.
+vi.mock("./marketContext", async importOriginal => {
+  const actual = await importOriginal<typeof import("./marketContext")>();
+  return { ...actual,
+    resolveTenantVerticalKey: async (tenantId: string) => tenantId.includes("non_laundry") ? "software" : "laundry_fluff_fold",
+    loadStrategyMarketContext: async (tenantId: string) => ({ tenantId, mode: "physical", territories: [{ id: "test-iowa", label: "Configured Iowa test market", address: "Des Moines, IA", latitude: 41.59, longitude: -93.62, radiusMiles: 5, sourceRef: "test_tenant_location", capturedAt: "2026-10-13T16:00:00Z" }], observations: [], limitations: ["Synthetic unit-test market"] }) };
+});
+vi.mock("../agents/persistentOperator/operatorAppointmentPolicy", async importOriginal => {
+  const actual = await importOriginal<typeof import("../agents/persistentOperator/operatorAppointmentPolicy")>();
+  return { ...actual, resolveOperatorTimeZone: async () => "America/Chicago" };
+});
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   triggerMorning,
   triggerMissionCompletion,
@@ -28,11 +41,7 @@ describe("Slice 9: Autonomous Triggers", () => {
       source: "operator_attested",
     });
 
-    await chooseStrategicPath({
-      tenantId,
-      playId: "play_prop_slice09",
-      surface: "map",
-    });
+
   });
 
   it("morning trigger runs idempotently: re-running for same date returns existing run", async () => {

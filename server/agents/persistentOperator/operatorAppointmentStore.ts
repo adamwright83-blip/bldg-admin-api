@@ -1,3 +1,6 @@
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { addDaysYmd } from "../../../shared/weeklyMissionReadiness";
+import { strategicCallAuthorizedNow } from "../../../shared/strategicCallAuthorization";
 import { randomUUID } from "node:crypto";
 import type {
   Pool,
@@ -12,7 +15,8 @@ import type {
 
 export type OperatorAppointmentKind =
   | "sunday_weekly_planning"
-  | "weekly_planning_callback";
+  | "weekly_planning_callback"
+  | "weekday_strategic_planning";
 
 export type ClaimedOperatorAppointment = DurableLeasedStep & {
   tenantId: string;
@@ -349,6 +353,22 @@ export class OperatorAppointmentStore
   }
 
   async beginCallDispatch(step: ClaimedOperatorAppointment): Promise<boolean> {
+    if (step.appointmentKind === "weekday_strategic_planning") {
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [auths] = await connection.execute<RowDataPacket[]>("SELECT * FROM tenant_standing_authorizations WHERE id = ? AND tenantId = ? AND canonicalOperatorId = ? FOR UPDATE", [step.standingAuthorizationId, step.tenantId, step.canonicalOperatorId]);
+        const auth = auths[0]; const now = new Date();
+        if (!auth || auth.operatorUserId !== step.operatorUserId || !strategicCallAuthorizedNow(auth as any, now, step.timeZone)) { await connection.rollback(); return false; }
+        const date = formatInTimeZone(now, step.timeZone, "yyyy-MM-dd");
+        const start = fromZonedTime(`${date}T00:00:00`, step.timeZone);
+        const end = fromZonedTime(`${addDaysYmd(date, 1)}T00:00:00`, step.timeZone);
+        const [counts] = await connection.execute<RowDataPacket[]>("SELECT COUNT(*) AS n FROM operator_appointments WHERE tenantId = ? AND canonicalOperatorId = ? AND appointmentKind = 'weekday_strategic_planning' AND callDispatchStartedAt >= ? AND callDispatchStartedAt < ?", [step.tenantId, step.canonicalOperatorId, start, end]);
+        if (Number(counts[0]?.n) >= Number(auth.dailyLimit)) { await connection.rollback(); return false; }
+        const [result] = await connection.execute<ResultSetHeader>("UPDATE operator_appointments SET callDispatchStartedAt = CURRENT_TIMESTAMP(3) WHERE tenantId = ? AND id = ? AND status = 'running' AND leaseOwner = ? AND leaseExpiresAt > CURRENT_TIMESTAMP(3) AND callDispatchStartedAt IS NULL AND callSid IS NULL AND standingAuthorizationId = ? AND timeZone = ?", [step.tenantId, step.id, step.leaseOwner, step.standingAuthorizationId, step.timeZone]);
+        await connection.commit(); return result.affectedRows === 1;
+      } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
+    }
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE operator_appointments
           SET callDispatchStartedAt = CURRENT_TIMESTAMP(3)

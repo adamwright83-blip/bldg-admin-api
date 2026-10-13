@@ -1,3 +1,5 @@
+import { readLaundryMatureRepeatCohort } from "./laundryCohortReader";
+import { softwareTemplate } from "./software";
 import { laundryFluffFoldTemplate } from "./laundryFluffFold";
 import {
   laundryActiveCustomersMetricReader,
@@ -17,6 +19,7 @@ import { ServerVerticalRegistry } from "./registry";
  */
 export const defaultVerticalRegistry = new ServerVerticalRegistry();
 defaultVerticalRegistry.registerTemplate(laundryFluffFoldTemplate);
+defaultVerticalRegistry.registerTemplate(softwareTemplate);
 defaultVerticalRegistry.registerMetricReader(
   "strategy.active_customers.v1",
   laundryActiveCustomersMetricReader
@@ -42,3 +45,6 @@ defaultVerticalRegistry.registerMetricReader(
   "commercial.recurring_account_paid_revenue.v1",
   recurringAccountPaidRevenueMetricReader
 );
+
+defaultVerticalRegistry.registerMetricReader("strategy.mature_cohort_customers.v1", async input => (await readLaundryMatureRepeatCohort(input)).cohort);
+defaultVerticalRegistry.registerMetricReader("strategy.mature_cohort_repeat_customers.v1", async input => (await readLaundryMatureRepeatCohort(input)).repeated);

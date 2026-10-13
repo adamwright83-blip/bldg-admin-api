@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Strategy proposals are required durable preparation; no business rows backfilled.
+const strategicDdl = await readFile(new URL("../drizzle/0128_claire_strategic_preparation.sql", import.meta.url), "utf8");
+for (const statement of strategicDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Claire strategic preparation");
+}
+
 // Canonical sales readers require durable economic decisions and source revisions.
 const salesTruthDdl = await readFile(new URL("../drizzle/0116_claire_sales_reconciliation.sql", import.meta.url), "utf8");
 for (const statement of salesTruthDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
@@ -5336,5 +5342,15 @@ await assertRequiredColumns("sales_intel_sources", ["id", "canonicalSourceUrlHas
 await assertRequiredColumns("sales_intel_source_artifacts", ["sourceRegistryId"]);
 await assertRequiredColumns("sales_intel_teachings", ["id", "teachingKey", "reviewState"]);
 
-await conn.end();
+
+
+await assertRequiredColumns("territory_scan_results", ["tenantId", "sourceCapturedAt", "accountSnapshotJson", "evidenceJson"]);
+await assertRequiredColumns("strategic_planning_proposals", ["id", "tenantId", "canonicalOperatorId", "revision", "payloadJson"]);
+if (!(await requiredColumnExists("dayforge_saas_tenants", "strategyVerticalKey"))) await runRequired("ALTER TABLE dayforge_saas_tenants ADD COLUMN strategyVerticalKey varchar(64) NULL", "tenant strategy industry");
+if (!(await requiredColumnExists("tenant_standing_authorizations", "allowedWeekdaysJson"))) await runRequired("ALTER TABLE tenant_standing_authorizations ADD COLUMN allowedWeekdaysJson json NULL", "bounded outbound weekdays");
+
+await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning') NOT NULL", "weekday strategic appointments");
+await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJson"]);
+await assertEnumContainsValues("operator_appointments", "appointmentKind", ["weekday_strategic_planning"]);
 console.log("\nMigration complete.");
+await conn.end();

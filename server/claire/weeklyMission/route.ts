@@ -5,6 +5,7 @@
  * classified and fail toward parking the weekly session.
  */
 
+import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { formatInTimeZone } from "date-fns-tz";
 import type { MutationReceipt } from "../assertionGuard";
 import {
@@ -25,6 +26,7 @@ import {
   classifyWeeklyTurnWithClaire,
   completeWeeklyActWithClaire,
 } from "./weeklyModel";
+import { routeStrategicProposalTurn } from "./strategicProposalTurn";
 import { interpretTurn } from "../turn/interpretTurn";
 
 export type WeeklyTurnIntent =
@@ -51,6 +53,7 @@ export function arbitrateWeeklyTurnIntent(input: {
   const utterance = input.utterance.trim();
   const session = input.session;
 
+  if (session.draft.pendingRecommendation && /^(?:approve (?:the )?(?:plan|proposal|all items)|approve (?:only )?items? [\d,\sand]+|accept (?:the )?(?:plan|proposal)|change item \d+ to .+|reject (?:the )?(?:plan|proposal)|defer(?: (?:the )?(?:decision|plan|proposal))?|why|explain(?: the recommendation)?)\.?$/i.test(utterance)) return "weekly_continue";
   if (isWeeklyCancel(utterance)) return "weekly_cancel";
   if (lockBindApplies(session, utterance)) return "weekly_lock";
   if (parseDayMove(utterance)) return "weekly_continue";
@@ -145,7 +148,7 @@ export async function routeActiveWeeklySession(
         weekStart: input.weekStartOverride,
       })
     : remainingWeekHorizon({ businessDate, localTime });
-  const session = await loadWeeklySessionForScope({
+  let session = await loadWeeklySessionForScope({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
     operatorIds: input.operatorIds,
@@ -155,6 +158,10 @@ export async function routeActiveWeeklySession(
     now: input.now,
     timeZone: input.timeZone,
   });
+  if (!session) {
+    const resolved = await resolveCanonicalOperatorIdentity({ tenantId: input.tenantId, source: { type: "open_id", value: input.operatorId }, subsystem: "weekly.conversation_alias" }).catch(() => null);
+    if (resolved?.ok) session = await loadWeeklySession({ tenantId: input.tenantId, operatorId: resolved.identity.weeklyOperatorId, weekStart: horizon.weekStart });
+  }
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
 
@@ -223,6 +230,7 @@ async function routeLoadedSession(
   session: WeeklyPlanningSession,
   intent: WeeklyTurnIntent
 ): Promise<WeeklyRouteResult> {
+  if (session.draft.pendingRecommendation) return routeStrategicProposalTurn({ session, utterance: input.utterance, intent, now: input.now });
   if (
     intent === "weekly_lock" &&
     (session.phase === "proposal" || session.phase === "awaiting_confirmation")

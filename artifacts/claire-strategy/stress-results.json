@@ -1,0 +1,2941 @@
+{
+  "generatedAt": "2026-10-13T20:03:28.911Z",
+  "fixtureOnly": true,
+  "strategicQualityCertified": false,
+  "humanReview": "pending",
+  "results": [
+    {
+      "id": "laundry-los-angeles",
+      "diagnosis": {
+        "id": "diagnosis_1ac8cb3b84b4c370a1e6c12e13ccbbc875152356",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "acquisition",
+        "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers",
+          "metric:qualified_demand",
+          "metric:required_qualified_demand"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Improve conversion of existing qualified demand",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Test a qualified customer segment within the operating market",
+        "notPrioritized": [
+          "Broad untargeted expansion"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-acquisition",
+            "title": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "motion": "account_acquisition",
+            "hypothesis": "acquisition is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "identical-laundry-iowa",
+      "diagnosis": {
+        "id": "diagnosis_6640e85d3da03f4fe93dba001d9bb9ba277f3c54",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "acquisition",
+        "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers",
+          "metric:qualified_demand",
+          "metric:required_qualified_demand"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Improve conversion of existing qualified demand",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Test a qualified customer segment within the operating market",
+        "notPrioritized": [
+          "Broad untargeted expansion"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Des Moines operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-acquisition",
+            "title": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "motion": "account_acquisition",
+            "hypothesis": "acquisition is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:iowa",
+              "label": "Des Moines operating market",
+              "address": "Des Moines, IA",
+              "latitude": 41.59,
+              "longitude": -93.62,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:iowa",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "same-geography-software",
+      "diagnosis": {
+        "id": "diagnosis_35738ba7eb478363a4f5c6c1ebeeba847543680e",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "software",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "retention",
+        "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers"
+        ],
+        "competingExplanations": [
+          "Service issues",
+          "Normal purchasing cadence",
+          "Cohort or identity coverage bias"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Investigate activation and subscription renewal barriers",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Prepare a bounded product-value experiment for an eligible software cohort",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Investigate activation and subscription renewal barriers",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Online operating model; no physical service radius assumed.",
+        "industryFit": "software: Separate recurring revenue from hosting, support costs, and contribution; Churn and activation require software cohorts",
+        "actions": [
+          {
+            "id": "strategy-retention",
+            "title": "Investigate activation and subscription renewal barriers",
+            "driver": "retention",
+            "motion": "retention",
+            "hypothesis": "retention is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Software authoritative metric readers are not connected; specialized performance claims are withheld.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "online",
+          "territories": [],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "acquisition-bottleneck",
+      "diagnosis": {
+        "id": "diagnosis_1ac8cb3b84b4c370a1e6c12e13ccbbc875152356",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "acquisition",
+        "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers",
+          "metric:qualified_demand",
+          "metric:required_qualified_demand"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Improve conversion of existing qualified demand",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Test a qualified customer segment within the operating market",
+        "notPrioritized": [
+          "Broad untargeted expansion"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-acquisition",
+            "title": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "motion": "account_acquisition",
+            "hypothesis": "acquisition is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "retention-bottleneck",
+      "diagnosis": {
+        "id": "diagnosis_7bf8f9605c288596edc752b106d103bd6658aacd",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "retention",
+        "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers"
+        ],
+        "competingExplanations": [
+          "Service issues",
+          "Normal purchasing cadence",
+          "Cohort or identity coverage bias"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Investigate first-to-second-purchase barriers",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Prepare a bounded reactivation test for eligible customers",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Investigate first-to-second-purchase barriers",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-retention",
+            "title": "Investigate first-to-second-purchase barriers",
+            "driver": "retention",
+            "motion": "retention",
+            "hypothesis": "retention is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "unprofitable-growth",
+      "diagnosis": {
+        "id": "diagnosis_9f1b56fd1c72db49d4d59276266bb0e02e092b4e",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "contribution",
+        "diagnosis": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+        "supportingEvidence": [
+          "metric:contribution_per_order_cents"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit price and variable cost on a bounded order sample",
+            "driver": "contribution",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "economics": "Observed contribution per order: -300 cents; fixed costs and cash timing remain distinct.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Compare a reversible price test with fulfillment cost reduction",
+            "driver": "contribution",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "economics": "Observed contribution per order: -300 cents; fixed costs and cash timing remain distinct.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit price and variable cost on a bounded order sample",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Observed contribution per order: -300 cents; fixed costs and cash timing remain distinct.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-contribution",
+            "title": "Audit price and variable cost on a bounded order sample",
+            "driver": "contribution",
+            "motion": "investigation",
+            "hypothesis": "contribution is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          },
+          {
+            "id": "metric:contribution_per_order_cents",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": -300,
+            "unit": "contribution_per_order_cents",
+            "quality": "complete",
+            "description": "contribution_per_order_cents"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "capacity-exhausted",
+      "diagnosis": {
+        "id": "diagnosis_73a0d0b2c6ff505b73614ba995675d2e5769feab",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "capacity",
+        "diagnosis": "Configured available capacity is exhausted. Validate fulfillment constraints before adding demand.",
+        "supportingEvidence": [
+          "metric:available_capacity"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit the fulfillment bottleneck and recover usable capacity",
+            "driver": "capacity",
+            "evidenceRefs": [
+              "metric:available_capacity"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "0 configured units available; confirm current reservations.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Compare scheduling changes with a limited capacity expansion",
+            "driver": "capacity",
+            "evidenceRefs": [
+              "metric:available_capacity"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "0 configured units available; confirm current reservations.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit the fulfillment bottleneck and recover usable capacity",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-capacity",
+            "title": "Audit the fulfillment bottleneck and recover usable capacity",
+            "driver": "capacity",
+            "motion": "investigation",
+            "hypothesis": "capacity is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Configured available capacity is exhausted. Validate fulfillment constraints before adding demand.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:available_capacity"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          },
+          {
+            "id": "metric:available_capacity",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 0,
+            "unit": "available_capacity",
+            "quality": "complete",
+            "description": "available_capacity"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "sparse-data",
+      "diagnosis": {
+        "id": "diagnosis_98b885331cc497b08a071be3a6f17bc0065ab2bd",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "investigation",
+        "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+        "supportingEvidence": [
+          "goal:1"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Observe the next reporting period before making a growth bet",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit missing business drivers and customer evidence",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-investigation",
+            "title": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "motion": "investigation",
+            "hypothesis": "Resolving missing driver evidence will distinguish the competing explanations.",
+            "rationale": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "stale-data",
+      "diagnosis": {
+        "id": "diagnosis_a9c97e82124fd9a7840092291da7c8d670d08b8f",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "investigation",
+        "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+        "supportingEvidence": [
+          "goal:1"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Observe the next reporting period before making a growth bet",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit missing business drivers and customer evidence",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-investigation",
+            "title": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "motion": "investigation",
+            "hypothesis": "Resolving missing driver evidence will distinguish the competing explanations.",
+            "rationale": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:contribution_per_order_cents",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": -500,
+            "unit": "contribution_per_order_cents",
+            "quality": "stale",
+            "description": "contribution_per_order_cents"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "stale",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "stale",
+            "description": "mature_cohort_repeat_customers"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "outside-service-territory",
+      "diagnosis": {
+        "id": "diagnosis_11c874936094c3542adf597f455df08c2419208c",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "acquisition",
+        "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers",
+          "metric:qualified_demand",
+          "metric:required_qualified_demand"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Improve conversion of existing qualified demand",
+            "driver": "acquisition",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Test a qualified customer segment within the operating market",
+        "notPrioritized": [
+          "Broad untargeted expansion"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-acquisition",
+            "title": "Test a qualified customer segment within the operating market",
+            "driver": "acquisition",
+            "motion": "account_acquisition",
+            "hypothesis": "acquisition is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "metric:qualified_demand",
+              "metric:required_qualified_demand"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "A valuable prospect is 25 miles away; outside the five-mile service radius, withheld.",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case",
+            "A valuable prospect is 25 miles away; outside the five-mile service radius, withheld."
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "competing-commitments",
+      "diagnosis": {
+        "id": "diagnosis_02269b372ff54fee64ccc3d8ef3b83b50c91f538",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "retention",
+        "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers"
+        ],
+        "competingExplanations": [
+          "Service issues",
+          "Normal purchasing cadence",
+          "Cohort or identity coverage bias"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Investigate first-to-second-purchase barriers",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Prepare a bounded reactivation test for eligible customers",
+            "driver": "retention",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Investigate first-to-second-purchase barriers",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-retention",
+            "title": "Investigate first-to-second-purchase barriers",
+            "driver": "retention",
+            "motion": "retention",
+            "hypothesis": "retention is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
+          "Existing obligations remain protected; strategic work must fit around them."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "outcome-contradicts-strategy",
+      "diagnosis": {
+        "id": "diagnosis_65e005fbf0d75b0f476b491c35221e3b731d1bec",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "investigation",
+        "diagnosis": "Verified outcomes contradicted the earlier approach. Reassess the mechanism and customer evidence before repeating that experiment.",
+        "supportingEvidence": [
+          "metric:mature_cohort_customers",
+          "metric:mature_cohort_repeat_customers",
+          "verified-result"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Review the contradicted strategic hypothesis and compare a different mechanism",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "verified-result"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Repeat the earlier approach only after resolving its failed assumptions",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "verified-result"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Review the contradicted strategic hypothesis and compare a different mechanism",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-investigation",
+            "title": "Review the contradicted strategic hypothesis and compare a different mechanism",
+            "driver": "investigation",
+            "motion": "investigation",
+            "hypothesis": "Resolving missing driver evidence will distinguish the competing explanations.",
+            "rationale": "Verified outcomes contradicted the earlier approach. Reassess the mechanism and customer evidence before repeating that experiment.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:mature_cohort_customers",
+              "metric:mature_cohort_repeat_customers",
+              "verified-result"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "verified-result",
+            "tenantId": "scenario",
+            "source": "goal_cycle_outcomes:controlled",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": "Reactivation produced no paid repeat purchases in the predeclared observation window",
+            "unit": "result",
+            "quality": "complete",
+            "description": "Observed disappointing result; completion is separate"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [
+          "result:1"
+        ],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "unsupported-industry",
+      "diagnosis": {
+        "id": "diagnosis_144b4bbd2eda565bd859b4318cf2cc87fa2c6413",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "unsupported-industry",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "investigation",
+        "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+        "supportingEvidence": [
+          "goal:1"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Observe the next reporting period before making a growth bet",
+            "driver": "investigation",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit missing business drivers and customer evidence",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "Unsupported industry capabilities; universal investigation only.",
+        "actions": [
+          {
+            "id": "strategy-investigation",
+            "title": "Audit missing business drivers and customer evidence",
+            "driver": "investigation",
+            "motion": "investigation",
+            "hypothesis": "Resolving missing driver evidence will distinguish the competing explanations.",
+            "rationale": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "goal:1"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Industry metric readers unsupported.",
+          "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    },
+    {
+      "id": "poor-margin-segment",
+      "diagnosis": {
+        "id": "diagnosis_718cd487263325346448766d6557e0a29af3b57c",
+        "schemaVersion": 1,
+        "doctrineVersion": "2026-10-13.1",
+        "tenantId": "scenario",
+        "canonicalOperatorId": "scenario:operator",
+        "verticalKey": "laundry_fluff_fold",
+        "businessDate": "2026-10-13",
+        "generatedAt": "2026-10-13T16:00:00.000Z",
+        "goal": {
+          "statement": "Improve profitable revenue",
+          "metricKey": "net_sales_per_period",
+          "target": 20000,
+          "current": 10000,
+          "evidenceRef": "goal:1"
+        },
+        "currentCondition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+        "primaryConstraint": "contribution",
+        "diagnosis": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+        "supportingEvidence": [
+          "metric:contribution_per_order_cents"
+        ],
+        "competingExplanations": [
+          "Demand quality",
+          "Customer conversion or repeat behavior",
+          "Pricing, fulfillment, or source coverage"
+        ],
+        "options": [
+          {
+            "id": "option-1",
+            "approach": "Audit price and variable cost on a bounded order sample",
+            "driver": "contribution",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "economics": "Observed contribution per order: -1000 cents; fixed costs and cash timing remain distinct.",
+            "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+            "effort": "One desk investigation using existing records.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "Small samples and incomplete attribution can mislead.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": true,
+            "reason": "Tests the central uncertainty with limited commitment."
+          },
+          {
+            "id": "option-2",
+            "approach": "Compare a reversible price test with fulfillment cost reduction",
+            "driver": "contribution",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "economics": "Observed contribution per order: -1000 cents; fixed costs and cash timing remain distinct.",
+            "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+            "effort": "Additional operator effort and customer eligibility need confirmation.",
+            "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+            "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+            "risk": "May consume cash or scarce operating time without validating the cause.",
+            "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+            "eligible": false,
+            "reason": "Kept as an alternative; validate economics and mechanism before selection."
+          }
+        ],
+        "selectedOptionId": "option-1",
+        "selectedApproach": "Audit price and variable cost on a bounded order sample",
+        "notPrioritized": [
+          "Additional acquisition spending before the constraint is validated"
+        ],
+        "economicAssumptions": [
+          "Observed contribution per order: -1000 cents; fixed costs and cash timing remain distinct.",
+          "Account value estimates and completed tasks are not verified revenue or profit."
+        ],
+        "customerUnderstanding": "Observed transactions describe purchasing; buyer motives, discovery channels, alternatives, and repeat barriers need customer evidence.",
+        "localFit": "Configured market: Los Angeles operating market. Public prospect presence is not demonstrated demand.",
+        "industryFit": "laundry_fluff_fold: Separate captured sales from processing and delivery costs; Route density and reserved processing capacity constrain profitable growth",
+        "actions": [
+          {
+            "id": "strategy-contribution",
+            "title": "Audit price and variable cost on a bounded order sample",
+            "driver": "contribution",
+            "motion": "investigation",
+            "hypothesis": "contribution is the pivotal constraint; this audit can test that explanation.",
+            "rationale": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+            "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+            "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+            "intendedOutcome": "A defensible next experiment toward: Improve profitable revenue",
+            "evidenceRefs": [
+              "metric:contribution_per_order_cents"
+            ],
+            "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+            "territoryId": null
+          }
+        ],
+        "successMeasures": [
+          "Eligible source records reviewed and missing fields resolved.",
+          "Track net_sales_per_period from the same authoritative reader; assess contribution separately."
+        ],
+        "revisionTrigger": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
+        "uncertainty": [
+          "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+          "No provider market research in this controlled case",
+          "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+          "Configured capacity is operator input, not a current utilization measurement."
+        ],
+        "evidence": [
+          {
+            "id": "goal:1",
+            "tenantId": "scenario",
+            "source": "operator_goal",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "operator_input",
+            "value": "Improve profitable revenue",
+            "unit": "goal",
+            "quality": "complete",
+            "description": "Declared goal"
+          },
+          {
+            "id": "metric:mature_cohort_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 100,
+            "unit": "mature_cohort_customers",
+            "quality": "complete",
+            "description": "mature_cohort_customers"
+          },
+          {
+            "id": "metric:mature_cohort_repeat_customers",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 80,
+            "unit": "mature_cohort_repeat_customers",
+            "quality": "complete",
+            "description": "mature_cohort_repeat_customers"
+          },
+          {
+            "id": "metric:qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 10,
+            "unit": "qualified_demand",
+            "quality": "complete",
+            "description": "qualified_demand"
+          },
+          {
+            "id": "metric:required_qualified_demand",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": 40,
+            "unit": "required_qualified_demand",
+            "quality": "complete",
+            "description": "required_qualified_demand"
+          },
+          {
+            "id": "metric:contribution_per_order_cents",
+            "tenantId": "scenario",
+            "source": "controlled_fixture_authoritative_reader",
+            "capturedAt": "2026-10-13T16:00:00.000Z",
+            "classification": "verified",
+            "value": -1000,
+            "unit": "contribution_per_order_cents",
+            "quality": "complete",
+            "description": "contribution_per_order_cents"
+          }
+        ],
+        "market": {
+          "tenantId": "scenario",
+          "mode": "physical",
+          "territories": [
+            {
+              "id": "location:la",
+              "label": "Los Angeles operating market",
+              "address": "Los Angeles, CA",
+              "latitude": 34.05,
+              "longitude": -118.25,
+              "radiusMiles": 5,
+              "sourceRef": "tenant_location:la",
+              "capturedAt": "2026-10-13T16:00:00.000Z"
+            }
+          ],
+          "observations": [],
+          "limitations": [
+            "No provider market research in this controlled case"
+          ]
+        },
+        "outcomeRefs": [],
+        "quality": {
+          "structuralErrors": [],
+          "judgment": "unreviewed",
+          "reasons": [
+            "Structural validity does not certify strategic quality; independent review remains required."
+          ]
+        }
+      },
+      "failures": [],
+      "dimensions": {
+        "diagnosticAccuracy": true,
+        "financialReasoning": true,
+        "industryApplicability": true,
+        "geographicValidity": true,
+        "qualityOfAlternatives": true,
+        "evidenceIntegrity": true,
+        "strategicCoherence": true,
+        "feasibility": true,
+        "missionMeasurability": true,
+        "outcomeAdaptation": true
+      },
+      "baseline": {
+        "selected": "Visit qualified sales prospects",
+        "diagnosis": null,
+        "alternatives": [],
+        "strategicCertification": "not assessed by task ranking"
+      },
+      "humanReview": "pending"
+    }
+  ]
+}

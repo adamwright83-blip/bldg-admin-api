@@ -14,7 +14,7 @@ import type { PerceivedTurn } from "../contracts/perceivedTurn";
 
 /** Lead-ins that express intent rather than being part of the work itself. */
 const COMMITMENT_LEAD_IN =
-  /^(?:and\s+)?(?:i\s+(?:need|have|want|ought|got)\s+to|i\s+(?:should|must|gotta|will|ll)|i'?m\s+going\s+to|i'?ll|remind\s+me\s+to|don'?t\s+let\s+me\s+forget\s+to|make\s+sure\s+i)\s+/i;
+  /^(?:and\s+)?(?:i\s+(?:also\s+)?(?:need|have|want|ought|got)\s+to|i\s+(?:should|must|gotta|will|ll)|i'?m\s+going\s+to|i'?ll|remind\s+me\s+to|don'?t\s+let\s+me\s+forget\s+to|make\s+sure\s+i)\s+/i;
 
 const REQUEST_LEAD_IN =
   /^(?:can\s+you|could\s+you|would\s+you|please|put|add|schedule|set\s+up|book)\s+(?:a\s+|an\s+|the\s+)?(?:reminder\s+to\s+|note\s+to\s+)?/i;

@@ -230,6 +230,8 @@ function availabilityFor(
       return bundle.recovery;
     case "campaign_library":
       return bundle.campaigns;
+    case "strategy_diagnosis":
+      return { status: "unavailable", reason: "strategy_adapter_not_loaded" };
   }
 }
 

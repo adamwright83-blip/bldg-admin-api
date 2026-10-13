@@ -173,6 +173,7 @@ type PreDriveConversation = ClaireTurnState & {
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
+  strategicProposalId?: string | null;
   appointmentTimeZone?: string | null;
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
@@ -1002,6 +1003,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           : turnUtterance;
         const liveV2 = await runClaireBrainV2LiveTurn({
           rawText: turnUtterance,
+          preparedStrategicConversation: Boolean(conversation.strategicProposalId),
           assembledText: liveAssembledUtterance,
           state: readOnlyWorkingMemorySource(
             conversation as unknown as Parameters<
@@ -1311,6 +1313,7 @@ async function persistClaireVoiceConversation(input: {
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
+  strategicProposalId?: string | null;
   appointmentTimeZone?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
@@ -1332,6 +1335,7 @@ async function persistClaireVoiceConversation(input: {
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference ?? null,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId ?? null,
+    strategicProposalId: input.strategicProposalId ?? null,
     appointmentTimeZone: input.appointmentTimeZone ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
@@ -1370,6 +1374,7 @@ export async function startClairePreDriveCall(input: {
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
+  strategicProposalId?: string | null;
 }): Promise<{ callSid: string; brief: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1393,6 +1398,7 @@ export async function startClairePreDriveCall(input: {
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId,
+    strategicProposalId: input.strategicProposalId,
     appointmentTimeZone: input.timeZone ?? null,
   });
   try {

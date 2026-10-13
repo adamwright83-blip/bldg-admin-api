@@ -11,6 +11,7 @@
  * no Day Line grant.
  */
 
+import { isClaireRoleFeedback } from "../../../../shared/claireRoleFeedback";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 
 /**
@@ -21,6 +22,7 @@ const FIRST_PERSON_PLAN =
   /\b(?:i|we)\b(?:\s+[a-z']+){0,4}?\s+(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|(?:am|'m|are|'re)\s+going\s+to)\s+\w+|\b(?:i'm|i\s+am|we're|we\s+are)\s+\w+ing\b/i;
 
 export function dayLineCandidate(perceived: PerceivedTurn): boolean {
+  if (isClaireRoleFeedback(perceived.assembledText)) return false;
   if (perceived.completeness === "incomplete" || perceived.openFragment) return false;
   if (perceived.externalCapability) return false;
   if (perceived.classifierStatus !== "classified") return false;

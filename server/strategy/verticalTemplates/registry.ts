@@ -3,6 +3,7 @@ import type { VerticalTemplate } from "./types";
 export type MetricReader<T = unknown> = (input: {
   tenantId: string;
   asOf?: Date;
+  timeZone?: string;
 }) => Promise<T>;
 
 export interface VerticalRegistry {

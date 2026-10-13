@@ -14,6 +14,7 @@ export const WEEKLY_GROWTH_SOURCE_KINDS = [
   "proactive_obligation",
   "customer_recovery",
   "campaign_library",
+  "strategy_diagnosis",
 ] as const;
 export type WeeklyGrowthSourceKind = (typeof WEEKLY_GROWTH_SOURCE_KINDS)[number];
 
@@ -28,6 +29,7 @@ export const WEEKLY_GROWTH_MOTIONS = [
   "retention",
   "digital_presence",
   "alliance",
+  "investigation",
 ] as const;
 export type WeeklyGrowthMotion = (typeof WEEKLY_GROWTH_MOTIONS)[number];
 
@@ -208,6 +210,7 @@ export function motionAlignsWithMacroGoal(metricKey: string, motion: WeeklyGrowt
     case "reputation":
     case "digital_presence":
     case "alliance":
+    case "investigation":
       return false;
   }
 }

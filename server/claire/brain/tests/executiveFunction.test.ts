@@ -75,6 +75,16 @@ function ack(result: Awaited<ReturnType<typeof brain>>, kind: string) {
     segment => segment.type === "CognitiveAcknowledgementSegment" && segment.kind === kind
   );
 }
+describe("October 13 authority regressions", () => {
+  it("never mints a briefing grant for pending ordinary proposal state", async () => {
+    const result = await brain("Yes.", pending());
+    expect(result.decision.actionGrants.some(g => g.actionClass === "commit_briefing")).toBe(false);
+  });
+  it("responsibility feedback cannot become an operational Day Line grant", async () => {
+    const result = await brain("You're supposed to be proactively preparing the work.");
+    expect(result.decision.actionGrants.filter(g => ["propose_day_line", "commit_day_line", "commit_briefing"].includes(g.actionClass))).toEqual([]);
+  });
+});
 
 describe("task switching", () => {
   it("a pending proposal plus an unrelated work topic switches and suppresses the pending item", async () => {
