@@ -127,7 +127,7 @@ export async function loadClaireIdentityTruth(
   }
 
   let businesses: ClaireBusinessIdentity[] = [];
-  const row = await loadTenantBusinessIdentity(tenantId);
+  const row = await loadTenantBusinessIdentity(tenantId).catch(() => null);
   if (row) businesses = dedupeBusinessNames(row.businessName, row.brandName);
 
   return {

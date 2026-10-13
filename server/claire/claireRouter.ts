@@ -62,6 +62,10 @@ import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } fro
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
+  brainV2CallControlResult,
+  executeGrantBoundLegacyAdapter,
+} from "./brain/live/grantBoundLegacyAdapter";
+import {
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
 } from "./brain/live/runClaireBrainV2LiveTurn";
@@ -343,13 +347,36 @@ export const claireRouter = router({
               surface: "text",
               priorClaimReceipts: state.claimReceipts ?? [],
             },
-            executeLegacyAdapter: async () => runLegacyAdapter(),
+            executeLegacyAdapter: async grant =>
+              executeGrantBoundLegacyAdapter({
+                grant,
+                state,
+                tenantId: scope.tenantId,
+                operatorUserId: scope.operatorUserId,
+                dayDirectorActorId: actorId,
+                conversationKey: key,
+                timeZone: input.timeZone ?? "America/Los_Angeles",
+                surface: "text",
+              }),
           });
+          const turnResult = liveV2.active
+            ? liveV2.adapterResult
+              ? liveV2.adapterResult
+              : liveV2.result.candidateEndCall
+                ? brainV2CallControlResult({
+                    candidateSpeak: liveV2.result.candidateSpeak,
+                    assembledUtterance: input.utterance,
+                  })
+                : (() => {
+                    throw new Error(
+                      "Brain V2 live action returned without a grant-bound adapter result"
+                    );
+                  })()
+            : await runLegacyAdapter();
+
           return {
             brainV2LiveHandled: liveV2.active,
-            result: liveV2.active
-              ? liveV2.adapterResult ?? (await runLegacyAdapter())
-              : await runLegacyAdapter(),
+            result: turnResult,
           };
         }
       );

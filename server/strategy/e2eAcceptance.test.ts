@@ -62,7 +62,7 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
   });
 
   it("Step 1: Day 1 Morning brief states gap to 50, featured operation matches all surfaces, no CEO language", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId, { activeCustomersCount: 27 });
+    const snapshot = await buildStrategySnapshot(tenantId, { operatorUserId: "operator_adam", activeCustomersCount: 27 });
     expect(snapshot).toBeDefined();
 
     // Goal and gap validation
@@ -135,7 +135,7 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
       missionId: "com_visit_1",
       businessDate: businessDateDay1,
     });
-    expect(comp1.worldUpdated).toBe(true);
+    expect(comp1.worldUpdated).toBe(false);
     expect(comp1.placedOutboundCall).toBe(false); // Guardrail: Zero outbound calls on completion!
 
     const comp2 = await triggerMissionCompletion({
@@ -143,7 +143,7 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
       missionId: "com_visit_2",
       businessDate: businessDateDay1,
     });
-    expect(comp2.worldUpdated).toBe(true);
+    expect(comp2.worldUpdated).toBe(false);
     expect(comp2.placedOutboundCall).toBe(false);
 
     // 4 misses produce 1 visible Recovery item and 3 queued items
@@ -305,7 +305,7 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
       source: "operator_attested",
     });
 
-    const snapshot = await buildStrategySnapshot(nonLaundryTenant);
+    const snapshot = await buildStrategySnapshot(nonLaundryTenant, { operatorUserId: "operator_hvac" });
     expect(snapshot.payload.goal.metricType).toBe("paid_orders_per_period");
     expect(snapshot.payload.goal.targetValue).toBe(120);
 

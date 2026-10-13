@@ -4,6 +4,7 @@
 **Branch:** `codex/claire-daphne-integration`
 **Worktree:** `/private/tmp/joystick-claire-daphne-convergence`
 **Verified Backup:** `/Users/adamwrightpfi/codex-backups/joystick-claire-daphne-convergence-backup-20261012`
+**Draft Pull Request:** [#574](https://github.com/adamwright83-blip/bldg-admin-api/pull/574)
 
 ---
 
@@ -14,15 +15,17 @@ Phase 2 engineering integration across Claire, Daphne, Governed Analytics, and P
 ### Verification Highlights
 - **TypeScript Compilation:** `pnpm check` exited with code 0 (zero errors across the entire repository).
 - **Claire Test Suite:** 163 test files passed, 2,099 tests passing (`server/claire/`).
-- **Agents & Analytics Test Suite:** 97 test files passed, 727 tests passing (`server/agents/`, `server/analytics/`).
-- **Total Passing Automated Tests:** 2,826+ passing tests in verified domains.
+- **Agents & Autonomous Execution:** 81 test files passed, 586 tests passing (`server/agents/`).
+- **Governed Analytics Suite:** 16 test files passed, 141 tests passing (`server/analytics/`).
+- **Broader Domain & Shared Suites:** 183 test files passed, 1,531 tests passing (`server/strategy/`, `server/planning/`, `server/experience/`, `server/behavioralExperiment/`, `shared/`).
+- **Total Passing Automated Tests:** 4,357+ passing tests across all verified domains.
 
 ---
 
 ## 2. Resolved Defects & System Improvements
 
 ### 2.1 TypeScript Compilation Baseline
-All four initial compiler diagnostics and subsequent telemetry enum typing were resolved cleanly without unsafe casts or fabricated defaults:
+All compiler diagnostics and telemetry enum typing were resolved cleanly without unsafe casts or fabricated defaults:
 1. `server/agents/persistentOperator/operatorAppointmentExecution.ts`: Properly typed `weeklyPlanningSourceReference`.
 2. `server/analytics/composerAgent.ts`: Restored `question` parameter in scope.
 3. `server/analytics/composerAgent.ts`: Corrected variable reference for `question`.
@@ -48,14 +51,21 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
   - `server/claire/brain/live/grantBoundLegacyAdapter.ts`: Preserved grant-bound titles without loss.
   - Verified across 30 test files and 366 tests in `server/claire/brain/tests/`.
 
-### 2.4 Governed Analytics Production-Path Suite
+### 2.4 Competing Brain Execution Elimination & HTTP Cutover Alignment
+- **Problem Statement:** `server/claire/claireRouter.ts` (the HTTP / desktop surface) passed `runLegacyAdapter` (`runClaireTurn`) as the adapter and fell back to `runLegacyAdapter` when `liveV2.active` was true, causing competing Brain execution.
+- **Implementation:**
+  - In `server/claire/claireRouter.ts`: Wired `executeGrantBoundLegacyAdapter` and `brainV2CallControlResult`.
+  - When Brain V2 is active, the legacy semantic router is completely bypassed; only the grant-bound canonical writer executes.
+  - Added regression test in `server/claire/brain/tests/liveCutover.test.ts` (13/13 passing) proving multi-item grant scope creates authorized work without competing Brain execution across both voice and HTTP text surfaces.
+
+### 2.5 Governed Analytics Production-Path Suite
 - **Implementation:** `server/analytics/governedBusinessQuery.test.ts` (6/6 passing).
 - **Verified Behaviors:**
   - Supported calculations: Average Order Value (AOV), revenue growth, order counts.
   - Missing data handling: Returns `status: "missing"` with explicit reasons; never silently substitutes zeros.
   - Tenant isolation: Mismatched tenant IDs are rejected or marked missing, preventing cross-tenant leakage.
 
-### 2.5 Daphne Learning: Consented Correction & Revocation Across Sessions
+### 2.6 Daphne Learning: Consented Correction & Revocation Across Sessions
 - **Implementation:** `server/claire/turn/daphneV2RuntimeCorrection.test.ts` (5/5 passing).
 - **Verified Lifecycle:**
   - **Session 1:** Operator states correction ("Keep your answers shorter from now on"). Persisted as durable `MetaPreference` (`response_detail: 0.2`).
@@ -63,7 +73,7 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
   - **Session 3:** Operator revokes adaptation (`adaptationConsented = false`).
   - **Session 4:** Next independent session loads `null` guidance and immediately reverts to unadapted baseline behavior.
 
-### 2.6 Earned Autonomy Runtime Boundaries
+### 2.7 Earned Autonomy Runtime Boundaries
 - **Implementation:** `server/agents/persistentOperator/actionExecution.test.ts` (7/7 passing).
 - **Verified Boundaries:**
   - `READ_ONLY`: Fully autonomous execution permitted.
@@ -72,7 +82,7 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
   - `FINANCIAL_OR_CONTRACTUAL`: Strictly requires human approval; fails closed if attempted autonomously.
   - Immediate fail-closed on operator consent revocation.
 
-### 2.7 Proactive Growth Wiring & Day Line Persistence
+### 2.8 Proactive Growth Wiring & Day Line Persistence
 - **Implementation:**
   - `server/claire/proactive/growthChallenge.ts`: Defines sales challenge schema and Day Line persistence.
   - `server/claire/proactive/recoveryEvidence.ts`: Validates dormant customer eligibility; blocks outreach when active orders exist.
@@ -80,7 +90,7 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
   - `server/claire/turn/claireTurn.ts`: Wired `pendingGrowthChallenge` and `acceptSalesInsightChallenge`.
   - Verified by `server/claire/proactive/growthChallenge.test.ts` (5/5 passing) and `server/claire/proactive/recoveryEvidence.test.ts` (5/5 passing).
 
-### 2.8 Full Conversation Replay Journey
+### 2.9 Full Conversation Replay Journey
 - **Implementation:** `server/claire/weeklyMission/fullWeeklyConversationJourney.test.ts` (1/1 passing).
 - **Verified Flow:**
   - Invitation admitted
@@ -91,7 +101,7 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
   - Accurate speech readback ("5 Day Line items verified on the line")
   - Continued conversation with subsequent query answered cleanly.
 
-### 2.9 Field Event Bridge Rule 2 Fix
+### 2.10 Field Event Bridge Rule 2 Fix
 - **Implementation:** `server/agents/persistentOperator/fieldEventBridge.ts`.
 - **Verified Flow:**
   - Rule 2 validation (`!input.paid || input.totalCents <= 0`) moved to front of function, failing closed with `order_not_paid_or_zero` without unnecessary DB calls.
@@ -107,7 +117,8 @@ All four initial compiler diagnostics and subsequent telemetry enum typing were 
 | Claire Core & Brain V2 (`server/claire/`) | 163 | 2,099 | **PASS** |
 | Agents & Autonomous Execution (`server/agents/`) | 81 | 586 | **PASS** |
 | Governed Analytics (`server/analytics/`) | 16 | 141 | **PASS** |
-| **Combined Verified Suite** | **260** | **2,826** | **PASS** |
+| Strategy, Planning, Experience, Shared (`server/strategy/`, `server/planning/`, `server/experience/`, `shared/`) | 183 | 1,531 | **PASS** |
+| **Combined Verified Suite** | **443** | **4,357** | **PASS** |
 | TypeScript Compiler (`pnpm check`) | - | - | **0 errors** |
 
 ---

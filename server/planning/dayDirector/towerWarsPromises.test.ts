@@ -25,7 +25,9 @@ function predicateParameters(predicate: unknown): unknown[] {
     queryChunks?: unknown[];
     value?: unknown;
   };
-  if (node.constructor?.name === "Param") return [node.value];
+  if (node.constructor?.name === "Param") {
+    return Array.isArray(node.value) ? node.value : [node.value];
+  }
   return (node.queryChunks ?? []).flatMap(predicateParameters);
 }
 
@@ -59,11 +61,14 @@ function memoryDb() {
                 ? [promise]
                 : [];
           } else if (table === dayDirectorCommitments) {
+            const tenantId = params[0];
+            const target = params[params.length - 1];
+            const actorIds = params.slice(1, -1);
             rows = commitments.filter(
               row =>
-                row.tenantId === params[0] &&
-                row.actorId === params[1] &&
-                (row.businessDate === params[2] || row.id === params[2])
+                row.tenantId === tenantId &&
+                (actorIds.length === 0 || actorIds.includes(row.actorId)) &&
+                (row.businessDate === target || row.id === target)
             );
           } else if (
             table === dayDirectorProcessingLocations ||
@@ -97,11 +102,14 @@ function memoryDb() {
         where: async (predicate: unknown) => {
           const params = predicateParameters(predicate);
           if (table === dayDirectorCommitments) {
+            const tenantId = params[0];
+            const target = params[params.length - 1];
+            const actorIds = params.slice(1, -1);
             const row = commitments.find(
               item =>
-                item.tenantId === params[0] &&
-                item.actorId === params[1] &&
-                item.id === params[2]
+                item.tenantId === tenantId &&
+                (actorIds.length === 0 || actorIds.includes(item.actorId)) &&
+                item.id === target
             );
             if (row) Object.assign(row, values);
           } else if (

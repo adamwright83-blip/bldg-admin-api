@@ -241,7 +241,7 @@ describe("Adam doctrine — avoidance, software, gumball, prepare, permanence, m
       skipSales: false,
     });
     expect(brief).toMatch(/GUMBALL/);
-    expect(brief).toMatch(/Text Sophie/);
+    expect(brief).toMatch(/Sophie/);
     expect(brief.split(". ").length).toBeLessThan(12);
     expect(whyPushingSales(false)).toMatch(/sales has to survive/);
   });

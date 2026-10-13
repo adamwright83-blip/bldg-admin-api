@@ -21,7 +21,7 @@ describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   });
 
   it("guardrail.G7.single_featured_source: Claire and Lantern City return the identical operation ID", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId);
+    const snapshot = await buildStrategySnapshot(tenantId, { operatorUserId: actorId });
     const featured = await getTodayFeaturedOperation(tenantId);
 
     // Call previewClairePreDrive
@@ -73,7 +73,7 @@ describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   });
 
   it("records snapshotId on preview output", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId);
+    const snapshot = await buildStrategySnapshot(tenantId, { operatorUserId: actorId });
     const preview = await previewClairePreDrive({
       tenantId,
       actorId,
