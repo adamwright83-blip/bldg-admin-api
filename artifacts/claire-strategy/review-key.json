@@ -1,15 +1,15 @@
 [
   {
     "case": 1,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 2,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 3,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 4,
@@ -21,7 +21,7 @@
   },
   {
     "case": 6,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 7,
@@ -29,11 +29,11 @@
   },
   {
     "case": 8,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 9,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 10,
@@ -41,18 +41,18 @@
   },
   {
     "case": 11,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 12,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 13,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 14,
-    "enhanced": "A"
+    "enhanced": "B"
   }
 ]

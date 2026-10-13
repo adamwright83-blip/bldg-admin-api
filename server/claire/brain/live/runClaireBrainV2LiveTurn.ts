@@ -1,3 +1,4 @@
+import { isClaireRoleFeedback } from "../../../../shared/claireRoleFeedback";
 /**
  * Operator-scoped Brain V2 live cutover.
  *
@@ -126,7 +127,7 @@ export async function runClaireBrainV2LiveTurn(
   input: ClaireBrainV2LiveInput,
   options: { env?: NodeJS.ProcessEnv } = {}
 ): Promise<ClaireBrainV2LiveResult> {
-  if (input.preparedStrategicConversation) return { active: false, reason: "outside_live_scope" };
+  if (input.preparedStrategicConversation || isClaireRoleFeedback(input.assembledText ?? input.rawText)) return { active: false, reason: "outside_live_scope" };
   const env = options.env ?? process.env;
   if (!enabled(env)) return { active: false, reason: "disabled" };
   if (

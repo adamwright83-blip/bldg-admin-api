@@ -163,10 +163,8 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const tightBudget = 200;
     const snapshot = await buildStrategySnapshot(tenantA, { tokenBudget: tightBudget });
 
-    // Unavailable arrays are empty. Never report fictional truncation merely
-    // because required provenance exceeds an unrealistically small budget.
-    expect(snapshot.isTruncated).toBe(false);
-    expect(snapshot.truncationDetails).toBeUndefined();
+    expect(snapshot.isTruncated).toBe(true);
+    expect(snapshot.truncationDetails).toContain("Token budget exceeded, but no optional list rows can safely be truncated.");
     expect(snapshot.estimatedTokens).toBeGreaterThan(tightBudget);
 
     // High priority sections must remain preserved

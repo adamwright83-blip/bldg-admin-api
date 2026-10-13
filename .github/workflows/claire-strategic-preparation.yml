@@ -44,7 +44,7 @@ jobs:
       - name: Strategy, authority, Mission Director and live routing regressions
         run: >-
           pnpm vitest run server/strategy server/planning/missionDirector
-          server/agents/persistentOperator/objectiveStore.test.ts
+          server/agents/persistentOperator
           server/claire/brain server/claire/weeklyMission server/claire/turn
           server/agents/daphne/explicitPreferenceCorrection.test.ts
       - name: Production boot migrations and idempotent second boot

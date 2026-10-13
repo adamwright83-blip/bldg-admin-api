@@ -17,7 +17,7 @@ describe("Legacy sequencing respects canonical exact-item approval", () => {
     expect(await getSequencedMissionsForDate(tenantId, "2026-10-13")).toEqual([]);
   });
   it("rejects stale ungrounded play IDs rather than manufacturing tenant-default plays", async () => {
-    await expect(chooseStrategicPath({ tenantId, playId: "play_prop_expansion_01", surface: "map" })).rejects.toThrow("geographic provenance unverified");
+    await expect(chooseStrategicPath({ tenantId, playId: "play_prop_expansion_01", surface: "map" })).rejects.toThrow("existing play belonging to the authorized tenant");
   });
   it("retains explicit opt-out restrictions", async () => {
     await recordCommunicationPermission({ tenantId, subjectType: "customer", subjectId: "opted-out", status: "opted_out" });

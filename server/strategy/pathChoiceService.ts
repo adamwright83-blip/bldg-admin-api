@@ -60,9 +60,10 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
     throw new Error("Strategy path choice cannot commit without durable database availability");
   }
   const play = await readStrategyPlayById(input.playId, input.tenantId);
-  if (!play || play.provenance.geographyVersion !== "tenant-market-v1") {
-    throw new Error("Strategy play unavailable or geographic provenance unverified");
+  if (!play) {
+    throw new Error("Strategy path choice requires an existing play belonging to the authorized tenant");
   }
+  if (play.provenance.geographyVersion !== "tenant-market-v1") throw new Error("Strategy play geographic provenance unverified");
   if (input.offerId) {
     const offer = await readPathOfferById(input.offerId, input.tenantId);
     if (!offer || offer.status !== "active" || Date.parse(offer.expiresAt) <= Date.now() || !offer.offeredPlayIds.includes(input.playId)) {

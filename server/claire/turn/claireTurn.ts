@@ -1,3 +1,4 @@
+import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import type { SalesInsightArtifact } from "../proactive/salesInsights";
 import { acceptSalesInsightChallenge } from "../proactive/growthChallenge";
 import { businessToday } from "../../analytics/businessPeriods";
@@ -1135,17 +1136,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     closedDecisions.pendingActionRelationship.effectiveOutput;
   let closedDecisionBranch = selectClaireClosedDecisionBranch(closedDecisions);
   let operatorAdaptation: DaphneAdaptationApplicationResult | undefined;
-  // A semantic correction with no proposed replacement invalidates held work,
-  // including when the closed decision abstains and asks for clarification.
-  if (brainV3.act === "correction" && brainV3.workDisposition === "none" && !brainV3.canonicalWork) {
-    state.pendingProposal = null;
-    state.pendingReminded = false;
-  }
-
   // Durable Daphne style corrections own their confirmation. A generic
   // doctrine "standing rule" response cannot prove an observation/write/read.
   if (
-    !hasPendingAction &&
+    (!hasPendingAction || isClaireRoleFeedback(utterance)) &&
     brainV3.workDisposition !== "propose" &&
     brainV3.workDisposition !== "commit" &&
     brainV3.dayLineDisposition === "none" &&

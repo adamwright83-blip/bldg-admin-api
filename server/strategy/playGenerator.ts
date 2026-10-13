@@ -10,7 +10,6 @@ import { strategyPathOffers, strategyPlays } from "../../drizzle/schema";
 import { loadStrategyMarketContext, resolveTenantVerticalKey, validTerritory } from "./marketContext";
 import type { StrategyMarketContext } from "../../shared/strategicIntelligence";
 import { resolveOperatorTimeZone } from "../agents/persistentOperator/operatorAppointmentPolicy";
-import { createHash } from "node:crypto";
 import { defaultVerticalRegistry } from "./verticalTemplates/defaultRegistry";
 import { scoreStrategyPlay, type ScoreBreakdown } from "./decisionPolicy";
 import { buildStrategySnapshot, getLatestStrategySnapshot } from "./snapshotBuilder";
@@ -195,7 +194,7 @@ export async function getOrCreatePathOffer(
 
   let snapshot = await getLatestStrategySnapshot(tenantId, { operatorUserId: options.operatorUserId, now });
   if (!snapshot) {
-    snapshot = await buildStrategySnapshot(tenantId, { now, operatorUserId: options.operatorUserId });
+    snapshot = await buildStrategySnapshot(tenantId, { now, operatorUserId: options.operatorUserId, timeZone });
   }
 
   const candidates = await generateCandidatePlays(tenantId, snapshot);

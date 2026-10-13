@@ -5,7 +5,6 @@
  * classified and fail toward parking the weekly session.
  */
 
-import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { formatInTimeZone } from "date-fns-tz";
 import type { MutationReceipt } from "../assertionGuard";
 import {
@@ -158,10 +157,6 @@ export async function routeActiveWeeklySession(
     now: input.now,
     timeZone: input.timeZone,
   });
-  if (!session) {
-    const resolved = await resolveCanonicalOperatorIdentity({ tenantId: input.tenantId, source: { type: "open_id", value: input.operatorId }, subsystem: "weekly.conversation_alias" }).catch(() => null);
-    if (resolved?.ok) session = await loadWeeklySession({ tenantId: input.tenantId, operatorId: resolved.identity.weeklyOperatorId, weekStart: horizon.weekStart });
-  }
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
 

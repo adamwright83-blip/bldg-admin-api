@@ -603,6 +603,7 @@ export async function buildStrategySnapshot(
  */
 export async function getLatestStrategySnapshot(tenantId: string, options: { operatorUserId?: string; now?: Date } = {}): Promise<StrategySnapshot | null> {
   const eligible = (s: StrategySnapshot) =>
+    s.schemaVersion === SNAPSHOT_SCHEMA_VERSION &&
     (!options.operatorUserId || s.payload.goal.operatorUserId === options.operatorUserId) &&
     (!options.now || options.now.getTime() - Date.parse(s.generatedAt) <= 5 * 60_000);
   // Check memory cache first
@@ -625,7 +626,7 @@ export async function getLatestStrategySnapshot(tenantId: string, options: { ope
       .orderBy(desc(strategySnapshots.createdAt))
       .limit(10);
 
-    const row = rows.find(r => eligible({ payload: r.payloadJson, generatedAt: r.generatedAt.toISOString() } as StrategySnapshot));
+    const row = rows.find(r => eligible({ schemaVersion: r.schemaVersion, payload: r.payloadJson, generatedAt: r.generatedAt.toISOString() } as StrategySnapshot));
     if (!row) return null;
     const snapshot: StrategySnapshot = {
       id: row.id,
