@@ -10,6 +10,7 @@
 - Base: `b2a8bc9adcf71183989343b4b8dfc06f543b2af3`, current main and independently reported Railway production commit at inspection.
 - Implementation: `e575e83c` — autonomous preparation, exact approval, bounded delivery.
 - Current-main reconciliation and final connected proof: `36c6ad75bbf66121f9eccfb54bd56ba23b724c33`.
+- Domain ports and release-consumer migration correction: `8ff62f35`.
 - Report/evidence commit: `6351d947`. Draft PR: [#575](https://github.com/adamwright83-blip/bldg-admin-api/pull/575). The final PR head is recorded in the delivery message; the PR is authoritative for later updates.
 - Worktree: `/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api`.
 
@@ -82,7 +83,7 @@ The strategy adapter supplies evidence-linked candidate rationale. Mission Direc
 
 Three new append-only MySQL tables: `strategic_diagnoses`, `strategic_planning_proposals`, `strategic_proposal_responses`. They require a real database in runtime; persistence failures do not fall back to a success-shaped in-memory record. Proposal row locking serializes acceptance, revision, rejection, and deferral. IDs/revisions support idempotency. Semantic readback uses deep JSON equality because MySQL may reorder object keys.
 
-Schema extensions include tenant-selected strategy vertical, exact weekday authorization constraints, and the weekday strategic appointment kind. `drizzle/0128_claire_strategic_preparation.sql` records the new tables; **actual production boot `scripts/migrate.mjs` also provisions and asserts the required tables/columns/enums**. Current main's territory-schema repair remains the owner of existing territory tables. Boot was exercised repeatedly on disposable MySQL 8, including a second idempotent boot. No production database was migrated by this task.
+Schema extensions include tenant-selected strategy vertical, exact weekday authorization constraints, and the weekday strategic appointment kind. `drizzle/0128_claire_strategic_preparation.sql` records the new tables and guarded industry/authorization/appointment extensions; **actual production boot `scripts/migrate.mjs` also provisions and asserts the required tables/columns/enums**. Current main's territory-schema repair remains the owner of existing territory tables. Boot was exercised repeatedly on disposable MySQL 8, including a second idempotent boot. Numbered release replay also passes on a separate fresh MySQL database, including repeated replay from 0128. The formerly failing authoritative visit-route consumer passes unchanged. No production database was migrated by this task.
 
 `presented` objectives now remain blocked recommendations; only accepted/in-progress work can project to ready. The legacy strategy mission sequencer returns pending approval rather than directly inserting Day Line work after a path choice. Choosing a strategy is not approval of its individual actions.
 
@@ -127,7 +128,7 @@ Actual `generateCandidatePlays()` resolves tenant vertical and market, separates
 
 The real MySQL journey generated and reloaded six Iowa-scoped plays and rejected cross-tenant access. Unit/scenario tests compare identical laundry economics in Los Angeles and Iowa; each receives its actual market labels without the other tenant's locations. Identical economics may correctly select the same business mechanism. A different city alone is not evidence for a different diagnosis.
 
-`geographyRemediation.ts` idempotently invalidates unaccepted legacy candidate/offered plays with ungrounded template geography, records the reason and original geography, and preserves chosen/active/approved history as historical, unverified local claims. MySQL proof inserted only synthetic contaminated history: `legacy-candidate-32e4415eb0` was invalidated; `legacy-active-32e4415eb0` remained intact. Repetition made no further changes. No production historical business records were inspected or rewritten; tenant-scoped remediation runs through preparation when the candidate is deployed.
+`geographyRemediation.ts` idempotently invalidates unaccepted legacy candidate/offered plays with ungrounded template geography, records the reason and original geography, and preserves chosen/active/approved history as historical, unverified local claims. MySQL proof inserted only synthetic contaminated history: `legacy-candidate-4794e64a05` was invalidated; `legacy-active-4794e64a05` remained intact. Repetition made no further changes. No production historical business records were inspected or rewritten; tenant-scoped remediation runs through preparation when the candidate is deployed.
 
 ## 10. Actual generated diagnosis examples
 
@@ -151,7 +152,7 @@ Economics/capacity/retention inputs produce the different drivers/actions above.
 
 Geography changes resolved territory and admissible local observations; an attractive out-of-radius prospect is withheld. Industry changes vocabulary and admissible readers; software receives no wash-and-fold/route actions. Existing obligations remain under Mission Director's protection.
 
-Actual MySQL proof records an operator-attested operational result `hypothesis_contradicted` through existing goal-cycle outcome authority, linked through the originating diagnosis objective. The next existing worker cycle changes diagnosis from `diagnosis_1079f6a9a73c20f21c2761e3d79a44ed30fa23a8` to `diagnosis_4363025d3851db891ba70696bf27334c19724c60` and selects the different-mechanism review above. Action completion alone is inconclusive, not business success. This proves connected adaptation to a persisted synthetic outcome; it does not establish verified real financial impact or superior causal inference.
+Actual MySQL proof records an operator-attested operational result `hypothesis_contradicted` through existing goal-cycle outcome authority, linked through the originating diagnosis objective. The next existing worker cycle changes diagnosis from `diagnosis_2bd460dc85073f55b92809297feedffd2b55f384` to `diagnosis_c4af121fecd8b9a312546f438819b8aba9079a9e` and selects the different-mechanism review above. Action completion alone is inconclusive, not business success. This proves connected adaptation to a persisted synthetic outcome; it does not establish verified real financial impact or superior causal inference.
 
 ## 12. Authorization, revocation, and no-permission behavior
 
@@ -169,7 +170,7 @@ Controls support explaining evidence/options, approving all or selected items, r
 
 Approval requires authenticated owner/admin/operator scope, exact nonexpired revision, and nonempty bounded item scope. Existing Day Director acceptance returns a receipt; independent reads verify tenant/actor, business date, title, source text, idempotency key, and immutable proposal/revision/item/response lineage. Strategic supporting work does not displace a protected primary. Same-content retries preserve first approval lineage and lifecycle instead of rewriting them. A presented objective becomes accepted only after canonical verification. Failed save/readback cannot generate “added” speech.
 
-Real proof accepted revised proposal `proposal_ddddb76ccbe42c7eb4bc59a61fda5796c9ee60a7`, revision `ddddb76ccbe42c7eb4bc59a61fda5796c9ee60a798ba5f2efe0c4cb9d57b28a9`, creating canonical commitment `c62c9f2d-e4a2-40fd-b62d-30b09d5fa701`. Voice/app retry remained one commitment. A separate selected-item test approved item 1 of 2 and left item 2 uncommitted. Full evidence is [mysql-journey.json](../../artifacts/claire-strategy/mysql-journey.json).
+Real proof accepted revised proposal `proposal_0c7d1a38fcf8b5a8ab07e729d674ea1908def253`, revision `0c7d1a38fcf8b5a8ab07e729d674ea1908def25382e865cb1206d39f1e708a30`, creating canonical commitment `1321d5a8-c775-45d9-85df-a25f47efb864`. Voice/app retry remained one commitment. A separate selected-item test approved item 1 of 2 and left item 2 uncommitted. Full evidence is [mysql-journey.json](../../artifacts/claire-strategy/mysql-journey.json).
 
 ## 14. October 13 regression results
 
@@ -204,11 +205,16 @@ The evaluator uses the existing Mission Director ranker as a controlled task-ran
 | Real MySQL connected journey | 1 test passed; actual persistence/workers/voice contracts with controlled phone transport |
 | Production boot migration and repeated boot | Passed on disposable MySQL 8 |
 | Strategic scenario evaluator | 14 scenarios, no deterministic failures; human review pending |
+| Domain-port and weekly/strategy follow-up | 14 files, **121 passed**, overlaps prior targeted suites |
+| Numbered release replay and authoritative visit-route consumer | Fresh replay and repeated 0128 replay passed; unchanged real-DB route test passed |
+| Nomenclature, tenant-default, vertical-dependency, domain-boundary guards | Passed on corrected committed diff; domain-boundary checker self-tests 11 passed |
 | `git diff --check` | Passed |
+
+The final real journey additionally verifies the app-facing domain read ports: industry configuration readback, grant/revoke consent visibility, accepted-item canonical status, rejection of tampered commitment source text, and cross-tenant proposal refusal. Claire’s router imports these services instead of the raw schema.
 
 The real journey starts the existing workers with no authoritative plan, resolves canonical identity/timezone/tenant market/industry, prepares and persists evidence-linked diagnosis, produces Mission Director plans, obtains `MISSION_DIRECTOR_PRIMARY`, stores proposal, verifies no-consent behavior, grants test authorization, dispatches existing appointment and exact voice opening, revises/approves, reads canonical commitment back, retries without duplication, records contradictory outcome, and observes changed next diagnosis. Explain/reject/defer/selected approval and Daphne next guidance are separately asserted within that journey.
 
-Four same-process planner calls return one plan ID. Two independent Node processes against MySQL return the same authoritative plan ID/revision (`f4d5d1ba-95d7-4bcf-82e1-ae9467a3da7c`, revision 3). Durable Iowa play reload and geography remediation also use the database. Phone transport is controlled; the rest is production-equivalent contracts, not in-memory substitutes. Synthetic identities/data are labeled `testOnly` throughout.
+Four same-process planner calls return one plan ID. Two independent Node processes against MySQL return the same authoritative plan ID/revision (`46574236-986a-49cd-9bb8-589387fc16a6`, revision 3). Durable Iowa play reload and geography remediation also use the database. Phone transport is controlled; the rest is production-equivalent contracts, not in-memory substitutes. Synthetic identities/data are labeled `testOnly` throughout.
 
 Reproduction:
 
@@ -232,7 +238,7 @@ Railway's authenticated deployment listing reports service `bldg-admin-api` (`9d
 
 Deployment prerequisites: run the actual boot migrations; keep existing canonical data/identity and configured business timezone available; explicitly configure supported vertical/territory; enable the existing workers with `DATABASE_URL` (workers disable on missing DB or `AUTONOMOUS_WORKERS_ENABLED=0/false`); use existing authorized phone/voice credentials and entitlement policy; obtain a real exact weekday grant before any real strategic outbound call. Daphne continuity uses `DAPHNE_V2_CLAIRE_ENABLED` or `DAPHNE_V2_CLAIRE_TENANTS`; Brain V2 uses existing `CLAIRE_BRAIN_V2_LIVE`, with strategic sessions handled by the existing weekly/authoritative voice path. Optional model review requires its own flag and provider credential. Production values of those flags were not retrieved; no secrets were exported.
 
-Unperformed: production migration/deploy/rollback drill, authenticated browser interaction acceptance, live provider/model strategic judgment, actual customer financial/outcome validation, independent human certification, and an explicitly authorized real phone conversation. No real-call authorization was supplied. Controlled testing does not substitute for these gates. The PR remains draft for review with those boundaries visible.
+Unperformed: production migration/deploy/rollback drill, authenticated browser interaction acceptance, live provider/model strategic judgment, actual customer financial/outcome validation, independent human certification, and an explicitly authorized real phone conversation. No real-call authorization was supplied. Controlled testing does not substitute for these gates. The PR remains draft for review with those boundaries visible. Initial CI caught a missing historical-name annotation, a new Claire raw-schema coupling, and a numbered-release schema gap. Those were corrected without weakening checks; final CI status remains authoritative on the PR.
 
 ## 18. Acceptance gates and remaining limitations
 

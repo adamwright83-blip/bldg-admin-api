@@ -1,7 +1,7 @@
 {
   "date": "2026-10-13",
   "branch": "codex/claire-strategic-production",
-  "testedCodeHead": "36c6ad75bbf66121f9eccfb54bd56ba23b724c33",
+  "testedCodeHead": "8ff62f3563cad91804daef518b9cc439487d7060",
   "base": "b2a8bc9adcf71183989343b4b8dfc06f543b2af3",
   "typecheck": "passed",
   "build": "passed",
@@ -37,5 +37,17 @@
   "authenticatedBrowserAcceptance": "unperformed",
   "liveModelJudgment": "unperformed",
   "livePhoneAcceptance": "unperformed",
-  "candidateDeployment": "unperformed"
+  "candidateDeployment": "unperformed",
+  "domainPortFollowup": {
+    "files": 14,
+    "passed": 121,
+    "overlapsOtherRuns": true
+  },
+  "numberedReleaseReplay": "passed on fresh MySQL and repeated from 0128",
+  "unchangedVisitRouteConsumer": {
+    "files": 1,
+    "passed": 1,
+    "realMySQL": true
+  },
+  "architectureGuards": "nomenclature, tenant-default, vertical, domain-boundary passed; boundary self-tests 11 passed"
 }
