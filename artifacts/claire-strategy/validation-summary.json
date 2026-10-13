@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-13",
+  "branch": "codex/claire-strategic-production",
+  "testedCodeHead": "36c6ad75bbf66121f9eccfb54bd56ba23b724c33",
+  "base": "b2a8bc9adcf71183989343b4b8dfc06f543b2af3",
+  "typecheck": "passed",
+  "build": "passed",
+  "focusedRegression": {
+    "files": 82,
+    "passed": 900,
+    "skipped": 1,
+    "skipReason": "Real MySQL journey run separately"
+  },
+  "persistentOperator": {
+    "files": 31,
+    "passed": 223,
+    "overlapWithFocused": 6
+  },
+  "finalRouting": {
+    "files": 5,
+    "passed": 78,
+    "overlapsOtherRuns": true
+  },
+  "realMySQLControlledVoice": {
+    "files": 1,
+    "passed": 1,
+    "transport": "controlled; no real outbound call"
+  },
+  "productionBootMigrations": "passed including repeated idempotent boot",
+  "strategicScenarios": {
+    "count": 14,
+    "deterministicFailures": [],
+    "fixtureOnly": true,
+    "humanReview": "pending",
+    "certified": false
+  },
+  "authenticatedBrowserAcceptance": "unperformed",
+  "liveModelJudgment": "unperformed",
+  "livePhoneAcceptance": "unperformed",
+  "candidateDeployment": "unperformed"
+}
