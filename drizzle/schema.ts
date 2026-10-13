@@ -10195,3 +10195,31 @@ export const presidentCandidateProjects = mysqlTable(
     ),
   })
 );
+
+/**
+ * hidden_game.lost_property unlock ledger.
+ *
+ * One row per chapter opened (spec v2 §2: Ch.1 on the first verified sale,
+ * Ch.2/3 after OBJECTIVES_PER_CHAPTER completed Objectives each). Rows are monotonic: nothing deletes or
+ * updates them, so a later un-completion never re-locks a chapter. The game
+ * reads this table through hiddenGameEligibilityService and never writes it.
+ */
+export const hiddenGameChapterUnlocks = mysqlTable(
+  "hidden_game_chapter_unlocks",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 191 }).notNull(),
+    chapter: int("chapter").notNull(),
+    unlockedOnLocalDate: varchar("unlocked_on_local_date", { length: 10 }).notNull(),
+    evidenceJson: json("evidence_json").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({
+    chapterOnce: uniqueIndex("uq_hidden_game_unlock_chapter").on(
+      table.tenantId,
+      table.operatorId,
+      table.chapter
+    ),
+  })
+);

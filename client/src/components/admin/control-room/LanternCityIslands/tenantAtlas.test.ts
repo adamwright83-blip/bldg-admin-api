@@ -6,7 +6,14 @@ const mocks = vi.hoisted(() => ({
   user: { role: "admin", openId: "admin-owner" },
 }));
 vi.mock("@/lib/trpc", () => ({
-  trpc: { system: { geographicTruth: { myAtlas: { useQuery: mocks.query } } } },
+  trpc: {
+    system: {
+      geographicTruth: { myAtlas: { useQuery: mocks.query } },
+      hiddenGame: {
+        eligibility: { useQuery: () => ({ isLoading: true, isError: false, data: undefined }) },
+      },
+    },
+  },
 }));
 vi.mock("@/_core/hooks/useAuth", () => ({
   useAuth: () => ({ user: mocks.user }),
