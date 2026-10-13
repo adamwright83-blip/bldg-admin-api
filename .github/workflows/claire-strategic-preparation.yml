@@ -110,6 +110,7 @@ jobs:
       GOLDLINE_AUTONOMOUS_WORKERS: "0"
       ANTHROPIC_API_KEY: ""
       OPENAI_API_KEY: ""
+      # LEGACY DAYFORGE COMPATIBILITY: historical client build flag name; not current architecture.
       VITE_DAYFORGE_DEMO_MODE: "false"
     steps:
       - uses: actions/checkout@v7

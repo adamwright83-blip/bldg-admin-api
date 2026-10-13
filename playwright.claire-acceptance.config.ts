@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literals (table/env names) only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e/claire-acceptance",

@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY: retained historical literals (table/env names) only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.**
+
 # Claire strategic preparation — release readiness (PR #575)
 
 Recorded 2026-10-13. Read-only; nothing here was deployed or written to production.

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literals (table/env names) only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { strategicProposalIsCallable } from "../../strategy/strategicStore";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { addDaysYmd } from "../../../shared/weeklyMissionReadiness";

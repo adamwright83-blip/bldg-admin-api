@@ -1,4 +1,5 @@
 {
+  "_nomenclature": "LEGACY DAYFORGE COMPATIBILITY: retained historical table/env literals in captured evidence only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.",
   "config": {
     "argv": [
       "/Users/adamwrightpfi/.nvm/versions/node/v22.22.0/bin/node",
