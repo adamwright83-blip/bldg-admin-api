@@ -219,3 +219,9 @@ export async function runClaireBrainV2LiveTurn(
     };
   }
 }
+
+export {
+  brainV2CallControlResult,
+  brainV2ExecutionFailureResult,
+  executeGrantBoundLegacyAdapter,
+} from "./grantBoundLegacyAdapter";

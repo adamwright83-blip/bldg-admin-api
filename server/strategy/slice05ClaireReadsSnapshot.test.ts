@@ -12,6 +12,13 @@ import { AssertionGuard, VerifiedFactInventoryBuilder } from "../claire/assertio
 import { writeClairePreDriveBrief } from "../claire/reasoning";
 import { getClaireGenerationStats } from "../claire/generationTelemetry";
 
+vi.mock("../saas/tenantIdentityService", () => ({
+  loadTenantBusinessIdentity: async () => ({
+    businessName: "Fixture Laundry",
+    brandName: "Fixture Laundry",
+  }),
+}));
+
 describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   const tenantId = "tenant_slice05_test";
   const actorId = "operator_slice05";

@@ -64,8 +64,6 @@ import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
   brainV2CallControlResult,
   executeGrantBoundLegacyAdapter,
-} from "./brain/live/grantBoundLegacyAdapter";
-import {
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
 } from "./brain/live/runClaireBrainV2LiveTurn";

@@ -36,7 +36,7 @@ All compiler diagnostics and telemetry enum typing were resolved cleanly without
 - **Problem Statement:** Mocks used in tests must never be mistaken for authoritative production readback, and production code must fail closed when canonical database verification is unavailable.
 - **Implementation in `server/claire/briefing/briefingCommit.ts`:**
   - In-memory tracker is strictly restricted to test mock mode (`Boolean(deps.accept || deps.linkVehicleWork) && !deps.readCanonical`).
-  - Production code path strictly invokes `readDayDirectorCanonicalCommitment` against PostgreSQL/Drizzle.
+  - Production code path strictly invokes `readDayDirectorCanonicalCommitment` against Railway MySQL / Drizzle.
   - Added regression test `server/claire/briefing/briefingCommit.readback.test.ts` (8/8 passing) proving production fails closed when canonical readback fails or is omitted.
 - **Implementation in `server/claire/weeklyMission/commit.ts`:**
   - In-memory test store isolated behind explicit test injection.
@@ -127,5 +127,5 @@ All compiler diagnostics and telemetry enum typing were resolved cleanly without
 
 Per the strict safety and gate rules, the following items require human operator authorization and real-world infrastructure before production deployment:
 1. **Live Twilio Voice Stream:** Real carrier phone call verification requires active Twilio SIP trunking and live operator audio stream.
-2. **PostgreSQL Production Migration:** Applying Drizzle migrations to live production database requires scheduled maintenance window.
+2. **Railway MySQL Production Migration:** Applying Drizzle migrations to live production database requires scheduled maintenance window.
 3. **Operator Approval Gate:** No real customer calls, external communications, or financial commits may be executed without explicit operator consent.
