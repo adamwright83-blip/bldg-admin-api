@@ -10,7 +10,7 @@
 - Base: `b2a8bc9adcf71183989343b4b8dfc06f543b2af3`, current main and independently reported Railway production commit at inspection.
 - Implementation: `e575e83c` — autonomous preparation, exact approval, bounded delivery.
 - Current-main reconciliation and final connected proof: `36c6ad75bbf66121f9eccfb54bd56ba23b724c33`.
-- Report/evidence commit and final PR head are recorded in the PR and delivery message. The PR link is added to this report after creation.
+- Report/evidence commit: `6351d947`. Draft PR: [#575](https://github.com/adamwright83-blip/bldg-admin-api/pull/575). The final PR head is recorded in the delivery message; the PR is authoritative for later updates.
 - Worktree: `/Users/adamwrightpfi/.codex/worktrees/claire-strategic-production/Cursor_bldg-admin-api`.
 
 The initial checkout contained unrelated, uncommitted Daphne work on an older branch. That work was preserved. Only the strategic program's commit was transferred onto current main; foreign branch commits were excluded. The isolated delivery branch retains current main's identity admission, weekly appointment lineage, durable play/path stores, and turn cutover rules.
