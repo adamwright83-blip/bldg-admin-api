@@ -185,6 +185,98 @@ describe("Brain V2 live cutover", () => {
   });
 
 
+  it("October 11: renders an adapter's separate receipt confirmation for voice and HTTP", async () => {
+    for (const surface of ["voice", "text"] as const) {
+      const result = await runClaireBrainV2LiveTurn(input({
+        surface,
+        rawText: "Add the stuff to the Day Line.",
+        assembledText: "Add the stuff to the Day Line.",
+        executeLegacyAdapter: async () => ({
+          speak: "", kind: "briefing_saved", actionIds: ["c1", "c2"],
+          receiptBackedCommit: "Done. 2 on tomorrow's line.",
+          mutationReceipts: [
+            { claimedState: "created", entityId: "c1", statement: "Added Call permit office to the Day Line" },
+            { claimedState: "created", entityId: "c2", statement: "Added Send estimate to the Day Line" },
+          ],
+        }),
+      }), { env: ON });
+      expect(result.active).toBe(true);
+      if (result.active) expect(result.adapterResult?.speak).toBe("Done. 2 on tomorrow's line.");
+    }
+  });
+
+  it("October 11 multi-item grant scope: executes authorized work without competing Brain execution", async () => {
+    let competingExecutionInvoked = false;
+    const competingV1Router = vi.fn(async () => {
+      competingExecutionInvoked = true;
+      return {
+        speak: "Competing legacy V1 response",
+        kind: "answered" as const,
+        thoughtCompleteness: "complete" as const,
+      };
+    });
+
+    for (const surface of ["voice", "text"] as const) {
+      competingExecutionInvoked = false;
+      const state = { pendingBriefing: null };
+      const rawText = "Add call Dana Tuesday and drop off Malcolm to the Day Line.";
+
+      const result = await runClaireBrainV2LiveTurn(
+        input({
+          surface,
+          rawText,
+          assembledText: rawText,
+          state,
+          executeLegacyAdapter: async grant => {
+            expect(grant.actionClass).toBe("commit_day_line");
+            expect(grant.scope.titles?.length).toBeGreaterThanOrEqual(1);
+
+            return {
+              speak: "Done. 2 on tomorrow's line.",
+              kind: "briefing_saved",
+              actionIds: ["commit-dana-1", "commit-malcolm-2"],
+              receiptBackedCommit: "Done. 2 on tomorrow's line.",
+              mutationReceipts: [
+                {
+                  claimedState: "created",
+                  entityId: "commit-dana-1",
+                  statement: "Added Call Dana Tuesday to the Day Line",
+                },
+                {
+                  claimedState: "created",
+                  entityId: "commit-malcolm-2",
+                  statement: "Added Drop off Malcolm to the Day Line",
+                },
+              ],
+            };
+          },
+        }),
+        { env: ON }
+      );
+
+      expect(result.active).toBe(true);
+      if (result.active) {
+        expect(result.actionClasses).toContain("commit_day_line");
+        expect(result.adapterResult?.kind).toBe("briefing_saved");
+        expect(result.adapterResult?.actionIds).toEqual(["commit-dana-1", "commit-malcolm-2"]);
+        expect(result.adapterResult?.mutationReceipts).toHaveLength(2);
+        expect(result.adapterResult?.speak).toBe("Done. 2 on tomorrow's line.");
+        expect(competingExecutionInvoked).toBe(false);
+        expect(competingV1Router).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("rejects separate success speech without matching mutation receipts", async () => {
+    const result = await runClaireBrainV2LiveTurn(input({
+      rawText: "Add the stuff to the Day Line.", assembledText: "Add the stuff to the Day Line.",
+      executeLegacyAdapter: async () => ({ speak: "", kind: "briefing_saved", actionIds: [],
+        receiptBackedCommit: "Done. 2 on tomorrow's line.", mutationReceipts: [] }),
+    }), { env: ON });
+    expect(result.active).toBe(true);
+    if (result.active) expect(result.adapterResult?.speak).not.toMatch(/Done\.|2 on/);
+  });
+
   it("binds a bare yes to the pre-turn pending briefing before the adapter clears it", async () => {
     const executeLegacyAdapter = vi.fn(async () =>
       adapterResult("briefing_saved")

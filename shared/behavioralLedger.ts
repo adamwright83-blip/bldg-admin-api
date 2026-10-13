@@ -21,6 +21,8 @@
  * from mere non-completion (that's what NOT_COMPLETED / recovery is for).
  */
 export const LEDGER_EVENT_TYPES = [
+  // Assignment is a durable decision, not delivery or operator attention.
+  "ASSIGNED",
   "DELIVERED",
   "VIEWABLE",
   "ENGAGED",

@@ -44,7 +44,7 @@ import { allocateControl, anotherRoundIsWorthwhile, terminalReason } from "./con
 import { integrate, type IntegrationContext } from "./integrate";
 import { applyInhibition } from "./inhibition";
 import { mintActionGrant, mintCallControlGrant } from "./grants";
-import { proposalText, proposedWorkTitle } from "./proposal";
+import { proposalText, proposedWorkTitle, proposedWorkTitles } from "./proposal";
 import { dayLineCandidate } from "./dayLineAuthority";
 import { nextStrategicFrame } from "./strategicFrame";
 import { explicitPendingReturn } from "./pendingBinding";
@@ -375,11 +375,12 @@ export async function decideTurn(
       attention.pendingDisposition !== "confirm";
     if (mayPropose) {
       control.actionRisk = "proposal_only";
-      const title = proposedWorkTitle(perceived);
+      const titles = proposedWorkTitles(perceived);
+      const title = titles[0] ?? proposedWorkTitle(perceived);
       const explicitCommit = perceived.workDeclarationKind === "explicit_day_line";
       const grant = mintActionGrant({
         actionClass: explicitCommit ? "commit_day_line" : "propose_day_line",
-        scope: title ? { titles: [title] } : {},
+        scope: titles.length ? { titles } : (title ? { titles: [title] } : {}),
         authorityBasis: perceived.explicitActionRequest
           ? "current_turn_explicit_request"
           : "current_turn_operator_commitment",

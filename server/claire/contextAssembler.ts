@@ -449,9 +449,9 @@ export async function assembleClaireDriveContext(input: {
 
   let strategySnapshot: StrategySnapshot | null = null;
   try {
-    strategySnapshot = await getLatestStrategySnapshot(input.tenantId);
+    strategySnapshot = await getLatestStrategySnapshot(input.tenantId, { operatorUserId: input.actorId, now });
     if (!strategySnapshot) {
-      strategySnapshot = await buildStrategySnapshot(input.tenantId, { now, referenceBusinessDate: today.businessDate });
+      strategySnapshot = await buildStrategySnapshot(input.tenantId, { now, operatorUserId: input.actorId, referenceBusinessDate: today.businessDate });
     }
   } catch {
     // Non-fatal strategy snapshot fallback

@@ -147,6 +147,50 @@ function makeDeps(llmResponses: unknown[] = [], sourceOverrides: Partial<typeof 
   };
 }
 
+describe("comparison integrity", () => {
+  it("does not compare revenue when the operator requested a non-comparable metric", async () => {
+    const deps = makeDeps([
+      makePlannerResponse({ metricIds: ["repeat_customer_count"], compareToPrevious: true }),
+      makeAnswererResponse({ answer: "Repeat customers are not directly comparable in this view." }),
+    ]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "How many repeat customers versus last month?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("comparison for the requested metric");
+    expect(deps.liveSource.getMetricComparison).not.toHaveBeenCalled();
+  });
+});
+
+describe("unsupported analytics never masquerade as revenue", () => {
+  it("fails closed when the planner proposes an unavailable derived metric", async () => {
+    const deps = makeDeps([makePlannerResponse({ metricIds: ["profit_margin_unavailable"] })]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "What was our operating profit margin last month?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("won't substitute revenue");
+    expect(result.headline).toBeNull();
+    expect(result.chart).toBeNull();
+    expect(result.table).toBeNull();
+    expect(deps.invokeLLM).toHaveBeenCalledTimes(1);
+    expect(result.meta.tenantId).toBe("tenant_a");
+  });
+
+  it("does not silently drop a missing metric from a multi-metric request", async () => {
+    const deps = makeDeps([makePlannerResponse({ metricIds: ["revenue_paid_stripe", "labor_cost_unavailable"] })]);
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "What was revenue minus labor cost?",
+      history: [],
+    }, deps);
+    expect(result.answer).toContain("can't calculate");
+    expect(result.headline).toBeNull();
+  });
+});
+
 // ── Step 1: History bug fix ───────────────────────────────────────────────────
 
 describe("history bug fix", () => {
@@ -377,18 +421,20 @@ describe("customer revenue ranking", () => {
   });
 });
 
-// ── Unknown metricIds fallback ────────────────────────────────────────────────
+// ── Unsupported metric IDs fail closed; never silently switch measures ────────
 
 describe("metric ID validation", () => {
-  it("falls back to revenue_paid_stripe when LLM returns unknown metric IDs", async () => {
+  it("does not substitute revenue when the model returns unknown metric IDs", async () => {
     const planWithBadIds = makePlannerResponse({ metricIds: ["nonexistent_metric", "another_fake"] });
     const liveSpy = { ...mockLiveSource, getRevenueSummary: vi.fn().mockResolvedValue(mockRevenue) };
     const deps = makeDeps([planWithBadIds, makeAnswererResponse()], liveSpy);
 
-    await runComposerTurn({ tenantId: "tenant_a", question: "Revenue?", history: [] }, deps);
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Revenue?", history: [] }, deps);
 
-    // Should call getRevenueSummary (the fallback) rather than throwing
-    expect(liveSpy.getRevenueSummary).toHaveBeenCalled();
+    expect(liveSpy.getRevenueSummary).not.toHaveBeenCalled();
+    expect(result.answer).toContain("won't substitute revenue");
+    expect(result.headline).toBeNull();
+    expect(deps.invokeLLM).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -307,6 +307,26 @@ async function demoteOtherPrimaries(input: {
   }
 }
 
+/** Raw owning-domain read used to verify a mutation before claiming success. */
+export async function readDayDirectorCanonicalCommitment(input: {
+  tenantId: string;
+  actorId: string;
+  actorIds?: readonly string[];
+  businessDate: string;
+  commitmentId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const actorIds = [...new Set([input.actorId, ...(input.actorIds ?? [])].map(id => id.trim()).filter(Boolean))];
+  const [row] = await db.select().from(dayDirectorCommitments).where(and(
+    eq(dayDirectorCommitments.tenantId, input.tenantId),
+    inArray(dayDirectorCommitments.actorId, actorIds),
+    eq(dayDirectorCommitments.businessDate, input.businessDate),
+    eq(dayDirectorCommitments.id, input.commitmentId),
+  )).limit(1);
+  return row ?? null;
+}
+
 export async function acceptProposalWithReceipt(input: {
   tenantId: string;
   actorId: string;

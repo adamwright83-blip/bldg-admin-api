@@ -1277,6 +1277,7 @@ export const behavioralLedgerEvents = mysqlTable(
     sourceEntityType: varchar("sourceEntityType", { length: 96 }).notNull(),
     sourceEntityId: varchar("sourceEntityId", { length: 128 }).notNull(),
     eventType: mysqlEnum("eventType", [
+      "ASSIGNED",
       "DELIVERED",
       "VIEWABLE",
       "ENGAGED",

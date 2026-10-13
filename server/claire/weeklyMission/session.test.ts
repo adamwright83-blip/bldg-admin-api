@@ -43,4 +43,22 @@ describe("weekly planning session", () => {
       await loadWeeklySession({ tenantId: "default", operatorId: "adam", weekStart: "2026-09-21", now: 1_600 })
     ).toBeNull();
   });
+
+  it("rejects a payload whose operator or key does not match its persisted owner", async () => {
+    const memory = createMemoryConversationStateStore();
+    setClaireConversationStateStoreForTests(memory);
+    const session = newWeeklySession({
+      tenantId: "tenant-a",
+      operatorId: "operator-a",
+      dayDirectorActorId: "11",
+      weekStart: "2026-10-12",
+      draft: { weekStart: "2026-10-12", days: [] },
+    });
+    await memory.save(session.key, {
+      tenantId: "tenant-a", operatorUserId: "operator-a", surface: "text",
+    }, { ...session, operatorId: "operator-b" }, 60_000);
+    expect(await loadWeeklySession({
+      tenantId: "tenant-a", operatorId: "operator-a", weekStart: "2026-10-12",
+    })).toBeNull();
+  });
 });

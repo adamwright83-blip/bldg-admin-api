@@ -88,7 +88,7 @@ describe("Mission Director prep completion evidence", () => {
   it("uses completedAt rather than createdAt for the prep deadline", () => {
     expect(
       evaluatePrepCompletionEvidence(
-        evidence({ completedAt: new Date("2026-10-04T00:00:00.000Z") }),
+        evidence({ completedAt: new Date("2026-10-04T12:00:00.000Z") }),
         deadline,
         timeZone
       )

@@ -44,6 +44,8 @@ export function selectFictionForMission(
     registry?: readonly FictionTemplate[];
     fictionRulesVersion?: number;
     preferredTemplateId?: string | null;
+    /** Fresh server-approved occasion, backed by a durable assignment. Null template is the plain control. */
+    authorizedPresentation?: { decisionPointId: string; templateId: string | null; rulesVersion: number | null } | null;
     persistAssignment?: (record: {
       stableMissionKey: string;
       templateId: string;
@@ -60,12 +62,22 @@ export function selectFictionForMission(
     fictionRulesVersion: rulesVersion,
   });
 
+  // An authorized comparison has its own durable occasion. It does not rewrite
+  // the existing mission assignment or the real grammar.
+  if (input.authorizedPresentation) {
+    const approved = input.authorizedPresentation;
+    if (!approved.decisionPointId.trim() || !approved.templateId) return null;
+    const template = eligibleTemplates(registry, grammar).find(t => t.id === approved.templateId && t.rulesVersion === approved.rulesVersion);
+    return template ? { stableMissionKey: key, template, grammar } : null;
+  }
+
   // Persistence-first: an already-instantiated mission keeps its movie no
   // matter how the registry has evolved since.
   const persisted = loadFictionAssignment(key, input.identity ?? null);
   if (persisted) {
     const template = registry.find(item => item.id === persisted.templateId);
-    if (!template) return null;
+    if (!template || template.rulesVersion !== persisted.rulesVersion ||
+        !eligibleTemplates(registry, grammar).some(item => item.id === template.id)) return null;
     return { stableMissionKey: key, template, grammar };
   }
 

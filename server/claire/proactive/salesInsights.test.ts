@@ -70,3 +70,31 @@ it("states strongest month only when canonical historical ranking proves it", ()
   history.coverage!.canonicalRevenue!.mayStateExact = false;
   expect(selectSalesInsight(result(), "2026-10-04", history)?.speech).not.toContain("strongest");
 });
+
+it("proposes a marketing challenge only from an exact material decline, without inventing its cause", () => {
+  const decline = result();
+  if (decline.status !== "ok" || decline.data.kind !== "totals") throw new Error("fixture");
+  decline.data.current.revenueCents = 100000;
+  decline.data.previous!.revenueCents = 200000;
+  const insight = selectSalesInsight(decline, "2026-10-04");
+  expect(insight).not.toBeNull();
+  expect(insight!.recommendedChallenge).toMatchObject({
+    kind: "marketing_challenge",
+    status: "proposal_only",
+    title: "Diagnose the paid-revenue decline",
+    requiresOperatorApproval: true,
+    sourceObservationReference: insight!.observationReference,
+  });
+  expect(insight!.speech).toContain("I'd suggest a marketing challenge");
+  expect(insight!.recommendedChallenge!.why).toContain("cause has not been established");
+  expect(insight!.recommendedChallenge!.completionCondition).toContain("measurable recovery experiment");
+});
+it("does not suggest a decline challenge for growth or stale/unreliable evidence", () => {
+  expect(selectSalesInsight(result(), "2026-10-04")?.recommendedChallenge).toBeNull();
+  const missing = result(false);
+  if (missing.status === "ok" && missing.data.kind === "totals") {
+    missing.data.current.revenueCents = 100000;
+    missing.data.previous!.revenueCents = 200000;
+  }
+  expect(selectSalesInsight(missing, "2026-10-04")).toBeNull();
+});

@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { eligibleTemplates } from "../../shared/fictionTemplate";
 import type { ActionGrammar } from "../../shared/actionGrammar";
 import type { FictionTemplate } from "../../shared/fictionTemplate";
 import {
@@ -82,6 +83,8 @@ export async function assignExperimentalPresentation(
   void input.clientAssignmentProbability;
 
   const decisionPointId = presentationDecisionPointId({ correlationId, occasionId });
+  if (!input.policy.enabled) return { usedExperiment: false, skipReason: "policy_disabled", assignment: null };
+  const currentlyEligible = new Set(eligibleTemplates(input.registry, input.grammar).map(t => t.id));
   const existing = await listBehavioralLedgerEventsForDecisionPoint(
     tenantId,
     decisionPointId,
@@ -91,7 +94,7 @@ export async function assignExperimentalPresentation(
     .filter(row => row.operatorUserId === operatorUserId)
     .map(rowToAssignment)
     .find(Boolean);
-  if (existingAssignment) {
+  if (existingAssignment && (existingAssignment.preferredTemplateId === null || currentlyEligible.has(existingAssignment.preferredTemplateId))) {
     return { usedExperiment: true, assignment: existingAssignment };
   }
 
@@ -122,7 +125,7 @@ export async function assignExperimentalPresentation(
       sourceSystem: sourceSystemForCorrelation(correlationId),
       sourceEntityType: "mrt_decision_point",
       sourceEntityId: decisionPointId,
-      eventType: "DELIVERED",
+      eventType: "ASSIGNED",
       occurredAt: now,
       verificationClass: null,
       provenance: `mrt_randomized_assignment:${input.policy.id}:${input.policy.version}`,

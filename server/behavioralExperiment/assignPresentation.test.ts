@@ -256,7 +256,8 @@ describe("assignExperimentalPresentation", () => {
       randomInt: () => 1,
     });
     expect(store.rows[0]?.occurredAt).toEqual(assignedAt);
-    expect(store.rows[0]?.eventType).toBe("DELIVERED");
+    expect(store.rows[0]?.eventType).toBe("ASSIGNED");
+    expect(store.rows.some(row => row.eventType === "DELIVERED")).toBe(false);
     expect(store.rows.some(row => row.eventType === "STARTED")).toBe(false);
     expect(result.assignment?.persisted).toBe(true);
   });

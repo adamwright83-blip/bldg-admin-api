@@ -1,4 +1,5 @@
 import { loadSalesInsight, type SalesInsightArtifact } from "./salesInsights";
+import { deriveRecoverySafety, loadRecoverySafetyEvidence } from "./recoveryEvidence";
 import { reconcileLedgerSpan } from "../../analytics/canonicalRevenue";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
@@ -25,6 +26,8 @@ import {
   type ProactiveObligation,
 } from "../../../shared/claireProactive";
 import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
+import { observedChurnHistory } from "./observedChurnHistory";
+import type { CustomerHistoryObservation } from "../../../shared/customerChurn";
 import { isStrategyFeatureEnabled, STRATEGY_FLAGS } from "../../../shared/strategyFeatureFlags";
 import { requiresSpendClearance } from "../../strategy/spendClearance";
 import {
@@ -214,18 +217,28 @@ export async function ensureOperatorBoard(input: {
   const rules = await loadDoctrine(input.tenantId, input.operatorUserId);
   let created = 0;
 
+  const verifiedHistoryByIdentity = new Map<string, CustomerHistoryObservation[]>();
   let customers: CustomerEvidence[] = [];
   try {
-    const ledger = await loadPaidOrderLedger({
-      tenantId: input.tenantId,
-      startUtc: zonedDayStartUtc("2020-01-01", timeZone),
-      endExclusiveUtc: new Date(now + 86_400_000),
-      timeZone,
-    });
+    const [ledger, safetyEvidence] = await Promise.all([
+      loadPaidOrderLedger({
+        tenantId: input.tenantId,
+        startUtc: zonedDayStartUtc("2020-01-01", timeZone),
+        endExclusiveUtc: new Date(now + 86_400_000),
+        timeZone,
+      }),
+      loadRecoverySafetyEvidence({
+        tenantId: input.tenantId,
+        now: new Date(now),
+        cooldownDays: rules.outreachCooldownDays,
+      }).catch(() => null),
+    ]);
     customers = groupCustomers(reconcileLedgerSpan(ledger, { start: "2020-01-01", end: today }).includedEvents)
       .filter(group => group.matched && group.records.some(record => record.cents > 0))
       .map(group => {
         const sorted = group.records.filter(record => record.cents > 0).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+        const history = observedChurnHistory(sorted);
+        if (history) verifiedHistoryByIdentity.set(group.identityId, history);
         const last = sorted[sorted.length - 1]!;
         const intervals = sorted
           .slice(1)
@@ -233,6 +246,14 @@ export async function ensureOperatorBoard(input: {
           .filter(days => days > 0 && days <= 120);
         const cadence = intervals.length ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length) : null;
         const name = [...sorted].reverse().find(record => record.customerName)?.customerName ?? "an unnamed customer";
+        const safety = safetyEvidence ? deriveRecoverySafety({
+          tenantId: input.tenantId,
+          identityKeys: [group.identityId],
+          nativeOrders: safetyEvidence.nativeOrders,
+          coverage: safetyEvidence.coverage,
+          recoveries: safetyEvidence.recoveries,
+          communications: safetyEvidence.communications,
+        }) : null;
         return {
           identityKey: group.identityId,
           displayName: name,
@@ -240,9 +261,9 @@ export async function ensureOperatorBoard(input: {
           lastPaidOn: last.businessDate,
           daysSinceLastPaid: Math.max(0, daysBetween(today, last.businessDate)),
           expectedCadenceDays: cadence,
-          openOrderCount: 0,
-          lastOutreachOn: null,
-          attestedOutreachOn: null,
+          openOrderCount: safety ? (safety.openOrderCount ?? (safety.unavailableReason ? 1 : 0)) : 0,
+          lastOutreachOn: safety?.lastOutreachOn ?? null,
+          attestedOutreachOn: safety?.attestedOutreachOn ?? null,
         };
       });
   } catch (error) {
@@ -273,16 +294,14 @@ export async function ensureOperatorBoard(input: {
     const current = await loadObligations(input.tenantId, input.operatorUserId);
     const check = isDormantEligible(customer, rules, today, current);
     if (!check.eligible) continue;
+    // Single-order, ambiguous-ID and incomplete histories cannot support a
+    // churn score. Never invent an order cadence, order IDs, or $50 purchases.
+    const history = verifiedHistoryByIdentity.get(customer.identityKey);
+    if (!history) continue;
     const score = scoreCustomerChurn({
       customerKey: customer.identityKey,
       customerName: customer.displayName,
-      history: Array.from({ length: Math.max(2, customer.paidOrderCount) }, (_, index) => ({
-        orderId: index + 1,
-        serviceAt: `${addDaysYmd(customer.lastPaidOn, -14 * (customer.paidOrderCount - index))}T12:00:00.000Z`,
-        valueCents: 5000,
-        weightLbs: null,
-        serviceType: "wash_fold" as const,
-      })),
+      history,
       now: new Date(`${today}T16:00:00.000Z`),
     });
     const draft = buildWinBackDraft({

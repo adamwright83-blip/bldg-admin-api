@@ -14,6 +14,8 @@ import {
   requireEffectiveOperatorIdentityForTenant,
   revokeOperatorIdentityAlias,
 } from "./identity";
+import { loadClaireAutonomyEvidence } from "./autonomyEvidence";
+import { evaluateClaireAutonomyReadiness } from "./earnedAutonomyReadiness";
 import { loadPersistentOperatorDiagnostics } from "./observability";
 import { operationReceipt } from "./operationReceipt";
 import {
@@ -65,6 +67,16 @@ export const persistentOperatorRouter = router({
       } catch (error) {
         identityFailure(error);
       }
+    }),
+
+  autonomyReadiness: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ exactAction: z.string().trim().min(1).max(128), standingAuthorizationId: z.string().uuid().optional() }))
+    .query(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({ tenantId: ctx.tenantId, user: ctx.user, subsystem: "persistent_operator.autonomy_readiness" });
+      const evidence = await loadClaireAutonomyEvidence({ ...input, tenantId: identity.tenantId,
+        canonicalOperatorId: identity.canonicalOperatorId, operatorUserId: identity.canonicalOpenId, requestedLevel: 2 });
+      return { ...evaluateClaireAutonomyReadiness(evidence), evidence,
+        unavailable: ["execution_path_certification", "current_source_coverage_certification", "revocation_certification", "critical_defect_register", "broader_autonomy_level_approval"] };
     }),
 
   diagnostics: legacyDayforgeTenantOperatorProcedure

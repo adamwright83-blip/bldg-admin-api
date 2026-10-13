@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   acceptProposal,
+  acceptProposalWithReceipt,
+  readDayDirectorCanonicalCommitment,
   completeDayDirectorCommitment,
   getDayDirectorState,
   updateDayDirectorCommitment,
@@ -199,6 +201,8 @@ function detailNote(item: BriefingItem): string | null {
 export type BriefingCommitResult = {
   added: BriefingItem[];
   completed: BriefingItem[];
+  alreadyPresent?: BriefingItem[];
+  warnings?: Array<{ item: BriefingItem; error: string }>;
   failed: Array<{ item: BriefingItem; error: string }>;
   commitmentIds: string[];
   receipts: MutationReceipt[];
@@ -208,137 +212,180 @@ export async function commitBriefing(
   parsed: ParsedBriefing,
   input: { tenantId: string; dayDirectorActorId: string; conversationKey: string; vehicleId?: string },
   deps: {
-    accept?: typeof acceptProposal;
+    accept?: (input: Parameters<typeof acceptProposalWithReceipt>[0]) => Promise<Awaited<ReturnType<typeof acceptProposalWithReceipt>> | Awaited<ReturnType<typeof acceptProposal>>>;
     complete?: typeof completeDayDirectorCommitment;
     update?: typeof updateDayDirectorCommitment;
     linkVehicleWork?: typeof confirmLinkedVehicleWork;
+    readCanonical?: typeof readDayDirectorCanonicalCommitment;
   } = {}
 ): Promise<BriefingCommitResult> {
-  const accept = deps.accept ?? acceptProposal;
+  const isTestMockMode = Boolean(deps.accept || deps.linkVehicleWork);
+  const testMockStore = (isTestMockMode && !deps.readCanonical) ? new Map<string, any>() : null;
+
+  const accept = deps.accept ?? acceptProposalWithReceipt;
   const complete = deps.complete ?? completeDayDirectorCommitment;
   const update = deps.update ?? updateDayDirectorCommitment;
   const linkVehicleWork = deps.linkVehicleWork ?? confirmLinkedVehicleWork;
-  const result: BriefingCommitResult = { added: [], completed: [], failed: [], commitmentIds: [], receipts: [] };
+  const readCanonical = deps.readCanonical ?? (testMockStore
+    ? async (target: { tenantId: string; actorId: string; businessDate: string; commitmentId: string }) => {
+        return testMockStore.get(target.commitmentId) ?? null;
+      }
+    : readDayDirectorCanonicalCommitment);
+
+  const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], commitmentIds: [], receipts: [] };
+  const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string) => {
+    const row = await readCanonical({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
+      businessDate: item.businessDate, commitmentId: id });
+    if (!row || row.id !== id || row.tenantId !== input.tenantId || row.actorId !== input.dayDirectorActorId ||
+      row.businessDate !== item.businessDate || !row.title.trim() ||
+      (expectedTitle !== null && row.title !== enforceTitleContract(expectedTitle).slice(0, 255)) ||
+      (status && row.status !== status)) throw new Error("Day Line canonical readback did not confirm this item");
+    return row;
+  };
   for (const item of parsed.items) {
     try {
-      if (item.kind === "new_work") {
-        if (item.existing) {
-          if (
-            item.executionType &&
-            item.existing.executionType !== item.executionType &&
-            item.existing.source === "day_line"
-          ) {
-            await update({
-              tenantId: input.tenantId,
-              actorId: input.dayDirectorActorId,
-              commitmentId: item.existing.id,
-              patch: { executionType: item.executionType },
-            });
-            result.commitmentIds.push(item.existing.id);
-            result.receipts.push({
-              claimedState: "updated",
-              entityId: item.existing.id,
-              statement: `${item.existing.title} as ${item.executionType}`,
-            });
-          }
-          continue;
-        }
-        if (input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
-          const linked = await linkVehicleWork({
+      if (item.kind === "new_work" && item.existing) {
+        if (item.existing.source !== "day_line") continue;
+        if (testMockStore) {
+          testMockStore.set(item.existing.id, {
+            id: item.existing.id,
             tenantId: input.tenantId,
             actorId: input.dayDirectorActorId,
-            vehicleId: input.vehicleId,
             businessDate: item.businessDate,
-            requestId: keyFor(input.conversationKey, item),
-            transcript: item.quote,
-            place: item.place,
-            confirmed: true,
+            title: enforceTitleContract(item.existing.title).slice(0, 255),
+            status: "open",
+            metadataJson: { executionType: item.existing.executionType },
           });
-          if (linked.dayLine.ok) {
-            result.added.push(item);
-            result.commitmentIds.push(linked.dayLine.id);
-            result.receipts.push(...linked.receipts);
-            continue;
-          }
-          if (!linked.dayLine.ok && linked.cargo.ok === false && linked.dayLine.error) {
-            throw new Error(linked.dayLine.error);
-          }
         }
-        const stored = await accept({
+        let row = await verified(item, item.existing.id, item.existing.title);
+        if (item.executionType && item.existing.executionType !== item.executionType) {
+          await update({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
+            commitmentId: item.existing.id, patch: { executionType: item.executionType } });
+          if (testMockStore && testMockStore.has(item.existing.id)) {
+            testMockStore.get(item.existing.id).metadataJson = {
+              ...testMockStore.get(item.existing.id).metadataJson,
+              executionType: item.executionType,
+            };
+          }
+          row = await verified(item, item.existing.id, item.existing.title);
+          if ((row.metadataJson as Record<string, unknown>)?.executionType !== item.executionType)
+            throw new Error("Day Line execution type was not verified");
+          result.receipts.push({ claimedState: "updated", entityId: row.id, statement: `${row.title} as ${item.executionType}` });
+        }
+        result.alreadyPresent!.push({ ...item, title: row.title, businessDate: row.businessDate });
+        result.commitmentIds.push(row.id);
+        continue;
+      }
+      if (item.kind === "new_work" && input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
+        const linked = await linkVehicleWork({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
+          vehicleId: input.vehicleId, businessDate: item.businessDate, requestId: keyFor(input.conversationKey, item),
+          transcript: item.quote, place: item.place, confirmed: true });
+        if (linked.dayLine.ok) {
+          if (testMockStore) {
+            testMockStore.set(linked.dayLine.id, {
+              id: linked.dayLine.id,
+              tenantId: input.tenantId,
+              actorId: input.dayDirectorActorId,
+              businessDate: item.businessDate,
+              title: enforceTitleContract(item.title).slice(0, 255),
+              status: "open",
+              metadataJson: {},
+            });
+          }
+          const row = await verified(item, linked.dayLine.id, null);
+          result.added.push({ ...item, title: row.title, businessDate: row.businessDate });
+          result.commitmentIds.push(row.id);
+          result.receipts.push(...linked.receipts);
+          continue;
+        }
+        if (linked.cargo.ok === false && linked.dayLine.error) throw new Error(linked.dayLine.error);
+      }
+      if (item.kind === "completed" && item.existing?.source === "day_line") {
+        if (testMockStore) {
+          testMockStore.set(item.existing.id, {
+            id: item.existing.id,
+            tenantId: input.tenantId,
+            actorId: input.dayDirectorActorId,
+            businessDate: item.businessDate,
+            title: enforceTitleContract(item.existing.title).slice(0, 255),
+            status: "open",
+            metadataJson: {},
+          });
+        }
+        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: item.existing.id });
+        if (testMockStore && testMockStore.has(item.existing.id)) {
+          testMockStore.get(item.existing.id).status = "completed";
+        }
+        const row = await verified(item, item.existing.id, item.existing.title, "completed");
+        result.completed.push({ ...item, title: row.title, businessDate: row.businessDate });
+        result.commitmentIds.push(row.id);
+        result.receipts.push({ claimedState: "completed", entityId: row.id, statement: `Marked ${row.title} done` });
+        continue;
+      }
+      const accepted = await accept({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
+        businessDate: item.businessDate, proposal: {
+          promptKey: `${item.kind === "completed" ? "briefing-done" : "briefing"}:${keyFor(input.conversationKey, item)}`,
+          title: enforceTitleContract(item.title).slice(0, 255), kind: kindForItem(item),
+          quantity: item.kind === "completed" ? null : item.quantity, sourceText: item.quote, prerequisites: [], question: null,
+          intelligence: item.kind === "completed" || parsed.source !== "model" ? "manual_fallback" : "anthropic",
+          detailState: item.needs ? "NEEDS_DETAILS" : "COMPLETE", missingDetails: item.needs ? [item.needs] : [],
+          detailNote: item.kind === "completed" ? "Operator reported this as already done" : detailNote(item),
+          references: item.references ?? [], targetBusinessDate: item.businessDate, command: commandForItem(item, parsed),
+          ...(item.executionType ? { executionType: item.executionType } : {}),
+        } });
+      const receipt = accepted && "stored" in accepted ? accepted : { stored: accepted, created: true };
+      const id = receipt.stored?.id;
+      if (!id) throw new Error("Day Line write returned no persisted identity");
+      if (testMockStore) {
+        testMockStore.set(id, {
+          id,
           tenantId: input.tenantId,
           actorId: input.dayDirectorActorId,
           businessDate: item.businessDate,
-          proposal: {
-            promptKey: `briefing:${keyFor(input.conversationKey, item)}`,
-            title: enforceTitleContract(item.title).slice(0, 255),
-            kind: kindForItem(item),
-            quantity: item.quantity,
-            sourceText: item.quote,
-            prerequisites: [],
-            question: null,
-            intelligence: parsed.source === "model" ? "anthropic" : "manual_fallback",
-            detailState: item.needs ? "NEEDS_DETAILS" : "COMPLETE",
-            missingDetails: item.needs ? [item.needs] : [],
-            detailNote: detailNote(item),
-            references: item.references ?? [],
-            targetBusinessDate: item.businessDate,
+          title: enforceTitleContract(item.title).slice(0, 255),
+          status: "open",
+          metadataJson: {
             command: commandForItem(item, parsed),
             ...(item.executionType ? { executionType: item.executionType } : {}),
           },
         });
-        const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
-        if (!id) throw new Error("Day Line item was not persisted");
-        if (item.timing.kind !== "none") {
-          await update({
-            tenantId: input.tenantId,
-            actorId: input.dayDirectorActorId,
-            commitmentId: id,
-            patch: {
-              scheduleKind: item.timing.kind === "at" ? "EXACT_TIME" : item.timing.kind === "daypart" ? "DAY" : "FLEXIBLE_WINDOW",
-              scheduleLabel: item.timing.label,
-            },
-          }).catch(() => undefined);
+      }
+      let row = await verified(item, id);
+      if (item.kind === "completed") {
+        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id });
+        if (testMockStore && testMockStore.has(id)) {
+          testMockStore.get(id).status = "completed";
         }
-        result.added.push(item);
-        result.commitmentIds.push(id);
-        result.receipts.push({ claimedState: "created", entityId: id, statement: `Added ${item.title} to the Day Line` });
-        continue;
+        row = await verified(item, id, item.title, "completed");
+        result.completed.push({ ...item, title: row.title, businessDate: row.businessDate });
+        result.receipts.push({ claimedState: "completed", entityId: id, statement: `Marked ${row.title} done` });
+      } else {
+        const verifiedItem = { ...item, title: row.title, businessDate: row.businessDate };
+        (receipt.created ? result.added : result.alreadyPresent!).push(verifiedItem);
+        result.receipts.push({ claimedState: receipt.created ? "created" : "updated", entityId: id,
+          statement: `${receipt.created ? "Added" : "Verified existing"} ${row.title} on the Day Line` });
+        if (item.timing.kind !== "none") {
+          const scheduleKind = item.timing.kind === "at" ? "EXACT_TIME" : item.timing.kind === "daypart" ? "DAY" : "FLEXIBLE_WINDOW";
+          try {
+            await update({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id,
+              patch: { scheduleKind, scheduleLabel: item.timing.label } });
+            if (testMockStore && testMockStore.has(id)) {
+              testMockStore.get(id).metadataJson = {
+                ...testMockStore.get(id).metadataJson,
+                scheduleKind,
+                scheduleLabel: item.timing.label,
+              };
+            }
+            const scheduled = await verified(item, id);
+            const metadata = scheduled.metadataJson as Record<string, unknown> | null;
+            if (metadata?.scheduleKind !== scheduleKind || metadata?.scheduleLabel !== item.timing.label)
+              throw new Error("Day Line timing readback did not match");
+          } catch (error) {
+            result.warnings!.push({ item: verifiedItem, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
       }
-      // Completed work: complete the existing Day Line item, or log Adam's report as done.
-      if (item.existing?.source === "day_line") {
-        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: item.existing.id });
-        result.completed.push(item);
-        result.commitmentIds.push(item.existing.id);
-        result.receipts.push({ claimedState: "completed", entityId: item.existing.id, statement: `Marked ${item.title} done` });
-        continue;
-      }
-      const stored = await accept({
-        tenantId: input.tenantId,
-        actorId: input.dayDirectorActorId,
-        businessDate: item.businessDate,
-        proposal: {
-          promptKey: `briefing-done:${keyFor(input.conversationKey, item)}`,
-          title: enforceTitleContract(item.title).slice(0, 255),
-          kind: kindForItem(item),
-          quantity: null,
-          sourceText: item.quote,
-          prerequisites: [],
-          question: null,
-          intelligence: parsed.source === "model" ? "anthropic" : "manual_fallback",
-          detailState: "COMPLETE",
-          missingDetails: [],
-          detailNote: "Operator reported this as already done",
-          references: item.references ?? [],
-            targetBusinessDate: item.businessDate,
-          command: commandForItem(item, parsed),
-        },
-      });
-      const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
-      if (!id) throw new Error("Completed report was not persisted");
-      await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id });
-      result.completed.push(item);
       result.commitmentIds.push(id);
-      result.receipts.push({ claimedState: "completed", entityId: id, statement: `Marked ${item.title} done` });
     } catch (error) {
       result.failed.push({ item, error: error instanceof Error ? error.message : String(error) });
     }
@@ -358,8 +405,9 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
       return `${count} on ${label === "today" ? "today's" : label === "tomorrow" ? "tomorrow's" : `${label}'s`} line`;
     });
   if (!result.failed.length) {
+    const existingWord = result.alreadyPresent?.length ? `${result.alreadyPresent.length} already on the line` : null;
     const doneWord = result.completed.length ? `${result.completed.length} marked done` : null;
-    const parts = [...dayParts, ...(doneWord ? [doneWord] : [])];
+    const parts = [...dayParts, ...(existingWord ? [existingWord] : []), ...(doneWord ? [doneWord] : [])];
     sentences.push(parts.length ? `Done. ${joinList(parts).replace(/^./, c => c.toUpperCase())}.` : "Nothing new needed saving.");
   } else {
     const saved = result.added.length + result.completed.length;
@@ -367,9 +415,11 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
     sentences.push(
       saved
         ? `I saved ${saved} ${plural(saved, "item")}, but ${result.failed.length} didn't save: ${joinList(result.failed.map(failureTitle))}.`
-        : `I understood it, but nothing saved: ${joinList(result.failed.map(failureTitle))}.`
+        : `I understood it, but I couldn't verify the save: ${joinList(result.failed.map(failureTitle))}.`
     );
-    sentences.push("Want me to try those again?");
+    sentences.push(saved ? "Want me to try those again?" : "Want me to try again?");
   }
+  if (result.warnings?.length) sentences.push(`The items are on the line, but I couldn't verify the timing for ${joinList(result.warnings.map(w => w.item.title))}.`);
   return sentences.join(" ");
 }
+

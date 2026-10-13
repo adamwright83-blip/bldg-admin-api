@@ -4,7 +4,6 @@ import {
   getActiveCustomerMetric,
   activeCustomerWindow,
   type ActiveCustomerLoaders,
-  type ActiveCustomerMetric,
 } from "../claire/activeCustomerMetric";
 import {
   interpretSourceCoverage,
@@ -35,11 +34,12 @@ export type ProvenanceRecord = {
 export type WeeklyTrendPoint = {
   weekIndex: number; // 0 is oldest (8 weeks ago), 7 is current
   weekEndingYmd: string;
-  count: number;
+  count: number | null;
 };
 
 export type StrategyActiveCustomersResult = {
-  count: number;
+  count: number | null;
+  completeness: ActiveCustomerMetricCompleteness;
   definition: string;
   windowStart: string;
   windowEnd: string;
@@ -52,43 +52,47 @@ export type UncertainCustomerReason = {
   reason: string;
 };
 
+type ActiveCustomerMetricCompleteness = "complete" | "partial" | "unavailable";
+
 export type StrategyGrowthMetricsResult = {
+  completeness: ActiveCustomerMetricCompleteness;
+  historicalCoverage: "complete" | "incomplete" | "unavailable";
   period: {
     startYmd: string;
     endYmd: string;
   };
   newPayingCustomers: {
-    count: number;
+    count: number | null;
     uncertainCount: number;
     uncertainReasons: UncertainCustomerReason[];
     provenance: ProvenanceRecord;
   };
   reactivatedCustomers: {
-    count: number;
+    count: number | null;
     inactivityDaysRule: number;
     provenance: ProvenanceRecord;
   };
   paidOrders: {
-    count: number;
+    count: number | null;
     provenance: ProvenanceRecord;
   };
   netSales: {
-    amountCents: number;
+    amountCents: number | null;
     isUncertain: boolean;
     uncertaintyReason: string | null;
     provenance: ProvenanceRecord;
   };
   repeatConversion: {
-    cohortSize: number;
-    repeatCount: number;
-    conversionRate: number;
+    cohortSize: number | null;
+    repeatCount: number | null;
+    conversionRate: number | null;
     observationWindowDays: number;
     provenance: ProvenanceRecord;
   };
   netActiveChange: {
-    change: number;
-    startActiveCount: number;
-    endActiveCount: number;
+    change: number | null;
+    startActiveCount: number | null;
+    endActiveCount: number | null;
     provenance: ProvenanceRecord;
   };
   computedAt: string;
@@ -138,12 +142,13 @@ export async function getStrategyActiveCustomers(
     trend.push({
       weekIndex: 7 - i,
       weekEndingYmd: zonedYmd(weekEndTime, timeZone),
-      count: pop.count,
+      count: ledger.completeness === "unavailable" ? null : pop.count,
     });
   }
 
   return {
-    count: currentMetric.value ?? 0,
+    count: currentMetric.value,
+    completeness: currentMetric.completeness,
     definition: currentMetric.definition,
     windowStart: currentMetric.windowStart,
     windowEnd: currentMetric.windowEnd,
@@ -167,7 +172,9 @@ export async function getStrategyGrowthMetrics(
     now?: Date;
     timeZone?: string;
     inactivityDays?: number;
+    /** Explicit fixture injection; never supplied by the production router. */
     mockEvents?: PaidOrderEvent[];
+    mockHistoryComplete?: boolean;
     unverifiedCustomers?: Set<string>;
   },
   loaders: LedgerLoaders = databaseLedgerLoaders
@@ -177,6 +184,7 @@ export async function getStrategyGrowthMetrics(
   const computedAt = (input.now ?? new Date()).toISOString();
 
   let events: PaidOrderEvent[];
+  let completeness: ActiveCustomerMetricCompleteness = "complete";
   let loadedSources: LedgerSource[] = [];
   let failedSources: LedgerSource[] = [];
   let provenExclusions: ProvenDuplicateExclusion[] = [];
@@ -196,6 +204,7 @@ export async function getStrategyGrowthMetrics(
       },
       loaders
     );
+    completeness = ledger.completeness;
     events = reconcileLedgerSpan(ledger, { start: "2020-01-01", end: input.period.endYmd }).includedEvents;
     loadedSources = ledger.loadedSources;
     failedSources = ledger.failedSources;
@@ -203,8 +212,19 @@ export async function getStrategyGrowthMetrics(
     unverifiedNative = ledger.unverifiedNative;
   }
 
-  // Resolve customer identities
-  const resolved = resolveCustomerIdentities(events, event => event.identity);
+  const coverageSnapshot = await loadRevenueSourceCoverage({ tenantId: input.tenantId, now: input.now });
+  const historyCoverage = interpretSourceCoverage({
+    snapshot: coverageSnapshot, window: { from: "2020-01-01", to: input.period.endYmd },
+    loadedSources, failedSources,
+  });
+  const historyComplete = input.mockEvents !== undefined
+    ? input.mockHistoryComplete !== false
+    : completeness === "complete" && historyCoverage.coverageAllowsExact;
+  const unavailable = completeness === "unavailable";
+
+  // Refunds and adjustments affect money but never create purchase/cohort activity.
+  const purchases = events.filter(event => event.cents > 0 && event.businessDate <= input.period.endYmd);
+  const resolved = resolveCustomerIdentities(purchases, event => event.identity);
 
   let newPayingCount = 0;
   let uncertainNewCount = 0;
@@ -225,7 +245,7 @@ export async function getStrategyGrowthMetrics(
       firstOrder.businessDate <= input.period.endYmd;
 
     const isCustomerUncertain =
-      !group.matched || (input.unverifiedCustomers?.has(group.id) ?? false);
+      !historyComplete || !group.matched || (input.unverifiedCustomers?.has(group.id) ?? false);
 
     if (isFirstInPeriod) {
       if (isCustomerUncertain) {
@@ -283,7 +303,6 @@ export async function getStrategyGrowthMetrics(
   });
   const paidOrdersCount = reconciledSales.exactIncludedOrderCount;
   const netSalesCents = reconciledSales.exactIncludedCents;
-  const coverageSnapshot = await loadRevenueSourceCoverage({ tenantId: input.tenantId });
   const salesCoverage = interpretSourceCoverage({
     snapshot: coverageSnapshot,
     window: { from: input.period.startYmd, to: input.period.endYmd },
@@ -313,9 +332,11 @@ export async function getStrategyGrowthMetrics(
   const repeatRate = cohortSize > 0 ? repeatCount / cohortSize : 0;
 
   return {
+    completeness,
+    historicalCoverage: unavailable ? "unavailable" : historyComplete ? "complete" : "incomplete",
     period: input.period,
     newPayingCustomers: {
-      count: newPayingCount,
+      count: unavailable || !historyComplete ? null : newPayingCount,
       uncertainCount: uncertainNewCount,
       uncertainReasons,
       provenance: {
@@ -326,7 +347,7 @@ export async function getStrategyGrowthMetrics(
       },
     },
     reactivatedCustomers: {
-      count: reactivatedCount,
+      count: unavailable || !historyComplete ? null : reactivatedCount,
       inactivityDaysRule,
       provenance: {
         sourceService: "server/strategy/growthMetrics.ts",
@@ -336,7 +357,7 @@ export async function getStrategyGrowthMetrics(
       },
     },
     paidOrders: {
-      count: paidOrdersCount,
+      count: unavailable ? null : paidOrdersCount,
       provenance: {
         sourceService: "server/analytics/canonicalRevenue.ts",
         queryOrDefinition: "Exact included orders from the canonical revenue read within the business-local period",
@@ -345,7 +366,7 @@ export async function getStrategyGrowthMetrics(
       },
     },
     netSales: {
-      amountCents: netSalesCents,
+      amountCents: unavailable ? null : netSalesCents,
       isUncertain: true,
       uncertaintyReason: [
         "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
@@ -369,9 +390,9 @@ export async function getStrategyGrowthMetrics(
       },
     },
     repeatConversion: {
-      cohortSize,
-      repeatCount,
-      conversionRate: repeatRate,
+      cohortSize: unavailable || !historyComplete ? null : cohortSize,
+      repeatCount: unavailable || !historyComplete ? null : repeatCount,
+      conversionRate: unavailable || !historyComplete ? null : repeatRate,
       observationWindowDays: Math.round(
         (Date.parse(`${input.period.endYmd}T00:00:00Z`) - Date.parse(`${input.period.startYmd}T00:00:00Z`)) /
           86_400_000
@@ -384,9 +405,9 @@ export async function getStrategyGrowthMetrics(
       },
     },
     netActiveChange: {
-      change: netChange,
-      startActiveCount: startPop.count,
-      endActiveCount: endPop.count,
+      change: unavailable ? null : netChange,
+      startActiveCount: unavailable ? null : startPop.count,
+      endActiveCount: unavailable ? null : endPop.count,
       provenance: {
         sourceService: "server/claire/activeCustomerMetric.ts",
         queryOrDefinition: "Net active customer change between period start and end",

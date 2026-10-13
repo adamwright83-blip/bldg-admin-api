@@ -2799,6 +2799,8 @@ await runRequired(
   )`,
   "CREATE TABLE behavioral_ledger_events"
 );
+await applyIdempotentSqlFile("../drizzle/0130_behavioral_presentation_assignment.sql", "Behavioral presentation assignment");
+await assertEnumContainsValues("behavioral_ledger_events", "eventType", ["ASSIGNED"]);
 await assertRequiredColumns("behavioral_ledger_events", [
   "tenantId", "operatorUserId", "correlationId", "sourceSystem",
   "sourceEntityType", "sourceEntityId", "eventType", "occurredAt",

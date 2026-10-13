@@ -122,6 +122,8 @@ export const BUSINESS_METRICS: readonly BusinessMetric[] = [
 ];
 
 export type BusinessQuery = {
+  /** Composable read-only calculation, resolved through this same canonical port. */
+  calculation?: import("./governedBusinessQuery").GovernedBusinessPlan;
   metric: BusinessMetric;
   period: PeriodSpec;
   /** "previous" = the comparable period right before `period`. */
@@ -218,6 +220,7 @@ export type BusinessCoverage = {
 };
 
 export type BusinessResultData =
+  | { kind: "calculation"; calculation: import("./governedBusinessQuery").GovernedCalculation }
   | {
       kind: "totals";
       current: RevenueTotals;
@@ -246,6 +249,7 @@ export type BusinessResultData =
 export type BusinessQueryResult =
   | {
       status: "unavailable";
+      tenantId?: string;
       query: BusinessQuery;
       period: ResolvedPeriod;
       comparisonPeriod: ResolvedPeriod | null;
@@ -253,6 +257,7 @@ export type BusinessQueryResult =
     }
   | {
       status: "ok";
+      tenantId?: string;
       query: BusinessQuery;
       period: ResolvedPeriod;
       comparisonPeriod: ResolvedPeriod | null;
@@ -384,6 +389,7 @@ export async function runBusinessQuery(
         : null;
   const unavailable = (reason: string): BusinessQueryResult => ({
     status: "unavailable",
+    tenantId,
     query,
     period,
     comparisonPeriod,
@@ -391,10 +397,18 @@ export async function runBusinessQuery(
   });
 
   try {
+    if (query.calculation) {
+      const { runGovernedBusinessPlan } = await import("./governedBusinessQuery");
+      const calculation = await runGovernedBusinessPlan({ tenantId, query, now, timeZone,
+        runQuery: (authorizedTenant, observationQuery) => runBusinessQuery(authorizedTenant, observationQuery, deps) });
+      return { status: "ok", tenantId, query, period, comparisonPeriod, coverage: null,
+        data: { kind: "calculation", calculation } };
+    }
     if (query.metric === "open_orders") {
       const stats = await deps.loadOpenOrders(tenantId);
       return {
         status: "ok",
+        tenantId,
         query,
         period,
         comparisonPeriod: null,
@@ -405,6 +419,7 @@ export async function runBusinessQuery(
     if (query.metric === "data_coverage") {
       return {
         status: "ok",
+        tenantId,
         query,
         period,
         comparisonPeriod: null,
@@ -416,6 +431,7 @@ export async function runBusinessQuery(
       const loader = deps.loadFreshness ?? loadDataFreshness;
       return {
         status: "ok",
+        tenantId,
         query,
         period,
         comparisonPeriod: null,
@@ -476,6 +492,7 @@ export async function runBusinessQuery(
     };
     const ok = (data: BusinessResultData): BusinessQueryResult => ({
       status: "ok",
+      tenantId,
       query,
       period,
       comparisonPeriod,

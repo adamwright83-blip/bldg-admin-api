@@ -20,7 +20,7 @@ import {
 } from "./snapshotBuilder";
 import { getTodayFeaturedOperation } from "./todayFeaturedService";
 import { getOrCreatePathOffer, getStrategyPlayById } from "./playGenerator";
-import { chooseStrategicPath, getActiveStrategicPath } from "./pathChoiceService";
+import { chooseStrategicPath, readActiveStrategicPath } from "./pathChoiceService";
 import { sequenceDailyMissions, getSequencedMissionsForDate } from "./missionSequencer";
 import {
   checkCommunicationPermission,
@@ -126,9 +126,9 @@ export const strategyRouter = router({
 
   snapshot: router({
     latest: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
-      let snapshot = await getLatestStrategySnapshot(ctx.tenantId);
+      let snapshot = await getLatestStrategySnapshot(ctx.tenantId, { operatorUserId: ctx.user.openId, now: new Date() });
       if (!snapshot) {
-        snapshot = await buildStrategySnapshot(ctx.tenantId);
+        snapshot = await buildStrategySnapshot(ctx.tenantId, { operatorUserId: ctx.user.openId });
       }
       return snapshot;
     }),
@@ -154,7 +154,7 @@ export const strategyRouter = router({
 
   plays: router({
     offer: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
-      return getOrCreatePathOffer(ctx.tenantId);
+      return getOrCreatePathOffer(ctx.tenantId, { operatorUserId: ctx.user.openId });
     }),
 
     choose: legacyDayforgeTenantOperatorProcedure
@@ -177,7 +177,7 @@ export const strategyRouter = router({
       }),
 
     active: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
-      const activePlayId = getActiveStrategicPath(ctx.tenantId);
+      const activePlayId = await readActiveStrategicPath(ctx.tenantId);
       return { activePlayId };
     }),
   }),
@@ -191,9 +191,9 @@ export const strategyRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        let snapshot = await getLatestStrategySnapshot(ctx.tenantId);
+        let snapshot = await getLatestStrategySnapshot(ctx.tenantId, { operatorUserId: ctx.user.openId, now: new Date() });
         if (!snapshot) {
-          snapshot = await buildStrategySnapshot(ctx.tenantId);
+          snapshot = await buildStrategySnapshot(ctx.tenantId, { operatorUserId: ctx.user.openId });
         }
         return sequenceDailyMissions({
           tenantId: ctx.tenantId,

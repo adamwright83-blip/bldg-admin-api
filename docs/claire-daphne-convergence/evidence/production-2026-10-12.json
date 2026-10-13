@@ -1,0 +1,485 @@
+{
+  "schemaVersion": 1,
+  "observedAtUtc": "2026-10-12",
+  "userTimeZone": "America/Los_Angeles",
+  "mode": "read_only_production_inspection",
+  "sources": [
+    {
+      "kind": "Railway MCP",
+      "reads": [
+        "list_projects",
+        "list_services",
+        "get_status",
+        "list_deployments",
+        "get_service_config",
+        "list_domains",
+        "list_variables",
+        "get_logs",
+        "get_tracing"
+      ]
+    },
+    {
+      "kind": "Railway CLI 5.66.0",
+      "reads": [
+        "whoami --json",
+        "variable list --json with strict allowlist filtering",
+        "ssh selected runtime flags",
+        "ssh mysql2 SELECT statements inside SET TRANSACTION READ ONLY / START TRANSACTION / ROLLBACK"
+      ],
+      "note": "Secret values, phone numbers, email addresses, and recording URLs were not emitted or persisted. Customer names in incident evidence are replaced with stable placeholders."
+    }
+  ],
+  "scope": {
+    "projectId": "293ee4d1-ee4f-4701-8a56-18ad120009a2",
+    "environmentId": "330bff45-7d21-4cdf-be04-b38cea76fcfb",
+    "serviceId": "9d63863a-2626-47a0-bd65-c3ba8db54258"
+  },
+  "deployment": {
+    "id": "2af5f3e4-2612-485a-9572-e70a6c831b30",
+    "status": "SUCCESS",
+    "createdAtUtc": "2026-10-12T18:01:42.585Z",
+    "branch": "main",
+    "gitSha": "870defd95a2381594c2ada6a292895ae5310a83d",
+    "commitSubject": "Add reviewed CleanCloud intake from Goldline (#561)",
+    "runtimeGitShaConfirmed": true,
+    "startCommand": "node scripts/migrate.mjs && NODE_ENV=production node dist/index.js",
+    "domains": [
+      "admin.bldg.chat",
+      "driver.bldg.chat"
+    ],
+    "tracing": {
+      "autoInstrumentationActive": false,
+      "autoInstrumentationEnabled": false,
+      "id": "9d63863a-2626-47a0-bd65-c3ba8db54258",
+      "name": "bldg-admin-api",
+      "tracingEnabled": false
+    }
+  },
+  "flags": {
+    "NODE_ENV": "production",
+    "OWNER_OPEN_ID": "adam-admin",
+    "CLAIRE_BRAIN_V2_LIVE": "1",
+    "CLAIRE_BRAIN_V2_SHADOW": "0",
+    "CLAIRE_PROGRESSION": "default,goldline",
+    "CLAIRE_PROGRESSION_CONTINUITY_REVIEWED": "1",
+    "CLAIRE_TWILIO_CONVERSATION_RELAY": "true",
+    "CLAIRE_TWILIO_RELAY_TTS_PROVIDER": "Amazon",
+    "CLAIRE_TWILIO_RELAY_VOICE": "Amy",
+    "CLAIRE_VOICE_RECORDING_ENABLED": "true",
+    "CLAIRE_XAI_TTS_ENABLED": "true",
+    "DAPHNE_V2_CLAIRE_ENABLED": "true",
+    "DAPHNE_V2_CLAIRE_TENANTS": "<unset>",
+    "DAPHNE_V2_CONVERSATION_INGESTION_ENABLED": "true",
+    "DAPHNE_V2_CONVERSATION_INGESTION_TENANTS": "default",
+    "DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED": "true",
+    "DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS": "default",
+    "DAPHNE_V2_CAUSAL_CANARY_ENABLED": "<unset>",
+    "DAPHNE_V2_CAUSAL_CANARY_TENANTS": "<unset>",
+    "CLAIRE_OPERATOR_CONTEXT_SHADOW_ENABLED": "<unset>",
+    "CLAIRE_OPERATOR_CONTEXT_ADAPTATION_ENABLED": "<unset>",
+    "CLAIRE_TRANSCRIPT_LOG_SCOPES": "default:adam-admin",
+    "CLAIRE_TRANSCRIPT_TEXT_SCOPES": "default:adam-admin",
+    "GOLDLINE_DEMO_BYPASS": "false",
+    "JOYSTICK_DRIVER_PUBLIC_ACCESS": "1"
+  },
+  "credentialPresenceOnly": [
+    "DATABASE_URL",
+    "ADMIN_PASSWORD",
+    "DRIVER_PASSWORD",
+    "JWT_SECRET",
+    "JWT_SHARED_SECRET",
+    "ANTHROPIC_API_KEY",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "CLAIRE_OPERATOR_PHONE"
+  ],
+  "operatorPhoneMapConfigured": false,
+  "identity": {
+    "persisted": [
+      {
+        "id": 1,
+        "tenantId": "default",
+        "openId": "adam-admin",
+        "role": "admin",
+        "loginMethod": "password",
+        "lastSignedIn": "2026-10-12T22:16:44.000Z"
+      },
+      {
+        "id": 67402,
+        "tenantId": "default",
+        "openId": "driver-primary",
+        "role": "driver",
+        "loginMethod": "public_acceptance_test",
+        "lastSignedIn": "2026-10-12T05:14:46.000Z"
+      }
+    ],
+    "phoneOwnerOpenId": "adam-admin",
+    "claireScope": {
+      "tenantId": "default",
+      "operatorUserId": "adam-admin"
+    },
+    "dayDirectorActorId": "1",
+    "canonicalOperatorId": "tenant:default:operator:adam-admin",
+    "sharedDriver": {
+      "tenantId": "default",
+      "openId": "driver-primary",
+      "dayDirectorActorId": "67402",
+      "role": "driver"
+    },
+    "authSource": "server/_core/index.ts /api/auth/login binds role to configured OWNER_OPEN_ID or DRIVER_OPEN_ID; body tenant/operator identifiers ignored. /api/auth/public-driver is enabled on production Railway and driver.bldg.chat hosts.",
+    "inboundSource": "server/claire/claireTwilio.ts resolves incoming phone against OWNER_OPEN_ID when CLAIRE_OPERATOR_PHONES is absent, verifies persisted user, obtains String(user.id) for Day Director.",
+    "standingAuthority": [
+      {
+        "tenantId": "default",
+        "canonicalOperatorId": "tenant:default:operator:adam-admin",
+        "operatorUserId": "adam-admin",
+        "channel": "call",
+        "recipientClass": "authorized_operator",
+        "exactAction": "claire.weekly_planning.call",
+        "dailyLimit": 1,
+        "timeZone": "America/Los_Angeles",
+        "version": 1,
+        "revokedAt": null
+      }
+    ]
+  },
+  "incident": {
+    "localDate": "2026-10-11",
+    "localStart": "18:00",
+    "incidentGitSha": "e226bd9ad098eae9f104fec22d2a86d1728921a7",
+    "sessions": [
+      {
+        "id": "06675520-ff63-447a-b59c-b5782e473bf1",
+        "tenantId": "default",
+        "operatorUserId": "adam-admin",
+        "providerCallSid": "CA47f48192852c46048af3633bab294e95",
+        "claireConversationId": "d6920e1f-2bd4-48ff-9232-10d6c8333e06",
+        "conversationKind": "weekly_planning_invite",
+        "status": "complete",
+        "completionReason": "remote_hangup",
+        "recordingStatus": "complete",
+        "transcriptionStatus": "failed",
+        "analysisStatus": "complete",
+        "notificationStatus": "sent",
+        "recordingConsent": "dogfood_explicit",
+        "gitSha": "e226bd9ad098eae9f104fec22d2a86d1728921a7",
+        "startedAt": "2026-10-12T01:00:10.000Z",
+        "endedAt": "2026-10-12T01:00:35.000Z"
+      },
+      {
+        "id": "80a1df59-daa7-444b-b524-f54d3d553459",
+        "tenantId": "default",
+        "operatorUserId": "adam-admin",
+        "providerCallSid": "CA69b16e6d2b171d2baee44b2c069f6737",
+        "claireConversationId": "5566000a-8da8-4939-a443-0cf2c0b050b0",
+        "conversationKind": "evening_planning",
+        "status": "complete",
+        "completionReason": "closing_phrase",
+        "recordingStatus": "pending",
+        "transcriptionStatus": "pending",
+        "analysisStatus": "pending",
+        "notificationStatus": "pending",
+        "recordingConsent": "dogfood_explicit",
+        "gitSha": "e226bd9ad098eae9f104fec22d2a86d1728921a7",
+        "startedAt": "2026-10-12T01:00:55.000Z",
+        "endedAt": "2026-10-12T01:05:44.000Z"
+      }
+    ],
+    "appointments": [
+      {
+        "id": "19d6b24f-093e-4d97-ada6-ea64875ef250",
+        "tenantId": "default",
+        "canonicalOperatorId": "tenant:default:operator:adam-admin",
+        "operatorUserId": "adam-admin",
+        "appointmentKind": "sunday_weekly_planning",
+        "weekStart": "2026-10-12",
+        "scheduledFor": "2026-10-12T01:00:00.000Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "standing_weekly_authorization",
+        "status": "completed",
+        "attemptCount": 1,
+        "maxAttempts": 3,
+        "callDispatchStartedAt": "2026-10-12T01:00:06.529Z",
+        "callSid": "CA47f48192852c46048af3633bab294e95",
+        "calendarStatus": null,
+        "followupTextSentAt": null,
+        "lastError": null,
+        "completedAt": "2026-10-12T01:00:10.778Z"
+      }
+    ],
+    "chronology": [
+      {
+        "atUtc": "2026-10-12T01:00:10.000Z",
+        "event": "weekly_planning_invite",
+        "detail": "Claire invited weekly planning. Invite hung up at 01:00:35Z."
+      },
+      {
+        "atUtc": "2026-10-12T01:00:10.778Z",
+        "event": "appointment_completed",
+        "detail": "Weekly appointment status completed immediately after successful dispatch; it does not certify weekly plan completion."
+      },
+      {
+        "atUtc": "2026-10-12T01:00:55.000Z",
+        "event": "inbound_callback",
+        "detail": "Callback 20 seconds after invite ended persisted as evening_planning, not weekly_planning."
+      },
+      {
+        "atUtc": "2026-10-12T01:01:12.000Z",
+        "event": "lineage_lost",
+        "operator": "Hey. You just called me to plan our Sunday.",
+        "claire": "That's backwards — you opened this one. Either way, it's Sunday evening and the day's done. What are we planning?"
+      },
+      {
+        "atUtc": "2026-10-12T01:01:21.814Z",
+        "event": "tone_fallback_replaced_intent",
+        "reason": "failure_day_tone:ceo_language",
+        "detail": "Response to Sunday weekly-meeting request replaced with stale account-contact disclaimer unrelated to week planning.",
+        "path": "fallback",
+        "routeMs": 9319,
+        "firstTokenMs": 7517,
+        "promptChars": 13735
+      },
+      {
+        "atUtc": "2026-10-12T01:02:03.713Z",
+        "event": "brain_v2_live_failed",
+        "reason": "Brain V2 Day Line grant scope did not resolve to executable work",
+        "operator": "Have [Customer A] and I have [Customer B]. [Customer A] lives in Silver Lake, [Customer B variant] lives in Silver Lake. And I also have to already picked up [Customer C]'s order today, but I have to process process that tomorrow.",
+        "claire": "I couldn't verify that action completed, so I won't retry it through another path."
+      },
+      {
+        "atUtc": "2026-10-12T01:02:47.748Z",
+        "event": "commit_day_line",
+        "operator": "Add [Customer A] and [Customer B] to the day line",
+        "adapterKind": "briefing_saved",
+        "actionIdCount": 1,
+        "mutationReceiptCount": 1,
+        "receiptBackedCommit": true,
+        "detail": "Transcript persists operator utterance with no intervening Claire reply before next operator turn. Database has one literal pseudo-task on Sunday, no quantity and no references."
+      },
+      {
+        "atUtc": "2026-10-12T01:05:44.065Z",
+        "event": "premature_close",
+        "operator": "To finish Kingdom one. So I think I have like, three high-rises left. I need to go to",
+        "claire": "You've got it. Drive safe.",
+        "completionReason": "closing_phrase"
+      }
+    ],
+    "dayLineWritesDuringCall": [
+      {
+        "id": "f319771c-409d-4b59-a4de-5842f87595b4",
+        "tenantId": "default",
+        "actorId": "1",
+        "businessDate": "2026-10-11",
+        "title": "Add [Customer A] and [Customer B] to day",
+        "kind": "operations",
+        "quantity": null,
+        "provenance": "manual",
+        "status": "open",
+        "sourceText": "Add [Customer A] and [Customer B] to the day line",
+        "metadataJson": {
+          "command": {
+            "role": null,
+            "cargoLink": null,
+            "demotedAt": null,
+            "promisedTo": null,
+            "constraints": {
+              "windowEnd": null,
+              "windowStart": null,
+              "scheduleLabel": null
+            },
+            "designatedAt": null,
+            "designatedBy": null,
+            "demotedReason": null,
+            "identityUnknown": false,
+            "promisedDeadline": null,
+            "recurrenceRuleId": null
+          },
+          "detailNote": null,
+          "references": [],
+          "detailState": "COMPLETE",
+          "intelligence": "manual_fallback",
+          "prerequisites": [],
+          "missingDetails": []
+        },
+        "createdAt": "2026-10-12T01:02:47.000Z"
+      }
+    ],
+    "generationRows": [
+      {
+        "id": 371,
+        "operatorUserId": "adam-admin",
+        "generationKind": "opening_brief",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:00:10.000Z"
+      },
+      {
+        "id": 372,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:01:12.000Z"
+      },
+      {
+        "id": 373,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "fallback",
+        "fallbackReason": "failure_day_tone:ceo_language",
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:01:21.000Z"
+      },
+      {
+        "id": 374,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:01:46.000Z"
+      },
+      {
+        "id": 375,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:02:32.000Z"
+      },
+      {
+        "id": 376,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:03:18.000Z"
+      },
+      {
+        "id": 377,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:04:18.000Z"
+      },
+      {
+        "id": 378,
+        "operatorUserId": "adam-admin",
+        "generationKind": "follow_up",
+        "generationSource": "model",
+        "fallbackReason": null,
+        "answerPath": null,
+        "businessReader": null,
+        "rendererProse": null,
+        "surface": null,
+        "turnKind": null,
+        "modelRequested": null,
+        "modelServed": null,
+        "promptChars": null,
+        "createdAt": "2026-10-12T01:05:22.000Z"
+      }
+    ],
+    "daphnePreferences": [
+      {
+        "canonicalOperatorId": "tenant:default:operator:adam-admin",
+        "preferenceKey": "response_detail",
+        "valueJson": 0.2,
+        "version": 1,
+        "status": "active",
+        "createdAt": "2026-10-08T20:26:32.183Z"
+      }
+    ],
+    "assessment": [
+      "Invite-to-callback weekly context was not retained.",
+      "Tone fallback discarded the active weekly-planning intent.",
+      "BrainV2 grant could not resolve multi-item work.",
+      "A single committed literal utterance on Sunday did not implement Monday planning.",
+      "Speech delivery was incomplete after receipt-backed commit.",
+      "Premature closing phrase interrupted ongoing sales-planning intent.",
+      "Callback post-call pipeline remains pending at inspection.",
+      "Persisted generation path/model fields are null although bounded runtime logs report them.",
+      "CleanCloud runtime logs at 01:00:40Z show stale coverage and rejected direct-sync login; current imported history cannot be assumed complete."
+    ]
+  },
+  "acceptanceSetup": {
+    "notRun": true,
+    "existingIsolatedDatabaseService": {
+      "name": "mysql-codex-test",
+      "serviceId": "8dd7e175-5833-4f4d-952c-477d080d8a18",
+      "status": "SUCCESS"
+    },
+    "realProviderModelObserved": "claude-sonnet-4-6",
+    "providerCredentialConfigured": true,
+    "deliveryTransportObserved": "ConversationRelay (Amazon/Amy)",
+    "safeNextSteps": [
+      "Use the integrated local worktree with real orchestration and provider credentials injected into subprocess memory; never write or print credentials.",
+      "Point DATABASE_URL explicitly at the existing isolated test MySQL database before importing application modules. Do not inherit production DATABASE_URL.",
+      "Use synthetic test tenant/operator records with no registered phone number; replace all Twilio/SMS/email transport adapters with recording fakes.",
+      "Exercise invite, inbound callback, interrupted utterance, request ambiguity, durable Day Line writes and dates/counts, voice response delivery, and post-call pipeline.",
+      "Run real model acceptance only after verifying all mutation/telemetry/adaptation write paths target the isolated DB and all outbound communications are disabled.",
+      "An existing scripts/claire-oral-exam-live.ts read-only label alone is insufficient certification; it stubs some writes, and all default hooks still require an isolation review."
+    ]
+  },
+  "unknowns": [
+    "No new real telephone call or external model evaluation was performed in this read-only inspection.",
+    "No production variable, deployment, data, file, scheduler, or communication mutation was performed.",
+    "Production SHA currently remains the pre-convergence main SHA; local integration behavior must not be reported as deployed.",
+    "Current production configuration lacks Railway tracing; log and SQL evidence were used instead.",
+    "Model acceptance, audio delivery, integrated UI persistence, complete generalized metrics, proactive growth and adaptive fantasy learning still require acceptance by the integration owner."
+  ]
+}

@@ -1,5 +1,8 @@
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import { planGovernedBusinessQuestion, type GovernedCalculation } from "./governedBusinessQuery";
+import { runBusinessQuery, type BusinessQuery } from "./businessQuery";
+import { speakBusinessResult } from "../claire/business/businessSpeech";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { addDaysYmd } from "./businessPeriods";
 import {
@@ -60,6 +63,7 @@ export type ComposerHeadline = {
 };
 
 export type ComposerAnswer = {
+  calculation?: GovernedCalculation;
   answer: string;
   headline: ComposerHeadline | null;
   chart: ComposerChart | null;
@@ -121,12 +125,15 @@ export type ComposerDeps = {
   invokeLLM: typeof invokeLLM;
   liveSource: AnalyticsSource;
   demoSource: AnalyticsSource;
+  runBusinessQuery?: typeof runBusinessQuery;
+  planCalculation?: typeof planGovernedBusinessQuestion;
 };
 
 export const defaultComposerDeps: ComposerDeps = {
   invokeLLM,
   liveSource,
   demoSource,
+  runBusinessQuery,
 };
 
 // ── Date validation / clamping (Step 2) ───────────────────────────────────────
@@ -250,6 +257,12 @@ type QueryResults = {
 
 function formatCurrency(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatGovernedValue(value: number, unit: string | null): string {
+  if (unit === "currency" || unit?.startsWith("currency_per_")) return formatCurrency(value);
+  if (unit === "percent") return `${Math.round(value * 100) / 100}%`;
+  return String(Math.round(value * 10000) / 10000);
 }
 
 function isoDate(date: Date): string {
@@ -615,11 +628,15 @@ async function executeMetrics(
   const needsRepeat = ids.has("repeat_customer_count");
   const needsCustomerRevenue = ids.has("top_customer_revenue");
   const needsCompleteness = plan.intent === "completeness";
-  const needsComparison = plan.compareToPrevious;
+  const comparisonMetricId = plan.metricIds.find(id => METRICS[id]?.supportsComparison);
+  const needsComparison = plan.compareToPrevious && Boolean(comparisonMetricId);
 
   const groupBy = plan.groupBy;
 
   const unavailable = results.unavailable;
+  if (plan.compareToPrevious && !comparisonMetricId) {
+    unavailable.push("comparison for the requested metric");
+  }
   const [revenue, stats, openOrders, repeatCustomers, customerRevenue, comparison, completeness] =
     await Promise.all([
       settle("revenue", needsRevenue, () => source.getRevenueSummary(tenantId, { range, groupBy }), unavailable),
@@ -637,7 +654,7 @@ async function executeMetrics(
         needsComparison,
         () =>
           source.getMetricComparison(tenantId, {
-            metricId: plan.metricIds.find((id) => METRICS[id]?.supportsComparison) ?? "revenue_paid_stripe",
+            metricId: comparisonMetricId!,
             currentRange: range,
             groupBy,
           }),
@@ -696,6 +713,25 @@ export async function runBoardMeetingSummary(
   const today = businessTodayYmd();
   const model = ENV.anthropicModel;
   const source = demoMode ? deps.demoSource : deps.liveSource;
+  const question = "Board meeting summary";
+
+  const calculationQuery = await (deps.planCalculation ?? planGovernedBusinessQuestion)({ question, invoke: deps.invokeLLM });
+  if (calculationQuery) {
+    const metricIds = calculationQuery.calculation!.observations.map(item => item.metricId).filter(id => Object.hasOwn(METRICS, id));
+    const result = demoMode ? null : await (deps.runBusinessQuery ?? runBusinessQuery)(tenantId, calculationQuery);
+    const calculation = result?.status === "ok" && result.data.kind === "calculation" ? result.data.calculation : null;
+    const cell = calculation?.cells.find(item => item.value != null);
+    const dateRange = result ? { start: result.period.start, end: result.period.end } : normalizeRange({});
+    const meta = { ...buildQueryMeta(metricIds, tenantId, demoMode), dateRange,
+      includedSources: calculation ? calculation.observations.flatMap(item => item.sourceRef ? [item.sourceRef] : []) : [] };
+    return { calculation: calculation ?? undefined,
+      answer: result ? speakBusinessResult(result, { surface: "text", previous: null, refinement: false, utterance: question, today,
+        timeZone: getDashboardTimeZone(), disclosed: [] }).text : "I can't calculate this from canonical business evidence in demo mode.",
+      headline: cell ? { label: `${cell.precision === "recorded_only" ? "Recorded: " : ""}${cell.label}`, value: formatGovernedValue(cell.value!, cell.unit) } : null,
+      chart: null,
+      table: calculation ? { columns: ["Calculation", "Value", "Precision", "Evidence"], rows: calculation.cells.map(item => [item.label, item.value == null ? "Unavailable" : formatGovernedValue(item.value, item.unit), item.precision, item.reason ?? item.sourceRefs.join(", ")]) } : null,
+      actions: [], meta };
+  }
 
   // Business-local Monday of this week → today
   const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
@@ -843,14 +879,27 @@ export async function runComposerTurn(
     typeof planContent === "string" ? planContent : JSON.stringify(planContent)
   );
 
-  // Validate metric IDs against registry (drop unknown ones, fallback to revenue).
+  // Never silently answer an unsupported question with revenue. The metric
+  // registry is a safety boundary, not permission to replace the user's intent.
   const validMetricIds = rawPlan.metricIds.filter((id) => METRICS[id]);
+  const unknownMetricIds = rawPlan.metricIds.filter((id) => !METRICS[id]);
   const inferredTopCustomer = isTopCustomerQuestion(question);
-  const metricIds = inferredTopCustomer
-    ? ["top_customer_revenue"]
-    : validMetricIds.length > 0
-      ? validMetricIds
-      : ["revenue_paid_stripe"];
+  if (
+    rawPlan.intent !== "completeness" &&
+    !inferredTopCustomer &&
+    (validMetricIds.length === 0 || unknownMetricIds.length > 0)
+  ) {
+    const range = normalizeRange(rawPlan.range);
+    return {
+      answer: "I can't calculate that metric from the connected data yet. I won't substitute revenue or guess a number.",
+      headline: null,
+      chart: null,
+      table: null,
+      actions: [],
+      meta: { ...buildQueryMeta(validMetricIds, tenantId, demoMode), dateRange: range },
+    };
+  }
+  const metricIds = inferredTopCustomer ? ["top_customer_revenue"] : validMetricIds;
   const plan: PlannerOutput = { ...rawPlan, metricIds };
 
   // Clamp/validate date range.

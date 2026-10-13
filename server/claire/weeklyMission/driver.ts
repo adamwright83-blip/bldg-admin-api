@@ -24,7 +24,8 @@ import { readWeeklyDossierFacts, readWeeklyGrowthCandidatesForDossier } from "./
 import { routeActiveWeeklySession } from "./route";
 import { completeWeeklyActWithClaire } from "./weeklyModel";
 import {
-  loadWeeklySession,
+  bindWeeklyAppointmentLineage,
+  loadWeeklySessionForScope,
   loadWeeklySurface,
   newWeeklySession,
   saveWeeklySurface,
@@ -44,6 +45,8 @@ export type WeeklyDriverScope = {
   now?: Date;
   /** Durable appointments can plan the coming Monday-Friday while called on Sunday. */
   weekStartOverride?: string;
+  weeklyPlanningSourceReference?: string | null;
+  weeklyPlanningAppointmentId?: string | null;
 };
 
 export type WeeklyDriverDeps = {
@@ -65,9 +68,10 @@ function identityPairs(scope: WeeklyDriverScope): Array<{
   operatorId: string;
   dayDirectorActorId: string;
 }> {
-  const candidates = scope.operatorIdentities?.length
-    ? scope.operatorIdentities
-    : [{ operatorId: scope.operatorId, dayDirectorActorId: scope.dayDirectorActorId }];
+  const candidates = [
+    { operatorId: scope.operatorId, dayDirectorActorId: scope.dayDirectorActorId },
+    ...(scope.operatorIdentities ?? []),
+  ];
   const seen = new Set<string>();
   return candidates
     .map(pair => ({
@@ -90,15 +94,22 @@ async function existingSession(
   scope: WeeklyDriverScope,
   horizon: RemainingWeekHorizon
 ): Promise<{ operatorId: string; dayDirectorActorId: string; session: WeeklyPlanningSession } | null> {
-  for (const pair of identityPairs(scope)) {
-    const session = await loadWeeklySession({
-      tenantId: scope.tenantId,
-      operatorId: pair.operatorId,
-      weekStart: horizon.weekStart,
-    });
-    if (session) return { ...pair, session };
-  }
-  return null;
+  const pairs = identityPairs(scope);
+  const session = await loadWeeklySessionForScope({
+    tenantId: scope.tenantId,
+    operatorId: scope.operatorId,
+    operatorIds: pairs.map(pair => pair.operatorId),
+    dayDirectorActorId: scope.dayDirectorActorId,
+    dayDirectorActorIds: scope.dayDirectorActorIds ?? pairs.map(pair => pair.dayDirectorActorId),
+    weekStart: horizon.weekStart,
+    now: scope.now,
+    timeZone: scope.timeZone,
+  });
+  return session ? {
+    operatorId: session.operatorId,
+    dayDirectorActorId: session.dayDirectorActorId,
+    session,
+  } : null;
 }
 
 async function surfaceFor(
@@ -187,6 +198,7 @@ export async function beginWeeklyMission(
   const horizon = horizonFor(scope);
   const existing = await existingSession(scope, horizon);
   if (existing) {
+    await bindWeeklyAppointmentLineage(existing.session, scope);
     return {
       speech: resumeSpeech(existing.session),
       resumed: true,
@@ -209,6 +221,7 @@ export async function beginWeeklyMission(
     draft: draftFromDossier(dossier),
   });
   session.internalHypothesis = deriveInternalHypothesis(dossier);
+  await bindWeeklyAppointmentLineage(session, scope);
   const advanced = await advanceWeeklySession(
     { dossier, session, operatorUtterance: "" },
     {
@@ -292,6 +305,9 @@ export async function replyWeeklyMission(
       ? [...scope.dayDirectorActorIds]
       : identityPairs(scope).map(pair => pair.dayDirectorActorId),
     utterance,
+    weekStartOverride: scope.weekStartOverride,
+    weeklyPlanningSourceReference: scope.weeklyPlanningSourceReference,
+    weeklyPlanningAppointmentId: scope.weeklyPlanningAppointmentId,
     now: scope.now ?? new Date(),
     timeZone: scope.timeZone,
   });

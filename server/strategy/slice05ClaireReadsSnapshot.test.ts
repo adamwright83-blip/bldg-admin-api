@@ -12,6 +12,13 @@ import { AssertionGuard, VerifiedFactInventoryBuilder } from "../claire/assertio
 import { writeClairePreDriveBrief } from "../claire/reasoning";
 import { getClaireGenerationStats } from "../claire/generationTelemetry";
 
+vi.mock("../saas/tenantIdentityService", () => ({
+  loadTenantBusinessIdentity: async () => ({
+    businessName: "Fixture Laundry",
+    brandName: "Fixture Laundry",
+  }),
+}));
+
 describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   const tenantId = "tenant_slice05_test";
   const actorId = "operator_slice05";
@@ -21,7 +28,7 @@ describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   });
 
   it("guardrail.G7.single_featured_source: Claire and Lantern City return the identical operation ID", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId);
+    const snapshot = await buildStrategySnapshot(tenantId, { operatorUserId: actorId });
     const featured = await getTodayFeaturedOperation(tenantId);
 
     // Call previewClairePreDrive
@@ -73,7 +80,7 @@ describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
   });
 
   it("records snapshotId on preview output", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId);
+    const snapshot = await buildStrategySnapshot(tenantId, { operatorUserId: actorId });
     const preview = await previewClairePreDrive({
       tenantId,
       actorId,

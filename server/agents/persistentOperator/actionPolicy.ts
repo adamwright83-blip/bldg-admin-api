@@ -3,6 +3,8 @@ import { tenantStandingAuthorizations } from "../../../drizzle/schema";
 import { PERSISTENT_OPERATOR_ENTITLEMENT } from "../../../shared/saasTenant";
 import { getDb } from "../../db";
 import { hasTenantEntitlement, roleAllows } from "../../saas/tenantAccess";
+import { evaluateClaireAutonomyReadiness, type ClaireAutonomyLevel } from "./earnedAutonomyReadiness";
+import { loadClaireAutonomyEvidence } from "./autonomyEvidence";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 
 export const TOOL_RISK_CLASSES = [
@@ -22,6 +24,8 @@ export type PersistentActionPolicyInput = {
   standingAuthorizationId?: string | null;
   approvedByUserId?: string | null;
   now?: Date;
+  /** Only a proposed broader autonomous action requests an earned level. Existing delegation is unchanged. */
+  requiredAutonomyLevel?: ClaireAutonomyLevel;
 };
 
 export function approvalMatchesCanonicalOperator(
@@ -69,7 +73,8 @@ export type PersistentActionPolicyDecision =
         | "role_not_allowed"
         | "standing_authorization_required"
         | "standing_authorization_invalid"
-        | "explicit_approval_required";
+        | "explicit_approval_required"
+        | "earned_autonomy_not_ready";
     };
 
 function localHm(now: Date, timeZone: string): string {
@@ -139,6 +144,12 @@ export async function evaluatePersistentActionPolicy(
     identity.identity,
     input.approvedByUserId
   );
+
+  if (!hasExplicitApproval && input.riskClass !== "READ_ONLY" && (input.requiredAutonomyLevel ?? 0) > 0) {
+    const evidence = await loadClaireAutonomyEvidence({ ...input, requestedLevel: input.requiredAutonomyLevel! });
+    const readiness = evaluateClaireAutonomyReadiness(evidence);
+    if (readiness.allowedLevel < input.requiredAutonomyLevel!) return { allowed: false, reason: "earned_autonomy_not_ready" };
+  }
 
   if (input.riskClass === "READ_ONLY" || input.riskClass === "INTERNAL_REVERSIBLE") {
     return {

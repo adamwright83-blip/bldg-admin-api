@@ -171,6 +171,8 @@ type PreDriveConversation = ClaireTurnState & {
     | "weekly_planning_invite"
     | "weekly_planning";
   weeklyPlanningWeekStart?: string | null;
+  weeklyPlanningSourceReference?: string | null;
+  weeklyPlanningAppointmentId?: string | null;
   appointmentTimeZone?: string | null;
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
@@ -1307,6 +1309,8 @@ async function persistClaireVoiceConversation(input: {
   inboundContextReady?: boolean;
   sessionKindOverride?: PreDriveConversation["sessionKind"];
   weeklyPlanningWeekStart?: string | null;
+  weeklyPlanningSourceReference?: string | null;
+  weeklyPlanningAppointmentId?: string | null;
   appointmentTimeZone?: string | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
@@ -1326,6 +1330,8 @@ async function persistClaireVoiceConversation(input: {
     touchedAt: now,
     sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
+    weeklyPlanningSourceReference: input.weeklyPlanningSourceReference ?? null,
+    weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId ?? null,
     appointmentTimeZone: input.appointmentTimeZone ?? null,
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
@@ -1362,6 +1368,8 @@ export async function startClairePreDriveCall(input: {
   openingOverride?: string;
   sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
   weeklyPlanningWeekStart?: string | null;
+  weeklyPlanningSourceReference?: string | null;
+  weeklyPlanningAppointmentId?: string | null;
 }): Promise<{ callSid: string; brief: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
@@ -1383,6 +1391,8 @@ export async function startClairePreDriveCall(input: {
     missionId: input.missionId,
     sessionKindOverride: input.sessionKindOverride,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
+    weeklyPlanningSourceReference: input.weeklyPlanningSourceReference,
+    weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId,
     appointmentTimeZone: input.timeZone ?? null,
   });
   try {

@@ -1,0 +1,69 @@
+import type { ActionGrammar } from "../../shared/actionGrammar";
+import { behavioralSubjectFromGrammar } from "../../shared/behavioralSubject";
+import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
+import { eligibleTemplates } from "../../shared/fictionTemplate";
+import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
+import { resolveCanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
+import { loadDaphneMetaPreferences } from "../agents/daphne/goalsPreferences";
+import { loadOperatorFictionGrammar } from "../experience/goldline/world/campaignService";
+import { assignExperimentalPresentation } from "./assignPresentation";
+import { listBehavioralLedgerEventsForDecisionPoint, recordBehavioralLedgerEvent, type BehavioralLedgerStore } from "../behavioralLedger/behavioralLedger";
+
+export type PresentationScope = { tenantId: string; operatorUserId: string };
+export type PresentationConsent = { adaptationAllowed: boolean; experimentationAllowed: boolean; evidenceRefs: string[] };
+export async function loadPresentationConsent(scope: PresentationScope): Promise<PresentationConsent> {
+  const identity = await resolveCanonicalOperatorIdentity({ tenantId: scope.tenantId,
+    source: { type: "open_id", value: scope.operatorUserId }, subsystem: "daphne.presentation" });
+  if (!identity.ok) return { adaptationAllowed: false, experimentationAllowed: false, evidenceRefs: [] };
+  const preferences = await loadDaphneMetaPreferences({ tenantId: scope.tenantId, canonicalOperatorId: identity.identity.canonicalOperatorId });
+  const enabled = (key: "adaptation_enabled" | "safe_experimentation") => preferences[key]?.status === "active" && preferences[key]?.value === true;
+  const recall = preferences.memory_recall;
+  const adaptationAllowed = enabled("adaptation_enabled") && recall?.status !== "revoked" && recall?.value !== false;
+  return { adaptationAllowed, experimentationAllowed: adaptationAllowed && enabled("safe_experimentation"),
+    evidenceRefs: [preferences.adaptation_enabled?.id, preferences.safe_experimentation?.id].filter((id): id is string => Boolean(id)) };
+}
+export type PresentationRuntimePorts = {
+  loadConsent: typeof loadPresentationConsent;
+  loadGrammar: (scope: PresentationScope & { occasionId?: string }) => Promise<ActionGrammar | null>;
+  store?: BehavioralLedgerStore;
+  randomInt?: (n: number) => number;
+  policy?: ReturnType<typeof resolveProductionExperimentPolicy>;
+};
+const defaults: PresentationRuntimePorts = {
+  loadConsent: loadPresentationConsent,
+  loadGrammar: scope => loadOperatorFictionGrammar({ tenantId: scope.tenantId, operatorId: scope.operatorUserId, occasionId: scope.occasionId }),
+};
+/** Client grammar, template, outcome and consent claims never supply authority. */
+export async function assignAuthorizedPresentation(input: PresentationScope & { correlationId: string; occasionId: string; emergency?: boolean }, ports: PresentationRuntimePorts = defaults) {
+  const consent = await ports.loadConsent(input);
+  const unavailable = (skipReason: string) => ({ usedExperiment: false as const, skipReason, assignment: null, consent });
+  if (!consent.experimentationAllowed) return unavailable("fresh_operator_experimentation_consent_required");
+  const grammar = await ports.loadGrammar(input);
+  if (!grammar || behavioralSubjectFromGrammar(grammar) !== input.correlationId) return unavailable("canonical_mission_grammar_unavailable");
+  const result = await assignExperimentalPresentation({ ...input, grammar, registry: FICTION_ELIGIBILITY_CATALOG,
+    policy: ports.policy ?? resolveProductionExperimentPolicy(), store: ports.store, randomInt: ports.randomInt });
+  return { ...result, consent };
+}
+/** UI acknowledgment proves a reported viewable surface; it never proves attention or business completion. */
+export async function acknowledgePresentationViewable(input: PresentationScope & { correlationId: string; occasionId: string; decisionPointId: string; templateId: string }, ports: PresentationRuntimePorts = defaults) {
+  const consent = await ports.loadConsent(input);
+  if (!consent.experimentationAllowed) throw new Error("Presentation experimentation consent revoked or absent");
+  const grammar = await ports.loadGrammar(input);
+  if (!grammar || behavioralSubjectFromGrammar(grammar) !== input.correlationId) throw new Error("Canonical presentation work unavailable");
+  const rows = await listBehavioralLedgerEventsForDecisionPoint(input.tenantId, input.decisionPointId, ports.store);
+  const assignment = rows.find(row => row.operatorUserId === input.operatorUserId && row.correlationId === input.correlationId && row.eventType === "ASSIGNED");
+  if (!assignment || assignment.assignedOption !== input.templateId ||
+      !eligibleTemplates(FICTION_ELIGIBILITY_CATALOG, grammar).some(t => t.id === input.templateId))
+    throw new Error("Viewable report lacks a durable approved assignment");
+  const row = await recordBehavioralLedgerEvent({ ...input, sourceSystem: "campaign_run", sourceEntityType: "presentation_viewable",
+    sourceEntityId: input.decisionPointId, eventType: "VIEWABLE", occurredAt: new Date(), verificationClass: "CLAIMED",
+    provenance: "authenticated_client_render_acknowledgment", evidenceSource: `assignment:${assignment.id}`,
+    idempotencyKey: `presentation-viewable:${assignment.id}`, decisionPoint: {
+      decisionPointId: input.decisionPointId, availability: true, eligibleOptions: assignment.eligibleOptionsJson as string[],
+      assignedOption: assignment.assignedOption!, assignmentProbability: Number(assignment.assignmentProbability),
+      interventionPolicyVersion: assignment.interventionPolicyVersion!, interventionDefinitionVersion: assignment.interventionDefinitionVersion,
+      proximalOutcomeWindowMinutes: assignment.proximalOutcomeWindowMinutes!,
+    } }, ports.store);
+  if (!row) throw new Error("Presentation acknowledgment did not persist");
+  return { recorded: true as const, eventId: row.id, verificationClass: "CLAIMED" as const };
+}

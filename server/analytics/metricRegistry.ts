@@ -177,6 +177,20 @@ export const METRICS: Record<string, MetricDef> = {
   },
 };
 
+// Calculable semantic observations share the existing registry. These are
+// canonical ledger measures, not model-supplied numbers or new financial truth.
+for (const [id, label, unit] of [
+  ["active_customer_count", "Paying customers in the period", "count"],
+  ["new_customer_count", "Customers first observed in retained history", "count"],
+  ["refund_paid", "Recorded signed refunds", "currency"],
+  ["credits_used", "Recorded credits used", "currency"],
+  ["discounts", "Recorded discounts", "currency"],
+] as const) {
+  METRICS[id] = { id, label, unit, dateBasis: "paidAt", includedSources: STRIPE_INCLUDED,
+    excludedSources: STRIPE_EXCLUDED, allowedGroupBy: [], allowedChartTypes: ["bar"],
+    supportsComparison: true, resolver: "runBusinessQuery" };
+}
+
 export const METRIC_IDS = Object.keys(METRICS);
 
 export function getMetric(id: string): MetricDef | undefined {

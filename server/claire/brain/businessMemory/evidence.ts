@@ -43,10 +43,16 @@ export function businessQueryFingerprint(result: BusinessQueryResult): string {
     rank: result.query.rank,
     filters: result.query.filters ?? null,
     serviceType: result.query.serviceType,
+    calculation: result.query.calculation ?? null,
   });
 }
 
 function coverageFrom(result: BusinessQueryResult): EvidenceCoverage | null {
+  if (result.status === "ok" && result.data.kind === "calculation") {
+    const gaps = result.data.calculation.cells.filter(cell => cell.precision !== "exact")
+      .map(cell => `${cell.key}:${cell.precision}:${cell.reason ?? "coverage not proven"}`);
+    return { complete: gaps.length === 0, gaps };
+  }
   if (result.status !== "ok" || !result.coverage) return null;
   const gaps: string[] = [];
   const { coverage } = result;
@@ -106,7 +112,7 @@ export function evidenceFromBusinessResult(input: {
   observedAtIso: string;
 }): EvidenceItem {
   const { result, reader, observedAtIso } = input;
-  const resolved = result.status === "ok";
+  const resolved = result.status === "ok" && (result.data.kind !== "calculation" || result.data.calculation.cells.some(cell => cell.value != null));
   const authoritativeFor: EvidenceAuthority[] = resolved ? ["current_business_truth"] : [];
   const provenance: EvidenceProvenance = { reader };
   return {

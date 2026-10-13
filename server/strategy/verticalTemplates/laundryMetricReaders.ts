@@ -92,15 +92,17 @@ export const laundryNewPayingCustomersMetricReader: MetricReader<AuthoritativeMe
     const exact =
       sourceCoverage.book.exhaustiveCurrent &&
       fullPaidHistoryCovered &&
+      metrics.historicalCoverage === "complete" &&
+      metrics.newPayingCustomers.count !== null &&
       metrics.newPayingCustomers.uncertainCount === 0;
     const baseCoverage = coverageQuality(sourceCoverage);
     const scopedCoverage =
       exact ? "complete" : baseCoverage === "complete" ? "partial" : baseCoverage;
     return {
       value: metrics.newPayingCustomers.count,
-      observationRef: `strategy.new_paying_customers.v1:${tenantId}:${period.startYmd}:${period.endYmd}:${metrics.computedAt}`,
-      precision: exact ? "exact" : "recorded_only",
-      coverage: scopedCoverage,
+      observationRef: metrics.newPayingCustomers.count === null ? null : `strategy.new_paying_customers.v1:${tenantId}:${period.startYmd}:${period.endYmd}:${metrics.computedAt}`,
+      precision: metrics.newPayingCustomers.count === null ? "missing" : exact ? "exact" : "recorded_only",
+      coverage: metrics.completeness === "unavailable" ? "unavailable" : scopedCoverage,
       observedAt: metrics.computedAt,
     };
   };

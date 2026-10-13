@@ -1,4 +1,5 @@
 import type { SalesInsightArtifact } from "../proactive/salesInsights";
+import { acceptSalesInsightChallenge } from "../proactive/growthChallenge";
 import { businessToday } from "../../analytics/businessPeriods";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import type { DayDirectorProposal } from "../../../shared/dayDirector";
@@ -220,6 +221,8 @@ export type ClaireTurnState = PendingProposalState &
     surfacedRecoveryAccounts?: Array<{ id: string; name: string }>;
     /** Brain V3: the operator has said not to use/discuss Day Line in this live conversation. */
     dayLineSuppressed?: boolean;
+    /** Growth challenge proposal held for operator confirmation. */
+    pendingGrowthChallenge?: { artifact: SalesInsightArtifact; createdAt: number } | null;
   };
 
 export type ClaireTurnInput = {
@@ -1482,6 +1485,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         const spokenBoard = useConcise ? board.conciseBrief! : board.brief;
         const surfaced = recoveryRefsNamedInSpeech(spokenBoard, board.recoveryAccounts ?? []);
         if (surfaced.length) state.surfacedRecoveryAccounts = surfaced;
+        if ("salesArtifacts" in board && board.salesArtifacts?.length) {
+          state.pendingGrowthChallenge = { artifact: board.salesArtifacts[0]!, createdAt: nowMs };
+        }
         console.info("[DaphneV2]", JSON.stringify({
           event: "response_style", replyPath: "proactive_board",
           preferenceActive: typeof daphneV2Guidance?.responseDetail === "number",
@@ -1683,6 +1689,57 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       return finish({ speak: "Okay, I won't change it.", kind: "answered" });
     }
     state.pendingAccountFollowUp = null;
+  }
+
+  if (state.pendingGrowthChallenge && nowMs - state.pendingGrowthChallenge.createdAt > PENDING_BRIEFING_TTL_MS) {
+    state.pendingGrowthChallenge = null;
+  }
+  if (state.pendingGrowthChallenge) {
+    const isChallengeAffirmation =
+      brainV3.act === "confirmation" ||
+      brainV3.dayLineDisposition === "accept" ||
+      brainV3.workDisposition === "commit" ||
+      /\b(?:yes|yeah|yep|sure|add (?:that|the)?(?: growth)? challenge|accept (?:the )?challenge|do (?:the )?challenge|put (?:that|the)?(?: growth)? challenge on(?: the)? day ?line)\b/i.test(utterance);
+    const isChallengeRejection =
+      brainV3.act === "rejection" ||
+      brainV3.dayLineDisposition === "decline" ||
+      /\b(?:no|nope|don't|skip (?:that|the)?(?: growth)? challenge|cancel (?:that|the)? challenge)\b/i.test(utterance);
+
+    if (isChallengeAffirmation) {
+      const challengeArtifact = state.pendingGrowthChallenge.artifact;
+      state.pendingGrowthChallenge = null;
+      const acceptResult = await acceptSalesInsightChallenge({
+        tenantId: input.tenantId,
+        actorId: input.dayDirectorActorId,
+        businessDate: today,
+        artifact: challengeArtifact,
+        operatorUtterance: utterance,
+        now: clock.now,
+        timeZone,
+      });
+      if (acceptResult.status === "accepted") {
+        mark("growth_challenge");
+        return finish({
+          speak: "",
+          receiptBackedCommit: acceptResult.speech,
+          mutationReceipts: [
+            {
+              claimedState: "created",
+              entityId: acceptResult.commitmentId,
+              statement: acceptResult.speech,
+            },
+          ],
+          actionIds: [acceptResult.commitmentId],
+          kind: "briefing_saved",
+        });
+      } else {
+        return finish({ speak: acceptResult.speech, kind: "answered" });
+      }
+    }
+    if (isChallengeRejection) {
+      state.pendingGrowthChallenge = null;
+      return finish({ speak: "Okay, I won't add that challenge.", kind: "answered" });
+    }
   }
 
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;

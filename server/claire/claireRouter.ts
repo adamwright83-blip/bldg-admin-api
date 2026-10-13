@@ -62,8 +62,12 @@ import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } fro
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
+  brainV2CallControlResult,
+  brainV2ExecutionFailureResult,
+  executeGrantBoundLegacyAdapter,
   isClaireBrainV2LiveEnabled,
   runClaireBrainV2LiveTurn,
+  shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
@@ -343,13 +347,66 @@ export const claireRouter = router({
               surface: "text",
               priorClaimReceipts: state.claimReceipts ?? [],
             },
-            executeLegacyAdapter: async () => runLegacyAdapter(),
+            executeLegacyAdapter: async grant =>
+              executeGrantBoundLegacyAdapter({
+                grant,
+                state,
+                tenantId: scope.tenantId,
+                operatorUserId: scope.operatorUserId,
+                dayDirectorActorId: actorId,
+                conversationKey: key,
+                timeZone: input.timeZone ?? "America/Los_Angeles",
+                surface: "text",
+              }),
           });
+          if (liveV2.active) {
+            const turnResult = liveV2.adapterResult
+              ? liveV2.adapterResult
+              : liveV2.result.candidateEndCall
+                ? brainV2CallControlResult({
+                    candidateSpeak: liveV2.result.candidateSpeak,
+                    assembledUtterance: input.utterance,
+                  })
+                : (() => {
+                    throw new Error(
+                      "Brain V2 live action returned without a grant-bound adapter result"
+                    );
+                  })();
+            console.info("[ClaireBrainV2]", {
+              event: "claire_brain_v2_live",
+              surface: "desktop",
+              conversationKey: key,
+              actionClasses: liveV2.actionClasses,
+              endCall: liveV2.result.candidateEndCall,
+              adapterKind: liveV2.adapterResult?.kind ?? null,
+              actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
+              mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
+              receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
+            });
+            return {
+              brainV2LiveHandled: true,
+              result: turnResult,
+            };
+          }
+
+          if (!shouldFallbackToClaireLegacy(liveV2)) {
+            console.warn("[ClaireBrainV2]", {
+              event: "claire_brain_v2_live_execution_failed",
+              surface: "desktop",
+              conversationKey: key,
+              reason: liveV2.reason,
+            });
+            return {
+              brainV2LiveHandled: true,
+              result: brainV2ExecutionFailureResult({
+                assembledUtterance: input.utterance,
+              }),
+            };
+          }
+
           return {
-            brainV2LiveHandled: liveV2.active,
-            result: liveV2.active
-              ? liveV2.adapterResult ?? (await runLegacyAdapter())
-              : await runLegacyAdapter(),
+            brainV2LiveHandled: false,
+            result: await runLegacyAdapter(),
           };
         }
       );
@@ -409,6 +466,9 @@ export const claireRouter = router({
         // Stage 3B structural proof. This is bounded interaction metadata only;
         // it is never business truth or Action / Execution authority.
         operatorAdaptation: result.operatorAdaptation ?? null,
+        brainV2LiveHandled,
+        actionIds: result.actionIds ?? [],
+        receiptBackedCommit: result.receiptBackedCommit,
       };
     }),
 

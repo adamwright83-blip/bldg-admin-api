@@ -26,6 +26,16 @@ const TOKEN_STOP = new Set([
   "line",
   "today",
   "tomorrow",
+  "have",
+  "has",
+  "lives",
+  "in",
+  "and",
+  "also",
+  "with",
+  "at",
+  "of",
+  "from",
 ]);
 
 function tokens(value: string): string[] {
@@ -64,7 +74,7 @@ function parseGrantWork(input: {
   );
   const items = parsed.items.filter(
     item =>
-      item.kind === "new_work" &&
+      (item.kind === "new_work" || item.kind === "completed") &&
       titles.some(title => titleMatchesScope(item.title, title))
   );
   if (!items.length) {
@@ -113,7 +123,7 @@ async function commitParsed(input: {
   }
 
   return {
-    speak: wrote || result.failed.length === 0 ? "" : speak,
+    speak,
     receiptBackedCommit: wrote || result.failed.length === 0 ? speak : undefined,
     kind: wrote || result.failed.length === 0 ? "briefing_saved" : "answered",
     actionIds: result.commitmentIds,

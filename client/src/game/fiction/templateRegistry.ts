@@ -14,6 +14,7 @@ import { LANTERN_SURVEY_TEMPLATE } from "./templates/lanternSurveyTemplate";
 import { NEUTRALIZE_TEMPLATE } from "./templates/neutralizeTemplate";
 import { SEALED_DOORS_TEMPLATE } from "./templates/sealedDoorsTemplate";
 import { WATCH_GATE_TEMPLATE } from "./templates/watchGateTemplate";
+import { SPIRIT_HUMAN_RESCUE_TEMPLATE } from "./templates/spiritHumanRescueTemplate";
 import { WORLD_HOLDS_BREATH_TEMPLATE } from "./templates/worldHoldsBreathTemplate";
 
 export const FICTION_TEMPLATE_REGISTRY: readonly FictionTemplate[] = [
@@ -26,4 +27,5 @@ export const FICTION_TEMPLATE_REGISTRY: readonly FictionTemplate[] = [
   HELD_BREATH_TEMPLATE,
   WATCH_GATE_TEMPLATE,
   WORLD_HOLDS_BREATH_TEMPLATE,
+  SPIRIT_HUMAN_RESCUE_TEMPLATE,
 ];

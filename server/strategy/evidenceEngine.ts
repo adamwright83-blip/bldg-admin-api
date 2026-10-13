@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { opportunityStallReasons, strategyEvidence } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { lintCausalLanguage, lintVerdictLanguage } from "./verdictLint";
-import { getStrategyPlayById, type StrategyPlay } from "./playGenerator";
+import { readStrategyPlayById, type StrategyPlay } from "./playGenerator";
 
 export type WorldSignal = "brighten" | "dim" | "none";
 
@@ -93,7 +93,7 @@ export async function computePlayEvidence(input: {
   exposureUnits?: number; // e.g. visits completed, tags deployed, contacts made
   linkedCustomers?: number;
 }): Promise<PlayEvidenceRecord> {
-  const play = getStrategyPlayById(input.playId);
+  const play = await readStrategyPlayById(input.playId, input.tenantId);
   const minThresholdDays = play?.minimumEvidenceThreshold?.minDays ?? 14;
   const minExposureUnits = play?.minimumEvidenceThreshold?.minVolume ?? 6;
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { planGovernedBusinessQuestion } from "../analytics/governedBusinessQuery";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
 import { parseCardinality } from "./turn/interpretTurn";
@@ -1051,6 +1052,7 @@ export type ClaireBusinessTurnDeps = {
   plan: typeof planBusinessQuestionWithLLM;
   now: () => Date;
   timeZone: () => string;
+  planCalculation?: typeof planGovernedBusinessQuestion;
   speakResult?: typeof speakBusinessResult;
   /** Source membership/health/range evidence. Injectable so tests can prove coverage without a database. */
   loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
@@ -1082,6 +1084,11 @@ export async function answerClaireBusinessTurn(
   const session = liveSession(input.state, nowMs);
   const run = (query: BusinessQuery) =>
     (deps.runQuery ?? ((tenantId: string, q: BusinessQuery) => runBusinessQuery(tenantId, q)))(input.tenantId, query);
+
+  const calculationQuery = await (deps.planCalculation ?? planGovernedBusinessQuestion)({
+    question: input.utterance, previous: session?.query ?? null, now, timeZone,
+  });
+  if (calculationQuery) return finishQuery({ kind: "query", query: calculationQuery, refinement: Boolean(session), hint: null }, false);
 
   let parsed: ParsedBusinessTurn;
   try {

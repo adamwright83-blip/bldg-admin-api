@@ -46,19 +46,21 @@ export type OpportunityGap = {
 
 export type StrategySnapshotPayload = {
   goal: {
+    operatorUserId?: string | null;
+    macroGoalId?: string | null;
     metricType: GoalMetricType;
-    target: number;
-    targetValue?: number;
+    target: number | null;
+    targetValue?: number | null;
     targetDate: string | null;
-    currentValue: number;
-    gap: number;
-    newPayingCustomers: number;
-    netActiveChange: number;
+    currentValue: number | null;
+    gap: number | null;
+    newPayingCustomers: number | null;
+    netActiveChange: number | null;
     secondaryTargets?: Record<string, number>;
   };
   growthPlan: {
-    unitsRemaining: number;
-    unitsNeededPerWeek: number;
+    unitsRemaining: number | null;
+    unitsNeededPerWeek: number | null;
     limitingStage: string;
     stages: FunnelStageItem[];
     nextActions: string[];
@@ -90,8 +92,8 @@ export type StrategySnapshotPayload = {
     remainingBudgetCents: number;
   };
   customers: {
-    activeCount: number;
-    weeklyTrend: Array<{ weekStart: string; weekEnd: string; activeCount: number }>;
+    activeCount: number | null;
+    weeklyTrend: Array<{ weekStart: string; weekEnd: string; activeCount: number | null }>;
     dormantEligible: Array<{
       id: string;
       firstName: string;
@@ -130,10 +132,10 @@ export type StrategySnapshotPayload = {
     blockedReason?: string | null;
   }>;
   capacity: {
-    weeklyCapacityPounds: number;
-    reservedPounds: number;
-    availablePounds: number;
-    utilizationPercent: number;
+    weeklyCapacityPounds: number | null;
+    reservedPounds: number | null;
+    availablePounds: number | null;
+    utilizationPercent: number | null;
   };
   campaigns: Array<{
     campaignId: string;
@@ -150,9 +152,9 @@ export type StrategySnapshotPayload = {
       scheduledAt?: string | null;
     }>;
     history14Days: {
-      kept: number;
-      missed: number;
-      total: number;
+      kept: number | null;
+      missed: number | null;
+      total: number | null;
     };
   };
   recentOutcomes: Array<{

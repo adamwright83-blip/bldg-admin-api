@@ -100,10 +100,6 @@ export const databaseMacroGoalPersistence: MacroGoalPersistence = {
               input.operatorUserId === "owner") &&
             candidate.status === "active" &&
             (!input.metricKey || candidate.metricKey === input.metricKey)
-        ) ??
-        list.find(
-          candidate =>
-            candidate.tenantId === tenantId && candidate.status === "active"
         );
       return match ?? null;
     }
@@ -143,6 +139,7 @@ export const databaseMacroGoalPersistence: MacroGoalPersistence = {
       for (const candidate of list) {
         if (
           candidate.tenantId === tenantId &&
+          candidate.operatorUserId === operatorUserId &&
           candidate.metricKey === input.metricKey &&
           candidate.status === "active"
         ) {

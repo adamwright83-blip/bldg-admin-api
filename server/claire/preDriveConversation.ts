@@ -173,7 +173,13 @@ export function conservativeClaireFollowUp(input: {
     }
   }
 
-  if (/\b(who|meeting|seeing|talk(?:ing)? to)\b/.test(question)) {
+  // A bare mention of a meeting is NOT a request for a contact's name.
+  // The October 11 weekly-planning callback said "our Sunday meeting" and
+  // this fallback answered with an unrelated account's contact information.
+  // Only an actual person/contact lookup may enter the named-stop fallback.
+  const asksWho = /^(?:who(?:m)?\b|which\s+(?:person|contact)\b|what(?:'s|\s+is)\s+(?:the\s+)?(?:contact|person|name)\b)/.test(question) ||
+    /\bwho\s+(?:am|are|is|was|did|should|do|does|will|can|would)\b/.test(question);
+  if (asksWho) {
     return stop
       ? `Today's context identifies ${stop.title}, but it does not name a specific person. I don't want to guess.`
       : "Today's field context does not name a person or commercial stop. I don't want to guess.";
