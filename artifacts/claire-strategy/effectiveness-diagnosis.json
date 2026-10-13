@@ -1,0 +1,117 @@
+{
+  "comparisonEvidence": {
+    "paid_orders_per_period": {
+      "value": 5,
+      "quality": "complete"
+    },
+    "paid_orders": {
+      "value": 5,
+      "quality": "complete"
+    },
+    "net_sales_cents": {
+      "value": 20000,
+      "quality": "complete"
+    },
+    "average_order_value_cents": {
+      "value": 4000,
+      "quality": "complete"
+    },
+    "prior_paid_orders": {
+      "value": 24,
+      "quality": "complete"
+    },
+    "prior_net_sales_cents": {
+      "value": 96000,
+      "quality": "complete"
+    },
+    "mtd_net_sales_cents": {
+      "value": 20000,
+      "quality": "complete"
+    },
+    "prior_mtd_net_sales_cents": {
+      "value": 48000,
+      "quality": "complete"
+    },
+    "new_customers_30d": {
+      "value": 1,
+      "quality": "complete"
+    },
+    "returning_customers_30d": {
+      "value": 4,
+      "quality": "complete"
+    },
+    "dormant_customers": {
+      "value": 8,
+      "quality": "complete"
+    },
+    "mature_cohort_customers": {
+      "value": 12,
+      "quality": "complete"
+    },
+    "mature_cohort_repeat_customers": {
+      "value": 12,
+      "quality": "complete"
+    }
+  },
+  "currentCondition": "Observed paid_orders_per_period: 5; operator target: 40. Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+  "primaryConstraint": "retention",
+  "diagnosis": "Recorded sales fell 79% against the prior 30 days while 8 previously active customers are dormant. Recovering known buyers is the most direct, observable lever; the cause of the decline is not yet established.",
+  "options": [
+    {
+      "id": "option-1",
+      "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+      "risk": "Small samples and incomplete attribution can mislead.",
+      "driver": "retention",
+      "effort": "One desk investigation using existing records.",
+      "reason": "Preferred: known buyers with an existing relationship, measurable within one cycle, and no acquisition spend.",
+      "approach": "Contact eligible dormant customers with a bounded recovery offer",
+      "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+      "eligible": true,
+      "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+      "uncertainty": "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.",
+      "evidenceRefs": [
+        "snap_744375db4f464956a6f67f16:net_sales_cents",
+        "snap_744375db4f464956a6f67f16:prior_net_sales_cents",
+        "snap_744375db4f464956a6f67f16:dormant_customers",
+        "snap_744375db4f464956a6f67f16:returning_customers_30d"
+      ],
+      "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+      "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+      "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+      "expectedBenefit": "If 5 of 8 dormant customers each place one order: 5 additional orders at the observed average of $40.00 is about $200.00 recorded sales (arithmetic on an average, not a forecast or profit).",
+      "nextMeasurableAction": "Prepare 5 consented recovery contacts and record replies and orders within 14 days."
+    },
+    {
+      "id": "option-2",
+      "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+      "risk": "May consume cash or scarce operating time without validating the cause.",
+      "driver": "retention",
+      "effort": "Additional operator effort and customer eligibility need confirmation.",
+      "reason": "Not preferred now: replacing lost buyers with new ones costs more and leaves the dormant base unexplained.",
+      "approach": "Acquire new customers to replace lost volume",
+      "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+      "eligible": false,
+      "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+      "uncertainty": "Acquisition cost and conversion are unmeasured.",
+      "evidenceRefs": [
+        "snap_744375db4f464956a6f67f16:net_sales_cents",
+        "snap_744375db4f464956a6f67f16:prior_net_sales_cents",
+        "snap_744375db4f464956a6f67f16:dormant_customers",
+        "snap_744375db4f464956a6f67f16:returning_customers_30d"
+      ],
+      "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+      "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+      "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+      "expectedBenefit": "Last 30 days brought 1 new customer. 1 additional order at the observed average of $40.00 is about $40.00 recorded sales (arithmetic on an average, not a forecast or profit).",
+      "nextMeasurableAction": "Record acquisition cost per new customer before committing spend."
+    }
+  ],
+  "uncertainty": [
+    "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+    "No recent in-territory prospect research is available; no demand inferred.",
+    "Demographics, local rules, seasonality, competitor differentiation, and route density are unmeasured.",
+    "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+    "Configured capacity is operator input, not a current utilization measurement.",
+    "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+  ]
+}

@@ -144,6 +144,7 @@ export async function prepareStrategicProposal(input: {
       objective: work.primary.completionCondition || work.primary.objective,
       executionType: work.primary.executionType,
       candidateId: work.primary.workId,
+      missionType: work.primary.motion ?? work.primary.sourceKind,
       planId: plan.id,
       planRevision: plan.revision,
       evidenceRefs: [

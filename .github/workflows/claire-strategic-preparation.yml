@@ -10,6 +10,15 @@ on:
       - "shared/claireRoleFeedback.ts"
       - "client/src/App.tsx"
       - "e2e/claire-acceptance/**"
+      - "shared/daphneMissionPresentation*"
+      - "shared/dayDirector.ts"
+      - "shared/goldlineDayLine.ts"
+      - "shared/missionDirector.ts"
+      - "server/agents/daphne/missionFollowUp.ts"
+      - "server/planning/dayDirector/**"
+      - "client/src/pages/driver/GoldlineDriverController.tsx"
+      - "client/src/pages/driver/goldlineDayPlanModel.ts"
+      - "client/src/pages/goldline/GoldlineDayPlan.tsx"
       - "playwright.claire-acceptance.config.ts"
       - "client/src/pages/goldline/Claire*"
       - "drizzle/0128_claire_strategic_preparation.sql"
@@ -49,7 +58,7 @@ jobs:
           pnpm vitest run server/strategy server/planning/missionDirector
           server/agents/persistentOperator
           server/claire/brain server/claire/weeklyMission server/claire/turn
-          server/agents/daphne/explicitPreferenceCorrection.test.ts shared/strategicProposalControl.test.ts
+          server/agents/daphne/explicitPreferenceCorrection.test.ts shared/strategicProposalControl.test.ts shared/daphneMissionPresentation.test.ts
       - name: Production boot migrations and idempotent second boot
         env:
           DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/claire_acceptance
@@ -73,6 +82,7 @@ jobs:
           pnpm vitest run --config vitest.integration.config.ts --fileParallelism false
           server/strategy/strategicJourney.mysql.integration.test.ts
           server/strategy/strategicReleaseAcceptance.mysql.integration.test.ts
+          server/strategy/effectivenessLoop.mysql.integration.test.ts
       - name: Fourteen scenarios and separate blinded review packet
         run: node --import tsx scripts/evaluate-claire-strategy.ts
       - uses: actions/upload-artifact@v7

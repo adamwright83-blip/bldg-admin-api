@@ -77,6 +77,24 @@ export function assembleStrategicDiagnosis(
   const demand = metric("qualified_demand");
   const needed = metric("required_qualified_demand");
   const cash = metric("cash_runway_weeks");
+  const sales = metric("net_sales_cents");
+  const priorSales = metric("prior_net_sales_cents");
+  const orders = metric("paid_orders");
+  const priorOrders = metric("prior_paid_orders");
+  const aov = metric("average_order_value_cents");
+  const mtd = metric("mtd_net_sales_cents");
+  const priorMtd = metric("prior_mtd_net_sales_cents");
+  const newCustomers = metric("new_customers_30d");
+  const returningCustomers = metric("returning_customers_30d");
+  const dormant = metric("dormant_customers");
+  const observed = describeObservedComparison({
+    sales, priorSales, orders, priorOrders, aov, mtd, priorMtd,
+    newCustomers, returningCustomers, dormant,
+  });
+  const salesChange =
+    sales != null && priorSales != null && priorSales > 0
+      ? (sales - priorSales) / priorSales
+      : null;
   let driver: BusinessDriver = "investigation";
   let diagnosis =
     "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.";
@@ -98,6 +116,20 @@ export function assembleStrategicDiagnosis(
     support = ref("available_capacity");
     diagnosis =
       "Configured available capacity is exhausted. Validate fulfillment constraints before adding demand.";
+  } else if (
+    salesChange != null &&
+    salesChange <= -0.1 &&
+    dormant != null &&
+    dormant > 0
+  ) {
+    driver = "retention";
+    support = [
+      ...ref("net_sales_cents"),
+      ...ref("prior_net_sales_cents"),
+      ...ref("dormant_customers"),
+      ...ref("returning_customers_30d"),
+    ];
+    diagnosis = `Recorded sales fell ${pct(salesChange)} against the prior 30 days while ${dormant} previously active customers are dormant. Recovering known buyers is the most direct, observable lever; the cause of the decline is not yet established.`;
   } else if (
     sample != null &&
     repeat != null &&
@@ -166,10 +198,16 @@ export function assembleStrategicDiagnosis(
       "Review overdue collections and the short-term cash calendar",
       "Compare discretionary cost deferral with faster collections",
     ],
-    retention: [
-      "Investigate first-to-second-purchase barriers",
-      "Prepare a bounded reactivation test for eligible customers",
-    ],
+    retention:
+      dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1 && !revisitingFailedHypothesis
+        ? [
+            "Contact eligible dormant customers with a bounded recovery offer",
+            "Acquire new customers to replace lost volume",
+          ]
+        : [
+            "Investigate first-to-second-purchase barriers",
+            "Prepare a bounded reactivation test for eligible customers",
+          ],
     acquisition: [
       "Test a qualified customer segment within the operating market",
       "Improve conversion of existing qualified demand",
@@ -228,6 +266,10 @@ export function assembleStrategicDiagnosis(
           : "Kept as an alternative; validate economics and mechanism before selection.",
     })
   );
+  const recovery =
+    driver === "retention" && !revisitingFailedHypothesis &&
+    dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1;
+  enrichOptions(options, driver, { aov, dormant, newCustomers, returningCustomers, capacity, observed, recovery });
   const action: StrategyAction = {
     id: `strategy-${driver}`,
     title: chosen,
@@ -243,10 +285,12 @@ export function assembleStrategicDiagnosis(
         ? "Resolving missing driver evidence will distinguish the competing explanations."
         : `${driver} is the pivotal constraint; this audit can test that explanation.`,
     rationale: diagnosis,
-    completionCondition:
-      "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
-    leadingIndicator:
-      "Eligible source records reviewed and missing fields resolved.",
+    completionCondition: recovery
+      ? options[0]!.nextMeasurableAction!
+      : "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+    leadingIndicator: recovery
+      ? "Consented recovery contacts prepared; replies and orders recorded."
+      : "Eligible source records reviewed and missing fields resolved.",
     intendedOutcome: `A defensible next experiment toward: ${input.goal.statement}`,
     evidenceRefs: support,
     reviewCondition:
@@ -265,9 +309,10 @@ export function assembleStrategicDiagnosis(
     generatedAt: input.now.toISOString(),
     goal: input.goal,
     currentCondition:
-      input.goal.current == null
+      (input.goal.current == null
         ? "Goal progress is unobserved."
-        : `Observed ${input.goal.metricKey}: ${input.goal.current}; operator target: ${input.goal.target}.`,
+        : `Observed ${input.goal.metricKey}: ${input.goal.current}; operator target: ${input.goal.target}.`) +
+      (observed.lines.length ? ` ${observed.lines.join(" ")}` : ""),
     primaryConstraint: driver,
     diagnosis,
     supportingEvidence: support,
@@ -318,6 +363,7 @@ export function assembleStrategicDiagnosis(
       ...(!industry
         ? ["Industry metric readers unsupported."]
         : industry.limitations),
+      ...observed.missing.map(m => `${m} is unmeasured.`),
       ...(contribution == null
         ? [
             "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
@@ -348,4 +394,85 @@ export function assembleStrategicDiagnosis(
     .slice(0, 40)}`;
   d.quality.structuralErrors = validateStrategicDiagnosis(d);
   return d;
+}
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const pct = (ratio: number) => `${Math.abs(Math.round(ratio * 100))}%`;
+
+type ObservedFigures = {
+  sales: number | null; priorSales: number | null;
+  orders: number | null; priorOrders: number | null;
+  aov: number | null; mtd: number | null; priorMtd: number | null;
+  newCustomers: number | null; returningCustomers: number | null;
+  dormant: number | null;
+};
+
+/** States only comparisons whose both sides were observed; names what is missing. */
+export function describeObservedComparison(f: ObservedFigures) {
+  const lines: string[] = [];
+  const missing: string[] = [];
+  const change = (now: number, before: number) =>
+    before > 0 ? `${now >= before ? "up" : "down"} ${pct((now - before) / before)}` : "no prior base";
+  if (f.sales != null && f.priorSales != null)
+    lines.push(`Recorded sales last 30 days ${dollars(f.sales)} vs ${dollars(f.priorSales)} the prior 30 (${change(f.sales, f.priorSales)}).`);
+  else missing.push("Prior-period sales comparison");
+  if (f.orders != null && f.priorOrders != null)
+    lines.push(`Paid orders ${f.orders} vs ${f.priorOrders}.`);
+  if (f.mtd != null && f.priorMtd != null)
+    lines.push(`Month-to-date ${dollars(f.mtd)} vs ${dollars(f.priorMtd)} at the same point last month.`);
+  else missing.push("Month-to-date comparison");
+  if (f.newCustomers != null && f.returningCustomers != null)
+    lines.push(`${f.newCustomers} new and ${f.returningCustomers} returning customers in the last 30 days.`);
+  else missing.push("New versus returning customer mix");
+  if (f.dormant != null) lines.push(`${f.dormant} dormant customers are recovery candidates.`);
+  else missing.push("Dormant customer count");
+  return { lines, missing };
+}
+
+function enrichOptions(
+  options: StrategyOption[],
+  driver: BusinessDriver,
+  f: {
+    aov: number | null; dormant: number | null;
+    newCustomers: number | null; returningCustomers: number | null;
+    capacity: number | null; observed: ReturnType<typeof describeObservedComparison>;
+    recovery: boolean;
+  }
+) {
+  const basis = f.observed.lines.join(" ") || "No comparable-period figures were observed.";
+  const perOrder = (n: number) =>
+    f.aov == null
+      ? "Average order value is unobserved, so no sales arithmetic is stated."
+      : `${n} additional order${n === 1 ? "" : "s"} at the observed average of ${dollars(f.aov)} is about ${dollars(n * f.aov)} recorded sales (arithmetic on an average, not a forecast or profit).`;
+  for (const [i, o] of options.entries()) {
+    o.observedBasis = basis;
+    if (f.recovery) {
+      const n = Math.min(5, f.dormant!);
+      if (i === 0) {
+        o.expectedBenefit = `If ${n} of ${f.dormant} dormant customers each place one order: ${perOrder(n)}`;
+        o.uncertainty = "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.";
+        o.nextMeasurableAction = `Prepare ${n} consented recovery contacts and record replies and orders within 14 days.`;
+        o.reason = "Preferred: known buyers with an existing relationship, measurable within one cycle, and no acquisition spend.";
+      } else {
+        o.expectedBenefit = f.newCustomers == null
+          ? "New-customer volume is unobserved; benefit cannot be sized."
+          : `Last 30 days brought ${f.newCustomers} new customer${f.newCustomers === 1 ? "" : "s"}. ${perOrder(1)}`;
+        o.uncertainty = "Acquisition cost and conversion are unmeasured.";
+        o.nextMeasurableAction = "Record acquisition cost per new customer before committing spend.";
+        o.reason = "Not preferred now: replacing lost buyers with new ones costs more and leaves the dormant base unexplained.";
+      }
+    } else {
+      o.expectedBenefit ??= i === 0
+        ? "Resolves the central uncertainty; no direct sales effect is claimed."
+        : "Benefit cannot be sized until the preferred investigation reports.";
+      o.uncertainty ??= f.observed.missing.length
+        ? `Missing: ${f.observed.missing.join(", ")}.`
+        : "Causal effect remains unproven.";
+      o.nextMeasurableAction ??= i === 0
+        ? "Review at least five eligible source records and record the next-test decision."
+        : "Re-evaluate after the preferred action reports.";
+    }
+    if (f.capacity != null && f.capacity <= 0)
+      o.uncertainty += " Configured capacity is exhausted; added orders may not be serviceable.";
+  }
 }

@@ -29,6 +29,10 @@ export type DayDirectorCommitment = {
   operatorMission?: OperatorMissionMetadata | null;
   /** Stored type. Absent means the shared classifier may derive. Null is stored unknown. */
   executionType?: ObjectiveExecutionType | null;
+  /** Mission identity used to match Daphne presentation adjustments. */
+  missionType?: string | null;
+  /** Presentation only. Title, objective, date and destination are unchanged. */
+  presentation?: import("./daphneMissionPresentation").DaphneMissionPresentation | null;
 };
 
 export type DayDirectorProposal = {

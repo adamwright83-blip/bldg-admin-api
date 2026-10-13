@@ -511,9 +511,15 @@ export function buildDayPlanProjection(input: {
           commitment.provenance === "user_reported"
             ? "You committed today"
             : "Added manually",
-        timeLabel: commitment.quantity
-          ? `${commitment.quantity} to complete`
-          : "Flexible today",
+        timeLabel:
+          commitment.presentation?.adjustment.kind === "timing"
+            ? `Suggested: ${commitment.presentation.adjustment.window}`
+            : commitment.presentation?.adjustment.kind === "task_size"
+              ? "First step only"
+              : commitment.quantity
+                ? `${commitment.quantity} to complete`
+                : "Flexible today",
+        displayDetail: commitment.presentation?.note ?? null,
         sortKey: `75:${String(index).padStart(3, "0")}`,
         estimatedMinutes: null,
         status: commitment.status === "completed" ? "completed" : "upcoming",

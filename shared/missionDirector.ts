@@ -1,5 +1,5 @@
 import type { ObjectiveExecutionType } from "./objectiveExecution";
-import type { WeeklyGrowthSourceKind, WeeklyGrowthSourceRef } from "./weeklyGrowthCandidates";
+import type { WeeklyGrowthMotion, WeeklyGrowthSourceKind, WeeklyGrowthSourceRef } from "./weeklyGrowthCandidates";
 
 /**
  * Slice 4 — Mission Director types shared between server and client.
@@ -46,6 +46,8 @@ export type MissionWorkRankEvidence = {
   objective: string;
   completionCondition: string | null;
   sourceKind: WeeklyGrowthSourceKind;
+  /** Candidate growth motion; identifies matching missions across sources. */
+  motion?: WeeklyGrowthMotion;
   sourceRefs: WeeklyGrowthSourceRef[];
   score: number;
   confidence: "high" | "low";
@@ -62,6 +64,7 @@ export type MissionWorkSelection = {
   objective: string;
   completionCondition: string | null;
   sourceKind: WeeklyGrowthSourceKind;
+  motion?: WeeklyGrowthMotion;
   sourceRefs: WeeklyGrowthSourceRef[];
   executionType: "mission" | "challenge";
   rankEvidence: MissionWorkRankEvidence;

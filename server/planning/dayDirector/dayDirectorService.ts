@@ -1,3 +1,7 @@
+import {
+  commitmentMissionType,
+  loadMissionPresentations,
+} from "../../agents/daphne/missionFollowUp";
 import { enforceTitleContract } from "../../claire/briefing/titleContract";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -83,6 +87,8 @@ export async function getDayDirectorState(input: {
   actorId: string;
   actorIds?: string[];
   businessDate: string;
+  /** When present, Daphne's consented presentation adjustments are applied. */
+  canonicalOperatorId?: string;
 }) {
   const actorIds = [...new Set(
     (input.actorIds?.length ? input.actorIds : [input.actorId])
@@ -130,6 +136,12 @@ export async function getDayDirectorState(input: {
         )
       ),
   ]);
+  const presentations = input.canonicalOperatorId
+    ? await loadMissionPresentations({
+        tenantId: input.tenantId,
+        canonicalOperatorId: input.canonicalOperatorId,
+      }).catch(() => new Map<string, never>())
+    : new Map<string, never>();
   return {
     processingLocation: locations[0]
       ? {
@@ -149,7 +161,26 @@ export async function getDayDirectorState(input: {
       if (metadata.hiddenFromDayPlan === true) return null;
       if (overlay.notPursuing || overlay.cancelledAt) return null;
       const command = readCommandMetadata(metadata);
+      const missionType = commitmentMissionType(row);
+      // Only matching open work that entered the Day Line after the operator's
+      // explanation changes presentation; earlier items keep their history.
+      const candidatePresentation = presentations.get(missionType);
+      const presentation =
+        row.status === "open" &&
+        candidatePresentation &&
+        row.createdAt.getTime() >= candidatePresentation.declaredAt.getTime() - 1000
+          ? candidatePresentation
+          : undefined;
       return {
+        missionType,
+        presentation: presentation
+          ? {
+              adjustment: presentation.adjustment,
+              note: presentation.note,
+              sourceObservationId: presentation.sourceObservationId,
+              missionType,
+            }
+          : null,
         id: row.id,
         businessDate: row.businessDate,
         title: dayLineDisplayTitle(overlay, row.title),

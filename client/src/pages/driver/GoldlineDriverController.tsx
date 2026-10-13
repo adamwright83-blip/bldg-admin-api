@@ -370,6 +370,13 @@ function LiveGoldlineDriverController({
     { businessDate: selectedDate },
     { refetchInterval: 60_000, retry: false }
   );
+  const missionFollowUp = trpc.system.dayDirector.missionFollowUp.useMutation();
+  const answerMissionFollowUp =
+    trpc.system.dayDirector.answerMissionFollowUp.useMutation();
+  const syncMissionFollowUp = missionFollowUp.mutate;
+  useEffect(() => {
+    syncMissionFollowUp({ today: selectedDate });
+  }, [selectedDate, syncMissionFollowUp]);
   const proposeDayCommitment = trpc.system.dayDirector.propose.useMutation();
   const acceptDayCommitment = trpc.system.dayDirector.accept.useMutation();
   const dismissDayPrompt = trpc.system.dayDirector.dismiss.useMutation();
@@ -1626,6 +1633,15 @@ function LiveGoldlineDriverController({
         }
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}
+        missionFollowUp={missionFollowUp.data ?? null}
+        onAnswerMissionFollowUp={async (commitmentId, answer) => {
+          const result = await answerMissionFollowUp.mutateAsync({
+            commitmentId,
+            answer,
+          });
+          await dayDirectorState.refetch();
+          return result.reply;
+        }}
         intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
         dismissedPromptKeys={dayDirectorState.data?.dismissedPromptKeys}
         nextCommitmentAt={

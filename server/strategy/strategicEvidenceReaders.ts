@@ -15,6 +15,8 @@ import { readLaundryMatureRepeatCohort } from "./verticalTemplates/laundryCohort
 import { buildStrategySnapshot } from "./snapshotBuilder";
 import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
 import { addDaysYmd } from "../analytics/businessPeriods";
+import { identityKeysFor } from "../analytics/customerIdentityResolution";
+import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
 import {
   loadStrategyMarketContext,
   resolveTenantVerticalKey,
@@ -162,6 +164,51 @@ export async function readStrategicDiagnosisInputs(input: {
       quality,
       "Recorded sales divided by admitted paid orders in the same period; no margin inference"
     );
+    // Comparable periods and customer mix come from the same admitted ledger.
+    // One lookback read; every derived figure inherits its coverage quality.
+    const lookback = await readCanonicalRevenue({
+      tenantId: identity.tenantId,
+      from: addDaysYmd(input.businessDate, -394),
+      to: input.businessDate,
+      timeZone: input.timeZone,
+      now,
+    });
+    const lookbackQuality: StrategyEvidence["quality"] =
+      lookback.status === "unavailable"
+        ? "unavailable"
+        : lookback.mayStateExact
+          ? "complete"
+          : lookback.coverage.bookStatus === "stale"
+            ? "stale"
+            : "partial";
+    const comparison = summarizeComparablePeriods(
+      lookback.status === "unavailable" ? null : lookback.includedEvents,
+      input.businessDate
+    );
+    for (const [key, value, description] of [
+      ["prior_paid_orders", comparison?.prior.orders ?? null, "Admitted paid orders in the 30 days before the current trailing period"],
+      ["prior_net_sales_cents", comparison?.prior.cents ?? null, "Recorded sales in the 30 days before the current trailing period; not profit"],
+      ["mtd_net_sales_cents", comparison?.mtd.cents ?? null, "Recorded sales month-to-date"],
+      ["prior_mtd_net_sales_cents", comparison?.priorMtd.cents ?? null, "Recorded sales for the same days of the prior month"],
+      ["new_customers_30d", comparison?.customers.newCustomers ?? null, "Identified customers whose first admitted purchase in a 395-day lookback is in the trailing 30 days"],
+      ["returning_customers_30d", comparison?.customers.returningCustomers ?? null, "Identified customers in the trailing 30 days with an earlier admitted purchase in the lookback"],
+    ] as const)
+      add(
+        key,
+        value,
+        // Unidentified purchases make customer counts incomplete, never zero.
+        key.endsWith("customers_30d") && (comparison?.customers.unidentifiedOrders ?? 0) > 0
+          ? lookbackQuality === "complete" ? "partial" : lookbackQuality
+          : lookbackQuality,
+        description
+      );
+    if (snapshot.payload.customers.aggregateSource === "observed")
+      add(
+        "dormant_customers",
+        snapshot.payload.customers.dormantCount,
+        "complete",
+        "Previously active customers past the dormant threshold; eligible recovery contacts still require consent"
+      );
     const mature = await readLaundryMatureRepeatCohort({
       tenantId: identity.tenantId,
       asOf: now,
@@ -312,5 +359,59 @@ export async function readStrategicDiagnosisInputs(input: {
       .map(
         c => `${c.businessDate}: ${c.title} [day_director_commitments:${c.id}]`
       ),
+  };
+}
+
+type PeriodTotals = { orders: number; cents: number };
+
+/** Pure: period and customer comparisons from admitted ledger events. Null means the ledger was unreadable. */
+export function summarizeComparablePeriods(
+  events: readonly Pick<PaidOrderEvent, "businessDate" | "cents" | "identity">[] | null,
+  businessDate: string
+): null | {
+  current: PeriodTotals;
+  prior: PeriodTotals;
+  mtd: PeriodTotals;
+  priorMtd: PeriodTotals;
+  customers: { newCustomers: number; returningCustomers: number; unidentifiedOrders: number };
+} {
+  if (!events) return null;
+  const currentFrom = addDaysYmd(businessDate, -29);
+  const priorFrom = addDaysYmd(businessDate, -59);
+  const monthStart = `${businessDate.slice(0, 8)}01`;
+  const [y, m] = businessDate.split("-").map(Number) as [number, number];
+  const pm = m === 1 ? 12 : m - 1;
+  const py = m === 1 ? y - 1 : y;
+  const priorMonthStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+  const priorMonthDays = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+  const day = Math.min(Number(businessDate.slice(8, 10)), priorMonthDays);
+  const priorMtdTo = `${priorMonthStart.slice(0, 8)}${String(day).padStart(2, "0")}`;
+  const total = (from: string, to: string): PeriodTotals => {
+    const inRange = events.filter(e => e.businessDate >= from && e.businessDate <= to);
+    return { orders: inRange.length, cents: inRange.reduce((n, e) => n + e.cents, 0) };
+  };
+  const firstSeen = new Map<string, string>();
+  for (const e of events)
+    for (const key of identityKeysFor(e.identity))
+      if (!firstSeen.has(key) || e.businessDate < firstSeen.get(key)!) firstSeen.set(key, e.businessDate);
+  const newCustomers = new Set<string>();
+  const returning = new Set<string>();
+  let unidentifiedOrders = 0;
+  for (const e of events) {
+    if (e.businessDate < currentFrom || e.businessDate > businessDate) continue;
+    const keys = identityKeysFor(e.identity);
+    if (!keys.length) {
+      unidentifiedOrders += 1;
+      continue;
+    }
+    const first = keys.map(k => firstSeen.get(k)!).sort()[0]!;
+    (first >= currentFrom ? newCustomers : returning).add(keys[0]!);
+  }
+  return {
+    current: total(currentFrom, businessDate),
+    prior: total(priorFrom, addDaysYmd(currentFrom, -1)),
+    mtd: total(monthStart, businessDate),
+    priorMtd: total(priorMonthStart, priorMtdTo),
+    customers: { newCustomers: newCustomers.size, returningCustomers: returning.size, unidentifiedOrders },
   };
 }
