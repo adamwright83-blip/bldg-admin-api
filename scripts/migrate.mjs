@@ -67,7 +67,10 @@ const runRequired = async (sql, label, params) => {
 
 // Strategy proposals are required durable preparation; no business rows backfilled.
 const strategicDdl = await readFile(new URL("../drizzle/0128_claire_strategic_preparation.sql", import.meta.url), "utf8");
-for (const statement of strategicDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+// Existing tenant/authority tables are created later in this boot; extensions are
+// applied and asserted at the end, while numbered replay includes them directly.
+const strategicTablesDdl = strategicDdl.split("-- Strategic schema extensions")[0];
+for (const statement of strategicTablesDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
   await runRequired(statement, "Claire strategic preparation");
 }
 

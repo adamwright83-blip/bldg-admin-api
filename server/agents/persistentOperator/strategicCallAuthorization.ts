@@ -235,3 +235,34 @@ export async function scheduleAuthorizedStrategicCall(input: {
     throw error;
   }
 }
+
+/** Canonical consent read port for authenticated application delivery. */
+export async function readStrategicCallConsent(
+  identity: CanonicalOperatorIdentity
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [authorization] = await db
+    .select()
+    .from(tenantStandingAuthorizations)
+    .where(
+      and(
+        eq(tenantStandingAuthorizations.tenantId, identity.tenantId),
+        eq(
+          tenantStandingAuthorizations.canonicalOperatorId,
+          identity.canonicalOperatorId
+        ),
+        eq(
+          tenantStandingAuthorizations.exactAction,
+          WEEKDAY_STRATEGIC_PLANNING_ACTION
+        ),
+        isNull(tenantStandingAuthorizations.revokedAt)
+      )
+    )
+    .orderBy(desc(tenantStandingAuthorizations.version))
+    .limit(1);
+  return {
+    authorization: authorization ?? null,
+    timeZone: await resolveOperatorTimeZone(identity.tenantId),
+  };
+}

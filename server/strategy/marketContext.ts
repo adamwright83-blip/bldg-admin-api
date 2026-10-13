@@ -198,3 +198,31 @@ export async function loadStrategyMarketContext(
   );
   return result;
 }
+
+/** Authenticated configuration port; industry truth stays with the strategy registry. */
+export async function configureTenantStrategyVertical(input: {
+  identity: import("../agents/persistentOperator/identity").CanonicalOperatorIdentity;
+  verticalKey: string;
+}) {
+  const { identity, verticalKey } = input;
+  if (
+    !["owner", "admin", "operator"].includes(identity.membership.source) ||
+    !["owner", "admin", "operator"].includes(identity.membership.canonical)
+  )
+    throw new Error("Authenticated operator configuration required");
+  if (verticalKey !== "generic") {
+    const { defaultVerticalRegistry } = await import(
+      "./verticalTemplates/defaultRegistry"
+    );
+    defaultVerticalRegistry.get(verticalKey);
+  }
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db
+    .update(legacyDayforgeSaasTenants)
+    .set({ strategyVerticalKey: verticalKey })
+    .where(eq(legacyDayforgeSaasTenants.id, identity.tenantId));
+  if ((await resolveTenantVerticalKey(identity.tenantId)) !== verticalKey)
+    throw new Error("Industry configuration readback failed");
+  return { verticalKey };
+}

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: historical SaaS SQL table names retained for the production schema; current product is JOYSTICK. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /* Controlled provider transport; real MySQL, workers, policies, voice sessions,
  * proposal revisions, and Day Director writes. No real outbound phone call. */
 import { execFile } from "node:child_process";
@@ -25,6 +26,7 @@ import {
 import {
   scheduleAuthorizedStrategicCall,
   grantStrategicCallAuthorization,
+  readStrategicCallConsent,
   revokeStrategicCallAuthorization,
 } from "../agents/persistentOperator/strategicCallAuthorization";
 import { OperatorAppointmentStore } from "../agents/persistentOperator/operatorAppointmentStore";
@@ -32,7 +34,10 @@ import { OperatorAppointmentWorker } from "../agents/persistentOperator/operator
 import { executeOperatorAppointment } from "../agents/persistentOperator/operatorAppointmentExecution";
 import { issueClaireToken } from "../claire/claireToken";
 import { runAuthoritativeClaireVoiceTurn } from "../claire/claireTwilio";
-import { respondToStrategicProposal } from "./strategicApproval";
+import {
+  readVerifiedStrategicApprovalItemIds,
+  respondToStrategicProposal,
+} from "./strategicApproval";
 import { prepareStrategicProposal } from "./strategicPreparation";
 import { refreshStrategicDiagnosis } from "./strategicPreparation";
 import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
@@ -60,6 +65,7 @@ import {
 } from "./playGenerator";
 import { invalidateUnresolvedTemplateGeography } from "./geographyRemediation";
 import { getDb } from "../db";
+import { configureTenantStrategyVertical } from "./marketContext";
 import { strategyPlays } from "../../drizzle/schema";
 import { planForDate } from "../planning/missionDirector/missionDirectorService";
 
@@ -151,6 +157,15 @@ describeMysql(
       if (!resolved.ok)
         throw new Error("Test canonical identity did not resolve");
       identity = resolved.identity;
+      expect(
+        await configureTenantStrategyVertical({
+          identity,
+          verticalKey: "laundry_fluff_fold",
+        })
+      ).toEqual({ verticalKey: "laundry_fluff_fold" });
+      expect(
+        (await readStrategicCallConsent(identity)).authorization
+      ).toBeNull();
       await setActiveMacroGoal({
         tenantId,
         operatorUserId: operator,
@@ -267,22 +282,20 @@ describeMysql(
           status => `legacy-${status}-${suffix}`
         );
         for (const [i, status] of ["candidate", "active"].entries())
-          await db
-            .insert(strategyPlays)
-            .values({
-              id: legacyIds[i]!,
-              tenantId,
-              businessName: "Historical contaminated template fixture",
-              worldName: "Historical template",
-              hypothesis: "Unverified historical fixture",
-              primaryMetric: "new_paying_customers",
-              geography: "century-city",
-              scoreBreakdownJson: {},
-              status: status as "candidate" | "active",
-              verticalKey: "laundry_fluff_fold",
-              templateKey: "property_expansion",
-              provenanceJson: { source: "verticalTemplate:laundry_fluff_fold" },
-            });
+          await db.insert(strategyPlays).values({
+            id: legacyIds[i]!,
+            tenantId,
+            businessName: "Historical contaminated template fixture",
+            worldName: "Historical template",
+            hypothesis: "Unverified historical fixture",
+            primaryMetric: "new_paying_customers",
+            geography: "century-city",
+            scoreBreakdownJson: {},
+            status: status as "candidate" | "active",
+            verticalKey: "laundry_fluff_fold",
+            templateKey: "property_expansion",
+            provenanceJson: { source: "verticalTemplate:laundry_fluff_fold" },
+          });
         const remediation =
           await invalidateUnresolvedTemplateGeography(tenantId);
         expect(remediation.invalidated).toContain(legacyIds[0]);
@@ -333,6 +346,9 @@ describeMysql(
           dailyLimit: 1,
           sourceReference: "authenticated_app:controlled_test_consent",
         });
+        expect(
+          (await readStrategicCallConsent(identity)).authorization?.id
+        ).toBe(authorization.id);
         const scheduled = await scheduleAuthorizedStrategicCall({
           identity,
           timeZone: zone,
@@ -450,6 +466,26 @@ describeMysql(
         });
         expect(appRetry.failedItems).toEqual([]);
         expect(appRetry.actionIds).toEqual([committed[0]!.id]);
+        expect(
+          await readVerifiedStrategicApprovalItemIds(identity, p2!)
+        ).toEqual(p2!.items.map(i => i.id));
+        await sql.execute(
+          "UPDATE day_director_commitments SET sourceText = ? WHERE tenantId = ? AND id = ?",
+          ["tampered test source", tenantId, committed[0]!.id]
+        );
+        expect(
+          await readVerifiedStrategicApprovalItemIds(identity, p2!)
+        ).toEqual([]);
+        await sql.execute(
+          "UPDATE day_director_commitments SET sourceText = ? WHERE tenantId = ? AND id = ?",
+          [p2!.items[0]!.objective, tenantId, committed[0]!.id]
+        );
+        await expect(
+          readVerifiedStrategicApprovalItemIds(
+            { ...identity, tenantId: "foreign-test-tenant" },
+            p2!
+          )
+        ).rejects.toThrow("Proposal owner mismatch");
         const [objectives] = await sql.execute<mysql.RowDataPacket[]>(
           "SELECT * FROM goal_cycle_objectives WHERE tenantId = ? AND selectedRef = ?",
           [tenantId, p!.items[0]!.candidateId]
@@ -635,6 +671,9 @@ describeMysql(
         );
         expect(new Set(subprocessPlans.map(plan => plan.id)).size).toBe(1);
         await revokeStrategicCallAuthorization(identity);
+        expect(
+          (await readStrategicCallConsent(identity)).authorization
+        ).toBeNull();
         const policyStep = {
           id: randomUUID(),
           tenantId,

@@ -269,3 +269,59 @@ export async function reviseStrategicProposal(input: {
     opening: `Revised pending proposal: ${items.map(i => `${i.businessDate}: ${i.title}`).join("; ")}. Approve selected items, revise, reject, or defer.`,
   });
 }
+
+/** Read port: application status requires canonical commitment plus persisted approval lineage. */
+export async function readVerifiedStrategicApprovalItemIds(
+  identity: CanonicalOperatorIdentity,
+  proposal: StrategicPlanningProposal
+): Promise<string[]> {
+  if (
+    proposal.tenantId !== identity.tenantId ||
+    proposal.canonicalOperatorId !== identity.canonicalOperatorId
+  )
+    throw new Error("Proposal owner mismatch");
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const responses = await strategicResponses(identity, proposal.id);
+  const stored = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, identity.tenantId),
+        eq(dayDirectorCommitments.actorId, identity.dayDirectorActorId)
+      )
+    );
+  return proposal.items
+    .filter(item =>
+      stored.some(row => {
+        const approval = (
+          row.metadataJson as {
+            strategicApproval?: {
+              proposalId: string;
+              revision: string;
+              itemId: string;
+              responseId: string;
+              canonicalOperatorId: string;
+            };
+          } | null
+        )?.strategicApproval;
+        return (
+          approval?.proposalId === proposal.id &&
+          approval.revision === proposal.revision &&
+          approval.itemId === item.id &&
+          approval.canonicalOperatorId === identity.canonicalOperatorId &&
+          responses.some(
+            r =>
+              r.id === approval.responseId &&
+              r.action === "approve" &&
+              r.itemIds.includes(item.id)
+          ) &&
+          row.title === item.title &&
+          row.sourceText === item.objective &&
+          row.businessDate === item.businessDate
+        );
+      })
+    )
+    .map(item => item.id);
+}
