@@ -7,6 +7,7 @@ import {
   type PersistentActionPolicyDecision,
   type ToolRiskClass,
 } from "./actionPolicy";
+import type { ClaireAutonomyLevel } from "./earnedAutonomyReadiness";
 import type { CanonicalOperatorIdentity } from "./identity";
 
 export type PersistentOperatorActionSource =
@@ -79,6 +80,7 @@ export async function executePersistentOperatorAction<T>(input: {
   exactAction: string;
   standingAuthorizationId?: string | null;
   approvedByUserId?: string | null;
+  requiredAutonomyLevel?: ClaireAutonomyLevel;
   expiresAtMs: number;
   execute: (
     context: PersistentOperatorActionExecutionContext
@@ -114,6 +116,7 @@ export async function executePersistentOperatorAction<T>(input: {
     riskClass: input.riskClass,
     standingAuthorizationId: input.standingAuthorizationId,
     approvedByUserId: input.approvedByUserId,
+    requiredAutonomyLevel: input.requiredAutonomyLevel,
   });
   if (!policy.allowed) {
     throw new Error(

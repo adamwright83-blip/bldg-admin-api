@@ -487,35 +487,6 @@ export async function bridgeCleanCloudPaidOrder(
   if (!input.tenantId?.trim()) throw new Error("tenantId is required");
   if (!input.cleancloudOrderId?.trim()) throw new Error("cleancloudOrderId is required");
 
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const sourceRows = await db
-    .select({
-      paid: cleancloudPaidOrders.paid,
-      totalCents: cleancloudPaidOrders.totalCents,
-      cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
-      paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
-      paidDateUtc: cleancloudPaidOrders.paidDateUtc,
-      placedAtUtc: cleancloudPaidOrders.placedAtUtc,
-    })
-    .from(cleancloudPaidOrders)
-    .where(
-      and(
-        eq(cleancloudPaidOrders.tenantId, input.tenantId),
-        eq(cleancloudPaidOrders.cleancloudOrderId, input.cleancloudOrderId.trim())
-      )
-    );
-  const authoritativeSource = sourceRows.find(
-    row => row.paid === true && (row.totalCents ?? 0) > 0 && row.totalCents === input.totalCents
-  );
-  if (!authoritativeSource) {
-    return {
-      bridged: false,
-      reason: "payment_evidence_mismatch",
-      message: `CleanCloud order #${input.cleancloudOrderId} caller values do not match persisted paid-order evidence`,
-    };
-  }
-
   // Rule 2: Unpaid orders or 0 total can never be economic outcomes
   if (!input.paid || input.totalCents <= 0) {
     return {
@@ -523,6 +494,36 @@ export async function bridgeCleanCloudPaidOrder(
       reason: "order_not_paid_or_zero",
       message: `CleanCloud order #${input.cleancloudOrderId} is not paid or has non-positive amount (${input.totalCents} cents); cannot bind economic credit.`,
     };
+  }
+
+  const db = await getDb();
+  if (db) {
+    const sourceRows = await db
+      .select({
+        paid: cleancloudPaidOrders.paid,
+        totalCents: cleancloudPaidOrders.totalCents,
+        cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+        paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+        paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+        placedAtUtc: cleancloudPaidOrders.placedAtUtc,
+      })
+      .from(cleancloudPaidOrders)
+      .where(
+        and(
+          eq(cleancloudPaidOrders.tenantId, input.tenantId),
+          eq(cleancloudPaidOrders.cleancloudOrderId, input.cleancloudOrderId.trim())
+        )
+      );
+    const authoritativeSource = sourceRows.find(
+      row => row.paid === true && (row.totalCents ?? 0) > 0 && row.totalCents === input.totalCents
+    );
+    if (!authoritativeSource) {
+      return {
+        bridged: false,
+        reason: "payment_evidence_mismatch",
+        message: `CleanCloud order #${input.cleancloudOrderId} caller values do not match persisted paid-order evidence`,
+      };
+    }
   }
 
   let matchedObjective: PersistentGrowthObjective | null = null;

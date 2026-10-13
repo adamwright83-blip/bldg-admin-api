@@ -233,4 +233,104 @@ describe("Daphne V2 real Claire correction loop", () => {
     expect(failed.speak).toContain("couldn't save");
     expect(failed.speak).not.toContain("standing rule");
   });
+
+  it("proves consented correction changes future behavior across sessions and immediate revocation restores unadapted behavior", async () => {
+    // Model persistent store with active consent and adaptation
+    let adaptationConsented = true;
+    let storedDetailPreference = 0.8; // default detailed
+
+    const memory = { concise: false };
+    const h = depsForRuntimeLoop(memory);
+
+    // Dynamic mock for guidance loader that checks persistent consent & preference
+    h.overrides.loadDaphneV2Guidance = vi.fn(async () => {
+      if (!adaptationConsented) return null;
+      return {
+        cardGeneratedAt: "2026-10-07T19:00:00.000Z",
+        evidenceCount: 1,
+        responseDetail: storedDetailPreference,
+        promptSection: `DAPHNE V2 USER-ADAPTATION CONTEXT. Declared response detail preference: ${storedDetailPreference.toFixed(2)} on [0,1].`,
+      };
+    });
+
+    // Mock capture to update the persistent store upon explicit consented correction
+    h.overrides.captureDaphneV2PreferenceCorrections = vi.fn(async (input: { utterance: string }) => {
+      if (/keep your answers shorter|concise/i.test(input.utterance)) {
+        storedDetailPreference = 0.2;
+        return {
+          status: "persisted" as const,
+          corrections: [{ preferenceKey: "response_detail" as const, value: 0.2, evidenceText: input.utterance }],
+          observationIds: ["obs-consented-1"],
+          readbackVerified: true,
+        };
+      }
+      return { status: "no_match" as const, corrections: [], observationIds: [], readbackVerified: false };
+    }) as never;
+
+    // Session 1: Operator explicitly requests shorter answers
+    const session1 = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "voice",
+        utterance: "Keep your answers shorter from now on.",
+        allowFragmentWait: false,
+        state: {} as ClaireTurnState,
+        conversationKey: "session-1",
+        brief: "b",
+        context: context(),
+      },
+      h.overrides
+    );
+    expect(session1.speak).toContain("I'll keep my answers shorter");
+    expect(storedDetailPreference).toBe(0.2);
+
+    // Session 2: Independent session with new conversationKey and empty state
+    // Claire reads durable preference and produces concise adapted response
+    const session2 = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "What should I do about The Louise?",
+        state: {} as ClaireTurnState,
+        conversationKey: "session-2",
+        brief: "b",
+        context: context(),
+      },
+      h.overrides
+    );
+    expect(session2.speak).toBe("Do the highest-value follow-up first.");
+    expect(h.followUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        daphnePromptSection: expect.stringContaining("0.20"),
+      })
+    );
+
+    // Operator revokes consent / adaptation
+    adaptationConsented = false;
+
+    // Session 3: Independent session after revocation
+    // Guidance is null, Claire immediately reverts to unadapted baseline response
+    const session3 = await runClaireTurn(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "adam",
+        dayDirectorActorId: "1",
+        surface: "text",
+        utterance: "What should I do about The Louise?",
+        state: {} as ClaireTurnState,
+        conversationKey: "session-3",
+        brief: "b",
+        context: context(),
+      },
+      h.overrides
+    );
+    expect(session3.speak).toBe(
+      "I would start by reviewing the full situation and then deciding which follow-up deserves attention first."
+    );
+  });
 });
+

@@ -57,6 +57,8 @@ export function proposeDaphneImmersionExperiment(input: {
   preferences: { adaptationEnabled: boolean; consentRevoked: boolean };
   variants: readonly DaphnePresentationVariant[];
   evidence: readonly DaphneMissionPresentationEvidence[];
+  now?: Date;
+  maxEvidenceAgeMs?: number;
 }): DaphneImmersionProposal {
   const abstain = (reason: string, evidenceRefs: string[] = []): DaphneImmersionProposal =>
     ({ status: "abstain", reason, evidenceRefs });
@@ -76,16 +78,31 @@ export function proposeDaphneImmersionExperiment(input: {
   }
   const active = applicable.find(v => v.id === input.activeVariantId);
   if (!active) return abstain("active_presentation_not_approved");
+  const now = (input.now ?? new Date()).getTime();
+  const maxAge = input.maxEvidenceAgeMs ?? 30 * 24 * 60 * 60_000;
   const eligible = input.evidence.filter(e =>
     e.tenantId === input.tenantId &&
     e.operatorUserId === input.operatorUserId &&
+    e.missionId === input.missionId &&
     e.missionType === input.missionType &&
     e.trigger === input.trigger &&
     e.verificationStatus === "verified" &&
     e.sourceRef.trim().length > 0 &&
-    !Number.isNaN(Date.parse(e.observedAt))
+    Number.isFinite(Date.parse(e.observedAt)) &&
+    Date.parse(e.observedAt) <= now && now - Date.parse(e.observedAt) <= maxAge &&
+    applicable.some(v => v.id === e.variantId && v.immersionLevel === e.immersionLevel)
   ).sort((a,b) => Date.parse(b.observedAt) - Date.parse(a.observedAt));
+  const sourceValues = new Map<string, string>();
+  for (const item of eligible) {
+    const value = JSON.stringify([item.missionId, item.variantId, item.outcome, item.observedAt, item.operatorReason]);
+    if (sourceValues.has(item.sourceRef) && sourceValues.get(item.sourceRef) !== value)
+      return abstain("conflicting_verified_source", [item.sourceRef]);
+    sourceValues.set(item.sourceRef, value);
+  }
   const latest = eligible[0];
+  if (latest && eligible.some(e => e.observedAt === latest.observedAt &&
+      (e.outcome !== latest.outcome || e.variantId !== latest.variantId)))
+    return abstain("conflicting_latest_evidence", eligible.filter(e => e.observedAt === latest.observedAt).map(e => e.sourceRef));
   if (!latest || latest.outcome !== "skipped" || latest.variantId !== active.id) {
     return abstain("no_verified_skip_of_current_presentation", latest ? [latest.sourceRef] : []);
   }

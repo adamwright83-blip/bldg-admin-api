@@ -20,7 +20,7 @@ import { advanceWeeklySession, type WeeklyAdvanceResult } from "./advance";
 import { commitWeeklyPlan } from "./commit";
 import { loadWeeklyDossier } from "./dossier";
 import { readWeeklyDossierFacts, readWeeklyGrowthCandidatesForDossier } from "./productionReaders";
-import { isWeeklySessionValid, loadWeeklySession, type WeeklyPlanningSession } from "./session";
+import { bindWeeklyAppointmentLineage, isWeeklySessionValid, loadWeeklySessionForScope, type WeeklyPlanningSession } from "./session";
 import {
   classifyWeeklyTurnWithClaire,
   completeWeeklyActWithClaire,
@@ -124,6 +124,8 @@ export async function routeActiveWeeklySession(
     now: Date;
     timeZone: string;
     weekStartOverride?: string;
+    weeklyPlanningSourceReference?: string | null;
+    weeklyPlanningAppointmentId?: string | null;
     /**
      * Brain V3 authoritative semantic intent. When present, this route does
      * not reinterpret the raw utterance or run its own semantic classifier.
@@ -143,10 +145,15 @@ export async function routeActiveWeeklySession(
         weekStart: input.weekStartOverride,
       })
     : remainingWeekHorizon({ businessDate, localTime });
-  const session = await loadWeeklySession({
+  const session = await loadWeeklySessionForScope({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
+    operatorIds: input.operatorIds,
+    dayDirectorActorId: input.dayDirectorActorId,
+    dayDirectorActorIds: input.dayDirectorActorIds,
     weekStart: horizon.weekStart,
+    now: input.now,
+    timeZone: input.timeZone,
   });
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
@@ -179,6 +186,7 @@ export async function routeActiveWeeklySession(
   }
 
   try {
+    await bindWeeklyAppointmentLineage(session, input);
     return await routeLoadedSession(input, horizon, session, intent);
   } catch (error) {
     if (isMissingTable(error)) throw error;

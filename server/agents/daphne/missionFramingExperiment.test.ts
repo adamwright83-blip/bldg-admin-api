@@ -22,7 +22,7 @@ const run = (changes: Record<string, unknown> = {}) => proposeDaphneImmersionExp
   tenantId: "t1", operatorUserId: "op1", missionId: "mis_call",
   missionType: "cold_call", trigger: "outbound_call", activeVariantId: "plain",
   preferences: { adaptationEnabled: true, consentRevoked: false },
-  variants, evidence: [evidence()], ...changes,
+  variants, evidence: [evidence()], now: new Date("2026-10-12T20:00:00Z"), ...changes,
 });
 
 describe("Daphne immersion hypotheses", () => {

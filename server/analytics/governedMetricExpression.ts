@@ -6,6 +6,7 @@
  * observations. This module neither fetches data nor changes payment truth.
  */
 import { METRICS, type MetricUnit } from "./metricRegistry";
+import { isValidYmd } from "./businessPeriods";
 
 export type MetricObservation = {
   metricId: string;
@@ -17,12 +18,16 @@ export type MetricObservation = {
   unit: MetricUnit;
   verified: boolean;
   stale: boolean;
+  /** Canonical dimensions, excluding the period. Arithmetic cannot mix scopes. */
+  scopeRef?: string;
 };
 
 export type MetricExpression =
   | { kind: "observation"; key: string }
   | { kind: "add" | "subtract"; left: MetricExpression; right: MetricExpression }
   | { kind: "divide"; numerator: MetricExpression; denominator: MetricExpression }
+  | { kind: "multiply" | "difference"; left: MetricExpression; right: MetricExpression }
+  | { kind: "percent"; expression: MetricExpression }
   | { kind: "percent_change"; current: MetricExpression; previous: MetricExpression };
 
 export type DerivedMetric = {
@@ -38,7 +43,7 @@ export class GovernedMetricError extends Error {
   constructor(public readonly code:
     | "BAD_EXPRESSION" | "MISSING_EVIDENCE" | "UNAUTHORIZED"
     | "UNVERIFIED" | "STALE" | "BAD_VALUE" | "UNIT_MISMATCH"
-    | "PERIOD_MISMATCH" | "DIVISION_BY_ZERO", message: string) {
+    | "PERIOD_MISMATCH" | "SCOPE_MISMATCH" | "DIVISION_BY_ZERO", message: string) {
     super(message);
     this.name = "GovernedMetricError";
   }
@@ -49,9 +54,9 @@ type InternalValue = {
   unit: string;
   sourceRefs: Set<string>;
   period: MetricObservation["period"] | null;
+  scopeRef: string;
 };
 
-const ISO_YMD = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NODES = 32;
 const MAX_DEPTH = 12;
 
@@ -61,6 +66,9 @@ function samePeriod(a: InternalValue, b: InternalValue): boolean {
 }
 
 function mergeRefs(a: InternalValue, b: InternalValue): Set<string> {
+  if (a.scopeRef !== b.scopeRef) {
+    throw new GovernedMetricError("SCOPE_MISMATCH", "Metric scopes must match for arithmetic");
+  }
   return new Set([...a.sourceRefs, ...b.sourceRefs]);
 }
 
@@ -88,11 +96,11 @@ export function evaluateGovernedMetricExpression(input: {
   }
   let nodeCount = 0;
   const evaluate = (node: MetricExpression, depth: number): InternalValue => {
-    if (++nodeCount > MAX_NODES || depth > MAX_DEPTH || !node) {
+    if (++nodeCount > MAX_NODES || depth > MAX_DEPTH || !node || typeof node !== "object") {
       throw new GovernedMetricError("BAD_EXPRESSION", "Metric expression is too large");
     }
     if (node.kind === "observation") {
-      const item = input.observations[node.key];
+      const item = Object.hasOwn(input.observations, node.key) ? input.observations[node.key] : null;
       if (!item) {
         throw new GovernedMetricError("MISSING_EVIDENCE", "Metric observation unavailable");
       }
@@ -103,14 +111,14 @@ export function evaluateGovernedMetricExpression(input: {
       if (!definition || definition.unit !== item.unit) {
         throw new GovernedMetricError("UNIT_MISMATCH", "Metric is not governed by the registry");
       }
-      if (!item.verified || !item.sourceRef.trim()) {
+      if (!item.verified || typeof item.sourceRef !== "string" || !item.sourceRef.trim()) {
         throw new GovernedMetricError("UNVERIFIED", "Metric observation is not verifiable");
       }
       if (item.stale) {
         throw new GovernedMetricError("STALE", "Metric observation is stale");
       }
-      if (!Number.isFinite(item.value) || !ISO_YMD.test(item.period.start) ||
-          !ISO_YMD.test(item.period.end) || item.period.start > item.period.end) {
+      if (!Number.isFinite(item.value) || !item.period || !isValidYmd(item.period.start) ||
+          !isValidYmd(item.period.end) || item.period.start > item.period.end) {
         throw new GovernedMetricError("BAD_VALUE", "Metric value or date period is invalid");
       }
       return {
@@ -118,22 +126,24 @@ export function evaluateGovernedMetricExpression(input: {
         unit: item.unit,
         sourceRefs: new Set([item.sourceRef]),
         period: item.period,
+        scopeRef: item.scopeRef ?? "legacy_same_scope",
       };
     }
-    if (node.kind === "add" || node.kind === "subtract") {
+    if (node.kind === "add" || node.kind === "subtract" || node.kind === "difference") {
       const left = evaluate(node.left, depth + 1);
       const right = evaluate(node.right, depth + 1);
       if (left.unit !== right.unit) {
         throw new GovernedMetricError("UNIT_MISMATCH", "Cannot add or subtract different metric units");
       }
-      if (!samePeriod(left, right)) {
+      if (node.kind !== "difference" && !samePeriod(left, right)) {
         throw new GovernedMetricError("PERIOD_MISMATCH", "Metric periods must match for arithmetic");
       }
       return {
         value: ensureFinite(node.kind === "add" ? left.value + right.value : left.value - right.value),
         unit: left.unit,
         sourceRefs: mergeRefs(left, right),
-        period: left.period,
+        period: node.kind === "difference" ? null : left.period,
+        scopeRef: left.scopeRef,
       };
     }
     if (node.kind === "divide") {
@@ -150,7 +160,23 @@ export function evaluateGovernedMetricExpression(input: {
         unit: left.unit === right.unit ? "ratio" : `${left.unit}_per_${right.unit}`,
         sourceRefs: mergeRefs(left, right),
         period: left.period,
+        scopeRef: left.scopeRef,
       };
+    }
+    if (node.kind === "multiply") {
+      const left = evaluate(node.left, depth + 1);
+      const right = evaluate(node.right, depth + 1);
+      if (!samePeriod(left, right)) throw new GovernedMetricError("PERIOD_MISMATCH", "Metric periods must match for multiplication");
+      // No arbitrary financial units: scaling by a ratio is meaningful; dollars
+      // times dollars is not an authorized business measure.
+      if (left.unit !== "ratio" && right.unit !== "ratio") throw new GovernedMetricError("UNIT_MISMATCH", "Multiplication requires a dimensionless ratio");
+      return { value: ensureFinite(left.value * right.value), unit: left.unit === "ratio" ? right.unit : left.unit,
+        sourceRefs: mergeRefs(left, right), period: left.period, scopeRef: left.scopeRef };
+    }
+    if (node.kind === "percent") {
+      const item = evaluate(node.expression, depth + 1);
+      if (item.unit !== "ratio") throw new GovernedMetricError("UNIT_MISMATCH", "Percentage requires a dimensionless ratio");
+      return { ...item, value: ensureFinite(item.value * 100), unit: "percent" };
     }
     if (node.kind === "percent_change") {
       const current = evaluate(node.current, depth + 1);
@@ -166,6 +192,7 @@ export function evaluateGovernedMetricExpression(input: {
         unit: "percent",
         sourceRefs: mergeRefs(current, previous),
         period: null,
+        scopeRef: current.scopeRef,
       };
     }
     throw new GovernedMetricError("BAD_EXPRESSION", "Unknown expression operation");

@@ -218,6 +218,8 @@ export async function executeOperatorAppointment(
           timeZone: step.timeZone,
           now,
           weekStartOverride: step.weekStart,
+          weeklyPlanningSourceReference: context.source.sourceReference,
+          weeklyPlanningAppointmentId: context.jobId,
         });
         opening = weekly.speech;
         sessionKind = "weekly_planning";
@@ -252,6 +254,8 @@ export async function executeOperatorAppointment(
         openingOverride: opening,
         sessionKindOverride: sessionKind,
         weeklyPlanningWeekStart: step.weekStart,
+        weeklyPlanningSourceReference: context.source.sourceReference,
+        weeklyPlanningAppointmentId: context.jobId,
       });
     },
   });

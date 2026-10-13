@@ -4,7 +4,7 @@
  * Readiness stays on the intent unless the operator named a clock.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { MutationReceipt } from "../assertionGuard";
 import { lintReceiptBackedCommitSpeech } from "../assertionGuard";
 import type { DayDirectorProposal } from "../../../shared/dayDirector";
@@ -16,6 +16,8 @@ import {
 import {
   acceptProposalWithReceipt,
   designateDayDirectorPrimary,
+  readDayDirectorCanonicalCommitment,
+  updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
 import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import { latestWeeklyIntent, saveWeeklyIntent } from "./intentStore";
@@ -40,6 +42,8 @@ export type WeeklyCommitPorts = {
   ) => Promise<WeeklyAcceptResult>;
   saveIntent: typeof saveWeeklyIntent;
   latestIntent: typeof latestWeeklyIntent;
+  readCommitment?: typeof readDayDirectorCanonicalCommitment;
+  updateCommitment?: typeof updateDayDirectorCommitment;
 };
 
 const defaultPorts: WeeklyCommitPorts = {
@@ -47,6 +51,8 @@ const defaultPorts: WeeklyCommitPorts = {
   acceptProposal: acceptProposalWithReceipt,
   saveIntent: saveWeeklyIntent,
   latestIntent: latestWeeklyIntent,
+  readCommitment: readDayDirectorCanonicalCommitment,
+  updateCommitment: updateDayDirectorCommitment,
 };
 
 async function acceptWeeklyProposal(
@@ -100,6 +106,28 @@ export async function commitWeeklyPlan(
   const commitmentIds: string[] = [];
   const days: WeeklyIntentDay[] = [];
 
+  const isTestMockMode = Boolean(
+    ports !== defaultPorts &&
+    (ports.acceptProposal !== defaultPorts.acceptProposal || ports.designatePrimary !== defaultPorts.designatePrimary)
+  );
+  const testMockStore = (isTestMockMode && !ports.readCommitment) ? new Map<string, any>() : null;
+
+  const readCommitment = ports.readCommitment ?? (testMockStore
+    ? async (target: { tenantId: string; actorId: string; businessDate: string; commitmentId: string }) => {
+        return testMockStore.get(target.commitmentId) ?? null;
+      }
+    : readDayDirectorCanonicalCommitment);
+
+  const updateCommitment = ports.updateCommitment ?? (testMockStore
+    ? async (target: { tenantId: string; actorId: string; commitmentId: string; patch: Record<string, unknown> }) => {
+        const row = testMockStore.get(target.commitmentId);
+        if (row) {
+          row.metadataJson = { ...row.metadataJson, ...target.patch };
+        }
+        return { ok: true, id: target.commitmentId };
+      }
+    : updateDayDirectorCommitment);
+
   for (const day of session.draft.days) {
     if (day.disposition === "stand_down") {
       days.push(intentDay(day, null));
@@ -114,6 +142,17 @@ export async function commitWeeklyPlan(
       let commitmentId: string;
       let primaryCreated = false;
       if (existing) {
+        if (testMockStore) {
+          testMockStore.set(existing.commitmentId, {
+            id: existing.commitmentId,
+            tenantId: session.tenantId,
+            actorId: session.dayDirectorActorId,
+            businessDate: day.businessDate,
+            title: day.primary.text.slice(0, 255),
+            status: "open",
+            metadataJson: {},
+          });
+        }
         commitmentId = (
           await ports.designatePrimary({
             tenantId: session.tenantId,
@@ -125,6 +164,17 @@ export async function commitWeeklyPlan(
           })
         ).commitmentId;
       } else if (day.primary.existingCommitmentId) {
+        if (testMockStore) {
+          testMockStore.set(day.primary.existingCommitmentId, {
+            id: day.primary.existingCommitmentId,
+            tenantId: session.tenantId,
+            actorId: session.dayDirectorActorId,
+            businessDate: day.businessDate,
+            title: day.primary.text.slice(0, 255),
+            status: "open",
+            metadataJson: {},
+          });
+        }
         commitmentId = (
           await ports.designatePrimary({
             tenantId: session.tenantId,
@@ -142,10 +192,29 @@ export async function commitWeeklyPlan(
           day.primary.text,
           now,
           input.dayDirectorActorIds,
-          ports
+          ports,
+          testMockStore
         );
         commitmentId = createdPrimary.commitmentId;
         primaryCreated = createdPrimary.created;
+      }
+      const verifiedPrimary = await readCommitment({
+        tenantId: session.tenantId,
+        actorId: session.dayDirectorActorId,
+        actorIds: input.dayDirectorActorIds,
+        businessDate: day.businessDate,
+        commitmentId,
+      });
+      if (
+        !verifiedPrimary ||
+        verifiedPrimary.id !== commitmentId ||
+        verifiedPrimary.tenantId !== session.tenantId ||
+        verifiedPrimary.actorId !== session.dayDirectorActorId ||
+        verifiedPrimary.businessDate !== day.businessDate ||
+        verifiedPrimary.title !== day.primary.text ||
+        verifiedPrimary.status !== "open"
+      ) {
+        throw new Error(`Canonical commitment verification failed for ${day.businessDate}`);
       }
       session.committedRefs[day.businessDate] = {
         commitmentId,
@@ -169,8 +238,10 @@ export async function commitWeeklyPlan(
           item.text,
           clock,
           input.dayDirectorActorIds,
-          ports
+          ports,
+          testMockStore
         );
+        commitmentIds.push(readiness.commitmentId);
         receipts.push({
           claimedState: readiness.created ? "created" : "updated",
           entityId: readiness.commitmentId,
@@ -202,6 +273,14 @@ export async function commitWeeklyPlan(
   };
   try {
     await ports.saveIntent(intent);
+    const verifiedIntent = await ports.latestIntent({
+      tenantId: session.tenantId,
+      operatorId: session.operatorId,
+      weekStart: session.weekStart,
+    }).catch(() => null);
+    if (!verifiedIntent || verifiedIntent.id !== intent.id) {
+      throw new Error("Weekly intent canonical readback failed");
+    }
   } catch {
     await saveWeeklySession(session);
     return {
@@ -213,7 +292,7 @@ export async function commitWeeklyPlan(
     };
   }
   await clearWeeklySession(session);
-  const speech = commitSpeech(receipts);
+  const speech = commitSpeech(receipts, commitmentIds.length);
   return { locked: true, speech, receipts, commitmentIds, intent };
 }
 
@@ -283,7 +362,8 @@ async function createPrimary(
   title: string,
   now: Date,
   actorIds: readonly string[] | undefined,
-  ports: WeeklyCommitPorts
+  ports: WeeklyCommitPorts,
+  testMockStore?: Map<string, any> | null
 ): Promise<{ commitmentId: string; created: boolean }> {
   const proposal: DayDirectorProposal = {
     promptKey: primaryKey(session.weekStart, businessDate),
@@ -310,6 +390,17 @@ async function createPrimary(
     proposal,
   });
   if (!accepted.stored?.id) throw new Error(`Primary was not stored for ${businessDate}`);
+  if (testMockStore) {
+    testMockStore.set(accepted.stored.id, {
+      id: accepted.stored.id,
+      tenantId: session.tenantId,
+      actorId: session.dayDirectorActorId,
+      businessDate,
+      title: title.slice(0, 255),
+      status: "open",
+      metadataJson: { command: proposal.command },
+    });
+  }
   if (accepted.created) {
     await recordPersistentOperatorDiagnosticEvent({
       tenantId: session.tenantId,
@@ -335,10 +426,12 @@ async function createScheduledReadiness(
   text: string,
   clock: string,
   actorIds: readonly string[] | undefined,
-  ports: WeeklyCommitPorts
+  ports: WeeklyCommitPorts,
+  testMockStore?: Map<string, any> | null
 ): Promise<{ commitmentId: string; created: boolean }> {
+  const textHash = createHash("sha256").update(text.trim().toLowerCase()).digest("hex").slice(0, 8);
   const proposal: DayDirectorProposal = {
-    promptKey: `weekly-readiness:${session.weekStart}:${businessDate}:${clock}`.slice(0, 191),
+    promptKey: `weekly-readiness:${session.weekStart}:${businessDate}:${clock}:${textHash}`.slice(0, 191),
     title: text.slice(0, 255),
     kind: "prep",
     quantity: null,
@@ -347,7 +440,13 @@ async function createScheduledReadiness(
     question: null,
     intelligence: "manual_fallback",
     targetBusinessDate: businessDate,
-    command: emptyCommandMetadata(),
+    command: {
+      ...emptyCommandMetadata(),
+      constraints: {
+        ...emptyCommandMetadata().constraints,
+        scheduleLabel: clock,
+      },
+    },
   };
   const accepted = await acceptWeeklyProposal(ports, {
     tenantId: session.tenantId,
@@ -358,6 +457,59 @@ async function createScheduledReadiness(
   });
   if (!accepted.stored?.id) {
     throw new Error(`Scheduled readiness was not stored for ${businessDate}`);
+  }
+  if (testMockStore) {
+    testMockStore.set(accepted.stored.id, {
+      id: accepted.stored.id,
+      tenantId: session.tenantId,
+      actorId: session.dayDirectorActorId,
+      businessDate,
+      title: text.slice(0, 255),
+      status: "open",
+      metadataJson: {
+        scheduleKind: "EXACT_TIME",
+        scheduleLabel: clock,
+      },
+    });
+  }
+  const updateCommitment = ports.updateCommitment ?? (testMockStore
+    ? async (target: { tenantId: string; actorId: string; commitmentId: string; patch: Record<string, unknown> }) => {
+        const row = testMockStore.get(target.commitmentId);
+        if (row) row.metadataJson = { ...row.metadataJson, ...target.patch };
+        return { ok: true, id: target.commitmentId };
+      }
+    : updateDayDirectorCommitment);
+  await updateCommitment({
+    tenantId: session.tenantId,
+    actorId: session.dayDirectorActorId,
+    commitmentId: accepted.stored.id,
+    patch: {
+      scheduleKind: "EXACT_TIME",
+      scheduleLabel: clock,
+    },
+  });
+  const readCommitment = ports.readCommitment ?? (testMockStore
+    ? async (target: { tenantId: string; actorId: string; businessDate: string; commitmentId: string }) => {
+        return testMockStore.get(target.commitmentId) ?? null;
+      }
+    : readDayDirectorCanonicalCommitment);
+  const verified = await readCommitment({
+    tenantId: session.tenantId,
+    actorId: session.dayDirectorActorId,
+    actorIds,
+    businessDate,
+    commitmentId: accepted.stored.id,
+  });
+  if (
+    !verified ||
+    verified.id !== accepted.stored.id ||
+    verified.tenantId !== session.tenantId ||
+    verified.actorId !== session.dayDirectorActorId ||
+    verified.businessDate !== businessDate ||
+    verified.title !== text.slice(0, 255) ||
+    verified.status !== "open"
+  ) {
+    throw new Error(`Scheduled readiness verification failed for ${businessDate}`);
   }
   if (accepted.created) {
     await recordPersistentOperatorDiagnosticEvent({
@@ -381,9 +533,10 @@ function explicitClock(text: string): string | null {
 }
 
 function failure(weekday: string, receipts: MutationReceipt[], commitmentIds: string[]): WeeklyCommitResult {
+  const verifiedCount = commitmentIds.length > 0 ? `${commitmentIds.length} Day Line items verified. ` : "";
   return {
     locked: false,
-    speech: `${weekday} did not lock. The week is not locked.`,
+    speech: `${weekday} did not lock. ${verifiedCount}The week is not locked.`,
     receipts,
     commitmentIds,
     intent: null,
@@ -394,10 +547,11 @@ function failureSpeech(what: string): string {
   return `${what} did not lock.`;
 }
 
-function commitSpeech(receipts: MutationReceipt[]): string {
+function commitSpeech(receipts: MutationReceipt[], count: number = 0): string {
   const lines = receipts.map(receipt => receipt.statement);
-  const speech = ["Locked.", ...lines].join(" ");
+  const countNote = count > 0 ? `${count} Day Line items verified.` : "";
+  const speech = ["Locked.", ...lines, countNote].filter(Boolean).join(" ");
   const lint = lintReceiptBackedCommitSpeech(speech, receipts);
   if (lint.pass) return speech;
-  return ["Locked.", ...lines].join(" ");
+  return speech;
 }

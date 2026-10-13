@@ -248,6 +248,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   behavioralTenantId?: string | null;
   behavioralOperatorUserId?: string | null;
   behavioralLedgerEvents?: BehavioralLedgerLikeEvent[];
+  behavioralAdaptationAllowed?: boolean;
+  authorizedPresentation?: { decisionPointId: string; templateId: string | null; rulesVersion: number | null } | null;
+  onFictionPresentationViewable?: (templateId: string) => void;
   experimentalPreferredTemplateId?: string | null;
   experimentalAssignmentActive?: boolean;
   /** Current chapter grammar when one exists — visit-route PLACE_ITEM is the fallback. */
@@ -1211,7 +1214,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       operatorUserId: props.behavioralOperatorUserId,
       grammar,
       registry: FICTION_TEMPLATE_REGISTRY,
-      events: props.behavioralLedgerEvents,
+      events: props.behavioralAdaptationAllowed ? props.behavioralLedgerEvents : [],
       campaignPreferredTemplateId: props.preferredFictionTemplateId ?? null,
     });
     const preferredTemplateId = props.experimentalAssignmentActive
@@ -1221,6 +1224,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       now: new Date(),
       identity: props.playerIdentity ?? null,
       preferredTemplateId,
+      authorizedPresentation: props.authorizedPresentation,
       persistAssignment: props.onPersistFictionAssignment,
     });
   }, [
@@ -1231,6 +1235,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     props.behavioralTenantId,
     props.behavioralOperatorUserId,
     props.behavioralLedgerEvents,
+    props.behavioralAdaptationAllowed,
+    props.authorizedPresentation,
     props.experimentalPreferredTemplateId,
     props.experimentalAssignmentActive,
     props.onPersistFictionAssignment,
@@ -3772,6 +3778,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               isDriving={drivingLikely}
               authoritativeCount={props.authoritativeRouteCoverage ?? 0}
               routeStops={props.authoritativeVisitRoute?.stops}
+              onViewable={props.onFictionPresentationViewable}
               onSelectStop={handleSelectRouteStop}
               onClose={() => setFictionMissionOpen(false)}
             />

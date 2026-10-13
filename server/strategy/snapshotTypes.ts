@@ -46,14 +46,16 @@ export type OpportunityGap = {
 
 export type StrategySnapshotPayload = {
   goal: {
+    operatorUserId?: string | null;
+    macroGoalId?: string | null;
     metricType: GoalMetricType;
     target: number | null;
     targetValue?: number | null;
     targetDate: string | null;
-    currentValue: number;
+    currentValue: number | null;
     gap: number | null;
-    newPayingCustomers: number;
-    netActiveChange: number;
+    newPayingCustomers: number | null;
+    netActiveChange: number | null;
     secondaryTargets?: Record<string, number>;
   };
   growthPlan: {
@@ -90,8 +92,8 @@ export type StrategySnapshotPayload = {
     remainingBudgetCents: number;
   };
   customers: {
-    activeCount: number;
-    weeklyTrend: Array<{ weekStart: string; weekEnd: string; activeCount: number }>;
+    activeCount: number | null;
+    weeklyTrend: Array<{ weekStart: string; weekEnd: string; activeCount: number | null }>;
     dormantEligible: Array<{
       id: string;
       firstName: string;

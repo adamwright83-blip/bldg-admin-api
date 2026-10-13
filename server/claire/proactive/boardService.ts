@@ -1,4 +1,5 @@
 import { loadSalesInsight, type SalesInsightArtifact } from "./salesInsights";
+import { deriveRecoverySafety, loadRecoverySafetyEvidence } from "./recoveryEvidence";
 import { reconcileLedgerSpan } from "../../analytics/canonicalRevenue";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
@@ -219,12 +220,19 @@ export async function ensureOperatorBoard(input: {
   const verifiedHistoryByIdentity = new Map<string, CustomerHistoryObservation[]>();
   let customers: CustomerEvidence[] = [];
   try {
-    const ledger = await loadPaidOrderLedger({
-      tenantId: input.tenantId,
-      startUtc: zonedDayStartUtc("2020-01-01", timeZone),
-      endExclusiveUtc: new Date(now + 86_400_000),
-      timeZone,
-    });
+    const [ledger, safetyEvidence] = await Promise.all([
+      loadPaidOrderLedger({
+        tenantId: input.tenantId,
+        startUtc: zonedDayStartUtc("2020-01-01", timeZone),
+        endExclusiveUtc: new Date(now + 86_400_000),
+        timeZone,
+      }),
+      loadRecoverySafetyEvidence({
+        tenantId: input.tenantId,
+        now: new Date(now),
+        cooldownDays: rules.outreachCooldownDays,
+      }).catch(() => null),
+    ]);
     customers = groupCustomers(reconcileLedgerSpan(ledger, { start: "2020-01-01", end: today }).includedEvents)
       .filter(group => group.matched && group.records.some(record => record.cents > 0))
       .map(group => {
@@ -238,6 +246,14 @@ export async function ensureOperatorBoard(input: {
           .filter(days => days > 0 && days <= 120);
         const cadence = intervals.length ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length) : null;
         const name = [...sorted].reverse().find(record => record.customerName)?.customerName ?? "an unnamed customer";
+        const safety = safetyEvidence ? deriveRecoverySafety({
+          tenantId: input.tenantId,
+          identityKeys: [group.identityId],
+          nativeOrders: safetyEvidence.nativeOrders,
+          coverage: safetyEvidence.coverage,
+          recoveries: safetyEvidence.recoveries,
+          communications: safetyEvidence.communications,
+        }) : null;
         return {
           identityKey: group.identityId,
           displayName: name,
@@ -245,9 +261,9 @@ export async function ensureOperatorBoard(input: {
           lastPaidOn: last.businessDate,
           daysSinceLastPaid: Math.max(0, daysBetween(today, last.businessDate)),
           expectedCadenceDays: cadence,
-          openOrderCount: 0,
-          lastOutreachOn: null,
-          attestedOutreachOn: null,
+          openOrderCount: safety ? (safety.openOrderCount ?? (safety.unavailableReason ? 1 : 0)) : 0,
+          lastOutreachOn: safety?.lastOutreachOn ?? null,
+          attestedOutreachOn: safety?.attestedOutreachOn ?? null,
         };
       });
   } catch (error) {

@@ -73,3 +73,69 @@ export function proposalText(title: string | null): string {
   if (!title) return "Want me to put that on your Day Line?";
   return `Want me to put "${title}" on your Day Line?`;
 }
+
+/**
+ * Extracts all discrete work titles named in an operator utterance.
+ * Used to ensure multi-item requests are fully represented in grant scope.
+ */
+export function proposedWorkTitles(perceived: PerceivedTurn): string[] {
+  const text = perceived.assembledText.trim();
+  if (!text) return [];
+
+  const titles: string[] = [];
+  const single = proposedWorkTitle(perceived);
+
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+
+    const isExplicitDayLine =
+      perceived.workDeclarationKind === "explicit_day_line" ||
+      REQUEST_LEAD_IN.test(trimmed);
+
+    if (isExplicitDayLine) {
+      let stripped = trimmed.replace(REQUEST_LEAD_IN, "");
+      stripped = stripped.replace(/\s+(?:to|on)\s+(?:the\s+)?day\s+line\b.*$/i, "");
+      stripped = tidy(stripped);
+
+      const conjoined = stripped.split(/\s+and\s+/i);
+      if (conjoined.length > 1) {
+        for (const part of conjoined) {
+          const t = tidy(part);
+          if (t.length >= 2 && !titles.includes(sentenceCase(t))) {
+            titles.push(sentenceCase(t));
+          }
+        }
+        continue;
+      }
+    }
+
+    const clauses = trimmed.split(/,(?=\s)|\s+(?:but|and then|then)\s+/i);
+    for (const clause of clauses) {
+      const c = clause.trim();
+      const hasLeadIn = COMMITMENT_LEAD_IN.test(c) || REQUEST_LEAD_IN.test(c);
+      const hasImperative = WORK_IMPERATIVE.test(c);
+
+      if (hasLeadIn || hasImperative) {
+        let core = c.replace(COMMITMENT_LEAD_IN, "").replace(REQUEST_LEAD_IN, "");
+        core = tidy(core);
+        core = core.replace(/\s+(?:to|on)\s+(?:the\s+)?day\s+line\b.*$/i, "");
+        core = tidy(core);
+
+        if (core.length >= 3 && /\s/.test(core)) {
+          const formatted = sentenceCase(core);
+          if (!titles.includes(formatted)) {
+            titles.push(formatted);
+          }
+        }
+      }
+    }
+  }
+
+  if (single && !titles.includes(single)) {
+    titles.unshift(single);
+  }
+
+  return titles.length ? titles : (single ? [single] : []);
+}

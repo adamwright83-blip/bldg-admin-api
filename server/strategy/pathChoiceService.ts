@@ -8,9 +8,10 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../db";
-import { strategyPathChoices } from "../../drizzle/schema";
-import { getStrategyPlayById } from "./playGenerator";
+import { strategyPathChoices, strategyPlays, strategyPathOffers } from "../../drizzle/schema";
+import { readStrategyPlayById, readPathOfferById } from "./playGenerator";
 
 export type PathChoiceInput = {
   tenantId: string;
@@ -53,11 +54,22 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
     throw new Error("Voice path choice requires an explicit read-back and spoken confirmation before recording.");
   }
 
-  const play = getStrategyPlayById(input.playId, input.tenantId);
+  const db = await getDb();
+  const allowTestMemory = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  if (!db && !allowTestMemory) {
+    throw new Error("Strategy path choice cannot commit without durable database availability");
+  }
+  const play = await readStrategyPlayById(input.playId, input.tenantId);
   if (!play) {
     throw new Error("Strategy path choice requires an existing play belonging to the authorized tenant");
   }
-  const previousPlayId = activePlayByTenant.get(input.tenantId) ?? null;
+  if (input.offerId) {
+    const offer = await readPathOfferById(input.offerId, input.tenantId);
+    if (!offer || offer.status !== "active" || Date.parse(offer.expiresAt) <= Date.now() || !offer.offeredPlayIds.includes(input.playId)) {
+      throw new Error("Strategy choice requires an active tenant-owned offer containing that play");
+    }
+  }
+  const previousPlayId = await readActiveStrategicPath(input.tenantId);
 
   // Approval is an explicit pending request, never spend clearance.
   const approvalRequestId = play.needsApprovalToRun
@@ -77,13 +89,9 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
 
   // Persist BEFORE publishing a successful active choice in process memory.
   // A DB outage must not become a reported committed strategic decision.
-  const db = await getDb();
-  const allowTestMemory = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  if (!db && !allowTestMemory) {
-    throw new Error("Strategy path choice cannot commit without durable database availability");
-  }
   if (db) {
-    await db.insert(strategyPathChoices).values({
+    await db.transaction(async tx => {
+    await tx.insert(strategyPathChoices).values({
       id: choiceId,
       tenantId: input.tenantId,
       offerId: input.offerId ?? null,
@@ -94,6 +102,17 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
       chosenAt: new Date(chosenAt),
       createdAt: new Date(chosenAt),
     });
+    await tx.update(strategyPlays).set({ status: "active" }).where(and(
+      eq(strategyPlays.id, input.playId), eq(strategyPlays.tenantId, input.tenantId),
+    ));
+    if (input.offerId) await tx.update(strategyPathOffers).set({ status: "accepted" }).where(and(
+      eq(strategyPathOffers.id, input.offerId), eq(strategyPathOffers.tenantId, input.tenantId),
+    ));
+    const [saved] = await tx.select().from(strategyPathChoices).where(and(
+      eq(strategyPathChoices.id, choiceId), eq(strategyPathChoices.tenantId, input.tenantId),
+    )).limit(1);
+    if (!saved || saved.playId !== input.playId) throw new Error("Strategy choice durable readback failed");
+    });
   }
 
   play.status = "active";
@@ -101,6 +120,20 @@ export async function chooseStrategicPath(input: PathChoiceInput): Promise<PathC
   choiceStore.set(choiceId, result);
 
   return result;
+}
+
+/** Reads the persisted choice after restarts and on every live consumer. */
+export async function readActiveStrategicPath(tenantId: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) {
+    if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return getActiveStrategicPath(tenantId);
+    throw new Error("Active strategy path requires durable database availability");
+  }
+  const [choice] = await db.select().from(strategyPathChoices).where(eq(strategyPathChoices.tenantId, tenantId))
+    .orderBy(desc(strategyPathChoices.chosenAt), desc(strategyPathChoices.id)).limit(1);
+  if (!choice) return null;
+  const play = await readStrategyPlayById(choice.playId, tenantId);
+  return play && play.status !== "retired" && play.status !== "paused" ? play.id : null;
 }
 
 export function getActiveStrategicPath(tenantId: string): string | null {

@@ -36,6 +36,11 @@ import { isMysqlDuplicateKeyError } from "../../../mysqlErrors";
 import { getFieldToday } from "../../../field/fieldTodayService";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
 import { listPresentedTerritories } from "./territoryService";
+import { deriveCampaignChapterActionGrammar } from "../../../../shared/goldlineCampaignBindings";
+import { deriveAuthoritativeRouteGrammar, type ActionGrammar } from "../../../../shared/actionGrammar";
+import { eligibleTemplates, stableMissionKey } from "../../../../shared/fictionTemplate";
+import { FICTION_ELIGIBILITY_CATALOG } from "../../../../shared/fictionEligibilityCatalog";
+import { getAuthoritativeVisitRoute } from "../../../field/authoritativeVisitRouteService";
 import { estimateCampaignTravel } from "../../../integrations/googleMaps/campaignTravelAdapter";
 
 function previousBusinessDate(date: string): string {
@@ -692,6 +697,31 @@ export async function listOperatorCampaigns(input: {
   return rows.map(toInstance);
 }
 
+/** Read only persisted operator-owned work. A client cannot relax safety or invent a mission. */
+export async function loadOperatorFictionGrammar(input: {
+  tenantId: string; operatorId: string; occasionId?: string; stableMissionKey?: string;
+}): Promise<ActionGrammar | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(goldlineCampaignInstances).where(and(
+    eq(goldlineCampaignInstances.tenantId, input.tenantId),
+    eq(goldlineCampaignInstances.operatorId, input.operatorId)
+  )).orderBy(desc(goldlineCampaignInstances.businessDate)).limit(14);
+  for (const row of rows) {
+    const campaign = toInstance(row);
+    if (["completed", "superseded"].includes(campaign.status)) continue;
+    const chapter = campaign.chapters.find(c => c.stableChapterId === campaign.currentChapterId);
+    if (!chapter || (input.occasionId && chapter.stableChapterId !== input.occasionId)) continue;
+    const grammar = deriveCampaignChapterActionGrammar(chapter);
+    if (grammar && (!input.stableMissionKey || stableMissionKey({ ...grammar, grammarKind: grammar.kind, fictionRulesVersion: 1 }) === input.stableMissionKey)) return grammar;
+  }
+  if (input.occasionId) return null;
+  const route = await getAuthoritativeVisitRoute({ tenantId: input.tenantId, actorId: input.operatorId });
+  const grammar = deriveAuthoritativeRouteGrammar(route);
+  if (grammar && (!input.stableMissionKey || stableMissionKey({ ...grammar, grammarKind: grammar.kind, fictionRulesVersion: 1 }) === input.stableMissionKey)) return grammar;
+  return null;
+}
+
 export async function upsertFictionAssignmentIfAbsent(input: {
   tenantId: string;
   operatorId: string;
@@ -699,6 +729,9 @@ export async function upsertFictionAssignmentIfAbsent(input: {
   templateId: string;
   rulesVersion: number;
 }): Promise<{ templateId: string; created: boolean }> {
+  const grammar = await loadOperatorFictionGrammar(input);
+  const template = grammar && eligibleTemplates(FICTION_ELIGIBILITY_CATALOG, grammar).find(t => t.id === input.templateId);
+  if (!template || template.rulesVersion !== input.rulesVersion) throw new Error("Fiction assignment requires canonical work and a registered eligible template version");
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [existing] = await db

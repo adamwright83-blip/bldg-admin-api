@@ -5,8 +5,8 @@ import { getDb } from "../db";
 import { buildPreparedSalesPrep, type PreparedSalesPrep } from "./missionSalesPrep";
 import { checkCommunicationPermission, type PermissionSubjectType } from "./communicationPermissionService";
 import { reserveSpend } from "./spendClearance";
-import { getActiveStrategicPath } from "./pathChoiceService";
-import { getStrategyPlayById } from "./playGenerator";
+import { readActiveStrategicPath } from "./pathChoiceService";
+import { readStrategyPlayById } from "./playGenerator";
 import type { StrategySnapshot } from "./snapshotTypes";
 
 export interface SequencerConfig {
@@ -88,8 +88,8 @@ export async function sequenceDailyMissions(
   const accounts = rawSnapshot.accounts ?? payload.accounts ?? [];
 
   // 1. Get active strategic path
-  const activePlayId = getActiveStrategicPath(input.tenantId);
-  const activePlay = activePlayId ? getStrategyPlayById(activePlayId, input.tenantId) : null;
+  const activePlayId = await readActiveStrategicPath(input.tenantId);
+  const activePlay = activePlayId ? await readStrategyPlayById(activePlayId, input.tenantId) : null;
 
   // 2. Identify candidate support opportunities (Support Allowance)
   // Supports: urgent customer service, ready-to-order customers, second-order due

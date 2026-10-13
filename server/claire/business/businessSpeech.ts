@@ -1004,6 +1004,21 @@ export function speakBusinessResult(
   const label = speech.label(period.label);
   const scope = scopeWords(query);
   switch (data.kind) {
+    case "calculation":
+      for (const cell of data.calculation.cells) {
+        if (cell.value == null) {
+          speech.say(`I can't calculate ${cell.label.toLowerCase()}: ${cell.reason ?? "the necessary evidence is unavailable"}`);
+          continue;
+        }
+        const value = cell.unit === "currency" || cell.unit?.startsWith("currency_per_")
+          ? speech.money(cell.value * 100, true)
+          : cell.unit === "percent" ? `${cell.value < 0 ? "minus " : ""}${speech.pct(cell.value)}`
+          : speech.count(Math.round(cell.value * 10000) / 10000);
+        const periods = cell.periods.map(span => span.start === span.end ? speech.date(span.start) : `${speech.date(span.start)} through ${speech.date(span.end)}`).join(" compared with ");
+        speech.say(`${cell.precision === "recorded_only" ? "From recorded inputs, " : ""}${cell.label}${scope.suffix} (${periods}): ${value}.`);
+        if (cell.reason) speech.say(cell.reason);
+      }
+      break;
     case "totals":
       if (context.hint?.kind === "money_semantics") {
         const field = context.hint.field;

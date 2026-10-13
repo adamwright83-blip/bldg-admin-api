@@ -188,4 +188,37 @@ describe("Brain V2 grant-bound legacy adapter", () => {
     });
     expect(commitMocks.commitBriefing).not.toHaveBeenCalled();
   });
+
+  it("resolves multi-item Day Line grants and speaks non-empty confirmation", async () => {
+    commitMocks.speakBriefingCommit.mockReturnValue("Done. 2 on tomorrow's line.");
+    commitMocks.commitBriefing.mockResolvedValue({
+      added: [{ title: "Customer A" }, { title: "Customer B" }],
+      completed: [],
+      failed: [],
+      commitmentIds: ["commit-1", "commit-2"],
+      receipts: [
+        { claimedState: "created", entityId: "commit-1", statement: "Added Customer A" },
+        { claimedState: "created", entityId: "commit-2", statement: "Added Customer B" },
+      ],
+    });
+
+    const state: any = {};
+    const result = await executeGrantBoundLegacyAdapter({
+      ...common,
+      state,
+      grant: grant({
+        actionClass: "commit_day_line",
+        text: "Call Customer A tomorrow. Call Customer B tomorrow.",
+        titles: ["Call Customer A", "Call Customer B"],
+      }),
+    });
+
+    expect(commitMocks.commitBriefing).toHaveBeenCalledTimes(1);
+    const parsed = commitMocks.commitBriefing.mock.calls[0]![0];
+    expect(parsed.items).toHaveLength(2);
+    expect(result.actionIds).toEqual(["commit-1", "commit-2"]);
+    expect(result.speak).toBe("Done. 2 on tomorrow's line.");
+    expect(result.receiptBackedCommit).toBe("Done. 2 on tomorrow's line.");
+    expect(result.kind).toBe("briefing_saved");
+  });
 });

@@ -113,7 +113,7 @@ export function selectSalesInsight(
     },
     series,
     recommendedChallenge,
-    speech: `${result.period.label} closed at ${(current / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })} in ${scope === "Laundry Farm total" ? "Laundry Farm paid revenue" : "CleanCloud paid revenue"}${strongest ? ", the strongest completed month in recorded history," : ","} ${Math.abs(percent)}% ${percent > 0 ? "above" : "below"} ${result.comparisonPeriod.label}.${recommendedChallenge ? " I'd suggest a marketing challenge to investigate the decline before choosing an outreach tactic. Want me to help plan it?" : ""}`,
+    speech: `${result.period.label} closed at $${(current / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })} in ${scope === "Laundry Farm total" ? "Laundry Farm paid revenue" : "CleanCloud paid revenue"}${strongest ? ", the strongest completed month in recorded history," : ","} ${Math.abs(percent)}% ${percent > 0 ? "above" : "below"} ${result.comparisonPeriod.label}.${recommendedChallenge ? " I'd suggest a marketing challenge to investigate the decline before choosing an outreach tactic. Want me to help plan it?" : ""}`,
   };
 }
 

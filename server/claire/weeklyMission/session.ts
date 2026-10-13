@@ -65,6 +65,8 @@ export type WeeklyPlanningSession = {
   operatorEvidence: string[];
   committedRefs: Record<string, WeeklyCommittedRef>;
   adjust: boolean;
+  /** Durable source of the invitation/callback; distinct from accepted work. */
+  appointmentLineage?: { sourceReference: string; appointmentId: string | null };
 };
 
 export type WeeklySurfaceReceipt = {
@@ -91,8 +93,55 @@ export async function loadWeeklySession(input: {
   // already written elsewhere remain untouched.
   if ((row.state as Partial<WeeklyPlanningSession>).brainVersion !== 3) return null;
   const session = normalizeWeeklySession(row.state);
-  if (session.weekStart !== input.weekStart) return null;
+  if (
+    session.key !== key ||
+    session.tenantId !== input.tenantId ||
+    session.operatorId !== input.operatorId ||
+    session.weekStart !== input.weekStart ||
+    session.draft.weekStart !== input.weekStart
+  ) return null;
   return session;
+}
+
+/** Resolve only identities admitted by the caller's canonical identity scope. */
+export async function loadWeeklySessionForScope(input: {
+  tenantId: string;
+  operatorId: string;
+  operatorIds?: readonly string[];
+  dayDirectorActorId: string;
+  dayDirectorActorIds?: readonly string[];
+  weekStart: string;
+  now?: Date;
+  timeZone?: string;
+}): Promise<WeeklyPlanningSession | null> {
+  const operators = [...new Set([input.operatorId, ...(input.operatorIds ?? [])]
+    .map(id => id.trim()).filter(Boolean))];
+  const actors = new Set([input.dayDirectorActorId, ...(input.dayDirectorActorIds ?? [])]
+    .map(id => id.trim()).filter(Boolean));
+  for (const operatorId of operators) {
+    const session = await loadWeeklySession({
+      tenantId: input.tenantId,
+      operatorId,
+      weekStart: input.weekStart,
+    });
+    if (!session || !actors.has(session.dayDirectorActorId)) continue;
+    if (!isWeeklySessionValid(session, { now: input.now, timeZone: input.timeZone })) continue;
+    return session;
+  }
+  return null;
+}
+
+export async function bindWeeklyAppointmentLineage(
+  session: WeeklyPlanningSession,
+  input: { weeklyPlanningSourceReference?: string | null; weeklyPlanningAppointmentId?: string | null }
+): Promise<void> {
+  const sourceReference = input.weeklyPlanningSourceReference?.trim();
+  if (!sourceReference) return;
+  const appointmentId = input.weeklyPlanningAppointmentId?.trim() || null;
+  if (session.appointmentLineage?.sourceReference === sourceReference &&
+      session.appointmentLineage.appointmentId === appointmentId) return;
+  session.appointmentLineage = { sourceReference, appointmentId };
+  await saveWeeklySession(session);
 }
 
 export async function saveWeeklySession(session: WeeklyPlanningSession, now = Date.now()): Promise<void> {

@@ -3,8 +3,8 @@
  * Generates candidate growth plays from vertical templates and creates 2-3 route path offers.
  */
 
-import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { getDb } from "../db";
 import { strategyPathOffers, strategyPlays } from "../../drizzle/schema";
 import { defaultVerticalRegistry } from "./verticalTemplates/defaultRegistry";
@@ -77,7 +77,7 @@ export async function generateCandidatePlays(
   const plays: StrategyPlay[] = [];
 
   for (const pt of legacyStrategy.playTemplates) {
-    const playId = `play_${pt.templateKey}_${tenantId.slice(0, 8)}`;
+    const playId = `play_${pt.templateKey}_${createHash("sha256").update(tenantId).digest("hex").slice(0, 24)}`;
     const spendCents = pt.defaultEstimatedSpendCents;
     const isApprovalCategory = payload.playgroundRules.approvalCategories.includes(pt.spendCategory);
     const exceedsBudget = spendCents > payload.playgroundRules.remainingBudgetCents;
@@ -130,6 +130,7 @@ export async function generateCandidatePlays(
     };
 
     plays.push(play);
+    await persistStrategyPlay(play);
     playStore.set(play.id, play);
   }
 
@@ -143,7 +144,7 @@ export async function generateCandidatePlays(
  */
 export async function getOrCreatePathOffer(
   tenantId: string,
-  options: { now?: Date; forceNew?: boolean } = {}
+  options: { now?: Date; forceNew?: boolean; operatorUserId?: string } = {}
 ): Promise<PathOffer> {
   const now = options.now ?? new Date();
   const businessDate = new Intl.DateTimeFormat("en-CA", {
@@ -155,15 +156,26 @@ export async function getOrCreatePathOffer(
 
   // Check existing active offer for today
   if (!options.forceNew) {
-    const existing = Array.from(offerStore.values()).find(
-      o => o.tenantId === tenantId && o.businessDate === businessDate && o.status === "active"
-    );
-    if (existing) return existing;
+    const db = await getDb();
+    if (db) {
+      const [row] = await db.select().from(strategyPathOffers).where(and(
+        eq(strategyPathOffers.tenantId, tenantId), eq(strategyPathOffers.businessDate, businessDate),
+        eq(strategyPathOffers.status, "active"), gt(strategyPathOffers.expiresAt, now),
+      )).orderBy(desc(strategyPathOffers.offeredAt)).limit(1);
+      if (row) return hydrateOffer(row);
+    } else if (allowTestMemory()) {
+      const existing = Array.from(offerStore.values()).find(
+        o => o.tenantId === tenantId && o.businessDate === businessDate && o.status === "active" && Date.parse(o.expiresAt) > now.getTime()
+      );
+      if (existing) return existing;
+    } else {
+      throw new Error("Strategy offers require durable database availability");
+    }
   }
 
-  let snapshot = await getLatestStrategySnapshot(tenantId);
+  let snapshot = await getLatestStrategySnapshot(tenantId, { operatorUserId: options.operatorUserId, now });
   if (!snapshot) {
-    snapshot = await buildStrategySnapshot(tenantId, { now });
+    snapshot = await buildStrategySnapshot(tenantId, { now, operatorUserId: options.operatorUserId });
   }
 
   const candidates = await generateCandidatePlays(tenantId, snapshot);
@@ -177,7 +189,7 @@ export async function getOrCreatePathOffer(
     ? `${recommendedPlay.worldName} is the clearest path today. ${recommendedPlay.hypothesis}`
     : "Review the board and explore territory customer density.";
 
-  const offerId = `offer_${businessDate.replace(/-/g, "")}_${tenantId}`;
+  const offerId = `offer_${businessDate.replace(/-/g, "")}_${createHash("sha256").update(tenantId).digest("hex").slice(0, 24)}${options.forceNew ? `_${randomUUID().slice(0, 8)}` : ""}`;
   const expiresAt = new Date(now.getTime() + 7 * 86400000).toISOString();
 
   const offer: PathOffer = {
@@ -193,10 +205,9 @@ export async function getOrCreatePathOffer(
     expiresAt,
   };
 
-  offerStore.set(offer.id, offer);
-
-  try {
-    const db = await getDb();
+  const db = await getDb();
+  if (!db && !allowTestMemory()) throw new Error("Strategy offers require durable database availability");
+  {
     if (db) {
       await db.insert(strategyPathOffers).values({
         id: offer.id,
@@ -211,11 +222,77 @@ export async function getOrCreatePathOffer(
         createdAt: now,
       });
     }
-  } catch {
-    // Offline DB fallback
   }
-
+  offerStore.set(offer.id, offer);
   return offer;
+}
+
+function allowTestMemory(): boolean {
+  return process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+}
+
+async function persistStrategyPlay(play: StrategyPlay): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    if (allowTestMemory()) return;
+    throw new Error("Strategy plays require durable database availability");
+  }
+  const values = {
+    id: play.id, tenantId: play.tenantId, businessName: play.businessName, worldName: play.worldName,
+    hypothesis: play.hypothesis, primaryMetric: play.primaryMetric, geography: play.geography,
+    stopsCount: play.stopsCount, isClustered: play.isClustered, estimatedInitiationCost: play.estimatedInitiationCost,
+    estimatedSpendCents: play.estimatedSpendCents, spendCategory: play.spendCategory, confidence: play.confidence,
+    scoreBreakdownJson: play.scoreBreakdown, totalScore: play.totalScore, status: play.status,
+    needsApprovalToRun: play.needsApprovalToRun, minimumEvidenceThresholdJson: play.minimumEvidenceThreshold,
+    verticalKey: play.verticalKey, templateKey: play.templateKey, provenanceJson: play.provenance,
+    createdAt: new Date(play.createdAt),
+  };
+  // Tenant hash IDs prevent one tenant's upsert overwriting another's play.
+  await db.insert(strategyPlays).values(values).onDuplicateKeyUpdate({ set: {
+    businessName: values.businessName, worldName: values.worldName, hypothesis: values.hypothesis,
+    geography: values.geography, scoreBreakdownJson: values.scoreBreakdownJson, totalScore: values.totalScore,
+    estimatedSpendCents: values.estimatedSpendCents, needsApprovalToRun: values.needsApprovalToRun,
+    provenanceJson: values.provenanceJson,
+  } });
+}
+
+/** Durable scoped lookup. The synchronous getter below is a test/cache accessor. */
+export async function readStrategyPlayById(playId: string, tenantId: string): Promise<StrategyPlay | null> {
+  const db = await getDb();
+  if (!db) return allowTestMemory() ? getStrategyPlayById(playId, tenantId) : null;
+  const [row] = await db.select().from(strategyPlays).where(and(
+    eq(strategyPlays.id, playId), eq(strategyPlays.tenantId, tenantId),
+  )).limit(1);
+  if (!row) return null;
+  const play: StrategyPlay = {
+    ...row, confidence: row.confidence as StrategyPlay["confidence"],
+    scoreBreakdown: row.scoreBreakdownJson as StrategyPlay["scoreBreakdown"],
+    minimumEvidenceThreshold: row.minimumEvidenceThresholdJson as StrategyPlay["minimumEvidenceThreshold"],
+    provenance: row.provenanceJson as StrategyPlay["provenance"], createdAt: row.createdAt.toISOString(),
+  };
+  playStore.set(play.id, play);
+  return play;
+}
+
+async function hydrateOffer(row: typeof strategyPathOffers.$inferSelect): Promise<PathOffer> {
+  const ids = row.playIdsJson as string[];
+  const plays = await Promise.all(ids.map(id => readStrategyPlayById(id, row.tenantId)));
+  if (plays.some(play => !play)) throw new Error("Strategy offer references unavailable tenant-owned plays");
+  return { id: row.id, tenantId: row.tenantId, plays: plays as StrategyPlay[], offeredPlayIds: ids,
+    recommendedPlayId: row.recommendedPlayId, claireRationale: row.claireRationale, status: row.status,
+    offeredAt: row.offeredAt.toISOString(), businessDate: row.businessDate, expiresAt: row.expiresAt.toISOString() };
+}
+
+export async function readPathOfferById(offerId: string, tenantId: string): Promise<PathOffer | null> {
+  const db = await getDb();
+  if (!db) {
+    const offer = allowTestMemory() ? offerStore.get(offerId) : null;
+    return offer?.tenantId === tenantId ? offer : null;
+  }
+  const [row] = await db.select().from(strategyPathOffers).where(and(
+    eq(strategyPathOffers.id, offerId), eq(strategyPathOffers.tenantId, tenantId),
+  )).limit(1);
+  return row ? hydrateOffer(row) : null;
 }
 
 export function registerStrategyPlay(play: StrategyPlay): void {

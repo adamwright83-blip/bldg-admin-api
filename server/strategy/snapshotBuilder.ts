@@ -149,9 +149,9 @@ export async function buildStrategySnapshot(
   let currentValue = activeCount;
   if (goalMetricType === "new_paying_customers") currentValue = newPayingCustomers;
   else if (goalMetricType === "paid_orders_per_period") currentValue = growthMetrics.paidOrders.count;
-  else if (goalMetricType === "net_sales_per_period") currentValue = Math.round(growthMetrics.netSales.amountCents / 100);
+  else if (goalMetricType === "net_sales_per_period") currentValue = growthMetrics.netSales.amountCents === null ? null : growthMetrics.netSales.amountCents / 100;
 
-  const gap = goalTarget === null ? null : Math.max(0, goalTarget - currentValue);
+  const gap = goalTarget === null || currentValue === null ? null : Math.max(0, goalTarget - currentValue);
 
   // 3. Gather Playground Rules & MTD Spend
   const playground = await getActivePlaygroundRules(tenantId);
@@ -352,7 +352,9 @@ export async function buildStrategySnapshot(
       queryOrDefinition: "Distinct resolved identities with first paid order in goal window",
       window: "last_30_days",
       computedAt,
-      sampleSize: newPayingCustomers,
+      ...(newPayingCustomers == null
+        ? { notes: "Paid-order source coverage unavailable; sample size unknown, not zero." }
+        : { sampleSize: newPayingCustomers }),
     },
     "goal.netActiveChange": {
       source: "growthMetrics.netActiveChange",
@@ -365,7 +367,7 @@ export async function buildStrategySnapshot(
       queryOrDefinition: canonicalDef,
       window: "30_days_rolling",
       computedAt,
-      sampleSize: activeCount,
+      sampleSize: activeCount ?? undefined,
     },
     "growthMetrics.netSalesCents": {
       source: "growthMetrics.netSales",
@@ -444,6 +446,8 @@ export async function buildStrategySnapshot(
   // Initial Payload
   let payload: StrategySnapshotPayload = {
     goal: {
+      operatorUserId: resolvedOperatorUserId ?? null,
+      macroGoalId: macroGoalRecord?.id ?? null,
       metricType: goalMetricType,
       target: goalTarget,
       targetValue: goalTarget,
@@ -591,10 +595,13 @@ export async function buildStrategySnapshot(
 /**
  * Retrieves the latest snapshot for a tenant.
  */
-export async function getLatestStrategySnapshot(tenantId: string): Promise<StrategySnapshot | null> {
+export async function getLatestStrategySnapshot(tenantId: string, options: { operatorUserId?: string; now?: Date } = {}): Promise<StrategySnapshot | null> {
+  const eligible = (s: StrategySnapshot) =>
+    (!options.operatorUserId || s.payload.goal.operatorUserId === options.operatorUserId) &&
+    (!options.now || options.now.getTime() - Date.parse(s.generatedAt) <= 5 * 60_000);
   // Check memory cache first
   const tenantSnapshots = Array.from(snapshotStore.values())
-    .filter(s => s.tenantId === tenantId)
+    .filter(s => s.tenantId === tenantId && eligible(s))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (tenantSnapshots.length > 0) {
@@ -610,10 +617,10 @@ export async function getLatestStrategySnapshot(tenantId: string): Promise<Strat
       .from(strategySnapshots)
       .where(eq(strategySnapshots.tenantId, tenantId))
       .orderBy(desc(strategySnapshots.createdAt))
-      .limit(1);
+      .limit(10);
 
-    if (rows.length === 0) return null;
-    const row = rows[0];
+    const row = rows.find(r => eligible({ payload: r.payloadJson, generatedAt: r.generatedAt.toISOString() } as StrategySnapshot));
+    if (!row) return null;
     const snapshot: StrategySnapshot = {
       id: row.id,
       tenantId: row.tenantId,

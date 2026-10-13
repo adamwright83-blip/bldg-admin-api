@@ -32,6 +32,7 @@ export type FictionMissionPanelProps = {
    */
   onSelectStop?: (stop: AuthoritativeVisitRouteStop) => void;
   onClose: () => void;
+  onViewable?: (templateId: string) => void;
 };
 
 export default function FictionMissionPanel(props: FictionMissionPanelProps) {
@@ -43,6 +44,14 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
     "in_progress" | "success" | "failure"
   >("in_progress");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const viewableReported = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${props.instance.stableMissionKey}:${template.id}`;
+    if (viewableReported.current === key) return;
+    viewableReported.current = key;
+    props.onViewable?.(template.id);
+  }, [props.instance.stableMissionKey, template.id, props.onViewable]);
 
   const complete =
     props.authoritativeCount >= grammar.count && grammar.count > 0;

@@ -1736,8 +1736,11 @@ function LiveGoldlineDriverController({
   const behavioralEvents =
     trpc.system.goldlineWorld.behavioralEventsForSubject.useQuery(
       { correlationId: behavioralSubject ?? "" },
-      { enabled: Boolean(behavioralSubject), staleTime: 15_000, retry: false }
+      { enabled: Boolean(behavioralSubject), staleTime: 0, refetchInterval: 5_000, retry: false }
     );
+  const presentationViewable = trpc.system.goldlineWorld.acknowledgePresentationViewable.useMutation({
+    onError: () => { void utils.system.goldlineWorld.experimentalPresentationAssignment.invalidate(); },
+  });
   const experimentalPresentation =
     trpc.system.goldlineWorld.experimentalPresentationAssignment.useQuery(
       {
@@ -1751,7 +1754,8 @@ function LiveGoldlineDriverController({
             currentCampaignChapter?.stableChapterId &&
             campaignChapterGrammar
         ),
-        staleTime: 15_000,
+        staleTime: 0,
+        refetchInterval: 5_000,
         retry: false,
       }
     );
@@ -2025,6 +2029,18 @@ function LiveGoldlineDriverController({
             null
           }
           behavioralLedgerEvents={behavioralEvents.data?.events ?? []}
+          behavioralAdaptationAllowed={behavioralEvents.data?.adaptationAllowed === true}
+          authorizedPresentation={experimentalPresentation.data?.usedExperiment ? {
+            decisionPointId: experimentalPresentation.data.decisionPointId,
+            templateId: experimentalPresentation.data.preferredTemplateId,
+            rulesVersion: experimentalPresentation.data.rulesVersion,
+          } : null}
+          onFictionPresentationViewable={templateId => {
+            const assigned = experimentalPresentation.data;
+            if (!assigned?.usedExperiment || !behavioralSubject || !currentCampaignChapter) return;
+            presentationViewable.mutate({ correlationId: behavioralSubject, occasionId: currentCampaignChapter.stableChapterId,
+              decisionPointId: assigned.decisionPointId, templateId });
+          }}
           experimentalPreferredTemplateId={
             experimentalPresentation.data?.usedExperiment
               ? experimentalPresentation.data.preferredTemplateId

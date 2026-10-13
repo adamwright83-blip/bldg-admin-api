@@ -185,6 +185,36 @@ describe("Brain V2 live cutover", () => {
   });
 
 
+  it("October 11: renders an adapter's separate receipt confirmation for voice and HTTP", async () => {
+    for (const surface of ["voice", "text"] as const) {
+      const result = await runClaireBrainV2LiveTurn(input({
+        surface,
+        rawText: "Add the stuff to the Day Line.",
+        assembledText: "Add the stuff to the Day Line.",
+        executeLegacyAdapter: async () => ({
+          speak: "", kind: "briefing_saved", actionIds: ["c1", "c2"],
+          receiptBackedCommit: "Done. 2 on tomorrow's line.",
+          mutationReceipts: [
+            { claimedState: "created", entityId: "c1", statement: "Added Call permit office to the Day Line" },
+            { claimedState: "created", entityId: "c2", statement: "Added Send estimate to the Day Line" },
+          ],
+        }),
+      }), { env: ON });
+      expect(result.active).toBe(true);
+      if (result.active) expect(result.adapterResult?.speak).toBe("Done. 2 on tomorrow's line.");
+    }
+  });
+
+  it("rejects separate success speech without matching mutation receipts", async () => {
+    const result = await runClaireBrainV2LiveTurn(input({
+      rawText: "Add the stuff to the Day Line.", assembledText: "Add the stuff to the Day Line.",
+      executeLegacyAdapter: async () => ({ speak: "", kind: "briefing_saved", actionIds: [],
+        receiptBackedCommit: "Done. 2 on tomorrow's line.", mutationReceipts: [] }),
+    }), { env: ON });
+    expect(result.active).toBe(true);
+    if (result.active) expect(result.adapterResult?.speak).not.toMatch(/Done\.|2 on/);
+  });
+
   it("binds a bare yes to the pre-turn pending briefing before the adapter clears it", async () => {
     const executeLegacyAdapter = vi.fn(async () =>
       adapterResult("briefing_saved")

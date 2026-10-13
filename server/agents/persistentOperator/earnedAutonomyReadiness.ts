@@ -48,7 +48,7 @@ export function evaluateClaireAutonomyReadiness(
   const reasons: string[] = [];
   const consentCeiling: ClaireAutonomyLevel =
     !evidence.consent.revoked && evidence.consent.evidenceRef?.trim()
-      ? evidence.consent.allowedLevel : 0;
+      && [0, 1, 2].includes(evidence.consent.allowedLevel) ? evidence.consent.allowedLevel : 0;
 
   if (!evidence.tenantId.trim() || !evidence.operatorUserId.trim()) {
     reasons.push("unresolved_identity");

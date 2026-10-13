@@ -9,6 +9,8 @@
 
 import type { ClaireTurnResult } from "../../turn/claireTurn";
 import type { WorkingMemorySource } from "../workingMemory/snapshot";
+import { VerifiedFactInventory, inventoryPlusReceipts } from "../../assertionGuard";
+import { assembleGuardedClaireSpeak } from "../../verifiedFactInventoryFromContext";
 import type { ExecutiveActionGrant } from "../contracts/grants";
 import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
 import {
@@ -148,7 +150,18 @@ export async function runClaireBrainV2LiveTurn(
       adapterPromise = input.executeLegacyAdapter(grant);
     }
     const rawAdapterResult = await adapterPromise;
-    adapterResult = guardCommittedDayLineResult(grant, rawAdapterResult);
+    const guarded = guardCommittedDayLineResult(grant, rawAdapterResult);
+    // Adapters return deterministic confirmation separately from conversation.
+    // Both phone and authenticated talk consumers need the same rendered speech.
+    const commit = guarded.receiptBackedCommit?.trim();
+    adapterResult = !commit || guarded.speak.trim().endsWith(commit)
+      ? guarded
+      : { ...guarded, speak: assembleGuardedClaireSpeak({
+          conversational: guarded.speak,
+          inventory: inventoryPlusReceipts(new VerifiedFactInventory([]), guarded.mutationReceipts),
+          receiptBackedCommit: commit,
+          mutationReceipts: guarded.mutationReceipts,
+        }) };
     return adapterResult;
   };
 

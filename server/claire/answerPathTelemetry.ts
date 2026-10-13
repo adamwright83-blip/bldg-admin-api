@@ -41,6 +41,7 @@ export const CLAIRE_ANSWER_PATHS = [
   "listening", // held fragment; nothing spoken
   "prior_claim_verification", // server-adjudicated recheck of a prior factual claim (provenance/claimReceipts.ts)
   "identity_truth", // authority-0/1 platform or tenant identity, rendered deterministically
+  "growth_challenge", // accepted sales challenge written to Day Line
 ] as const;
 
 export type ClaireAnswerPath = (typeof CLAIRE_ANSWER_PATHS)[number];

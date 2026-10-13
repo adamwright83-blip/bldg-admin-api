@@ -41,7 +41,7 @@ import { listBehavioralLedgerEventsForOperatorCorrelation } from "../behavioralL
 import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
-import { assignExperimentalPresentation } from "../behavioralExperiment/assignPresentation";
+import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -276,6 +276,7 @@ export const goldlineWorldRouter = router({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
         correlationId: input.correlationId,
+        adaptationAllowed: (await loadPresentationConsent({ tenantId: ctx.tenantId, operatorUserId: ctx.user.openId })).adaptationAllowed,
         events: rows.map(row => ({
           tenantId: row.tenantId,
           operatorUserId: row.operatorUserId,
@@ -307,14 +308,11 @@ export const goldlineWorldRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const result = await assignExperimentalPresentation({
+      const result = await assignAuthorizedPresentation({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
         correlationId: input.correlationId,
         occasionId: input.occasionId,
-        grammar: input.grammar,
-        registry: FICTION_ELIGIBILITY_CATALOG,
-        policy: resolveProductionExperimentPolicy(),
         emergency: input.emergency,
       });
       if (!result.usedExperiment) {
@@ -333,6 +331,7 @@ export const goldlineWorldRouter = router({
         skipReason: null,
         preferredTemplateId: result.assignment.preferredTemplateId,
         assignedOption: result.assignment.assignedOption,
+        rulesVersion: result.assignment.preferredTemplateId ? FICTION_ELIGIBILITY_CATALOG.find(t => t.id === result.assignment.preferredTemplateId)?.rulesVersion ?? null : null,
         assignmentProbability: result.assignment.assignmentProbability,
         assignmentMechanism: result.assignment.assignmentMechanism,
         decisionPointId: result.assignment.decisionPointId,
@@ -340,6 +339,10 @@ export const goldlineWorldRouter = router({
         proximalOutcomeWindowMinutes: result.assignment.proximalOutcomeWindowMinutes,
       };
     }),
+  acknowledgePresentationViewable: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ correlationId: z.string().min(1).max(128), occasionId: z.string().min(1).max(96),
+      decisionPointId: z.string().min(1).max(128), templateId: z.string().min(1).max(64) }))
+    .mutation(({ ctx, input }) => acknowledgePresentationViewable({ ...input, tenantId: ctx.tenantId, operatorUserId: ctx.user.openId })),
   resetProofWorld: legacyDayforgeTenantAdminProcedure.mutation(() =>
     resetProofWorldFromApi()
   ),
