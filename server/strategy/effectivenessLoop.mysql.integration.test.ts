@@ -22,8 +22,10 @@ import { _clearSnapshotStore } from "./snapshotBuilder";
 import { prepareStrategicProposal, refreshStrategicDiagnosis } from "./strategicPreparation";
 import { respondToStrategicProposal } from "./strategicApproval";
 import { getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
+import { planForDate } from "../planning/missionDirector/missionDirectorService";
 import {
   answerMissionFollowUp,
+  readCarriedForwardWork,
   revokeMissionPresentation,
   syncMissionFollowUp,
 } from "../agents/daphne/missionFollowUp";
@@ -249,6 +251,54 @@ describeMysql("Claire + Daphne business effectiveness loop", () => {
     );
     expect(origRows[0]).toMatchObject({ status: "open", title: item.title, businessDate: item.businessDate, sourceText: item.objective });
     expect(await syncMissionFollowUp({ ...scope, today: nextDay })).toBeNull();
+
+    // Carry-forward: the next planning cycle picks up the same unfinished work.
+    const [beforeCarry] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id FROM day_director_commitments WHERE tenantId = ?",
+      [tenantId]
+    );
+    const carryPlan = await planForDate({
+      tenantId,
+      operatorId: identity.dayDirectorActorId,
+      operatorIds: identity.dayDirectorActorIds,
+      operatorUserId: identity.canonicalOpenId,
+      operatorUserIds: identity.aliases.map(a => a.openId),
+      businessDate: nextDay,
+      timeZone: zone,
+    });
+    const carriedRank = carryPlan.outcome.workPlan!.ranking.find(r =>
+      r.sourceRefs.some(ref => ref.sourceType === "day_director_commitment" && ref.sourceId === commitmentId)
+    )!;
+    expect(carriedRank).toBeTruthy();
+    expect(carriedRank.blockedReasons).not.toContain("EXECUTION_TYPE_UNKNOWN");
+    expect(carriedRank.eligible).toBe(true);
+    expect(carriedRank.executionType).toBe(item.executionType);
+    expect(carriedRank.motion).toBe(item.missionType);
+    expect(carryPlan.outcome.workPlan!.status).toBe("ranked");
+    const carried = await readCarriedForwardWork({
+      tenantId,
+      canonicalOperatorId: identity.canonicalOperatorId,
+      actorIds: identity.dayDirectorActorIds,
+      businessDate: nextDay,
+      sourceRefs: carriedRank.sourceRefs,
+    });
+    expect(carried).toMatchObject({
+      commitmentId,
+      originalBusinessDate: item.businessDate,
+      title: item.title,
+      objective: item.objective,
+      executionType: item.executionType,
+      missionType: item.missionType,
+      presentation: { adjustment: { kind: "task_size", firstStepOnly: true } },
+    });
+    // Planning created no duplicate commitment and left approval lineage intact.
+    const [afterCarry] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT id, metadataJson FROM day_director_commitments WHERE tenantId = ?",
+      [tenantId]
+    );
+    expect(afterCarry.map(r => r.id).sort()).toEqual(beforeCarry.map(r => r.id).sort());
+    const lineage = (typeof afterCarry[0]!.metadataJson === "string" ? JSON.parse(afterCarry[0]!.metadataJson) : afterCarry[0]!.metadataJson).strategicApproval;
+    expect(lineage).toMatchObject({ proposalId: proposal.id, revision: proposal.revision, itemId: item.id });
 
     // 8–9. Claire's next preparation; the next matching mission carries Daphne's adjustment.
     // Claire's next preparation cycle, after the explanation.

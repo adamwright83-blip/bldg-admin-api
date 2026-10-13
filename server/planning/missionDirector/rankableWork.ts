@@ -151,6 +151,8 @@ function rankOne(input: {
     blockedReasons.push("PREP_NOT_READY");
   }
 
+  // Approved work carries forward with the execution type it was approved as.
+  if (candidate.storedExecutionType) execution.executionType = candidate.storedExecutionType;
   // Strategy preparation is a bounded desk investigation, never a field visit.
   if (candidate.sourceKind === "strategy_diagnosis") execution.executionType = "challenge";
   if (execution.executionType == null) {

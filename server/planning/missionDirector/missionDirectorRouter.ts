@@ -9,6 +9,7 @@ import { getDb } from "../../db";
 import { isLegacyDayforgeTenant } from "../../saas/tenantAccess";
 import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
 import { listPlanRevisions, planForDate, recordPlanUsage } from "./missionDirectorService";
+import { readCarriedForwardWork } from "../../agents/daphne/missionFollowUp";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -57,7 +58,7 @@ export const missionDirectorRouter = router({
     .query(async ({ ctx, input }) => {
       const identity = await missionDirectorIdentity(ctx, "mission_director.plan");
       const timeZone = await resolveMissionDirectorBusinessTimeZone(identity.tenantId);
-      return planForDate({
+      const plan = await planForDate({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
@@ -66,6 +67,19 @@ export const missionDirectorRouter = router({
         timeZone,
         ...input,
       });
+      const work = plan.outcome.workPlan;
+      // Read-side only: the stored plan is unchanged.
+      const carriedForward =
+        work?.status === "ranked"
+          ? await readCarriedForwardWork({
+              tenantId: identity.tenantId,
+              canonicalOperatorId: identity.canonicalOperatorId,
+              actorIds: identity.dayDirectorActorIds,
+              businessDate: input.businessDate,
+              sourceRefs: work.primary.sourceRefs,
+            }).catch(() => null)
+          : null;
+      return { ...plan, carriedForward };
     }),
   revisions: legacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date }))

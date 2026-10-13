@@ -1,3 +1,4 @@
+import { WEEKLY_GROWTH_MOTIONS } from "../../shared/weeklyGrowthCandidates";
 import { formatInTimeZone } from "date-fns-tz";
 import { and, eq, inArray } from "drizzle-orm";
 import { commercialFollowUps, dayDirectorCommitments } from "../../drizzle/schema";
@@ -130,6 +131,10 @@ async function readCommitments(input: {
     const customerKey = stringField(metadata, "customerKey");
     const obligationId = obligationIdFrom(row.idempotencyKey) ?? stringField(metadata, "obligationId");
     const title = dayLineDisplayTitle(overlay, row.title);
+    const missionType = stringField(metadata, "missionType");
+    const storedMotion = (WEEKLY_GROWTH_MOTIONS as readonly string[]).includes(missionType ?? "")
+      ? (missionType as WeeklyGrowthMotion)
+      : null;
     let grounding: WeeklyGrowthGrounding | null = null;
     if (row.kind === "growth") grounding = "growth_tagged";
     else if (campaignId) grounding = "campaign_linked";
@@ -148,7 +153,12 @@ async function readCommitments(input: {
       status: hidden ? "cancelled" : row.status,
       grounding,
       operationalClass,
-      motionHint: grounding === "commercial_follow_up" || grounding === "sales" ? "commercial_follow_up" : grounding === "proactive_recovery" ? "customer_recovery" : null,
+      // Approved work keeps the motion and execution type recorded at approval.
+      motionHint: storedMotion ?? (grounding === "commercial_follow_up" || grounding === "sales" ? "commercial_follow_up" : grounding === "proactive_recovery" ? "customer_recovery" : null),
+      storedExecutionType:
+        metadata.executionType === "mission" || metadata.executionType === "challenge"
+          ? metadata.executionType
+          : null,
       campaignId,
       followUpId,
       missionId,

@@ -1634,6 +1634,7 @@ function LiveGoldlineDriverController({
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}
         missionFollowUp={missionFollowUp.data ?? null}
+        carriedForward={missionDirectorPlan.data?.carriedForward ?? null}
         onAnswerMissionFollowUp={async (commitmentId, answer) => {
           const result = await answerMissionFollowUp.mutateAsync({
             commitmentId,
@@ -1694,6 +1695,7 @@ function LiveGoldlineDriverController({
         onCompleteCommitment={async commitmentId => {
           await completeDayCommitment.mutateAsync({ commitmentId });
           await dayDirectorState.refetch();
+          await missionDirectorPlan.refetch();
         }}
       />
       <SalesJournalSheet

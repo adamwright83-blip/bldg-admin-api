@@ -18,7 +18,17 @@ import type {
   DayDirectorProposal,
   ProcessingLocation,
 } from "@shared/dayDirector";
-import type { DaphneMissionFollowUp } from "@shared/daphneMissionPresentation";
+import type {
+  DaphneMissionFollowUp,
+  DaphneMissionPresentation,
+} from "@shared/daphneMissionPresentation";
+
+type CarriedForwardWorkView = {
+  commitmentId: string;
+  originalBusinessDate: string;
+  title: string;
+  presentation: DaphneMissionPresentation | null;
+};
 import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
 import {
@@ -117,6 +127,8 @@ export type GoldlineDayPlanProps = {
   commitments?: DayDirectorCommitment[];
   /** Claire's one question about overdue, still-open work. */
   missionFollowUp?: DaphneMissionFollowUp | null;
+  /** Unfinished approved work Mission Director carried into this plan date. */
+  carriedForward?: CarriedForwardWorkView | null;
   onAnswerMissionFollowUp?: (commitmentId: string, answer: string) => Promise<string>;
   intelligenceAvailable?: boolean;
   dismissedPromptKeys?: string[];
@@ -329,6 +341,43 @@ function MissionFollowUpCard({
   );
 }
 
+function CarriedForwardCard({
+  work,
+  onComplete,
+}: {
+  work: CarriedForwardWorkView | null;
+  onComplete?: (commitmentId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!work) return null;
+  return (
+    <section className="gdp-mission-adjustments" data-testid="carried-forward-mission">
+      <p>
+        <strong>Still open from {work.originalBusinessDate}:</strong> {work.title}
+      </p>
+      {work.presentation ? (
+        <p data-testid="carried-forward-presentation">{work.presentation.note}</p>
+      ) : null}
+      {onComplete ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onComplete(work.commitmentId);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Mark done
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 function DaphneMissionAdjustments({
   commitments,
 }: {
@@ -469,6 +518,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         onAnswer={props.onAnswerMissionFollowUp}
       />
       <DaphneMissionAdjustments commitments={props.commitments} />
+      <CarriedForwardCard
+        work={props.carriedForward ?? null}
+        onComplete={props.onCompleteCommitment}
+      />
       {!artPreview && (
         <button
           type="button"

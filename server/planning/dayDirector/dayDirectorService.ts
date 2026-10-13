@@ -1,6 +1,7 @@
 import {
   commitmentMissionType,
   loadMissionPresentations,
+  missionPresentationApplies,
 } from "../../agents/daphne/missionFollowUp";
 import { enforceTitleContract } from "../../claire/briefing/titleContract";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -162,13 +163,9 @@ export async function getDayDirectorState(input: {
       if (overlay.notPursuing || overlay.cancelledAt) return null;
       const command = readCommandMetadata(metadata);
       const missionType = commitmentMissionType(row);
-      // Only matching open work that entered the Day Line after the operator's
-      // explanation changes presentation; earlier items keep their history.
       const candidatePresentation = presentations.get(missionType);
       const presentation =
-        row.status === "open" &&
-        candidatePresentation &&
-        row.createdAt.getTime() >= candidatePresentation.declaredAt.getTime() - 1000
+        candidatePresentation && missionPresentationApplies(row, candidatePresentation)
           ? candidatePresentation
           : undefined;
       return {

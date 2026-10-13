@@ -298,3 +298,72 @@ export async function loadMissionPresentations(input: {
   }
   return out;
 }
+
+/**
+ * A consented adjustment applies to matching open work that entered the Day
+ * Line after the explanation, and to the explained item itself when it
+ * carries forward. Earlier, unexplained items keep their recorded presentation.
+ */
+export function missionPresentationApplies(
+  row: { status: string; createdAt: Date; metadataJson: unknown },
+  presentation: { declaredAt: Date }
+): boolean {
+  if (row.status !== "open") return false;
+  if (row.createdAt.getTime() >= presentation.declaredAt.getTime() - 1000) return true;
+  return readDayLineOverlay(row.metadataJson).unresolved?.status === "explained";
+}
+
+export type CarriedForwardWork = {
+  commitmentId: string;
+  originalBusinessDate: string;
+  title: string;
+  objective: string | null;
+  missionType: string;
+  executionType: "mission" | "challenge" | null;
+  presentation: DaphneMissionPresentation | null;
+};
+
+/**
+ * Resolves Mission Director's selected work back to its canonical Day Line
+ * commitment when that commitment is open and dated before the plan date.
+ * Read-only: no new commitment is created for carried-forward work.
+ */
+export async function readCarriedForwardWork(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  actorIds: readonly string[];
+  businessDate: string;
+  sourceRefs: readonly { sourceType: string; sourceId: string }[];
+}): Promise<CarriedForwardWork | null> {
+  const ref = input.sourceRefs.find(r => r.sourceType === "day_director_commitment");
+  if (!ref || !input.actorIds.length) return null;
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        eq(dayDirectorCommitments.id, ref.sourceId),
+        inArray(dayDirectorCommitments.actorId, [...input.actorIds])
+      )
+    )
+    .limit(1);
+  if (!row || row.status !== "open" || row.businessDate >= input.businessDate) return null;
+  const meta = (row.metadataJson && typeof row.metadataJson === "object" ? row.metadataJson : {}) as Record<string, unknown>;
+  const missionType = commitmentMissionType(row);
+  const found = (await loadMissionPresentations(input)).get(missionType);
+  return {
+    commitmentId: row.id,
+    originalBusinessDate: row.businessDate,
+    title: row.title,
+    objective: row.sourceText,
+    missionType,
+    executionType: meta.executionType === "mission" || meta.executionType === "challenge" ? meta.executionType : null,
+    presentation:
+      found && missionPresentationApplies(row, found)
+        ? { adjustment: found.adjustment, note: found.note, sourceObservationId: found.sourceObservationId, missionType }
+        : null,
+  };
+}
