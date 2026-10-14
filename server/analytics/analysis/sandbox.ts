@@ -166,7 +166,7 @@ export async function executeAnalysisQuery(input: {
           );
           // An unnamed or otherwise unclassifiable financial expression
           // cannot silently surface its raw cents as an ordinary figure.
-          const monetarySource = /\\b(?:amount|discount|credit|lifetime)_cents\\b/i.test(
+          const monetarySource = /\b(?:amount|discount|credit|lifetime)_cents\b/i.test(
             checked.sql
           );
           return [
