@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeComparablePeriods } from "./strategicEvidenceReaders";
+import { salesSourceOutage, summarizeComparablePeriods } from "./strategicEvidenceReaders";
 import { assembleStrategicDiagnosis, describeObservedComparison } from "./strategicDiagnosis";
 import { defaultVerticalRegistry } from "./verticalTemplates/defaultRegistry";
 
@@ -59,5 +59,48 @@ describe("stale sales sources", () => {
     expect(d.selectedApproach).toMatch(/^Restore the stale sales data source/);
     expect(d.options[0]!.observedBasis).toMatch(/^Recorded, incomplete: Recorded sales last 30 days \$1874\.16 vs \$2523\.25/);
     expect(d.options[1]!.reason).toMatch(/^Not preferred/);
+  });
+});
+
+describe("source outage vs payment-authority gap", () => {
+  const cov = (over: Partial<{ cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: string[]; failedSources: string[] }>) => ({
+    status: "ok" as const,
+    coverage: { cleanCloudStatus: "fresh", snapshotRead: true, loadedSources: ["laundry_butler", "cleancloud"], failedSources: [], ...over },
+  });
+  it("a loaded source with missing payment receipts is not an outage", () => {
+    // Production shape after the Oct 14 restore: both loaded, both flagged for receipts.
+    expect(salesSourceOutage(cov({ failedSources: ["laundry_butler", "cleancloud"] }))).toEqual([]);
+  });
+  it("stale CleanCloud and unloadable sources are outages", () => {
+    expect(salesSourceOutage(cov({ cleanCloudStatus: "stale" }))).toEqual(["CleanCloud stale"]);
+    expect(salesSourceOutage(cov({ loadedSources: ["cleancloud"], failedSources: ["laundry_butler"] }))).toEqual(["laundry_butler could not be loaded"]);
+  });
+
+  it("Claire does not recommend repairing a healthy connection; recorded figures stay labelled unverified", () => {
+    const now = new Date("2026-10-14T20:00:00Z");
+    const at = now.toISOString();
+    const e = (id: string, value: number | string, quality: "complete" | "partial") => ({
+      id, tenantId: "t", source: "test", capturedAt: at,
+      classification: quality === "complete" ? ("verified" as const) : ("estimate" as const),
+      value, unit: id, quality, description: id,
+    });
+    const d = assembleStrategicDiagnosis(
+      {
+        tenantId: "t", canonicalOperatorId: "op", verticalKey: "laundry_fluff_fold", businessDate: "2026-10-14", now,
+        goal: { statement: "Get to 50 active customers", metricKey: "active_customers", target: 50, current: null, evidenceRef: "goal" },
+        evidence: [e("goal", "g", "complete"), e("net_sales_cents", 268997, "partial"), e("prior_net_sales_cents", 252325, "partial"), e("dormant_customers", 85, "complete"), e("gap", "31 recorded orders lack payment-authority receipts", "complete")],
+        metrics: { net_sales_cents: "net_sales_cents", prior_net_sales_cents: "prior_net_sales_cents", dormant_customers: "dormant_customers" },
+        market: { tenantId: "t", mode: "physical", territories: [], observations: [], limitations: [] },
+        outcomes: [], commitments: [],
+        recordedFigures: { evidenceRef: "gap", description: "31 recorded orders lack payment-authority receipts" },
+      },
+      defaultVerticalRegistry
+    );
+    expect(d.quality.structuralErrors).toEqual([]);
+    expect(d.selectedApproach).not.toMatch(/Restore/);
+    expect(d.diagnosis).not.toMatch(/incomplete|restore/i);
+    expect(d.currentCondition).toContain("Recorded sales (sources current; not all orders payment-verified):");
+    expect(d.currentCondition).toContain("$2689.97 vs $2523.25");
+    expect(d.uncertainty.join(" ")).toContain("lack payment-authority receipts");
   });
 });

@@ -52,6 +52,7 @@ export async function readStrategicDiagnosisInputs(input: {
   });
   const evidence: StrategyEvidence[] = [];
   let sourceGaps: DiagnosisInput["sourceGaps"];
+  let recordedFigures: DiagnosisInput["recordedFigures"];
   const metrics: DiagnosisInput["metrics"] = {};
   const goalRef = goal
     ? `operator_macro_goals:${goal.id}`
@@ -203,22 +204,13 @@ export async function readStrategicDiagnosisInputs(input: {
           : lookbackQuality,
         description
       );
-    if (lookback.status === "unavailable" || !lookback.mayStateExact) {
-      const c = lookback.coverage;
-      const parts = [
-        ...(c.cleanCloudStatus && c.cleanCloudStatus !== "fresh" && c.cleanCloudStatus !== "not_held"
-          ? [`CleanCloud ${c.cleanCloudStatus}`]
-          : []),
-        ...c.failedSources
-          .filter(s => !(s === "cleancloud" && c.cleanCloudStatus && c.cleanCloudStatus !== "fresh"))
-          .map(s => `${s} could not be fully read`),
-        ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
-      ];
+    // Three distinct conditions: a source outage (stale or unloadable source),
+    // a payment-authority gap (orders loaded but lacking payment receipts), and
+    // exact coverage. Only an outage means the connection needs repair.
+    const outage = salesSourceOutage(lookback);
+    if (outage.length) {
       const id = `${snapshot.id}:sales_source_coverage`;
-      sourceGaps = {
-        evidenceRef: id,
-        description: parts.length ? parts.join("; ") : "source coverage does not allow exact totals",
-      };
+      sourceGaps = { evidenceRef: id, description: outage.join("; ") };
       evidence.push({
         id,
         tenantId: identity.tenantId,
@@ -229,6 +221,26 @@ export async function readStrategicDiagnosisInputs(input: {
         unit: "sales_source_coverage",
         quality: "complete",
         description: "Verified state of the sales sources for the comparison window",
+      });
+    } else if (lookback.status === "ok" && !lookback.mayStateExact) {
+      const unverified = lookback.unverifiedPaymentAuthority;
+      const id = `${snapshot.id}:payment_authority_gap`;
+      recordedFigures = {
+        evidenceRef: id,
+        description: unverified?.count
+          ? `${unverified.count} recorded orders lack payment-authority receipts; totals are recorded sales, not payment-verified`
+          : "Totals are recorded sales; exact payment verification is not established for this window",
+      };
+      evidence.push({
+        id,
+        tenantId: identity.tenantId,
+        source: "canonicalRevenue payment authority reconciliation",
+        capturedAt: snapshot.generatedAt,
+        classification: "verified",
+        value: recordedFigures.description,
+        unit: "payment_authority_gap",
+        quality: "complete",
+        description: "Sources are current; some recorded orders are not payment-verified",
       });
     }
     if (snapshot.payload.customers.aggregateSource === "observed")
@@ -379,6 +391,7 @@ export async function readStrategicDiagnosisInputs(input: {
     market,
     outcomes,
     ...(sourceGaps ? { sourceGaps } : {}),
+    ...(recordedFigures ? { recordedFigures } : {}),
     commitments: commitments
       .filter(
         c =>
@@ -444,4 +457,26 @@ export function summarizeComparablePeriods(
     priorMtd: total(priorMonthStart, priorMtdTo),
     customers: { newCustomers: newCustomers.size, returningCustomers: returning.size, unidentifiedOrders },
   };
+}
+
+/**
+ * Pure: the source conditions that mean sales data is actually missing.
+ * A source that loaded but has orders without payment receipts is not an outage.
+ */
+export function salesSourceOutage(
+  revenue:
+    | { status: "unavailable"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
+    | { status: "ok"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
+): string[] {
+  const c = revenue.coverage;
+  if (revenue.status === "unavailable") return ["sales sources could not be read"];
+  return [
+    ...(c.cleanCloudStatus && !["fresh", "not_held"].includes(c.cleanCloudStatus)
+      ? [`CleanCloud ${c.cleanCloudStatus}`]
+      : []),
+    ...c.failedSources
+      .filter(s => !c.loadedSources.includes(s))
+      .map(s => `${s} could not be loaded`),
+    ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
+  ];
 }

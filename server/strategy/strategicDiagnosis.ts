@@ -33,6 +33,8 @@ export type DiagnosisInput = {
   commitments: string[];
   /** Sales sources that were stale or unreadable for the comparison window. */
   sourceGaps?: { evidenceRef: string; description: string };
+  /** Sources current, but some orders are not payment-verified: figures are usable as recorded, never as confirmed. */
+  recordedFigures?: { evidenceRef: string; description: string };
 };
 
 export function assembleStrategicDiagnosis(
@@ -66,6 +68,14 @@ export function assembleStrategicDiagnosis(
       return null;
     return e.value;
   };
+  const recordedValue = (key: string): number | null => {
+    if (!industry?.metrics.includes(key)) return null;
+    const e = byId.get(input.metrics[key] ?? "");
+    return e && typeof e.value === "number" && Number.isFinite(e.value) &&
+      (e.quality === "partial" || e.quality === "stale")
+      ? e.value
+      : null;
+  };
   const ref = (key: string) =>
     input.metrics[key] ? [input.metrics[key]!] : [];
   const goalEvidence =
@@ -79,15 +89,17 @@ export function assembleStrategicDiagnosis(
   const demand = metric("qualified_demand");
   const needed = metric("required_qualified_demand");
   const cash = metric("cash_runway_weeks");
-  const sales = metric("net_sales_cents");
-  const priorSales = metric("prior_net_sales_cents");
-  const orders = metric("paid_orders");
-  const priorOrders = metric("prior_paid_orders");
-  const aov = metric("average_order_value_cents");
-  const mtd = metric("mtd_net_sales_cents");
-  const priorMtd = metric("prior_mtd_net_sales_cents");
-  const newCustomers = metric("new_customers_30d");
-  const returningCustomers = metric("returning_customers_30d");
+  const recordedUsable = Boolean(input.recordedFigures && byId.has(input.recordedFigures.evidenceRef));
+  const recordedOrExact = (key: string) => metric(key) ?? (recordedUsable ? recordedValue(key) : null);
+  const sales = recordedOrExact("net_sales_cents");
+  const priorSales = recordedOrExact("prior_net_sales_cents");
+  const orders = recordedOrExact("paid_orders");
+  const priorOrders = recordedOrExact("prior_paid_orders");
+  const aov = recordedOrExact("average_order_value_cents");
+  const mtd = recordedOrExact("mtd_net_sales_cents");
+  const priorMtd = recordedOrExact("prior_mtd_net_sales_cents");
+  const newCustomers = recordedOrExact("new_customers_30d");
+  const returningCustomers = recordedOrExact("returning_customers_30d");
   const dormant = metric("dormant_customers");
   const observed = describeObservedComparison({
     sales, priorSales, orders, priorOrders, aov, mtd, priorMtd,
@@ -102,6 +114,8 @@ export function assembleStrategicDiagnosis(
       ? e.value
       : null;
   };
+  if (recordedUsable && observed.lines.length)
+    observed.lines.unshift("Recorded sales (sources current; not all orders payment-verified):");
   const salesChange =
     sales != null && priorSales != null && priorSales > 0
       ? (sales - priorSales) / priorSales
@@ -139,6 +153,7 @@ export function assembleStrategicDiagnosis(
       ...ref("prior_net_sales_cents"),
       ...ref("dormant_customers"),
       ...ref("returning_customers_30d"),
+      ...(recordedUsable ? [input.recordedFigures!.evidenceRef] : []),
     ];
     diagnosis = `Recorded sales fell ${pct(salesChange)} against the prior 30 days while ${dormant} previously active customers are dormant. Recovering known buyers is the most direct, observable lever; the cause of the decline is not yet established.`;
   } else if (
@@ -397,6 +412,7 @@ export function assembleStrategicDiagnosis(
         ? ["Industry metric readers unsupported."]
         : industry.limitations),
       ...observed.missing.map(m => `${m} is unmeasured.`),
+      ...(recordedUsable ? [`${input.recordedFigures!.description}.`] : []),
       ...(contribution == null
         ? [
             "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
