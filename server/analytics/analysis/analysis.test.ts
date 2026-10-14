@@ -8,7 +8,7 @@ import {
 import { executeAnalysisQuery, assertDatasetBounded } from "./sandbox";
 import { validateAnalysisSql } from "./sqlPolicy";
 import { analyzeBusinessData } from "./analyzeBusinessData";
-import { investigateForPreparation } from "./proactiveInvestigation";
+import { investigateForPreparation, createProactiveResearchGate, PROACTIVE_RESEARCH_REUSE_MS } from "./proactiveInvestigation";
 import { loadPaidOrderLedger } from "../paidOrderLedger";
 import {
   fixtureLoaders,
@@ -586,5 +586,104 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
       tenantId: "tenant-a",
       budgetMs: 25000,
     });
+  });
+});
+
+describe("server-owned financial result units", () => {
+  it("infers cents through arbitrary model aliases and through CTE projections", async () => {
+    for (const sql of [
+      "SELECT SUM(amount_cents) AS revenue FROM orders",
+      "WITH revenue_cte AS (SELECT SUM(amount_cents) AS arbitrary FROM orders) SELECT arbitrary AS gross FROM revenue_cte",
+    ]) {
+      const result = await executeAnalysisQuery({
+        tenantId: "tenant-a",
+        dataset: tinyDataset(),
+        sql,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.rows).toEqual([[6000]]);
+      const key = result.columns[0]!.toLowerCase();
+      expect(result.monetaryUnits?.[key]).toBe("cents");
+    }
+  });
+  it("recognizes explicit cents-to-dollars division and rejects alias-based money guesses", async () => {
+    const converted = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset: tinyDataset(),
+      sql: "SELECT SUM(amount_cents) / 100.0 AS revenue FROM orders",
+    });
+    expect(converted.rows).toEqual([[60]]);
+    expect(converted.monetaryUnits?.revenue).toBe("dollars");
+    const misleading = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset: tinyDataset(),
+      sql: "SELECT COUNT(*) AS fake_cents FROM orders",
+    });
+    expect(misleading.rows).toEqual([[3]]);
+    expect(misleading.monetaryUnits?.fake_cents).toBe("none");
+  });
+  it("renders an arbitrary aggregate alias as dollars from trusted cents lineage", async () => {
+    const invoke = vi.fn(async () =>
+      invoke.mock.calls.length === 1
+        ? envelope(request({ sql: "SELECT SUM(amount_cents) AS revenue FROM orders" }))
+        : envelope({ kind: "final", sql: "", answer: "Revenue has been summarized." })
+    );
+    const result = await analyzeBusinessData(
+      {
+        tenantId: "tenant-a",
+        question: "Summarize the recorded sales",
+        now: FIXTURE_NOW,
+        timeZone: FIXTURE_TZ,
+      },
+      { invoke: invoke as any, build: async () => tinyDataset() }
+    );
+    expect(result.kind).toBe("evidence");
+    expect(result.answer).toContain("revenue: $60.00");
+    expect(result.answer).not.toContain("revenue: 6000");
+  });
+});
+
+describe("scheduled proactive model-call reuse", () => {
+  const requestFor = (tenantId: string, objective: string, now: Date) => ({
+    tenantId, objective, now, timeZone: FIXTURE_TZ,
+  });
+  const evidence = () => ({
+    kind: "evidence" as const, answer: "Test only", results: [],
+    citedReceiptIds: [], limitations: [],
+  });
+  it("coalesces concurrent attempts for the same tenant and objective", async () => {
+    const gate = createProactiveResearchGate();
+    const model = vi.fn(async () => evidence() as any);
+    const input = requestFor("reuse-a", "Recover sales", FIXTURE_NOW);
+    const [a, b] = await Promise.all([
+      gate(input, model as any), gate(input, model as any),
+    ]);
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(evidence());
+    expect(b).toEqual(evidence());
+    await gate(input, model as any);
+    expect(model).toHaveBeenCalledTimes(1);
+  });
+  it("never reuses one objective for another; independent tenants retain their own budgets", async () => {
+    const gate = createProactiveResearchGate();
+    const model = vi.fn(async () => evidence() as any);
+    await gate(requestFor("reuse-b", "Recovery", FIXTURE_NOW), model as any);
+    expect(await gate(requestFor("reuse-b", "Advertising", FIXTURE_NOW), model as any)).toBeNull();
+    await gate(requestFor("reuse-c", "Advertising", FIXTURE_NOW), model as any);
+    expect(model).toHaveBeenCalledTimes(2);
+    await gate(
+      requestFor("reuse-b", "Advertising",
+        new Date(FIXTURE_NOW.getTime() + PROACTIVE_RESEARCH_REUSE_MS)),
+      model as any
+    );
+    expect(model).toHaveBeenCalledTimes(3);
+  });
+  it("failed investigations consume the cooldown and do not trigger paid retry storms", async () => {
+    const gate = createProactiveResearchGate();
+    const model = vi.fn(async () => { throw new Error("Provider failure"); });
+    const input = requestFor("reuse-failure", "Retention", FIXTURE_NOW);
+    expect(await gate(input, model as any)).toBeNull();
+    expect(await gate(input, model as any)).toBeNull();
+    expect(model).toHaveBeenCalledTimes(1);
   });
 });
