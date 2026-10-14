@@ -51,6 +51,7 @@ export async function readStrategicDiagnosisInputs(input: {
     ],
   });
   const evidence: StrategyEvidence[] = [];
+  let sourceGaps: DiagnosisInput["sourceGaps"];
   const metrics: DiagnosisInput["metrics"] = {};
   const goalRef = goal
     ? `operator_macro_goals:${goal.id}`
@@ -202,6 +203,34 @@ export async function readStrategicDiagnosisInputs(input: {
           : lookbackQuality,
         description
       );
+    if (lookback.status === "unavailable" || !lookback.mayStateExact) {
+      const c = lookback.coverage;
+      const parts = [
+        ...(c.cleanCloudStatus && c.cleanCloudStatus !== "fresh" && c.cleanCloudStatus !== "not_held"
+          ? [`CleanCloud ${c.cleanCloudStatus}`]
+          : []),
+        ...c.failedSources
+          .filter(s => !(s === "cleancloud" && c.cleanCloudStatus && c.cleanCloudStatus !== "fresh"))
+          .map(s => `${s} could not be fully read`),
+        ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
+      ];
+      const id = `${snapshot.id}:sales_source_coverage`;
+      sourceGaps = {
+        evidenceRef: id,
+        description: parts.length ? parts.join("; ") : "source coverage does not allow exact totals",
+      };
+      evidence.push({
+        id,
+        tenantId: identity.tenantId,
+        source: "canonicalRevenue source coverage contract",
+        capturedAt: snapshot.generatedAt,
+        classification: "verified",
+        value: sourceGaps.description,
+        unit: "sales_source_coverage",
+        quality: "complete",
+        description: "Verified state of the sales sources for the comparison window",
+      });
+    }
     if (snapshot.payload.customers.aggregateSource === "observed")
       add(
         "dormant_customers",
@@ -349,6 +378,7 @@ export async function readStrategicDiagnosisInputs(input: {
     metrics,
     market,
     outcomes,
+    ...(sourceGaps ? { sourceGaps } : {}),
     commitments: commitments
       .filter(
         c =>

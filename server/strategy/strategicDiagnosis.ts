@@ -31,6 +31,8 @@ export type DiagnosisInput = {
     evidenceRef: string;
   }>;
   commitments: string[];
+  /** Sales sources that were stale or unreadable for the comparison window. */
+  sourceGaps?: { evidenceRef: string; description: string };
 };
 
 export function assembleStrategicDiagnosis(
@@ -91,6 +93,15 @@ export function assembleStrategicDiagnosis(
     sales, priorSales, orders, priorOrders, aov, mtd, priorMtd,
     newCustomers, returningCustomers, dormant,
   });
+  // Recorded but incomplete figures: shown only as labelled context, never decisive.
+  const recorded = (key: string): number | null => {
+    if (!industry?.metrics.includes(key)) return null;
+    const e = byId.get(input.metrics[key] ?? "");
+    return e && typeof e.value === "number" && Number.isFinite(e.value) &&
+      (e.quality === "partial" || e.quality === "stale")
+      ? e.value
+      : null;
+  };
   const salesChange =
     sales != null && priorSales != null && priorSales > 0
       ? (sales - priorSales) / priorSales
@@ -165,6 +176,23 @@ export function assembleStrategicDiagnosis(
     diagnosis =
       "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.";
   }
+  const sourceGap =
+    driver === "investigation" && input.sourceGaps && byId.has(input.sourceGaps.evidenceRef)
+      ? input.sourceGaps
+      : null;
+  const recordedView = sourceGap
+    ? describeObservedComparison({
+        sales: recorded("net_sales_cents"), priorSales: recorded("prior_net_sales_cents"),
+        orders: recorded("paid_orders"), priorOrders: recorded("prior_paid_orders"),
+        aov: null, mtd: recorded("mtd_net_sales_cents"), priorMtd: recorded("prior_mtd_net_sales_cents"),
+        newCustomers: recorded("new_customers_30d"), returningCustomers: recorded("returning_customers_30d"),
+        dormant,
+      })
+    : null;
+  if (sourceGap) {
+    support = [sourceGap.evidenceRef];
+    diagnosis = `Sales data is incomplete: ${sourceGap.description}. Recorded figures cannot show whether sales fell or the data stopped arriving, so no growth driver can be isolated until the source is restored.`;
+  }
   const contradicted = input.outcomes.filter(
     o =>
       o.result === "contradicted" &&
@@ -212,10 +240,15 @@ export function assembleStrategicDiagnosis(
       "Test a qualified customer segment within the operating market",
       "Improve conversion of existing qualified demand",
     ],
-    investigation: [
-      "Audit missing business drivers and customer evidence",
-      "Observe the next reporting period before making a growth bet",
-    ],
+    investigation: sourceGap
+      ? [
+          "Restore the stale sales data source, then re-run the sales comparison",
+          "Act now on the incomplete recorded figures",
+        ]
+      : [
+          "Audit missing business drivers and customer evidence",
+          "Observe the next reporting period before making a growth bet",
+        ],
   };
   let [chosen, alternative] = labels[driver]!;
   if (revisitingFailedHypothesis) {
@@ -269,7 +302,7 @@ export function assembleStrategicDiagnosis(
   const recovery =
     driver === "retention" && !revisitingFailedHypothesis &&
     dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1;
-  enrichOptions(options, driver, { aov, dormant, newCustomers, returningCustomers, capacity, observed, recovery });
+  enrichOptions(options, driver, { aov, dormant, newCustomers, returningCustomers, capacity, observed, recovery, sourceGap, recordedView });
   const action: StrategyAction = {
     id: `strategy-${driver}`,
     title: chosen,
@@ -437,6 +470,8 @@ function enrichOptions(
     newCustomers: number | null; returningCustomers: number | null;
     capacity: number | null; observed: ReturnType<typeof describeObservedComparison>;
     recovery: boolean;
+    sourceGap: { description: string } | null;
+    recordedView: ReturnType<typeof describeObservedComparison> | null;
   }
 ) {
   const basis = f.observed.lines.join(" ") || "No comparable-period figures were observed.";
@@ -446,7 +481,22 @@ function enrichOptions(
       : `${n} additional order${n === 1 ? "" : "s"} at the observed average of ${dollars(f.aov)} is about ${dollars(n * f.aov)} recorded sales (arithmetic on an average, not a forecast or profit).`;
   for (const [i, o] of options.entries()) {
     o.observedBasis = basis;
-    if (f.recovery) {
+    if (f.sourceGap) {
+      o.observedBasis = f.recordedView?.lines.length
+        ? `Recorded, incomplete: ${f.recordedView.lines.join(" ")}`
+        : basis;
+      if (i === 0) {
+        o.expectedBenefit = "Makes the sales comparison decision-grade; no sales effect is claimed.";
+        o.uncertainty = `${f.sourceGap.description}.`;
+        o.nextMeasurableAction = "Restore source access and confirm one successful import covering the missing days, then re-run Claire's comparison.";
+        o.reason = "Preferred: an apparent sales drop may be missing data, and acting on it could target the wrong problem.";
+      } else {
+        o.expectedBenefit = "Cannot be sized: the recorded figures are incomplete.";
+        o.uncertainty = "Any decline shown may be a data gap rather than lost customers.";
+        o.nextMeasurableAction = "Only after restoring data: compare recovered figures with the prior period.";
+        o.reason = "Not preferred: acting on incomplete figures risks chasing a drop that did not happen.";
+      }
+    } else if (f.recovery) {
       const n = Math.min(5, f.dormant!);
       if (i === 0) {
         o.expectedBenefit = `If ${n} of ${f.dormant} dormant customers each place one order: ${perOrder(n)}`;

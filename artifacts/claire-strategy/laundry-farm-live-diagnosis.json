@@ -1,0 +1,132 @@
+{
+  "tenant": "Laundry Farm (legacy tenant default)",
+  "source": "read-only consistent dump of production MySQL taken 2026-10-13, run on a disposable local copy; production unmodified",
+  "generatedAt": "2026-10-14T00:05:41.842Z",
+  "evidence": [
+    {
+      "unit": "goal",
+      "value": "Get to 50 active customers",
+      "quality": "complete",
+      "classification": "operator_input"
+    },
+    {
+      "unit": "active_customers",
+      "value": 15,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "paid_orders",
+      "value": 22,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "net_sales_cents",
+      "value": 187416,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "average_order_value_cents",
+      "value": 8518.90909090909,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "prior_paid_orders",
+      "value": 35,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "prior_net_sales_cents",
+      "value": 252325,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "mtd_net_sales_cents",
+      "value": 6987,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "prior_mtd_net_sales_cents",
+      "value": 169070,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "new_customers_30d",
+      "value": 3,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "returning_customers_30d",
+      "value": 12,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "sales_source_coverage",
+      "value": "CleanCloud stale; laundry_butler could not be fully read; cleancloud could not be fully read",
+      "quality": "complete",
+      "classification": "verified"
+    },
+    {
+      "unit": "dormant_customers",
+      "value": 87,
+      "quality": "complete",
+      "classification": "verified"
+    },
+    {
+      "unit": "mature_cohort_customers",
+      "value": 9,
+      "quality": "partial",
+      "classification": "estimate"
+    },
+    {
+      "unit": "mature_cohort_repeat_customers",
+      "value": 3,
+      "quality": "partial",
+      "classification": "estimate"
+    }
+  ],
+  "primaryConstraint": "investigation",
+  "diagnosis": "Sales data is incomplete: CleanCloud stale; laundry_butler could not be fully read; cleancloud could not be fully read. Recorded figures cannot show whether sales fell or the data stopped arriving, so no growth driver can be isolated until the source is restored.",
+  "currentCondition": "Goal progress is unobserved. 87 dormant customers are recovery candidates.",
+  "options": [
+    {
+      "approach": "Restore the stale sales data source, then re-run the sales comparison",
+      "observedBasis": "Recorded, incomplete: Recorded sales last 30 days $1874.16 vs $2523.25 the prior 30 (down 26%). Paid orders 22 vs 35. Month-to-date $69.87 vs $1690.70 at the same point last month. 3 new and 12 returning customers in the last 30 days. 87 dormant customers are recovery candidates.",
+      "reason": "Preferred: an apparent sales drop may be missing data, and acting on it could target the wrong problem.",
+      "expectedBenefit": "Makes the sales comparison decision-grade; no sales effect is claimed.",
+      "uncertainty": "CleanCloud stale; laundry_butler could not be fully read; cleancloud could not be fully read.",
+      "nextMeasurableAction": "Restore source access and confirm one successful import covering the missing days, then re-run Claire's comparison."
+    },
+    {
+      "approach": "Act now on the incomplete recorded figures",
+      "observedBasis": "Recorded, incomplete: Recorded sales last 30 days $1874.16 vs $2523.25 the prior 30 (down 26%). Paid orders 22 vs 35. Month-to-date $69.87 vs $1690.70 at the same point last month. 3 new and 12 returning customers in the last 30 days. 87 dormant customers are recovery candidates.",
+      "reason": "Not preferred: acting on incomplete figures risks chasing a drop that did not happen.",
+      "expectedBenefit": "Cannot be sized: the recorded figures are incomplete.",
+      "uncertainty": "Any decline shown may be a data gap rather than lost customers.",
+      "nextMeasurableAction": "Only after restoring data: compare recovered figures with the prior period."
+    }
+  ],
+  "uncertainty": [
+    "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+    "No authoritative operating location or service territory is configured.",
+    "No recent in-territory prospect research is available; no demand inferred.",
+    "Demographics, local rules, seasonality, competitor differentiation, and route density are unmeasured.",
+    "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+    "Configured capacity is operator input, not a current utilization measurement.",
+    "Prior-period sales comparison is unmeasured.",
+    "Month-to-date comparison is unmeasured.",
+    "New versus returning customer mix is unmeasured.",
+    "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
+    "Existing obligations remain protected; strategic work must fit around them."
+  ],
+  "operationalFinding": "CleanCloud direct sync: 1,175 'login rejected: Unknown login error' and 65 'email code' failures since 2026-10-01; last successful import 2026-10-05."
+}

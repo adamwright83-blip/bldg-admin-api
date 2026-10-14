@@ -1,3 +1,4 @@
+import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
 import { and, desc, eq, gte } from "drizzle-orm";
 import {
   legacyDayforgeSaasTenantLocations,
@@ -66,7 +67,8 @@ export async function resolveTenantVerticalKey(
     .where(eq(territoryOperatorProfiles.tenantId, tenantId))
     .limit(1);
   // An actual saved wash/fold operating profile is industry evidence. Array order is not.
-  return laundry ? "laundry_fluff_fold" : "generic";
+  // The legacy tenants are Laundry Farm itself, a wash/fold business.
+  return laundry || isLegacyDayforgeTenant(tenantId) ? "laundry_fluff_fold" : "generic";
 }
 export async function loadStrategyMarketContext(
   tenantId: string,
