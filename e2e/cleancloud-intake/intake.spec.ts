@@ -18,7 +18,10 @@ test("phone intake requires inspection approval and uncertain outcome only offer
   const calls: any[] = [];
   await page.route("**/api/trpc/**", async route => {
     const request = route.request(),
-      operation = new URL(request.url()).pathname.split(".").pop();
+      url = new URL(request.url()),
+      // Answer batched requests per procedure, as the real tRPC server does.
+      operations = url.pathname.split("/").pop()!.split(",").map(p => p.split(".").pop()),
+      operation = operations.find(op => op !== "directStatus") ?? operations[0];
     const input =
       request.method() === "POST" ? request.postDataJSON()?.json : null;
     calls.push({ operation, input });
@@ -53,9 +56,21 @@ test("phone intake requires inspection approval and uncertain outcome only offer
             ],
           }
         : { queued: true };
+    const resultFor = (op: string | undefined) => ({
+      result: {
+        data: {
+          json:
+            op === "directStatus"
+              ? { configured: false, gmail: { configured: false, connected: false, connectedEmail: null }, autoSyncEnabled: false, paired: false }
+              : data,
+        },
+      },
+    });
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ result: { data: { json: data } } }),
+      body: JSON.stringify(
+        url.searchParams.get("batch") === "1" ? operations.map(resultFor) : resultFor(operation)
+      ),
     });
   });
   await page.goto("/e2e/cleancloud-intake/fixture.html");
