@@ -5,6 +5,7 @@ import { readDailyClaireCallStatus } from "../../agents/persistentOperator/daily
 import { latestStrategicProposal } from "../../strategy/strategicStore";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
+import { loadConfirmedWorkdayPlan } from "../workdayPlanService";
 import { readWinBackDossier } from "../../strategy/winBackDossier";
 import { buildShowrunnerBriefing, DESK_PREPARATION_SOURCE } from "../showrunner/showrunnerBriefing";
 
@@ -78,6 +79,7 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
     .filter(r => r.need && r.forDate === tomorrow)
     .map(r => ({ need: r.need!, savedAt: r.savedAt }));
   const calls = await readDailyClaireCallStatus(identity).catch(() => null);
+  const tomorrowPlan = await loadConfirmedWorkdayPlan({ tenantId: identity.tenantId, actorId: identity.dayDirectorActorId, businessDate: tomorrow }).catch(() => null);
   const diagnosis = proposal?.diagnosis;
   const action = diagnosis?.actions.find(a => a.territoryId) ?? diagnosis?.actions[0];
   return {
@@ -108,6 +110,7 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
         }
       : null,
     winBack,
+    tomorrowConfirmedAt: tomorrowPlan?.confirmedAt ?? null,
     outcomes: briefing.weekToDate.reportedOutcomes,
     recentChange: briefing.weekPlan?.recentChanges.at(-1) ?? null,
     dailyCalls: calls,

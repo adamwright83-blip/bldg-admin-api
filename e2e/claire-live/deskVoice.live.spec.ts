@@ -63,6 +63,9 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   await expect(log.locator("li.cd-line-claire").nth(2)).toBeVisible({ timeout: 90_000 });
   evidence.secondAnswer = await log.locator("li.cd-line-claire").nth(2).innerText();
   evidence.voiceNote = await page.getByTestId("open-comms-voice-note").innerText().catch(() => null);
+  evidence.voiceResponsesSoFar = [...voice];
+  evidence.audioEventsSoFar = [...played];
+  await writeFile(`${OUT}/evidence.json`, JSON.stringify(evidence, null, 2));
   await page.screenshot({ path: `${OUT}/2-voice-turns.png`, fullPage: true });
 
   // Natural reporting and a plan change by text, with ambiguous then exact approval.
@@ -79,6 +82,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   await expect(page.getByTestId("open-comms-saved")).toContainText("bring the customer list");
   evidence.ambiguous = await type("Yes, but make it 11.");
   await expect(page.getByTestId("open-comms-saved")).not.toContainText("approved item");
+  await writeFile(`${OUT}/evidence.json`, JSON.stringify(evidence, null, 2));
   evidence.approve = await type("Yes, lock it in.");
   if (!/verified in the Day Line/.test(String(evidence.approve))) {
     // Claire may have re-proposed 11 AM from the correction; approving that exact revision is still a plain yes.

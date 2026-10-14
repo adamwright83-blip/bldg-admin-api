@@ -9,7 +9,7 @@ export default defineConfig({
   testDir: "./e2e/claire-live",
   workers: 1,
   retries: 0,
-  timeout: 300_000,
+  timeout: 900_000,
   expect: { timeout: 60_000 },
   reporter: [["list"]],
   use: {

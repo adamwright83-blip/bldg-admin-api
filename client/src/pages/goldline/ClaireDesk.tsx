@@ -24,7 +24,6 @@ const STATUS: Record<string, string> = {
 export default function ClaireDesk() {
   const utils = trpc.useUtils();
   const mission = trpc.system.weeklyMission.deskMission.useQuery(undefined, { retry: false, staleTime: 15_000 });
-  const workday = trpc.system.claire.previewWorkday.useQuery({ timeZone: BROWSER_ZONE }, { retry: false, staleTime: 15_000 });
   const respond = trpc.system.weeklyMission.respondToPreparedProposal.useMutation();
   const confirm = trpc.system.claire.confirmTomorrow.useMutation();
   const relationshipClosing = trpc.system.claireRelationshipOffboarding.preview.useQuery(undefined, { enabled: false, retry: false });
@@ -35,7 +34,6 @@ export default function ClaireDesk() {
     void utils.system.weeklyMission.deskMission.invalidate();
     void utils.system.weeklyMission.preparedProposal.invalidate();
     void utils.system.weeklyMission.dailyCallStatus.invalidate();
-    void utils.system.claire.previewWorkday.invalidate();
   }, [utils]);
 
   const m = mission.data;
@@ -65,8 +63,7 @@ export default function ClaireDesk() {
     setConfirmState({ state: "saving" });
     try {
       const r = await confirm.mutateAsync({ timeZone: BROWSER_ZONE });
-      const after = await utils.system.claire.previewWorkday.fetch({ timeZone: BROWSER_ZONE });
-      if (!after.confirmedAt) throw new Error("The save could not be read back, so it is not confirmed.");
+      if (!r.verified) throw new Error("The save could not be read back, so it is not confirmed.");
       setConfirmState({
         state: "ok",
         text: `Saved tomorrow's plan snapshot for ${m?.tomorrowLabel ?? "tomorrow"} at ${new Date(r.confirmedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${r.itemCount} item${r.itemCount === 1 ? "" : "s"}.${
@@ -221,11 +218,11 @@ export default function ClaireDesk() {
               {pendingTomorrow.length ? (
                 <p className="cd-note">Confirming saves tomorrow's plan snapshot only. It does not approve: {pendingTomorrow.map(i => i.title).join("; ")}.</p>
               ) : null}
-              {workday.data?.confirmedAt && confirmState.state === "idle" ? (
-                <p className="cd-ok" data-testid="confirm-tomorrow-already">Tomorrow already confirmed at {new Date(workday.data.confirmedAt).toLocaleString()}.</p>
+              {m.tomorrowConfirmedAt && confirmState.state === "idle" ? (
+                <p className="cd-ok" data-testid="confirm-tomorrow-already">Tomorrow already confirmed at {new Date(m.tomorrowConfirmedAt).toLocaleString()}.</p>
               ) : null}
               <button type="button" className="cd-navy" disabled={confirmState.state === "saving"} onClick={() => void confirmTomorrow()} data-testid="confirm-tomorrow-button">
-                {confirmState.state === "saving" ? "Saving…" : confirmState.state === "error" ? "Retry confirm tomorrow" : workday.data?.confirmedAt ? "Confirm tomorrow again" : "CONFIRM TOMORROW"}
+                {confirmState.state === "saving" ? "Saving…" : confirmState.state === "error" ? "Retry confirm tomorrow" : m.tomorrowConfirmedAt ? "Confirm tomorrow again" : "CONFIRM TOMORROW"}
               </button>
               {confirmState.text ? (
                 <p role={confirmState.state === "error" ? "alert" : "status"} className={confirmState.state === "error" ? "cd-error" : "cd-ok"} data-testid="confirm-tomorrow-result">
