@@ -69,8 +69,22 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
     try {
       const dataset: ApprovedDataset = payload.dataset;
       const state: ClaireAnalyticsState = {};
-      const calls: Array<{ model: string; queryHash: string | null }> = [];
+      const calls: Array<{
+        model: string;
+        queryHash: string | null;
+        kind: string;
+        elapsedMs: number;
+        completionTokens: number;
+        shapeComplete: boolean;
+      }> = [];
+      const executions: Array<{
+        status: string;
+        elapsedMs: number;
+        category?: string;
+      }> = [];
+      let lastAnalysis: { kind: string; reason: string } | undefined;
       const invoke: typeof invokeLLM = async params => {
+        const started = Date.now();
         const response = await invokeLLM(params);
         const content = response.choices[0]?.message.content;
         const decision = JSON.parse(
@@ -78,6 +92,21 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
         );
         calls.push({
           model: response.model,
+          kind: [
+            "query",
+            "final",
+            "existing",
+            "not_business",
+            "insufficient_evidence",
+          ].includes(decision.kind)
+            ? decision.kind
+            : "invalid",
+          elapsedMs: Date.now() - started,
+          completionTokens: response.usage?.completion_tokens ?? 0,
+          shapeComplete:
+            typeof decision.sql === "string" &&
+            typeof decision.answer === "string",
+
           queryHash:
             typeof decision.sql === "string" && decision.sql
               ? createHash("sha256").update(decision.sql).digest("hex")
@@ -85,8 +114,51 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
         });
         return response;
       };
-      const analyze: typeof analyzeBusinessData = input =>
-        analyzeBusinessData(input, { invoke, build: async () => dataset });
+      const analyze: typeof analyzeBusinessData = async input => {
+        const evidence = await analyzeBusinessData(input, {
+          invoke,
+          build: async () => dataset,
+          execute: async request => {
+            const started = Date.now();
+            try {
+              const result = await executeAnalysisQuery(request);
+              executions.push({
+                status: result.receipt.status,
+                elapsedMs: Date.now() - started,
+              });
+              return result;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "";
+              const category = /syntax/i.test(message)
+                ? "syntax"
+                : /Field/.test(message)
+                  ? "field"
+                  : /function/i.test(message)
+                    ? "function"
+                    : /complexity|structure|nesting|Relation limit/.test(
+                          message
+                        )
+                      ? "complexity"
+                      : /join/i.test(message)
+                        ? "join"
+                        : /Dataset/.test(message)
+                          ? "dataset"
+                          : "policy_or_capacity";
+              executions.push({
+                status: "rejected",
+                elapsedMs: Date.now() - started,
+                category,
+              });
+              throw error;
+            }
+          },
+        });
+        lastAnalysis = {
+          kind: evidence.kind,
+          reason: evidence.kind === "execution_error" ? evidence.answer : "",
+        };
+        return evidence;
+      };
       const questions = [
         "For Laundry Farm customers with at least four positive paid orders and no recorded paid order in the past sixty days, calculate ordering consistency as population variance of consecutive gaps divided by squared mean gap. Return the ten lowest normalized variances, with ties ordered by customer_id. Exclude zero-mean gaps. This is evidence only, not mission ranking.",
         "Exclude anyone with an outstanding order.",
@@ -159,6 +231,9 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
             result.analysisEvidence?.kind === "evidence" &&
             populationCorrect &&
             referenceCorrect,
+          diagnostic: lastAnalysis,
+          populationCorrect,
+          referenceCorrect,
           coverageDisclosed:
             result.handled &&
             /CleanCloud|native/i.test(result.speak) &&
@@ -204,6 +279,8 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
         checks,
         originalFixedWindowRegression: payload.originalRegression,
         modelCalls: calls.length,
+        calls,
+        executions,
         servedModels: [...new Set(calls.map(c => c.model))],
         queryHashes: calls.map(c => c.queryHash).filter(Boolean),
         passed: checks.every(c => c.passed === true),
@@ -253,11 +330,12 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
         ? original.data.population.count
         : null;
     const originalRegression = {
-      reportingWindowFrozen: true,
+      reportingWindowFrozenForThisRun: true,
+      historicalReportingWindowProven: false,
       matchesPreviouslyReportedFourteen: originalCount === 14,
       historicalSnapshotIdentityProven: false,
       reason:
-        "The prior raw snapshot was not retained; this repeats the original governed calculation at its frozen reporting clock against current canonical records",
+        "The prior raw snapshot and exact historical window were not retained; this repeats the governed calculation at the fixed acceptance clock against current canonical records",
     };
     // Contact keys remain server-side; model process needs only an opaque identity bridge.
     dataset.customerRefs = Object.fromEntries(

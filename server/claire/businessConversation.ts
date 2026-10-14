@@ -194,6 +194,8 @@ const COVERAGE =
 const SPEND = /\b(spend|spent|spending|generate[ds]?|pay us|paid us|worth)\b/;
 const QUESTION =
   /^(what|what'?s|whats|how|how'?s|who|which|when|did|do|does|was|were|is|are|has|have|compare|show|tell|give|pull|break|list|name|any|count)\b|\?\s*$|\b(what about|how about|compared|versus|vs\.?)\b/i;
+// Analytical requests need not be phrased as questions or name an existing metric.
+const ANALYTICAL_DIRECTIVE = /\b(?:calculate|compute|analy[sz]e|investigate|identify|summari[sz]e)\b/i;
 const REFINEMENT =
   /^(no|nope|nah|actually|instead|rather|ok(?:ay)?|and|just|only|what if|same|now|then)\b|\b(what about|how about|instead|which (?:one|period|was|had)|who (?:are|were) (?:they|those|them)|name them|list them|which customers|how many of (?:those|them)|of those|only (?:count|include|use|people|customers|repeat|the)|just (?:wash|dry|repeat|the)|more than once|at least (?:twice|two|\d)|(?:two|2) or more|exclud\w*|except|without)\b/;
 const PRECEDING = new RegExp(
@@ -1128,7 +1130,8 @@ export async function answerClaireBusinessTurn(
     !looksLikeWorkRequest(input.utterance) &&
     (parsed.kind !== "not_analytics" ||
       Boolean(input.state.businessAnalysis) ||
-      QUESTION.test(input.utterance));
+      QUESTION.test(input.utterance) ||
+      ANALYTICAL_DIRECTIVE.test(input.utterance));
   if (mayInvestigate && (deps.analyze || !deps.runQuery)) {
     const analysis = await (deps.analyze ?? analyzeBusinessData)({
       tenantId: input.tenantId,

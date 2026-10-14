@@ -66,6 +66,26 @@ const showrunner = (): ShowrunnerCallState => ({
 });
 
 describe("shared Claire analysis continuity and authority", () => {
+  it("routes unfamiliar analytical directives without requiring a question prefix or a registered metric", async () => {
+    const analyze = vi.fn(async () => evidence);
+    const result = await answerClaireBusinessTurn(
+      {
+        tenantId: d.tenantId,
+        utterance:
+          "For Laundry Farm customers with at least four positive paid orders, calculate ordering consistency as population variance of consecutive gaps divided by squared mean gap. Return ten candidates as evidence.",
+        state: {},
+        surface: "text",
+      },
+      {
+        now: () => now,
+        timeZone: () => d.window.timeZone,
+        analyze,
+        planCalculation: async () => null,
+      }
+    );
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(result.handled && result.reader).toBe("analysis");
+  });
   it("carries customer identities and refinements without calling any fixed query or action port", async () => {
     const state: ClaireAnalyticsState = {};
     const analyze = vi.fn(async () => evidence),
