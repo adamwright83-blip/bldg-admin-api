@@ -164,7 +164,16 @@ export async function executeAnalysisQuery(input: {
           const direct = APPROVED_VIEWS.some(view =>
             view.columns.some(c => c.name === key && c.name.endsWith("_cents"))
           );
-          return [key, checked.outputUnits[key] ?? (direct ? "cents" : "none")];
+          // An unnamed or otherwise unclassifiable financial expression
+          // cannot silently surface its raw cents as an ordinary figure.
+          const monetarySource = /\\b(?:amount|discount|credit|lifetime)_cents\\b/i.test(
+            checked.sql
+          );
+          return [
+            key,
+            checked.outputUnits[key] ??
+              (direct ? "cents" : monetarySource ? "uncertain" : "none"),
+          ];
         })
       ),
       ...(result.error ? { error: result.error } : {}),
