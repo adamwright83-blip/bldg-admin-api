@@ -349,27 +349,14 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Jawbreaker Gmail (read-only) authorization for CleanCloud verification codes.
   app.get("/api/integrations/jawbreaker/gmail/callback", async (req, res) => {
-    const code = typeof req.query.code === "string" ? req.query.code : "";
-    const state = typeof req.query.state === "string" ? req.query.state : "";
-    if (!code || !state) {
-      res.status(400).send("Gmail authorization was cancelled or incomplete.");
-      return;
-    }
-    try {
-      const { createContext } = await import("./context");
-      const { appRouter } = await import("../routers");
-      const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
-      const result = await appRouter
-        .createCaller(ctx)
-        .system.gumball.gmailCompleteConnection({ code, state });
-      res
-        .status(200)
-        .send(`Gmail connected for CleanCloud verification${result.connectedEmail ? ` (${result.connectedEmail})` : ""}. You can close this tab.`);
-    } catch (error) {
-      // Never echo the authorization code or tokens.
-      console.warn("[JawbreakerGmail] Authorization failed:", error instanceof Error ? error.message : "unknown");
-      res.status(403).send("Gmail authorization failed. Sign in to JOYSTICK as the operator and try again.");
-    }
+    const { handleJawbreakerGmailCallback } = await import(
+      "../integrations/cleancloud/browserSync/gmailCallback"
+    );
+    const { createContext } = await import("./context");
+    await handleJawbreakerGmailCallback(req, res, {
+      createContext: (request, response) =>
+        createContext({ req: request, res: response } as Parameters<typeof createContext>[0]),
+    });
   });
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
