@@ -204,10 +204,16 @@ export async function fetchCleanCloudDirectExport(input: {
   const [y1, m1, d1] = range.from.split("-");
   const [y2, m2, d2] = range.to.split("-");
   const typeParam = input.reportType === "orders_revenue" ? "2" : "1";
+  if (!input.session && !input.tenantId?.trim()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "tenantId is required to log in to CleanCloud.",
+    });
+  }
   const session =
     input.session ??
     (await loginCleanCloud({
-      tenantId: input.tenantId ?? "default",
+      tenantId: input.tenantId!,
       credentials: input.credentials,
       fetchImpl: input.fetchImpl,
     }));
