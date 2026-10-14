@@ -65,7 +65,8 @@ run("Claire showrunner week on Laundry Farm data", () => {
     await grantDailyClaireCall({ identity, purpose: "evening_debrief", weekdays: [1, 2, 3, 4, 5], localStart: "17:30", localEnd: "19:00", timeZone: zone, sourceReference: `authenticated_app:${randomUUID()}` });
 
     // Sunday: the weekly production plan.
-    const plan = await prepareStrategicProposal({ identity, timeZone: zone, now: T.sunday });
+    // Prepared on the real clock (fresh source coverage) for the coming week, as the Sunday worker does.
+    const plan = await prepareStrategicProposal({ identity, timeZone: zone, weekStart: "2026-10-19" });
     out.sunday = { weekStart: plan.weekStart, weeklyPlan: plan.weeklyPlan, items: plan.items.map(i => ({ date: i.businessDate, title: i.title, window: i.timeWindow?.window ?? null })) };
     const approved = await respondToStrategicProposal({ identity, proposalId: plan.id, revision: plan.revision, action: "approve", itemIds: plan.items.map(i => i.id), source: "authenticated_app" });
     out.sundayApproval = approved.speech;

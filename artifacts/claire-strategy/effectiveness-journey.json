@@ -1,5 +1,5 @@
 {
-  "tenantId": "effect-901461e395",
+  "tenantId": "effect-cbe50b7d11",
   "diagnosis": {
     "constraint": "retention",
     "currentCondition": "Observed paid_orders_per_period: 5; operator target: 40. Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
@@ -18,10 +18,10 @@
         "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
         "uncertainty": "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.",
         "evidenceRefs": [
-          "snap_3b923d7c02e444d7a774ec1d:net_sales_cents",
-          "snap_3b923d7c02e444d7a774ec1d:prior_net_sales_cents",
-          "snap_3b923d7c02e444d7a774ec1d:dormant_customers",
-          "snap_3b923d7c02e444d7a774ec1d:returning_customers_30d"
+          "snap_b5e7e4581d5b45cda0acedc4:net_sales_cents",
+          "snap_b5e7e4581d5b45cda0acedc4:prior_net_sales_cents",
+          "snap_b5e7e4581d5b45cda0acedc4:dormant_customers",
+          "snap_b5e7e4581d5b45cda0acedc4:returning_customers_30d"
         ],
         "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
         "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
@@ -42,10 +42,10 @@
         "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
         "uncertainty": "Acquisition cost and conversion are unmeasured.",
         "evidenceRefs": [
-          "snap_3b923d7c02e444d7a774ec1d:net_sales_cents",
-          "snap_3b923d7c02e444d7a774ec1d:prior_net_sales_cents",
-          "snap_3b923d7c02e444d7a774ec1d:dormant_customers",
-          "snap_3b923d7c02e444d7a774ec1d:returning_customers_30d"
+          "snap_b5e7e4581d5b45cda0acedc4:net_sales_cents",
+          "snap_b5e7e4581d5b45cda0acedc4:prior_net_sales_cents",
+          "snap_b5e7e4581d5b45cda0acedc4:dormant_customers",
+          "snap_b5e7e4581d5b45cda0acedc4:returning_customers_30d"
         ],
         "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
         "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
@@ -56,13 +56,13 @@
     ]
   },
   "firstMission": {
-    "commitmentId": "ddd24862-31a4-48c2-9222-134c564c5a99",
+    "commitmentId": "754a577b-1297-45aa-b13d-dd89f7de2c85",
     "title": "Contact eligible dormant customers with a bounded recovery offer",
     "missionType": "retention",
     "businessDate": "2026-10-14"
   },
   "followUp": {
-    "commitmentId": "ddd24862-31a4-48c2-9222-134c564c5a99",
+    "commitmentId": "754a577b-1297-45aa-b13d-dd89f7de2c85",
     "businessDate": "2026-10-14",
     "title": "Contact eligible dormant customers with a bounded recovery offer",
     "missionType": "retention",
@@ -77,13 +77,13 @@
         "firstStepOnly": true
       }
     },
-    "explanationObservationId": "dobs_932fe2383b53aa63dce5542e2c47253431767d3496468293",
-    "adjustmentObservationId": "dobs_296a206731bed5198ee55c13db571643df6ed6634f940c77",
+    "explanationObservationId": "dobs_6a4317ebdcafd9b2a216a6350e825df27a79e36d483c65cd",
+    "adjustmentObservationId": "dobs_6183ea8cebcb48cff05515fec8871dbb24b6595a023f4f11",
     "adjustmentApplied": true,
     "reply": "Thanks. Start with the first step only; the full objective is unchanged. The work itself stays the same."
   },
   "nextMission": {
-    "commitmentId": "8fc4d356-0db9-42f9-8053-355388fc1ed5",
+    "commitmentId": "da5f0f58-26d8-4e35-ab46-61b372ad97dc",
     "title": "Contact eligible dormant customers with a bounded recovery offer",
     "presentation": {
       "adjustment": {
@@ -91,7 +91,7 @@
         "firstStepOnly": true
       },
       "note": "Start with the first step only; the full objective is unchanged.",
-      "sourceObservationId": "dobs_296a206731bed5198ee55c13db571643df6ed6634f940c77",
+      "sourceObservationId": "dobs_6183ea8cebcb48cff05515fec8871dbb24b6595a023f4f11",
       "missionType": "retention"
     }
   }

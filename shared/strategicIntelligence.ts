@@ -146,7 +146,9 @@ export type StrategicProposalItem = {
   /** Mission Director source kind; identifies matching missions for Daphne. */
   missionType?: string;
   /** Proposed time of day, from the operator's own feedback to Daphne. */
-  timeWindow?: { window: "morning" | "afternoon" | "evening"; reason: string; sourceObservationId: string };
+  timeWindow?: { window: "morning" | "afternoon" | "evening"; time?: string; reason: string; sourceObservationId: string };
+  /** Approved Day Line commitments this item replaces (e.g. a rescheduled meeting); cancelled only on approval. */
+  supersedesCommitmentIds?: string[];
   planId: string;
   planRevision: number;
   evidenceRefs: string[];

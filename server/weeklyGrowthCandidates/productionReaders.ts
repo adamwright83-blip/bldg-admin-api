@@ -154,8 +154,11 @@ async function readCommitments(input: {
       title,
       objective: resolveRelativeInstruction({
         text: row.sourceText?.trim() || title,
-        referenceAt: row.createdAt,
+        // A commitment copied from an obligation carries the obligation's original date.
+        referenceAt: obligationDate(obligationIdFrom(row.idempotencyKey)) ?? row.createdAt,
+        referencePrecision: obligationDate(obligationIdFrom(row.idempotencyKey)) ? "day" : "instant",
         timeZone: input.timeZone ?? getDashboardTimeZone(),
+        now: new Date(),
       }).text,
       status: hidden ? "cancelled" : row.status,
       grounding,
@@ -200,7 +203,12 @@ async function readMissions(input: {
     origin: "commercial_mission",
     sourceId: String(mission.id),
     title: mission.account.name || mission.code,
-    objective: mission.brief.salesAngle || mission.account.name,
+    objective: resolveRelativeInstruction({
+      text: mission.brief.salesAngle || mission.account.name,
+      referenceAt: new Date(mission.createdAt),
+      timeZone: getDashboardTimeZone(),
+      now: new Date(),
+    }).text,
     status: mission.status,
     grounding: "commercial_acquisition",
     motionHint: "account_acquisition",
@@ -289,6 +297,7 @@ async function readFollowUps(input: {
         referenceAt: row.createdAt,
         dueAt: row.dueAt,
         timeZone: input.timeZone,
+        now: new Date(),
       }).text;
       return emptyRawRecord({
         tenantId: row.tenantId,
@@ -340,7 +349,13 @@ function obligationRecord(
     origin: "proactive_obligation",
     sourceId: obligation.id,
     title: obligation.title,
-    objective: obligation.why,
+    objective: resolveRelativeInstruction({
+      text: obligation.why,
+      referenceAt: obligationDate(obligation.id) ?? null,
+      referencePrecision: "day",
+      timeZone: getDashboardTimeZone(),
+      now: new Date(),
+    }).text,
     status: obligation.status,
     grounding: dormant ? "proactive_recovery" : obligation.kind === "sales_follow_up" ? "sales" : null,
     obligationKind: obligation.kind,
@@ -435,6 +450,12 @@ async function readMacro(input: {
     status: "available",
     records: [{ id: goal.id, metricKey: goal.metricKey, objective: goal.objective }],
   };
+}
+
+/** "sales:8:2026-08-07" → that date at local noon; the moment the instruction belonged to. */
+function obligationDate(obligationId: string | null | undefined): Date | null {
+  const m = obligationId ? /(\d{4}-\d{2}-\d{2})$/.exec(obligationId) : null;
+  return m ? new Date(`${m[1]}T19:00:00Z`) : null;
 }
 
 function obligationIdFrom(idempotencyKey: string): string | null {

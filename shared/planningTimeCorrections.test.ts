@@ -68,3 +68,10 @@ describe("database client timezone", () => {
     expect(withUtcTimezone("mysql://u:p@h:3306/db?timezone=local")).toContain("timezone=local");
   });
 });
+
+describe("day-precision references", () => {
+  it("a copied obligation resolves to its original date without inventing a time", () => {
+    const r = resolveRelativeInstruction({ text: "Email Dana in 3 hours", referenceAt: new Date("2026-08-07T19:00:00Z"), referencePrecision: "day", timeZone: LA });
+    expect(r.text).toBe("Email Dana (due Aug 7)");
+  });
+});

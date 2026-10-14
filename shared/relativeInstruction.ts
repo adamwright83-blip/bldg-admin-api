@@ -26,6 +26,10 @@ export function resolveRelativeInstruction(input: {
   /** Explicit due time recorded with the instruction, when one exists. */
   dueAt?: Date | null;
   timeZone: string;
+  /** "day" when only the reference date is known: never state an invented clock time. */
+  referencePrecision?: "instant" | "day";
+  /** When given, a deadline already past is labelled overdue. */
+  now?: Date;
 }): ResolvedInstruction {
   const match = RELATIVE.exec(input.text);
   if (!match) return { text: input.text, relative: false, resolvedAt: null, unresolved: false };
@@ -46,7 +50,17 @@ export function resolveRelativeInstruction(input: {
   if (!resolvedAt) {
     return { text: `${input.text} (timing unresolved)`, relative: true, resolvedAt: null, unresolved: true };
   }
-  const label = formatInTimeZone(resolvedAt, input.timeZone, "MMM d, h:mm a");
+  const label = formatInTimeZone(
+    resolvedAt,
+    input.timeZone,
+    input.referencePrecision === "day" && !input.dueAt ? "MMM d" : "MMM d, h:mm a"
+  );
   const cleaned = input.text.replace(match[0], "").replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").trim();
-  return { text: `${cleaned} (due ${label})`, relative: true, resolvedAt, unresolved: false };
+  const overdue = input.now != null && resolvedAt.getTime() < input.now.getTime();
+  return {
+    text: overdue ? `${cleaned} (was due ${label}, now overdue)` : `${cleaned} (due ${label})`,
+    relative: true,
+    resolvedAt,
+    unresolved: false,
+  };
 }

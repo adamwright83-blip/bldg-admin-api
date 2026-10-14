@@ -1,3 +1,4 @@
+import { cancelDayLineItem } from "../planning/dayline/dayLineMutationService";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
@@ -169,11 +170,21 @@ export async function respondToStrategicProposal(
         !isDeepStrictEqual(lineage, expectedLineage)
       )
         throw new Error("Canonical commitment readback mismatch");
-      if (item.missionType && metadata && (metadata as Record<string, unknown>).missionType !== item.missionType)
+      if (metadata && (item.missionType || item.timeWindow)) {
+        const label = item.timeWindow
+          ? `${item.timeWindow.window[0]!.toUpperCase()}${item.timeWindow.window.slice(1)}${item.timeWindow.time ? ` · ${item.timeWindow.time}` : ""}`
+          : null;
         await db
           .update(dayDirectorCommitments)
-          .set({ metadataJson: { ...(metadata as Record<string, unknown>), missionType: item.missionType } })
+          .set({
+            metadataJson: {
+              ...(metadata as Record<string, unknown>),
+              ...(item.missionType ? { missionType: item.missionType } : {}),
+              ...(label ? { scheduleLabel: label } : {}),
+            },
+          })
           .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));
+      }
       // The accepted canonical commitment is the execution authority. Keep
       // the originating durable objective's lifecycle in sync for outcome binding.
       await db
@@ -191,6 +202,20 @@ export async function respondToStrategicProposal(
           )
         );
       actionIds.push(row.id);
+      // Approval of a rescheduled item retires the commitment it replaces (kept as cancelled history).
+      for (const supersededId of item.supersedesCommitmentIds ?? [])
+        await cancelDayLineItem({
+          tenantId: p.tenantId,
+          actorId: input.identity.dayDirectorActorId,
+          item: {
+            sourceType: "day_director_commitment",
+            sourceId: supersededId,
+            displayTitle: item.title,
+            editableCapabilities: [],
+            status: "active",
+          },
+          reason: `Rescheduled to ${item.businessDate} by approved plan revision ${p.revision.slice(0, 12)}`,
+        }).catch(() => undefined);
     } catch {
       failedItems.push(item.id);
     }

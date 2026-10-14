@@ -511,14 +511,18 @@ export function buildDayPlanProjection(input: {
           commitment.provenance === "user_reported"
             ? "You committed today"
             : "Added manually",
-        timeLabel:
-          commitment.presentation?.adjustment.kind === "timing"
+        // A reported time ("Morning · 10:00") outranks a general preference.
+        timeLabel: /\d{1,2}:\d{2}/.test(commitment.scheduleLabel ?? "")
+          ? commitment.scheduleLabel!
+          : commitment.presentation?.adjustment.kind === "timing"
             ? `Suggested: ${commitment.presentation.adjustment.window}`
             : commitment.presentation?.adjustment.kind === "task_size"
               ? "First step only"
-              : commitment.quantity
-                ? `${commitment.quantity} to complete`
-                : "Flexible today",
+              : commitment.scheduleLabel
+                ? commitment.scheduleLabel
+                : commitment.quantity
+                  ? `${commitment.quantity} to complete`
+                  : "Flexible today",
         displayDetail: commitment.presentation?.note ?? null,
         sortKey: `75:${String(index).padStart(3, "0")}`,
         estimatedMinutes: null,

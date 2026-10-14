@@ -347,6 +347,7 @@ async function executeDailyClaireCall(input: {
           captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
           replan: null,
           turns: 0,
+          clockOffsetMs: now.getTime() - Date.now(),
         },
       });
     },

@@ -1,4 +1,6 @@
 import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
+import { getDashboardTimeZone } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 
 /** Claire asks only about work that went unfinished within this many days. */
@@ -362,11 +364,14 @@ export async function loadMissionPresentations(input: {
  * carries forward. Earlier, unexplained items keep their recorded presentation.
  */
 export function missionPresentationApplies(
-  row: { status: string; createdAt: Date; metadataJson: unknown },
-  presentation: { declaredAt: Date }
+  row: { status: string; createdAt: Date; metadataJson: unknown; businessDate?: string },
+  presentation: { declaredAt: Date },
+  timeZone: string = getDashboardTimeZone()
 ): boolean {
   if (row.status !== "open") return false;
   if (row.createdAt.getTime() >= presentation.declaredAt.getTime() - 1000) return true;
+  // Work dated after the day the operator explained applies too.
+  if (row.businessDate && row.businessDate > formatInTimeZone(presentation.declaredAt, timeZone, "yyyy-MM-dd")) return true;
   return readDayLineOverlay(row.metadataJson).unresolved?.status === "explained";
 }
 

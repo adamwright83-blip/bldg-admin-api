@@ -173,7 +173,7 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
   const avoid: Slot[] = preferred === "morning" ? ["afternoon"] : [];
 
   // Existing approved commitments occupy their slots and are never moved.
-  const committed: Array<{ key: string; date: string; window: Slot }> = [];
+  const committed: Array<{ key: string; date: string; window: Slot; id: string; title: string }> = [];
   for (const date of dates) {
     const day = await getDayDirectorState({
       tenantId: identity.tenantId,
@@ -184,13 +184,18 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
     });
     for (const c of day.commitments.filter(c => c.status === "open")) {
       const w = (c.presentation?.adjustment.kind === "timing" ? c.presentation.adjustment.window : "morning") as Slot;
-      committed.push({ key: `commitment:${c.id}`, date, window: w });
+      committed.push({ key: `commitment:${c.id}`, date, window: w, id: c.id, title: c.title });
     }
   }
-  const developmentItems = state.captured.developments
-    .filter(d => ["meeting", "opportunity", "commitment"].includes(d.kind))
+  // The latest report about the same contact supersedes earlier ones in this call.
+  const latestByContact = new Map<string, DebriefDevelopment>();
+  for (const d of state.captured.developments.filter(d => ["meeting", "opportunity", "commitment"].includes(d.kind)))
+    latestByContact.set((d.who || d.what).toLowerCase(), d);
+  const developmentItems = [...latestByContact.values()]
     .map(d => {
-      const date = d.date && dates.includes(d.date) ? d.date : dates[0]!;
+      const spoken = dateFromOperatorWords(d.operatorWords, state.businessDate);
+      const resolvedDate = spoken ?? d.date;
+      const date = resolvedDate && dates.includes(resolvedDate) ? resolvedDate : dates[0]!;
       const window: Slot =
         d.window !== "none" ? (d.window as Slot) : d.time ? (d.time < "12:00" ? "morning" : d.time < "17:00" ? "afternoon" : "evening") : (preferred ?? "morning");
       const key = `development:${short(JSON.stringify([d.who, d.what, d.date, d.time]))}`;
@@ -210,10 +215,18 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
           planId: `claire_showrunner:${state.businessDate}`,
           planRevision: 0,
           evidenceRefs: [`operator_report:${state.businessDate}`],
-          timeWindow: { window: window === "evening" ? "evening" : window, reason: "Time you reported.", sourceObservationId: `operator_report:${state.businessDate}` },
+          timeWindow: { window: window === "evening" ? "evening" : window, ...(d.time ? { time: d.time } : {}), reason: "Time you reported.", sourceObservationId: `operator_report:${state.businessDate}` },
         } as StrategicProposalItem,
       };
     });
+  // A rescheduled meeting replaces its approved earlier slot, but only once approved.
+  for (const d of developmentItems) {
+    const earlier = committed.filter(c => c.title === d.item.title && c.date !== d.date);
+    if (earlier.length) {
+      d.item.supersedesCommitmentIds = earlier.map(c => c.id);
+      for (const c of earlier) committed.splice(committed.indexOf(c), 1);
+    }
+  }
   const allItems = [...state.briefing.today, ...state.briefing.tomorrow];
   const carried = state.captured.missionUpdates
     .filter(u => u.outcome !== "done")
@@ -239,12 +252,21 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
         } as StrategicProposalItem,
       };
     });
+  // A meeting reported earlier keeps its stated time; only a newer report of the same contact replaces it.
+  const reportedWho = new Set(developmentItems.map(d => d.item.title));
+  const keptMeetings = base.items
+    .filter(i => !approvedIds.has(i.id) && i.candidateId.startsWith("development:") && i.businessDate >= dates[0]! && !reportedWho.has(i.title))
+    .map(i => ({ key: `kept:${i.id}`, date: i.businessDate, window: (i.timeWindow?.window ?? "morning") as Slot, item: i }));
   const remaining = base.items
-    .filter(i => !approvedIds.has(i.id) && i.businessDate >= dates[0]!)
+    .filter(i => !approvedIds.has(i.id) && i.businessDate >= dates[0]! && !i.candidateId.startsWith("development:") && !carried.some(c => c.item.title === i.title))
     .map(i => ({ key: `existing:${i.id}`, item: i }));
   const slots = scheduleSlots({
     dates,
-    fixed: [...committed, ...developmentItems.map(d => ({ key: d.key, date: d.date, window: d.window }))],
+    fixed: [
+      ...committed,
+      ...developmentItems.map(d => ({ key: d.key, date: d.date, window: d.window })),
+      ...keptMeetings.map(k => ({ key: k.key, date: k.date, window: k.window })),
+    ],
     flexible: [...carried.map(c => ({ key: c.key, earliest: dates[0]! })), ...remaining.map(r => ({ key: r.key, earliest: r.item.businessDate }))],
     preferred,
     avoid,
@@ -261,6 +283,7 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
   };
   const items = [
     ...developmentItems.map(d => placed(d.key, d.item)),
+    ...keptMeetings.map(k => placed(k.key, k.item)),
     ...carried.map(c => placed(c.key, c.item)),
     ...remaining.map(r => placed(r.key, r.item)),
   ].filter((i): i is StrategicProposalItem => Boolean(i));
@@ -269,7 +292,11 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
   const changes: string[] = [];
   for (const d of developmentItems) {
     const s = slots.get(d.key)!;
-    changes.push(`${describeDay(s.date, tz)} ${s.window}: ${d.item.title} (new — you reported it).`);
+    changes.push(
+      d.item.supersedesCommitmentIds?.length
+        ? `${d.item.title} moves to ${describeDay(s.date, tz)} ${s.window}; I'll take the earlier slot off your Day Line once you approve.`
+        : `${describeDay(s.date, tz)} ${s.window}: ${d.item.title} (new — you reported it).`
+    );
   }
   for (const c of carried) {
     const s = slots.get(c.key);
@@ -326,4 +353,21 @@ export async function approveShowrunnerReplan(state: ShowrunnerCallState): Promi
     source: "authenticated_voice",
   });
   return r.failedItems.length ? null : r.speech;
+}
+
+const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+/** Pure: a date the operator named in words ("Thursday", "tomorrow"), resolved against the call's business date. */
+export function dateFromOperatorWords(words: string, businessDate: string): string | null {
+  const t = words.toLowerCase();
+  const base = new Date(`${businessDate}T12:00:00Z`);
+  const add = (n: number) => new Date(base.getTime() + n * 86_400_000).toISOString().slice(0, 10);
+  if (/\btomorrow\b/.test(t)) return add(1);
+  if (/\btoday\b|\bthis (?:morning|afternoon|evening)\b/.test(t)) return add(0);
+  const named = WEEKDAYS.findIndex(d => new RegExp(`\\b${d}\\b`).test(t));
+  if (named < 0) return null;
+  const todayIdx = (base.getUTCDay() + 6) % 7; // Monday = 0
+  let delta = named - todayIdx;
+  if (delta <= 0) delta += 7;
+  return add(delta);
 }
