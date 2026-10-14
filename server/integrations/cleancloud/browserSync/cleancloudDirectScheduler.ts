@@ -1,10 +1,34 @@
 /* LEGACY DAYFORGE COMPATIBILITY: cleancloud direct sync autonomous scheduler */
 import { getDb } from "../../../db";
-import { browserSyncBindings } from "./schema";
+import { and, desc, eq } from "drizzle-orm";
+import { browserSyncAttempts, browserSyncBindings } from "./schema";
 import {
+  DIRECT_AUTH_FAILED,
   isCleanCloudDirectConfigured,
   runCleanCloudDirectSync,
 } from "./cleancloudDirectSync";
+
+/** After an authentication failure, automatic attempts pause this long. */
+export const AUTH_FAILURE_BACKOFF_MS = 24 * 3600 * 1000;
+
+/**
+ * Automatic sync stays off until an operator confirms a successful manual
+ * import with the Gmail verification flow and sets JAWBREAKER_DIRECT_AUTO_SYNC=1.
+ */
+export function isDirectAutoSyncEnabled(): boolean {
+  return process.env.JAWBREAKER_DIRECT_AUTO_SYNC?.trim() === "1";
+}
+
+/** Pure: whether the latest attempt was an auth failure still inside the backoff window. */
+export function isAuthBackoffActive(
+  latest: { outcome: string; createdAt: Date } | null,
+  now: Date = new Date()
+): boolean {
+  return (
+    latest?.outcome === DIRECT_AUTH_FAILED &&
+    now.getTime() - latest.createdAt.getTime() < AUTH_FAILURE_BACKOFF_MS
+  );
+}
 import { pacificToday } from "../../../../extensions/gumballpals/core";
 
 const DEFAULT_SCHEDULER_INTERVAL_MS = 60_000 * 15; // 15 minutes
@@ -126,7 +150,7 @@ export async function triggerScheduledCleanCloudDirectSync(input?: {
   now?: Date;
   tenantId?: string;
 }): Promise<void> {
-  if (!isCleanCloudDirectConfigured()) {
+  if (!isCleanCloudDirectConfigured() || !isDirectAutoSyncEnabled()) {
     return;
   }
 
@@ -138,6 +162,17 @@ export async function triggerScheduledCleanCloudDirectSync(input?: {
 
   for (const binding of bindings) {
     if (input?.tenantId && binding.tenantId !== input.tenantId) {
+      continue;
+    }
+
+    const [latest] = await db
+      .select({ outcome: browserSyncAttempts.outcome, createdAt: browserSyncAttempts.createdAt })
+      .from(browserSyncAttempts)
+      .where(and(eq(browserSyncAttempts.tenantId, binding.tenantId)))
+      .orderBy(desc(browserSyncAttempts.createdAt))
+      .limit(1);
+    if (isAuthBackoffActive(latest ?? null, now)) {
+      // Each CleanCloud login can send a new verification email; never loop on failures.
       continue;
     }
 
@@ -183,9 +218,9 @@ export async function triggerScheduledCleanCloudDirectSync(input?: {
  * Starts the background server-side timer for CleanCloud direct sync.
  */
 export function startCleanCloudDirectScheduler(intervalMs: number = DEFAULT_SCHEDULER_INTERVAL_MS) {
-  if (!isCleanCloudDirectConfigured()) {
+  if (!isCleanCloudDirectConfigured() || !isDirectAutoSyncEnabled()) {
     console.info(
-      "[JawbreakerDirect] Direct sync credentials not configured; server-side direct scheduler disabled."
+      "[JawbreakerDirect] Automatic direct sync disabled (credentials missing or JAWBREAKER_DIRECT_AUTO_SYNC != 1)."
     );
     return () => undefined;
   }
