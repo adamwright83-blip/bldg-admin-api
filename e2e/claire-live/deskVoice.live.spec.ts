@@ -63,7 +63,10 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   evidence.secondHeard = await log.locator("li.cd-line-you").nth(1).innerText();
   await expect(log.locator("li.cd-line-claire").nth(2)).toBeVisible({ timeout: 90_000 });
   evidence.secondAnswer = await log.locator("li.cd-line-claire").nth(2).innerText();
-  evidence.voiceNote = await page.getByTestId("open-comms-voice-note").innerText().catch(() => null);
+  // The note exists only when Claire's own voice was unavailable; absent means she spoke in her voice.
+  const note = page.getByTestId("open-comms-voice-note");
+  evidence.voiceNote = (await note.count()) ? await note.innerText() : null;
+  expect(evidence.voiceNote).toBeNull();
   evidence.voiceResponsesSoFar = [...voice];
   evidence.audioEventsSoFar = [...played];
   await writeFile(`${OUT}/evidence.json`, JSON.stringify(evidence, null, 2));
