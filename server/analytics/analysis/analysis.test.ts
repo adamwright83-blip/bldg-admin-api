@@ -1,3 +1,4 @@
+import { syntheticAnalysisDataset } from "./acceptanceFixture";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildApprovedDataset,
@@ -150,13 +151,70 @@ describe("approved materialization", () => {
     assertDatasetBounded(dataset);
   });
   it("counts overlapping Goldline, CleanCloud and Stripe payment evidence once", async () => {
-    const event = (source: "laundry_butler" | "cleancloud", key: string, cents: number, phone: string) => ({ source, eventKey: key, cents, occurredAt: new Date("2026-09-01T19:00:00Z"), businessDate: "2026-09-01", serviceType: null, customerName: "Fixture", identity: { phone }, authorityReceiptId: `receipt:${key}` });
-    const ledger: any = { startUtc: new Date("2023-01-01Z"), endExclusiveUtc: FIXTURE_NOW, timeZone: FIXTURE_TZ, events: [event("laundry_butler", "native:1", 1000, "3105550001"), event("cleancloud", "cc:copy", 1000, "3105550001"), event("cleancloud", "cc:other", 3000, "3105550002")], unverifiedNative: [], provenDuplicateExclusions: [{ keptEventKey: "cc:other", excludedEventKey: "cc:twin", cents: 3000, reason: "cleancloud_sales_and_revenue_report" }], loadedSources: ["laundry_butler", "cleancloud"], failedSources: [], completeness: "complete" };
-    const data = await buildApprovedDataset({ tenantId: "tenant-a", now: FIXTURE_NOW, timeZone: FIXTURE_TZ, loaders: { ledger: async () => ledger, openOrders: async () => [], coverage: async () => null } });
-    const result = await executeAnalysisQuery({ tenantId: "tenant-a", dataset: data, sql: "SELECT SUM(amount_cents) AS recorded_cents FROM orders" });
+    const event = (
+      source: "laundry_butler" | "cleancloud",
+      key: string,
+      cents: number,
+      phone: string
+    ) => ({
+      source,
+      eventKey: key,
+      cents,
+      occurredAt: new Date("2026-09-01T19:00:00Z"),
+      businessDate: "2026-09-01",
+      serviceType: null,
+      customerName: "Fixture",
+      identity: { phone },
+      authorityReceiptId: `receipt:${key}`,
+    });
+    const ledger: any = {
+      startUtc: new Date("2023-01-01Z"),
+      endExclusiveUtc: FIXTURE_NOW,
+      timeZone: FIXTURE_TZ,
+      events: [
+        event("laundry_butler", "native:1", 1000, "3105550001"),
+        event("cleancloud", "cc:copy", 1000, "3105550001"),
+        event("cleancloud", "cc:other", 3000, "3105550002"),
+      ],
+      unverifiedNative: [],
+      provenDuplicateExclusions: [
+        {
+          keptEventKey: "cc:other",
+          excludedEventKey: "cc:twin",
+          cents: 3000,
+          reason: "cleancloud_sales_and_revenue_report",
+        },
+      ],
+      loadedSources: ["laundry_butler", "cleancloud"],
+      failedSources: [],
+      completeness: "complete",
+    };
+    const data = await buildApprovedDataset({
+      tenantId: "tenant-a",
+      now: FIXTURE_NOW,
+      timeZone: FIXTURE_TZ,
+      loaders: {
+        ledger: async () => ledger,
+        openOrders: async () => [],
+        coverage: async () => null,
+      },
+    });
+    const result = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset: data,
+      sql: "SELECT SUM(amount_cents) AS recorded_cents FROM orders",
+    });
     expect(result.rows).toEqual([[4000]]);
-    expect(data.tables.excluded_sales!.some(r => r[0] === "suspected_duplicate_withheld" && r[2] === 1000)).toBe(true);
-    expect(data.tables.excluded_sales!.some(r => r[0] === "proven_duplicate" && r[2] === 3000)).toBe(true);
+    expect(
+      data.tables.excluded_sales!.some(
+        r => r[0] === "suspected_duplicate_withheld" && r[2] === 1000
+      )
+    ).toBe(true);
+    expect(
+      data.tables.excluded_sales!.some(
+        r => r[0] === "proven_duplicate" && r[2] === 3000
+      )
+    ).toBe(true);
   });
   it("failed open-order read is unknown and unknown coverage cannot become complete", async () => {
     const dataset = await buildApprovedDataset({
@@ -309,6 +367,44 @@ describe("real WASM sandbox", () => {
 });
 
 describe("bounded investigation (mocked model; real sandbox)", () => {
+  it("restricts refinement data to stored identities even if the model queries every customer", async () => {
+    const data = syntheticAnalysisDataset();
+    const invoke = vi.fn(async (input: any) => {
+      if (invoke.mock.calls.length === 1) {
+        const request = JSON.parse(String(input.messages[1].content));
+        expect(request.currentQuestion).toBe("Only Silver Lake.");
+        expect(request.historicalQuestionContext).toEqual([]);
+        return envelope({
+          kind: "query",
+          sql: "SELECT customer_id, name FROM customers ORDER BY customer_id",
+          answer: "",
+        });
+      }
+      return envelope({ kind: "final", sql: "", answer: "" });
+    });
+    const ids = ["cust_fixture6", "cust_fixture7"];
+    const result = await analyzeBusinessData(
+      {
+        tenantId: data.tenantId,
+        question: "Only Silver Lake.",
+        now: new Date(data.generatedAt),
+        timeZone: data.window.timeZone,
+        previous: {
+          tenantId: data.tenantId,
+          touchedAt: Date.parse(data.generatedAt),
+          questions: ["Identify weekly customers who stopped"],
+          results: [],
+          customerIds: ids,
+          customers: ids.map(id => data.customerRefs[id]!),
+        },
+      },
+      { invoke: invoke as any, build: async () => data }
+    );
+    expect(result.kind).toBe("evidence");
+    expect(result.session?.customerIds).toEqual(ids);
+    expect(result.results[0]?.rows).toHaveLength(2);
+  });
+
   it("renders executed cells and identities even when the model invents final figures and references", async () => {
     let receiptId = "";
     const invoke = vi.fn(async input => {
@@ -398,11 +494,28 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
   });
   it("the hard investigation budget cancels a slow materialization without starting SQL", async () => {
     let finish!: (value: ApprovedDataset) => void;
-    const build = vi.fn(() => new Promise<ApprovedDataset>(resolve => { finish=resolve; }));
-    const invoke = vi.fn(async () => envelope(request({ sql: "SELECT COUNT(*) AS n FROM orders" })));
+    const build = vi.fn(
+      () =>
+        new Promise<ApprovedDataset>(resolve => {
+          finish = resolve;
+        })
+    );
+    const invoke = vi.fn(async () =>
+      envelope(request({ sql: "SELECT COUNT(*) AS n FROM orders" }))
+    );
     const execute = vi.fn();
-    const result = await analyzeBusinessData({ tenantId: "tenant-a", question: "Compute intervals", now: FIXTURE_NOW, timeZone: FIXTURE_TZ, budgetMs: 30 }, { invoke, build, execute });
-    expect(result.kind).toBe("execution_error"); expect(execute).not.toHaveBeenCalled();
+    const result = await analyzeBusinessData(
+      {
+        tenantId: "tenant-a",
+        question: "Compute intervals",
+        now: FIXTURE_NOW,
+        timeZone: FIXTURE_TZ,
+        budgetMs: 30,
+      },
+      { invoke, build, execute }
+    );
+    expect(result.kind).toBe("execution_error");
+    expect(execute).not.toHaveBeenCalled();
     expect(build.mock.calls[0]![0].signal.aborted).toBe(true);
     finish(tinyDataset());
   });
