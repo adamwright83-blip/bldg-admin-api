@@ -1,3 +1,6 @@
+import { investigateForPreparation } from "../analytics/analysis/proactiveInvestigation";
+import { investigateForPreparation } from "../analytics/analysis/proactiveInvestigation";
+import { investigateForPreparation } from "../analytics/analysis/proactiveInvestigation";
 import type { WeeklyProductionPlan } from "../../shared/strategicIntelligence";
 import { loadMissionPresentations, presentationFor } from "../agents/daphne/missionFollowUp";
 import { createHash } from "node:crypto";
@@ -43,6 +46,85 @@ export async function refreshStrategicDiagnosis(input: {
     businessDate,
     registry,
   });
+  // Model-selected research enriches preparation as hypothesis evidence. Existing metric and ranking authority stays intact.
+  // Reuse the prepared diagnosis for an hour so scheduled calls do not repeatedly pay for research.
+  if (
+    !prior ||
+    now.getTime() - Date.parse(prior.generatedAt) >= 3600000 ) {
+    const research = await investigateForPreparation({
+    tenantId: input.identity.tenantId,
+    objective: facts.focus?.statement ?? facts.goal.statement,
+    now,
+    timeZone: input.timeZone,
+  });
+  if(research)facts.evidence.push( {
+          id: `business_analysis:${research.citedReceiptIds.join(":")}`,
+        tenantId: input.identity.tenantId,
+        source: "analyzeBusinessData",
+        capturedAt: now.toISOString(),
+        classification: "hypothesis",
+        value: research.answer,
+        unit: "analytical_interpretation",
+        quality: "partial",
+        description: [research.answer, ...research.limitations].join(" "),
+      });
+  } else {
+    facts.evidence.push(
+      ...prior.evidence.filter(e => e.source === "analyzeBusinessData")
+    );
+  }
+  // Model-selected research enriches preparation as hypothesis evidence. Existing metric and ranking authority stays intact.
+  // Reuse the prepared diagnosis for an hour so scheduled calls do not repeatedly pay for research.
+  if (!prior || now.getTime() - Date.parse(prior.generatedAt) >= 3600000) {
+    const research = await investigateForPreparation({
+      tenantId: input.identity.tenantId,
+      objective: facts.focus?.statement ?? facts.goal.statement,
+      now,
+      timeZone: input.timeZone,
+    });
+    if (research)
+      facts.evidence.push({
+        id: `business_analysis:${research.citedReceiptIds.join(":")}`,
+        tenantId: input.identity.tenantId,
+        source: "analyzeBusinessData",
+        capturedAt: now.toISOString(),
+        classification: "hypothesis",
+        value: research.answer,
+        unit: "analytical_interpretation",
+        quality: "partial",
+        description: [research.answer, ...research.limitations].join(" "),
+      });
+  } else {
+    facts.evidence.push(
+      ...prior.evidence.filter(e => e.source === "analyzeBusinessData")
+    );
+  }
+  // Model-selected research enriches preparation as hypothesis evidence. Existing metric and ranking authority stays intact.
+  // Reuse the prepared diagnosis for an hour so scheduled calls do not repeatedly pay for research.
+  if (!prior || now.getTime() - Date.parse(prior.generatedAt) >= 3600000) {
+    const research = await investigateForPreparation({
+      tenantId: input.identity.tenantId,
+      objective: facts.focus?.statement ?? facts.goal.statement,
+      now,
+      timeZone: input.timeZone,
+    });
+    if (research)
+      facts.evidence.push({
+        id: `business_analysis:${research.citedReceiptIds.join(":")}`,
+        tenantId: input.identity.tenantId,
+        source: "analyzeBusinessData",
+        capturedAt: now.toISOString(),
+        classification: "hypothesis",
+        value: research.answer,
+        unit: "analytical_interpretation",
+        quality: "partial",
+        description: [research.answer, ...research.limitations].join(" "),
+      });
+  } else {
+    facts.evidence.push(
+      ...prior.evidence.filter(e => e.source === "analyzeBusinessData")
+    );
+  }
   const diagnosis = assembleStrategicDiagnosis(facts, registry);
   const content = (d: typeof diagnosis) =>
     canonicalJsonStringify({

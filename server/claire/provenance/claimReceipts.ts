@@ -457,3 +457,122 @@ export const AMBIGUOUS_REFERENT_SPEECH = "I'm not sure which statement you mean.
 
 /** Spoken when a claim cannot be verified in this turn. Status stays unresolved: nothing affirmed, retracted, or confessed. */
 export const UNVERIFIABLE_SPEECH = "I can't verify that properly right now.";
+/** Calculations are deterministic; model interpretation is synthesized, never independently verified. */
+export function receiptFromAnalysis(input: {
+  conversationKey: string;
+  claireTurnOrdinal: number;
+  nowMs: number;
+  answerText: string;
+  evidence: import("../../analytics/analysis/analyzeBusinessData").BusinessAnalysisEvidence;
+}): FactualClaimReceipt {
+  const results = input.evidence.results.filter(r =>
+    input.evidence.citedReceiptIds.includes(r.receipt.id)
+  );
+  const facts = results
+    .map(r => JSON.stringify({ columns: r.columns, rows: r.rows }))
+    .join(" ");
+  const backing = receiptFromReader({
+    ...input,
+    answerText: facts,
+    answerPath: "business_reader",
+    claimType: "analytical_calculation",
+    grounding: "deterministic",
+    sources: results.map(r => `analysis_receipt:${r.receipt.id}`),
+  });
+  backing.fingerprint = claimReceiptDigest(results.map(r => r.receipt));
+  backing.asOf =
+    results[0]?.receipt.asOf ?? new Date(input.nowMs).toISOString();
+  backing.freshness = {
+    completeness: "partial",
+    loadedSources: [...new Set(results.flatMap(r => r.receipt.views))],
+    failedSources: [],
+  };
+  return {
+    ...backing,
+    id: `claim_${input.conversationKey}_${input.claireTurnOrdinal}`,
+    answerText: input.answerText,
+    claimType: "analytical_interpretation",
+    grounding: "synthesized",
+    supportedBy: backing,
+  };
+}
+
+/** Calculations are deterministic; model interpretation is synthesized, never independently verified. */
+export function receiptFromAnalysis(input: {
+  conversationKey: string;
+  claireTurnOrdinal: number;
+  nowMs: number;
+  answerText: string;
+  evidence: import("../../analytics/analysis/analyzeBusinessData").BusinessAnalysisEvidence;
+}): FactualClaimReceipt {
+  const results = input.evidence.results.filter(r =>
+    input.evidence.citedReceiptIds.includes(r.receipt.id)
+  );
+  const facts = results
+    .map(r => JSON.stringify({ columns: r.columns, rows: r.rows }))
+    .join(" ");
+  const backing = receiptFromReader({
+    ...input,
+    answerText: facts,
+    answerPath: "business_reader",
+    claimType: "analytical_calculation",
+    grounding: "deterministic",
+    sources: results.map(r => `analysis_receipt:${r.receipt.id}`),
+  });
+  backing.fingerprint = claimReceiptDigest(results.map(r => r.receipt));
+  backing.asOf =
+    results[0]?.receipt.asOf ?? new Date(input.nowMs).toISOString();
+  backing.freshness = {
+    completeness: "partial",
+    loadedSources: [...new Set(results.flatMap(r => r.receipt.views))],
+    failedSources: [],
+  };
+  return {
+    ...backing,
+    id: `claim_${input.conversationKey}_${input.claireTurnOrdinal}`,
+    answerText: input.answerText,
+    claimType: "analytical_interpretation",
+    grounding: "synthesized",
+    supportedBy: backing,
+  };
+}
+
+/** Calculations are deterministic; model interpretation is synthesized, never independently verified. */
+export function receiptFromAnalysis(input: {
+  conversationKey: string;
+  claireTurnOrdinal: number;
+  nowMs: number;
+  answerText: string;
+  evidence: import("../../analytics/analysis/analyzeBusinessData").BusinessAnalysisEvidence;
+}): FactualClaimReceipt {
+  const results = input.evidence.results.filter(r =>
+    input.evidence.citedReceiptIds.includes(r.receipt.id)
+  );
+  const facts = results
+    .map(r => JSON.stringify({ columns: r.columns, rows: r.rows }))
+    .join(" ");
+  const backing = receiptFromReader({
+    ...input,
+    answerText: facts,
+    answerPath: "business_reader",
+    claimType: "analytical_calculation",
+    grounding: "deterministic",
+    sources: results.map(r => `analysis_receipt:${r.receipt.id}`),
+  });
+  backing.fingerprint = claimReceiptDigest(results.map(r => r.receipt));
+  backing.asOf =
+    results[0]?.receipt.asOf ?? new Date(input.nowMs).toISOString();
+  backing.freshness = {
+    completeness: "partial",
+    loadedSources: [...new Set(results.flatMap(r => r.receipt.views))],
+    failedSources: [],
+  };
+  return {
+    ...backing,
+    id: `claim_${input.conversationKey}_${input.claireTurnOrdinal}`,
+    answerText: input.answerText,
+    claimType: "analytical_interpretation",
+    grounding: "synthesized",
+    supportedBy: backing,
+  };
+}

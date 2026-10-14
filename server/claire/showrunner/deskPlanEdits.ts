@@ -1,3 +1,4 @@
+import { parseSpokenNumber } from "../../analytics/businessPeriods";
 import { createHash } from "node:crypto";
 import { formatInTimeZone } from "date-fns-tz";
 import { latestStrategicProposal, persistStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
@@ -11,7 +12,7 @@ import type { ShowrunnerCallState } from "./showrunnerTurn";
 /** One explicit change the operator asked for on OPEN COMMS. */
 export type DeskPlanEdit = {
   itemId: string;
-  action: "retime" | "hold";
+  action: "retime" | "hold" | "analysis_contact";
   /** YYYY-MM-DD the operator named, or "" to keep the item's own day. */
   date: string;
   time: string;
@@ -62,6 +63,82 @@ export async function replanFromDeskEdits(
   const changed: string[] = [];
   const lines: string[] = [];
   for (const edit of edits) {
+    if (edit.action === "analysis_contact") {
+      const analysis = state.businessAnalysis;
+      const index = analysis?.customerIds.indexOf(edit.itemId) ?? -1;
+      const customer = index >= 0 ? analysis!.customers[index] : null;
+      const date = dateFromOperatorWords(
+        edit.operatorWords,
+        state.businessDate
+      );
+      if (
+        !customer ||
+        !customer.identityKeys.length ||
+        analysis!.tenantId !== state.tenantId ||
+        now.getTime() - analysis!.touchedAt > 20 * 60000 ||
+        !date ||
+        date < state.businessDate
+      )
+        continue;
+      const id = `${date}:analysis_contact:${edit.itemId}`;
+      if (!items.some(i => i.id === id))
+        items.push({
+          id,
+          businessDate: date,
+          title: `Contact ${customer.displayName}`,
+          objective:
+            "Operator-requested customer follow-up; decide consent, offer and channel before contact.",
+          executionType: "mission",
+          candidateId: `analysis_contact:${edit.itemId}`,
+          missionType: "retention",
+          planId: `claire_desk:${state.businessDate}`,
+          planRevision: 0,
+          evidenceRefs: analysis!.results.map(
+            r => `analysis_receipt:${r.receipt.id}`
+          ),
+        });
+      changed.push(id);
+      lines.push(`Proposed contacting ${customer.displayName} on ${date}.`);
+      continue;
+    }
+    if (edit.action === "analysis_contact") {
+      const analysis = state.businessAnalysis;
+      const index = analysis?.customerIds.indexOf(edit.itemId) ?? -1;
+      const customer = index >= 0 ? analysis!.customers[index] : null;
+      const date = dateFromOperatorWords(
+        edit.operatorWords,
+        state.businessDate
+      );
+      if (
+        !customer ||
+        !customer.identityKeys.length ||
+        analysis!.tenantId !== state.tenantId ||
+        now.getTime() - analysis!.touchedAt > 20 * 60000 ||
+        !date ||
+        date < state.businessDate
+      )
+        continue;
+      const id = `${date}:analysis_contact:${edit.itemId}`;
+      if (!items.some(i => i.id === id))
+        items.push({
+          id,
+          businessDate: date,
+          title: `Contact ${customer.displayName}`,
+          objective:
+            "Operator-requested customer follow-up; decide consent, offer and channel before contact.",
+          executionType: "mission",
+          candidateId: `analysis_contact:${edit.itemId}`,
+          missionType: "retention",
+          planId: `claire_desk:${state.businessDate}`,
+          planRevision: 0,
+          evidenceRefs: analysis!.results.map(
+            r => `analysis_receipt:${r.receipt.id}`
+          ),
+        });
+      changed.push(id);
+      lines.push(`Proposed contacting ${customer.displayName} on ${date}.`);
+      continue;
+    }
     const draft = items.find(i => i.id === edit.itemId);
     const committed = commitments.get(edit.itemId);
     const day = (date: string) => (date === tomorrow ? "tomorrow" : formatInTimeZone(new Date(`${date}T12:00:00Z`), tz, "EEEE"));
@@ -132,4 +209,79 @@ export async function replanFromDeskEdits(
   };
   const stored = await persistStrategicProposal(revised);
   return { proposalId: stored.id, revision: stored.revision, summary, itemIds: changed.filter(id => stored.items.some(i => i.id === id)) };
+}
+/** Resolve an explicit operator-selected population into existing proposal edits. No ranking or execution. */
+export function contactEditsForAnalysisSelection(
+  state: ShowrunnerCallState,
+  utterance: string,
+  now: Date
+): DeskPlanEdit[] | null {
+  const selection = state.businessAnalysis;
+  if (
+    !selection ||
+    selection.tenantId !== state.tenantId ||
+    now.getTime() - selection.touchedAt > 20 * 60000 ||
+    !selection.customerIds.length ||
+    selection.customerIds.length > 10
+  )
+    return null;
+  const request =
+    /^(?:please\s+)?(?:put|add)\s+(?:those|these|them)(?:\s+(all|\d+|one|two|three|four|five|six|seven|eight|nine|ten))?\s+(?:on|to|onto)\s+(?:the\s+)?(?:today(?:'s)?|tomorrow(?:'s)?|monday(?:'s)?|tuesday(?:'s)?|wednesday(?:'s)?|thursday(?:'s)?|friday(?:'s)?|saturday(?:'s)?|sunday(?:'s)?)\s+day\s*line[.!]?$/i.exec(
+      utterance.trim()
+    );
+  const date = dateFromOperatorWords(utterance, state.businessDate);
+  if (
+    !request ||
+    !date ||
+    (request[1] &&
+      request[1].toLowerCase() !== "all" &&
+      parseSpokenNumber(request[1]) !== selection.customerIds.length)
+  )
+    return null;
+  return selection.customerIds.map(itemId => ({
+    itemId,
+    action: "analysis_contact",
+    date,
+    time: "",
+    window: "none",
+    operatorWords: utterance,
+  }));
+}
+
+/** Resolve an explicit operator-selected population into existing proposal edits. No ranking or execution. */
+export function contactEditsForAnalysisSelection(
+  state: ShowrunnerCallState,
+  utterance: string,
+  now: Date
+): DeskPlanEdit[] | null {
+  const selection = state.businessAnalysis;
+  if (
+    !selection ||
+    selection.tenantId !== state.tenantId ||
+    now.getTime() - selection.touchedAt > 20 * 60000 ||
+    !selection.customerIds.length ||
+    selection.customerIds.length > 10
+  )
+    return null;
+  const request =
+    /^(?:please\s+)?(?:put|add)\s+(?:those|these|them)(?:\s+(all|\d+|one|two|three|four|five|six|seven|eight|nine|ten))?\s+(?:on|to|onto)\s+(?:the\s+)?(?:today(?:'s)?|tomorrow(?:'s)?|monday(?:'s)?|tuesday(?:'s)?|wednesday(?:'s)?|thursday(?:'s)?|friday(?:'s)?|saturday(?:'s)?|sunday(?:'s)?)\s+day\s*line[.!]?$/i.exec(
+      utterance.trim()
+    );
+  const date = dateFromOperatorWords(utterance, state.businessDate);
+  if (
+    !request ||
+    !date ||
+    (request[1] &&
+      request[1].toLowerCase() !== "all" &&
+      parseSpokenNumber(request[1]) !== selection.customerIds.length)
+  )
+    return null;
+  return selection.customerIds.map(itemId => ({
+    itemId,
+    action: "analysis_contact",
+    date,
+    time: "",
+    window: "none",
+    operatorWords: utterance,
+  }));
 }

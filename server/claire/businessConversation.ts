@@ -1,3 +1,18 @@
+import {
+  analyzeBusinessData,
+  type AnalysisSession,
+  type BusinessAnalysisEvidence,
+} from "../analytics/analysis/analyzeBusinessData";
+import {
+  analyzeBusinessData,
+  type AnalysisSession,
+  type BusinessAnalysisEvidence,
+} from "../analytics/analysis/analyzeBusinessData";
+import {
+  analyzeBusinessData,
+  type AnalysisSession,
+  type BusinessAnalysisEvidence,
+} from "../analytics/analysis/analyzeBusinessData";
 import { z } from "zod";
 import { planGovernedBusinessQuestion } from "../analytics/governedBusinessQuery";
 import { invokeLLM } from "../_core/llm";
@@ -131,7 +146,8 @@ export type ClaireAnalyticsSession = {
   focus?: ClaireAnalyticsFocus;
 };
 
-export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null };
+export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null; businessAnalysis?: AnalysisSession | null;
+};
 
 export const CLAIRE_ANALYTICS_SESSION_TTL_MS = 20 * 60 * 1000;
 
@@ -147,11 +163,13 @@ export type ClaireBusinessReader =
   | "combine"
   | "compare_customers"
   | "planned_query"
-  | "query";
+  | "query"
+  | "analysis";
 
 export type ClaireBusinessTurn =
   | { handled: false }
-  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; reader?: ClaireBusinessReader };
+  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; analysisEvidence?: BusinessAnalysisEvidence;
+      reader?: ClaireBusinessReader };
 
 // ── Intent ───────────────────────────────────────────────────────────────────
 
@@ -1049,6 +1067,9 @@ function liveSession(state: ClaireAnalyticsState, nowMs: number): ClaireAnalytic
 }
 
 export type ClaireBusinessTurnDeps = {
+  analyze?: typeof analyzeBusinessData;
+  analyze?: typeof analyzeBusinessData;
+  analyze?: typeof analyzeBusinessData;
   runQuery: (tenantId: string, query: BusinessQuery) => Promise<BusinessQueryResult>;
   plan: typeof planBusinessQuestionWithLLM;
   now: () => Date;
@@ -1105,7 +1126,6 @@ export async function answerClaireBusinessTurn(
   const calculationQuery = await (deps.planCalculation ?? planGovernedBusinessQuestion)({
     question: input.utterance, previous: session?.query ?? null, now, timeZone,
   });
-  if (calculationQuery) return finishQuery({ kind: "query", query: calculationQuery, refinement: Boolean(session), hint: null }, false);
 
   let parsed: ParsedBusinessTurn;
   try {
@@ -1114,6 +1134,150 @@ export async function answerClaireBusinessTurn(
     console.warn("[Claire] business question parsing failed", error);
     return { handled: false };
   }
+  let reader: ClaireBusinessReader = "query";
+  // The model assesses whole-question adequacy before a greedy fixed metric can erase novel criteria.
+  // Legacy dependency-injected fixtures retain their established reader behavior; new tests inject analyze explicitly.
+  const mayInvestigate =
+    !looksLikeWorkRequest(input.utterance) &&
+    (parsed.kind !== "not_analytics" ||
+      Boolean(input.state.businessAnalysis) ||
+      QUESTION.test(input.utterance));
+  if (mayInvestigate && (deps.analyze || !deps.runQuery)) {
+    const analysis = await (deps.analyze ?? analyzeBusinessData)({
+      tenantId: input.tenantId,
+      question: input.utterance,
+      now,
+      timeZone,
+      previous: input.state.businessAnalysis,
+      existingQuery:
+        calculationQuery ?? (parsed.kind === "query" ? parsed.query : null),
+    });
+    if (
+      analysis.kind === "evidence" ||
+      analysis.kind === "insufficient_evidence"
+    ) {
+      if (analysis.session) {
+        input.state.businessAnalysis = analysis.session;
+        input.state.analytics = {
+          query: session?.query ?? defaultBusinessQuery("customer_history"),
+          periods: session?.periods ?? [],
+          pendingClarification: null,
+          disclosed: session?.disclosed ?? [],
+          touchedAt: nowMs,
+          focus: {
+            ...(session?.focus ?? {}),
+            population: analysis.session.customers,
+            customers: analysis.session.customers.slice(0, 2),
+          },
+        };
+      }
+      const text = [analysis.answer, ...analysis.limitations].join(" ");
+      return guardedTurn({
+        handled: true,
+        speak: text,
+        facts:
+          analysis.kind === "evidence"
+            ? analysis.results.map(r => JSON.stringify(r))
+            : [],
+        reader: "analysis",
+        analysisEvidence: analysis,
+      });
+    }
+    if (analysis.kind === "existing") input.state.businessAnalysis = null;
+    if (analysis.kind === "execution_error" && !calculationQuery) {
+      return guardedTurn({
+        handled: true,
+        speak:
+          "I couldn't complete that investigation reliably just now, so I won't guess.",
+        facts: [],
+        reader: "analysis",
+      });
+    }
+    if (analysis.kind === "not_business" && parsed.kind === "not_analytics")
+      return { handled: false };
+  }
+  if (calculationQuery)
+    return finishQuery(
+      {
+        kind: "query",
+        query: calculationQuery,
+        refinement: Boolean(session),
+        hint: null,
+      },
+      false
+    );
+
+  // The model assesses whole-question adequacy before a greedy fixed metric can erase novel criteria.
+  // Legacy dependency-injected fixtures retain their established reader behavior; new tests inject analyze explicitly.
+  const mayInvestigate =
+    !looksLikeWorkRequest(input.utterance) &&
+    (parsed.kind !== "not_analytics" ||
+      Boolean(input.state.businessAnalysis) ||
+      QUESTION.test(input.utterance));
+  if (mayInvestigate && (deps.analyze || !deps.runQuery)) {
+    const analysis = await (deps.analyze ?? analyzeBusinessData)({
+      tenantId: input.tenantId,
+      question: input.utterance,
+      now,
+      timeZone,
+      previous: input.state.businessAnalysis,
+      existingQuery:
+        calculationQuery ?? (parsed.kind === "query" ? parsed.query : null),
+    });
+    if (
+      analysis.kind === "evidence" ||
+      analysis.kind === "insufficient_evidence"
+    ) {
+      if (analysis.session) {
+        input.state.businessAnalysis = analysis.session;
+        input.state.analytics = {
+          query: session?.query ?? defaultBusinessQuery("customer_history"),
+          periods: session?.periods ?? [],
+          pendingClarification: null,
+          disclosed: session?.disclosed ?? [],
+          touchedAt: nowMs,
+          focus: {
+            ...(session?.focus ?? {}),
+            population: analysis.session.customers,
+            customers: analysis.session.customers.slice(0, 2),
+          },
+        };
+      }
+      const text = [analysis.answer, ...analysis.limitations].join(" ");
+      return guardedTurn({
+        handled: true,
+        speak: text,
+        facts:
+          analysis.kind === "evidence"
+            ? analysis.results.map(r => JSON.stringify(r))
+            : [],
+        reader: "analysis",
+        analysisEvidence: analysis,
+      });
+    }
+    if (analysis.kind === "existing") input.state.businessAnalysis = null;
+    if (analysis.kind === "execution_error" && !calculationQuery) {
+      return guardedTurn({
+        handled: true,
+        speak:
+          "I couldn't complete that investigation reliably just now, so I won't guess.",
+        facts: [],
+        reader: "analysis",
+      });
+    }
+    if (analysis.kind === "not_business" && parsed.kind === "not_analytics")
+      return { handled: false };
+  }
+  if (calculationQuery)
+    return finishQuery(
+      {
+        kind: "query",
+        query: calculationQuery,
+        refinement: Boolean(session),
+        hint: null,
+      },
+      false
+    );
   if (parsed.kind === "not_analytics") return { handled: false };
 
   let reader: ClaireBusinessReader = "query";

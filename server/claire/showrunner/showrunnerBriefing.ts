@@ -1,3 +1,6 @@
+import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
+import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
+import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
@@ -37,6 +40,7 @@ export type ShowrunnerBriefing = {
   /** This week so far: operator-reported outcomes and plan changes, for the week review. */
   weekToDate: { reportedOutcomes: string[]; planChanges: string[] };
   /** Desk only: the revenue opportunity Claire found, from stored evidence. */
+  analyticalEvidence?: { answer: string; receiptIds: string[]; limitations: string[] } | null;
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -153,7 +157,41 @@ export async function buildShowrunnerBriefing(input: {
       })),
     };
   }
+  let analyticalEvidence: ShowrunnerBriefing["analyticalEvidence"] = null;
+  if (input.purpose === "morning_readiness") {
+    const saved =
+      proposal?.diagnosis.evidence.filter(
+        e => e.source === "analyzeBusinessData"
+      ) ?? [];
+    if (
+      saved.length &&
+      now.getTime() - Date.parse(saved[0]!.capturedAt) < 3600000
+    ) {
+      analyticalEvidence = {
+        answer: String(saved[0]!.value),
+        receiptIds: saved.map(e => e.id),
+        limitations: [saved[0]!.description],
+      };
+    } else {
+      const research = await investigateForPreparation({
+        tenantId: identity.tenantId,
+        objective:
+          proposal?.weeklyPlan?.objective ??
+          proposal?.diagnosis.goal.statement ??
+          null,
+        now,
+        timeZone,
+      });
+      if (research)
+        analyticalEvidence = {
+          answer: research.answer,
+          receiptIds: research.citedReceiptIds,
+          limitations: research.limitations,
+        };
+    }
+  }
   return {
+    analyticalEvidence,
     opportunity,
     purpose: input.purpose,
     businessDate,

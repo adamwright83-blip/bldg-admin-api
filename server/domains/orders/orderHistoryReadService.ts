@@ -65,10 +65,24 @@ export async function readNativeOrdersForVendor(
 
 
 /** Native paid candidates; capture occurrence must be resolved by Payment before windowing. */
-export async function readNativePaidCandidates(tenantId: string) {
+export async function readNativePaidCandidates(tenantId: string,
+  maxRows?: number
+) {
   if (!tenantId.trim()) throw new Error("Payment candidates require established tenant authority");
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select({ ...NATIVE_CUSTOMER_HISTORY_COLUMNS, paidAt: orders.paidAt, serviceType: orders.serviceType })
+  const query = db.select({ ...NATIVE_CUSTOMER_HISTORY_COLUMNS, paidAt: orders.paidAt, serviceType: orders.serviceType })
     .from(orders).where(and(eq(orders.tenantId, tenantId), eq(orders.paid, true)));
+  const rows = await (maxRows ? query.limit(maxRows + 1) : query);
+  if (maxRows && rows.length > maxRows)
+    throw new Error("Native paid candidate limit exceeded");
+  return rows;
+  const rows = await (maxRows ? query.limit(maxRows + 1) : query);
+  if (maxRows && rows.length > maxRows)
+    throw new Error("Native paid candidate limit exceeded");
+  return rows;
+  const rows = await (maxRows ? query.limit(maxRows + 1) : query);
+  if (maxRows && rows.length > maxRows)
+    throw new Error("Native paid candidate limit exceeded");
+  return rows;
 }
