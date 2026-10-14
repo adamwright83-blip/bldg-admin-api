@@ -61,7 +61,7 @@ export async function routeStrategicProposalTurn(input: {
   );
   // Spoken answers come from the diagnosis content, never from its internal labels.
   const plain = (text: string | undefined) =>
-    (text ?? "").replace(/^(Preferred|Not preferred(?: now)?):\s*/i, "").trim();
+    (text ?? "").replace(/^(Preferred|Not preferred[^:]*):\s*/i, "").trim();
   const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
   const basis = selectedOption?.observedBasis ?? p.diagnosis.currentCondition;
   if (
@@ -83,7 +83,7 @@ export async function routeStrategicProposalTurn(input: {
             : "I haven't found a supported alternative yet."
           : control.kind === "economics"
             ? `I do not know that this will make money. ${selectedOption?.expectedBenefit ?? ""} ${selectedOption?.economics ?? ""}`
-            : `${p.diagnosis.diagnosis} So I'd start with this: ${lower(p.diagnosis.selectedApproach)}, because ${lower(plain(selectedOption?.reason))} ${selectedOption?.expectedBenefit ?? ""}${
+            : `${p.diagnosis.objective ? `${basis} ` : ""}${p.diagnosis.diagnosis} So I'd start with this: ${lower(p.diagnosis.selectedApproach)}, because ${lower(plain(selectedOption?.reason))} ${selectedOption?.expectedBenefit ?? ""}${
                 alternative ? ` I didn't lead with ${lower(alternative.approach)} because ${lower(plain(alternative.reason))}` : ""
               } ${selectedOption?.uncertainty ?? ""}`;
     return {

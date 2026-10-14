@@ -79,6 +79,9 @@ export function parseStrategicProposalControl(
   )
     return { kind: "reject" };
   if (/\b(?:why|explain|evidence)\b/i.test(text)) return { kind: "why" };
+  // Broad "what should I do" questions get the full reasoning, even if they mention profit.
+  if (/\b(?:what should (?:i|we) do|what(?:'s| is) happening|what do you recommend|what would you do)\b/i.test(text))
+    return { kind: "why" };
   if (/\b(?:what numbers|which numbers|numbers.*bas(?:ing|ed))\b/i.test(text))
     return { kind: "numbers" };
   if (/\balternative(?:s)?\b/i.test(text)) return { kind: "alternative" };

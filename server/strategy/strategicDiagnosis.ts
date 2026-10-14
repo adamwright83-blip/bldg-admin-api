@@ -618,7 +618,7 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
       driver: "retention" as BusinessDriver,
       condition,
       support,
-      diagnosis: `${salesLine}${dormantLine} The fastest evidence-backed lever for "${focus.statement}" is winning back known ${area} customers before spending effort on new ones.`,
+      diagnosis: `For "${focus.statement}", the fastest evidence-backed lever is winning back the ${focus.dormant} lapsed ${area} customers before spending effort on new ones.`,
       chosen: `Win back lapsed ${area} customers`,
       alternative: outreach,
       leadingIndicator: "Win-back contacts made; replies and returning orders recorded.",

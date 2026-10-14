@@ -1,33 +1,33 @@
 {
   "testOnly": true,
   "provider": "controlled transport; no real call",
-  "tenantId": "claire-strategy-bcc4d126d7",
-  "runId": "898e8cdb-e73e-4e5e-88e4-305e4d81f975",
-  "diagnosisId": "diagnosis_b30ba1f021a318bf4820362fb0328cbd6fdd2486",
-  "proposalId": "proposal_be53cc367e161200a5a52a15a3fd37be5167e93b",
-  "revisedProposalId": "proposal_95c5f07836c0e9dc28c77260e6cf6b3095f4cac1",
-  "revision": "95c5f07836c0e9dc28c77260e6cf6b3095f4cac15213bba71a1a9e8e14f174da",
+  "tenantId": "claire-strategy-9e657e84d3",
+  "runId": "590711e2-2aee-41fc-b3eb-51057e6983e6",
+  "diagnosisId": "diagnosis_47546f106076dd3ac75dca2631dd86f81b29091d",
+  "proposalId": "proposal_a403e7899b286f13879a9c275f35d3bca7f039ee",
+  "revisedProposalId": "proposal_d8bcede73b4e1d264169364eb829a7b6a6b00f27",
+  "revision": "d8bcede73b4e1d264169364eb829a7b6a6b00f27d877397f16608ae5d365893f",
   "planIds": [
-    "78fdb5e2-338d-4494-bd67-2f802f253487",
-    "ab80aaa8-0ed3-48ff-b0f5-37b1680ad176",
-    "1e219201-8c99-49ce-a649-adfd80a19db2",
-    "3aa0158f-e1b3-4075-9463-0062ac7f5403"
+    "0b44c6c2-5c05-4e08-8743-0627b7ccbc5b",
+    "b0dd5eef-1b50-4f40-8ed7-b58ecaa66369",
+    "c705d171-5456-4b6e-959a-07d7ebe1f2f2",
+    "21ec5fc1-dd7a-4548-8174-894b3148dad3"
   ],
   "canonicalCommitmentIds": [
-    "7b52a1db-273a-4ab4-9a04-1bf614943333"
+    "f4a55b72-3974-4aa7-a0b1-a040056202d9"
   ],
   "approvalLineage": {
-    "itemId": "2026-10-13:diagnosis_b30ba1f021a318bf4820362fb0328cbd6fdd2486:strategy-investigation",
-    "revision": "95c5f07836c0e9dc28c77260e6cf6b3095f4cac15213bba71a1a9e8e14f174da",
-    "proposalId": "proposal_95c5f07836c0e9dc28c77260e6cf6b3095f4cac1",
-    "responseId": "response_2040e8de2dbf7315c6442ad351b01ad1a6ad4f2e",
-    "approvedByUserId": "claire-owner-bcc4d126d7",
-    "canonicalOperatorId": "tenant:claire-strategy-bcc4d126d7:operator:claire-owner-bcc4d126d7"
+    "itemId": "2026-10-13:diagnosis_47546f106076dd3ac75dca2631dd86f81b29091d:strategy-investigation",
+    "revision": "d8bcede73b4e1d264169364eb829a7b6a6b00f27d877397f16608ae5d365893f",
+    "proposalId": "proposal_d8bcede73b4e1d264169364eb829a7b6a6b00f27",
+    "responseId": "response_c833a0a9af83b1c61f2db4e9271f8a867c5e47bc",
+    "approvedByUserId": "claire-owner-9e657e84d3",
+    "canonicalOperatorId": "tenant:claire-strategy-9e657e84d3:operator:claire-owner-9e657e84d3"
   },
   "noPermissionCalls": 0,
   "controlledProviderCalls": 1,
-  "observedOutcomeId": "09e68a4a-ea48-48b5-8499-799177e22597",
-  "updatedDiagnosisId": "diagnosis_e4fe3b70056bdb03f40cf78ae33c48a97e0b3794",
+  "observedOutcomeId": "63d96f18-8c9f-49d0-85c0-42750ad04733",
+  "updatedDiagnosisId": "diagnosis_057f71d337581034886b4d8e58d987616a17f0c9",
   "updatedApproach": "Review the contradicted strategic hypothesis and compare a different mechanism",
   "roleCorrectionReadback": true,
   "nextInteractionGuidanceObserved": true,
@@ -47,42 +47,42 @@
     {
       "control": "approve item 1",
       "actionIds": [
-        "91f1bbbf-db79-46db-8203-8d21f0788b58"
+        "3fb3f9dd-6c35-4373-bed0-93abdd097036"
       ]
     }
   ],
   "geographyGenerationIds": [
-    "play_6df6e52d1c5c97d190aab0503bc6b899d02a750c",
-    "play_cda927f637fb407b575fe9f82fa673f8a1140c1d",
-    "play_67eb0aa98398dddaba7ca11ec3e0f6ee132c6ccf",
-    "play_63b34ef2446464cbd5c42450fa1612e93cd077fc",
-    "play_d6e9218e7d604976e7315fb40f7d3becb4666161",
-    "play_047d19b42e3ed72078f0e7d545e9cc10af71bc91"
+    "play_fb23d36bcea1f09e4d3cbef8677b07638f491eb1",
+    "play_939ffbd3b3cae264fdf08589a658a92fb09f0180",
+    "play_f417a60a936dcd7c4c2a6f1130a4955df02d6fc3",
+    "play_fcc44edf924e490e07e15d03498aa2e4591f28f5",
+    "play_4a2926df5492c712705a5fb48d06fafded08d84d",
+    "play_0458ccfa9735b01379f8a771817e079601920f89"
   ],
   "geographyRemediation": {
     "invalidated": [
-      "legacy-candidate-bcc4d126d7"
+      "legacy-candidate-9e657e84d3"
     ],
     "approvedHistory": [
-      "legacy-active-bcc4d126d7"
+      "legacy-active-9e657e84d3"
     ],
     "historicalLocalClaimsVerified": false
   },
   "processIndependentPlans": [
     {
-      "id": "ca7feec5-98da-4da3-8e00-6db6107bbfb8",
+      "id": "fb581f2e-9afb-4311-9d33-7b9651c43f9e",
       "revision": 3
     },
     {
-      "id": "ca7feec5-98da-4da3-8e00-6db6107bbfb8",
+      "id": "fb581f2e-9afb-4311-9d33-7b9651c43f9e",
       "revision": 3
     }
   ],
   "concurrentPlanIds": [
-    "b9bc33e3-0a93-41c3-a712-86e0acef0df9",
-    "b9bc33e3-0a93-41c3-a712-86e0acef0df9",
-    "b9bc33e3-0a93-41c3-a712-86e0acef0df9",
-    "b9bc33e3-0a93-41c3-a712-86e0acef0df9"
+    "690025c0-2c2b-4d83-9e13-7e04e0e809ae",
+    "690025c0-2c2b-4d83-9e13-7e04e0e809ae",
+    "690025c0-2c2b-4d83-9e13-7e04e0e809ae",
+    "690025c0-2c2b-4d83-9e13-7e04e0e809ae"
   ],
   "liveVoiceAcceptance": "unperformed"
 }
