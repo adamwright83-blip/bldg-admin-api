@@ -1,3 +1,10 @@
+// This routing suite exercises governed fast paths; live-model investigation is certified separately.
+vi.mock("../analytics/analysis/analyzeBusinessData", () => ({
+  analyzeBusinessData: async (input: { existingQuery?: unknown }) => ({
+    kind: input.existingQuery ? "existing" : "not_business",
+    answer: "", results: [], citedReceiptIds: [], limitations: [],
+  }),
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => {

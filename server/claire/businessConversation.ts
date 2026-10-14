@@ -92,10 +92,9 @@ export type { ClaireSurface };
  * Claire's read-only business interrogation layer, shared by the live phone
  * call and desktop Claire.
  *
- * Understanding is deterministic first (and at most one LLM planning call
- * for phrasing the parser cannot resolve — the model only chooses criteria).
- * Numbers come only from runBusinessQuery and are spoken through fixed
- * templates, so no model ever writes a business figure. Follow-up context
+ * Governed queries retain their canonical readers and templates. Unfamiliar
+ * questions use the existing model through a bounded approved-view investigation;
+ * values and identities are rendered from executed results by the server. Follow-up context
  * (the last question, the customers, order, or group being discussed) lives
  * on the caller's conversation state and is never business truth.
  */

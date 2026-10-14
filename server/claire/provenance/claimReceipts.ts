@@ -469,7 +469,7 @@ export function receiptFromAnalysis(input: {
     input.evidence.citedReceiptIds.includes(r.receipt.id)
   );
   const facts = results
-    .map(r => JSON.stringify({ columns: r.columns, rows: r.rows }))
+    .map(r => JSON.stringify({ columns: r.columns, rows: r.rows, selectedCustomers: input.evidence.session?.customers.map(customer => customer.displayName) ?? [] }))
     .join(" ");
   const backing = receiptFromReader({
     ...input,

@@ -345,7 +345,7 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
     );
     expect(result.kind).toBe("evidence");
     expect(result.answer).toBe(
-      "Test Customer has recorded historical sales of $60.00."
+      "The recorded evidence shows: Test Customer, lifetime cents: $60.00."
     );
     expect(result.session?.customers).toEqual([
       { displayName: "Test Customer", identityKeys: ["cleancloud:test"] },
