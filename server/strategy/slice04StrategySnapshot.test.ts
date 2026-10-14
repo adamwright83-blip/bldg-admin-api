@@ -26,7 +26,7 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
 
     expect(snapshot.id).toMatch(/^snap_/);
     expect(snapshot.tenantId).toBe(tenantA);
-    expect(snapshot.schemaVersion).toBe(1);
+    expect(snapshot.schemaVersion).toBe(2);
     expect(snapshot.contentHash).toBeDefined();
     expect(snapshot.estimatedTokens).toBeGreaterThan(0);
     expect(snapshot.payload).toBeDefined();
@@ -164,8 +164,8 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
     const snapshot = await buildStrategySnapshot(tenantA, { tokenBudget: tightBudget });
 
     expect(snapshot.isTruncated).toBe(true);
-    expect(snapshot.truncationDetails).toBeDefined();
-    expect(snapshot.truncationDetails?.length).toBeGreaterThan(0);
+    expect(snapshot.truncationDetails).toContain("Token budget exceeded, but no optional list rows can safely be truncated.");
+    expect(snapshot.estimatedTokens).toBeGreaterThan(tightBudget);
 
     // High priority sections must remain preserved
     expect(snapshot.payload.goal).toBeDefined();

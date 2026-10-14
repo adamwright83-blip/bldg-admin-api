@@ -1,3 +1,5 @@
+import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
+import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
 import { interpretTurn } from "./interpretTurn";
@@ -100,6 +102,7 @@ export type ClaireBrainV3Input = {
     weeklyPlanning: boolean;
   };
   dayLineSuppressed: boolean;
+  preparedStrategicProposal?: boolean;
 };
 
 /**
@@ -113,6 +116,13 @@ export type ClaireBrainV3Input = {
 export async function interpretClaireBrainV3(
   input: ClaireBrainV3Input
 ): Promise<ClaireBrainV3Interpretation | null> {
+  const preparedControl = input.preparedStrategicProposal && explicitPreparedControl(input.utterance);
+  if (preparedControl) return { ...safeClaireBrainV3Fallback(), target: "weekly_planning", act: preparedControl === "lock" ? "confirmation" : "question", weeklyDisposition: preparedControl, rationale: "Explicit control of the prepared proposal currently held by this conversation." };
+  if (isClaireRoleFeedback(input.utterance)) return {
+    ...safeClaireBrainV3Fallback(), act: "correction", target: "open_conversation", identityTopic: "claire_role",
+    workDisposition: "none", dayLineDisposition: "none", canonicalWork: null,
+    rationale: "Feedback about Claire's proactive preparation responsibility; no operational mutation requested.",
+  };
   if (!ENV.anthropicApiKey?.trim()) return null;
 
   try {
@@ -332,6 +342,7 @@ export type SafeClaireBrainV3FallbackContext = {
   morningSession?: string | null;
   dayLineSuppressed?: boolean;
   hasActiveAnalyticsQuery?: boolean;
+  preparedStrategicProposal?: boolean;
 };
 
 export function safeClaireBrainV3Fallback(
@@ -359,6 +370,9 @@ export function safeClaireBrainV3Fallback(
   }
 
   const text = utterance.trim();
+  const preparedControl = ctx.preparedStrategicProposal && explicitPreparedControl(text);
+  if (preparedControl) return { ...safeClaireBrainV3Fallback(), target: "weekly_planning", act: preparedControl === "lock" ? "confirmation" : "question", weeklyDisposition: preparedControl, rationale: "Explicit stored proposal control." };
+  if (isClaireRoleFeedback(text)) return { ...safeClaireBrainV3Fallback(), act: "correction", identityTopic: "claire_role", rationale: "Claire role feedback; no work authority." };
   const interpreted = interpretTurn(text);
   const confirmation = detectConfirmation(text);
 
@@ -492,4 +506,8 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
     return content.map(part => ("text" in part ? part.text : "")).join("");
   }
   return "";
+}
+
+function explicitPreparedControl(text: string): ClaireBrainV3WeeklyDisposition | null {
+  return parseStrategicProposalControl(text) ? "continue" : null;
 }

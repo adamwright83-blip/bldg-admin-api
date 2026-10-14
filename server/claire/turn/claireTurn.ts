@@ -1,3 +1,4 @@
+import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import type { SalesInsightArtifact } from "../proactive/salesInsights";
 import { acceptSalesInsightChallenge } from "../proactive/growthChallenge";
 import { businessToday } from "../../analytics/businessPeriods";
@@ -192,6 +193,8 @@ export type PendingBriefing = { parsed: ParsedBriefing; createdAt: number };
 
 export type ClaireTurnState = PendingProposalState &
   ClaireAnalyticsState & {
+    strategicProposalId?: string | null;
+    strategicProposalRevision?: string | null;
     history?: ClaireTurnHistoryEntry[];
     pendingBriefing?: PendingBriefing | null;
     pendingAccountFollowUp?: PendingAccountFollowUp | null;
@@ -1004,6 +1007,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           operatorId: input.operatorUserId,
           utterance,
           recentTurns: history().slice(0, -1).slice(-12),
+          preparedStrategicProposal: Boolean(state.strategicProposalId),
           pending: {
             briefing: Boolean(state.pendingBriefing),
             accountFollowUp: Boolean(state.pendingAccountFollowUp),
@@ -1035,6 +1039,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ),
       weeklyPlanning: Boolean(state.weeklyPlanningWeekStart),
     },
+    preparedStrategicProposal: Boolean(state.strategicProposalId),
     hasActiveAnalyticsQuery: Boolean(state.analytics?.query || state.analytics?.pendingClarification),
     sessionKind: state.sessionKind,
     morningSession,
@@ -1135,7 +1140,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Durable Daphne style corrections own their confirmation. A generic
   // doctrine "standing rule" response cannot prove an observation/write/read.
   if (
-    !hasPendingAction &&
+    (!hasPendingAction || isClaireRoleFeedback(utterance)) &&
     brainV3.workDisposition !== "propose" &&
     brainV3.workDisposition !== "commit" &&
     brainV3.dayLineDisposition === "none" &&
@@ -1409,6 +1414,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           now: deps.now(),
           timeZone: deps.timeZone(),
           weekStartOverride: state.weeklyPlanningWeekStart ?? undefined,
+          expectedStrategicProposalId: state.strategicProposalId ?? undefined,
+          expectedStrategicProposalRevision: state.strategicProposalRevision ?? undefined,
           authoritativeIntent:
             brainV3.weeklyDisposition === "lock"
               ? "weekly_lock"
@@ -1418,6 +1425,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         })
       : null;
   if (weekly) {
+    if (weekly.presentedRecommendation) {
+      state.strategicProposalId = weekly.presentedRecommendation.proposalId;
+      state.strategicProposalRevision = weekly.presentedRecommendation.revision;
+    }
     mark("fallback", { fallbackReason: "weekly_planning" });
     if (weekly.receiptBackedCommit) {
       return finish({

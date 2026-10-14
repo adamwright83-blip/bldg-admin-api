@@ -1,0 +1,76 @@
+{
+  "syntheticOnly": true,
+  "mysql": "8.0",
+  "outcomes": [
+    {
+      "database": "claire575_numbered",
+      "numberedMigrationCount": 129,
+      "compatibleSchema": false,
+      "productionBoots": 2,
+      "existingColumnsPreserved": true,
+      "strategicTables": [
+        "strategic_diagnoses",
+        "strategic_planning_proposals",
+        "strategic_proposal_responses"
+      ],
+      "authorizationColumns": [
+        {
+          "COLUMN_NAME": "appointmentKind",
+          "COLUMN_TYPE": "enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning')"
+        },
+        {
+          "COLUMN_NAME": "dailyLimit",
+          "COLUMN_TYPE": "int"
+        },
+        {
+          "COLUMN_NAME": "allowedLocalStart",
+          "COLUMN_TYPE": "varchar(5)"
+        },
+        {
+          "COLUMN_NAME": "allowedLocalEnd",
+          "COLUMN_TYPE": "varchar(5)"
+        },
+        {
+          "COLUMN_NAME": "allowedWeekdaysJson",
+          "COLUMN_TYPE": "json"
+        }
+      ],
+      "numbered0128RepeatCount": 2
+    },
+    {
+      "database": "claire575_upgrade",
+      "numberedMigrationCount": 127,
+      "compatibleSchema": true,
+      "productionBoots": 2,
+      "existingColumnsPreserved": true,
+      "strategicTables": [
+        "strategic_diagnoses",
+        "strategic_planning_proposals",
+        "strategic_proposal_responses"
+      ],
+      "authorizationColumns": [
+        {
+          "COLUMN_NAME": "appointmentKind",
+          "COLUMN_TYPE": "enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning')"
+        },
+        {
+          "COLUMN_NAME": "dailyLimit",
+          "COLUMN_TYPE": "int"
+        },
+        {
+          "COLUMN_NAME": "allowedLocalStart",
+          "COLUMN_TYPE": "varchar(5)"
+        },
+        {
+          "COLUMN_NAME": "allowedLocalEnd",
+          "COLUMN_TYPE": "varchar(5)"
+        },
+        {
+          "COLUMN_NAME": "allowedWeekdaysJson",
+          "COLUMN_TYPE": "json"
+        }
+      ],
+      "numbered0128RepeatCount": 0
+    }
+  ]
+}

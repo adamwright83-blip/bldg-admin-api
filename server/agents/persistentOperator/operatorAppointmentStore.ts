@@ -1,3 +1,8 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literals (table/env names) only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { strategicProposalIsCallable } from "../../strategy/strategicStore";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { addDaysYmd } from "../../../shared/weeklyMissionReadiness";
+import { strategicCallAuthorizedNow } from "../../../shared/strategicCallAuthorization";
 import { randomUUID } from "node:crypto";
 import type {
   Pool,
@@ -12,7 +17,8 @@ import type {
 
 export type OperatorAppointmentKind =
   | "sunday_weekly_planning"
-  | "weekly_planning_callback";
+  | "weekly_planning_callback"
+  | "weekday_strategic_planning";
 
 export type ClaimedOperatorAppointment = DurableLeasedStep & {
   tenantId: string;
@@ -58,7 +64,10 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function claimed(row: AppointmentRow, leaseOwner: string): ClaimedOperatorAppointment {
+function claimed(
+  row: AppointmentRow,
+  leaseOwner: string
+): ClaimedOperatorAppointment {
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -151,31 +160,33 @@ export class OperatorAppointmentStore
         [input.tenantId, input.idempotencyKey]
       );
       const row = rows[0];
-      if (!row) throw new Error("Unable to resolve durable operator appointment");
+      if (!row)
+        throw new Error("Unable to resolve durable operator appointment");
       if (
         insert.affectedRows !== 1 &&
-        (
-          row.canonicalOperatorId !== input.canonicalOperatorId ||
+        (row.canonicalOperatorId !== input.canonicalOperatorId ||
           row.operatorUserId !== input.operatorUserId ||
           row.appointmentKind !== input.appointmentKind ||
           row.weekStart !== input.weekStart ||
-          row.sourceReference !== input.sourceReference
-        )
+          row.sourceReference !== input.sourceReference)
       ) {
-        throw new Error("Operator appointment idempotency key is bound to different work");
+        throw new Error(
+          "Operator appointment idempotency key is bound to different work"
+        );
       }
       const sundayExecutionSnapshotChanged =
-        row.standingAuthorizationId !== (input.standingAuthorizationId ?? null) ||
+        row.standingAuthorizationId !==
+          (input.standingAuthorizationId ?? null) ||
         row.timeZone !== input.timeZone;
       if (
         insert.affectedRows !== 1 &&
         row.appointmentKind === "sunday_weekly_planning" &&
-        ["scheduled", "retry_scheduled", "leased", "running"].includes(row.status) &&
+        ["scheduled", "retry_scheduled", "leased", "running"].includes(
+          row.status
+        ) &&
         row.callDispatchStartedAt == null &&
-        (
-          ["scheduled", "retry_scheduled"].includes(row.status) ||
-          sundayExecutionSnapshotChanged
-        )
+        (["scheduled", "retry_scheduled"].includes(row.status) ||
+          sundayExecutionSnapshotChanged)
       ) {
         // The weekly idempotency key intentionally survives authorization
         // rotation. Refresh authority/timezone until external dispatch begins.
@@ -348,7 +359,125 @@ export class OperatorAppointmentStore
     return result.affectedRows === 1;
   }
 
-  async beginCallDispatch(step: ClaimedOperatorAppointment): Promise<boolean> {
+  async beginCallDispatch(
+    step: ClaimedOperatorAppointment,
+    preparedProposalId?: string
+  ): Promise<boolean> {
+    if (
+      step.appointmentKind === "weekday_strategic_planning" ||
+      preparedProposalId ||
+      step.sourceReference.startsWith("strategic_proposal:")
+    ) {
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        await connection.execute(
+          "SELECT id FROM dayforge_saas_tenants WHERE id = ? FOR UPDATE",
+          [step.tenantId]
+        );
+        const [proposals] = await connection.execute<RowDataPacket[]>(
+          "SELECT * FROM strategic_planning_proposals WHERE tenantId = ? AND canonicalOperatorId = ? AND weekStart = ? ORDER BY createdAt DESC, id DESC LIMIT 1",
+          [step.tenantId, step.canonicalOperatorId, step.weekStart]
+        );
+        const proposal = proposals[0];
+        const expectedId =
+          preparedProposalId ??
+          (step.sourceReference.startsWith("strategic_proposal:")
+            ? step.sourceReference.slice("strategic_proposal:".length)
+            : null);
+        if (!proposal || proposal.id !== expectedId) {
+          await connection.rollback();
+          return false;
+        }
+        const [responses] = await connection.execute<RowDataPacket[]>(
+          "SELECT responseJson FROM strategic_proposal_responses WHERE tenantId = ? AND canonicalOperatorId = ? AND proposalId = ?",
+          [step.tenantId, step.canonicalOperatorId, expectedId]
+        );
+        const parse = (v: any) => (typeof v === "string" ? JSON.parse(v) : v);
+        if (
+          !strategicProposalIsCallable(
+            parse(proposal.payloadJson),
+            responses.map(r => parse(r.responseJson)),
+            new Date()
+          )
+        ) {
+          await connection.rollback();
+          return false;
+        }
+        if (step.appointmentKind === "weekday_strategic_planning") {
+          const [auths] = await connection.execute<RowDataPacket[]>(
+            "SELECT * FROM tenant_standing_authorizations WHERE id = ? AND tenantId = ? AND canonicalOperatorId = ? FOR UPDATE",
+            [
+              step.standingAuthorizationId,
+              step.tenantId,
+              step.canonicalOperatorId,
+            ]
+          );
+          const auth = auths[0];
+          const now = new Date();
+          if (
+            !auth ||
+            auth.operatorUserId !== step.operatorUserId ||
+            !strategicCallAuthorizedNow(auth as any, now, step.timeZone)
+          ) {
+            await connection.rollback();
+            return false;
+          }
+          const date = formatInTimeZone(now, step.timeZone, "yyyy-MM-dd");
+          const start = fromZonedTime(`${date}T00:00:00`, step.timeZone);
+          const end = fromZonedTime(
+            `${addDaysYmd(date, 1)}T00:00:00`,
+            step.timeZone
+          );
+          const [counts] = await connection.execute<RowDataPacket[]>(
+            "SELECT COUNT(*) AS n FROM operator_appointments WHERE tenantId = ? AND canonicalOperatorId = ? AND appointmentKind = 'weekday_strategic_planning' AND callDispatchStartedAt >= ? AND callDispatchStartedAt < ?",
+            [step.tenantId, step.canonicalOperatorId, start, end]
+          );
+          if (Number(counts[0]?.n) >= Number(auth.dailyLimit)) {
+            await connection.rollback();
+            return false;
+          }
+        } else if (step.standingAuthorizationId) {
+          const [auths] = await connection.execute<RowDataPacket[]>(
+            "SELECT * FROM tenant_standing_authorizations WHERE id = ? AND tenantId = ? AND canonicalOperatorId = ? FOR UPDATE",
+            [
+              step.standingAuthorizationId,
+              step.tenantId,
+              step.canonicalOperatorId,
+            ]
+          );
+          const auth = auths[0];
+          if (
+            !auth ||
+            auth.revokedAt ||
+            auth.operatorUserId !== step.operatorUserId ||
+            auth.channel !== "call" ||
+            auth.exactAction !== "claire.weekly_planning.call" ||
+            auth.timeZone !== step.timeZone
+          ) {
+            await connection.rollback();
+            return false;
+          }
+        }
+        const [result] = await connection.execute<ResultSetHeader>(
+          "UPDATE operator_appointments SET callDispatchStartedAt = CURRENT_TIMESTAMP(3) WHERE tenantId = ? AND id = ? AND status = 'running' AND leaseOwner = ? AND leaseExpiresAt > CURRENT_TIMESTAMP(3) AND callDispatchStartedAt IS NULL AND callSid IS NULL AND standingAuthorizationId <=> ? AND timeZone = ?",
+          [
+            step.tenantId,
+            step.id,
+            step.leaseOwner,
+            step.standingAuthorizationId,
+            step.timeZone,
+          ]
+        );
+        await connection.commit();
+        return result.affectedRows === 1;
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    }
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE operator_appointments
           SET callDispatchStartedAt = CURRENT_TIMESTAMP(3)
@@ -376,9 +505,10 @@ export class OperatorAppointmentStore
             calendarStatus?: unknown;
           })
         : {};
-    const callSid = typeof row.callSid === "string" && row.callSid.trim()
-      ? row.callSid.trim()
-      : null;
+    const callSid =
+      typeof row.callSid === "string" && row.callSid.trim()
+        ? row.callSid.trim()
+        : null;
     const calendarEventId =
       typeof row.calendarEventId === "string" && row.calendarEventId.trim()
         ? row.calendarEventId.trim()
@@ -621,12 +751,7 @@ export class OperatorAppointmentStore
           SET calendarStatus = ?,
               calendarEventId = COALESCE(?, calendarEventId)
         WHERE tenantId = ? AND id = ?`,
-      [
-        input.status,
-        input.eventId ?? null,
-        input.tenantId,
-        input.appointmentId,
-      ]
+      [input.status, input.eventId ?? null, input.tenantId, input.appointmentId]
     );
   }
 
@@ -664,5 +789,4 @@ export class OperatorAppointmentStore
       connection.release();
     }
   }
-
 }

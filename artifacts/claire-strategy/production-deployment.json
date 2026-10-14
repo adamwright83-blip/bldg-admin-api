@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-10-13 20:21:51 UTC",
+  "projectId": "293ee4d1-ee4f-4701-8a56-18ad120009a2",
+  "environmentId": "330bff45-7d21-4cdf-be04-b38cea76fcfb",
+  "serviceId": "9d63863a-2626-47a0-bd65-c3ba8db54258",
+  "deploymentId": "8197936f-fae1-40d3-8501-1a22de6356ea",
+  "status": "SUCCESS",
+  "commitHash": "b2a8bc9adcf71183989343b4b8dfc06f543b2af3",
+  "branch": "main",
+  "createdAt": "2026-10-13T15:15:32.524Z",
+  "updatedAt": "2026-10-13T15:32:29.049Z",
+  "candidateDeployed": false
+}

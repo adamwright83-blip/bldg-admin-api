@@ -1,0 +1,1043 @@
+[
+  {
+    "case": 1,
+    "knownFacts": [
+      "Strong mature repeat purchases",
+      "Inadequate qualified demand",
+      "Actual LA territory"
+    ],
+    "missing": [
+      "Margin and market differentiation"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+          "recommendation": "Test a qualified customer segment within the operating market",
+          "alternatives": [
+            {
+              "approach": "Test a qualified customer segment within the operating market",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Improve conversion of existing qualified demand",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Test a qualified customer segment within the operating market",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 2,
+    "knownFacts": [
+      "Same economics as LA",
+      "Actual Iowa territory"
+    ],
+    "missing": [
+      "No local demand evidence justifies changing the mechanism"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+          "recommendation": "Test a qualified customer segment within the operating market",
+          "alternatives": [
+            {
+              "approach": "Test a qualified customer segment within the operating market",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Improve conversion of existing qualified demand",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Test a qualified customer segment within the operating market",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 3,
+    "knownFacts": [
+      "Software renewal cohort loses customers"
+    ],
+    "missing": [
+      "Hosting cost and buyer alternatives"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+          "recommendation": "Investigate activation and subscription renewal barriers",
+          "alternatives": [
+            {
+              "approach": "Investigate activation and subscription renewal barriers",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Prepare a bounded product-value experiment for an eligible software cohort",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Investigate activation and subscription renewal barriers",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Software authoritative metric readers are not connected; specialized performance claims are withheld.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 4,
+    "knownFacts": [
+      "80/100 repeat",
+      "10 qualified opportunities vs 40 requirement"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+          "recommendation": "Test a qualified customer segment within the operating market",
+          "alternatives": [
+            {
+              "approach": "Test a qualified customer segment within the operating market",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Improve conversion of existing qualified demand",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Test a qualified customer segment within the operating market",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 5,
+    "knownFacts": [
+      "10/100 mature customers repeated"
+    ],
+    "missing": [
+      "Why customers left"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+          "recommendation": "Investigate first-to-second-purchase barriers",
+          "alternatives": [
+            {
+              "approach": "Investigate first-to-second-purchase barriers",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Prepare a bounded reactivation test for eligible customers",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Investigate first-to-second-purchase barriers",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 6,
+    "knownFacts": [
+      "Additional sales lose 300 cents contribution per order"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+          "recommendation": "Audit price and variable cost on a bounded order sample",
+          "alternatives": [
+            {
+              "approach": "Audit price and variable cost on a bounded order sample",
+              "economics": "Observed contribution per order: -300 cents; fixed costs and cash timing remain distinct.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Compare a reversible price test with fulfillment cost reduction",
+              "economics": "Observed contribution per order: -300 cents; fixed costs and cash timing remain distinct.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit price and variable cost on a bounded order sample",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 7,
+    "knownFacts": [
+      "No available fulfillment capacity"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Configured available capacity is exhausted. Validate fulfillment constraints before adding demand.",
+          "recommendation": "Audit the fulfillment bottleneck and recover usable capacity",
+          "alternatives": [
+            {
+              "approach": "Audit the fulfillment bottleneck and recover usable capacity",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Compare scheduling changes with a limited capacity expansion",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit the fulfillment bottleneck and recover usable capacity",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 8,
+    "knownFacts": [
+      "Operator goal exists"
+    ],
+    "missing": [
+      "Driver metrics, economics, and customer evidence"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+          "recommendation": "Audit missing business drivers and customer evidence",
+          "alternatives": [
+            {
+              "approach": "Audit missing business drivers and customer evidence",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Observe the next reporting period before making a growth bet",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit missing business drivers and customer evidence",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 9,
+    "knownFacts": [
+      "Prior observations are stale"
+    ],
+    "missing": [
+      "Current economics and customer cohorts"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+          "recommendation": "Audit missing business drivers and customer evidence",
+          "alternatives": [
+            {
+              "approach": "Audit missing business drivers and customer evidence",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Observe the next reporting period before making a growth bet",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit missing business drivers and customer evidence",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 10,
+    "knownFacts": [
+      "Qualified-demand gap",
+      "Remote prospect cannot be served"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
+          "recommendation": "Test a qualified customer segment within the operating market",
+          "alternatives": [
+            {
+              "approach": "Test a qualified customer segment within the operating market",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Improve conversion of existing qualified demand",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Test a qualified customer segment within the operating market",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "A valuable prospect is 25 miles away; outside the five-mile service radius, withheld.",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 11,
+    "knownFacts": [
+      "Retention concern",
+      "Legitimate overdue obligation must remain protected"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
+          "recommendation": "Investigate first-to-second-purchase barriers",
+          "alternatives": [
+            {
+              "approach": "Investigate first-to-second-purchase barriers",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Prepare a bounded reactivation test for eligible customers",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Investigate first-to-second-purchase barriers",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
+            "Existing obligations remain protected; strategic work must fit around them."
+          ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 12,
+    "knownFacts": [
+      "Earlier retention test disappointed",
+      "Verified outcome reference"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Verified outcomes contradicted the earlier approach. Reassess the mechanism and customer evidence before repeating that experiment.",
+          "recommendation": "Review the contradicted strategic hypothesis and compare a different mechanism",
+          "alternatives": [
+            {
+              "approach": "Review the contradicted strategic hypothesis and compare a different mechanism",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Repeat the earlier approach only after resolving its failed assumptions",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Review the contradicted strategic hypothesis and compare a different mechanism",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 13,
+    "knownFacts": [
+      "No registered industry capabilities"
+    ],
+    "missing": [
+      "Authoritative specialized readers"
+    ],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
+          "recommendation": "Audit missing business drivers and customer evidence",
+          "alternatives": [
+            {
+              "approach": "Audit missing business drivers and customer evidence",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Observe the next reporting period before making a growth bet",
+              "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit missing business drivers and customer evidence",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Industry metric readers unsupported.",
+            "Variable costs, gross profit, contribution, and cash flow are unmeasured."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  },
+  {
+    "case": 14,
+    "knownFacts": [
+      "High-revenue demand has negative contribution"
+    ],
+    "missing": [],
+    "alternatives": [
+      {
+        "label": "A",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
+          "diagnosis": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
+          "recommendation": "Audit price and variable cost on a bounded order sample",
+          "alternatives": [
+            {
+              "approach": "Audit price and variable cost on a bounded order sample",
+              "economics": "Observed contribution per order: -1000 cents; fixed costs and cash timing remain distinct.",
+              "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+              "effort": "One desk investigation using existing records.",
+              "risk": "Small samples and incomplete attribution can mislead."
+            },
+            {
+              "approach": "Compare a reversible price test with fulfillment cost reduction",
+              "economics": "Observed contribution per order: -1000 cents; fixed costs and cash timing remain distinct.",
+              "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+              "effort": "Additional operator effort and customer eligibility need confirmation.",
+              "risk": "May consume cash or scarce operating time without validating the cause."
+            }
+          ],
+          "action": [
+            {
+              "title": "Audit price and variable cost on a bounded order sample",
+              "completionCondition": "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
+              "leadingIndicator": "Eligible source records reviewed and missing fields resolved.",
+              "reviewCondition": "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it."
+            }
+          ],
+          "uncertainty": [
+            "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+            "No provider market research in this controlled case",
+            "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
+            "Configured capacity is operator input, not a current utilization measurement."
+          ]
+        }
+      }
+    ],
+    "questions": [
+      "Which identifies the defensible constraint?",
+      "Are alternatives credible and economics honest?",
+      "Would you approve the preparation?",
+      "What disqualifying error remains?"
+    ],
+    "rating": null
+  }
+]

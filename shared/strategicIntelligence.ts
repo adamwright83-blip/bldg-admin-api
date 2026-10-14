@@ -1,0 +1,161 @@
+/** StrategyEngine evidence and reasoning; never execution or ranking authority. */
+export type BusinessDriver =
+  | "acquisition"
+  | "conversion"
+  | "retention"
+  | "frequency"
+  | "pricing"
+  | "transaction_value"
+  | "contribution"
+  | "capacity"
+  | "fulfillment"
+  | "differentiation"
+  | "market_selection"
+  | "cash_flow"
+  | "investigation";
+export type StrategyEvidence = {
+  id: string;
+  tenantId: string;
+  source: string;
+  capturedAt: string;
+  classification: "verified" | "operator_input" | "estimate" | "hypothesis";
+  value: number | string | null;
+  unit: string;
+  quality: "complete" | "partial" | "stale" | "unavailable";
+  description: string;
+};
+export type MarketTerritory = {
+  id: string;
+  label: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMiles: number | null;
+  sourceRef: string;
+  capturedAt: string;
+};
+export type MarketObservation = {
+  id: string;
+  name: string;
+  territoryId: string;
+  latitude: number;
+  longitude: number;
+  source: string;
+  sourceUrl: string | null;
+  capturedAt: string;
+  classification: "sourced_fact";
+  demandVerified: false;
+};
+export type StrategyMarketContext = {
+  tenantId: string;
+  mode: "physical" | "online" | "unresolved";
+  territories: MarketTerritory[];
+  observations: MarketObservation[];
+  limitations: string[];
+};
+export type StrategyAction = {
+  id: string;
+  title: string;
+  driver: BusinessDriver;
+  motion:
+    | "retention"
+    | "customer_recovery"
+    | "account_acquisition"
+    | "investigation";
+  hypothesis: string;
+  rationale: string;
+  completionCondition: string;
+  leadingIndicator: string;
+  intendedOutcome: string;
+  evidenceRefs: string[];
+  reviewCondition: string;
+  territoryId: string | null;
+};
+export type StrategyOption = {
+  id: string;
+  approach: string;
+  driver: BusinessDriver;
+  evidenceRefs: string[];
+  economics: string;
+  cost: string;
+  effort: string;
+  timeToResults: string;
+  capacity: string;
+  risk: string;
+  reversibility: string;
+  eligible: boolean;
+  reason: string;
+};
+export type StrategicDiagnosis = {
+  id: string;
+  schemaVersion: 1;
+  doctrineVersion: string;
+  tenantId: string;
+  canonicalOperatorId: string;
+  verticalKey: string;
+  businessDate: string;
+  generatedAt: string;
+  goal: {
+    statement: string;
+    metricKey: string;
+    target: number;
+    current: number | null;
+    evidenceRef: string | null;
+  };
+  currentCondition: string;
+  primaryConstraint: BusinessDriver;
+  diagnosis: string;
+  supportingEvidence: string[];
+  competingExplanations: string[];
+  options: StrategyOption[];
+  selectedOptionId: string;
+  selectedApproach: string;
+  notPrioritized: string[];
+  economicAssumptions: string[];
+  customerUnderstanding: string;
+  localFit: string;
+  industryFit: string;
+  actions: StrategyAction[];
+  successMeasures: string[];
+  revisionTrigger: string;
+  uncertainty: string[];
+  evidence: StrategyEvidence[];
+  market: StrategyMarketContext;
+  outcomeRefs: string[];
+  quality: {
+    structuralErrors: string[];
+    judgment: "unreviewed" | "acceptable" | "revise" | "unavailable";
+    reasons: string[];
+  };
+};
+export type StrategicProposalItem = {
+  id: string;
+  businessDate: string;
+  title: string;
+  objective: string;
+  executionType: "mission" | "challenge";
+  candidateId: string;
+  planId: string;
+  planRevision: number;
+  evidenceRefs: string[];
+};
+export type StrategicPlanningProposal = {
+  id: string;
+  schemaVersion: 1;
+  revision: string;
+  tenantId: string;
+  canonicalOperatorId: string;
+  operatorUserId: string;
+  dayDirectorActorId: string;
+  weekStart: string;
+  businessDate: string;
+  timeZone: string;
+  preparedAt: string;
+  expiresAt: string;
+  diagnosis: StrategicDiagnosis;
+  items: StrategicProposalItem[];
+  constraints: string[];
+  uncertainty: string[];
+  opening: string;
+  approvalState: "pending" | "approved" | "rejected" | "deferred";
+};

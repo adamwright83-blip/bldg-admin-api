@@ -1,0 +1,88 @@
+{
+  "testOnly": true,
+  "provider": "controlled transport; no real call",
+  "tenantId": "claire-strategy-c4f7edbdea",
+  "runId": "4555017c-2519-4c31-a7ba-903be32873b8",
+  "diagnosisId": "diagnosis_78d71eeb6847c14c562f8c67ffa3355e1e153455",
+  "proposalId": "proposal_50f9ab2538e72bbcf6cc1abb5ba71237d0a36fd2",
+  "revisedProposalId": "proposal_5ceb17cf7b801fc11c579b62e45dcbf8ac8947de",
+  "revision": "5ceb17cf7b801fc11c579b62e45dcbf8ac8947dedcb2cd94abf520ffafb6aa22",
+  "planIds": [
+    "05fb03e6-48b0-4643-8753-7e58036c6180",
+    "8b558a0c-96b6-4d04-8d58-bba0f0b803a2",
+    "bfce9834-58f4-4f3f-a309-5731ba20a086",
+    "eea7b90e-1f83-4d7a-b077-e76cc9f04861"
+  ],
+  "canonicalCommitmentIds": [
+    "08fe532b-ea78-436f-b757-cb4c3123fd85"
+  ],
+  "approvalLineage": {
+    "itemId": "2026-10-13:diagnosis_78d71eeb6847c14c562f8c67ffa3355e1e153455:strategy-investigation",
+    "revision": "5ceb17cf7b801fc11c579b62e45dcbf8ac8947dedcb2cd94abf520ffafb6aa22",
+    "proposalId": "proposal_5ceb17cf7b801fc11c579b62e45dcbf8ac8947de",
+    "responseId": "response_12294755970bb7e35d0840020a2980cc94a0084b",
+    "approvedByUserId": "claire-owner-c4f7edbdea",
+    "canonicalOperatorId": "tenant:claire-strategy-c4f7edbdea:operator:claire-owner-c4f7edbdea"
+  },
+  "noPermissionCalls": 0,
+  "controlledProviderCalls": 1,
+  "observedOutcomeId": "bbb712b3-75ab-4440-97e8-863ff904b729",
+  "updatedDiagnosisId": "diagnosis_f068cd85a1253cd2982de8b4adb5682e720f1eb0",
+  "updatedApproach": "Review the contradicted strategic hypothesis and compare a different mechanism",
+  "roleCorrectionReadback": true,
+  "nextInteractionGuidanceObserved": true,
+  "controlResults": [
+    {
+      "control": "why",
+      "actionIds": []
+    },
+    {
+      "control": "reject the plan",
+      "actionIds": []
+    },
+    {
+      "control": "defer the decision",
+      "actionIds": []
+    },
+    {
+      "control": "approve item 1",
+      "actionIds": [
+        "7c6b732c-baf8-4714-886c-792fa1bea269"
+      ]
+    }
+  ],
+  "geographyGenerationIds": [
+    "play_f4e7aca6f550289a4e45d738b81cdaa5505a600b",
+    "play_8808f99c4f678fbdfc8f66ef94c53bc932383d3a",
+    "play_c180fc03763b4624c51523130b7fea939b71a540",
+    "play_0b3970bdab35c8bd27ce0d6577db8fbdc61b1d63",
+    "play_e31662f87bdde97f7ded3612a753f019e6bd4283",
+    "play_1c01c56406230d5527faad948df29772587cabc6"
+  ],
+  "geographyRemediation": {
+    "invalidated": [
+      "legacy-candidate-c4f7edbdea"
+    ],
+    "approvedHistory": [
+      "legacy-active-c4f7edbdea"
+    ],
+    "historicalLocalClaimsVerified": false
+  },
+  "processIndependentPlans": [
+    {
+      "id": "2fad63af-d6be-4c5a-84ba-acc15acb7f32",
+      "revision": 3
+    },
+    {
+      "id": "2fad63af-d6be-4c5a-84ba-acc15acb7f32",
+      "revision": 3
+    }
+  ],
+  "concurrentPlanIds": [
+    "4abb17d5-a0cb-45fa-86aa-2f082a1782f8",
+    "4abb17d5-a0cb-45fa-86aa-2f082a1782f8",
+    "4abb17d5-a0cb-45fa-86aa-2f082a1782f8",
+    "4abb17d5-a0cb-45fa-86aa-2f082a1782f8"
+  ],
+  "liveVoiceAcceptance": "unperformed"
+}

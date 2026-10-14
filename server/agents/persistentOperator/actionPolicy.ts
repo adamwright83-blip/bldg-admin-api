@@ -1,3 +1,4 @@
+import { WEEKDAY_STRATEGIC_PLANNING_ACTION, strategicCallAuthorizedNow } from "../../../shared/strategicCallAuthorization";
 import { and, eq, isNull } from "drizzle-orm";
 import { tenantStandingAuthorizations } from "../../../drizzle/schema";
 import { PERSISTENT_OPERATOR_ENTITLEMENT } from "../../../shared/saasTenant";
@@ -211,6 +212,7 @@ export async function evaluatePersistentActionPolicy(
   )) {
     return { allowed: false, reason: "standing_authorization_invalid" };
   }
+  if (input.exactAction === WEEKDAY_STRATEGIC_PLANNING_ACTION && !strategicCallAuthorizedNow(authorization, input.now ?? new Date())) return { allowed: false, reason: "standing_authorization_invalid" };
   if (
     !inLocalWindow({
       now: input.now ?? new Date(),

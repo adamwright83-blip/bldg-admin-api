@@ -1,0 +1,255 @@
+{
+  "_nomenclature": "LEGACY DAYFORGE COMPATIBILITY: retained historical table/env literals in captured evidence only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.",
+  "observedAt": "2026-10-13T22:11:29.899Z",
+  "service": {
+    "service": {
+      "id": "9d63863a-2626-47a0-bd65-c3ba8db54258",
+      "name": "bldg-admin-api",
+      "state": "live"
+    },
+    "environment": {
+      "id": "330bff45-7d21-4cdf-be04-b38cea76fcfb",
+      "name": "production"
+    },
+    "staged": null,
+    "config": {
+      "source": {
+        "repo": "adamwright83-blip/bldg-admin-api",
+        "branch": "main",
+        "checkSuites": false
+      },
+      "networking": {
+        "serviceDomains": {
+          "bldg-admin-api-production.up.railway.app": {}
+        },
+        "customDomains": {
+          "admin.bldg.chat": {},
+          "driver.bldg.chat": {}
+        },
+        "privateNetworkEndpoint": "bldg-admin-api-e1b920d1"
+      },
+      "build": {
+        "builder": "RAILPACK",
+        "buildCommand": "pnpm install && pnpm build",
+        "buildEnvironment": "V3"
+      },
+      "deploy": {
+        "startCommand": "node scripts/migrate.mjs && NODE_ENV=production node dist/index.js",
+        "useLegacyStacker": false,
+        "ipv6EgressEnabled": false,
+        "runtime": "V2",
+        "multiRegionConfig": {
+          "us-west2": {
+            "numReplicas": 1
+          }
+        }
+      }
+    },
+    "stagedChanges": [],
+    "variableNames": [
+      "ADMIN_AGENT_SHARED_SECRET",
+      "ADMIN_BASE_URL",
+      "ADMIN_PASSWORD",
+      "AGENTMAIL_API_KEY",
+      "AGENTMAIL_VENDOR_INBOX_EMAIL",
+      "AGENTMAIL_VENDOR_INBOX_ID",
+      "AGENTMAIL_VENDOR_WEBHOOK_SECRET",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_API_KEY_GoldlineAdminProduction",
+      "ANTHROPIC_MODEL_MISSION_PLANNER",
+      "ANTHROPIC_MODEL_SERVICE_AREA_VERIFIER",
+      "APP_SHARED_API_SECRET",
+      "BORESLAY_LEAD_NOTIFY_PHONE",
+      "BUILT_IN_FORGE_API_KEY",
+      "BUILT_IN_FORGE_API_URL",
+      "CLAIRE_BIOGRAPHY_VERIFIER_MODEL",
+      "CLAIRE_BRAIN_V2_LIVE",
+      "CLAIRE_BRAIN_V2_SHADOW",
+      "CLAIRE_OPERATOR_PHONE",
+      "CLAIRE_PROGRESSION",
+      "CLAIRE_PROGRESSION_CONTINUITY_REVIEWED",
+      "CLAIRE_TRANSCRIPT_LOG_BACKFILL_COUNT",
+      "CLAIRE_TRANSCRIPT_LOG_BACKFILL_ON_BOOT",
+      "CLAIRE_TRANSCRIPT_LOG_SCOPES",
+      "CLAIRE_TRANSCRIPT_TEXT_SCOPES",
+      "CLAIRE_TWILIO_CONVERSATION_RELAY",
+      "CLAIRE_TWILIO_FROM_NUMBER",
+      "CLAIRE_TWILIO_RELAY_PUBLIC_BASE_URL",
+      "CLAIRE_TWILIO_RELAY_TTS_PROVIDER",
+      "CLAIRE_TWILIO_RELAY_VOICE",
+      "CLAIRE_VOICE_RECORDING_ENABLED",
+      "CLAIRE_XAI_TTS_ENABLED",
+      "CLAIRE_XAI_TTS_VOICE_ID",
+      "CLEANCLOUD_BASE_URL",
+      "CLEANCLOUD_PASSWORD",
+      "CLEANCLOUD_USERNAME",
+      "Claire-Prod-2026-09",
+      "DAPHNE_V2_CLAIRE_ENABLED",
+      "DAPHNE_V2_CONSOLIDATION_WORKER_ENABLED",
+      "DAPHNE_V2_CONSOLIDATION_WORKER_TENANTS",
+      "DAPHNE_V2_CONVERSATION_INGESTION_ENABLED",
+      "DAPHNE_V2_CONVERSATION_INGESTION_TENANTS",
+      "DATABASE_URL",
+      "DAYFORGE_ALLOWED_ORIGINS",
+      "DAYFORGE_DEMO_ENABLED",
+      "DAYFORGE_DEMO_TENANT_SLUG",
+      "DAYFORGE_PUBLIC_PREVIEW_FINGERPRINT_SECRET",
+      "DAYFORGE_PUBLIC_PREVIEW_TOKEN_SECRET",
+      "DAYFORGE_RETENTION_SECRET",
+      "DRIVER_PASSWORD",
+      "GEMINI_API_KEY",
+      "GEMINI_VIDEO_MODEL",
+      "GEMINI_VIDEO_TIMEOUT_MS",
+      "GOLDLINE_DEMO_BYPASS",
+      "GOOGLE_ADDRESS_VALIDATION_API_KEY",
+      "GOOGLE_AERIAL_VIEW_API_KEY",
+      "GOOGLE_AIR_QUALITY_API_KEY",
+      "GOOGLE_GEOCODING_API_KEY",
+      "GOOGLE_MAPS_JAVASCRIPT_API_KEY",
+      "GOOGLE_MAP_TILES_API_KEY",
+      "GOOGLE_PLACES_AGGREGATE_API_KEY",
+      "GOOGLE_PLACES_API_KEY",
+      "GOOGLE_SHEETS_CLIENT_EMAIL",
+      "GOOGLE_SHEETS_PRIVATE_KEY",
+      "GOOGLE_SHEETS_SPREADSHEET_ID",
+      "GOOGLE_STREET_VIEW_STATIC_API_KEY",
+      "GOOGLE_WEATHER_API_KEY",
+      "HELD_VENDOR_EMAIL_CANARY_ENABLED",
+      "HELD_VENDOR_EMAIL_CATEGORY_ALLOWLIST",
+      "HELD_VENDOR_EMAIL_PROVIDER",
+      "HELD_VENDOR_EMAIL_REPLY_MODE",
+      "HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST",
+      "JOYSTICK_DRIVER_PUBLIC_ACCESS",
+      "JWT_SECRET",
+      "JWT_SHARED_SECRET",
+      "NODE_ENV",
+      "OAUTH_SERVER_URL",
+      "OPENAI_API_KEY",
+      "OPENAI_CAPABILITY_AGENT_ID",
+      "OPENAI_CAPABILITY_ENV_TEMPLATE_ID",
+      "OWNER_OPEN_ID",
+      "PORT",
+      "POSTHOG_HOST",
+      "POSTHOG_PROJECT_TOKEN",
+      "PRESIDENT_AGENT_CALLBACK_TOKENS_JSON",
+      "PRESIDENT_AGENT_TARGETS_JSON",
+      "PRESIDENT_CALLBACK_BASE_URL",
+      "PRESIDENT_DATABASE_URL",
+      "PRESIDENT_EXECUTION_ENABLED",
+      "PRESIDENT_EXECUTION_MODE",
+      "PRESIDENT_TRANSPORT_CALLBACK_TOKEN",
+      "PRESIDENT_TRANSPORT_WAKE_TOKEN",
+      "SPIRIT_HUMAN_SMS_FROM_NUMBER",
+      "SPIRIT_HUMAN_SMS_TENANT_ID",
+      "STRIPE_SECRET_KEY",
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_FROM_NUMBER",
+      "XAI_API_KEY"
+    ],
+    "volumes": [],
+    "domains": {
+      "serviceDomains": [
+        {
+          "id": "8d9ce38d-db5f-498d-9972-ab891ff80bd3",
+          "domain": "bldg-admin-api-production.up.railway.app",
+          "targetPort": null
+        }
+      ],
+      "customDomains": [
+        {
+          "id": "a076b044-2b04-43c4-8f25-ef078c975232",
+          "domain": "admin.bldg.chat",
+          "targetPort": null
+        },
+        {
+          "id": "a46ea097-8ec8-4dd5-b56c-351674297cd5",
+          "domain": "driver.bldg.chat",
+          "targetPort": null
+        }
+      ]
+    },
+    "tcpProxies": [],
+    "latestDeployment": {
+      "id": "8197936f-fae1-40d3-8501-1a22de6356ea",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-13T15:15:32.524Z",
+      "url": null
+    },
+    "tracing": {
+      "tracingEnabled": false,
+      "autoInstrumentationEnabled": false,
+      "autoInstrumentationActive": false
+    }
+  },
+  "flagValues": "unknown: OAuth redacted; CLI targeted variable request unauthorized",
+  "outboundRolloutAuthorized": false,
+  "deployments": [
+    {
+      "id": "8197936f-fae1-40d3-8501-1a22de6356ea",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-13T15:15:32.524Z",
+      "updatedAt": "2026-10-13T15:32:29.049Z",
+      "serviceId": "9d63863a-2626-47a0-bd65-c3ba8db54258",
+      "environmentId": "330bff45-7d21-4cdf-be04-b38cea76fcfb",
+      "url": null,
+      "snapshotId": "56dc1a1b-74eb-4b50-9aca-08fe54f9dc18",
+      "canRollback": true,
+      "canRedeploy": true,
+      "regions": [
+        "us-west2"
+      ],
+      "meta": {
+        "reason": "deploy",
+        "commitMessage": "Merge pull request #574 from adamwright83-blip/codex/claire-daphne-integration\n\n[WIP Draft] feat(convergence): complete Claire + Daphne Phase 2 integration (#565)",
+        "commitHash": "b2a8bc9adcf71183989343b4b8dfc06f543b2af3",
+        "branch": "main"
+      }
+    },
+    {
+      "id": "2af5f3e4-2612-485a-9572-e70a6c831b30",
+      "status": "REMOVED",
+      "createdAt": "2026-10-12T18:01:42.585Z",
+      "updatedAt": "2026-10-13T15:32:44.258Z",
+      "serviceId": "9d63863a-2626-47a0-bd65-c3ba8db54258",
+      "environmentId": "330bff45-7d21-4cdf-be04-b38cea76fcfb",
+      "url": null,
+      "snapshotId": "a58d3bb2-8a35-469a-8bda-e0573f12269e",
+      "canRollback": true,
+      "canRedeploy": true,
+      "regions": [
+        "us-west2"
+      ],
+      "meta": {
+        "reason": "deploy",
+        "commitMessage": "Add reviewed CleanCloud intake from Goldline (#561)\n\n* Add reviewed CleanCloud intake pilot through Goldline\n\n* Omit absent worker RPC arguments at Chrome scripting boundary\n\n* Use portable Playwright screenshot output for intake proof\n\n* Pass Playwright test context to portable screenshot capture\n\n* Preserve historical date picker text and gate worker serialization",
+        "commitHash": "870defd95a2381594c2ada6a292895ae5310a83d",
+        "branch": "main"
+      }
+    }
+  ],
+  "workerStartup": [
+    {
+      "timestamp": "2026-10-13T15:32:25.727781366Z",
+      "severity": "info",
+      "message": "[AutonomousWorkers] Initializing autonomous workers (leaseOwner: 0a28fee7-d90b-4d5c-9d60-0425a24a2d18)",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-13T15:32:25.735506590Z",
+      "severity": "info",
+      "message": "[AutonomousWorkers] Persistent Growth Operator heartbeat started successfully.",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    }
+  ]
+}

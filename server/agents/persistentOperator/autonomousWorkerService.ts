@@ -37,7 +37,10 @@ import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
 import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
 import { resolveCanonicalOperatorIdentity } from "./identity";
-import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
+import { scheduleAuthorizedStrategicCall } from "./strategicCallAuthorization";
+import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
+import { resolveTenantVerticalKey } from "../../strategy/marketContext";
+import { ensureSundayPlanningAppointment, resolveOperatorTimeZone } from "./operatorAppointmentPolicy";
 
 export type AutonomousWorkerOptions = {
   enabled?: boolean;
@@ -84,6 +87,13 @@ export async function ensureAutonomousGoalBootstrap(input: {
       });
       if (!resolution.ok) continue;
 
+      // Preparation succeeds independently of outbound permission or reader support.
+      const timeZone = await resolveOperatorTimeZone(goal.tenantId);
+      if (!timeZone) continue;
+      await prepareStrategicProposal({ identity: resolution.identity, timeZone }).then(proposal => scheduleAuthorizedStrategicCall({ identity: resolution.identity, timeZone, proposalId: proposal.id, store: input.appointmentStore })).catch(error => {
+        console.warn("[AutonomousWorkers] Strategy preparation failed", { tenantId: goal.tenantId, reason: error instanceof Error ? error.message : String(error) });
+      });
+
       // Check if an active macro_goal_run exists
       const [existingRun] = await db
         .select()
@@ -100,9 +110,10 @@ export async function ensureAutonomousGoalBootstrap(input: {
       let targetRunId = existingRun?.id;
 
       if (!targetRunId) {
-        const template = registry.list()[0];
-        if (!template) continue;
-        const verticalKey = template.verticalKey;
+        const verticalKey = await resolveTenantVerticalKey(goal.tenantId);
+        let template;
+        try { template = registry.get(verticalKey); } catch { continue; }
+        if (!template.metricCatalog.some(metric => metric.metricKey === goal.metricKey)) continue;
         const activated = await activateCurrentMacroGoalRun({
           tenantId: goal.tenantId,
           identity: resolution.identity,
@@ -451,6 +462,15 @@ export function startAutonomousPersistentOperatorWorkers(
         runId: input.runId,
         registry: defaultVerticalRegistry,
       });
+      if (evaluation.run.status === "active") {
+        const resolved = await resolveCanonicalOperatorIdentity({ tenantId: input.tenantId, source: { type: "open_id", value: evaluation.run.operatorUserId }, subsystem: "autonomous_strategy_preparation" });
+        const timeZone = await resolveOperatorTimeZone(input.tenantId);
+        if (!resolved.ok || !timeZone) throw new Error("Autonomous strategy identity/timezone unavailable");
+        const proposal = await prepareStrategicProposal({ identity: resolved.identity, timeZone });
+        await scheduleAuthorizedStrategicCall({ identity: resolved.identity, timeZone, proposalId: proposal.id, store: operatorAppointmentStore }).catch(error => {
+          console.warn("[AutonomousWorkers] Prepared proposal remains available; call scheduling unavailable", error instanceof Error ? error.message : String(error));
+        });
+      }
       const decision = await decideGoalCycle({
         tenantId: input.tenantId,
         runId: input.runId,

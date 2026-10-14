@@ -3205,6 +3205,7 @@ export const legacyDayforgeSaasTenants = mysqlTable(
     ])
       .notNull()
       .default("provisioning"),
+    strategyVerticalKey: varchar("strategyVerticalKey", { length: 64 }),
     onboardingStep: varchar("onboardingStep", { length: 64 })
       .notNull()
       .default("business"),
@@ -8505,6 +8506,7 @@ export const tenantStandingAuthorizations = mysqlTable(
     recipientClass: varchar("recipientClass", { length: 64 }).notNull(),
     exactAction: varchar("exactAction", { length: 128 }).notNull(),
     dailyLimit: int("dailyLimit").notNull().default(1),
+    allowedWeekdaysJson: json("allowedWeekdaysJson"),
     allowedLocalStart: varchar("allowedLocalStart", { length: 5 }),
     allowedLocalEnd: varchar("allowedLocalEnd", { length: 5 }),
     timeZone: varchar("timeZone", { length: 64 }).notNull(),
@@ -8543,6 +8545,7 @@ export const operatorAppointments = mysqlTable(
     appointmentKind: mysqlEnum("appointmentKind", [
       "sunday_weekly_planning",
       "weekly_planning_callback",
+      "weekday_strategic_planning",
     ]).notNull(),
     weekStart: varchar("weekStart", { length: 10 }).notNull(),
     scheduledFor: timestamp("scheduledFor", { fsp: 3 }).notNull(),
@@ -10195,3 +10198,30 @@ export const presidentCandidateProjects = mysqlTable(
     ),
   })
 );
+
+/** Immutable strategic diagnosis/proposal revisions. They carry no execution authority. */
+export const strategicDiagnoses = mysqlTable("strategic_diagnoses", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+  businessDate: varchar("businessDate", { length: 10 }).notNull(),
+  payloadJson: json("payloadJson").notNull(),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow().notNull(),
+}, t => ({ lookup: index("idx_strategic_diagnosis_owner").on(t.tenantId, t.canonicalOperatorId, t.businessDate, t.createdAt) }));
+export const strategicPlanningProposals = mysqlTable("strategic_planning_proposals", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+  weekStart: varchar("weekStart", { length: 10 }).notNull(),
+  revision: varchar("revision", { length: 64 }).notNull(),
+  payloadJson: json("payloadJson").notNull(),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow().notNull(),
+}, t => ({ lookup: index("idx_strategic_proposal_owner").on(t.tenantId, t.canonicalOperatorId, t.weekStart, t.createdAt) }));
+export const strategicProposalResponses = mysqlTable("strategic_proposal_responses", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  proposalId: varchar("proposalId", { length: 64 }).notNull(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+  responseJson: json("responseJson").notNull(),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow().notNull(),
+}, t => ({ lookup: index("idx_strategic_response_proposal").on(t.tenantId, t.proposalId) }));

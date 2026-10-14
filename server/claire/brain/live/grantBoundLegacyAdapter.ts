@@ -1,3 +1,4 @@
+import { isClaireRoleFeedback } from "../../../../shared/claireRoleFeedback";
 import type { ExecutiveActionGrant } from "../contracts/grants";
 import type { ClaireTurnResult, ClaireTurnState } from "../../turn/claireTurn";
 import {
@@ -149,12 +150,12 @@ export async function executeGrantBoundLegacyAdapter(input: {
   surface: "voice" | "text";
   now?: Date;
 }): Promise<ClaireTurnResult> {
+  if (isClaireRoleFeedback(input.grant.sourceTurnAssembledText)) throw new Error("Claire role feedback cannot authorize Day Line mutation");
   const now = input.now ?? new Date();
   const clock = briefingClock(now, input.timeZone);
 
   if (input.grant.actionClass === "commit_briefing") {
     if (
-      input.grant.scope.identity &&
       input.grant.scope.identity !== "pending-briefing"
     ) {
       throw new Error("Brain V2 briefing grant does not match pending briefing authority");

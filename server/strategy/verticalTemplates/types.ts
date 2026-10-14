@@ -43,6 +43,16 @@ export type VerticalTemplate = {
   executionIntelligenceDoctrineFamilies: readonly string[];
   expectedSourceCapabilities: readonly string[];
   presentationDefaults: VerticalPresentationDefaults;
+  strategicIntelligence?: {
+    version: string;
+    metrics: readonly string[];
+    revenueDrivers: readonly string[];
+    economics: readonly string[];
+    operatingConstraints: readonly string[];
+    customerBehavior: readonly string[];
+    researchRequirements: readonly string[];
+    limitations: readonly string[];
+  };
 
   /**
    * Compatibility-only StrategyEngine vocabulary. It is not an authoritative

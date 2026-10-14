@@ -349,6 +349,8 @@ const SAAS_CUSTOMER_SAFE_PATHS = [
 
 function isSaasCustomerSafePath(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "") || "/";
+  // Tenant operators have an authenticated Claire Desk; platform analysis subroutes retain their existing restriction.
+  if (path === "/claire") return true;
   return SAAS_CUSTOMER_SAFE_PATHS.some(prefix =>
     prefix.endsWith("/")
       ? pathname.startsWith(prefix)
@@ -357,6 +359,7 @@ function isSaasCustomerSafePath(pathname: string): boolean {
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
+  "/claire",
   "/president",
   "/war-room",
   "/driver/cockpit",

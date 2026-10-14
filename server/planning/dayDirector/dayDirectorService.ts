@@ -352,6 +352,7 @@ export async function acceptProposalWithReceipt(input: {
     detailNote: input.proposal.detailNote ?? null,
     references: readReferences(input.proposal.references),
     command,
+    ...(input.proposal.strategicApproval ? { strategicApproval: input.proposal.strategicApproval } : {}),
     ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
     ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
   };
@@ -374,6 +375,12 @@ export async function acceptProposalWithReceipt(input: {
 
   const existing = existingRows[0];
   if (existing) {
+    if (input.proposal.strategicApproval) {
+      const approval = (existing.metadataJson as { strategicApproval?: { proposalId?: string; revision?: string; itemId?: string } } | null)?.strategicApproval;
+      if (approval?.proposalId !== input.proposal.strategicApproval.proposalId || approval.revision !== input.proposal.strategicApproval.revision || approval.itemId !== input.proposal.strategicApproval.itemId || existing.title !== input.proposal.title.trim().slice(0, 255) || existing.sourceText !== input.proposal.sourceText) throw new Error("Immutable strategic acceptance mismatch");
+      // A retry must preserve the first stored approval lineage and lifecycle.
+      return { stored: existing, created: false };
+    }
     await db
       .update(dayDirectorCommitments)
       .set({

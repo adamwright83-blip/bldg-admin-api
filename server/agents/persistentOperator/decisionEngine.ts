@@ -18,7 +18,7 @@ import { classifyObjectiveExecution, type ObjectiveExecutionType } from "../../.
 import { businessToday } from "../../analytics/businessPeriods";
 import { getDb } from "../../db";
 import { selectExecutionIntelligence } from "../../executionIntelligence/selectExecutionIntelligence";
-import { getLatestPlan } from "../../planning/missionDirector/missionDirectorService";
+import { planForDate } from "../../planning/missionDirector/missionDirectorService";
 import type { MissionDirectorPlan } from "../../../shared/missionDirector";
 import type { VerticalRegistry } from "../../strategy/verticalTemplates/registry";
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
@@ -518,11 +518,17 @@ export async function decideGoalCycle(input: {
   let plan: MissionDirectorPlan | null = null;
   let missionDirectorCoverage: unknown = { status: "available", plan: false };
   try {
-    plan = await getLatestPlan({
+    // Mission Director refreshes its append-only plan before selection. Its
+    // only execution side effect projects previously operator-approved rules.
+    // Day Director IDs and conversation open IDs are different identity spaces.
+    plan = await planForDate({
       tenantId: input.tenantId,
-      operatorId: identity.identity.weeklyOperatorId,
-      operatorIds,
+      operatorId: identity.identity.dayDirectorActorId,
+      operatorIds: identity.identity.dayDirectorActorIds,
+      operatorUserId: identity.identity.canonicalOpenId,
+      operatorUserIds: operatorIds,
       businessDate: today,
+      timeZone,
     });
     missionDirectorCoverage = { status: "available", plan: plan !== null };
   } catch (error) {

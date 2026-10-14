@@ -50,6 +50,10 @@ export type DayDirectorProposal = {
   command?: DayDirectorCommandMetadata;
   operatorMission?: OperatorMissionMetadata | null;
   executionType?: ObjectiveExecutionType | null;
+  strategicApproval?: {
+    proposalId: string; revision: string; itemId: string; responseId: string;
+    canonicalOperatorId: string; approvedByUserId: string;
+  };
   recurrence?: {
     weekday: string;
     windowStart: string | null;

@@ -50,7 +50,7 @@ function sampleObjective(
 describe("Persistent Growth Objective Store (Slice H)", () => {
   describe("projectToGoldlineObjective", () => {
     it("projects a field mission objective into a Goldline adventure commercial_visit", () => {
-      const obj = sampleObjective({ executionType: "mission" });
+      const obj = sampleObjective({ executionType: "mission", status: "accepted" });
       const projected = projectToGoldlineObjective(obj);
 
       expect(projected.id).toBe(obj.id);
@@ -85,6 +85,13 @@ describe("Persistent Growth Objective Store (Slice H)", () => {
       const inProgress = sampleObjective({ status: "in_progress" });
       expect(projectToGoldlineObjective(inProgress).status).toBe("ready");
     });
+  });
+
+  it("never promotes presented or terminal objectives to executable adventure work", () => {
+    for (const status of ["presented", "failed", "cancelled", "action_attempted", "action_executed"] as const) {
+      expect(projectToGoldlineObjective(sampleObjective({ status })).status).toBe("blocked");
+    }
+    expect(projectToGoldlineObjective(sampleObjective()).authority).toBe("derived_recommendation");
   });
 
   describe("projectToRankedDayWork", () => {

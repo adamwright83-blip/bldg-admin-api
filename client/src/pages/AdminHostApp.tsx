@@ -167,20 +167,21 @@ export default function AdminHostApp() {
   const debouncedCustomerQuery = useDebounce(customerSearchQuery, 300);
   const searchOrders = trpc.admin.searchOrdersForReceipt.useQuery(
     { q: debouncedCustomerQuery },
-    { enabled: debouncedCustomerQuery.length >= 2 && isAuthenticated }
+    { enabled: debouncedCustomerQuery.length >= 2 && isAuthenticated && user?.role === "admin" }
   );
+  const platformAdmin = isAuthenticated && user?.role === "admin";
   const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(
     undefined,
     {
-      enabled: isAuthenticated,
+      enabled: platformAdmin,
     }
   );
   const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: platformAdmin,
   });
   const sandboxCapability = trpc.system.towerWars.sandboxCapability.useQuery(
     undefined,
-    { enabled: isAuthenticated, retry: false }
+    { enabled: platformAdmin, retry: false }
   );
 
   useEffect(() => {

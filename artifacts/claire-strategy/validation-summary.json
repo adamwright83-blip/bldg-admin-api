@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-13",
+  "branch": "codex/claire-strategic-production",
+  "testedCodeHead": "8ff62f3563cad91804daef518b9cc439487d7060",
+  "base": "b2a8bc9adcf71183989343b4b8dfc06f543b2af3",
+  "typecheck": "passed",
+  "build": "passed",
+  "focusedRegression": {
+    "files": 82,
+    "passed": 900,
+    "skipped": 1,
+    "skipReason": "Real MySQL journey run separately"
+  },
+  "persistentOperator": {
+    "files": 31,
+    "passed": 223,
+    "overlapWithFocused": 6
+  },
+  "finalRouting": {
+    "files": 5,
+    "passed": 78,
+    "overlapsOtherRuns": true
+  },
+  "realMySQLControlledVoice": {
+    "files": 1,
+    "passed": 1,
+    "transport": "controlled; no real outbound call"
+  },
+  "productionBootMigrations": "passed including repeated idempotent boot",
+  "strategicScenarios": {
+    "count": 14,
+    "deterministicFailures": [],
+    "fixtureOnly": true,
+    "humanReview": "pending",
+    "certified": false
+  },
+  "authenticatedBrowserAcceptance": "unperformed",
+  "liveModelJudgment": "unperformed",
+  "livePhoneAcceptance": "unperformed",
+  "candidateDeployment": "unperformed",
+  "domainPortFollowup": {
+    "files": 14,
+    "passed": 121,
+    "overlapsOtherRuns": true
+  },
+  "numberedReleaseReplay": "passed on fresh MySQL and repeated from 0128",
+  "unchangedVisitRouteConsumer": {
+    "files": 1,
+    "passed": 1,
+    "realMySQL": true
+  },
+  "architectureGuards": "nomenclature, tenant-default, vertical, domain-boundary passed; boundary self-tests 11 passed"
+}

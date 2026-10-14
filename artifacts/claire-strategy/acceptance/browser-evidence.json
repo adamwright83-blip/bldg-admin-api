@@ -1,0 +1,70 @@
+{
+  "testOnly": true,
+  "authentication": "real password endpoint + HTTP-only cookie + persisted membership; no API mocks",
+  "providerCalls": 0,
+  "evidence": [
+    {
+      "boundary": "actual preparation",
+      "proposalId": "proposal_653b8b84556a7b912dff1bdb0cff4578871dae9c",
+      "diagnosisId": "diagnosis_b65a52535ec71e42daa7dae02c2414f6ad8a646d",
+      "itemCount": 1,
+      "quality": {
+        "reasons": [
+          "Independent model judgment is unavailable; strategic-quality certification remains incomplete."
+        ],
+        "judgment": "unavailable",
+        "structuralErrors": []
+      }
+    },
+    {
+      "boundary": "selected approval -> actual Day Line",
+      "proposalId": "proposal_d7dc38190300db11f46ab61f2606cf9c35842bbe",
+      "canonicalId": "a248aa76-3e93-4110-a4c9-20ec534ffc26",
+      "approvedItemIds": [
+        "browser-2-d7dc38190300"
+      ]
+    },
+    {
+      "boundary": "full approval",
+      "proposalId": "proposal_6e2fbc0c470329fed9fa3462853e83a797c4eef0"
+    },
+    {
+      "boundary": "single item revision",
+      "originalId": "proposal_9812946590d4a7b0f8ea72da1cff0bb74df81132",
+      "revisedId": "proposal_018bf106e80fab9ae2fabaf6096dadd0df14d754"
+    },
+    {
+      "boundary": "Reject",
+      "proposalId": "proposal_a1f2052dd27dc9cb8cb3e34ac345864395f1703a"
+    },
+    {
+      "boundary": "Defer",
+      "proposalId": "proposal_206b03833e3ab66309a6faa0e2cecc3f6dfd835f"
+    },
+    {
+      "boundary": "expired client/server and refresh",
+      "expiredId": "proposal_248c1e2e3f49b5814345d4b4b1c023fefdb27505",
+      "newId": "proposal_6ad6b5e906d7da8afb27f54d9ac644f3e35fd4a6"
+    },
+    {
+      "boundary": "stale browser mutation denied",
+      "oldId": "proposal_eafa411e9ff0eb8cdd207a93b42cc44068aaecbf",
+      "newId": "proposal_92fb6adf3013a45461768f90b291ce93ef374f1d",
+      "canonicalWrites": 0
+    },
+    {
+      "boundary": "saved consent after reload and revoke",
+      "days": [
+        2
+      ],
+      "start": "10:00",
+      "end": "11:00",
+      "zone": "America/Los_Angeles",
+      "revoked": true
+    },
+    {
+      "boundary": "foreign authenticated owner cannot approve another tenant proposal",
+      "denied": true
+    }
+  ]
+}

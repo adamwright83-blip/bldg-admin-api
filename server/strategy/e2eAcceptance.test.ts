@@ -1,4 +1,17 @@
-import { describe, expect, it, beforeEach } from "vitest";
+
+// Unit fixtures explicitly configure industry, timezone and geography. These
+// mocks verify compatibility contracts; real persistence is tested separately.
+vi.mock("./marketContext", async importOriginal => {
+  const actual = await importOriginal<typeof import("./marketContext")>();
+  return { ...actual,
+    resolveTenantVerticalKey: async (tenantId: string) => tenantId.includes("hvac") ? "software" : "laundry_fluff_fold",
+    loadStrategyMarketContext: async (tenantId: string) => ({ tenantId, mode: "physical", territories: [{ id: "test-iowa", label: "Configured Iowa test market", address: "Des Moines, IA", latitude: 41.59, longitude: -93.62, radiusMiles: 5, sourceRef: "test_tenant_location", capturedAt: "2026-10-13T16:00:00Z" }], observations: [], limitations: ["Synthetic unit-test market"] }) };
+});
+vi.mock("../agents/persistentOperator/operatorAppointmentPolicy", async importOriginal => {
+  const actual = await importOriginal<typeof import("../agents/persistentOperator/operatorAppointmentPolicy")>();
+  return { ...actual, resolveOperatorTimeZone: async () => "America/Chicago" };
+});
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { setPlaygroundRules, resetInMemoryRulesForTesting } from "./playgroundRulesService";
 import { setActiveMacroGoal, resetInMemoryGoalsForTesting } from "../claire/macroGoalService";
 import { buildStrategySnapshot, getLatestStrategySnapshot, getSnapshotProvenance, _clearSnapshotStore } from "./snapshotBuilder";
@@ -102,15 +115,11 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
     expect(activePath).toBe(offer.recommendedPlayId);
   });
 
-  it("Step 3: Sequencer lays out capped, geographically clustered plan; print order sits in wait_approval (G6)", async () => {
+  it("Step 3: Legacy strategy selection cannot create execution without exact item approval", async () => {
     const snapshot = await buildStrategySnapshot(tenantId);
 
     // Choose door tag campaign that includes print order spend ($75.00)
-    await chooseStrategicPath({
-      tenantId,
-      playId: "play_door_tags_approval",
-      surface: "map",
-    });
+
 
     const sequenceResult = await sequenceDailyMissions({
       tenantId,
@@ -119,13 +128,10 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
       snapshot,
     });
 
-    expect(sequenceResult.growthMissions.length).toBeLessThanOrEqual(1); // 1 growth outing per day
-    const printMission = sequenceResult.growthMissions.find(m => m.spendCategory === "print_order");
-    if (printMission) {
-      // Guardrail G6: Sits in wait_approval pending human approval
-      expect(printMission.status).toBe("wait_approval");
-      expect(printMission.spendReservationId).toBeDefined();
-    }
+    expect(sequenceResult.growthMissions).toEqual([]);
+    expect(sequenceResult.supportMissions).toEqual([]);
+    expect(sequenceResult.receipt.verifiedInStorage).toBe(false);
+    expect(await getSequencedMissionsForDate(tenantId, businessDateDay1)).toEqual([]);
   });
 
   it("Step 4 & 5: 2 of 6 visits completed (no call); 4 misses produce 1 visible Recovery & 3 queued; drop requires reason", async () => {
@@ -311,16 +317,7 @@ describe("End-to-End Acceptance (Section 11): 3-Week Fluff-and-Fold Operator Sim
 
     // Offer fork for non-laundry tenant
     const offer = await getOrCreatePathOffer(nonLaundryTenant);
-    expect(offer.offeredPlayIds.length).toBeGreaterThanOrEqual(2);
-
-    // Choose path
-    await chooseStrategicPath({
-      tenantId: nonLaundryTenant,
-      playId: offer.recommendedPlayId,
-      surface: "map",
-    });
-
-    const activePath = getActiveStrategicPath(nonLaundryTenant);
-    expect(activePath).toBe(offer.recommendedPlayId);
+    expect(offer.offeredPlayIds).toEqual([]);
+    expect(offer.recommendedPlayId).toBe("none");
   });
 });

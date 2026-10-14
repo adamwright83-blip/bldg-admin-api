@@ -32,7 +32,8 @@ export type PersistentOperatorActionSource =
       appointmentId: string;
       appointmentKind:
         | "sunday_weekly_planning"
-        | "weekly_planning_callback";
+        | "weekly_planning_callback"
+        | "weekday_strategic_planning";
       standingAuthorizationId: string | null;
     };
 

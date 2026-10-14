@@ -42,7 +42,7 @@ import type {
 export const ACCOUNTS_STATE_UNMAPPED_ISSUE =
   "accounts[].state (Captured|Contested|Closed|Recovery|Wait) has no mapping from commercial_accounts or pipeline stage anywhere in the repo; the accounts list is empty rather than guessed.";
 
-export const SNAPSHOT_SCHEMA_VERSION = 1;
+export const SNAPSHOT_SCHEMA_VERSION = 2;
 export const DEFAULT_TOKEN_BUDGET = 6000;
 
 /** In-memory cache of snapshots for rapid retrieval & isolated test environments */
@@ -86,6 +86,7 @@ export type SnapshotBuildOptions = {
   referenceBusinessDate?: string;
   activeCustomersCount?: number;
   operatorUserId?: string;
+  timeZone?: string;
   /** Injected in tests. Production uses the canonical source-coverage authority. */
   sourceCoverageOverride?: BusinessSourceCoverageSnapshot;
   /** Injected in tests. Production uses loadStrategyCustomerAggregates. */
@@ -118,23 +119,24 @@ export async function buildStrategySnapshot(
 
   // 2. Gather Growth Metrics & Active Customer Trend
   const thirtyDaysAgoYmd = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles",
+    timeZone: options.timeZone ?? "UTC",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(now.getTime() - 30 * 86400000));
   const todayYmd = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles",
+    timeZone: options.timeZone ?? "UTC",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(now);
 
-  const activeCustomerData = await getStrategyActiveCustomers({ tenantId, now });
+  const activeCustomerData = await getStrategyActiveCustomers({ tenantId, now, timeZone: options.timeZone });
   const growthMetrics = await getStrategyGrowthMetrics({
     tenantId,
     period: { startYmd: thirtyDaysAgoYmd, endYmd: todayYmd },
     now,
+    timeZone: options.timeZone,
   });
   const sourceCoverage =
     options.sourceCoverageOverride ??
@@ -258,6 +260,10 @@ export async function buildStrategySnapshot(
     });
   }
   const staleness: Record<string, StalenessRecord> = {};
+  for (const source of ["opportunities", "activation", "capacity", "campaigns", "commitments", "recentOutcomes", "constraints"]) {
+    unresolved.push({ source: `strategySnapshot.${source}`, issue: "No canonical adapter in this snapshot; unobserved, never example data.", severity: "warning" });
+  }
+  if (!macroGoalRecord) unresolved.push({ source: "strategySnapshot.goal", issue: "Operator goal unavailable; zero compatibility target is not an operator goal.", severity: "warning" });
 
   // Strategy does not invent its own CleanCloud clock. The canonical B1 source-
   // coverage contract decides freshness and whether the combined book is current.
@@ -516,7 +522,6 @@ export async function buildStrategySnapshot(
   const truncationDetails: string[] = [];
 
   if (estimatedTokens > budget) {
-    isTruncated = true;
     // Step 1: Truncate low priority arrays deterministically
     if (payload.accounts.length > 2) {
       payload.accounts = payload.accounts.slice(0, 2);
@@ -543,6 +548,7 @@ export async function buildStrategySnapshot(
     }
 
     estimatedTokens = estimateTokenCount(canonicalJsonStringify(payload));
+    isTruncated = truncationDetails.length > 0;
   }
 
   // 18. Compute Content Hash (SHA-256 of canonical payload)
@@ -597,6 +603,7 @@ export async function buildStrategySnapshot(
  */
 export async function getLatestStrategySnapshot(tenantId: string, options: { operatorUserId?: string; now?: Date } = {}): Promise<StrategySnapshot | null> {
   const eligible = (s: StrategySnapshot) =>
+    s.schemaVersion === SNAPSHOT_SCHEMA_VERSION &&
     (!options.operatorUserId || s.payload.goal.operatorUserId === options.operatorUserId) &&
     (!options.now || options.now.getTime() - Date.parse(s.generatedAt) <= 5 * 60_000);
   // Check memory cache first
@@ -615,11 +622,11 @@ export async function getLatestStrategySnapshot(tenantId: string, options: { ope
     const rows = await db
       .select()
       .from(strategySnapshots)
-      .where(eq(strategySnapshots.tenantId, tenantId))
+      .where(and(eq(strategySnapshots.tenantId, tenantId), eq(strategySnapshots.schemaVersion, SNAPSHOT_SCHEMA_VERSION)))
       .orderBy(desc(strategySnapshots.createdAt))
       .limit(10);
 
-    const row = rows.find(r => eligible({ payload: r.payloadJson, generatedAt: r.generatedAt.toISOString() } as StrategySnapshot));
+    const row = rows.find(r => eligible({ schemaVersion: r.schemaVersion, payload: r.payloadJson, generatedAt: r.generatedAt.toISOString() } as StrategySnapshot));
     if (!row) return null;
     const snapshot: StrategySnapshot = {
       id: row.id,

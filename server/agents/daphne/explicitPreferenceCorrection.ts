@@ -1,3 +1,4 @@
+import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { createHash } from "node:crypto";
 import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity";
 import { isDaphneV2ClaireEnabled } from "./claireAdapter";
@@ -51,6 +52,7 @@ export function detectExplicitDaphnePreferenceCorrections(
   }
 
   const out: DaphneExplicitPreferenceCorrection[] = [];
+  if (isClaireRoleFeedback(text)) pushUnique(out, { preferenceKey: "proactive_initiative", value: "high", evidenceText: text });
 
   if (/^(?:I prefer Claire to ask one question at a time|Please ask (?:me )?one question at a time)[.!]?$/i.test(text)) {
     pushUnique(out, { preferenceKey: "question_batch_size", value: 1, evidenceText: text });

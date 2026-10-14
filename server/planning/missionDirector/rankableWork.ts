@@ -151,6 +151,8 @@ function rankOne(input: {
     blockedReasons.push("PREP_NOT_READY");
   }
 
+  // Strategy preparation is a bounded desk investigation, never a field visit.
+  if (candidate.sourceKind === "strategy_diagnosis") execution.executionType = "challenge";
   if (execution.executionType == null) {
     blockedReasons.push("EXECUTION_TYPE_UNKNOWN");
   } else if (execution.executionType === "hybrid_objective") {
@@ -274,6 +276,10 @@ function rankOne(input: {
       input.context.macroGoal ? "high" : "unknown"
     )
   );
+
+  if (candidate.sourceKind === "strategy_diagnosis") {
+    factors.push(factor("evidence_linked_strategy", candidate.observedSignals.find(s => s.label === "strategic_driver")?.value ?? null, candidate.provenance.sourceIds.join(","), 100, "low"));
+  }
 
   factors.push(
     factor(

@@ -4,7 +4,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { missionDirectorPlans, opsTasks } from "../../../drizzle/schema";
+import { missionDirectorPlans, opsTasks, legacyDayforgeSaasTenants } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { getFieldToday } from "../../field/fieldTodayService";
@@ -530,36 +530,28 @@ async function planForDateInner(input: {
     )
   );
   const { outcome, inputFingerprint } = await computeMissionPlan(input);
-  const latest = await getLatestPlan(input);
-  if (latest && latest.inputFingerprint === inputFingerprint) {
-    return latest;
-  }
-  // Reads span the authorized alias group, but revisions are unique per
-  // concrete operatorId. Compute the next revision only from the canonical
-  // write key so an alias-owned revision number cannot collide with an
-  // existing canonical revision.
-  const canonicalLatest = await getLatestPlan({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    businessDate: input.businessDate,
+  // Serialize persistence across API replicas using the authoritative tenant
+  // row. Expensive reads/model work above do not hold the lock.
+  return db.transaction(async tx => {
+    const [tenant] = await tx.select({ id: legacyDayforgeSaasTenants.id }).from(legacyDayforgeSaasTenants)
+      .where(eq(legacyDayforgeSaasTenants.id, input.tenantId)).for("update");
+    if (!tenant) throw new Error("Planning tenant unavailable");
+    const rows = await tx.select().from(missionDirectorPlans).where(and(
+      eq(missionDirectorPlans.tenantId, input.tenantId),
+      inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
+      eq(missionDirectorPlans.businessDate, input.businessDate)
+    )).orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision));
+    const latest = rows[0];
+    if (latest?.inputFingerprint === inputFingerprint) return toRecord(latest);
+    const canonicalRevision = Math.max(0, ...rows.filter(r => r.operatorId === input.operatorId).map(r => r.revision));
+    const id = randomUUID();
+    await tx.insert(missionDirectorPlans).values({ id, tenantId: input.tenantId, operatorId: input.operatorId,
+      businessDate: input.businessDate, stableKey: stableKeyFor(input.tenantId, input.operatorId, input.businessDate),
+      revision: canonicalRevision + 1, inputFingerprint, outcomeJson: outcome, usageOutcome: null, usageReportedAt: null });
+    const [stored] = await tx.select().from(missionDirectorPlans).where(and(eq(missionDirectorPlans.id, id), eq(missionDirectorPlans.tenantId, input.tenantId))).limit(1);
+    if (!stored || stored.inputFingerprint !== inputFingerprint) throw new Error("Mission plan readback mismatch");
+    return toRecord(stored);
   });
-  const revision = (canonicalLatest?.revision ?? 0) + 1;
-  const row = {
-    id: randomUUID(),
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    businessDate: input.businessDate,
-    stableKey: stableKeyFor(input.tenantId, input.operatorId, input.businessDate),
-    revision,
-    inputFingerprint,
-    outcomeJson: outcome,
-    usageOutcome: null,
-    usageReportedAt: null,
-  };
-  await db.insert(missionDirectorPlans).values(row);
-  const stored = await getLatestPlan(input);
-  if (!stored) throw new Error("Mission plan was not persisted");
-  return stored;
 }
 
 export async function recordPlanUsage(input: {

@@ -653,6 +653,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </span>
       </div>
 
+      {artPreview && props.currentDayLine && (
+        <details className="gdp-dayline-disclosure">
+          <summary>DAY LINE DETAILS</summary>
+          <CurrentDayLineBlock line={props.currentDayLine} />
+        </details>
+      )}
       {props.firstMissionEvidence && (
         <section
           className="gdp-load-error"

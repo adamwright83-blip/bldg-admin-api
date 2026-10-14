@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  legacyDayforgeSaasTenants,
   macroGoalRuns,
   type MacroGoalRun as MacroGoalRunRow,
 } from "../../../drizzle/schema";
@@ -197,6 +198,11 @@ const databasePersistence: MacroGoalRunPersistence = {
     if (!db) throw new Error("Database unavailable");
     return db.transaction(
       async tx => {
+        // Serialize activation against the existing tenant, rather than locking
+        // an absent goal range under SERIALIZABLE across unrelated businesses.
+        const [tenant] = await tx.select({id: legacyDayforgeSaasTenants.id})
+          .from(legacyDayforgeSaasTenants).where(eq(legacyDayforgeSaasTenants.id,input.tenantId)).for("update");
+        if (!tenant) throw new Error("Macro goal tenant unavailable");
         const [existing] = await tx
           .select()
           .from(macroGoalRuns)
@@ -261,7 +267,7 @@ const databasePersistence: MacroGoalRunPersistence = {
         if (!saved) throw new Error("Macro goal run insert was not readable");
         return saved;
       },
-      { isolationLevel: "serializable" }
+      { isolationLevel: "read committed" }
     );
   },
 

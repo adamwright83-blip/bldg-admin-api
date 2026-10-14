@@ -7,6 +7,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { getDb } from "../db";
 import { strategyPathOffers, strategyPlays } from "../../drizzle/schema";
+import { loadStrategyMarketContext, resolveTenantVerticalKey, validTerritory } from "./marketContext";
+import type { StrategyMarketContext } from "../../shared/strategicIntelligence";
+import { resolveOperatorTimeZone } from "../agents/persistentOperator/operatorAppointmentPolicy";
 import { defaultVerticalRegistry } from "./verticalTemplates/defaultRegistry";
 import { scoreStrategyPlay, type ScoreBreakdown } from "./decisionPolicy";
 import { buildStrategySnapshot, getLatestStrategySnapshot } from "./snapshotBuilder";
@@ -40,6 +43,8 @@ export type StrategyPlay = {
   provenance: {
     source: string;
     generatedAt: string;
+    geographyVersion?: "tenant-market-v1";
+    geographyRefs?: string[];
   };
   createdAt: string;
 };
@@ -66,18 +71,28 @@ const offerStore = new Map<string, PathOffer>();
  */
 export async function generateCandidatePlays(
   tenantId: string,
-  snapshot: StrategySnapshot
+  snapshot: StrategySnapshot,
+  options: { verticalKey?: string; market?: StrategyMarketContext } = {}
 ): Promise<StrategyPlay[]> {
-  const template = defaultVerticalRegistry.get("laundry_fluff_fold");
+  if (snapshot.tenantId !== tenantId) throw new Error("Strategy snapshot tenant mismatch");
+  const verticalKey = options.verticalKey ?? await resolveTenantVerticalKey(tenantId);
+  let template;
+  try { template = defaultVerticalRegistry.get(verticalKey); } catch { return []; }
   const legacyStrategy = template.legacyStrategy;
-  if (!legacyStrategy) throw new Error("laundry_fluff_fold legacy StrategyEngine scenario is unavailable");
+  if (!legacyStrategy) return [];
+  const market = options.market ?? await loadStrategyMarketContext(tenantId, verticalKey);
+  if (market.tenantId !== tenantId) throw new Error("Strategy market tenant mismatch");
+  const territory = market.territories.find(validTerritory);
   const { payload } = snapshot;
   const nowIso = new Date().toISOString();
 
   const plays: StrategyPlay[] = [];
 
   for (const pt of legacyStrategy.playTemplates) {
-    const playId = `play_${pt.templateKey}_${createHash("sha256").update(tenantId).digest("hex").slice(0, 24)}`;
+    const local = !["dormant_recovery", "first_to_second_order"].includes(pt.templateKey);
+    if (local && !territory) continue;
+    const geography = local ? territory!.label : "tenant_customer_book";
+    const playId = `play_${createHash("sha256").update(JSON.stringify([tenantId, verticalKey, pt.templateKey, geography, local ? territory : null])).digest("hex").slice(0, 40)}`;
     const spendCents = pt.defaultEstimatedSpendCents;
     const isApprovalCategory = payload.playgroundRules.approvalCategories.includes(pt.spendCategory);
     const exceedsBudget = spendCents > payload.playgroundRules.remainingBudgetCents;
@@ -90,9 +105,9 @@ export async function generateCandidatePlays(
         worldName: pt.worldName,
         hypothesis: pt.hypothesis,
         primaryMetric: pt.primaryMetric,
-        geography: pt.geography,
+        geography,
         stopsCount: pt.baseStops,
-        isClustered: pt.isClustered,
+        isClustered: false,
         estimatedInitiationCost: pt.estimatedInitiationCost,
         estimatedSpendCents: spendCents,
         spendCategory: pt.spendCategory,
@@ -108,9 +123,9 @@ export async function generateCandidatePlays(
       worldName: pt.worldName,
       hypothesis: pt.hypothesis,
       primaryMetric: pt.primaryMetric,
-      geography: pt.geography,
+      geography,
       stopsCount: pt.baseStops,
-      isClustered: pt.isClustered,
+      isClustered: false,
       estimatedInitiationCost: pt.estimatedInitiationCost,
       estimatedSpendCents: spendCents,
       spendCategory: pt.spendCategory,
@@ -125,6 +140,8 @@ export async function generateCandidatePlays(
       provenance: {
         source: `verticalTemplate:${template.verticalKey}`,
         generatedAt: nowIso,
+        geographyVersion: "tenant-market-v1",
+        geographyRefs: local ? [territory!.sourceRef] : [],
       },
       createdAt: nowIso,
     };
@@ -147,8 +164,10 @@ export async function getOrCreatePathOffer(
   options: { now?: Date; forceNew?: boolean; operatorUserId?: string } = {}
 ): Promise<PathOffer> {
   const now = options.now ?? new Date();
+  const timeZone = await resolveOperatorTimeZone(tenantId);
+  if (!timeZone) throw new Error("Tenant timezone unavailable");
   const businessDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -175,7 +194,7 @@ export async function getOrCreatePathOffer(
 
   let snapshot = await getLatestStrategySnapshot(tenantId, { operatorUserId: options.operatorUserId, now });
   if (!snapshot) {
-    snapshot = await buildStrategySnapshot(tenantId, { now, operatorUserId: options.operatorUserId });
+    snapshot = await buildStrategySnapshot(tenantId, { now, operatorUserId: options.operatorUserId, timeZone });
   }
 
   const candidates = await generateCandidatePlays(tenantId, snapshot);
@@ -248,12 +267,7 @@ async function persistStrategyPlay(play: StrategyPlay): Promise<void> {
     createdAt: new Date(play.createdAt),
   };
   // Tenant hash IDs prevent one tenant's upsert overwriting another's play.
-  await db.insert(strategyPlays).values(values).onDuplicateKeyUpdate({ set: {
-    businessName: values.businessName, worldName: values.worldName, hypothesis: values.hypothesis,
-    geography: values.geography, scoreBreakdownJson: values.scoreBreakdownJson, totalScore: values.totalScore,
-    estimatedSpendCents: values.estimatedSpendCents, needsApprovalToRun: values.needsApprovalToRun,
-    provenanceJson: values.provenanceJson,
-  } });
+  await db.insert(strategyPlays).values(values).onDuplicateKeyUpdate({ set: { id: play.id } });
 }
 
 /** Durable scoped lookup. The synchronous getter below is a test/cache accessor. */
@@ -305,59 +319,12 @@ export function getStrategyPlayById(playId: string, tenantId?: string): Strategy
     return tenantId && existing.tenantId !== tenantId ? null : existing;
   }
 
-  // Legacy fixtures use implied play IDs. This compatibility fallback must
-  // never be permitted to create tenant-"default" plays in a live product.
-  const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  if (isTest && playId.startsWith("play_")) {
-    const isDoor = playId.includes("door");
-    const isExpensive = playId.includes("expensive");
-    const now = new Date();
-    const fallback: StrategyPlay = {
-      id: playId,
-      tenantId: tenantId ?? "test-fixture",
-      businessName: isDoor ? "Door-Tag Acquisition" : "Luxury Property Expansion",
-      worldName: isDoor ? "The Low Pass" : "The High Gates",
-      hypothesis: isDoor ? "Deploy door tags for local resident acquisition" : "Expand into luxury properties for resident amenity acquisition",
-      primaryMetric: "new_paying_customers",
-      geography: isDoor ? "Hillside Doors" : "Downtown Core",
-      stopsCount: 3,
-      isClustered: true,
-      estimatedInitiationCost: 66,
-      estimatedSpendCents: isExpensive ? 7500 : (isDoor ? 2500 : 0),
-      spendCategory: isDoor ? "print_order" : "paid_growth",
-      confidence: "medium",
-      scoreBreakdown: {
-        policyVersion: "2026.09.1",
-        opportunityAdvancement: 20,
-        urgencyAndSpeed: 15,
-        repeatPotential: 20,
-        capacityFeasibility: 15,
-        initiationEffortPenalty: -20,
-        geographicClusteringBonus: 25,
-        unknownEconomicsScore: 0,
-        avoidancePenalty: 0,
-        totalScore: 75,
-      },
-      totalScore: 75,
-      status: "active",
-      needsApprovalToRun: isExpensive,
-      minimumEvidenceThreshold: {
-        minDays: 14,
-        minVolume: isDoor ? 100 : 6,
-        volumeUnit: isDoor ? "tags" : "stops",
-      },
-      verticalKey: "laundry_fluff_fold",
-      templateKey: isDoor ? "door_tags" : "property_expansion",
-      provenance: {
-        source: "fallback:synthesis",
-        generatedAt: now.toISOString(),
-      },
-      createdAt: now.toISOString(),
-    };
-    playStore.set(playId, fallback);
-    return fallback;
-  }
+
   return null;
+}
+/** Compatibility spelling delegates to the existing durable, tenant-scoped reader. */
+export async function loadStrategyPlayById(tenantId: string, playId: string): Promise<StrategyPlay | null> {
+  return readStrategyPlayById(playId, tenantId);
 }
 
 export function _clearPlayAndOfferStore(): void {

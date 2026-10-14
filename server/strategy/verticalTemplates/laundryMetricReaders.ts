@@ -25,9 +25,9 @@ function coverageQuality(
 }
 
 export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetricObservation> =
-  async ({ tenantId, asOf }) => {
+  async ({ tenantId, asOf, timeZone: configuredTimeZone }) => {
     const now = asOf ?? new Date();
-    const timeZone = getDashboardTimeZone();
+    const timeZone = configuredTimeZone ?? getDashboardTimeZone();
     const [metric, sourceCoverage] = await Promise.all([
       getActiveCustomerMetric({ tenantId, now, timeZone }),
       loadBusinessSourceCoverage({ tenantId, now }),
@@ -71,9 +71,9 @@ export const laundryActiveCustomersMetricReader: MetricReader<AuthoritativeMetri
   };
 
 export const laundryNewPayingCustomersMetricReader: MetricReader<AuthoritativeMetricObservation> =
-  async ({ tenantId, asOf }) => {
+  async ({ tenantId, asOf, timeZone: configuredTimeZone }) => {
     const now = asOf ?? new Date();
-    const timeZone = getDashboardTimeZone();
+    const timeZone = configuredTimeZone ?? getDashboardTimeZone();
     const period = trailingThirtyDayPeriod(now, timeZone);
     const [metrics, sourceCoverage] = await Promise.all([
       getStrategyGrowthMetrics({ tenantId, period, now, timeZone }),
@@ -108,9 +108,9 @@ export const laundryNewPayingCustomersMetricReader: MetricReader<AuthoritativeMe
   };
 
 export const laundryPaidOrdersMetricReader: MetricReader<AuthoritativeMetricObservation> =
-  async ({ tenantId, asOf }) => {
+  async ({ tenantId, asOf, timeZone: configuredTimeZone }) => {
     const now = asOf ?? new Date();
-    const timeZone = getDashboardTimeZone();
+    const timeZone = configuredTimeZone ?? getDashboardTimeZone();
     const period = trailingThirtyDayPeriod(now, timeZone);
     const result = await readCanonicalRevenue({
       tenantId,
@@ -138,9 +138,9 @@ export const laundryPaidOrdersMetricReader: MetricReader<AuthoritativeMetricObse
   };
 
 export const laundryNetSalesMetricReader: MetricReader<AuthoritativeMetricObservation> =
-  async ({ tenantId, asOf }) => {
+  async ({ tenantId, asOf, timeZone: configuredTimeZone }) => {
     const now = asOf ?? new Date();
-    const timeZone = getDashboardTimeZone();
+    const timeZone = configuredTimeZone ?? getDashboardTimeZone();
     const period = trailingThirtyDayPeriod(now, timeZone);
     const result = await readCanonicalRevenue({
       tenantId,

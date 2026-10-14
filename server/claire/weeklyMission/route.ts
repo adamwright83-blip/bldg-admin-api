@@ -1,3 +1,4 @@
+import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
 /**
  * Thin weekly-planning route. One seam for runClaireTurn.
  * An open weekly session is context, not automatic conversational authority.
@@ -25,6 +26,7 @@ import {
   classifyWeeklyTurnWithClaire,
   completeWeeklyActWithClaire,
 } from "./weeklyModel";
+import { routeStrategicProposalTurn } from "./strategicProposalTurn";
 import { interpretTurn } from "../turn/interpretTurn";
 
 export type WeeklyTurnIntent =
@@ -51,6 +53,7 @@ export function arbitrateWeeklyTurnIntent(input: {
   const utterance = input.utterance.trim();
   const session = input.session;
 
+  if (session.draft.pendingRecommendation && parseStrategicProposalControl(utterance)) return "weekly_continue";
   if (isWeeklyCancel(utterance)) return "weekly_cancel";
   if (lockBindApplies(session, utterance)) return "weekly_lock";
   if (parseDayMove(utterance)) return "weekly_continue";
@@ -111,6 +114,7 @@ export type WeeklyRouteResult = {
   mutationReceipts?: MutationReceipt[];
   actionIds?: string[];
   act: WeeklyAct;
+  presentedRecommendation?: { proposalId: string; revision: string };
 };
 
 export async function routeActiveWeeklySession(
@@ -124,6 +128,8 @@ export async function routeActiveWeeklySession(
     now: Date;
     timeZone: string;
     weekStartOverride?: string;
+    expectedStrategicProposalId?: string;
+    expectedStrategicProposalRevision?: string;
     weeklyPlanningSourceReference?: string | null;
     weeklyPlanningAppointmentId?: string | null;
     /**
@@ -145,7 +151,7 @@ export async function routeActiveWeeklySession(
         weekStart: input.weekStartOverride,
       })
     : remainingWeekHorizon({ businessDate, localTime });
-  const session = await loadWeeklySessionForScope({
+  let session = await loadWeeklySessionForScope({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
     operatorIds: input.operatorIds,
@@ -155,6 +161,11 @@ export async function routeActiveWeeklySession(
     now: input.now,
     timeZone: input.timeZone,
   });
+  if (input.expectedStrategicProposalId && (!session ||
+      session.draft.pendingRecommendation?.proposalId !== input.expectedStrategicProposalId ||
+      (input.expectedStrategicProposalRevision && session.draft.pendingRecommendation?.revision !== input.expectedStrategicProposalRevision))) {
+    return { speak: "The prepared revision held by this conversation has changed or closed. Open the current recommendation before deciding. No work was added.", act: "REVISE", actionIds: [] };
+  }
   if (!session) return null;
   if (!["interview", "proposal", "awaiting_confirmation"].includes(session.phase)) return null;
 
@@ -223,6 +234,7 @@ async function routeLoadedSession(
   session: WeeklyPlanningSession,
   intent: WeeklyTurnIntent
 ): Promise<WeeklyRouteResult> {
+  if (session.draft.pendingRecommendation) return routeStrategicProposalTurn({ session, utterance: input.utterance, intent, now: input.now });
   if (
     intent === "weekly_lock" &&
     (session.phase === "proposal" || session.phase === "awaiting_confirmation")

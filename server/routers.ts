@@ -4030,7 +4030,7 @@ export const appRouter = router({
       return listCoordinatedRequests();
     }),
 
-    countNewCoordinatedRequests: protectedProcedure.query(async () => {
+    countNewCoordinatedRequests: legacyAdminRoleProcedure.query(async () => {
       return getNewCoordinatedRequestsCount();
     }),
 
@@ -4065,7 +4065,7 @@ export const appRouter = router({
         return getLeadById(input.id);
       }),
 
-    countUnreadLeads: protectedProcedure.query(async () => {
+    countUnreadLeads: legacyAdminRoleProcedure.query(async () => {
       return getUnreadLeadsCount();
     }),
 

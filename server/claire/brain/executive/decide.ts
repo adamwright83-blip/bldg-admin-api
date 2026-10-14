@@ -373,7 +373,7 @@ export async function decideTurn(
       dayLineCandidate(perceived) &&
       attention.pendingDisposition !== "reject" &&
       attention.pendingDisposition !== "confirm";
-    if (mayPropose) {
+    if (mayPropose && proposedWorkTitle(perceived)?.trim()) {
       control.actionRisk = "proposal_only";
       const titles = proposedWorkTitles(perceived);
       const title = titles[0] ?? proposedWorkTitle(perceived);
@@ -395,13 +395,13 @@ export async function decideTurn(
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
     }
 
-    if (attention.pendingDisposition === "confirm") {
+    if (attention.pendingDisposition === "confirm" && memory.pendingBriefing?.identity === "pending-briefing") {
       // Authority is inherited from the pending item's lifecycle, never manufactured
       // from the word "yes" alone.
       control.actionRisk = "proposal_only";
       const grant = mintActionGrant({
         actionClass: "commit_briefing",
-        scope: { identity: memory.pendingBriefing?.identity ?? memory.pendingProposal?.identity },
+        scope: { identity: memory.pendingBriefing.identity },
         authorityBasis: "pending_lifecycle",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
