@@ -196,7 +196,15 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
     });
     for (const action of ["Reject", "Defer"]) {
       const p = await fixture(action);
+      // "Approve plan" is also disabled while the request is in flight, so wait
+      // for the decision itself to be acknowledged before reading stored state.
+      const decided = page.waitForResponse(
+        r =>
+          r.url().includes("weeklyMission.respondToPreparedProposal") &&
+          r.request().method() === "POST"
+      );
       await panel.getByRole("button", { name: action, exact: true }).click();
+      expect((await decided).ok()).toBe(true);
       await expect(
         panel.getByRole("button", { name: "Approve plan", exact: true })
       ).toBeDisabled();
