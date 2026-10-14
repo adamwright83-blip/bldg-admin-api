@@ -1,3 +1,5 @@
+import { getDashboardTimeZone } from "../dashboardZoned";
+import { resolveRelativeInstruction } from "../../shared/relativeInstruction";
 import { WEEKLY_GROWTH_MOTIONS } from "../../shared/weeklyGrowthCandidates";
 import { formatInTimeZone } from "date-fns-tz";
 import { and, eq, inArray } from "drizzle-orm";
@@ -111,6 +113,7 @@ async function readCommitments(input: {
   tenantId: string;
   dayDirectorActorId: string;
   dayDirectorActorIds?: readonly string[];
+  timeZone?: string;
 }): Promise<WeeklyGrowthRawRecord[]> {
   const db = await getDb();
   if (!db) throw new Error(DATABASE_UNAVAILABLE);
@@ -149,7 +152,11 @@ async function readCommitments(input: {
       origin: "day_director_commitment",
       sourceId: row.id,
       title,
-      objective: row.sourceText?.trim() || title,
+      objective: resolveRelativeInstruction({
+        text: row.sourceText?.trim() || title,
+        referenceAt: row.createdAt,
+        timeZone: input.timeZone ?? getDashboardTimeZone(),
+      }).text,
       status: hidden ? "cancelled" : row.status,
       grounding,
       operationalClass,
@@ -276,13 +283,20 @@ async function readFollowUps(input: {
     records: rows.map(row => {
       const utcDue = row.dueAt.toISOString().slice(0, 10);
       const dueDate = formatInTimeZone(row.dueAt, input.timeZone, "yyyy-MM-dd");
+      // "Email Dana in 3 hours" means 3 hours after it was written, never after this run.
+      const note = resolveRelativeInstruction({
+        text: row.note,
+        referenceAt: row.createdAt,
+        dueAt: row.dueAt,
+        timeZone: input.timeZone,
+      }).text;
       return emptyRawRecord({
         tenantId: row.tenantId,
         operatorUserId: row.assignedTo,
         origin: "commercial_follow_up",
         sourceId: row.id,
-        title: row.note,
-        objective: row.note,
+        title: note,
+        objective: note,
         status: row.status,
         grounding: "commercial_follow_up",
         motionHint: "commercial_follow_up",

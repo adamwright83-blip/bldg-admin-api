@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalJsonStringify } from "./snapshotBuilder";
 import { formatInTimeZone } from "date-fns-tz";
 import {
+  actionableDates,
   remainingWeekHorizon,
   targetWeekHorizon,
   addDaysYmd,
@@ -78,18 +79,20 @@ export async function prepareStrategicProposal(input: {
   await invalidateUnresolvedTemplateGeography(identity.tenantId);
   const businessDate = formatInTimeZone(now, input.timeZone, "yyyy-MM-dd");
   const localTime = formatInTimeZone(now, input.timeZone, "HH:mm");
+  const isoWeekday = Number(formatInTimeZone(now, input.timeZone, "i"));
+  const thisWeek = remainingWeekHorizon({ businessDate, localTime });
+  // Weekends, and a Friday whose execution window has closed, plan next week.
   const horizon = input.weekStart
     ? targetWeekHorizon({ businessDate, localTime, weekStart: input.weekStart })
-    : Number(formatInTimeZone(now, input.timeZone, "i")) >= 6
+    : isoWeekday >= 6 || actionableDates(thisWeek).length === 0
       ? targetWeekHorizon({
           businessDate,
           localTime,
-          weekStart: addDaysYmd(
-            businessDate,
-            8 - Number(formatInTimeZone(now, input.timeZone, "i"))
-          ),
+          weekStart: addDaysYmd(businessDate, 8 - isoWeekday),
         })
-      : remainingWeekHorizon({ businessDate, localTime });
+      : thisWeek;
+  // New work is never dated to a business day whose useful window has closed.
+  const planDates = actionableDates(horizon);
   const diagnosis = await refreshStrategicDiagnosis({
     identity,
     timeZone: input.timeZone,
@@ -107,7 +110,7 @@ export async function prepareStrategicProposal(input: {
     operatorUserIds: operatorIds,
     dayDirectorActorId: identity.dayDirectorActorId,
     dayDirectorActorIds: identity.dayDirectorActorIds,
-    dates: horizon.remainingDates,
+    dates: planDates,
     now,
     timeZone: input.timeZone,
   });
@@ -118,7 +121,7 @@ export async function prepareStrategicProposal(input: {
   // provenance to the diagnosis. Mission Director's ranked work fills later days,
   // so stale unrelated follow-ups cannot displace the current strategic priority.
   const selectedAction = diagnosis.actions[0];
-  const strategyDate = horizon.remainingDates[0];
+  const strategyDate = planDates[0];
   const strategyItem =
     selectedAction && strategyDate && !diagnosis.quality.structuralErrors.length
       ? {
@@ -138,7 +141,7 @@ export async function prepareStrategicProposal(input: {
     items.push(strategyItem);
     seen.add(strategyItem.candidateId);
   }
-  for (const date of horizon.remainingDates) {
+  for (const date of planDates) {
     if (strategyItem && date === strategyItem.businessDate) continue;
     const plan = await planForDate({
       tenantId: identity.tenantId,

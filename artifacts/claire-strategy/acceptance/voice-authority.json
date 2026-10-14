@@ -2,208 +2,208 @@
   "testOnly": true,
   "providerCalls": 0,
   "voice": "production authoritative routing; providers unavailable; durable synthetic conversation fixtures",
-  "tenantId": "claire-strategy-4aa2f6cd20",
+  "tenantId": "claire-strategy-6900507533",
   "controls": [
     {
       "utterance": "Why did you recommend this?",
-      "proposalId": "proposal_35587b103b5ad609318555ab05abb0d654118ce6",
-      "revision": "35587b103b5ad609318555ab05abb0d654118ce6e8992bd87e715f226c7a3ac6",
+      "proposalId": "proposal_2988f45508b903ab412e8b9ff5b8e38225ac17ad",
+      "revision": "2988f45508b903ab412e8b9ff5b8e38225ac17ad13e4576a513a35117142a815",
       "speech": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step. So I'd start with this: audit missing business drivers and customer evidence, because tests the central uncertainty with limited commitment. Resolves the central uncertainty; no direct sales effect is claimed. I didn't lead with observe the next reporting period before making a growth bet because kept as an alternative; validate economics and mechanism before selection. Causal effect remains unproven.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "What numbers are you basing that on?",
-      "proposalId": "proposal_fa2d11c545d3693b7abb37afca702fee5b0657ae",
-      "revision": "fa2d11c545d3693b7abb37afca702fee5b0657aefa040ede9c7d624d4ae96067",
+      "proposalId": "proposal_57a150d5f4835396855443d64d35fd83a300d714",
+      "revision": "57a150d5f4835396855443d64d35fd83a300d7144138de0df1f323a5067441d1",
       "speech": "Recorded sales last 30 days $0.00 vs $0.00 the prior 30 (no prior base). Paid orders 0 vs 0. Month-to-date $0.00 vs $0.00 at the same point last month. 0 new and 0 returning customers in the last 30 days. 0 dormant customers are recovery candidates. That rests on: Operator-declared goal, not measured performance (Reach 100 paid orders while validating contribution economics); Progress toward the operator's stated goal (0); Admitted paid orders in the trailing 30-day period; whole-book exactness requires source coverage (0); Recorded sales, not contribution profit; whole-book exactness requires source coverage ($0.00); Admitted paid orders in the 30 days before the current trailing period (0); Recorded sales in the 30 days before the current trailing period; not profit ($0.00); Recorded sales month-to-date ($0.00); Recorded sales for the same days of the prior month ($0.00). Causal effect remains unproven.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "Only add the second one.",
-      "proposalId": "proposal_2fdaf723827fdcd2448104f77eadb5ff7e2c4e55",
-      "revision": "2fdaf723827fdcd2448104f77eadb5ff7e2c4e55990cd7e3ce67e35046ef0fc3",
+      "proposalId": "proposal_68438ab6e53dfe893a60e03e1985240b63fc44a9",
+      "revision": "68438ab6e53dfe893a60e03e1985240b63fc44a942b8270e2fb565e84977ade6",
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: Only add the second one..",
       "decisions": [
         {
-          "id": "response_2ddfc27e7015a60d379ccec270173735e44f2a25",
+          "id": "response_381db26bbcd9313b306a8fbbfdc381c202474653",
           "note": null,
           "action": "approve",
           "source": "authenticated_voice",
           "itemIds": [
-            "release-2-2fdaf723827f"
+            "release-2-68438ab6e53d"
           ],
-          "revision": "2fdaf723827fdcd2448104f77eadb5ff7e2c4e55990cd7e3ce67e35046ef0fc3",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_2fdaf723827fdcd2448104f77eadb5ff7e2c4e55",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "68438ab6e53dfe893a60e03e1985240b63fc44a942b8270e2fb565e84977ade6",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_68438ab6e53dfe893a60e03e1985240b63fc44a9",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": [
-        "1d18e851-3d80-481d-8d58-9d43b506ee81"
+        "2183ff5b-d980-4ad1-aca9-6fdfad046dc6"
       ]
     },
     {
       "utterance": "Actually, move that mission to Thursday.",
-      "proposalId": "proposal_bbcd7d9552eeb309d5d0326ad8707d3ce2a5460d",
-      "revision": "bbcd7d9552eeb309d5d0326ad8707d3ce2a5460dd91c630d0c6982dfe43972ab",
-      "speech": "Revised pending proposal: 2026-10-13: Release fixture item 1: Actually, move that mission to Thursday.; 2026-10-15: The explicitly referenced second mission. Approve selected items, revise, reject, or defer.",
+      "proposalId": "proposal_d7bfffc73aec7ce0d3133063e736521c9cd88dd6",
+      "revision": "d7bfffc73aec7ce0d3133063e736521c9cd88dd6f3766965fcf52288359774e2",
+      "speech": "Revised pending proposal: 2026-10-14: Release fixture item 1: Actually, move that mission to Thursday.; 2026-10-15: The explicitly referenced second mission. Approve selected items, revise, reject, or defer.",
       "decisions": [
         {
-          "id": "response_0bf2dc9766a777f8734da1caab2ee99b71ea6a42",
+          "id": "response_de9d738531fc0ec10b2e2770e761375d1795deb1",
           "note": "The explicitly referenced second mission",
           "action": "revise",
           "source": "authenticated_voice",
           "itemIds": [
-            "release-2-bbcd7d9552ee"
+            "release-2-d7bfffc73aec"
           ],
-          "revision": "bbcd7d9552eeb309d5d0326ad8707d3ce2a5460dd91c630d0c6982dfe43972ab",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_bbcd7d9552eeb309d5d0326ad8707d3ce2a5460d",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "d7bfffc73aec7ce0d3133063e736521c9cd88dd6f3766965fcf52288359774e2",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_d7bfffc73aec7ce0d3133063e736521c9cd88dd6",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": []
     },
     {
       "utterance": "No, I don't want to do that.",
-      "proposalId": "proposal_21a7d8c46ed33d0dc5e705d798e2bbf8db0f513c",
-      "revision": "21a7d8c46ed33d0dc5e705d798e2bbf8db0f513c8b981524c1e595f22f52a79e",
+      "proposalId": "proposal_8b8afb20df84575cbf34b764fe23a59e82e34a6c",
+      "revision": "8b8afb20df84575cbf34b764fe23a59e82e34a6c5f3e668dab942b0903fa25af",
       "speech": "The recommendation is rejected. No work was added.",
       "decisions": [
         {
-          "id": "response_d9ea3bc835021c72e0665fe4084a9dc5bf45448d",
+          "id": "response_f8964eb88595be9a337b0b96ba88f53403d001a3",
           "note": null,
           "action": "reject",
           "source": "authenticated_voice",
           "itemIds": [],
-          "revision": "21a7d8c46ed33d0dc5e705d798e2bbf8db0f513c8b981524c1e595f22f52a79e",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_21a7d8c46ed33d0dc5e705d798e2bbf8db0f513c",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "8b8afb20df84575cbf34b764fe23a59e82e34a6c5f3e668dab942b0903fa25af",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_8b8afb20df84575cbf34b764fe23a59e82e34a6c",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": []
     },
     {
       "utterance": "Not now. We'll discuss it tomorrow.",
-      "proposalId": "proposal_a7bc177a9a43f3ecbbd1e6fc6dc8b5be830f4d5a",
-      "revision": "a7bc177a9a43f3ecbbd1e6fc6dc8b5be830f4d5ae6c43d6328d028bdb08d7f69",
+      "proposalId": "proposal_dc1b5d23d254107aaede7e2292e6dbf7e568bfdc",
+      "revision": "dc1b5d23d254107aaede7e2292e6dbf7e568bfdc2dcf179240c7f1ab18e23c1e",
       "speech": "The decision is deferred. No work was added.",
       "decisions": [
         {
-          "id": "response_17c8c60af72142e8477ca93465468e9d70391f18",
+          "id": "response_e0cf50d7c9b13b130427e567135402de4fa0d27c",
           "note": null,
           "action": "defer",
           "source": "authenticated_voice",
           "itemIds": [],
-          "revision": "a7bc177a9a43f3ecbbd1e6fc6dc8b5be830f4d5ae6c43d6328d028bdb08d7f69",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_a7bc177a9a43f3ecbbd1e6fc6dc8b5be830f4d5a",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "dc1b5d23d254107aaede7e2292e6dbf7e568bfdc2dcf179240c7f1ab18e23c1e",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_dc1b5d23d254107aaede7e2292e6dbf7e568bfdc",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": []
     },
     {
       "utterance": "Didn't I already tell you that?",
-      "proposalId": "proposal_a9f2d22fc2f4fd0d0072560882eaeecfcb1aa5c8",
-      "revision": "a9f2d22fc2f4fd0d0072560882eaeecfcb1aa5c8e9dbd19bd6c15e2adc81cd01",
-      "speech": "I still have the stored proposal and its revisions. 2026-10-13: Release fixture item 1: Didn't I already tell you that?; 2026-10-13: Release fixture item 2: Didn't I already tell you that?. I cannot infer which earlier statement you mean; name it and I will check the record.",
+      "proposalId": "proposal_939cecc0d90b5c55afdb64f6af4d56f8900920c7",
+      "revision": "939cecc0d90b5c55afdb64f6af4d56f8900920c7859df439769a921e5f1f519e",
+      "speech": "I still have the stored proposal and its revisions. 2026-10-14: Release fixture item 1: Didn't I already tell you that?; 2026-10-14: Release fixture item 2: Didn't I already tell you that?. I cannot infer which earlier statement you mean; name it and I will check the record.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "What was our original plan?",
-      "proposalId": "proposal_f0d6bc25c08040a84dd58af5d3da64d1ece4faff",
-      "revision": "f0d6bc25c08040a84dd58af5d3da64d1ece4faffdd9a431bc382aaf9136d3f21",
-      "speech": "Our original stored proposal was: 2026-10-13: Audit missing business drivers and customer evidence. The currently held revision remains pending until explicitly approved.",
+      "proposalId": "proposal_d2ecfa78eb4f53b79f342dbcfde5e76b5230f2c1",
+      "revision": "d2ecfa78eb4f53b79f342dbcfde5e76b5230f2c1716475eecfeeb4975cfcedb5",
+      "speech": "Our original stored proposal was: 2026-10-14: Audit missing business drivers and customer evidence. The currently held revision remains pending until explicitly approved.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "You should be preparing these decisions for me.",
-      "proposalId": "proposal_21d990e76630ed9b37326a41d34840972879350b",
-      "revision": "21d990e76630ed9b37326a41d34840972879350b15774fd9a7ea26777a04cf1a",
+      "proposalId": "proposal_2f114ba8f285488f301ac2c6f4005eebf76c0bc4",
+      "revision": "2f114ba8f285488f301ac2c6f4005eebf76c0bc4aedf3d1baf6623d7f0403574",
       "speech": "That preference is saved for future calls.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "What's the alternative?",
-      "proposalId": "proposal_4e5cfb9cfa65635603112bdeb63091ca6736e53e",
-      "revision": "4e5cfb9cfa65635603112bdeb63091ca6736e53ebd4465a17d16e7e3c66b1b06",
+      "proposalId": "proposal_ebeaf1f9c32bc54dc086914007e34f21d2dcf325",
+      "revision": "ebeaf1f9c32bc54dc086914007e34f21d2dcf325026dfb284ade49a1b1d47d94",
       "speech": "The alternative is to observe the next reporting period before making a growth bet. I'm not leading with it because kept as an alternative; validate economics and mechanism before selection. Benefit cannot be sized until the preferred investigation reports.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "How do you know this will make money?",
-      "proposalId": "proposal_df62c88f6857bd1a0333120f297121e3197aec98",
-      "revision": "df62c88f6857bd1a0333120f297121e3197aec980793edac6ece583779e2ced1",
+      "proposalId": "proposal_cc39043e8cec2e4f82018016b79a0ec3f6ada300",
+      "revision": "cc39043e8cec2e4f82018016b79a0ec3f6ada3007a29a8460683104e20aa9313",
       "speech": "I do not know that this will make money. Resolves the central uncertainty; no direct sales effect is claimed. Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
       "decisions": [],
       "canonicalIds": []
     },
     {
       "utterance": "make item 2 a mission",
-      "proposalId": "proposal_86969c072f7a654bc95badfba3af3fbe1606c035",
-      "revision": "86969c072f7a654bc95badfba3af3fbe1606c035fd7b1a91f50e8580ddfb68ca",
+      "proposalId": "proposal_6a363ce6fd7ab31fdb54982fe1029f4d7cfad6c7",
+      "revision": "6a363ce6fd7ab31fdb54982fe1029f4d7cfad6c7684560dafb28fbd0217b4493",
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: make item 2 a mission.",
       "decisions": [
         {
-          "id": "response_068841dd9001a644e9b6b76cfd719498e5e5caa6",
+          "id": "response_61b8ffb7de53fc999e2d2951be6fc3ea80b5411f",
           "note": null,
           "action": "approve",
           "source": "authenticated_voice",
           "itemIds": [
-            "release-2-86969c072f7a"
+            "release-2-6a363ce6fd7a"
           ],
-          "revision": "86969c072f7a654bc95badfba3af3fbe1606c035fd7b1a91f50e8580ddfb68ca",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_86969c072f7a654bc95badfba3af3fbe1606c035",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "6a363ce6fd7ab31fdb54982fe1029f4d7cfad6c7684560dafb28fbd0217b4493",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_6a363ce6fd7ab31fdb54982fe1029f4d7cfad6c7",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": [
-        "6c70b483-56d0-4bfa-866e-aec1fbb9073b"
+        "68fe5f0c-1395-4fda-b7b7-620487c0cb57"
       ]
     },
     {
       "utterance": "make the second item a mission",
-      "proposalId": "proposal_d48fbee4beece2c6789efcfd93245e9e78432e51",
-      "revision": "d48fbee4beece2c6789efcfd93245e9e78432e51524d75e41ffaef4f77eb3807",
+      "proposalId": "proposal_d291ac0eaf12a1e9e9248b9518f20b2e03b3e6fd",
+      "revision": "d291ac0eaf12a1e9e9248b9518f20b2e03b3e6fd05a9c7884799bdc703035068",
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: make the second item a mission.",
       "decisions": [
         {
-          "id": "response_46edcdf2619eae5a90024af4c263379f8de8fe36",
+          "id": "response_01a894b8d1884c3e1a112e8e0a6b83a6e7ac7f7b",
           "note": null,
           "action": "approve",
           "source": "authenticated_voice",
           "itemIds": [
-            "release-2-d48fbee4beec"
+            "release-2-d291ac0eaf12"
           ],
-          "revision": "d48fbee4beece2c6789efcfd93245e9e78432e51524d75e41ffaef4f77eb3807",
-          "tenantId": "claire-strategy-4aa2f6cd20",
-          "proposalId": "proposal_d48fbee4beece2c6789efcfd93245e9e78432e51",
-          "operatorUserId": "claire-owner-4aa2f6cd20",
-          "canonicalOperatorId": "tenant:claire-strategy-4aa2f6cd20:operator:claire-owner-4aa2f6cd20"
+          "revision": "d291ac0eaf12a1e9e9248b9518f20b2e03b3e6fd05a9c7884799bdc703035068",
+          "tenantId": "claire-strategy-6900507533",
+          "proposalId": "proposal_d291ac0eaf12a1e9e9248b9518f20b2e03b3e6fd",
+          "operatorUserId": "claire-owner-6900507533",
+          "canonicalOperatorId": "tenant:claire-strategy-6900507533:operator:claire-owner-6900507533"
         }
       ],
       "canonicalIds": [
-        "b8f45d5f-f64e-47e3-b01e-18610e2d6d1f"
+        "937a2af0-11f0-47b9-8837-9c80a9ff1b57"
       ]
     },
     {
       "utterance": "yes",
-      "proposalId": "proposal_c9b31c268df063924bc8cbd9a6c5990425be9b98",
-      "revision": "c9b31c268df063924bc8cbd9a6c5990425be9b98bf2a60e9bfce26fa264bd915",
+      "proposalId": "proposal_36c7982025051617d51d6e53a3799252163dc737",
+      "revision": "36c7982025051617d51d6e53a3799252163dc73729cc764d9f6e4e9d8a0363f1",
       "speech": "The stored proposal is still pending. Name the item numbers to approve or revise, explicitly approve the plan, reject, defer, or ask about the evidence. No work was added.",
       "decisions": [],
       "canonicalIds": []
@@ -216,8 +216,8 @@
     },
     {
       "boundary": "two conversations holding one shared weekly session",
-      "oldHeldId": "proposal_31ea24c0107c84c9fe94de652c322839d39f2843",
-      "newHeldId": "proposal_40a3c907d277516814977e18ff8f4a19be3f4808",
+      "oldHeldId": "proposal_8dce2a56b190f4284fb93c8f9f72434c7dd83867",
+      "newHeldId": "proposal_bfe20e9aefcf5b2ecca97694c318235eed6e7259",
       "deniedSpeech": "The prepared revision held by this conversation has changed or closed. Open the current recommendation before deciding. No work was added.",
       "heardRevisionApproval": "1 approved item(s) added and verified in the Day Line: Revision heard only by conversation B.",
       "acceptedMoveRequiresDayDirector": "This proposal already has accepted work. Change those commitments through the Day Line; I have not moved or rewritten anything."
@@ -228,34 +228,34 @@
         "make the",
         "second item a mission"
       ],
-      "proposalId": "proposal_015ab3540406881cdc3bf44b131615f1600c3009",
+      "proposalId": "proposal_f4924185f47894f8e4acfbd6f7472c72b4ff3586",
       "approvedItemIds": [
-        "release-2-015ab3540406"
+        "release-2-f4924185f478"
       ],
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: fragmented Gather."
     },
     {
-      "queuedProposalId": "proposal_f31759fb76f287fdea11159f316e2c813d49ea67",
+      "queuedProposalId": "proposal_c63941a7c9ba54289d0262cf89d42956d1f4b6dd",
       "postEnqueueDecision": "defer",
       "dispatchAdmitted": false
     },
     {
-      "queuedProposalId": "proposal_a3bd9e1b1e407c5d5e854c980f247dbe1ed24758",
+      "queuedProposalId": "proposal_15ab3624bab546a360026a9ddad13c271b48f274",
       "postEnqueueDecision": "reject",
       "dispatchAdmitted": false
     },
     {
-      "queuedProposalId": "proposal_3a6844f24ed034f6097aa5e402d8677ad24bf98f",
+      "queuedProposalId": "proposal_835b221dfa6ab79d02fec70dcba4401fbcbd35f9",
       "postEnqueueDecision": "approve",
       "dispatchAdmitted": false
     },
     {
-      "queuedProposalId": "proposal_bcb05bea7f3692a4593c14cf0e4e3910424cb0bc",
+      "queuedProposalId": "proposal_8f90646cba7375b7acd6c8ed21abb8f31441a741",
       "postEnqueueDecision": "revise",
       "dispatchAdmitted": false
     },
     {
-      "queuedProposalId": "proposal_bebb6f407a69e705c479074578565589a0485472",
+      "queuedProposalId": "proposal_99fa105d23a08b82e3f605f77fbb05a563753b98",
       "postEnqueueDecision": "supersede",
       "dispatchAdmitted": false
     },
@@ -270,20 +270,20 @@
       "boundary": "parallel first activation across tenants and independent processes",
       "results": [
         {
-          "tenantId": "activation-4aa2f6cd20-1",
-          "id": "51e3ef0a-b546-4e85-a32f-f78df7cd6837"
+          "tenantId": "activation-6900507533-1",
+          "id": "51bab0d7-85c7-4e5f-84f9-7a0cf70861ff"
         },
         {
-          "tenantId": "activation-4aa2f6cd20-1",
-          "id": "51e3ef0a-b546-4e85-a32f-f78df7cd6837"
+          "tenantId": "activation-6900507533-1",
+          "id": "51bab0d7-85c7-4e5f-84f9-7a0cf70861ff"
         },
         {
-          "tenantId": "activation-4aa2f6cd20-2",
-          "id": "e56efc4c-a6c0-414b-88d9-e4f7cc6a49bc"
+          "tenantId": "activation-6900507533-2",
+          "id": "d6b0e79b-42ca-424b-af70-e6cc44fb7e52"
         },
         {
-          "tenantId": "activation-4aa2f6cd20-2",
-          "id": "e56efc4c-a6c0-414b-88d9-e4f7cc6a49bc"
+          "tenantId": "activation-6900507533-2",
+          "id": "d6b0e79b-42ca-424b-af70-e6cc44fb7e52"
         }
       ]
     }
@@ -292,18 +292,18 @@
     {
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: independent admission retry.",
       "actionIds": [
-        "4363fc27-bfc6-430b-a81e-356f9c2350f5"
+        "763bf03b-27c2-4cd2-8343-8fc90a67f8b3"
       ],
       "failedItems": [],
-      "responseId": "response_384a99d8eeec78030d928f66b4380dd0ca06a7fc"
+      "responseId": "response_d1323bc17aee1fbbfa114671cd58e1f9bfd96ab5"
     },
     {
       "speech": "1 approved item(s) added and verified in the Day Line: Release fixture item 2: independent admission retry.",
       "actionIds": [
-        "4363fc27-bfc6-430b-a81e-356f9c2350f5"
+        "763bf03b-27c2-4cd2-8343-8fc90a67f8b3"
       ],
       "failedItems": [],
-      "responseId": "response_384a99d8eeec78030d928f66b4380dd0ca06a7fc"
+      "responseId": "response_d1323bc17aee1fbbfa114671cd58e1f9bfd96ab5"
     }
   ]
 }

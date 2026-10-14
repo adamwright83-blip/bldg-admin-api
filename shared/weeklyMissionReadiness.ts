@@ -229,6 +229,23 @@ export function remainingWeekHorizon(input: { businessDate: string; localTime: s
   };
 }
 
+/**
+ * Default scheduling policy: field and outreach work is useful until 5 PM in the
+ * business's own timezone. Local wall-clock minutes come from the canonical
+ * business timezone, so daylight-saving changes need no offset arithmetic.
+ */
+export const DEFAULT_EXECUTION_CUTOFF_MINUTES = 17 * 60;
+
+/** Dates on which new work can still meaningfully be done. Today drops out once its window closes. */
+export function actionableDates(
+  horizon: Pick<RemainingWeekHorizon, "businessDate" | "localMinutes" | "remainingDates">,
+  cutoffMinutes: number = DEFAULT_EXECUTION_CUTOFF_MINUTES
+): string[] {
+  return horizon.remainingDates.filter(
+    date => !(date === horizon.businessDate && horizon.localMinutes >= cutoffMinutes)
+  );
+}
+
 export function targetWeekHorizon(input: {
   businessDate: string;
   localTime: string;
