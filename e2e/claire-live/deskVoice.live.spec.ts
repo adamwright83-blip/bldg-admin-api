@@ -33,6 +33,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
     };
   });
 
+  const shot = (path: string) => page.screenshot({ path, timeout: 20_000 }).catch(() => undefined);
   const login = await page.request.post("/api/auth/login", { data: { password: process.env.DESK_LIVE_ADMIN_PASSWORD } });
   expect(login.status()).toBe(200);
   await page.goto("/claire", { waitUntil: "domcontentloaded" });
@@ -42,7 +43,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   const sheet = page.getByTestId("claire-desk-call-sheet");
   await expect(sheet.locator("li")).toHaveCount(5);
   await expect(sheet.locator("a[href^='tel:']")).toHaveCount(5);
-  await page.screenshot({ path: `${OUT}/1-desk-real-data.png`, fullPage: true });
+  await shot(`${OUT}/1-desk-real-data.png`);
 
   // Exact approval of the win-back mission.
   const primary = page.getByTestId("claire-desk-primary-mission");
@@ -66,7 +67,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   evidence.voiceResponsesSoFar = [...voice];
   evidence.audioEventsSoFar = [...played];
   await writeFile(`${OUT}/evidence.json`, JSON.stringify(evidence, null, 2));
-  await page.screenshot({ path: `${OUT}/2-voice-turns.png`, fullPage: true });
+  await shot(`${OUT}/2-voice-turns.png`);
 
   // Natural reporting and a plan change by text, with ambiguous then exact approval.
   const type = async (text: string) => {
@@ -91,7 +92,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   await expect(page.getByTestId("open-comms-saved")).toContainText("verified in the Day Line");
   await expect(page.getByTestId("claire-desk-runway")).toContainText(/Tomorrow · Morning · 1[01]:00/);
   await expect(page.getByTestId("claire-desk-readiness")).toContainText("customer list");
-  await page.screenshot({ path: `${OUT}/3-plan-change-verified.png`, fullPage: true });
+  await shot(`${OUT}/3-plan-change-verified.png`);
 
   // A failed write is reported truthfully.
   await page.route("**/api/trpc/system.weeklyMission.deskComms**", r => r.abort("failed"));
@@ -101,7 +102,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   await page.unroute("**/api/trpc/system.weeklyMission.deskComms**");
   await page.getByTestId("open-comms-end").click();
   await expect(page.getByTestId("open-comms-button")).toBeVisible();
-  await page.screenshot({ path: `${OUT}/4-after-comms.png`, fullPage: true });
+  await shot(`${OUT}/4-after-comms.png`);
 
   evidence.voiceResponses = voice;
   evidence.audioEvents = played;

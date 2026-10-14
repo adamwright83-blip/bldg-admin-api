@@ -9,6 +9,7 @@ const access = vi.hoisted(() => ({
 const workday = vi.hoisted(() => ({
   previewWorkdayLoop: vi.fn(),
   confirmWorkdayPlan: vi.fn(),
+  loadConfirmedWorkdayPlan: vi.fn(),
   assembleTomorrowCandidates: vi.fn(),
 }));
 const assemble = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ vi.mock("./workdayPlanService", async importOriginal => {
     ...actual,
     previewWorkdayLoop: workday.previewWorkdayLoop,
     confirmWorkdayPlan: workday.confirmWorkdayPlan,
+    loadConfirmedWorkdayPlan: workday.loadConfirmedWorkdayPlan,
     assembleTomorrowCandidates: workday.assembleTomorrowCandidates,
   };
 });
@@ -90,6 +92,10 @@ describe("Claire workday router identifiers", () => {
       confirmedAt: "2026-09-15T02:01:00.000Z",
       items: [{ id: "item-1", title: "Call Dana" }],
     });
+    workday.loadConfirmedWorkdayPlan.mockResolvedValue({
+      confirmedAt: "2026-09-15T02:01:00.000Z",
+      items: [{ id: "item-1", title: "Call Dana" }],
+    });
   });
 
   it("resolves previewWorkdayLoop, confirmWorkdayPlan, and assembleTomorrowCandidates", () => {
@@ -125,6 +131,13 @@ describe("Claire workday router identifiers", () => {
       businessDate: "2026-09-16",
       items: [{ id: "item-1", title: "Call Dana" }],
     });
-    expect(result).toEqual({ confirmedAt: "2026-09-15T02:01:00.000Z", itemCount: 1 });
+    expect(workday.loadConfirmedWorkdayPlan).toHaveBeenCalledWith({ tenantId: "tenant-1", actorId: "7", businessDate: "2026-09-16" });
+    expect(result).toEqual({ confirmedAt: "2026-09-15T02:01:00.000Z", itemCount: 1, businessDate: "2026-09-16", verified: true });
+  });
+
+  it("confirmTomorrow is unverified when the readback does not match the write", async () => {
+    workday.loadConfirmedWorkdayPlan.mockResolvedValue(null);
+    const result = await caller().confirmTomorrow({ timeZone: "America/Los_Angeles" });
+    expect(result.verified).toBe(false);
   });
 });
