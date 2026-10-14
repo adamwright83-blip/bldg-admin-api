@@ -374,6 +374,10 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
         const request = JSON.parse(String(input.messages[1].content));
         expect(request.currentQuestion).toBe("Only Silver Lake.");
         expect(request.historicalQuestionContext).toEqual([]);
+        expect(String(input.messages[1].content)).not.toContain("5551234567");
+        expect(request.proposedFastPath.filters.customerKeys).toEqual([
+          "server-resolved private scope",
+        ]);
         return envelope({
           kind: "query",
           sql: "SELECT customer_id, name FROM customers ORDER BY customer_id",
@@ -387,6 +391,7 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
       {
         tenantId: data.tenantId,
         question: "Only Silver Lake.",
+        existingQuery: { filters: { customerKeys: ["phone:5551234567"] } },
         now: new Date(data.generatedAt),
         timeZone: data.window.timeZone,
         previous: {

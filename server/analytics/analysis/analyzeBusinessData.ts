@@ -139,17 +139,24 @@ export async function analyzeBusinessData(
     },
     {
       role: "user",
-      content: JSON.stringify({
-        currentQuestion: input.question,
-        historicalQuestionContext: refinement ? [] : priorQuestions,
-        previousCustomerIds: previous?.customerIds ?? [],
-        referencedCustomerId: ordinal ?? null,
-        serverSelectionScope: refinement
-          ? "previous population"
-          : "all approved records",
-        proposedFastPath: input.existingQuery ?? null,
-        proactive: Boolean(input.proactive),
-      }),
+      content: JSON.stringify(
+        {
+          currentQuestion: input.question,
+          historicalQuestionContext: refinement ? [] : priorQuestions,
+          previousCustomerIds: previous?.customerIds ?? [],
+          referencedCustomerId: ordinal ?? null,
+          serverSelectionScope: refinement
+            ? "previous population"
+            : "all approved records",
+          proposedFastPath: input.existingQuery ?? null,
+          proactive: Boolean(input.proactive),
+        },
+        (key, value) =>
+          ["customerKeys", "identityKeys", "addressTerms"].includes(key) &&
+          Array.isArray(value)
+            ? ["server-resolved private scope"]
+            : value
+      ),
     },
   ];
   try {
