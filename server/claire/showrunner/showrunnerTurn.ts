@@ -138,6 +138,10 @@ export async function runShowrunnerTurn(input: {
   sourceEventId: string;
   conversationKey: string;
   invoke?: typeof invokeLLM;
+  /** Durable recorder; injectable for failure tests. */
+  record?: typeof recordShowrunnerTurn;
+  approve?: typeof approveShowrunnerReplan;
+  replan?: typeof replanFromShowrunnerCall;
   now?: Date;
 }): Promise<{ speak: string; end: boolean; state: ShowrunnerCallState }> {
   const state: ShowrunnerCallState = JSON.parse(JSON.stringify(input.state));
@@ -146,12 +150,12 @@ export async function runShowrunnerTurn(input: {
 
   // Voice approval of a revised plan Claire already proposed in this call.
   const control = state.replan && !state.replan.approved ? parseStrategicProposalControl(input.utterance) : null;
-  // A plain yes to "Want me to lock that in?" is approval of exactly that revision.
+  // Only an unambiguous yes to "Want me to lock that in?" approves exactly that revision.
+  const unambiguous = isUnambiguousAgreement(input.utterance);
   const affirmed =
-    state.replan && !state.replan.approved && (state.replan.askedTurn ?? 0) === state.turns - 1 &&
-    /^\s*(?:yes|yeah|yep|sure|ok(?:ay)?|please do|do it|go ahead|lock it in|approve(?: it)?|sounds good)\b/i.test(input.utterance);
-  if (state.replan && (control?.kind === "approve" || affirmed)) {
-    const approved = await approveShowrunnerReplan(state).catch(() => null);
+    state.replan && !state.replan.approved && (state.replan.askedTurn ?? 0) === state.turns - 1 && unambiguous;
+  if (state.replan && ((control?.kind === "approve" && unambiguous) || affirmed)) {
+    const approved = await (input.approve ?? approveShowrunnerReplan)(state).catch(() => null);
     if (approved) {
       state.replan.approved = true;
       return { speak: `Done. ${approved} I'll have it ready in the morning.`, end: state.purpose === "evening_debrief", state };
@@ -199,28 +203,40 @@ export async function runShowrunnerTurn(input: {
   const developments: DebriefDevelopment[] = model.developments
     .filter(d => d.what.trim() || d.who.trim())
     .map(d => ({ ...d, reportedAt: now.toISOString() }));
+  // Persist first: Claire only remembers what was durably saved.
+  const record = input.record ?? recordShowrunnerTurn;
+  const persist = () =>
+    record({ state, utterance: input.utterance, updates, developments, sourceEventId: input.sourceEventId, conversationKey: input.conversationKey, now });
+  const saved = await persist()
+    .then(() => true)
+    .catch(() => persist().then(() => true))
+    .catch(error => {
+      console.warn("[Showrunner] turn persistence failed after retry", error instanceof Error ? error.message : error);
+      return false;
+    });
+  if (!saved) {
+    // Nothing from this turn enters Claire's working memory or the plan.
+    const unsaved = JSON.parse(JSON.stringify(input.state)) as ShowrunnerCallState;
+    return {
+      speak: "I heard you, but I couldn't save that just now, so I won't count on remembering it. Could you tell me again in a moment?",
+      end: false,
+      state: unsaved,
+    };
+  }
   state.captured.missionUpdates.push(...updates);
   state.captured.developments.push(...developments);
   state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
 
-  await recordShowrunnerTurn({
-    state,
-    utterance: input.utterance,
-    updates,
-    developments,
-    sourceEventId: input.sourceEventId,
-    conversationKey: input.conversationKey,
-    now,
-  }).catch(error => console.warn("[Showrunner] turn persistence failed", error instanceof Error ? error.message : error));
-
   let speak = model.speak.trim();
+  // A correction to an unapproved revision produces a fresh revision; an approved one is never redone silently.
+  const correctingPending = Boolean(state.replan && !state.replan.approved && developments.length > 0);
   const needsReplan =
-    !state.replan &&
+    (!state.replan || correctingPending) &&
     // Any schedulable development captured during this call, not just this turn.
     (state.captured.developments.some(d => ["meeting", "opportunity", "commitment"].includes(d.kind)) ||
       (state.purpose === "evening_debrief" && model.operatorIsDone && state.captured.missionUpdates.some(u => u.outcome !== "done")));
-  if (needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness")) {
-    const replan = await replanFromShowrunnerCall(state, now).catch(error => {
+  if (needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness" || correctingPending)) {
+    const replan = await (input.replan ?? replanFromShowrunnerCall)(state, now).catch(error => {
       console.warn("[Showrunner] replan failed", error instanceof Error ? error.message : error);
       return null;
     });
@@ -235,4 +251,19 @@ export async function runShowrunnerTurn(input: {
   const end = model.operatorIsDone && (!state.replan || state.replan.approved || declinedReplan || state.purpose === "morning_readiness");
   if (end && declinedReplan) speak = `${speak} The revised plan isn't approved yet; it's waiting in the app.`;
   return { speak, end, state };
+}
+
+const QUALIFIER = /\b(?:but|except|not|no|don'?t|isn'?t|instead|change|move|only|wait|actually|however|unless|though|rather|other|different|hold on|first)\b|n't\b|\?/i;
+const AGREE_HEAD = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please do|do it|go ahead|lock it in|approve(?: it)?|sounds good|that works|perfect|great)\b/i;
+const AGREE_TAIL = /^(?:yes|please|lock it in|go ahead|do it|and update it|update it|approve it|thanks|thank you|that works|sounds good|perfect|great|claire|go ahead and update it|lock that in)$/i;
+
+/**
+ * True only for plain agreement: "Yes", "Sure, lock it in", "Yes, go ahead and
+ * update it". Any qualifier or correction ("Yes, but not Thursday") is not approval.
+ */
+export function isUnambiguousAgreement(utterance: string): boolean {
+  const text = utterance.trim().replace(/[.!]+$/g, "");
+  if (!text || QUALIFIER.test(text) || !AGREE_HEAD.test(text)) return false;
+  const rest = text.replace(AGREE_HEAD, "").split(/[,;]|\s+-\s+/).map(s => s.trim()).filter(Boolean);
+  return rest.every(part => AGREE_TAIL.test(part));
 }

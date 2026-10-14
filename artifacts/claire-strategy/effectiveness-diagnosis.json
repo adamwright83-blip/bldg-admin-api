@@ -70,10 +70,10 @@
       "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
       "uncertainty": "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.",
       "evidenceRefs": [
-        "snap_b5e7e4581d5b45cda0acedc4:net_sales_cents",
-        "snap_b5e7e4581d5b45cda0acedc4:prior_net_sales_cents",
-        "snap_b5e7e4581d5b45cda0acedc4:dormant_customers",
-        "snap_b5e7e4581d5b45cda0acedc4:returning_customers_30d"
+        "snap_ef9dabf86f114583b8d14a07:net_sales_cents",
+        "snap_ef9dabf86f114583b8d14a07:prior_net_sales_cents",
+        "snap_ef9dabf86f114583b8d14a07:dormant_customers",
+        "snap_ef9dabf86f114583b8d14a07:returning_customers_30d"
       ],
       "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
       "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
@@ -94,10 +94,10 @@
       "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
       "uncertainty": "Acquisition cost and conversion are unmeasured.",
       "evidenceRefs": [
-        "snap_b5e7e4581d5b45cda0acedc4:net_sales_cents",
-        "snap_b5e7e4581d5b45cda0acedc4:prior_net_sales_cents",
-        "snap_b5e7e4581d5b45cda0acedc4:dormant_customers",
-        "snap_b5e7e4581d5b45cda0acedc4:returning_customers_30d"
+        "snap_ef9dabf86f114583b8d14a07:net_sales_cents",
+        "snap_ef9dabf86f114583b8d14a07:prior_net_sales_cents",
+        "snap_ef9dabf86f114583b8d14a07:dormant_customers",
+        "snap_ef9dabf86f114583b8d14a07:returning_customers_30d"
       ],
       "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
       "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
