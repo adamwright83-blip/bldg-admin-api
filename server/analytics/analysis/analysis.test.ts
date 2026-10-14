@@ -367,6 +367,50 @@ describe("real WASM sandbox", () => {
 });
 
 describe("bounded investigation (mocked model; real sandbox)", () => {
+  it("retrieves only the stored first customer's last order even without an ID projection and retains all selected customers", async () => {
+    const data = syntheticAnalysisDataset(),
+      ids = [
+        "cust_fixture7",
+        "cust_fixture6",
+        "cust_fixture5",
+        "cust_fixture4",
+        "cust_fixture3",
+      ];
+    let calls = 0;
+    const invoke = async () =>
+      envelope(
+        ++calls === 1
+          ? {
+              kind: "query",
+              sql: "SELECT summary,business_date,amount_cents FROM orders ORDER BY business_date DESC LIMIT 1",
+              answer: "",
+            }
+          : { kind: "final", sql: "", answer: "" }
+      );
+    const result = await analyzeBusinessData(
+      {
+        tenantId: data.tenantId,
+        question: "What did the first one order last time?",
+        now: new Date(data.generatedAt),
+        timeZone: data.window.timeZone,
+        previous: {
+          tenantId: data.tenantId,
+          touchedAt: Date.parse(data.generatedAt),
+          questions: ["Select five customers"],
+          results: [],
+          customerIds: ids,
+          customers: ids.map(id => data.customerRefs[id]!),
+        },
+      },
+      { invoke: invoke as any, build: async () => data }
+    );
+    expect(result.kind).toBe("evidence");
+    expect(result.results[0]?.rows).toEqual([
+      ["Wash and fold, medium bag", "2026-06-29", 8000],
+    ]);
+    expect(result.session?.customerIds).toEqual(ids);
+  });
+
   it("restricts refinement data to stored identities even if the model queries every customer", async () => {
     const data = syntheticAnalysisDataset();
     const invoke = vi.fn(async (input: any) => {

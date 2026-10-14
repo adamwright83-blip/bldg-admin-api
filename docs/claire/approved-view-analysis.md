@@ -28,6 +28,6 @@ The analysis tests exercise real SQLite workers, AST rejection, cancellation, ex
 
 CleanCloud outstanding orders are not synchronized. Native exclusions cannot establish complete outstanding-order absence. Costs are unavailable, so sales are not profit. ZIP membership is approximate geography. Activity is limited to the materialized window, and partial source coverage cannot establish churn or zero activity. Large datasets fail explicitly; there is no automatic unbounded scan.
 
-The historical fourteen-customer result cannot be certified against an identical old snapshot because that snapshot was not retained. The production acceptance repeats the governed calculation at a frozen reporting clock against current canonical records and reports that distinction explicitly. This historical reproducibility gap remains a release consideration, even if the current-record acceptance passes.
+The historical fourteen-customer result cannot be certified against an identical old snapshot because that snapshot was not retained. The production acceptance repeats the governed calculation at the fixed acceptance clock against current canonical records and reports that distinction explicitly. This historical reproducibility gap remains a release consideration, even if the current-record acceptance passes.
 
 No merge or deployment is authorized by this work. Review the PR and its actual acceptance results before release.

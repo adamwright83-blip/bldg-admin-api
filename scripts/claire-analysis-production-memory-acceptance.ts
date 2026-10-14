@@ -208,16 +208,36 @@ if (process.env.CLAIRE_ANALYSIS_MODEL_CHILD === "1") {
             : observed.length === expected.length &&
               observed.every(id => expected.includes(id));
         let referenceCorrect = true;
-        if (index === 4 && expected[0] && result.handled)
+        if (index === 4 && expected[0] && result.handled) {
+          const history = dataset.tables.orders!.filter(
+            order => order[1] === expected[0] && order[9] === "laundry_farm"
+          );
+          const latestDate = history
+            .map(order => String(order[2]))
+            .sort()
+            .at(-1);
+          const latestOrders = history.filter(order => order[2] === latestDate);
+          // Verify the actual returned date and order contents, whether or not the model projects an ID column.
+          // The server independently restricts ordinal retrieval to the stored first customer's identity.
           referenceCorrect = Boolean(
             result.analysisEvidence?.results.some(
               r =>
                 r.receipt.status === "ok" &&
-                r.rows.some(
-                  row => row[r.columns.indexOf("customer_id")] === expected[0]
+                r.rows.some(row =>
+                  latestOrders.some(order => {
+                    const idColumn = r.columns.indexOf("customer_id");
+                    return (
+                      (idColumn < 0 || row[idColumn] === expected[0]) &&
+                      row.includes(order[2]!) &&
+                      (order[14]
+                        ? row.includes(order[14]!)
+                        : row.includes(order[5]!))
+                    );
+                  })
                 )
             )
           );
+        }
         checks.push({
           case: [
             "novel_interval_consistency",
