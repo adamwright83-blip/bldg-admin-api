@@ -113,7 +113,32 @@ export async function prepareStrategicProposal(input: {
   const items: StrategicPlanningProposal["items"] = [];
   const seen = new Set<string>();
   const limitations: string[] = [];
+  // Claire's selected recommendation becomes the first proposed mission, with
+  // provenance to the diagnosis. Mission Director's ranked work fills later days,
+  // so stale unrelated follow-ups cannot displace the current strategic priority.
+  const selectedAction = diagnosis.actions[0];
+  const strategyDate = horizon.remainingDates[0];
+  const strategyItem =
+    selectedAction && strategyDate && !diagnosis.quality.structuralErrors.length
+      ? {
+          id: `${strategyDate}:${diagnosis.id}:${selectedAction.id}`,
+          businessDate: strategyDate,
+          title: selectedAction.title,
+          objective: selectedAction.completionCondition,
+          executionType: "challenge" as const,
+          candidateId: `${diagnosis.id}:${selectedAction.id}`,
+          missionType: selectedAction.motion,
+          planId: `strategic_diagnosis:${diagnosis.id}`,
+          planRevision: 0,
+          evidenceRefs: [`strategic_diagnosis:${diagnosis.id}`, ...diagnosis.supportingEvidence],
+        }
+      : null;
+  if (strategyItem) {
+    items.push(strategyItem);
+    seen.add(strategyItem.candidateId);
+  }
   for (const date of horizon.remainingDates) {
+    if (strategyItem && date === strategyItem.businessDate) continue;
     const plan = await planForDate({
       tenantId: identity.tenantId,
       operatorId: identity.dayDirectorActorId,

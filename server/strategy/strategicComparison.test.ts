@@ -104,3 +104,39 @@ describe("source outage vs payment-authority gap", () => {
     expect(d.uncertainty.join(" ")).toContain("lack payment-authority receipts");
   });
 });
+
+describe("operator objective focus", () => {
+  it("serves a neighborhood objective with equal-window comparison and named lapsed customers", () => {
+    const now = new Date("2026-10-14T20:00:00Z");
+    const at = now.toISOString();
+    const e = (id: string, value: number | string) => ({
+      id, tenantId: "t", source: "test", capturedAt: at, classification: "verified" as const,
+      value, unit: id, quality: "complete" as const, description: id,
+    });
+    const d = assembleStrategicDiagnosis(
+      {
+        tenantId: "t", canonicalOperatorId: "op", verticalKey: "laundry_fluff_fold", businessDate: "2026-10-14", now,
+        goal: { statement: "Get to 50 active customers", metricKey: "active_customers", target: 50, current: null, evidenceRef: "goal" },
+        evidence: [e("goal", "g"), e("objective", "maximize sales in Silver Lake"), e("area_sales", 103000), e("area_dormant", 14)],
+        metrics: {},
+        market: { tenantId: "t", mode: "physical", territories: [], observations: [], limitations: [] },
+        outcomes: [], commitments: [],
+        focus: {
+          statement: "maximize sales in Silver Lake", area: "Silver Lake", evidenceRef: "objective", windowDays: 90,
+          sales: 103000, priorSales: 190000, orders: 13, priorOrders: 26, salesRef: "area_sales",
+          dormant: 14, dormantRef: "area_dormant",
+          dormantTop: [{ name: "Avery K.", lastOrderDate: "2026-07-02", revenueCents: 61000 }, { name: "Sam T.", lastOrderDate: "2026-06-20", revenueCents: 42000 }],
+          figuresVerified: false,
+        },
+      },
+      defaultVerticalRegistry
+    );
+    expect(d.quality.structuralErrors).toEqual([]);
+    expect(d.objective).toEqual({ statement: "maximize sales in Silver Lake", area: "Silver Lake" });
+    expect(d.selectedApproach).toBe("Win back lapsed Silver Lake customers");
+    expect(d.currentCondition).toMatch(/^Your objective: maximize sales in Silver Lake\. Silver Lake recorded sales were \$1030\.00 over the last 90 days vs \$1900\.00 the prior 90 \(down 46%\), 13 vs 26 orders \(recorded; not all orders payment-verified\)\. 14 Silver Lake customers/);
+    expect(d.actions[0]!.completionCondition).toContain("Avery K., Sam T.");
+    expect(d.options[1]!.approach).toBe("Find new Silver Lake customers through building and door outreach");
+    expect(d.uncertainty.join(" ")).toContain("Profitability can't be judged yet");
+  });
+});

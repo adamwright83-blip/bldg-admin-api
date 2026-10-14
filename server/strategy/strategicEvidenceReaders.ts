@@ -26,6 +26,13 @@ import type {
   StrategyEvidence,
 } from "../../shared/strategicIntelligence";
 import type { DiagnosisInput } from "./strategicDiagnosis";
+import { listActiveDaphneGoals } from "../agents/daphne/goalsPreferences";
+import { addressScope } from "../claire/business/businessLanguage";
+import {
+  defaultBusinessQuery,
+  defaultBusinessQueryDeps,
+  runBusinessQuery,
+} from "../analytics/businessQuery";
 
 export async function readStrategicDiagnosisInputs(input: {
   identity: CanonicalOperatorIdentity;
@@ -303,6 +310,15 @@ export async function readStrategicDiagnosisInputs(input: {
       });
     }
   }
+  // The operator's durable objective (Daphne goal) and its neighborhood evidence.
+  const focus = await readObjectiveFocus({
+    tenantId: identity.tenantId,
+    canonicalOperatorId: identity.canonicalOperatorId,
+    timeZone: input.timeZone,
+    now,
+    outage: Boolean(sourceGaps),
+  }).catch(() => null);
+  if (focus) evidence.push(...focus.evidence);
   for (const observation of market.observations)
     evidence.push({
       id: observation.id,
@@ -392,6 +408,7 @@ export async function readStrategicDiagnosisInputs(input: {
     outcomes,
     ...(sourceGaps ? { sourceGaps } : {}),
     ...(recordedFigures ? { recordedFigures } : {}),
+    ...(focus ? { focus: focus.focus } : {}),
     commitments: commitments
       .filter(
         c =>
@@ -479,4 +496,114 @@ export function salesSourceOutage(
       .map(s => `${s} could not be loaded`),
     ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
   ];
+}
+
+const FOCUS_WINDOW_DAYS = 90;
+
+/**
+ * Reads the operator's latest active Daphne goal that names a neighborhood and
+ * measures that neighborhood with the same canonical business query Claire's
+ * conversation uses: two equal completed trailing windows, and lapsed customers.
+ */
+export async function readObjectiveFocus(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  timeZone: string;
+  now: Date;
+  outage: boolean;
+}): Promise<{ focus: NonNullable<DiagnosisInput["focus"]>; evidence: StrategyEvidence[] } | null> {
+  const goals = await listActiveDaphneGoals({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.canonicalOperatorId,
+  });
+  const goal = [...goals]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(g => ({ g, scope: addressScope(g.statement) }))
+    .find(x => x.scope?.addressAny?.length);
+  if (!goal) return null;
+  const label = goal.scope!.addressLabel!.replace(/^in\s+/i, "");
+  const filters = { addressAny: goal.scope!.addressAny, addressLabel: goal.scope!.addressLabel };
+  const deps = { ...defaultBusinessQueryDeps, now: () => input.now, timeZone: () => input.timeZone };
+  const capturedAt = input.now.toISOString();
+  const goalRef = `daphne_goals:${goal.g.id}`;
+  const evidence: StrategyEvidence[] = [
+    {
+      id: goalRef,
+      tenantId: input.tenantId,
+      source: "Daphne durable operator goal",
+      capturedAt,
+      classification: "operator_input",
+      value: goal.g.statement,
+      unit: "operator_objective",
+      quality: "complete",
+      description: "Operator's stated objective",
+    },
+  ];
+  const focus: NonNullable<DiagnosisInput["focus"]> = {
+    statement: goal.g.statement,
+    area: label,
+    evidenceRef: goalRef,
+    windowDays: FOCUS_WINDOW_DAYS,
+    sales: null,
+    priorSales: null,
+    orders: null,
+    priorOrders: null,
+    salesRef: null,
+    dormant: null,
+    dormantRef: null,
+    dormantTop: [],
+    figuresVerified: false,
+  };
+  if (input.outage) return { focus, evidence };
+  const revenue = await runBusinessQuery(
+    input.tenantId,
+    { ...defaultBusinessQuery("revenue"), period: { kind: "trailing_days", days: FOCUS_WINDOW_DAYS }, comparison: "previous", filters },
+    deps
+  );
+  if (revenue.status === "ok" && revenue.data.kind === "totals" && revenue.data.previous) {
+    const exact = revenue.coverage?.canonicalRevenue?.mayStateExact === true;
+    focus.sales = revenue.data.current.revenueCents;
+    focus.orders = revenue.data.current.orderCount;
+    focus.priorSales = revenue.data.previous.revenueCents;
+    focus.priorOrders = revenue.data.previous.orderCount;
+    focus.figuresVerified = exact;
+    focus.salesRef = `objective_area_sales:${input.tenantId}:${label}:${capturedAt}`;
+    evidence.push({
+      id: focus.salesRef,
+      tenantId: input.tenantId,
+      source: "canonical business query (address scope)",
+      capturedAt,
+      classification: exact ? "verified" : "estimate",
+      value: focus.sales,
+      unit: "area_sales_cents",
+      quality: exact ? "complete" : "partial",
+      description: `${label} recorded sales, last ${FOCUS_WINDOW_DAYS} days vs the prior ${FOCUS_WINDOW_DAYS}: ${focus.sales} vs ${focus.priorSales} cents`,
+    });
+  }
+  const dormant = await runBusinessQuery(
+    input.tenantId,
+    { ...defaultBusinessQuery("dormant_customers"), listMembers: true, limit: 50, filters },
+    deps
+  );
+  if (dormant.status === "ok" && dormant.data.kind === "customers") {
+    focus.dormant = dormant.data.population.count;
+    focus.dormantTop = [...dormant.data.population.members]
+      .filter(m => m.matched)
+      .sort((a, b) => b.revenueCents - a.revenueCents)
+      .slice(0, 5)
+      .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents }));
+    focus.dormantRef = `objective_area_dormant:${input.tenantId}:${label}:${capturedAt}`;
+    evidence.push({
+      id: focus.dormantRef,
+      tenantId: input.tenantId,
+      source: "canonical business query (address scope)",
+      capturedAt,
+      classification: "verified",
+      value: focus.dormant,
+      unit: "area_dormant_customers",
+      quality: "complete",
+      description: `${label} customers with earlier orders and none in the last 60 days`,
+    });
+  }
+  return { focus, evidence };
 }

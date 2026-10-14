@@ -1,4 +1,8 @@
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { addDaysYmd } from "../../analytics/businessPeriods";
+
+/** Claire asks only about work that went unfinished within this many days. */
+export const FOLLOW_UP_WINDOW_DAYS = 7;
 import { dayDirectorCommitments, daphneObservations } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import {
@@ -79,10 +83,12 @@ export async function syncMissionFollowUp(
         eq(dayDirectorCommitments.tenantId, input.tenantId),
         inArray(dayDirectorCommitments.actorId, [...input.actorIds]),
         eq(dayDirectorCommitments.status, "open"),
-        lt(dayDirectorCommitments.businessDate, input.today)
+        lt(dayDirectorCommitments.businessDate, input.today),
+        // Recent work only: an old backlog stays as recorded, never auto-questioned.
+        gte(dayDirectorCommitments.businessDate, addDaysYmd(input.today, -FOLLOW_UP_WINDOW_DAYS))
       )
     )
-    .orderBy(dayDirectorCommitments.businessDate);
+    .orderBy(desc(dayDirectorCommitments.businessDate));
   let pending: DaphneMissionFollowUp | null = null;
   for (const row of rows) {
     const overlay = readDayLineOverlay(row.metadataJson);

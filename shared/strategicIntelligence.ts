@@ -93,6 +93,8 @@ export type StrategyOption = {
   nextMeasurableAction?: string;
 };
 export type StrategicDiagnosis = {
+  /** The operator's stated objective this diagnosis serves, when one exists. */
+  objective?: { statement: string; area: string };
   id: string;
   schemaVersion: 1;
   doctrineVersion: string;
