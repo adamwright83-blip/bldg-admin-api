@@ -1,3 +1,4 @@
+import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import type { SalesInsightArtifact } from "../../../../server/claire/proactive/salesInsights";
 import { FormEvent, useState } from "react";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
@@ -99,6 +100,7 @@ export default function ClaireDesk() {
       </p>
       <ClaireStrategicProposal />
       <ClaireStrategicCallConsent />
+      <ClaireDailyCallSettings />
       {preview.data?.brief ? (
         <p
           data-testid="claire-desk-brief"

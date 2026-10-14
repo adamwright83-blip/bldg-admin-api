@@ -1,3 +1,4 @@
+import type { WeeklyProductionPlan } from "../../shared/strategicIntelligence";
 import { loadMissionPresentations, presentationFor } from "../agents/daphne/missionFollowUp";
 import { createHash } from "node:crypto";
 import { canonicalJsonStringify } from "./snapshotBuilder";
@@ -208,6 +209,13 @@ export async function prepareStrategicProposal(input: {
       f =>
         `${f.businessDate ?? f.weekday ?? ""}: ${f.title}${f.scheduleLabel ? ` ${f.scheduleLabel}` : ""} [${f.id}]`
     );
+  const weeklyPlan = buildWeeklyProductionPlan({
+    diagnosis,
+    items,
+    planDates,
+    constraints,
+    adaptations: [...presentations.values()].map((p: { note: string }) => p.note),
+  });
   const current = await latestStrategicProposal(identity, horizon.weekStart);
   const decisions = current ? await strategicResponses(identity, current.id) : [];
   const closedGeneration = decisions.some(r => ["reject", "defer", "revise"].includes(r.action))
@@ -248,6 +256,7 @@ export async function prepareStrategicProposal(input: {
       ...limitations,
     ],
     approvalState: "pending",
+    weeklyPlan,
     opening: [
       diagnosis.currentCondition,
       diagnosis.diagnosis,
@@ -263,4 +272,49 @@ export async function prepareStrategicProposal(input: {
     ].join(" "),
   };
   return persistStrategicProposal(p);
+}
+
+/** Pure: the week's throughline, sequence, preparation and contingency, from the plan inputs only. */
+export function buildWeeklyProductionPlan(input: {
+  diagnosis: StrategicPlanningProposal["diagnosis"];
+  items: StrategicPlanningProposal["items"];
+  planDates: string[];
+  constraints: string[];
+  adaptations: string[];
+}): WeeklyProductionPlan {
+  const d = input.diagnosis;
+  const selected = d.options.find(o => o.id === d.selectedOptionId);
+  const action = d.actions[0];
+  const motion = action?.motion;
+  const preparation =
+    motion === "retention"
+      ? ["Decide the return offer you'll make before contacting anyone.", "Keep the named customer list from the mission at hand."]
+      : motion === "account_acquisition"
+        ? ["Choose the building or account and note its address before going out."]
+        : [];
+  const used = new Set(input.items.map(i => i.businessDate));
+  const buffer = input.planDates.filter(date => !used.has(date));
+  return {
+    objective: d.objective?.statement ?? d.goal.statement,
+    outcomes: [action?.leadingIndicator, ...d.successMeasures].filter((x): x is string => Boolean(x)).slice(0, 3),
+    evidence: selected?.observedBasis ?? d.currentCondition,
+    sequence: input.items.map(i => ({
+      date: i.businessDate,
+      itemId: i.id,
+      title: i.title,
+      window: i.timeWindow?.window ?? null,
+      why: i.planId.startsWith("strategic_diagnosis:")
+        ? (selected?.reason ?? d.diagnosis).replace(/^(Preferred|Not preferred[^:]*):\s*/i, "")
+        : "Existing work ranked by Mission Director.",
+      status: "draft",
+    })),
+    preparation,
+    commitments: input.constraints.slice(0, 10),
+    contingency: buffer.length
+      ? `Kept ${buffer.join(", ")} open as buffer for whatever comes up.`
+      : "No buffer day this week; if something comes up, I'll move the lowest-priority item and tell you.",
+    adaptations: input.adaptations,
+    uncertainty: d.uncertainty.filter(u => /Profitability|Why these customers|payment|Return rate/i.test(u)).slice(0, 4),
+    changes: [],
+  };
 }

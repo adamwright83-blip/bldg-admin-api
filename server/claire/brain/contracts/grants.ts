@@ -55,7 +55,12 @@ export type ActionGrantSource =
       tenantId: string;
       canonicalOperatorId: string;
       appointmentId: string;
-      appointmentKind: "sunday_weekly_planning" | "weekly_planning_callback";
+      appointmentKind:
+        | "sunday_weekly_planning"
+        | "weekly_planning_callback"
+        | "weekday_strategic_planning"
+        | "daily_morning_readiness"
+        | "daily_evening_debrief";
       standingAuthorizationId: string | null;
     };
 

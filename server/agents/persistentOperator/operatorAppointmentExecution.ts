@@ -1,4 +1,6 @@
 import { requireCallableStrategicProposal } from "../../strategy/strategicStore";
+import { DAILY_CLAIRE_CALLS, dailyPurposeForKind, type DailyClairePurpose } from "../../../shared/dailyClaireCalls";
+import { buildShowrunnerBriefing, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
@@ -160,6 +162,8 @@ export async function executeOperatorAppointment(
 ): Promise<Record<string, unknown>> {
   assertOperatorAppointmentExecutionContext(step, context);
   const identity = await resolveAppointmentIdentity(context);
+  const dailyPurpose = dailyPurposeForKind(step.appointmentKind);
+  if (dailyPurpose) return executeDailyClaireCall({ step, now, store, context, identity, purpose: dailyPurpose });
   const operatorIds = [
     identity.canonicalOpenId,
     ...identity.aliases.map(alias => alias.openId),
@@ -280,4 +284,91 @@ export async function executeOperatorAppointment(
     appointmentKind: context.source.appointmentKind,
     weekStart: step.weekStart,
   };
+}
+
+/**
+ * Morning readiness and evening debrief. Independent of any strategic proposal:
+ * the call happens when its own grant authorizes it, even if the Day Line is
+ * complete. Authority is rechecked at policy time and again at dispatch.
+ */
+async function executeDailyClaireCall(input: {
+  step: ClaimedOperatorAppointment;
+  now: Date;
+  store?: OperatorAppointmentStore;
+  context: OperatorAppointmentExecutionContext;
+  identity: Awaited<ReturnType<typeof resolveAppointmentIdentity>>;
+  purpose: DailyClairePurpose;
+}): Promise<Record<string, unknown>> {
+  const { step, now, store, context, identity, purpose } = input;
+  if (!context.actor.standingAuthorizationId) return { skipped: "daily_call_requires_standing_authorization" };
+  const businessDate = formatInTimeZone(now, step.timeZone, "yyyy-MM-dd");
+  const result = await executePersistentOperatorAction({
+    identity,
+    actionClass: purpose === "morning_readiness" ? "place_morning_readiness_call" : "place_evening_debrief_call",
+    authorityBasis: "scheduled_operator_appointment",
+    source: {
+      type: "scheduled_operator_appointment",
+      tenantId: context.scope.tenantId,
+      canonicalOperatorId: identity.canonicalOperatorId,
+      appointmentId: context.jobId,
+      appointmentKind: context.source.appointmentKind,
+      standingAuthorizationId: context.actor.standingAuthorizationId,
+    },
+    riskClass: "EXTERNAL_COMMUNICATION",
+    exactAction: DAILY_CLAIRE_CALLS[purpose].exactAction,
+    sourceReference: context.source.sourceReference,
+    idempotencyKey: context.idempotencyKey,
+    standingAuthorizationId: context.actor.standingAuthorizationId,
+    approvedByUserId: null,
+    expiresAtMs: Date.now() + 5 * 60_000,
+    now,
+    execute: async () => {
+      if (!store) throw new Error("Operator appointment execution requires its durable store");
+      const briefing = await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
+      const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
+      if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");
+      return startClairePreDriveCall({
+        tenantId: context.scope.tenantId,
+        actorId: identity.communicationOperatorUserId,
+        dayDirectorActorId: identity.dayDirectorActorId,
+        timeZone: step.timeZone,
+        openingOverride: showrunnerOpening(briefing),
+        sessionKindOverride: purpose,
+        showrunner: {
+          purpose,
+          tenantId: identity.tenantId,
+          canonicalOperatorId: identity.canonicalOperatorId,
+          operatorUserId: identity.canonicalOpenId,
+          dayDirectorActorId: identity.dayDirectorActorId,
+          dayDirectorActorIds: identity.dayDirectorActorIds,
+          timeZone: step.timeZone,
+          businessDate,
+          briefing,
+          captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
+          replan: null,
+          turns: 0,
+        },
+      });
+    },
+  });
+  if (!result.executed) return { skipped: result.reason };
+  const { callSid, communicationReceiptId } = requireClaireCallExecutionProof(result.result);
+  await logAgentEvent({
+    ctx: {
+      tenantId: context.scope.tenantId,
+      agentType: "goal_cycle_agent",
+      actorType: "system",
+      actorId: identity.canonicalOpenId,
+      canonicalOperatorId: identity.canonicalOperatorId,
+      standingAuthorizationId: context.actor.standingAuthorizationId,
+      approvedByUserId: null,
+    },
+    toolName: purpose === "morning_readiness" ? "placeClaireMorningReadinessCall" : "placeClaireEveningDebriefCall",
+    inputJson: { appointmentId: context.jobId, appointmentKind: context.source.appointmentKind, businessDate, idempotencyKey: context.idempotencyKey },
+    outputJson: { callSid, communicationReceiptId },
+    status: "success",
+    entityType: "operator_appointment",
+    entityId: context.jobId,
+  }).catch(() => undefined);
+  return { callSid, communicationReceiptId, appointmentId: context.jobId, appointmentKind: context.source.appointmentKind, businessDate };
 }

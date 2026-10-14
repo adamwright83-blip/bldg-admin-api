@@ -181,60 +181,18 @@ export async function answerMissionFollowUp(
   const overlay = readDayLineOverlay(row.metadataJson);
   if (!overlay.unresolved) throw new Error("This item is not awaiting an explanation");
   const missionType = commitmentMissionType(row);
-  const classification = classifyMissionExplanation(answer);
-  const sourceReference = `day_director_commitments:${row.id}`;
-  const explanation = await recordDaphneObservation({
-    tenantId: input.tenantId,
-    canonicalOperatorId: input.canonicalOperatorId,
-    operatorUserId: input.operatorUserId,
-    actorType: "user",
-    actorId: input.operatorUserId,
-    observationKind: "user_statement",
-    evidenceChannel: "stated",
-    verificationStatus: "attested",
+  const recorded = await recordMissionExplanation({
+    ...input,
+    missionType,
+    answer,
     sourceType: "day_line_unresolved_explanation",
-    sourceReference,
-    occurredAt: now,
-    payload: {
-      answer,
-      missionType,
-      reason: classification.reason,
-      epistemic: classification.epistemic,
-      unresolvedObservationId: overlay.unresolved.observationId,
-    },
+    sourceReference: `day_director_commitments:${row.id}`,
     idempotencyKey: `day_line_explanation:${row.id}:${overlay.unresolved.observationId}`,
+    extraPayload: { unresolvedObservationId: overlay.unresolved.observationId },
+    now,
   });
-  let adjustmentObservationId: string | null = null;
-  const allowed = daphneAdaptationAllowed(
-    await loadDaphneMetaPreferences({
-      tenantId: input.tenantId,
-      canonicalOperatorId: input.canonicalOperatorId,
-    })
-  );
-  if (classification.epistemic === "explicit" && classification.adjustment && allowed) {
-    const adjustment = await recordDaphneObservation({
-      tenantId: input.tenantId,
-      canonicalOperatorId: input.canonicalOperatorId,
-      operatorUserId: input.operatorUserId,
-      actorType: "user",
-      actorId: input.operatorUserId,
-      observationKind: "preference_declaration",
-      evidenceChannel: "stated",
-      verificationStatus: "attested",
-      sourceType: MISSION_PRESENTATION_SOURCE,
-      sourceReference: `daphne_observations:${explanation.id}`,
-      occurredAt: now,
-      // Time-of-day, channel and style describe the operator, not one mission type.
-      payload: {
-        missionType: adjustmentScope(classification.adjustment!) === "operator" ? OPERATOR_SCOPE : missionType,
-        originMissionType: missionType,
-        adjustment: classification.adjustment,
-        revoked: false,
-      },
-      idempotencyKey: `mission_presentation:${explanation.id}`,
-    });
-    adjustmentObservationId = adjustment.id;
-  }
+  const { classification, allowed, adjustmentObservationId } = recorded;
+  const explanation = { id: recorded.explanationObservationId };
   await writeUnresolved(db, row, {
     ...overlay.unresolved,
     status: "explained",
@@ -255,6 +213,81 @@ export async function answerMissionFollowUp(
     adjustmentApplied: adjustmentObservationId != null,
     reply,
   };
+}
+
+/**
+ * Records an operator's explanation of unfinished work in their own words and,
+ * only for an explicit recognised reason with adaptation consent, the resulting
+ * presentation preference. Shared by Day Line follow-ups and evening debriefs.
+ */
+export async function recordMissionExplanation(
+  input: Omit<Scope, "actorIds"> & {
+    missionType: string;
+    answer: string;
+    sourceType: string;
+    sourceReference: string;
+    idempotencyKey: string;
+    extraPayload?: Record<string, unknown>;
+    now?: Date;
+  }
+): Promise<{
+  classification: DaphneExplanationClassification;
+  explanationObservationId: string;
+  adjustmentObservationId: string | null;
+  allowed: boolean;
+}> {
+  const now = input.now ?? new Date();
+  const classification = classifyMissionExplanation(input.answer);
+  const explanation = await recordDaphneObservation({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.canonicalOperatorId,
+    operatorUserId: input.operatorUserId,
+    actorType: "user",
+    actorId: input.operatorUserId,
+    observationKind: "user_statement",
+    evidenceChannel: "stated",
+    verificationStatus: "attested",
+    sourceType: input.sourceType,
+    sourceReference: input.sourceReference,
+    occurredAt: now,
+    payload: {
+      answer: input.answer,
+      missionType: input.missionType,
+      reason: classification.reason,
+      epistemic: classification.epistemic,
+      ...(input.extraPayload ?? {}),
+    },
+    idempotencyKey: input.idempotencyKey,
+  });
+  const allowed = daphneAdaptationAllowed(
+    await loadDaphneMetaPreferences({ tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId })
+  );
+  let adjustmentObservationId: string | null = null;
+  if (classification.epistemic === "explicit" && classification.adjustment && allowed) {
+    const adjustment = await recordDaphneObservation({
+      tenantId: input.tenantId,
+      canonicalOperatorId: input.canonicalOperatorId,
+      operatorUserId: input.operatorUserId,
+      actorType: "user",
+      actorId: input.operatorUserId,
+      observationKind: "preference_declaration",
+      evidenceChannel: "stated",
+      verificationStatus: "attested",
+      sourceType: MISSION_PRESENTATION_SOURCE,
+      sourceReference: `daphne_observations:${explanation.id}`,
+      occurredAt: now,
+      // Time-of-day, channel and style describe the operator, not one mission type.
+      payload: {
+        missionType: adjustmentScope(classification.adjustment) === "operator" ? OPERATOR_SCOPE : input.missionType,
+        originMissionType: input.missionType,
+        adjustment: classification.adjustment,
+        revoked: false,
+      },
+      idempotencyKey: `mission_presentation:${explanation.id}`,
+    });
+    adjustmentObservationId = adjustment.id;
+  }
+  return { classification, explanationObservationId: explanation.id, adjustmentObservationId, allowed };
 }
 
 /** Operator revocation: the next missions of this type return to default presentation. */

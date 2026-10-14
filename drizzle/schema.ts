@@ -8546,6 +8546,8 @@ export const operatorAppointments = mysqlTable(
       "sunday_weekly_planning",
       "weekly_planning_callback",
       "weekday_strategic_planning",
+      "daily_morning_readiness",
+      "daily_evening_debrief",
     ]).notNull(),
     weekStart: varchar("weekStart", { length: 10 }).notNull(),
     scheduledFor: timestamp("scheduledFor", { fsp: 3 }).notNull(),

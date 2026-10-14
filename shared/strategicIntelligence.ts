@@ -170,4 +170,19 @@ export type StrategicPlanningProposal = {
   uncertainty: string[];
   opening: string;
   approvalState: "pending" | "approved" | "rejected" | "deferred";
+  /** The week's production plan: one throughline, a sequence, and what changed. */
+  weeklyPlan?: WeeklyProductionPlan;
+};
+
+export type WeeklyProductionPlan = {
+  objective: string;
+  outcomes: string[];
+  evidence: string;
+  sequence: Array<{ date: string; itemId: string; title: string; window: string | null; why: string; status: "draft" | "commitment" }>;
+  preparation: string[];
+  commitments: string[];
+  contingency: string;
+  adaptations: string[];
+  uncertainty: string[];
+  changes: Array<{ at: string; summary: string }>;
 };

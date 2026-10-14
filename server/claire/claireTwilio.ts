@@ -1,3 +1,4 @@
+import { runShowrunnerTurn, type ShowrunnerCallState } from "./showrunner/showrunnerTurn";
 import { parseStrategicProposalControl } from "../../shared/strategicProposalControl";
 import { createHash, randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
@@ -170,7 +171,11 @@ type PreDriveConversation = ClaireTurnState & {
     | "field_debrief"
     | "pre_drive"
     | "weekly_planning_invite"
-    | "weekly_planning";
+    | "weekly_planning"
+    | "morning_readiness"
+    | "evening_debrief";
+  /** Prepared briefing and captured outcomes for a daily showrunner call. */
+  showrunner?: ShowrunnerCallState | null;
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
@@ -802,7 +807,33 @@ export function runAuthoritativeClaireVoiceTurn(input: {
 
       let result: ClaireTurnResult;
       let brainV2LiveHandled = false;
-      if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
+      if (
+        (conversation.sessionKind === "morning_readiness" || conversation.sessionKind === "evening_debrief") &&
+        conversation.showrunner &&
+        input.utterance.trim()
+      ) {
+        // Daily showrunner calls have their own grounded conversation handler.
+        const turn = await runShowrunnerTurn({
+          state: conversation.showrunner,
+          history: conversation.history ?? [],
+          utterance: input.utterance.trim(),
+          sourceEventId: daphneSourceId,
+          conversationKey: callStateKey(conversationId),
+        });
+        conversation.showrunner = turn.state;
+        conversation.history = [
+          ...(conversation.history ?? []),
+          { speaker: "operator", text: input.utterance.trim(), at: Date.now() },
+          { speaker: "claire", text: turn.speak, at: Date.now() },
+        ];
+        result = {
+          speak: turn.speak,
+          kind: "answered",
+          assembledUtterance: input.utterance.trim(),
+          thoughtCompleteness: "complete",
+          ...(turn.end ? { endCall: true, endCallReason: `${conversation.sessionKind}_complete` } : {}),
+        } as ClaireTurnResult;
+      } else if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
         if (input.utterance.trim()) {
           conversation.providerFragments = [
             ...(conversation.providerFragments ?? []),
@@ -1313,6 +1344,7 @@ async function persistClaireVoiceConversation(input: {
   /** Outbound already has assembled context. Inbound pickup bootstraps and waits until the first turn. */
   inboundContextReady?: boolean;
   sessionKindOverride?: PreDriveConversation["sessionKind"];
+  showrunner?: ShowrunnerCallState | null;
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
@@ -1336,6 +1368,7 @@ async function persistClaireVoiceConversation(input: {
     turns: 0,
     touchedAt: now,
     sessionKind: input.sessionKindOverride ?? input.context.workday?.session,
+    showrunner: input.showrunner ?? null,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart ?? null,
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference ?? null,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId ?? null,
@@ -1375,7 +1408,9 @@ export async function startClairePreDriveCall(input: {
   dayDirectorActorId?: string;
   /** Reuses the authorized Claire dialer while supplying a bounded authored opening. */
   openingOverride?: string;
-  sessionKindOverride?: "weekly_planning_invite" | "weekly_planning";
+  sessionKindOverride?: "weekly_planning_invite" | "weekly_planning" | "morning_readiness" | "evening_debrief";
+  /** Daily showrunner calls carry their prepared briefing into the conversation. */
+  showrunner?: ShowrunnerCallState | null;
   weeklyPlanningWeekStart?: string | null;
   weeklyPlanningSourceReference?: string | null;
   weeklyPlanningAppointmentId?: string | null;
@@ -1401,6 +1436,7 @@ export async function startClairePreDriveCall(input: {
     spokenOpening: spokenClaireText(brief, true),
     missionId: input.missionId,
     sessionKindOverride: input.sessionKindOverride,
+    showrunner: input.showrunner ?? null,
     weeklyPlanningWeekStart: input.weeklyPlanningWeekStart,
     weeklyPlanningSourceReference: input.weeklyPlanningSourceReference,
     weeklyPlanningAppointmentId: input.weeklyPlanningAppointmentId,

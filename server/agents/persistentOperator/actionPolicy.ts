@@ -1,3 +1,4 @@
+import { dailyCallAuthorizedNow, dailyPurposeForAction } from "../../../shared/dailyClaireCalls";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION, strategicCallAuthorizedNow } from "../../../shared/strategicCallAuthorization";
 import { and, eq, isNull } from "drizzle-orm";
 import { tenantStandingAuthorizations } from "../../../drizzle/schema";
@@ -213,6 +214,10 @@ export async function evaluatePersistentActionPolicy(
     return { allowed: false, reason: "standing_authorization_invalid" };
   }
   if (input.exactAction === WEEKDAY_STRATEGIC_PLANNING_ACTION && !strategicCallAuthorizedNow(authorization, input.now ?? new Date())) return { allowed: false, reason: "standing_authorization_invalid" };
+  // Each daily call purpose is authorized only by its own grant, on its own days and window.
+  const dailyPurpose = dailyPurposeForAction(input.exactAction);
+  if (dailyPurpose && !dailyCallAuthorizedNow(authorization, dailyPurpose, input.now ?? new Date()))
+    return { allowed: false, reason: "standing_authorization_invalid" };
   if (
     !inLocalWindow({
       now: input.now ?? new Date(),
