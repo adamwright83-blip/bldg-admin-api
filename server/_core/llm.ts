@@ -75,12 +75,6 @@ export type InvokeParams = {
   /** Cancels bounded investigations at the provider boundary. */
   signal?: AbortSignal;
   timeoutMs?: number;
-  /** Cancels bounded investigations at the provider boundary. */
-  signal?: AbortSignal;
-  timeoutMs?: number;
-  /** Cancels bounded investigations at the provider boundary. */
-  signal?: AbortSignal;
-  timeoutMs?: number;
   messages: Message[];
   tenantId?: string;
   model?: string;

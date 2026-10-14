@@ -438,16 +438,6 @@ export const databaseLedgerLoaders: LedgerLoaders = {
       : query);
     if (window.maxSourceRows && rows.length > window.maxSourceRows)
       throw new Error("CleanCloud materialization limit exceeded");
-    const rows: CleanCloudOrderRow[] = await (window.maxSourceRows
-      ? query.limit(window.maxSourceRows + 1)
-      : query);
-    if (window.maxSourceRows && rows.length > window.maxSourceRows)
-      throw new Error("CleanCloud materialization limit exceeded");
-    const rows: CleanCloudOrderRow[] = await (window.maxSourceRows
-      ? query.limit(window.maxSourceRows + 1)
-      : query);
-    if (window.maxSourceRows && rows.length > window.maxSourceRows)
-      throw new Error("CleanCloud materialization limit exceeded");
     // A Revenue-report row in the window may have a Sales-report twin dated
     // outside it; the Sales row wins, so load those twins before deduping.
     const withSales = new Set(rows.filter(r => r.sourceReportType === "orders_sales").map(r => r.cleancloudOrderId));
@@ -468,10 +458,6 @@ export const databaseLedgerLoaders: LedgerLoaders = {
         );
       rows.push(...twins);
     if (window.maxSourceRows && rows.length > window.maxSourceRows)
-        throw new Error("CleanCloud twin materialization limit exceeded");
-      if (window.maxSourceRows && rows.length > window.maxSourceRows)
-        throw new Error("CleanCloud twin materialization limit exceeded");
-      if (window.maxSourceRows && rows.length > window.maxSourceRows)
         throw new Error("CleanCloud twin materialization limit exceeded");
     }
     const storeLabel = rows.length ? await pairedStoreLabel(db, window.tenantId) : null;

@@ -420,10 +420,10 @@ export async function analyzeBusinessData(
           );
         } catch {
           // A verbose or malformed model narrative cannot promote invented figures. Render actual cells instead.
-          answer = renderEvidenceCells(cited, next.customerIds);
+          answer = renderEvidenceCells(cited, next.customerIds, dataset.customerRefs);
         }
         if (!answer.trim())
-          answer = renderEvidenceCells(cited, next.customerIds);
+          answer = renderEvidenceCells(cited, next.customerIds, dataset.customerRefs);
         const retain = next.retainSelection || Boolean(ordinalId);
         const customerIds =
           retain && previous ? previous.customerIds : next.customerIds;
@@ -494,11 +494,12 @@ function failure(
 /** Generic result renderer, not a metric or question catalogue. Every displayed value is an executed result cell. */
 function renderEvidenceCells(
   results: AnalysisQueryResult[],
-  customerIds: string[]
+  customerIds: string[],
+  refs: ApprovedDataset["customerRefs"]
 ): string {
   const result =
     [...results].reverse().find(r => r.columns.includes("name")) ??
-    results.at(-1)!;
+    (customerIds.length ? [...results].reverse().find(r => r.columns.includes("customer_id")) : null) ?? results.at(-1)!;
   const idColumn = result.columns.indexOf("customer_id");
   const rows =
     customerIds.length && idColumn >= 0
@@ -506,8 +507,8 @@ function renderEvidenceCells(
           .map(id => result.rows.find(row => row[idColumn] === id))
           .filter((r): r is NonNullable<typeof r> => Boolean(r))
       : result.rows;
-  const cells = rows.slice(0, 5).map(row =>
-    result.columns
+  const cells = rows.slice(0, 5).map(row => {
+    const fields = result.columns
       .slice(0, 8)
       .map((column, i) => {
         if (["customer_id", "order_ref"].includes(column) || row[i] == null)
@@ -519,8 +520,10 @@ function renderEvidenceCells(
         return `${column.replace(/_/g, " ").slice(0, 40)}: ${value}`;
       })
       .filter(Boolean)
-      .join(", ")
-  );
+      .join(", ");
+    const name = idColumn >= 0 ? refs[String(row[idColumn])]?.displayName : null;
+    return result.columns.includes("name") || !name ? fields : `name: ${name}${fields ? `, ${fields}` : ""}`;
+  }).filter(Boolean);
   return cells.length
     ? `Here’s the recorded evidence: ${cells.join("; ")}.${result.receipt.truncated ? " The result is truncated and does not establish a population total." : ""}`
     : "The calculation returned no matching records in the available window; incomplete coverage does not establish zero activity.";

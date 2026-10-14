@@ -77,12 +77,4 @@ export async function readNativePaidCandidates(tenantId: string,
   if (maxRows && rows.length > maxRows)
     throw new Error("Native paid candidate limit exceeded");
   return rows;
-  const rows = await (maxRows ? query.limit(maxRows + 1) : query);
-  if (maxRows && rows.length > maxRows)
-    throw new Error("Native paid candidate limit exceeded");
-  return rows;
-  const rows = await (maxRows ? query.limit(maxRows + 1) : query);
-  if (maxRows && rows.length > maxRows)
-    throw new Error("Native paid candidate limit exceeded");
-  return rows;
 }

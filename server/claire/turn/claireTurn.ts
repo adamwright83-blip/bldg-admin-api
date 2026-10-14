@@ -1,6 +1,4 @@
 import { receiptFromAnalysis } from "../provenance/claimReceipts";
-import { receiptFromAnalysis } from "../provenance/claimReceipts";
-import { receiptFromAnalysis } from "../provenance/claimReceipts";
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import type { SalesInsightArtifact } from "../proactive/salesInsights";
 import { acceptSalesInsightChallenge } from "../proactive/growthChallenge";

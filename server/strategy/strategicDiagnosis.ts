@@ -448,18 +448,6 @@ export function assembleStrategicDiagnosis(
           e =>
             `Analytical research (model interpretation, not causal proof): ${e.description} [${e.id}]`
         ),
-      ...evidence
-        .filter(e => e.source === "analyzeBusinessData")
-        .map(
-          e =>
-            `Analytical research (model interpretation, not causal proof): ${e.description} [${e.id}]`
-        ),
-      ...evidence
-        .filter(e => e.source === "analyzeBusinessData")
-        .map(
-          e =>
-            `Analytical research (model interpretation, not causal proof): ${e.description} [${e.id}]`
-        ),
       ...input.market.limitations,
       ...(!industry
         ? ["Industry metric readers unsupported."]

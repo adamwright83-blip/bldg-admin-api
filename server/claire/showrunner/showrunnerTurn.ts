@@ -3,22 +3,11 @@ import {
   looksLikeWorkRequest,
   type ClaireAnalyticsState,
 } from "../businessConversation";
-import {
-  answerClaireBusinessTurn,
-  looksLikeWorkRequest,
-  type ClaireAnalyticsState,
-} from "../businessConversation";
-import {
-  answerClaireBusinessTurn,
-  looksLikeWorkRequest,
-  type ClaireAnalyticsState,
-} from "../businessConversation";
 import { invokeLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
 import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
 import type { ShowrunnerBriefing } from "./showrunnerBriefing";
 import { contactEditsForAnalysisSelection,
-  contactEditsForAnalysisSelection,
   replanFromDeskEdits, type DeskPlanEdit } from "./deskPlanEdits";
 import {
   approveShowrunnerReplan,
@@ -189,8 +178,6 @@ export async function runShowrunnerTurn(input: {
   conversationKey: string;
   invoke?: typeof invokeLLM;
   business?: Parameters<typeof answerClaireBusinessTurn>[1];
-  business?: Parameters<typeof answerClaireBusinessTurn>[1];
-  business?: Parameters<typeof answerClaireBusinessTurn>[1];
   /** Durable recorder; injectable for failure tests. */
   record?: typeof recordShowrunnerTurn;
   approve?: typeof approveShowrunnerReplan;
@@ -239,81 +226,6 @@ export async function runShowrunnerTurn(input: {
       end: false,
       state,
     };
-  }
-  const contactEdits =
-    state.purpose === "desk_planning"
-      ? contactEditsForAnalysisSelection(state, input.utterance, now)
-      : null;
-  if (contactEdits) {
-    const edit = await (input.deskReplan ?? replanFromDeskEdits)(
-      state,
-      contactEdits,
-      now
-    ).catch(() => null);
-    if (!edit?.itemIds.length)
-      return {
-        speak:
-          "I couldn't prepare those contacts reliably, so no work was added.",
-        end: false,
-        state,
-      };
-    state.replan = { ...edit, approved: false, askedTurn: state.turns };
-    return {
-      speak: `$
-        { edit.summary }Want me to lock that in?`,
-      end: false,
-      state,
-    };
-  }
-  // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.
-  // A pending proposal approval above retains priority; analytical turns cannot record outcomes or plan edits.
-  if (
-    !looksLikeWorkRequest(input.utterance) &&
-    (input.business || !input.invoke)
-  ) {
-    const business = await answerClaireBusinessTurn(
-      {
-        tenantId: state.tenantId,
-        utterance: input.utterance,
-        state,
-        surface: "voice",
-      },
-      { now: () => now, timeZone: () => state.timeZone, ...input.business }
-    );
-    if (business.handled && business.reader === "analysis") {
-      if (business.analysisEvidence?.kind === "evidence")
-        state.briefing.analyticalEvidence = {
-          answer: business.analysisEvidence.answer,
-          receiptIds: business.analysisEvidence.citedReceiptIds,
-          limitations: business.analysisEvidence.limitations,
-        };
-      return { speak: business.speak, end: false, state };
-    }
-  }
-  // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.
-  // A pending proposal approval above retains priority; analytical turns cannot record outcomes or plan edits.
-  if (
-    !looksLikeWorkRequest(input.utterance) &&
-    (input.business || !input.invoke)
-  ) {
-    const business = await answerClaireBusinessTurn(
-      {
-        tenantId: state.tenantId,
-        utterance: input.utterance,
-        state,
-        surface: "voice",
-      },
-      { now: () => now, timeZone: () => state.timeZone, ...input.business }
-    );
-    if (business.handled && business.reader === "analysis") {
-      if (business.analysisEvidence?.kind === "evidence")
-        state.briefing.analyticalEvidence = {
-          answer: business.analysisEvidence.answer,
-          receiptIds: business.analysisEvidence.citedReceiptIds,
-          limitations: business.analysisEvidence.limitations,
-        };
-      return { speak: business.speak, end: false, state };
-    }
   }
   // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.
   // A pending proposal approval above retains priority; analytical turns cannot record outcomes or plan edits.
