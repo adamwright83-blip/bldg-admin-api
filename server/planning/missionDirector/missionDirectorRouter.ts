@@ -1,3 +1,4 @@
+import { formatInTimeZone } from "date-fns-tz";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -9,6 +10,7 @@ import { getDb } from "../../db";
 import { isLegacyDayforgeTenant } from "../../saas/tenantAccess";
 import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
 import { listPlanRevisions, planForDate, recordPlanUsage } from "./missionDirectorService";
+import { readCarriedForwardWork } from "../../agents/daphne/missionFollowUp";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -57,7 +59,7 @@ export const missionDirectorRouter = router({
     .query(async ({ ctx, input }) => {
       const identity = await missionDirectorIdentity(ctx, "mission_director.plan");
       const timeZone = await resolveMissionDirectorBusinessTimeZone(identity.tenantId);
-      return planForDate({
+      const plan = await planForDate({
         tenantId: identity.tenantId,
         operatorId: identity.dayDirectorActorId,
         operatorIds: identity.dayDirectorActorIds,
@@ -66,6 +68,20 @@ export const missionDirectorRouter = router({
         timeZone,
         ...input,
       });
+      const work = plan.outcome.workPlan;
+      // Read-side only: the stored plan is unchanged.
+      const carriedForward =
+        work?.status === "ranked"
+          ? await readCarriedForwardWork({
+              tenantId: identity.tenantId,
+              canonicalOperatorId: identity.canonicalOperatorId,
+              actorIds: identity.dayDirectorActorIds,
+              // Carried forward only once the tenant's business day has passed.
+              businessDate: [input.businessDate, formatInTimeZone(new Date(), timeZone, "yyyy-MM-dd")].sort()[0]!,
+              sourceRefs: work.primary.sourceRefs,
+            }).catch(() => null)
+          : null;
+      return { ...plan, carriedForward };
     }),
   revisions: legacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date }))

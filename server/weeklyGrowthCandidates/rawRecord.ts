@@ -56,6 +56,8 @@ export type WeeklyGrowthRawRecord = {
   grounding: WeeklyGrowthGrounding | null;
   operationalClass: WeeklyGrowthOperationalClass | null;
   motionHint: WeeklyGrowthMotion | null;
+  /** Execution type stored at approval; authoritative over text classification. */
+  storedExecutionType: "mission" | "challenge" | null;
   obligationKind: "dormant_recovery" | "sales_follow_up" | "data_health" | null;
   campaignId: string | null;
   followUpId: string | null;
@@ -115,6 +117,7 @@ export function emptyRawRecord(overrides: Partial<WeeklyGrowthRawRecord> & Pick<
     grounding: null,
     operationalClass: null,
     motionHint: null,
+    storedExecutionType: null,
     obligationKind: null,
     campaignId: null,
     followUpId: null,

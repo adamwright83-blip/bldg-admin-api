@@ -169,6 +169,11 @@ export async function respondToStrategicProposal(
         !isDeepStrictEqual(lineage, expectedLineage)
       )
         throw new Error("Canonical commitment readback mismatch");
+      if (item.missionType && metadata && (metadata as Record<string, unknown>).missionType !== item.missionType)
+        await db
+          .update(dayDirectorCommitments)
+          .set({ metadataJson: { ...(metadata as Record<string, unknown>), missionType: item.missionType } })
+          .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));
       // The accepted canonical commitment is the execution authority. Keep
       // the originating durable objective's lifecycle in sync for outcome binding.
       await db

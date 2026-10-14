@@ -1,0 +1,98 @@
+{
+  "tenantId": "effect-b85f18ad41",
+  "diagnosis": {
+    "constraint": "retention",
+    "currentCondition": "Observed paid_orders_per_period: 5; operator target: 40. Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+    "selected": "Contact eligible dormant customers with a bounded recovery offer",
+    "options": [
+      {
+        "id": "option-1",
+        "cost": "No paid expansion proposed; any cost requires a separate budget and approval.",
+        "risk": "Small samples and incomplete attribution can mislead.",
+        "driver": "retention",
+        "effort": "One desk investigation using existing records.",
+        "reason": "Preferred: known buyers with an existing relationship, measurable within one cycle, and no acquisition spend.",
+        "approach": "Contact eligible dormant customers with a bounded recovery offer",
+        "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+        "eligible": true,
+        "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+        "uncertainty": "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.",
+        "evidenceRefs": [
+          "snap_d3da0b111bb64cbda585e33b:net_sales_cents",
+          "snap_d3da0b111bb64cbda585e33b:prior_net_sales_cents",
+          "snap_d3da0b111bb64cbda585e33b:dormant_customers",
+          "snap_d3da0b111bb64cbda585e33b:returning_customers_30d"
+        ],
+        "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+        "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+        "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+        "expectedBenefit": "If 5 of 8 dormant customers each place one order: 5 additional orders at the observed average of $40.00 is about $200.00 recorded sales (arithmetic on an average, not a forecast or profit).",
+        "nextMeasurableAction": "Prepare 5 consented recovery contacts and record replies and orders within 14 days."
+      },
+      {
+        "id": "option-2",
+        "cost": "Incremental cost is unmeasured; gather a bounded estimate before approval.",
+        "risk": "May consume cash or scarce operating time without validating the cause.",
+        "driver": "retention",
+        "effort": "Additional operator effort and customer eligibility need confirmation.",
+        "reason": "Not preferred now: replacing lost buyers with new ones costs more and leaves the dormant base unexplained.",
+        "approach": "Acquire new customers to replace lost volume",
+        "capacity": "Capacity unknown; do not presume ability to absorb more demand.",
+        "eligible": false,
+        "economics": "Contribution margin, gross profit, and cash-flow impact are unknown; revenue is not profit.",
+        "uncertainty": "Acquisition cost and conversion are unmeasured.",
+        "evidenceRefs": [
+          "snap_d3da0b111bb64cbda585e33b:net_sales_cents",
+          "snap_d3da0b111bb64cbda585e33b:prior_net_sales_cents",
+          "snap_d3da0b111bb64cbda585e33b:dormant_customers",
+          "snap_d3da0b111bb64cbda585e33b:returning_customers_30d"
+        ],
+        "observedBasis": "Recorded sales last 30 days $200.00 vs $960.00 the prior 30 (down 79%). Paid orders 5 vs 24. Month-to-date $200.00 vs $480.00 at the same point last month. 1 new and 4 returning customers in the last 30 days. 8 dormant customers are recovery candidates.",
+        "reversibility": "Preparation is reversible; no spend, contact, or commitment is authorized by this recommendation.",
+        "timeToResults": "Review at the next weekly cycle; causal results may take longer.",
+        "expectedBenefit": "Last 30 days brought 1 new customer. 1 additional order at the observed average of $40.00 is about $40.00 recorded sales (arithmetic on an average, not a forecast or profit).",
+        "nextMeasurableAction": "Record acquisition cost per new customer before committing spend."
+      }
+    ]
+  },
+  "firstMission": {
+    "commitmentId": "feec837e-8d51-4699-9597-2ffd62584526",
+    "title": "Contact eligible dormant customers with a bounded recovery offer",
+    "missionType": "retention",
+    "businessDate": "2026-10-13"
+  },
+  "followUp": {
+    "commitmentId": "feec837e-8d51-4699-9597-2ffd62584526",
+    "businessDate": "2026-10-13",
+    "title": "Contact eligible dormant customers with a bounded recovery offer",
+    "missionType": "retention",
+    "question": "What happened with that customer recovery mission?"
+  },
+  "explanation": {
+    "classification": {
+      "reason": "task_size",
+      "epistemic": "explicit",
+      "adjustment": {
+        "kind": "task_size",
+        "firstStepOnly": true
+      }
+    },
+    "explanationObservationId": "dobs_a1063f1c328db29148b37e38f7eb22f13d54439efccf9df3",
+    "adjustmentObservationId": "dobs_1238194f86c755de322f98e28d7ed383eb799427ded504e7",
+    "adjustmentApplied": true,
+    "reply": "Thanks. Start with the first step only; the full objective is unchanged. The work itself stays the same."
+  },
+  "nextMission": {
+    "commitmentId": "12fa9c73-56cf-40a4-af87-c53a8c0b1438",
+    "title": "Contact eligible dormant customers with a bounded recovery offer",
+    "presentation": {
+      "adjustment": {
+        "kind": "task_size",
+        "firstStepOnly": true
+      },
+      "note": "Start with the first step only; the full objective is unchanged.",
+      "sourceObservationId": "dobs_1238194f86c755de322f98e28d7ed383eb799427ded504e7",
+      "missionType": "retention"
+    }
+  }
+}

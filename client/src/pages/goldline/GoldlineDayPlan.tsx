@@ -18,6 +18,17 @@ import type {
   DayDirectorProposal,
   ProcessingLocation,
 } from "@shared/dayDirector";
+import type {
+  DaphneMissionFollowUp,
+  DaphneMissionPresentation,
+} from "@shared/daphneMissionPresentation";
+
+type CarriedForwardWorkView = {
+  commitmentId: string;
+  originalBusinessDate: string;
+  title: string;
+  presentation: DaphneMissionPresentation | null;
+};
 import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
 import {
@@ -114,6 +125,11 @@ export type GoldlineDayPlanProps = {
   onOpenWeek?: () => void;
   processingLocation?: ProcessingLocation | null;
   commitments?: DayDirectorCommitment[];
+  /** Claire's one question about overdue, still-open work. */
+  missionFollowUp?: DaphneMissionFollowUp | null;
+  /** Unfinished approved work Mission Director carried into this plan date. */
+  carriedForward?: CarriedForwardWorkView | null;
+  onAnswerMissionFollowUp?: (commitmentId: string, answer: string) => Promise<string>;
   intelligenceAvailable?: boolean;
   dismissedPromptKeys?: string[];
   onProposeCommitment?: (sourceText: string) => Promise<DayDirectorProposal>;
@@ -274,6 +290,114 @@ function StopCard({
     </article>
   );
 }
+function MissionFollowUpCard({
+  followUp,
+  onAnswer,
+}: {
+  followUp: DaphneMissionFollowUp | null;
+  onAnswer?: (commitmentId: string, answer: string) => Promise<string>;
+}) {
+  const [answer, setAnswer] = useState("");
+  const [reply, setReply] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!followUp || !onAnswer) return null;
+  return (
+    <section className="gdp-mission-followup" data-testid="claire-mission-followup">
+      <p>
+        <strong>Claire:</strong>{" "}
+        <span data-testid="claire-mission-followup-question">{followUp.question}</span>
+      </p>
+      <p className="gdp-mission-followup-item">
+        {followUp.title} · {followUp.businessDate} · still open
+      </p>
+      {reply ? (
+        <p data-testid="claire-mission-followup-reply">{reply}</p>
+      ) : (
+        <form
+          onSubmit={async event => {
+            event.preventDefault();
+            if (!answer.trim()) return;
+            setBusy(true);
+            try {
+              setReply(await onAnswer(followUp.commitmentId, answer.trim()));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <input
+            aria-label="Tell Claire what happened"
+            data-testid="claire-mission-followup-answer"
+            value={answer}
+            maxLength={2000}
+            onChange={event => setAnswer(event.target.value)}
+          />
+          <button type="submit" disabled={busy || !answer.trim()}>
+            Tell Claire
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function CarriedForwardCard({
+  work,
+  onComplete,
+}: {
+  work: CarriedForwardWorkView | null;
+  onComplete?: (commitmentId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!work) return null;
+  return (
+    <section className="gdp-mission-adjustments" data-testid="carried-forward-mission">
+      <p>
+        <strong>Still open from {work.originalBusinessDate}:</strong> {work.title}
+      </p>
+      {work.presentation ? (
+        <p data-testid="carried-forward-presentation">{work.presentation.note}</p>
+      ) : null}
+      {onComplete ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onComplete(work.commitmentId);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Mark done
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function DaphneMissionAdjustments({
+  commitments,
+}: {
+  commitments?: DayDirectorCommitment[];
+}) {
+  const adjusted = (commitments ?? []).filter(
+    c => c.status === "open" && c.presentation
+  );
+  if (!adjusted.length) return null;
+  return (
+    <section className="gdp-mission-adjustments" data-testid="daphne-mission-adjustments">
+      {adjusted.map(c => (
+        <p key={c.id} data-testid={`daphne-mission-adjustment-${c.id}`}>
+          <strong>{c.title}</strong> — {c.presentation!.note}
+        </p>
+      ))}
+    </section>
+  );
+}
+
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   // GOLDLINE world is the default Day Line. The operator can switch to
   // the previous layout with ?dayline=classic while visual QA continues.
@@ -389,6 +513,15 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}${artPreview ? " gdp-shell--v2" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
+      <MissionFollowUpCard
+        followUp={props.missionFollowUp ?? null}
+        onAnswer={props.onAnswerMissionFollowUp}
+      />
+      <DaphneMissionAdjustments commitments={props.commitments} />
+      <CarriedForwardCard
+        work={props.carriedForward ?? null}
+        onComplete={props.onCompleteCommitment}
+      />
       {!artPreview && (
         <button
           type="button"

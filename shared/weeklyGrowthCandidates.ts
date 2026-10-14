@@ -123,6 +123,8 @@ export type WeeklyGrowthCandidate = {
   title: string;
   objective: string;
   alreadyInFlight: boolean;
+  /** Execution type recorded when the work was approved; never re-derived from text. */
+  storedExecutionType?: "mission" | "challenge";
   /** Observed due date from the source. Not a recommended business date. */
   observedDueDate: string | null;
   sourceRefs: WeeklyGrowthSourceRef[];

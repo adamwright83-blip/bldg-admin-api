@@ -85,6 +85,12 @@ export type StrategyOption = {
   reversibility: string;
   eligible: boolean;
   reason: string;
+  /** Observed numbers this option rests on; absent figures are named as missing. */
+  observedBasis?: string;
+  /** Arithmetic on observed averages only; never a forecast, ROI, or profit claim. */
+  expectedBenefit?: string;
+  uncertainty?: string;
+  nextMeasurableAction?: string;
 };
 export type StrategicDiagnosis = {
   id: string;
@@ -135,6 +141,8 @@ export type StrategicProposalItem = {
   objective: string;
   executionType: "mission" | "challenge";
   candidateId: string;
+  /** Mission Director source kind; identifies matching missions for Daphne. */
+  missionType?: string;
   planId: string;
   planRevision: number;
   evidenceRefs: string[];

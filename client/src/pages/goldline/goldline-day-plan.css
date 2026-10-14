@@ -1634,3 +1634,35 @@
 .gdp-v2-claire-label strong { font: 800 12px/1.1 Inter, system-ui, sans-serif; }
 .gdp-v2-claire-label small { font-size: 8px; letter-spacing: .08em; }
 @media(max-width:390px) { .gdp-v2-claire-label { right: 64px; } }
+
+/* Claire's unresolved-work question and Daphne presentation adjustments. */
+.gdp-mission-followup,
+.gdp-mission-adjustments {
+  position: relative;
+  z-index: 5;
+  margin: 12px 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(16, 20, 28, 0.88);
+  color: #f5efe0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.gdp-mission-followup form { display: flex; gap: 8px; margin-top: 8px; }
+.gdp-mission-followup input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 239, 224, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+.gdp-mission-followup button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #e8b84a;
+  color: #1a1408;
+  font-weight: 600;
+}
+.gdp-mission-followup-item { opacity: 0.75; font-size: 12px; }

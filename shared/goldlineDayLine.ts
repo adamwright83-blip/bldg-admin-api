@@ -22,6 +22,16 @@ export type GoldlineDayLineOverlay = {
   cancelledBy?: string | null;
   cancelledReason?: string | null;
   notPursuing?: boolean;
+  /** Overdue and still open. Evidence of unresolved work, never proof of a skip. */
+  unresolved?: DayLineUnresolvedWork | null;
+};
+
+export type DayLineUnresolvedWork = {
+  observedAt: string;
+  observationId: string;
+  status: "awaiting_explanation" | "explained";
+  explanationObservationId?: string | null;
+  reason?: string | null;
 };
 
 export type DayLineItemRef = {
@@ -57,6 +67,20 @@ export function readDayLineOverlay(source: unknown): GoldlineDayLineOverlay {
     cancelledReason:
       typeof nested.cancelledReason === "string" ? nested.cancelledReason : null,
     notPursuing: nested.notPursuing === true,
+    unresolved: readUnresolved(nested.unresolved),
+  };
+}
+
+function readUnresolved(value: unknown): DayLineUnresolvedWork | null {
+  const v = asRecord(value);
+  if (typeof v.observedAt !== "string" || typeof v.observationId !== "string") return null;
+  return {
+    observedAt: v.observedAt,
+    observationId: v.observationId,
+    status: v.status === "explained" ? "explained" : "awaiting_explanation",
+    explanationObservationId:
+      typeof v.explanationObservationId === "string" ? v.explanationObservationId : null,
+    reason: typeof v.reason === "string" ? v.reason : null,
   };
 }
 

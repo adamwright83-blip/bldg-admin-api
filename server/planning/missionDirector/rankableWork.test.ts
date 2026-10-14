@@ -76,6 +76,29 @@ describe("Mission Director rankable work", () => {
     ).toContain("EXECUTION_CLASS_UNAVAILABLE");
   });
 
+  it("carried-forward approved work keeps its stored execution type instead of text classification", () => {
+    const carried = candidate(
+      "carried",
+      "Recover lapsed customers",
+      "Recover lapsed customers",
+      { motion: "customer_recovery", storedExecutionType: "mission", alreadyInFlight: true }
+    );
+    const unstored = candidate("unstored", "Recover lapsed customers", "Recover lapsed customers", {
+      motion: "customer_recovery",
+    });
+    const plan = rankMissionDirectorWork({
+      candidates: [carried, unstored],
+      campaigns: [],
+      campaignPrepReady: {},
+      context,
+      pockets: [],
+    });
+    const carriedRank = plan.ranking.find(item => item.workId === "carried")!;
+    expect(carriedRank.executionType).toBe("mission");
+    expect(carriedRank.blockedReasons).not.toContain("EXECUTION_TYPE_UNKNOWN");
+    expect(plan.ranking.find(item => item.workId === "unstored")!.blockedReasons).toContain("EXECUTION_TYPE_UNKNOWN");
+  });
+
   it("does not expose Hybrid Objective as the day's primary assignment", () => {
     const hybrid = candidate(
       "hybrid",

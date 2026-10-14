@@ -167,7 +167,7 @@ export const laundryFluffFoldTemplate: VerticalTemplate = {
   presentationDefaults: {},
   strategicIntelligence: {
     version: "2026-10-13.1",
-    metrics: ["paid_orders", "net_sales_cents", "average_order_value_cents", "mature_cohort_customers", "mature_cohort_repeat_customers", "qualified_demand", "required_qualified_demand", "available_capacity", "contribution_per_order_cents", "cash_runway_weeks"],
+    metrics: ["paid_orders", "net_sales_cents", "average_order_value_cents", "mature_cohort_customers", "mature_cohort_repeat_customers", "qualified_demand", "required_qualified_demand", "available_capacity", "contribution_per_order_cents", "cash_runway_weeks", "prior_paid_orders", "prior_net_sales_cents", "mtd_net_sales_cents", "prior_mtd_net_sales_cents", "new_customers_30d", "returning_customers_30d", "dormant_customers"],
     revenueDrivers: ["paid orders", "order frequency", "price", "retention", "recurring commercial accounts"],
     economics: ["Separate captured sales from processing and delivery costs", "Route density and reserved processing capacity constrain profitable growth"],
     operatingConstraints: ["service territory", "pickup windows", "processing capacity", "turnaround"],

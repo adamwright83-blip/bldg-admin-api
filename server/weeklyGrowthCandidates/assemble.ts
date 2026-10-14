@@ -461,6 +461,7 @@ function toCandidate(
     assumptions: assumptions.length,
   });
   const id = stableId(input.tenantId, group);
+  const storedExecutionType = group.find(record => record.storedExecutionType)?.storedExecutionType ?? null;
   const candidate: WeeklyGrowthCandidate = {
     id,
     sourceKind,
@@ -468,6 +469,7 @@ function toCandidate(
     title: content.title,
     objective: content.objective || content.title,
     alreadyInFlight,
+    ...(storedExecutionType ? { storedExecutionType } : {}),
     observedDueDate: dueDate,
     sourceRefs: sourceRefs(group),
     provenance: {
