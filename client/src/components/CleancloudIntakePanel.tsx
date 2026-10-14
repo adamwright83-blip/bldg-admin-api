@@ -9,6 +9,10 @@ export function CleancloudIntakePanel() {
   const approve = trpc.system.gumball.intake.approve.useMutation();
   const focus = trpc.system.gumball.intake.focus.useMutation();
   const verify = trpc.system.gumball.intake.verify.useMutation();
+  const directStatus = trpc.system.gumball.directStatus.useQuery(undefined, {
+    retry: false,
+  });
+  const gmailConnect = trpc.system.gumball.gmailConnectUrl.useMutation();
   const [selected, setSelected] = useState<string | null>(null),
     [search, setSearch] = useState(""),
     [quantities, setQuantities] = useState<Record<string, string>>({}),
@@ -38,6 +42,32 @@ export function CleancloudIntakePanel() {
       aria-label="CleanCloud intake pilot"
     >
       <h3 className="text-lg font-semibold">CleanCloud intake</h3>
+      {directStatus.data?.gmail.configured ? (
+        <div className="my-2 flex items-center gap-3 text-sm">
+          <span>
+            Sync verification email:{" "}
+            {directStatus.data.gmail.connected
+              ? `connected${directStatus.data.gmail.connectedEmail ? ` (${directStatus.data.gmail.connectedEmail})` : ""}`
+              : "not connected"}
+          </span>
+          <button
+            type="button"
+            className={button}
+            disabled={gmailConnect.isPending}
+            onClick={async () => {
+              setError("");
+              try {
+                const { url } = await gmailConnect.mutateAsync();
+                window.location.assign(url);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Gmail connection failed.");
+              }
+            }}
+          >
+            {directStatus.data.gmail.connected ? "Reconnect Gmail" : "Connect Gmail"}
+          </button>
+        </div>
+      ) : null}
       <p className="my-2 text-sm">
         Enter the complete actual pounds or item quantities. These replace
         pickup estimates. CleanCloud supplies the prices. Inspect the prepared

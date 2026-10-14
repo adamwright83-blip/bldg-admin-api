@@ -347,6 +347,17 @@ async function startServer() {
   registerLegacyDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Jawbreaker Gmail (read-only) authorization for CleanCloud verification codes.
+  app.get("/api/integrations/jawbreaker/gmail/callback", async (req, res) => {
+    const { handleJawbreakerGmailCallback } = await import(
+      "../integrations/cleancloud/browserSync/gmailCallback"
+    );
+    const { createContext } = await import("./context");
+    await handleJawbreakerGmailCallback(req, res, {
+      createContext: (request, response) =>
+        createContext({ req: request, res: response } as Parameters<typeof createContext>[0]),
+    });
+  });
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
   registerVendorOnboardingSessionRoutes(app);

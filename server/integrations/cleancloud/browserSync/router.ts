@@ -626,6 +626,11 @@ export const cleancloudBrowserSyncRouter = router({
         reportTypes: input?.reportTypes,
       });
     }),
+  /** Starts Gmail (read-only) authorization for CleanCloud verification codes. */
+  gmailConnectUrl: legacyDayforgeTenantOperatorProcedure.mutation(async ({ ctx }) => {
+    const { createJawbreakerGmailConnectUrl } = await import("./gmailVerification");
+    return createJawbreakerGmailConnectUrl({ tenantId: ctx.tenantId, userId: ctx.user.openId });
+  }),
   /** Query direct sync availability and credentials status */
   directStatus: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     const { isCleanCloudDirectConfigured } = await import(
@@ -636,8 +641,12 @@ export const cleancloudBrowserSyncRouter = router({
       .select()
       .from(browserSyncBindings)
       .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
+    const { getJawbreakerGmailStatus } = await import("./gmailVerification");
+    const { isDirectAutoSyncEnabled } = await import("./cleancloudDirectScheduler");
     return {
       configured: isCleanCloudDirectConfigured(),
+      gmail: await getJawbreakerGmailStatus(ctx.tenantId),
+      autoSyncEnabled: isDirectAutoSyncEnabled(),
       paired: !!binding,
       storeId: binding?.storeId ?? null,
       storeLabel: binding?.storeLabel ?? null,

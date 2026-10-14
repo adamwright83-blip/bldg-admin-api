@@ -12,6 +12,8 @@ import {
 } from "./ingestion";
 import { pacificToday, validateRange } from "../../../../extensions/gumballpals/core";
 
+export const DIRECT_AUTH_FAILED = "direct_auth_failed";
+
 export type CleanCloudDirectCredentials = {
   baseUrl?: string;
   username?: string;
@@ -63,16 +65,56 @@ export function isCleanCloudDirectConfigured(
   return getCleanCloudCredentials(override) !== null;
 }
 
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Referer: "https://cleancloudapp.com/store",
+};
+
+export type CleanCloudSession = { cookieHeader: string };
+
+/** Authentication failures stop automatic retries; they are recorded distinctly. */
+export class CleanCloudAuthError extends TRPCError {
+  readonly cleanCloudAuth = true;
+  constructor(message: string) {
+    super({ code: "UNAUTHORIZED", message });
+  }
+}
+
+/** CleanCloud error text can echo submitted values; never let a code reach logs. */
+export function sanitizeCleanCloudMessage(message: string): string {
+  return message.replace(/\b\d{6}\b/g, "******").slice(0, 200);
+}
+
+function mergeCookies(jar: Map<string, string>, res: Response) {
+  const raw = res.headers.getSetCookie ? res.headers.getSetCookie() : [res.headers.get("set-cookie") || ""];
+  for (const cookie of raw.filter(Boolean)) {
+    const pair = cookie.split(";")[0]!;
+    const eq = pair.indexOf("=");
+    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1));
+  }
+}
+const cookieHeaderOf = (jar: Map<string, string>) =>
+  [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+
+type LoginResponse = {
+  login?: string;
+  error?: string;
+  doEmailConfirm?: boolean | string | number;
+  twoFA?: boolean | string | number;
+};
+
 /**
- * Authenticates against CleanCloud using credentials in Railway and fetches the export CSV.
+ * Logs in to CleanCloud's store login, completing the email-verification step
+ * with a code read from the connected Jawbreaker Gmail when CleanCloud asks.
+ * The same cookie jar carries the session across both requests.
  */
-export async function fetchCleanCloudDirectExport(input: {
-  from: string;
-  to: string;
-  storeId: string;
-  reportType: "orders_sales" | "orders_revenue";
+export async function loginCleanCloud(input: {
+  tenantId: string;
   credentials?: CleanCloudDirectCredentials;
-}): Promise<{ csv: string; exportUrl: string }> {
+  fetchImpl?: typeof fetch;
+  waitForCode?: (args: { tenantId: string; notBefore: Date }) => Promise<string>;
+}): Promise<CleanCloudSession> {
   const creds = getCleanCloudCredentials(input.credentials);
   if (!creds) {
     throw new TRPCError({
@@ -81,14 +123,9 @@ export async function fetchCleanCloudDirectExport(input: {
         "CleanCloud direct sync credentials are not configured in Railway (CLEANCLOUD_USERNAME, CLEANCLOUD_PASSWORD).",
     });
   }
-
-  const range = validateRange(input.from, input.to);
-  const [y1, m1, d1] = range.from.split("-");
-  const [y2, m2, d2] = range.to.split("-");
-  const typeParam = input.reportType === "orders_revenue" ? "2" : "1";
-
-  // 1. Authenticate with CleanCloud
-  const form = new URLSearchParams({
+  const doFetch = input.fetchImpl ?? fetch;
+  const jar = new Map<string, string>();
+  const payload: Record<string, string> = {
     login_email: creds.username,
     login_password: creds.password,
     choose_store_select: "0",
@@ -96,61 +133,94 @@ export async function fetchCleanCloudDirectExport(input: {
     station: "",
     plant_station: "",
     pos: "",
-  });
-
-  const loginRes = await fetch(
-    "https://cleancloudapp.com/include/process_login_new.php",
-    {
+  };
+  const post = async (body: Record<string, string>) => {
+    const res = await doFetch("https://cleancloudapp.com/include/process_login_new.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://cleancloudapp.com/store",
+        ...BROWSER_HEADERS,
+        ...(jar.size ? { Cookie: cookieHeaderOf(jar) } : {}),
       },
-      body: form.toString(),
+      body: new URLSearchParams(body).toString(),
+    });
+    if (!res.ok) {
+      throw new TRPCError({
+        code: "BAD_GATEWAY",
+        message: `CleanCloud login HTTP failed with status ${res.status}.`,
+      });
     }
-  );
+    mergeCookies(jar, res);
+    return (await res.json().catch(() => null)) as LoginResponse | null;
+  };
 
-  if (!loginRes.ok) {
+  const attemptStartedAt = new Date();
+  let data = await post(payload);
+  if (data?.doEmailConfirm && data.login !== "1") {
+    const waitForCode =
+      input.waitForCode ??
+      (async args => {
+        const { waitForCleanCloudVerificationCode } = await import("./gmailVerification");
+        return waitForCleanCloudVerificationCode(args);
+      });
+    let code: string;
+    try {
+      code = await waitForCode({ tenantId: input.tenantId, notBefore: attemptStartedAt });
+    } catch (error) {
+      throw new CleanCloudAuthError(
+        `CleanCloud email verification could not be completed: ${error instanceof Error ? error.message : "code unavailable"}.`
+      );
+    }
+    data = await post({ ...payload, emailCodeEntered: code });
+  }
+  if (data?.twoFA && data.login !== "1") {
+    throw new CleanCloudAuthError(
+      "CleanCloud requires authenticator-app 2FA; Jawbreaker supports email verification codes only."
+    );
+  }
+  if (!data || data.login !== "1") {
+    throw new CleanCloudAuthError(
+      `CleanCloud login rejected: ${sanitizeCleanCloudMessage(data?.error || "Unknown login error")}.`
+    );
+  }
+  return { cookieHeader: cookieHeaderOf(jar) };
+}
+
+/**
+ * Fetches one export CSV using an authenticated CleanCloud session
+ * (logging in first when no session is supplied).
+ */
+export async function fetchCleanCloudDirectExport(input: {
+  from: string;
+  to: string;
+  storeId: string;
+  reportType: "orders_sales" | "orders_revenue";
+  credentials?: CleanCloudDirectCredentials;
+  session?: CleanCloudSession;
+  tenantId?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ csv: string; exportUrl: string }> {
+  const range = validateRange(input.from, input.to);
+  const [y1, m1, d1] = range.from.split("-");
+  const [y2, m2, d2] = range.to.split("-");
+  const typeParam = input.reportType === "orders_revenue" ? "2" : "1";
+  if (!input.session && !input.tenantId?.trim()) {
     throw new TRPCError({
-      code: "BAD_GATEWAY",
-      message: `CleanCloud login HTTP failed with status ${loginRes.status}.`,
+      code: "BAD_REQUEST",
+      message: "tenantId is required to log in to CleanCloud.",
     });
   }
+  const session =
+    input.session ??
+    (await loginCleanCloud({
+      tenantId: input.tenantId!,
+      credentials: input.credentials,
+      fetchImpl: input.fetchImpl,
+    }));
 
-  const loginData = (await loginRes.json().catch(() => null)) as {
-    login?: string;
-    storeId?: string;
-    error?: string;
-  } | null;
-
-  if (!loginData || loginData.login !== "1") {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: `CleanCloud login rejected: ${loginData?.error || "Unknown login error"}.`,
-    });
-  }
-
-  const rawCookies = loginRes.headers.getSetCookie
-    ? loginRes.headers.getSetCookie()
-    : [loginRes.headers.get("set-cookie") || ""];
-
-  const cookieHeader = rawCookies
-    .filter(Boolean)
-    .map(c => c.split(";")[0])
-    .join("; ");
-
-  // 2. Fetch Export CSV
   const exportUrl = `https://cleancloudapp.com/include/data-export-endpoint.php?type=${typeParam}&d1=${d1}&m1=${m1}&y1=${y1}&d2=${d2}&m2=${m2}&y2=${y2}&stores=[${input.storeId}]&group=`;
-
-  const exportRes = await fetch(exportUrl, {
-    headers: {
-      Cookie: cookieHeader,
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Referer: "https://cleancloudapp.com/store",
-    },
+  const exportRes = await (input.fetchImpl ?? fetch)(exportUrl, {
+    headers: { Cookie: session.cookieHeader, ...BROWSER_HEADERS },
   });
 
   if (!exportRes.ok) {
@@ -263,13 +333,15 @@ export async function runCleanCloudDirectSync(
   let revenueReceipt: CleanCloudIngestionResult | null = null;
 
   try {
+    // One authenticated session serves every export in this run.
+    const session = await loginCleanCloud({ tenantId, credentials: options.credentials });
     if (reportTypes.includes("orders_sales")) {
       const salesExport = await fetchCleanCloudDirectExport({
         from: range.from,
         to: range.to,
         storeId: binding.storeId,
         reportType: "orders_sales",
-        credentials: options.credentials,
+        session,
       });
 
       salesReceipt = await executeCleanCloudIngestion({
@@ -294,7 +366,7 @@ export async function runCleanCloudDirectSync(
         to: range.to,
         storeId: binding.storeId,
         reportType: "orders_revenue",
-        credentials: options.credentials,
+        session,
       });
 
       revenueReceipt = await executeCleanCloudIngestion({
@@ -325,8 +397,8 @@ export async function runCleanCloudDirectSync(
   } catch (error) {
     await recordSyncAttempt({
       tenantId,
-      outcome: "direct_sync_failed",
-      message: error instanceof Error ? error.message : String(error),
+      outcome: error instanceof CleanCloudAuthError ? DIRECT_AUTH_FAILED : "direct_sync_failed",
+      message: sanitizeCleanCloudMessage(error instanceof Error ? error.message : String(error)),
       from: range.from,
       to: range.to,
     });
