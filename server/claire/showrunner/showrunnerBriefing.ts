@@ -7,8 +7,10 @@ import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/mi
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
+import { readWinBackDossier } from "../../strategy/winBackDossier";
 
 export const SHOWRUNNER_DEVELOPMENT_SOURCE = "claire_showrunner_development";
+export const DESK_PREPARATION_SOURCE = "claire_desk_preparation";
 
 export type BriefingItem = {
   id: string;
@@ -34,6 +36,13 @@ export type ShowrunnerBriefing = {
   uncertain: string[];
   /** This week so far: operator-reported outcomes and plan changes, for the week review. */
   weekToDate: { reportedOutcomes: string[]; planChanges: string[] };
+  /** Desk only: the revenue opportunity Claire found, from stored evidence. */
+  opportunity?: null | {
+    diagnosis: string;
+    approach: string;
+    evidence: string[];
+    lapsedCustomers: Array<{ name: string; lastOrderDate: string | null; paidOrders: number; lifetimeDollars: number; contactOnFile: boolean }>;
+  };
 };
 
 function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): BriefingItem[] {
@@ -69,7 +78,7 @@ export async function buildShowrunnerBriefing(input: {
     getDayDirectorState({ ...stateArgs, businessDate }),
     getDayDirectorState({ ...stateArgs, businessDate: tomorrowDate }),
   ]);
-  const weekStart = weekStartMonday(input.purpose === "evening_debrief" ? tomorrowDate : businessDate);
+  const weekStart = weekStartMonday(input.purpose !== "morning_readiness" ? tomorrowDate : businessDate);
   const proposal =
     (await latestStrategicProposal(identity, weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));
@@ -127,7 +136,25 @@ export async function buildShowrunnerBriefing(input: {
       .map(i => `Whether materials and the address for "${i.title}" are ready is unknown.`),
     ...(proposal?.weeklyPlan?.uncertainty ?? []).slice(0, 2),
   ];
+  let opportunity: ShowrunnerBriefing["opportunity"] = undefined;
+  if (input.purpose === "desk_planning" && proposal) {
+    const refs = new Set(proposal.diagnosis.supportingEvidence);
+    const dossier = await readWinBackDossier({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId, timeZone, now }).catch(() => null);
+    opportunity = {
+      diagnosis: proposal.diagnosis.diagnosis,
+      approach: proposal.diagnosis.selectedApproach,
+      evidence: proposal.diagnosis.evidence.filter(e => refs.has(e.id)).map(e => `${e.description} [${e.classification}]`),
+      lapsedCustomers: (dossier?.contacts ?? []).map(c => ({
+        name: c.name,
+        lastOrderDate: c.lastOrderDate,
+        paidOrders: c.paidOrders,
+        lifetimeDollars: Math.round(c.lifetimeCents / 100),
+        contactOnFile: Boolean(c.phone || c.email),
+      })),
+    };
+  }
   return {
+    opportunity,
     purpose: input.purpose,
     businessDate,
     weekday: formatInTimeZone(now, timeZone, "EEEE"),

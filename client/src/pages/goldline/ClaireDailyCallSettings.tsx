@@ -3,18 +3,20 @@ import { trpc } from "@/lib/trpc";
 
 type Purpose = "morning_readiness" | "evening_debrief";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const COPY: Record<Purpose, { title: string; blurb: string; start: string; end: string }> = {
+const COPY: Record<Purpose, { title: string; blurb: string; start: string; end: string; days: number[] }> = {
   morning_readiness: {
     title: "Morning readiness calls",
     blurb: "Claire calls to get you ready for the day: today's objective, what she has prepared, anything missing, and your first move. This happens even if nothing needs approval.",
     start: "07:30",
     end: "09:00",
+    days: [1, 2, 3, 4, 5, 6, 7],
   },
   evening_debrief: {
     title: "Evening debrief calls",
     blurb: "Claire calls to hear how the day went, captures new developments, and revises tomorrow and the rest of the week for your approval.",
     start: "17:30",
     end: "19:00",
+    days: [1, 2, 3, 4, 5, 6],
   },
 };
 
@@ -22,6 +24,7 @@ type Status = {
   enabled: boolean;
   grant: null | { weekdays: number[]; localStart: string; localEnd: string; version: number };
   nextScheduled: string | Date | null;
+  nextWindow?: string | Date | null;
   recent: Array<{ scheduledFor: string | Date; status: string; placed: boolean }>;
 };
 
@@ -29,16 +32,17 @@ function PurposeCard({ purpose, status, timeZone, onChange }: { purpose: Purpose
   const grant = trpc.system.weeklyMission.grantDailyCalls.useMutation();
   const revoke = trpc.system.weeklyMission.revokeDailyCalls.useMutation();
   const copy = COPY[purpose];
-  const [days, setDays] = useState<number[]>([]);
+  // Recommended schedule preselected; nothing is allowed until the operator presses Allow.
+  const [days, setDays] = useState<number[]>(copy.days);
   const [start, setStart] = useState(copy.start);
   const [end, setEnd] = useState(copy.end);
   const [message, setMessage] = useState("");
   const busy = grant.isPending || revoke.isPending;
-  const run = (fn: () => Promise<unknown>, ok: string) =>
+  const run = (fn: () => Promise<unknown>, ok: string | ((result: unknown) => string)) =>
     void (async () => {
       try {
-        await fn();
-        setMessage(ok);
+        const result = await fn();
+        setMessage(typeof ok === "string" ? ok : ok(result));
         await onChange();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Nothing was changed.");
@@ -52,7 +56,11 @@ function PurposeCard({ purpose, status, timeZone, onChange }: { purpose: Purpose
         {status?.enabled && status.grant
           ? `On: ${status.grant.weekdays.map(d => DAYS[d - 1]).join(", ")}, ${status.grant.localStart}–${status.grant.localEnd} (${timeZone}).`
           : "Off. Claire will not place these calls."}
-        {status?.nextScheduled ? ` Next call: ${new Date(status.nextScheduled).toLocaleString()}.` : ""}
+        {status?.nextScheduled
+          ? ` Next call scheduled: ${new Date(status.nextScheduled).toLocaleString()}.`
+          : status?.enabled && status.nextWindow
+            ? ` First eligible window opens ${new Date(status.nextWindow).toLocaleString()}; the call is scheduled that day.`
+            : ""}
       </p>
       {status?.recent?.length ? (
         <p>Recent: {status.recent.slice(0, 3).map(r => `${new Date(r.scheduledFor).toLocaleDateString()} ${r.status}${r.placed ? "" : " (not placed)"}`).join("; ")}</p>
@@ -80,7 +88,14 @@ function PurposeCard({ purpose, status, timeZone, onChange }: { purpose: Purpose
         onClick={() =>
           run(
             () => grant.mutateAsync({ purpose, weekdays: days, localStart: start, localEnd: end, timeZone: timeZone!, consent: true }),
-            `${copy.title} allowed for the selected days and window.`
+            result => {
+              const r = result as { status?: { nextScheduled: string | Date | null; nextWindow: string | Date | null } };
+              return r.status?.nextScheduled
+                ? `Verified: ${copy.title.toLowerCase()} allowed. Next call scheduled ${new Date(r.status.nextScheduled).toLocaleString()}.`
+                : r.status?.nextWindow
+                  ? `Verified: ${copy.title.toLowerCase()} allowed. First window opens ${new Date(r.status.nextWindow).toLocaleString()}.`
+                  : `${copy.title} allowed; no upcoming window found for the selected days.`;
+            }
           )
         }
       >

@@ -7,6 +7,7 @@ import {
   DAILY_CLAIRE_PURPOSES,
   dailyCallStillDueToday,
   dailyPurposeForAction,
+  nextDailyCallWindowStart,
   validDailyCallBounds,
   windowsOverlap,
   type DailyClairePurpose,
@@ -168,6 +169,7 @@ export async function readDailyClaireCallStatus(identity: CanonicalOperatorIdent
             version: grant.version,
           }
         : null,
+      nextWindow: grant ? nextDailyCallWindowStart(grant as never, purpose, new Date()) : null,
       nextScheduled: recent.find(r => r.status === "scheduled" || r.status === "retry_scheduled")?.scheduledFor ?? null,
       recent: recent.map(r => ({ scheduledFor: r.scheduledFor, status: r.status, placed: Boolean(r.callSid) })),
     };

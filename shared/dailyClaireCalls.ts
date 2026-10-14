@@ -1,4 +1,4 @@
-import { formatInTimeZone } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 /**
  * Two daily Claire call purposes, each with its own exact action, appointment
@@ -104,6 +104,21 @@ export function dailyCallStillDueToday(a: DailyCallAuthorization, purpose: Daily
   if (!validDailyCallBounds(a, purpose)) return false;
   const day = Number(formatInTimeZone(now, a.timeZone, "i"));
   return days(a)!.includes(day) && formatInTimeZone(now, a.timeZone, "HH:mm") <= a.allowedLocalEnd!;
+}
+
+/** Start of the next allowed window (today if still due), as a UTC instant; null if the grant is invalid. */
+export function nextDailyCallWindowStart(a: DailyCallAuthorization, purpose: DailyClairePurpose, now: Date): Date | null {
+  if (!validDailyCallBounds(a, purpose)) return null;
+  for (let n = 0; n < 8; n++) {
+    const probe = new Date(now.getTime() + n * 86_400_000);
+    const date = formatInTimeZone(probe, a.timeZone, "yyyy-MM-dd");
+    const day = Number(formatInTimeZone(probe, a.timeZone, "i"));
+    if (!days(a)!.includes(day)) continue;
+    if (n === 0 && formatInTimeZone(now, a.timeZone, "HH:mm") > a.allowedLocalEnd!) continue;
+    const start = fromZonedTime(`${date}T${a.allowedLocalStart}:00`, a.timeZone);
+    return start > now ? start : now;
+  }
+  return null;
 }
 
 /** Morning and evening windows may not overlap, so the two calls never collide. */
