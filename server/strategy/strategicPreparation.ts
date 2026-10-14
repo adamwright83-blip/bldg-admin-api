@@ -1,3 +1,4 @@
+import { loadMissionPresentations, presentationFor } from "../agents/daphne/missionFollowUp";
 import { createHash } from "node:crypto";
 import { canonicalJsonStringify } from "./snapshotBuilder";
 import { formatInTimeZone } from "date-fns-tz";
@@ -178,6 +179,18 @@ export async function prepareStrategicProposal(input: {
       ],
     });
   }
+  // Daphne's consented, operator-wide timing preference shapes proposed timing.
+  const presentations = await loadMissionPresentations({
+    tenantId: identity.tenantId,
+    canonicalOperatorId: identity.canonicalOperatorId,
+  }).catch(() => new Map());
+  for (const item of items) {
+    const p = presentationFor(presentations, item.missionType ?? "growth") as
+      | { adjustment: { kind: string; window?: "morning" | "afternoon" | "evening" }; note: string; sourceObservationId: string }
+      | undefined;
+    if (p?.adjustment.kind === "timing" && p.adjustment.window)
+      item.timeWindow = { window: p.adjustment.window, reason: p.note, sourceObservationId: p.sourceObservationId };
+  }
   const constraints = facts
     .filter(
       f =>
@@ -239,7 +252,9 @@ export async function prepareStrategicProposal(input: {
       `I recommend: ${diagnosis.selectedApproach}.`,
       `I also considered: ${diagnosis.options[1]?.approach}.`,
       items.length
-        ? `I prepared ${items.length} proposed item${items.length === 1 ? "" : "s"}: ${items.map(i => `${i.businessDate}, ${i.title}`).join("; ")}.`
+        ? `I prepared ${items.length} proposed item${items.length === 1 ? "" : "s"}: ${items.map(i => `${i.businessDate}${i.timeWindow ? ` (${i.timeWindow.window})` : ""}, ${i.title}`).join("; ")}.${
+            items.some(i => i.timeWindow) ? ` I proposed the ${items.find(i => i.timeWindow)!.timeWindow!.window} because of what you told me about your timing.` : ""
+          }`
         : "No eligible work was selected within the operating constraints.",
       "These are pending recommendations. Approve selected items, revise, reject, defer, or ask why.",
     ].join(" "),

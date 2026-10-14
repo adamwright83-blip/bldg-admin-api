@@ -22,6 +22,18 @@ import {
 import { recordDaphneObservation } from "./observationStore";
 import { daphneAdaptationAllowed, loadDaphneMetaPreferences } from "./goalsPreferences";
 
+/** Key for adjustments that apply to every mission for this operator. */
+export const OPERATOR_SCOPE = "*";
+
+export function adjustmentScope(adjustment: { kind: string }): "operator" | "mission_type" {
+  return adjustment.kind === "task_size" ? "mission_type" : "operator";
+}
+
+/** A mission's own type-specific adjustment wins; otherwise the operator-wide one applies. */
+export function presentationFor<T>(presentations: Map<string, T>, missionType: string): T | undefined {
+  return presentations.get(missionType) ?? presentations.get(OPERATOR_SCOPE);
+}
+
 /** The Daphne observation source that carries operator-approved presentation adjustments. */
 export const MISSION_PRESENTATION_SOURCE = "daphne_mission_presentation";
 
@@ -212,7 +224,13 @@ export async function answerMissionFollowUp(
       sourceType: MISSION_PRESENTATION_SOURCE,
       sourceReference: `daphne_observations:${explanation.id}`,
       occurredAt: now,
-      payload: { missionType, adjustment: classification.adjustment, revoked: false },
+      // Time-of-day, channel and style describe the operator, not one mission type.
+      payload: {
+        missionType: adjustmentScope(classification.adjustment!) === "operator" ? OPERATOR_SCOPE : missionType,
+        originMissionType: missionType,
+        adjustment: classification.adjustment,
+        revoked: false,
+      },
       idempotencyKey: `mission_presentation:${explanation.id}`,
     });
     adjustmentObservationId = adjustment.id;
@@ -359,7 +377,7 @@ export async function readCarriedForwardWork(input: {
   if (!row || row.status !== "open" || row.businessDate >= input.businessDate) return null;
   const meta = (row.metadataJson && typeof row.metadataJson === "object" ? row.metadataJson : {}) as Record<string, unknown>;
   const missionType = commitmentMissionType(row);
-  const found = (await loadMissionPresentations(input)).get(missionType);
+  const found = presentationFor(await loadMissionPresentations(input), missionType);
   return {
     commitmentId: row.id,
     originalBusinessDate: row.businessDate,

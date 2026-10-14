@@ -2,6 +2,7 @@ import {
   commitmentMissionType,
   loadMissionPresentations,
   missionPresentationApplies,
+  presentationFor,
 } from "../../agents/daphne/missionFollowUp";
 import { enforceTitleContract } from "../../claire/briefing/titleContract";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -163,7 +164,7 @@ export async function getDayDirectorState(input: {
       if (overlay.notPursuing || overlay.cancelledAt) return null;
       const command = readCommandMetadata(metadata);
       const missionType = commitmentMissionType(row);
-      const candidatePresentation = presentations.get(missionType);
+      const candidatePresentation = presentationFor(presentations, missionType);
       const presentation =
         candidatePresentation && missionPresentationApplies(row, candidatePresentation)
           ? candidatePresentation

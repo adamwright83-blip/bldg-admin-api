@@ -72,13 +72,17 @@ export async function routeStrategicProposalTurn(input: {
   ) {
     const explanation =
       control.kind === "numbers"
-        ? `${basis} ${selectedOption?.uncertainty ?? ""}`
+        ? `${basis} That rests on: ${p.diagnosis.evidence
+            .filter(e => e.value !== null && e.unit !== "prospect_presence")
+            .slice(0, 8)
+            .map(e => `${e.description} (${typeof e.value === "number" && /cents/.test(e.unit) ? `$${(e.value / 100).toFixed(2)}` : String(e.value)})`)
+            .join("; ")}. ${selectedOption?.uncertainty ?? ""}`
         : control.kind === "alternative"
           ? alternative
-            ? `The other option is to ${lower(alternative.approach)}. I'm not leading with it because ${lower(plain(alternative.reason))} ${alternative.expectedBenefit ?? ""}`
+            ? `The alternative is to ${lower(alternative.approach)}. I'm not leading with it because ${lower(plain(alternative.reason))} ${alternative.expectedBenefit ?? ""}`
             : "I haven't found a supported alternative yet."
           : control.kind === "economics"
-            ? `I don't know yet that this makes money. ${selectedOption?.expectedBenefit ?? ""} ${selectedOption?.economics ?? ""}`
+            ? `I do not know that this will make money. ${selectedOption?.expectedBenefit ?? ""} ${selectedOption?.economics ?? ""}`
             : `${p.diagnosis.diagnosis} So I'd start with this: ${lower(p.diagnosis.selectedApproach)}, because ${lower(plain(selectedOption?.reason))} ${selectedOption?.expectedBenefit ?? ""}${
                 alternative ? ` I didn't lead with ${lower(alternative.approach)} because ${lower(plain(alternative.reason))}` : ""
               } ${selectedOption?.uncertainty ?? ""}`;
