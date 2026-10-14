@@ -1,6 +1,8 @@
+import { cancelDayLineItem } from "../planning/dayline/dayLineMutationService";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { mergeDayLineOverlay, readDayLineOverlay } from "../../shared/goldlineDayLine";
 import {
   dayDirectorCommitments,
   goalCycleObjectives,
@@ -110,6 +112,8 @@ export async function respondToStrategicProposal(
       const promptKey = `strategy-approved:${p.revision.slice(0, 32)}:${createHash("sha256").update(id).digest("hex").slice(0, 24)}`;
       // Accepted work enters as supporting work. Existing primary/protected
       // commitments retain their designation; this approval does not displace them.
+      // Refuse before creating anything if an earlier slot cannot be retired.
+      await assertSupersededRetirable(p.tenantId, input.identity, item.supersedesCommitmentIds ?? []);
       const result = await acceptProposalWithReceipt({
         tenantId: p.tenantId,
         actorId: input.identity.dayDirectorActorId,
@@ -169,11 +173,21 @@ export async function respondToStrategicProposal(
         !isDeepStrictEqual(lineage, expectedLineage)
       )
         throw new Error("Canonical commitment readback mismatch");
-      if (item.missionType && metadata && (metadata as Record<string, unknown>).missionType !== item.missionType)
+      if (metadata && (item.missionType || item.timeWindow)) {
+        const label = item.timeWindow
+          ? `${item.timeWindow.window[0]!.toUpperCase()}${item.timeWindow.window.slice(1)}${item.timeWindow.time ? ` · ${item.timeWindow.time}` : ""}`
+          : null;
         await db
           .update(dayDirectorCommitments)
-          .set({ metadataJson: { ...(metadata as Record<string, unknown>), missionType: item.missionType } })
+          .set({
+            metadataJson: {
+              ...(metadata as Record<string, unknown>),
+              ...(item.missionType ? { missionType: item.missionType } : {}),
+              ...(label ? { scheduleLabel: label } : {}),
+            },
+          })
           .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));
+      }
       // The accepted canonical commitment is the execution authority. Keep
       // the originating durable objective's lifecycle in sync for outcome binding.
       await db
@@ -190,6 +204,17 @@ export async function respondToStrategicProposal(
             eq(goalCycleObjectives.status, "presented")
           )
         );
+      // A rescheduled item replaces earlier commitments. The replacement exists
+      // only if every earlier slot is retired; otherwise it is rolled back, the
+      // earlier slots stay active, and the item is reported as not confirmed.
+      await retireSupersededOrRollBack({
+        tenantId: p.tenantId,
+        identity: input.identity,
+        replacementId: row.id,
+        replacementTitle: item.title,
+        supersededIds: item.supersedesCommitmentIds ?? [],
+        reason: `Rescheduled to ${item.businessDate} by approved plan revision ${p.revision.slice(0, 12)}`,
+      });
       actionIds.push(row.id);
     } catch {
       failedItems.push(item.id);
@@ -349,9 +374,101 @@ export async function readVerifiedStrategicApprovalItemIds(
           ) &&
           row.title === item.title &&
           row.sourceText === item.objective &&
-          row.businessDate === item.businessDate
+          row.businessDate === item.businessDate &&
+          // A replacement rolled back because its earlier slot could not be retired is not approved work.
+          !readDayLineOverlay(row.metadataJson).cancelledReason?.startsWith("Rollback:")
         );
       })
     )
     .map(item => item.id);
+}
+
+type ApprovalIdentity = { dayDirectorActorId: string; dayDirectorActorIds: string[] };
+
+async function supersededRows(tenantId: string, identity: ApprovalIdentity, ids: string[]) {
+  if (!ids.length) return [];
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, tenantId),
+        inArray(dayDirectorCommitments.id, ids),
+        inArray(dayDirectorCommitments.actorId, identity.dayDirectorActorIds)
+      )
+    );
+}
+
+export async function assertSupersededRetirable(tenantId: string, identity: ApprovalIdentity, ids: string[]) {
+  const rows = await supersededRows(tenantId, identity, ids);
+  for (const id of ids) {
+    const row = rows.find(r => r.id === id);
+    if (!row) throw new Error("Superseded commitment not found for this operator");
+    if (row.status === "completed") throw new Error("Superseded commitment is already completed history");
+  }
+}
+
+async function setCancellation(
+  tenantId: string,
+  id: string,
+  overlay: { cancelledAt: string | null; cancelledBy: string | null; cancelledReason: string | null; notPursuing: boolean }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [row] = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(and(eq(dayDirectorCommitments.tenantId, tenantId), eq(dayDirectorCommitments.id, id)))
+    .limit(1);
+  if (!row) throw new Error("Commitment not found");
+  await db
+    .update(dayDirectorCommitments)
+    .set({ metadataJson: mergeDayLineOverlay(row.metadataJson, overlay) })
+    .where(and(eq(dayDirectorCommitments.tenantId, tenantId), eq(dayDirectorCommitments.id, id)));
+}
+
+const ROLLBACK_PREFIX = "Rollback:";
+
+export async function retireSupersededOrRollBack(input: {
+  tenantId: string;
+  identity: ApprovalIdentity;
+  replacementId: string;
+  replacementTitle: string;
+  supersededIds: string[];
+  reason: string;
+  cancel?: typeof cancelDayLineItem;
+}) {
+  if (!input.supersededIds.length) return;
+  const cancel = input.cancel ?? cancelDayLineItem;
+  // A retried approval reactivates a replacement an earlier attempt rolled back.
+  const [replacement] = await supersededRows(input.tenantId, input.identity, [input.replacementId]);
+  if (replacement && readDayLineOverlay(replacement.metadataJson).cancelledReason?.startsWith(ROLLBACK_PREFIX))
+    await setCancellation(input.tenantId, input.replacementId, { cancelledAt: null, cancelledBy: null, cancelledReason: null, notPursuing: false });
+  const retired: string[] = [];
+  try {
+    for (const id of input.supersededIds) {
+      const [current] = await supersededRows(input.tenantId, input.identity, [id]);
+      if (current && readDayLineOverlay(current.metadataJson).cancelledAt) continue; // already retired
+      await cancel({
+        tenantId: input.tenantId,
+        actorId: input.identity.dayDirectorActorId,
+        item: { sourceType: "day_director_commitment", sourceId: id, displayTitle: input.replacementTitle, editableCapabilities: [], status: "active" },
+        reason: input.reason,
+      });
+      retired.push(id);
+    }
+  } catch (error) {
+    // Never leave two active meetings: undo this attempt, keep the history.
+    for (const id of retired)
+      await setCancellation(input.tenantId, id, { cancelledAt: null, cancelledBy: null, cancelledReason: null, notPursuing: false }).catch(() => undefined);
+    await setCancellation(input.tenantId, input.replacementId, {
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: input.identity.dayDirectorActorId,
+      cancelledReason: `${ROLLBACK_PREFIX} the earlier slot could not be retired, so this reschedule was not applied.`,
+      notPursuing: true,
+    });
+    throw error;
+  }
 }

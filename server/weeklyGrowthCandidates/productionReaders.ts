@@ -1,3 +1,5 @@
+import { getDashboardTimeZone } from "../dashboardZoned";
+import { resolveRelativeInstruction } from "../../shared/relativeInstruction";
 import { WEEKLY_GROWTH_MOTIONS } from "../../shared/weeklyGrowthCandidates";
 import { formatInTimeZone } from "date-fns-tz";
 import { and, eq, inArray } from "drizzle-orm";
@@ -111,6 +113,7 @@ async function readCommitments(input: {
   tenantId: string;
   dayDirectorActorId: string;
   dayDirectorActorIds?: readonly string[];
+  timeZone?: string;
 }): Promise<WeeklyGrowthRawRecord[]> {
   const db = await getDb();
   if (!db) throw new Error(DATABASE_UNAVAILABLE);
@@ -149,7 +152,14 @@ async function readCommitments(input: {
       origin: "day_director_commitment",
       sourceId: row.id,
       title,
-      objective: row.sourceText?.trim() || title,
+      objective: resolveRelativeInstruction({
+        text: row.sourceText?.trim() || title,
+        // A commitment copied from an obligation carries the obligation's original date.
+        referenceAt: obligationDate(obligationIdFrom(row.idempotencyKey)) ?? row.createdAt,
+        referencePrecision: obligationDate(obligationIdFrom(row.idempotencyKey)) ? "day" : "instant",
+        timeZone: input.timeZone ?? getDashboardTimeZone(),
+        now: new Date(),
+      }).text,
       status: hidden ? "cancelled" : row.status,
       grounding,
       operationalClass,
@@ -193,7 +203,12 @@ async function readMissions(input: {
     origin: "commercial_mission",
     sourceId: String(mission.id),
     title: mission.account.name || mission.code,
-    objective: mission.brief.salesAngle || mission.account.name,
+    objective: resolveRelativeInstruction({
+      text: mission.brief.salesAngle || mission.account.name,
+      referenceAt: new Date(mission.createdAt),
+      timeZone: getDashboardTimeZone(),
+      now: new Date(),
+    }).text,
     status: mission.status,
     grounding: "commercial_acquisition",
     motionHint: "account_acquisition",
@@ -276,13 +291,21 @@ async function readFollowUps(input: {
     records: rows.map(row => {
       const utcDue = row.dueAt.toISOString().slice(0, 10);
       const dueDate = formatInTimeZone(row.dueAt, input.timeZone, "yyyy-MM-dd");
+      // "Email Dana in 3 hours" means 3 hours after it was written, never after this run.
+      const note = resolveRelativeInstruction({
+        text: row.note,
+        referenceAt: row.createdAt,
+        dueAt: row.dueAt,
+        timeZone: input.timeZone,
+        now: new Date(),
+      }).text;
       return emptyRawRecord({
         tenantId: row.tenantId,
         operatorUserId: row.assignedTo,
         origin: "commercial_follow_up",
         sourceId: row.id,
-        title: row.note,
-        objective: row.note,
+        title: note,
+        objective: note,
         status: row.status,
         grounding: "commercial_follow_up",
         motionHint: "commercial_follow_up",
@@ -326,7 +349,13 @@ function obligationRecord(
     origin: "proactive_obligation",
     sourceId: obligation.id,
     title: obligation.title,
-    objective: obligation.why,
+    objective: resolveRelativeInstruction({
+      text: obligation.why,
+      referenceAt: obligationDate(obligation.id) ?? null,
+      referencePrecision: "day",
+      timeZone: getDashboardTimeZone(),
+      now: new Date(),
+    }).text,
     status: obligation.status,
     grounding: dormant ? "proactive_recovery" : obligation.kind === "sales_follow_up" ? "sales" : null,
     obligationKind: obligation.kind,
@@ -421,6 +450,12 @@ async function readMacro(input: {
     status: "available",
     records: [{ id: goal.id, metricKey: goal.metricKey, objective: goal.objective }],
   };
+}
+
+/** "sales:8:2026-08-07" → that date at local noon; the moment the instruction belonged to. */
+function obligationDate(obligationId: string | null | undefined): Date | null {
+  const m = obligationId ? /(\d{4}-\d{2}-\d{2})$/.exec(obligationId) : null;
+  return m ? new Date(`${m[1]}T19:00:00Z`) : null;
 }
 
 function obligationIdFrom(idempotencyKey: string): string | null {

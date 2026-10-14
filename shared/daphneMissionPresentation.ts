@@ -106,7 +106,7 @@ export function classifyMissionExplanation(
 export function describeMissionAdjustment(a: DaphneMissionAdjustment): string {
   switch (a.kind) {
     case "timing":
-      return `Suggested for the ${a.window}; you said the old timing didn't work.`;
+      return `Suggested for the ${a.window}: that's when you said this kind of work fits.`;
     case "task_size":
       return "Start with the first step only; the full objective is unchanged.";
     case "reveal_timing":

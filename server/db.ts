@@ -135,13 +135,26 @@ export function resetDbForTesting() {
   _db = null;
 }
 
+export function withUtcTimezone(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has("timezone")) parsed.searchParams.set("timezone", "Z");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 export async function getDb() {
   if (process.env.NODE_ENV === "test" && !process.env.ALLOW_TEST_DB && !_db) {
     return null;
   }
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // Read and write TIMESTAMP/DATETIME as UTC regardless of the host's TZ.
+      // Production hosts run in UTC already; a non-UTC host (local tooling) would
+      // otherwise shift every timestamp by its offset.
+      _db = drizzle(withUtcTimezone(process.env.DATABASE_URL));
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

@@ -302,7 +302,9 @@ export type PendingProposalState = {
     | "field_debrief"
     | "pre_drive"
     | "weekly_planning_invite"
-    | "weekly_planning";
+    | "weekly_planning"
+    | "morning_readiness"
+    | "evening_debrief";
   weeklyPlanningWeekStart?: string | null;
   pendingWeeklyPlanningCallback?: {
     scheduledForIso: string;

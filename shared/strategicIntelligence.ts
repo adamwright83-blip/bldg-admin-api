@@ -146,7 +146,9 @@ export type StrategicProposalItem = {
   /** Mission Director source kind; identifies matching missions for Daphne. */
   missionType?: string;
   /** Proposed time of day, from the operator's own feedback to Daphne. */
-  timeWindow?: { window: "morning" | "afternoon" | "evening"; reason: string; sourceObservationId: string };
+  timeWindow?: { window: "morning" | "afternoon" | "evening"; time?: string; reason: string; sourceObservationId: string };
+  /** Approved Day Line commitments this item replaces (e.g. a rescheduled meeting); cancelled only on approval. */
+  supersedesCommitmentIds?: string[];
   planId: string;
   planRevision: number;
   evidenceRefs: string[];
@@ -170,4 +172,19 @@ export type StrategicPlanningProposal = {
   uncertainty: string[];
   opening: string;
   approvalState: "pending" | "approved" | "rejected" | "deferred";
+  /** The week's production plan: one throughline, a sequence, and what changed. */
+  weeklyPlan?: WeeklyProductionPlan;
+};
+
+export type WeeklyProductionPlan = {
+  objective: string;
+  outcomes: string[];
+  evidence: string;
+  sequence: Array<{ date: string; itemId: string; title: string; window: string | null; why: string; status: "draft" | "commitment" }>;
+  preparation: string[];
+  commitments: string[];
+  contingency: string;
+  adaptations: string[];
+  uncertainty: string[];
+  changes: Array<{ at: string; summary: string }>;
 };

@@ -15,6 +15,11 @@ import {
   readStrategicCallConsent,
 } from "../../agents/persistentOperator/strategicCallAuthorization";
 import {
+  grantDailyClaireCall,
+  readDailyClaireCallStatus,
+  revokeDailyClaireCall,
+} from "../../agents/persistentOperator/dailyCallAuthorization";
+import {
   configureTenantStrategyVertical,
   resolveTenantVerticalKey,
 } from "../../strategy/marketContext";
@@ -142,6 +147,52 @@ export const weeklyMissionRouter = router({
       return revokeStrategicCallAuthorization(identity);
     }
   ),
+  /** Morning readiness and evening debrief: separate grants, read together for settings. */
+  dailyCallStatus: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const identity = await requireCanonicalOperatorIdentityForUser({
+      tenantId: ctx.tenantId,
+      user: ctx.user,
+      subsystem: "claire.daily_call_status",
+    });
+    return readDailyClaireCallStatus(identity);
+  }),
+  grantDailyCalls: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        purpose: z.enum(["morning_readiness", "evening_debrief"]),
+        weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+        localStart: z.string().regex(/^\d{2}:\d{2}$/),
+        localEnd: z.string().regex(/^\d{2}:\d{2}$/),
+        timeZone: z.string().min(1),
+        consent: z.literal(true),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "claire.daily_call_grant",
+      });
+      return grantDailyClaireCall({
+        identity,
+        purpose: input.purpose,
+        weekdays: input.weekdays,
+        localStart: input.localStart,
+        localEnd: input.localEnd,
+        timeZone: input.timeZone,
+        sourceReference: `authenticated_app:${randomUUID()}`,
+      });
+    }),
+  revokeDailyCalls: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ purpose: z.enum(["morning_readiness", "evening_debrief"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({
+        tenantId: ctx.tenantId,
+        user: ctx.user,
+        subsystem: "claire.daily_call_revoke",
+      });
+      return revokeDailyClaireCall(identity, input.purpose);
+    }),
   preparedProposal: legacyDayforgeTenantOperatorProcedure.query(
     async ({ ctx }) => {
       const identity = await requireCanonicalOperatorIdentityForUser({

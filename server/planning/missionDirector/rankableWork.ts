@@ -1,3 +1,4 @@
+import { addDaysYmd } from "../../analytics/businessPeriods";
 import { classifyObjectiveExecution } from "../../../shared/objectiveExecution";
 import {
   motionAlignsWithMacroGoal,
@@ -118,6 +119,9 @@ function protectedPrimaryMatches(
   return candidate.sourceRefs.some(ref => protectedSourceIds.has(ref.sourceId));
 }
 
+/** Overdue work older than this no longer receives an urgency bonus. */
+export const STALE_OVERDUE_DAYS = 14;
+
 function rankOne(input: {
   candidate: WeeklyGrowthCandidate;
   campaigns: readonly GrowthCampaign[];
@@ -217,7 +221,12 @@ function rankOne(input: {
   );
 
   const due = candidate.observedDueDate;
-  const overdue = due != null && due < input.context.businessDate;
+  // Urgency belongs to recent deadlines. Work overdue for weeks stays eligible and
+  // visible, but no longer outranks current priorities on urgency alone.
+  const overdue =
+    due != null &&
+    due < input.context.businessDate &&
+    due >= addDaysYmd(input.context.businessDate, -STALE_OVERDUE_DAYS);
   const dueToday = due === input.context.businessDate;
   factors.push(
     factor(

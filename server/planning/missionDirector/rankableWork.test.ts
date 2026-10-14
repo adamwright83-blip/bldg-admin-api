@@ -299,3 +299,16 @@ describe("Mission Director rankable work", () => {
     expect(plan.ranking[0]?.blockedReasons).toContain("PREP_NOT_READY");
   });
 });
+
+describe("stale overdue urgency", () => {
+  it("recent overdue work keeps its urgency; work overdue for weeks does not outrank current work", () => {
+    const ctx = { businessDate: "2026-10-14", macroGoal: null, openTasks: [] };
+    const stale = candidate("stale", "The Louise", "Email Dana (due Aug 7, 3:00 PM)", { observedDueDate: "2026-08-07" });
+    const recent = candidate("recent", "Text Andrew", "Text Andrew", { observedDueDate: "2026-10-10" });
+    const plan = rankMissionDirectorWork({ candidates: [stale, recent], campaigns: [], campaignPrepReady: {}, context: ctx, pockets: [] });
+    const due = (id: string) => plan.ranking.find(r => r.workId === id)!.factors.find(f => f.name === "due_work")!;
+    expect(due("recent").effect).toBe(200);
+    expect(due("stale").effect).toBe(0);
+    expect(plan.ranking.find(r => r.workId === "stale")!.eligible).toBe(true);
+  });
+});

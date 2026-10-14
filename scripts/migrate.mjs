@@ -5352,8 +5352,9 @@ await assertRequiredColumns("strategic_planning_proposals", ["id", "tenantId", "
 if (!(await requiredColumnExists("dayforge_saas_tenants", "strategyVerticalKey"))) await runRequired("ALTER TABLE dayforge_saas_tenants ADD COLUMN strategyVerticalKey varchar(64) NULL", "tenant strategy industry");
 if (!(await requiredColumnExists("tenant_standing_authorizations", "allowedWeekdaysJson"))) await runRequired("ALTER TABLE tenant_standing_authorizations ADD COLUMN allowedWeekdaysJson json NULL", "bounded outbound weekdays");
 
-await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning') NOT NULL", "weekday strategic appointments");
+// Superset only: values are never removed, so existing appointment rows stay valid.
+await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning','daily_morning_readiness','daily_evening_debrief') NOT NULL", "Claire appointment kinds");
 await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJson"]);
-await assertEnumContainsValues("operator_appointments", "appointmentKind", ["weekday_strategic_planning"]);
+await assertEnumContainsValues("operator_appointments", "appointmentKind", ["weekday_strategic_planning", "daily_morning_readiness", "daily_evening_debrief"]);
 console.log("\nMigration complete.");
 await conn.end();

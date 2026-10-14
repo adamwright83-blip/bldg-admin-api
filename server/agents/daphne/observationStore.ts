@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { daphneObservations } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { recordDaphneMetricEvent } from "./metrics";
@@ -288,4 +288,30 @@ export async function getDaphneObservationsByIds(input: {
     const observation = found.get(id);
     return observation ? [observation] : [];
   });
+}
+
+/** Recent observations of one source type for this operator, newest first. */
+export async function listRecentDaphneObservationsBySource(input: {
+  tenantId: string;
+  canonicalOperatorId: string;
+  sourceType: string;
+  since: Date;
+  limit?: number;
+}): Promise<DaphneObservationRecord[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(daphneObservations)
+    .where(
+      and(
+        eq(daphneObservations.tenantId, required(input.tenantId, "tenantId", 64)),
+        eq(daphneObservations.canonicalOperatorId, required(input.canonicalOperatorId, "canonicalOperatorId", 191)),
+        eq(daphneObservations.sourceType, input.sourceType),
+        gte(daphneObservations.occurredAt, input.since)
+      )
+    )
+    .orderBy(desc(daphneObservations.occurredAt))
+    .limit(Math.max(1, Math.min(input.limit ?? 10, 100)));
+  return rows.map(toRecord);
 }

@@ -33,7 +33,9 @@ export type PersistentOperatorActionSource =
       appointmentKind:
         | "sunday_weekly_planning"
         | "weekly_planning_callback"
-        | "weekday_strategic_planning";
+        | "weekday_strategic_planning"
+        | "daily_morning_readiness"
+        | "daily_evening_debrief";
       standingAuthorizationId: string | null;
     };
 
@@ -83,6 +85,8 @@ export async function executePersistentOperatorAction<T>(input: {
   approvedByUserId?: string | null;
   requiredAutonomyLevel?: ClaireAutonomyLevel;
   expiresAtMs: number;
+  /** Business clock for window checks; defaults to the real clock. */
+  now?: Date;
   execute: (
     context: PersistentOperatorActionExecutionContext
   ) => Promise<T>;
@@ -118,6 +122,7 @@ export async function executePersistentOperatorAction<T>(input: {
     standingAuthorizationId: input.standingAuthorizationId,
     approvedByUserId: input.approvedByUserId,
     requiredAutonomyLevel: input.requiredAutonomyLevel,
+    now: input.now,
   });
   if (!policy.allowed) {
     throw new Error(

@@ -1,3 +1,4 @@
+import { DAILY_CLAIRE_CALLS, dailyCallAuthorizedNow, dailyPurposeForKind } from "../../../shared/dailyClaireCalls";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literals (table/env names) only; not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { strategicProposalIsCallable } from "../../strategy/strategicStore";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
@@ -18,7 +19,9 @@ import type {
 export type OperatorAppointmentKind =
   | "sunday_weekly_planning"
   | "weekly_planning_callback"
-  | "weekday_strategic_planning";
+  | "weekday_strategic_planning"
+  | "daily_morning_readiness"
+  | "daily_evening_debrief";
 
 export type ClaimedOperatorAppointment = DurableLeasedStep & {
   tenantId: string;
@@ -265,6 +268,8 @@ export class OperatorAppointmentStore
   async claimNextStep(input: {
     leaseOwner: string;
     leaseMs: number;
+    /** Business clock deciding which appointments are due; defaults to the database clock. Leases stay on real time. */
+    dueBy?: Date;
   }): Promise<ClaimedOperatorAppointment | null> {
     const connection = await this.pool.getConnection();
     try {
@@ -274,7 +279,7 @@ export class OperatorAppointmentStore
            FROM operator_appointments
           WHERE (
                 (status IN ('scheduled','retry_scheduled')
-                 AND scheduledFor <= CURRENT_TIMESTAMP(3))
+                 AND scheduledFor <= COALESCE(?, CURRENT_TIMESTAMP(3)))
              OR (status IN ('leased','running')
                  AND leaseExpiresAt IS NOT NULL
                  AND leaseExpiresAt <= CURRENT_TIMESTAMP(3)
@@ -283,7 +288,8 @@ export class OperatorAppointmentStore
           )
           ORDER BY scheduledFor, createdAt, id
           LIMIT 1
-          FOR UPDATE SKIP LOCKED`
+          FOR UPDATE SKIP LOCKED`,
+        [input.dueBy ?? null]
       );
       const row = rows[0];
       if (!row) {
@@ -357,6 +363,55 @@ export class OperatorAppointmentStore
       ]
     );
     return result.affectedRows === 1;
+  }
+
+  /**
+   * Daily morning/evening dispatch fence. Locks and rechecks the exact grant for
+   * this appointment's purpose at dispatch time: same operator, same timezone,
+   * not revoked, allowed day and window, and no other call of this purpose already
+   * dispatched for the business date.
+   */
+  async beginDailyCallDispatch(step: ClaimedOperatorAppointment, now: Date): Promise<boolean> {
+    const purpose = dailyPurposeForKind(step.appointmentKind);
+    if (!purpose || !step.standingAuthorizationId) return false;
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [auths] = await connection.execute<RowDataPacket[]>(
+        "SELECT * FROM tenant_standing_authorizations WHERE id = ? AND tenantId = ? AND canonicalOperatorId = ? FOR UPDATE",
+        [step.standingAuthorizationId, step.tenantId, step.canonicalOperatorId]
+      );
+      const auth = auths[0];
+      if (
+        !auth ||
+        auth.operatorUserId !== step.operatorUserId ||
+        auth.exactAction !== DAILY_CLAIRE_CALLS[purpose].exactAction ||
+        !dailyCallAuthorizedNow(auth as never, purpose, now, step.timeZone)
+      ) {
+        await connection.rollback();
+        return false;
+      }
+      const date = formatInTimeZone(now, step.timeZone, "yyyy-MM-dd");
+      const [dispatched] = await connection.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) AS n FROM operator_appointments WHERE tenantId = ? AND canonicalOperatorId = ? AND appointmentKind = ? AND idempotencyKey = ? AND callDispatchStartedAt IS NOT NULL",
+        [step.tenantId, step.canonicalOperatorId, step.appointmentKind, `${step.appointmentKind}:${step.canonicalOperatorId}:${date}`]
+      );
+      if (Number(dispatched[0]?.n) > 0) {
+        await connection.rollback();
+        return false;
+      }
+      const [result] = await connection.execute<ResultSetHeader>(
+        "UPDATE operator_appointments SET callDispatchStartedAt = CURRENT_TIMESTAMP(3) WHERE tenantId = ? AND id = ? AND status = 'running' AND leaseOwner = ? AND leaseExpiresAt > CURRENT_TIMESTAMP(3) AND callDispatchStartedAt IS NULL AND callSid IS NULL AND standingAuthorizationId <=> ? AND timeZone = ?",
+        [step.tenantId, step.id, step.leaseOwner, step.standingAuthorizationId, step.timeZone]
+      );
+      await connection.commit();
+      return result.affectedRows === 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async beginCallDispatch(
