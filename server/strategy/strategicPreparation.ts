@@ -46,17 +46,16 @@ export async function refreshStrategicDiagnosis(input: {
   });
   // Model-selected research enriches preparation as hypothesis evidence. Existing metric and ranking authority stays intact.
   // Reuse the prepared diagnosis for an hour so scheduled calls do not repeatedly pay for research.
-  if (
-    !prior ||
-    now.getTime() - Date.parse(prior.generatedAt) >= 3600000 ) {
+  if (!prior || now.getTime() - Date.parse(prior.generatedAt) >= 3600000) {
     const research = await investigateForPreparation({
-    tenantId: input.identity.tenantId,
-    objective: facts.focus?.statement ?? facts.goal.statement,
-    now,
-    timeZone: input.timeZone,
-  });
-  if(research)facts.evidence.push( {
-          id: `business_analysis:${research.citedReceiptIds.join(":")}`,
+      tenantId: input.identity.tenantId,
+      objective: facts.focus?.statement ?? facts.goal.statement,
+      now,
+      timeZone: input.timeZone,
+    });
+    if (research) {
+      facts.evidence.push({
+        id: `business_analysis:${research.citedReceiptIds.join(":")}`,
         tenantId: input.identity.tenantId,
         source: "analyzeBusinessData",
         capturedAt: now.toISOString(),
@@ -66,6 +65,7 @@ export async function refreshStrategicDiagnosis(input: {
         quality: "partial",
         description: [research.answer, ...research.limitations].join(" "),
       });
+    }
   } else {
     facts.evidence.push(
       ...prior.evidence.filter(e => e.source === "analyzeBusinessData")

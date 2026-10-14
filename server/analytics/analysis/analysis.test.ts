@@ -309,7 +309,7 @@ describe("real WASM sandbox", () => {
 });
 
 describe("bounded investigation (mocked model; real sandbox)", () => {
-  it("formulates evidence, renders exact cells and retains customer references", async () => {
+  it("renders executed cells and identities even when the model invents final figures and references", async () => {
     let receiptId = "";
     const invoke = vi.fn(async input => {
       if (invoke.mock.calls.length === 1)
@@ -324,9 +324,9 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
         request({
           kind: "final",
           sql: "",
-          answer: "{{0}} has recorded historical sales of {{1}}.",
-          receiptIds: [receiptId],
-          customerIds: ["cust_a"],
+          answer: "Invented Customer made $999 profit.",
+          receiptIds: ["invented"],
+          customerIds: ["invented"],
           facts: [
             { receiptId, row: 0, column: "name", format: "text" },
             { receiptId, row: 0, column: "lifetime_cents", format: "dollars" },
@@ -347,6 +347,8 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
     expect(result.answer).toBe(
       "The recorded evidence shows: Test Customer, lifetime cents: $60.00."
     );
+    expect(result.citedReceiptIds).toEqual([receiptId]);
+    expect(result.session?.customerIds).toEqual(["cust_a"]);
     expect(result.session?.customers).toEqual([
       { displayName: "Test Customer", identityKeys: ["cleancloud:test"] },
     ]);
