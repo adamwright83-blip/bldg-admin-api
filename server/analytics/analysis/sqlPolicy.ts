@@ -37,10 +37,91 @@ const columns = new Set(
   APPROVED_VIEWS.flatMap(v => v.columns.map(c => c.name))
 );
 
+/**
+ * Infer display units from parsed expressions, never from model-chosen aliases.
+ * The fallback for an unfamiliar money expression is "uncertain", not dollars.
+ * CTE projections propagate unit lineage into the outer SELECT.
+ */
+export type AnalysisMoneyUnit = "cents" | "dollars" | "uncertain" | "none";
+function moneyOutputUnits(ast: any): Record<string, AnalysisMoneyUnit> {
+  const known = new Map<string, AnalysisMoneyUnit>();
+  for (const view of APPROVED_VIEWS)
+    for (const column of view.columns)
+      if (column.name.endsWith("_cents")) known.set(column.name, "cents");
+
+  const merge = (units: AnalysisMoneyUnit[]): AnalysisMoneyUnit => {
+    const present = units.filter(u => u !== "none");
+    if (!present.length) return "none";
+    return present.every(u => u === present[0]) ? present[0]! : "uncertain";
+  };
+  const infer = (expr: any): AnalysisMoneyUnit => {
+    if (!expr || typeof expr !== "object") return "none";
+    if (Array.isArray(expr)) return merge(expr.map(infer));
+    if (expr.type === "column_ref") {
+      const name = String(expr.column ?? "").toLowerCase();
+      return known.get(name) ?? "none";
+    }
+    const funcName =
+      typeof expr.name === "string"
+        ? expr.name
+        : expr.name?.name?.map((n: any) => n.value).join(".");
+    const upper = String(funcName ?? "").toUpperCase();
+    if (upper === "COUNT" || upper === "ROW_NUMBER" ||
+        upper === "RANK" || upper === "DENSE_RANK") return "none";
+    if (expr.type === "binary_expr") {
+      const left = infer(expr.left), right = infer(expr.right);
+      if (expr.operator === "/" && left !== "none") {
+        if (right !== "none")
+          return left === right ? "none" : "uncertain";
+        if (expr.right?.type === "number" &&
+            Number(expr.right.value) === 100)
+          return left === "cents" ? "dollars" : left;
+        return left;
+      }
+      if (expr.operator === "/" && right !== "none") return "uncertain";
+      if (expr.operator === "*" && left !== "none" && right !== "none")
+        return "uncertain";
+      return merge([left, right]);
+    }
+    if (expr.type === "select") return merge(Object.values(project(expr)));
+    const children: AnalysisMoneyUnit[] = [];
+    for (const [key, value] of Object.entries(expr)) {
+      if (["name", "as", "table", "column", "value"].includes(key)) continue;
+      if (value && typeof value === "object") children.push(infer(value));
+    }
+    return merge(children);
+  };
+  function project(select: any): Record<string, AnalysisMoneyUnit> {
+    for (const cte of select.with ?? []) {
+      const projection = project(cte.stmt?.ast ?? cte.stmt);
+      const names = Object.keys(projection);
+      for (let i = 0; i < names.length; i++) {
+        const renamed = cte.columns?.[i]?.value ?? cte.columns?.[i]?.column;
+        known.set(String(renamed ?? names[i]).toLowerCase(), projection[names[i]!]!);
+      }
+    }
+    for (const relation of select.from ?? [])
+      if (relation.expr?.ast) project(relation.expr.ast);
+    const out: Record<string, AnalysisMoneyUnit> = {};
+    for (const c of select.columns ?? []) {
+      const name = c.as ??
+        (c.expr?.type === "column_ref" ? c.expr.column : null);
+      if (!name || name === "*") continue;
+      const key = String(name).toLowerCase();
+      const unit = infer(c.expr);
+      out[key] = unit;
+      known.set(key, unit);
+    }
+    return out;
+  }
+  return project(ast);
+}
+
 /** Parse, allowlist the structure, then regenerate SQL. Never execute the original text. */
 export function validateAnalysisSql(sql: string): {
   sql: string;
   views: string[];
+  outputUnits: Record<string, AnalysisMoneyUnit>;
 } {
   if (typeof sql !== "string" || sql.length > 8000 || !sql.trim())
     throw new Error("Query must contain 1–8000 characters");
@@ -168,5 +249,5 @@ export function validateAnalysisSql(sql: string): {
     }
   }
   checkCtes(ast);
-  return { sql: parser.sqlify(ast, dialect), views: [...used].sort() };
+  return { sql: parser.sqlify(ast, dialect), views: [...used].sort(), outputUnits: moneyOutputUnits(ast) };
 }
