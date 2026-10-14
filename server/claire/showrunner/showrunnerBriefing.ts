@@ -32,6 +32,8 @@ export type ShowrunnerBriefing = {
   pendingDecision: null | { proposalId: string; revision: string; summary: string; items: Array<{ id: string; date: string; title: string; window: string | null }> };
   adaptations: string[];
   uncertain: string[];
+  /** This week so far: operator-reported outcomes and plan changes, for the week review. */
+  weekToDate: { reportedOutcomes: string[]; planChanges: string[] };
 };
 
 function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): BriefingItem[] {
@@ -96,6 +98,20 @@ export async function buildShowrunnerBriefing(input: {
     const summary = [p.who, p.what].filter(Boolean).join(": ") + (p.date ? ` (${p.date}${p.time ? ` ${p.time}` : ""})` : "");
     return { summary, date: p.date || null, reportedOn: formatInTimeZone(new Date(r.occurredAt), timeZone, "yyyy-MM-dd") };
   });
+  const weekStartDate = weekStartMonday(businessDate);
+  const outcomeRows = await listRecentDaphneObservationsBySource({
+    tenantId: identity.tenantId,
+    canonicalOperatorId: identity.canonicalOperatorId,
+    sourceType: "claire_debrief_mission_outcome",
+    since: new Date(Date.parse(`${weekStartDate}T00:00:00Z`) - 86_400_000),
+    limit: 40,
+  }).catch(() => []);
+  const reportedOutcomes = outcomeRows
+    .reverse()
+    .map(r => {
+      const p = (r.payload ?? {}) as Record<string, string>;
+      return `${p.businessDate ?? ""}: ${p.title ?? "a mission"} — ${p.outcome ?? "reported"}${p.answer || p.operatorWords ? ` ("${String(p.answer ?? p.operatorWords).slice(0, 100)}")` : ""}`;
+    });
   const presentations = await loadMissionPresentations({
     tenantId: identity.tenantId,
     canonicalOperatorId: identity.canonicalOperatorId,
@@ -130,6 +146,7 @@ export async function buildShowrunnerBriefing(input: {
     pendingDecision,
     adaptations,
     uncertain,
+    weekToDate: { reportedOutcomes, planChanges: (proposal?.weeklyPlan?.changes ?? []).map(c => c.summary) },
   };
 }
 

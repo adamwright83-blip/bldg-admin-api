@@ -115,6 +115,7 @@ function systemPrompt(state: ShowrunnerCallState): string {
           "capture unexpected developments (new meetings, opportunities, commitments, availability changes) with who/when/where when stated.",
           "Ask only the follow-up question genuinely needed (e.g. the time of a new meeting). Do not re-ask what was answered.",
           "An unfinished item is unresolved work, not avoidance; never imply blame. When the operator has nothing more to add, set operatorIsDone true.",
+          "If asked how the week went, answer from BRIEFING.objective and BRIEFING.weekToDate: what was reported done, what changed and why, and what is still outstanding. Say these are reported outcomes, not verified sales.",
         ];
   return [
     ...role,
@@ -204,7 +205,8 @@ export async function runShowrunnerTurn(input: {
   let speak = model.speak.trim();
   const needsReplan =
     !state.replan &&
-    (developments.length > 0 ||
+    // Any schedulable development captured during this call, not just this turn.
+    (state.captured.developments.some(d => ["meeting", "opportunity", "commitment"].includes(d.kind)) ||
       (state.purpose === "evening_debrief" && model.operatorIsDone && state.captured.missionUpdates.some(u => u.outcome !== "done")));
   if (needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness")) {
     const replan = await replanFromShowrunnerCall(state, now).catch(error => {
