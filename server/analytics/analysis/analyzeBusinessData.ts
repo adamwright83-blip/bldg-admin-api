@@ -390,17 +390,18 @@ function renderEvidence(
         const unit =
           result.monetaryUnits?.[column.toLowerCase()] ??
           (/(?:^|_)cents$/i.test(column) ? "cents" : "none");
+        const raw = row[i];
         const value =
-          typeof row[i] !== "number"
-            ? String(row[i]).slice(0, 100)
+          typeof raw !== "number"
+            ? String(raw).slice(0, 100)
             : unit === "cents"
-              ? `${(row[i] / 100).toFixed(2)}`
+              ? "$" + (raw / 100).toFixed(2)
               : unit === "dollars"
-                ? `${row[i].toFixed(2)}`
+                ? "$" + raw.toFixed(2)
                 : unit === "uncertain" ||
                     (unit === "none" && /(?:^|_)cents$/i.test(column))
-                  ? `${row[i]} (monetary unit unverified; not a dollar figure)`
-                  : String(row[i]);
+                  ? String(raw) + " (monetary unit unverified; not a dollar figure)"
+                  : String(raw);
         return [
           column === "name" ? value : `${column.replace(/_/g, " ")}: ${value}`,
         ];
