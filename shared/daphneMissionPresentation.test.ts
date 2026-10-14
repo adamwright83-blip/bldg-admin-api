@@ -27,3 +27,16 @@ describe("Daphne mission explanation classification", () => {
     expect(missionFollowUpQuestion("unknown_kind")).toBe("What happened with that mission?");
   });
 });
+
+describe("adjustment scope", () => {
+  it("time-of-day reasons apply to every mission; task size stays with its mission type", async () => {
+    const { adjustmentScope, presentationFor, OPERATOR_SCOPE } = await import("../server/agents/daphne/missionFollowUp");
+    const timing = classifyMissionExplanation("I ran out of time; afternoons are too busy.");
+    expect(timing.adjustment).toEqual({ kind: "timing", window: "morning" });
+    expect(adjustmentScope(timing.adjustment!)).toBe("operator");
+    expect(adjustmentScope({ kind: "task_size" })).toBe("mission_type");
+    const map = new Map([[OPERATOR_SCOPE, "morning"], ["retention", "first-step"]]);
+    expect(presentationFor(map, "account_acquisition")).toBe("morning");
+    expect(presentationFor(map, "retention")).toBe("first-step");
+  });
+});

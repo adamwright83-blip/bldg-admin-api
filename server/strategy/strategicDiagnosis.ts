@@ -33,6 +33,24 @@ export type DiagnosisInput = {
   commitments: string[];
   /** Sales sources that were stale or unreadable for the comparison window. */
   sourceGaps?: { evidenceRef: string; description: string };
+  /** The operator's durable objective and its neighborhood evidence, when stated. */
+  focus?: {
+    statement: string;
+    area: string;
+    evidenceRef: string;
+    windowDays: number;
+    sales: number | null;
+    priorSales: number | null;
+    orders: number | null;
+    priorOrders: number | null;
+    salesRef: string | null;
+    dormant: number | null;
+    dormantRef: string | null;
+    dormantTop: Array<{ name: string; lastOrderDate: string | null; revenueCents: number }>;
+    figuresVerified: boolean;
+  };
+  /** Sources current, but some orders are not payment-verified: figures are usable as recorded, never as confirmed. */
+  recordedFigures?: { evidenceRef: string; description: string };
 };
 
 export function assembleStrategicDiagnosis(
@@ -66,6 +84,14 @@ export function assembleStrategicDiagnosis(
       return null;
     return e.value;
   };
+  const recordedValue = (key: string): number | null => {
+    if (!industry?.metrics.includes(key)) return null;
+    const e = byId.get(input.metrics[key] ?? "");
+    return e && typeof e.value === "number" && Number.isFinite(e.value) &&
+      (e.quality === "partial" || e.quality === "stale")
+      ? e.value
+      : null;
+  };
   const ref = (key: string) =>
     input.metrics[key] ? [input.metrics[key]!] : [];
   const goalEvidence =
@@ -79,15 +105,17 @@ export function assembleStrategicDiagnosis(
   const demand = metric("qualified_demand");
   const needed = metric("required_qualified_demand");
   const cash = metric("cash_runway_weeks");
-  const sales = metric("net_sales_cents");
-  const priorSales = metric("prior_net_sales_cents");
-  const orders = metric("paid_orders");
-  const priorOrders = metric("prior_paid_orders");
-  const aov = metric("average_order_value_cents");
-  const mtd = metric("mtd_net_sales_cents");
-  const priorMtd = metric("prior_mtd_net_sales_cents");
-  const newCustomers = metric("new_customers_30d");
-  const returningCustomers = metric("returning_customers_30d");
+  const recordedUsable = Boolean(input.recordedFigures && byId.has(input.recordedFigures.evidenceRef));
+  const recordedOrExact = (key: string) => metric(key) ?? (recordedUsable ? recordedValue(key) : null);
+  const sales = recordedOrExact("net_sales_cents");
+  const priorSales = recordedOrExact("prior_net_sales_cents");
+  const orders = recordedOrExact("paid_orders");
+  const priorOrders = recordedOrExact("prior_paid_orders");
+  const aov = recordedOrExact("average_order_value_cents");
+  const mtd = recordedOrExact("mtd_net_sales_cents");
+  const priorMtd = recordedOrExact("prior_mtd_net_sales_cents");
+  const newCustomers = recordedOrExact("new_customers_30d");
+  const returningCustomers = recordedOrExact("returning_customers_30d");
   const dormant = metric("dormant_customers");
   const observed = describeObservedComparison({
     sales, priorSales, orders, priorOrders, aov, mtd, priorMtd,
@@ -102,6 +130,8 @@ export function assembleStrategicDiagnosis(
       ? e.value
       : null;
   };
+  if (recordedUsable && observed.lines.length)
+    observed.lines.unshift("Recorded sales (sources current; not all orders payment-verified):");
   const salesChange =
     sales != null && priorSales != null && priorSales > 0
       ? (sales - priorSales) / priorSales
@@ -139,6 +169,7 @@ export function assembleStrategicDiagnosis(
       ...ref("prior_net_sales_cents"),
       ...ref("dormant_customers"),
       ...ref("returning_customers_30d"),
+      ...(recordedUsable ? [input.recordedFigures!.evidenceRef] : []),
     ];
     diagnosis = `Recorded sales fell ${pct(salesChange)} against the prior 30 days while ${dormant} previously active customers are dormant. Recovering known buyers is the most direct, observable lever; the cause of the decline is not yet established.`;
   } else if (
@@ -192,6 +223,17 @@ export function assembleStrategicDiagnosis(
   if (sourceGap) {
     support = [sourceGap.evidenceRef];
     diagnosis = `Sales data is incomplete: ${sourceGap.description}. Recorded figures cannot show whether sales fell or the data stopped arriving, so no growth driver can be isolated until the source is restored.`;
+  }
+  // The operator's stated objective outranks generic triage unless the business
+  // has a hard constraint (negative contribution, cash, capacity) or data outage.
+  const focusPlan =
+    input.focus && !input.sourceGaps && !["contribution", "cash_flow", "capacity"].includes(driver)
+      ? planForObjective(input.focus, aov, byId)
+      : null;
+  if (focusPlan) {
+    driver = focusPlan.driver;
+    diagnosis = focusPlan.diagnosis;
+    support = focusPlan.support;
   }
   const contradicted = input.outcomes.filter(
     o =>
@@ -250,7 +292,7 @@ export function assembleStrategicDiagnosis(
           "Observe the next reporting period before making a growth bet",
         ],
   };
-  let [chosen, alternative] = labels[driver]!;
+  let [chosen, alternative] = focusPlan ? [focusPlan.chosen, focusPlan.alternative] : labels[driver]!;
   if (revisitingFailedHypothesis) {
     chosen =
       "Review the contradicted strategic hypothesis and compare a different mechanism";
@@ -303,6 +345,10 @@ export function assembleStrategicDiagnosis(
     driver === "retention" && !revisitingFailedHypothesis &&
     dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1;
   enrichOptions(options, driver, { aov, dormant, newCustomers, returningCustomers, capacity, observed, recovery, sourceGap, recordedView });
+  if (focusPlan && !revisitingFailedHypothesis) {
+    Object.assign(options[0]!, focusPlan.chosenFields, { eligible: true });
+    Object.assign(options[1]!, focusPlan.altFields);
+  }
   const action: StrategyAction = {
     id: `strategy-${driver}`,
     title: chosen,
@@ -318,13 +364,15 @@ export function assembleStrategicDiagnosis(
         ? "Resolving missing driver evidence will distinguish the competing explanations."
         : `${driver} is the pivotal constraint; this audit can test that explanation.`,
     rationale: diagnosis,
-    completionCondition: recovery
+    completionCondition: focusPlan || recovery
       ? options[0]!.nextMeasurableAction!
       : "Prepare one written comparison from at least five eligible records (or every available record if fewer), with source references, missing fields, and a next-test decision.",
-    leadingIndicator: recovery
+    leadingIndicator: focusPlan
+      ? focusPlan.leadingIndicator
+      : recovery
       ? "Consented recovery contacts prepared; replies and orders recorded."
       : "Eligible source records reviewed and missing fields resolved.",
-    intendedOutcome: `A defensible next experiment toward: ${input.goal.statement}`,
+    intendedOutcome: `A defensible next experiment toward: ${input.focus?.statement ?? input.goal.statement}`,
     evidenceRefs: support,
     reviewCondition:
       "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
@@ -341,7 +389,9 @@ export function assembleStrategicDiagnosis(
     businessDate: input.businessDate,
     generatedAt: input.now.toISOString(),
     goal: input.goal,
+    ...(input.focus ? { objective: { statement: input.focus.statement, area: input.focus.area } } : {}),
     currentCondition:
+      (focusPlan ? `${focusPlan.condition} ` : "") +
       (input.goal.current == null
         ? "Goal progress is unobserved."
         : `Observed ${input.goal.metricKey}: ${input.goal.current}; operator target: ${input.goal.target}.`) +
@@ -397,6 +447,8 @@ export function assembleStrategicDiagnosis(
         ? ["Industry metric readers unsupported."]
         : industry.limitations),
       ...observed.missing.map(m => `${m} is unmeasured.`),
+      ...(focusPlan ? focusPlan.uncertainty : []),
+      ...(recordedUsable ? [`${input.recordedFigures!.description}.`] : []),
       ...(contribution == null
         ? [
             "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
@@ -525,4 +577,90 @@ function enrichOptions(
     if (f.capacity != null && f.capacity <= 0)
       o.uncertainty += " Configured capacity is exhausted; added orders may not be serviceable.";
   }
+}
+
+type Focus = NonNullable<DiagnosisInput["focus"]>;
+
+/** Pure: competing options for the operator's neighborhood objective, from observed figures only. */
+export function planForObjective(focus: Focus, businessAov: number | null, byId: Map<string, unknown>) {
+  const area = focus.area;
+  const unverified = focus.figuresVerified ? "" : " (recorded; not all orders payment-verified)";
+  const change =
+    focus.sales != null && focus.priorSales != null && focus.priorSales > 0
+      ? (focus.sales - focus.priorSales) / focus.priorSales
+      : null;
+  const areaAov = focus.sales != null && focus.orders ? focus.sales / focus.orders : businessAov;
+  const salesLine =
+    focus.sales != null && focus.priorSales != null
+      ? `${area} recorded sales were ${dollars(focus.sales)} over the last ${focus.windowDays} days vs ${dollars(focus.priorSales)} the prior ${focus.windowDays}${
+          change == null ? "" : ` (${change < 0 ? "down" : "up"} ${pct(change)})`
+        }, ${focus.orders} vs ${focus.priorOrders} orders${unverified}.`
+      : `${area} sales could not be measured.`;
+  const dormantLine =
+    focus.dormant != null ? ` ${focus.dormant} ${area} customers who ordered before have not ordered in the last 60 days.` : "";
+  const condition = `Your objective: ${focus.statement}. ${salesLine}${dormantLine}`;
+  const support = [focus.evidenceRef, focus.salesRef, focus.dormantRef].filter(
+    (r): r is string => Boolean(r && byId.has(r))
+  );
+  const profit = "Profitability can't be judged yet: contribution per order is unmeasured, so this targets recorded sales.";
+  const worth = (n: number) =>
+    areaAov == null
+      ? "Order value is unmeasured, so no sales arithmetic is stated."
+      : `${n} returning order${n === 1 ? "" : "s"} at the ${area} average of ${dollars(areaAov)} is about ${dollars(n * areaAov)} in recorded sales (arithmetic, not a forecast).`;
+  const outreach = `Find new ${area} customers through building and door outreach`;
+  if (focus.dormant != null && focus.dormant > 0) {
+    const n = Math.min(5, focus.dormant);
+    const names = focus.dormantTop.slice(0, n).map(c => c.name).filter(Boolean);
+    const who = names.length
+      ? `${names.join(", ")} — your ${names.length} highest-spending lapsed ${area} customers`
+      : `the ${n} highest-spending lapsed ${area} customers`;
+    return {
+      driver: "retention" as BusinessDriver,
+      condition,
+      support,
+      diagnosis: `For "${focus.statement}", the fastest evidence-backed lever is winning back the ${focus.dormant} lapsed ${area} customers before spending effort on new ones.`,
+      chosen: `Win back lapsed ${area} customers`,
+      alternative: outreach,
+      leadingIndicator: "Win-back contacts made; replies and returning orders recorded.",
+      uncertainty: [profit, "Why these customers stopped ordering is unknown; ask when you contact them."],
+      chosenFields: {
+        observedBasis: condition,
+        reason: `Preferred: ${focus.dormant} ${area} customers already know the service, so a few returning is the quickest measurable lift toward your objective, with no acquisition spend.`,
+        expectedBenefit: `If ${n} return once: ${worth(n)}`,
+        uncertainty: `Return rate is unobserved. ${profit}`,
+        nextMeasurableAction: `Contact ${who} with a return offer you approve; record replies and orders within 14 days.`,
+      },
+      altFields: {
+        observedBasis: condition,
+        reason: `Not preferred first: new ${area} customers take more time and effort to win, and the lapsed ones are a cheaper, untested lever. Do this next if win-backs stall.`,
+        expectedBenefit: `Each new ${area} order is worth about ${areaAov == null ? "an unmeasured amount" : dollars(areaAov)}.`,
+        uncertainty: "Conversion of new buildings or doors is unmeasured.",
+        nextMeasurableAction: `Pick one ${area} building and log outreach and responses.`,
+      },
+    };
+  }
+  return {
+    driver: "acquisition" as BusinessDriver,
+    condition,
+    support,
+    diagnosis: `${salesLine} No lapsed ${area} customers are recorded, so growth has to come from new customers.`,
+    chosen: outreach,
+    alternative: `Raise order frequency of current ${area} customers`,
+    leadingIndicator: "Outreach logged; new orders recorded.",
+    uncertainty: [profit],
+    chosenFields: {
+      observedBasis: condition,
+      reason: `Preferred: with no lapsed ${area} customers to win back, new customers are the available lever.`,
+      expectedBenefit: `Each new ${area} order is worth about ${areaAov == null ? "an unmeasured amount" : dollars(areaAov)}.`,
+      uncertainty: "Conversion is unmeasured.",
+      nextMeasurableAction: `Pick one ${area} building and log outreach and responses this week.`,
+    },
+    altFields: {
+      observedBasis: condition,
+      reason: `Not preferred first: current ${area} customers are few, so frequency gains are small.`,
+      expectedBenefit: worth(1),
+      uncertainty: "Order cadence is unmeasured.",
+      nextMeasurableAction: `Ask current ${area} customers about a regular pickup day.`,
+    },
+  };
 }

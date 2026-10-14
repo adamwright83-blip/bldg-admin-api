@@ -247,9 +247,19 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
     speech.disclosures.push(key);
     speech.say(sentence());
   };
-  if (coverage.failedSources.length && coverage.loadedSources.length) {
+  // A source that loaded but has orders without payment receipts was reached;
+  // it is unverified, not unreachable.
+  const unreachable = coverage.failedSources.filter(source => !coverage.loadedSources.includes(source));
+  const unverified = coverage.failedSources.filter(source => coverage.loadedSources.includes(source));
+  const reached = coverage.loadedSources.filter(source => !unreachable.includes(source));
+  if (unreachable.length && reached.length) {
     speech.say(
-      `That only includes ${joinList(coverage.loadedSources.map(source => SOURCE_LABEL[source]))}; I couldn't reach ${joinList(coverage.failedSources.map(source => SOURCE_LABEL[source]))} just now.`
+      `That only includes ${joinList(reached.map(source => SOURCE_LABEL[source]))}; I couldn't reach ${joinList(unreachable.map(source => SOURCE_LABEL[source]))} just now.`
+    );
+  }
+  if (unverified.length && moneyMetric) {
+    once("payment_unverified", () =>
+      `Some ${joinList(unverified.map(source => SOURCE_LABEL[source]))} orders aren't payment-verified yet, so that's recorded sales, not confirmed payments.`
     );
   }
   const filters = result.query.filters ?? {};

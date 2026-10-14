@@ -421,10 +421,19 @@ export function coverageVerdict(input: {
   now?: Date;
   /** Paid-order analytics are economic-event dated, not order-created dated. */
   basis?: SourceCoverageBasis;
+  /**
+   * Revenue claims need payment proof, so a loaded source with unverified orders is
+   * unreadable for them. Customer counts only need the source to have loaded.
+   */
+  paymentProofMatters?: boolean;
 }): CoverageVerdict {
   const now = input.now ?? new Date();
   const basis = input.basis ?? "economic_event";
-  const unreadable = input.required.filter(s => input.failedSources.includes(s) || !input.loadedSources.includes(s));
+  const unreadable = input.required.filter(
+    s =>
+      !input.loadedSources.includes(s) ||
+      (input.paymentProofMatters !== false && input.failedSources.includes(s))
+  );
   if (unreadable.length) return { kind: "unreadable", sources: unreadable };
   const unknown = input.required.filter(s => input.evidence[s].state === "unknown");
   if (unknown.length) return { kind: "unknown", sources: unknown };

@@ -1,3 +1,4 @@
+import { loadMissionPresentations, presentationFor } from "../agents/daphne/missionFollowUp";
 import { createHash } from "node:crypto";
 import { canonicalJsonStringify } from "./snapshotBuilder";
 import { formatInTimeZone } from "date-fns-tz";
@@ -113,7 +114,32 @@ export async function prepareStrategicProposal(input: {
   const items: StrategicPlanningProposal["items"] = [];
   const seen = new Set<string>();
   const limitations: string[] = [];
+  // Claire's selected recommendation becomes the first proposed mission, with
+  // provenance to the diagnosis. Mission Director's ranked work fills later days,
+  // so stale unrelated follow-ups cannot displace the current strategic priority.
+  const selectedAction = diagnosis.actions[0];
+  const strategyDate = horizon.remainingDates[0];
+  const strategyItem =
+    selectedAction && strategyDate && !diagnosis.quality.structuralErrors.length
+      ? {
+          id: `${strategyDate}:${diagnosis.id}:${selectedAction.id}`,
+          businessDate: strategyDate,
+          title: selectedAction.title,
+          objective: selectedAction.completionCondition,
+          executionType: "challenge" as const,
+          candidateId: `${diagnosis.id}:${selectedAction.id}`,
+          missionType: selectedAction.motion,
+          planId: `strategic_diagnosis:${diagnosis.id}`,
+          planRevision: 0,
+          evidenceRefs: [`strategic_diagnosis:${diagnosis.id}`, ...diagnosis.supportingEvidence],
+        }
+      : null;
+  if (strategyItem) {
+    items.push(strategyItem);
+    seen.add(strategyItem.candidateId);
+  }
   for (const date of horizon.remainingDates) {
+    if (strategyItem && date === strategyItem.businessDate) continue;
     const plan = await planForDate({
       tenantId: identity.tenantId,
       operatorId: identity.dayDirectorActorId,
@@ -152,6 +178,18 @@ export async function prepareStrategicProposal(input: {
         ...diagnosis.supportingEvidence,
       ],
     });
+  }
+  // Daphne's consented, operator-wide timing preference shapes proposed timing.
+  const presentations = await loadMissionPresentations({
+    tenantId: identity.tenantId,
+    canonicalOperatorId: identity.canonicalOperatorId,
+  }).catch(() => new Map());
+  for (const item of items) {
+    const p = presentationFor(presentations, item.missionType ?? "growth") as
+      | { adjustment: { kind: string; window?: "morning" | "afternoon" | "evening" }; note: string; sourceObservationId: string }
+      | undefined;
+    if (p?.adjustment.kind === "timing" && p.adjustment.window)
+      item.timeWindow = { window: p.adjustment.window, reason: p.note, sourceObservationId: p.sourceObservationId };
   }
   const constraints = facts
     .filter(
@@ -214,7 +252,9 @@ export async function prepareStrategicProposal(input: {
       `I recommend: ${diagnosis.selectedApproach}.`,
       `I also considered: ${diagnosis.options[1]?.approach}.`,
       items.length
-        ? `I prepared ${items.length} proposed item${items.length === 1 ? "" : "s"}: ${items.map(i => `${i.businessDate}, ${i.title}`).join("; ")}.`
+        ? `I prepared ${items.length} proposed item${items.length === 1 ? "" : "s"}: ${items.map(i => `${i.businessDate}${i.timeWindow ? ` (${i.timeWindow.window})` : ""}, ${i.title}`).join("; ")}.${
+            items.some(i => i.timeWindow) ? ` I proposed the ${items.find(i => i.timeWindow)!.timeWindow!.window} because of what you told me about your timing.` : ""
+          }`
         : "No eligible work was selected within the operating constraints.",
       "These are pending recommendations. Approve selected items, revise, reject, defer, or ask why.",
     ].join(" "),

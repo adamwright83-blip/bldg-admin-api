@@ -59,13 +59,11 @@ export async function routeStrategicProposalTurn(input: {
   const alternative = p.diagnosis.options.find(
     o => o.id !== p.diagnosis.selectedOptionId
   );
-  const quality = `Strategic quality review: ${p.diagnosis.quality.judgment}. ${p.diagnosis.quality.reasons.join(" ")} This is a strategic hypothesis, with no guaranteed financial impact.`;
-  const facts = p.diagnosis.evidence
-    .map(
-      e =>
-        `${e.description}: ${e.value === null ? "unknown" : String(e.value) + " " + e.unit}; ${e.classification}, ${e.quality}, from ${e.source}.`
-    )
-    .join(" ");
+  // Spoken answers come from the diagnosis content, never from its internal labels.
+  const plain = (text: string | undefined) =>
+    (text ?? "").replace(/^(Preferred|Not preferred[^:]*):\s*/i, "").trim();
+  const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+  const basis = selectedOption?.observedBasis ?? p.diagnosis.currentCondition;
   if (
     control?.kind === "why" ||
     control?.kind === "numbers" ||
@@ -74,16 +72,22 @@ export async function routeStrategicProposalTurn(input: {
   ) {
     const explanation =
       control.kind === "numbers"
-        ? facts
+        ? `${basis} That rests on: ${p.diagnosis.evidence
+            .filter(e => e.value !== null && e.unit !== "prospect_presence")
+            .slice(0, 8)
+            .map(e => `${e.description} (${typeof e.value === "number" && /cents/.test(e.unit) ? `$${(e.value / 100).toFixed(2)}` : String(e.value)})`)
+            .join("; ")}. ${selectedOption?.uncertainty ?? ""}`
         : control.kind === "alternative"
           ? alternative
-            ? `The alternative is ${alternative.approach}. ${alternative.reason} ${alternative.economics} ${alternative.risk}`
-            : "No supported alternative has been prepared."
+            ? `The alternative is to ${lower(alternative.approach)}. I'm not leading with it because ${lower(plain(alternative.reason))} ${alternative.expectedBenefit ?? ""}`
+            : "I haven't found a supported alternative yet."
           : control.kind === "economics"
-            ? `I do not know that this will make money. ${selectedOption?.economics ?? "The economics are unknown."} ${p.diagnosis.economicAssumptions.join(" ")} ${p.diagnosis.successMeasures.join(" ")}`
-            : `${p.diagnosis.diagnosis} I selected ${p.diagnosis.selectedApproach} because ${selectedOption?.reason ?? "the evidence is incomplete"}. ${facts}`;
+            ? `I do not know that this will make money. ${selectedOption?.expectedBenefit ?? ""} ${selectedOption?.economics ?? ""}`
+            : `${p.diagnosis.objective ? `${basis} ` : ""}${p.diagnosis.diagnosis} So I'd start with this: ${lower(p.diagnosis.selectedApproach)}, because ${lower(plain(selectedOption?.reason))} ${selectedOption?.expectedBenefit ?? ""}${
+                alternative ? ` I didn't lead with ${lower(alternative.approach)} because ${lower(plain(alternative.reason))}` : ""
+              } ${selectedOption?.uncertainty ?? ""}`;
     return {
-      speak: `${explanation} ${quality} ${p.uncertainty.join(" ")}`,
+      speak: explanation.replace(/\s+/g, " ").replace(/\.\./g, ".").trim(),
       act: "AWAIT_CONFIRMATION",
       actionIds: [],
     };

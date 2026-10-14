@@ -93,6 +93,8 @@ export type StrategyOption = {
   nextMeasurableAction?: string;
 };
 export type StrategicDiagnosis = {
+  /** The operator's stated objective this diagnosis serves, when one exists. */
+  objective?: { statement: string; area: string };
   id: string;
   schemaVersion: 1;
   doctrineVersion: string;
@@ -143,6 +145,8 @@ export type StrategicProposalItem = {
   candidateId: string;
   /** Mission Director source kind; identifies matching missions for Daphne. */
   missionType?: string;
+  /** Proposed time of day, from the operator's own feedback to Daphne. */
+  timeWindow?: { window: "morning" | "afternoon" | "evening"; reason: string; sourceObservationId: string };
   planId: string;
   planRevision: number;
   evidenceRefs: string[];
