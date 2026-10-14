@@ -27,7 +27,8 @@ test("Driver: Claire asks about unresolved work, Daphne records the answer, the 
     page.on("pageerror", error => pageErrors.push(error.message));
     await login(page, owner);
     const today = ymd(new Date());
-    const yesterday = ymd(new Date(Date.now() - 86_400_000));
+    // Two days back is overdue in any tenant timezone, whatever the runner's clock.
+    const yesterday = ymd(new Date(Date.now() - 2 * 86_400_000));
     // Yesterday's growth work, still open.
     await rpc(context.request, "system.dayDirector.accept", { businessDate: yesterday, proposal: proposal("Recover lapsed customers") }, true);
 

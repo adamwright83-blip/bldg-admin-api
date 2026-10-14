@@ -1,3 +1,4 @@
+import { formatInTimeZone } from "date-fns-tz";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -75,7 +76,8 @@ export const missionDirectorRouter = router({
               tenantId: identity.tenantId,
               canonicalOperatorId: identity.canonicalOperatorId,
               actorIds: identity.dayDirectorActorIds,
-              businessDate: input.businessDate,
+              // Carried forward only once the tenant's business day has passed.
+              businessDate: [input.businessDate, formatInTimeZone(new Date(), timeZone, "yyyy-MM-dd")].sort()[0]!,
               sourceRefs: work.primary.sourceRefs,
             }).catch(() => null)
           : null;

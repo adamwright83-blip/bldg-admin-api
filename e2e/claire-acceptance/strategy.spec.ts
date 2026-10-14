@@ -144,7 +144,8 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
     expect(saved[0].actorId).toBe(String(owner.userId));
     await rpc(context.request,"system.goldlineOnboarding.fieldOutcome",{missionId:owner.missionId,text:"Synthetic acceptance field observation; no sale or revenue verified.",confirmedPresence:true,gps:null},true);
     console.log("Browser boundary: actual Day Line");
-    await page.goto("/play",{waitUntil:"domcontentloaded"});
+    // Open the item's business date; the runner's clock may already be on the next UTC day.
+    await page.goto(`/play?date=${saved[0].businessDate}`,{waitUntil:"domcontentloaded"});
     await expect(page.getByText("DAY LINE DETAILS", { exact: true })).toBeVisible();
     await page.getByText("DAY LINE DETAILS", { exact: true }).click();
     await expect(page.getByTestId("current-day-line")).toContainText(

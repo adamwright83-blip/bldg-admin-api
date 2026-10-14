@@ -1,5 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
+import { formatInTimeZone } from "date-fns-tz";
+import { resolveMissionDirectorBusinessTimeZone } from "../missionDirector/missionDirectorRouter";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
 import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
@@ -61,12 +63,18 @@ export const dayDirectorRouter = router({
     .input(z.object({ today: date }))
     .mutation(async ({ ctx, input }) => {
       const identity = await dayDirectorIdentity(ctx, "day_director.mission_follow_up");
+      // Overdue is judged by the tenant's business date, never the browser's.
+      const tenantToday = formatInTimeZone(
+        new Date(),
+        await resolveMissionDirectorBusinessTimeZone(identity.tenantId),
+        "yyyy-MM-dd"
+      );
       return syncMissionFollowUp({
         tenantId: identity.tenantId,
         canonicalOperatorId: identity.canonicalOperatorId,
         operatorUserId: identity.canonicalOpenId,
         actorIds: identity.dayDirectorActorIds,
-        today: input.today,
+        today: input.today < tenantToday ? input.today : tenantToday,
       });
     }),
   answerMissionFollowUp: legacyDayforgeTenantMemberProcedure
