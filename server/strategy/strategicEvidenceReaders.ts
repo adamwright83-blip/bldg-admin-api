@@ -500,6 +500,22 @@ export function salesSourceOutage(
 
 const FOCUS_WINDOW_DAYS = 90;
 
+/** The operator's latest active Daphne goal that names a neighborhood, as business-query address filters. */
+export async function readObjectiveArea(input: { tenantId: string; canonicalOperatorId: string }) {
+  const goals = await listActiveDaphneGoals({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.canonicalOperatorId,
+  });
+  const goal = [...goals]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(g => ({ g, scope: addressScope(g.statement) }))
+    .find(x => x.scope?.addressAny?.length);
+  if (!goal) return null;
+  const label = goal.scope!.addressLabel!.replace(/^in\s+/i, "");
+  const filters = { addressAny: goal.scope!.addressAny, addressLabel: goal.scope!.addressLabel };
+  return { goal, label, filters };
+}
+
 /**
  * Reads the operator's latest active Daphne goal that names a neighborhood and
  * measures that neighborhood with the same canonical business query Claire's
@@ -512,17 +528,9 @@ export async function readObjectiveFocus(input: {
   now: Date;
   outage: boolean;
 }): Promise<{ focus: NonNullable<DiagnosisInput["focus"]>; evidence: StrategyEvidence[] } | null> {
-  const goals = await listActiveDaphneGoals({
-    tenantId: input.tenantId,
-    canonicalOperatorId: input.canonicalOperatorId,
-  });
-  const goal = [...goals]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map(g => ({ g, scope: addressScope(g.statement) }))
-    .find(x => x.scope?.addressAny?.length);
-  if (!goal) return null;
-  const label = goal.scope!.addressLabel!.replace(/^in\s+/i, "");
-  const filters = { addressAny: goal.scope!.addressAny, addressLabel: goal.scope!.addressLabel };
+  const area = await readObjectiveArea(input);
+  if (!area) return null;
+  const { goal, label, filters } = area;
   const deps = { ...defaultBusinessQueryDeps, now: () => input.now, timeZone: () => input.timeZone };
   const capturedAt = input.now.toISOString();
   const goalRef = `daphne_goals:${goal.g.id}`;

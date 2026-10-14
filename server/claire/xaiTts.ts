@@ -157,6 +157,8 @@ export async function synthesizeClaireXaiSpeech(
     apiKey?: string;
     voiceId?: string;
     fetchImpl?: FetchLike;
+    /** "phone" (default): G.711 mu-law 8 kHz for Twilio. "web": MP3 for browsers (OPEN COMMS). */
+    format?: "phone" | "web";
   } = {}
 ): Promise<Buffer> {
   const apiKey = options.apiKey ?? ENV.xaiApiKey;
@@ -180,10 +182,10 @@ export async function synthesizeClaireXaiSpeech(
           ENV.claireXaiTtsVoiceId ??
           CLAIRE_XAI_TTS_DEFAULT_VOICE,
         language: "en",
-        output_format: {
-          codec: "mulaw",
-          sample_rate: 8000,
-        },
+        output_format:
+          options.format === "web"
+            ? { codec: "mp3", sample_rate: 24000 }
+            : { codec: "mulaw", sample_rate: 8000 },
         speed: 0.95,
         optimize_streaming_latency: 1,
         text_normalization: true,
@@ -215,11 +217,13 @@ export async function handleClaireXaiTtsRequest(
   try {
     const token = String(req.query.token ?? "");
     const { text } = verifyClaireXaiSpeechToken(token);
-    const audio = await synthesizeClaireXaiSpeech(text);
+    const web = req.query.format === "web";
+    const audio = await synthesizeClaireXaiSpeech(text, { format: web ? "web" : "phone" });
 
-    // xAI returns G.711 mu-law at 8 kHz; Twilio's <Play> accepts audio/ulaw.
+    // Phone: xAI returns G.711 mu-law at 8 kHz; Twilio's <Play> accepts audio/ulaw.
+    // Web: the same voice as MP3 for the in-app OPEN COMMS player.
     res.status(200);
-    res.setHeader("Content-Type", "audio/ulaw");
+    res.setHeader("Content-Type", web ? "audio/mpeg" : "audio/ulaw");
     res.setHeader("Cache-Control", "private, no-store, max-age=0");
     res.setHeader("Content-Length", String(audio.length));
     res.end(audio);

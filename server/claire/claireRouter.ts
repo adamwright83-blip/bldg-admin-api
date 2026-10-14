@@ -55,6 +55,7 @@ import { setActiveMacroGoal } from "./macroGoalService";
 import {
   assembleTomorrowCandidates,
   confirmWorkdayPlan,
+  loadConfirmedWorkdayPlan,
   previewWorkdayLoop,
 } from "./workdayPlanService";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
@@ -245,13 +246,20 @@ export const claireRouter = router({
         phase: "pre_drive",
         timeZone: input.timeZone,
       });
-      const snapshot = await confirmWorkdayPlan({
+      const target = {
         tenantId: ctx.tenantId,
         actorId: dayDirectorActorId(ctx),
         businessDate: context.clock?.tomorrowBusinessDate ?? context.businessDate,
-        items: assembleTomorrowCandidates(context),
-      });
-      return { confirmedAt: snapshot.confirmedAt, itemCount: snapshot.items.length };
+      };
+      const snapshot = await confirmWorkdayPlan({ ...target, items: assembleTomorrowCandidates(context) });
+      // Separate read of exactly what was written, for this business date.
+      const readback = await loadConfirmedWorkdayPlan(target);
+      return {
+        confirmedAt: snapshot.confirmedAt,
+        itemCount: snapshot.items.length,
+        businessDate: target.businessDate,
+        verified: readback?.confirmedAt === snapshot.confirmedAt && readback.items.length === snapshot.items.length,
+      };
     }),
 
   talk: joystickClaireDeskProcedure

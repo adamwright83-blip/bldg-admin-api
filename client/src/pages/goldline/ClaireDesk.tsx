@@ -1,296 +1,339 @@
+import { useCallback, useState } from "react";
+import { trpc } from "@/lib/trpc";
 import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
-import type { SalesInsightArtifact } from "../../../../server/claire/proactive/salesInsights";
-import { FormEvent, useState } from "react";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
-import { trpc } from "@/lib/trpc";
+import { OpenComms } from "./claireDesk/OpenComms";
+import "./claireDesk/claireDesk.css";
+
+const BROWSER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const money = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const dayLabel = (date: string, today: string, tomorrow: string) =>
+  date === today ? "Today" : date === tomorrow ? "Tomorrow" : new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+const STATUS: Record<string, string> = {
+  awaiting_approval: "Needs your approval",
+  committed: "On your Day Line",
+  completed: "Done",
+};
 
 /**
- * Desktop Claire — same operator, same brain, richer form factor.
- * This is not Sage and not a second identity.
+ * JOYSTICK · Claire Desk. An operating cockpit: objective, opportunity, the one
+ * mission, its runway, what Claire prepared, and what actually happened. Every
+ * figure comes from stored evidence; unknown values are left out.
  */
 export default function ClaireDesk() {
-  const [utterance, setUtterance] = useState("");
-  const [log, setLog] = useState<
-    Array<{
-      role: "you" | "claire";
-      text: string;
-      salesArtifacts?: SalesInsightArtifact[];
-    }>
-  >([]);
-  const [conversationId] = useState(() =>
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `desk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  );
-  const preview = trpc.system.claire.previewPreDrive.useQuery(
-    { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    { staleTime: 15_000 }
-  );
-  const relationshipClosing =
-    trpc.system.claireRelationshipOffboarding.preview.useQuery(undefined, {
-      enabled: false,
-      retry: false,
-    });
-  const talk = trpc.system.claire.talk.useMutation();
-  const confirmTomorrow = trpc.system.claire.confirmTomorrow.useMutation();
+  const utils = trpc.useUtils();
+  const mission = trpc.system.weeklyMission.deskMission.useQuery(undefined, { retry: false, staleTime: 15_000 });
+  const respond = trpc.system.weeklyMission.respondToPreparedProposal.useMutation();
+  const confirm = trpc.system.claire.confirmTomorrow.useMutation();
+  const relationshipClosing = trpc.system.claireRelationshipOffboarding.preview.useQuery(undefined, { enabled: false, retry: false });
+  const [approval, setApproval] = useState<{ state: "idle" | "saving" | "ok" | "error"; text?: string }>({ state: "idle" });
+  const [confirmState, setConfirmState] = useState<{ state: "idle" | "saving" | "ok" | "error"; text?: string }>({ state: "idle" });
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    const text = utterance.trim();
-    if (!text || talk.isPending) return;
-    setUtterance("");
-    setLog(current => [...current, { role: "you", text }]);
+  const refresh = useCallback(() => {
+    void utils.system.weeklyMission.deskMission.invalidate();
+    void utils.system.weeklyMission.preparedProposal.invalidate();
+    void utils.system.weeklyMission.dailyCallStatus.invalidate();
+  }, [utils]);
+
+  const m = mission.data;
+  const primary = m?.items.find(i => i.status !== "completed") ?? null;
+  const secondary = m?.items.filter(i => i.status !== "completed" && i.id !== primary?.id)[0] ?? null;
+  const pendingTomorrow = m?.items.filter(i => i.status === "awaiting_approval" && i.date === m.tomorrow) ?? [];
+
+  async function approve(itemId: string) {
+    if (!m?.pendingApproval) return;
+    setApproval({ state: "saving" });
     try {
-      const result = await talk.mutateAsync({
-        utterance: text,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        conversationId,
-      });
-      setLog(current => [
-        ...current,
-        {
-          role: "claire",
-          text: result.reply,
-          salesArtifacts: result.salesArtifacts,
-        },
-      ]);
-    } catch (error) {
-      setLog(current => [
-        ...current,
-        {
-          role: "claire",
-          text:
-            error instanceof Error ? error.message : "Claire could not answer.",
-        },
-      ]);
+      // Always approve against the latest stored revision; Claire re-prepares hourly.
+      const fresh = await utils.system.weeklyMission.deskMission.fetch();
+      const scope = fresh.pendingApproval;
+      if (!scope || !scope.itemIds.includes(itemId)) throw new Error("This mission changed since you opened it. Review the updated mission.");
+      const r = await respond.mutateAsync({ proposalId: scope.proposalId, revision: scope.revision, action: "approve", itemIds: [itemId] });
+      if (r.failedItems.length) throw new Error(r.speech);
+      setApproval({ state: "ok", text: r.speech });
+    } catch (e) {
+      setApproval({ state: "error", text: e instanceof Error ? e.message : "Approval was not saved. Nothing changed." });
+    } finally {
+      refresh();
     }
   }
 
-  const workday = preview.data?.workday;
+  async function confirmTomorrow() {
+    setConfirmState({ state: "saving" });
+    try {
+      const r = await confirm.mutateAsync({ timeZone: BROWSER_ZONE });
+      if (!r.verified) throw new Error("The save could not be read back, so it is not confirmed.");
+      setConfirmState({
+        state: "ok",
+        text: `Saved tomorrow's plan snapshot for ${m?.tomorrowLabel ?? "tomorrow"} at ${new Date(r.confirmedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${r.itemCount} item${r.itemCount === 1 ? "" : "s"}.${
+          pendingTomorrow.length ? ` Still needs your approval: ${pendingTomorrow.map(i => i.title).join("; ")}.` : ""
+        }`,
+      });
+    } catch (e) {
+      setConfirmState({ state: "error", text: e instanceof Error ? e.message : "Tomorrow was not saved." });
+    } finally {
+      refresh();
+    }
+  }
+
+  const claireLine = !m
+    ? null
+    : primary?.status === "awaiting_approval"
+      ? `I've prepared "${primary.title}". It needs your OK before it goes on the Day Line.`
+      : primary
+        ? `${primary.title} is on your Day Line ${dayLabel(primary.date, m.businessDate, m.tomorrow).toLowerCase()}${primary.when ? ` (${primary.when})` : ""}.`
+        : "Nothing is prepared for the next two days yet.";
 
   return (
-    <div
-      data-testid="claire-desk"
-      style={{
-        maxWidth: 760,
-        margin: "0 auto",
-        padding: "28px 20px 64px",
-        color: "#17385e",
-        background: "#fffdf6",
-        minHeight: "100%",
-      }}
-    >
-      <p
-        style={{
-          letterSpacing: "0.18em",
-          fontWeight: 800,
-          fontSize: 12,
-          color: "#9b6410",
-        }}
-      >
-        CLAIRE
-      </p>
-      <h1 style={{ fontSize: 36, margin: "8px 0 12px" }}>
-        Same Claire. Deeper desk.
-      </h1>
-      <p style={{ maxWidth: 560, lineHeight: 1.5, color: "#3a5f7e" }}>
-        This is not a second brain. Desktop just has room for more of the same
-        operator, goals, field outcomes, and campaign truth.
-      </p>
-      <ClaireStrategicProposal />
-      <ClaireStrategicCallConsent />
-      <ClaireDailyCallSettings />
-      {preview.data?.brief ? (
-        <p
-          data-testid="claire-desk-brief"
-          style={{ marginTop: 20, fontSize: 18, lineHeight: 1.45 }}
-        >
-          {preview.data.brief}
-        </p>
-      ) : (
-        <p>Loading Claire’s current picture…</p>
-      )}
-      {workday ? (
-        <p data-testid="claire-desk-workday" style={{ color: "#4a6a86" }}>
-          {workday.session.replaceAll("_", " ")} · tomorrow items{" "}
-          {workday.tomorrowCount} · overnight deltas {workday.deltaCount}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={confirmTomorrow.isPending}
-        onClick={() =>
-          void confirmTomorrow.mutateAsync({
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          })
-        }
-        style={{
-          marginTop: 16,
-          minHeight: 48,
-          padding: "0 18px",
-          border: 0,
-          borderRadius: 14,
-          background: "#17385e",
-          color: "#fff8dc",
-          fontWeight: 800,
-        }}
-      >
-        {confirmTomorrow.isPending ? "Confirming…" : "Confirm tomorrow"}
-      </button>
-      <div style={{ marginTop: 28, display: "grid", gap: 12 }}>
-        {log.map((entry, index) => (
-          <div key={`${entry.role}-${index}`}>
-            <p>
-              <strong>{entry.role === "you" ? "You" : "Claire"}:</strong>{" "}
-              {entry.text}
-            </p>
-            {entry.salesArtifacts?.map(artifact => (
-              <figure
-                key={artifact.observationReference}
-                data-testid="claire-sales-trend"
-                style={{
-                  padding: 16,
-                  border: "1px solid #e0bd63",
-                  borderRadius: 14,
-                }}
-              >
-                <figcaption>
-                  {artifact.scope} · paid revenue · {artifact.precision}
-                </figcaption>
-                {artifact.series.map(point => (
-                  <div key={point.from} style={{ marginTop: 12 }}>
-                    <p>
-                      {point.from}–{point.to}: ${(point.cents / 100).toFixed(2)}
-                    </p>
-                    <div
-                      role="img"
-                      aria-label={`Paid revenue ${(point.cents / 100).toFixed(2)} dollars`}
-                      style={{
-                        height: 22,
-                        background: "#17385e",
-                        width: `${Math.max(1, (point.cents / Math.max(...artifact.series.map(item => item.cents))) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                ))}
-                <p style={{ fontSize: 12 }}>
-                  Net paid revenue; comparison uses completed calendar months.
-                </p>
-              </figure>
-            ))}
-          </div>
-        ))}
-      </div>
-      <form
-        onSubmit={event => void onSubmit(event)}
-        style={{ marginTop: 24, display: "grid", gap: 12 }}
-      >
-        <textarea
-          value={utterance}
-          onChange={event => setUtterance(event.target.value)}
-          rows={4}
-          placeholder="Ask Claire about the field, tomorrow, or the goal."
-          style={{
-            border: "2px solid #e0bd63",
-            borderRadius: 16,
-            padding: 16,
-            fontSize: 16,
-            background: "#fffdf2",
-            color: "#17385e",
-          }}
-        />
-        <button
-          type="submit"
-          disabled={talk.isPending || utterance.trim().length === 0}
-          style={{
-            minHeight: 52,
-            border: 0,
-            borderRadius: 14,
-            background: "#edaa26",
-            color: "#17385e",
-            fontWeight: 800,
-            fontSize: 16,
-          }}
-        >
-          {talk.isPending ? "Claire is thinking…" : "Talk to Claire"}
-        </button>
-      </form>
+    <div className="cd-root" data-testid="claire-desk">
+      <nav className="cd-rail" aria-label="JOYSTICK">
+        <img src="/assets/joystick-home/joystick-logo.webp" alt="JOYSTICK" className="cd-logo" />
+        <a href="/play" aria-label="Day Line">◎<span>Day Line</span></a>
+        <a href="/claire" aria-current="page" aria-label="Claire">✦<span>Claire</span></a>
+        <a href="/driver" aria-label="Driver">➤<span>Driver</span></a>
+      </nav>
 
-      <details
-        data-testid="claire-relationship-closing"
-        style={{
-          marginTop: 48,
-          borderTop: "1px solid #e4d7b0",
-          paddingTop: 20,
-          color: "#3a5f7e",
-        }}
-      >
-        <summary
-          style={{
-            cursor: "pointer",
-            fontWeight: 800,
-            color: "#17385e",
-          }}
-        >
-          Relationship closing
-        </summary>
-        <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-          <p style={{ margin: 0, lineHeight: 1.5 }}>
-            Preview the safe closing record Claire can produce from verified
-            shared history and things you explicitly told her. It never deletes
-            or changes orders, customers, revenue, routes, or other business
-            records.
-          </p>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>
-            This is a preview only. Generating it does not disable future
-            relationship context or delete stored history.
-          </p>
-          <button
-            type="button"
-            disabled={relationshipClosing.isFetching}
-            onClick={() => void relationshipClosing.refetch()}
-            style={{
-              justifySelf: "start",
-              minHeight: 44,
-              padding: "0 16px",
-              border: "1px solid #c8a34a",
-              borderRadius: 12,
-              background: "#fff9e6",
-              color: "#17385e",
-              fontWeight: 800,
-            }}
-          >
-            {relationshipClosing.isFetching
-              ? "Building closing record…"
-              : "Preview relationship closing"}
+      <main className="cd-main">
+        {mission.isLoading ? <p className="cd-muted">Loading Claire's picture…</p> : null}
+        {mission.error ? <p role="alert" className="cd-error">Claire's mission couldn't load: {mission.error.message}</p> : null}
+
+        {m ? (
+          <>
+            <header className="cd-hero" data-testid="claire-desk-objective">
+              <div className="cd-hero-map" aria-hidden />
+              <div className="cd-hero-copy">
+                <p className="cd-kicker">THE OBJECTIVE</p>
+                <h1>{m.objective ?? "No objective set yet"}</h1>
+                {m.rationale ? (
+                  <>
+                    <p className="cd-kicker cd-mt">THE OPPORTUNITY</p>
+                    <p className="cd-opportunity" data-testid="claire-desk-opportunity">{m.rationale.diagnosis}</p>
+                  </>
+                ) : null}
+                {m.area ? <span className="cd-chip">{m.area}</span> : null}
+              </div>
+            </header>
+
+            <section className="cd-missions" aria-label="Mission">
+              {primary ? (
+                <article className="cd-card cd-primary" data-testid="claire-desk-primary-mission">
+                  <p className="cd-kicker">THE MISSION · {dayLabel(primary.date, m.businessDate, m.tomorrow)}</p>
+                  <h2>{primary.title}</h2>
+                  {primary.objective ? <p>{primary.objective}</p> : null}
+                  <p className="cd-meta">
+                    <span className={`cd-status cd-status-${primary.status}`}>{STATUS[primary.status]}</span>
+                    {primary.when ? <span>{primary.when}</span> : null}
+                  </p>
+                  {primary.status === "awaiting_approval" ? (
+                    <div className="cd-approve">
+                      {/offer/i.test(primary.objective ?? "") ? (
+                        <p className="cd-note">No offer is approved. Calls can be plain check-ins; any discount is your decision, and Claire won't promise one.</p>
+                      ) : null}
+                      <button type="button" className="cd-gold" disabled={approval.state === "saving"} onClick={() => void approve(primary.id)} data-testid="approve-primary-mission">
+                        {approval.state === "saving" ? "Saving approval…" : "Approve this mission"}
+                      </button>
+                      <p className="cd-fine">Approves only this mission. It adds it to your Day Line; it contacts no one.</p>
+                    </div>
+                  ) : null}
+                  {approval.state === "ok" || approval.state === "error" ? (
+                    <p role={approval.state === "error" ? "alert" : "status"} className={approval.state === "error" ? "cd-error" : "cd-ok"} data-testid="approve-result">
+                      {approval.text}
+                    </p>
+                  ) : null}
+                </article>
+              ) : (
+                <article className="cd-card cd-primary"><p className="cd-muted">No mission prepared. Open comms and ask Claire what she's found.</p></article>
+              )}
+              {secondary ? (
+                <article className="cd-card cd-secondary" data-testid="claire-desk-secondary-mission">
+                  <p className="cd-kicker">ALSO · {dayLabel(secondary.date, m.businessDate, m.tomorrow)}</p>
+                  <h3>{secondary.title}</h3>
+                  {secondary.objective ? <p className="cd-small">{secondary.objective}</p> : null}
+                  <span className={`cd-status cd-status-${secondary.status}`}>{STATUS[secondary.status]}</span>
+                </article>
+              ) : null}
+            </section>
+
+            {m.winBack?.contacts.length ? (
+              <section className="cd-card" aria-label="Call sheet" data-testid="claire-desk-call-sheet">
+                <p className="cd-kicker">CLAIRE PREPARED · CALL SHEET</p>
+                <h3>
+                  Lapsed {m.winBack.area} customers — {m.winBack.contacts.length} of {m.winBack.lapsedCount}, highest spend first
+                </h3>
+                <ul className="cd-sheet">
+                  {m.winBack.contacts.map(c => (
+                    <li key={c.identityId}>
+                      <strong>{c.name}</strong>
+                      <span>
+                        {c.paidOrders} paid order{c.paidOrders === 1 ? "" : "s"} · {money(c.lifetimeCents)} recorded
+                        {c.lastOrderDate ? ` · last ${c.lastOrderDate}` : ""}
+                        {c.medianGapDays ? ` · usually every ${c.medianGapDays} days` : ""}
+                      </span>
+                      <span className="cd-contact">
+                        {c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : null}
+                        {c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : null}
+                        {!c.phone && !c.email ? "No contact on file" : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="cd-fine">Recorded revenue, not profit. Claire never contacts customers; you do.</p>
+              </section>
+            ) : null}
+
+            <section className="cd-card" aria-label="Runway" data-testid="claire-desk-runway">
+              <p className="cd-kicker">THE RUNWAY</p>
+              {m.items.length ? (
+                <ol className="cd-runway">
+                  {m.items.map(i => (
+                    <li key={i.id} className={`cd-runway-${i.status}`}>
+                      <span className="cd-when">{dayLabel(i.date, m.businessDate, m.tomorrow)}{i.when ? ` · ${i.when}` : ""}</span>
+                      <span>{i.title}</span>
+                      <small>{STATUS[i.status]}</small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="cd-muted">Nothing scheduled for today or tomorrow.</p>
+              )}
+            </section>
+
+            <section className="cd-card" aria-label="Readiness" data-testid="claire-desk-readiness">
+              <p className="cd-kicker">READINESS</p>
+              {m.preparation.saved.length || m.preparation.planned.length || m.uncertain.length ? (
+                <ul className="cd-ready">
+                  {m.preparation.saved.map(p => <li key={p.savedAt + p.need}>✓ {p.need} <small>(your reminder, saved)</small></li>)}
+                  {m.preparation.planned.slice(0, 3).map(p => <li key={p}>{p}</li>)}
+                  {m.uncertain.slice(0, 2).map(u => <li key={u} className="cd-muted">? {u}</li>)}
+                </ul>
+              ) : (
+                <p className="cd-muted">Nothing to prepare is on record.</p>
+              )}
+            </section>
+
+            <OpenComms onChanged={refresh} />
+
+            <section className="cd-card cd-confirm" aria-label="Confirm tomorrow" data-testid="confirm-tomorrow">
+              {pendingTomorrow.length ? (
+                <p className="cd-note">Confirming saves tomorrow's plan snapshot only. It does not approve: {pendingTomorrow.map(i => i.title).join("; ")}.</p>
+              ) : null}
+              {m.tomorrowConfirmedAt && confirmState.state === "idle" ? (
+                <p className="cd-ok" data-testid="confirm-tomorrow-already">Tomorrow already confirmed at {new Date(m.tomorrowConfirmedAt).toLocaleString()}.</p>
+              ) : null}
+              <button type="button" className="cd-navy" disabled={confirmState.state === "saving"} onClick={() => void confirmTomorrow()} data-testid="confirm-tomorrow-button">
+                {confirmState.state === "saving" ? "Saving…" : confirmState.state === "error" ? "Retry confirm tomorrow" : m.tomorrowConfirmedAt ? "Confirm tomorrow again" : "CONFIRM TOMORROW"}
+              </button>
+              {confirmState.text ? (
+                <p role={confirmState.state === "error" ? "alert" : "status"} className={confirmState.state === "error" ? "cd-error" : "cd-ok"} data-testid="confirm-tomorrow-result">
+                  {confirmState.state === "error" ? `Not saved: ${confirmState.text}` : confirmState.text}
+                </p>
+              ) : null}
+            </section>
+
+            <section className="cd-card" aria-label="Outcome" data-testid="claire-desk-outcome">
+              <p className="cd-kicker">THE OUTCOME · THIS WEEK</p>
+              {m.outcomes.length ? (
+                <ul className="cd-ready">{m.outcomes.slice(-5).map(o => <li key={o}>{o}</li>)}</ul>
+              ) : (
+                <p className="cd-muted">No results reported yet this week. Tell Claire on comms what happened after each call.</p>
+              )}
+              <p className="cd-fine">Reported by you unless marked verified. Paid orders appear once CleanCloud syncs.</p>
+            </section>
+
+            <ActivateRoutine calls={m.dailyCalls} onChanged={refresh} />
+
+            <section className="cd-card" aria-label="Call settings">
+              <p className="cd-kicker">CALL SETTINGS</p>
+              <ClaireDailyCallSettings />
+              <ClaireStrategicCallConsent />
+            </section>
+
+            <section className="cd-card" aria-label="Full week plan">
+              <p className="cd-kicker">FULL WEEK PLAN</p>
+              <ClaireStrategicProposal />
+            </section>
+          </>
+        ) : null}
+
+        <details data-testid="claire-relationship-closing" className="cd-card">
+          <summary>Relationship closing</summary>
+          <p className="cd-small">Preview the safe closing record Claire can produce. It never deletes or changes business records.</p>
+          <button type="button" disabled={relationshipClosing.isFetching} onClick={() => void relationshipClosing.refetch()}>
+            {relationshipClosing.isFetching ? "Building closing record…" : "Preview relationship closing"}
           </button>
-          {relationshipClosing.error ? (
-            <p role="alert" style={{ margin: 0, color: "#8b2f24" }}>
-              {relationshipClosing.error.message}
-            </p>
-          ) : null}
-          {relationshipClosing.data ? (
-            <div
-              data-testid="claire-relationship-closing-preview"
-              style={{
-                border: "1px solid #e0bd63",
-                borderRadius: 14,
-                background: "#fffdf2",
-                padding: 16,
-              }}
-            >
-              <p style={{ margin: 0, lineHeight: 1.55 }}>
-                {relationshipClosing.data.closingMessage}
-              </p>
-              <p style={{ margin: "10px 0 0", fontSize: 12, color: "#6a7890" }}>
-                Business records: preserved · eligible history items:{" "}
-                {relationshipClosing.data.eligibleHistoryIds.length}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </details>
+          {relationshipClosing.error ? <p role="alert" className="cd-error">{relationshipClosing.error.message}</p> : null}
+          {relationshipClosing.data ? <p data-testid="claire-relationship-closing-preview">{relationshipClosing.data.closingMessage}</p> : null}
+        </details>
+      </main>
+
+      <aside className="cd-claire" aria-label="Claire">
+        <div className="cd-portrait" aria-hidden>C</div>
+        <p className="cd-name">CLAIRE <small>Chief of staff</small></p>
+        {claireLine ? <p className="cd-says" data-testid="claire-desk-says">“{claireLine}”</p> : null}
+        {m?.recentChange ? <p className="cd-small">Latest change: {m.recentChange}</p> : null}
+        {m?.rationale ? (
+          <details className="cd-why" data-testid="claire-desk-why">
+            <summary>Why this plan?</summary>
+            <p>{m.rationale.approach}</p>
+            {m.rationale.evidence.length ? (
+              <ul className="cd-small">
+                {m.rationale.evidence.map(e => <li key={e.description}>{e.description} <em>({e.classification.replace("_", " ")})</em></li>)}
+              </ul>
+            ) : null}
+            {m.rationale.completionCondition ? <p className="cd-small">Done when: {m.rationale.completionCondition}</p> : null}
+            {m.adaptations.length ? <p className="cd-small">{m.adaptations[0]}</p> : null}
+          </details>
+        ) : null}
+        <div className="cd-claire-map" aria-hidden />
+      </aside>
     </div>
+  );
+}
+
+type DailyCalls = { timeZone: string | null } & Record<string, unknown>;
+
+/** One tap per purpose, each its own explicit permission, with readback of when Claire will first call. */
+function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () => void }) {
+  const grant = trpc.system.weeklyMission.grantDailyCalls.useMutation();
+  const [result, setResult] = useState<Record<string, string>>({});
+  const data = calls as DailyCalls | null;
+  const zone = data?.timeZone ?? null;
+  const plans = [
+    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–9:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "09:00" },
+    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "Monday–Saturday, 5:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6], start: "17:30", end: "19:00" },
+  ];
+  // Rows stay visible while they show this session's verified result.
+  const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled || result[p.purpose]);
+  if (!data || !off.length) return null;
+  return (
+    <section className="cd-card cd-activate" aria-label="Daily routine" data-testid="activate-routine">
+      <p className="cd-kicker">DAILY ROUTINE</p>
+      <p className="cd-small">Recommended. Each call is its own permission; allowing one never allows the other. Times are {zone ?? "business time"}.</p>
+      {off.map(p => (
+        <div key={p.purpose} className="cd-activate-row">
+          <span><strong>{p.label}</strong> — {p.when}</span>
+          {result[p.purpose] ? null : <button
+            type="button"
+            className="cd-gold"
+            disabled={grant.isPending || !zone}
+            data-testid={`activate-${p.purpose}`}
+            onClick={() =>
+              void grant
+                .mutateAsync({ purpose: p.purpose, weekdays: p.weekdays, localStart: p.start, localEnd: p.end, timeZone: zone!, consent: true })
+                .then(r => {
+                  const when = r.status?.nextScheduled ?? r.status?.nextWindow;
+                  setResult(v => ({ ...v, [p.purpose]: when ? `Verified. First call window: ${new Date(when).toLocaleString()}.` : "Allowed, but no upcoming window was found." }));
+                })
+                .catch(e => setResult(v => ({ ...v, [p.purpose]: `Not allowed: ${e instanceof Error ? e.message : "nothing changed"}` })))
+                .finally(onChanged)
+            }
+          >
+            Allow {p.label.toLowerCase()} calls
+          </button>}
+          {result[p.purpose] ? <p role="status" className="cd-small" data-testid={`activate-${p.purpose}-result`}>{result[p.purpose]}</p> : null}
+        </div>
+      ))}
+    </section>
   );
 }

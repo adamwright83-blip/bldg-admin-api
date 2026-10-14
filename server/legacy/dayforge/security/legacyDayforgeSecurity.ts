@@ -287,7 +287,8 @@ export function legacyDayforgeSecurityHeaders(
     // unrelated cross-origin documents remain isolated.
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
+    // Microphone: first-party pages only (OPEN COMMS, field voice capture); the browser still asks the operator.
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(self)");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     if (env.NODE_ENV === "production") {

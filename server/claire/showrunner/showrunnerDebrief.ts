@@ -9,7 +9,8 @@ import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
 import { actionableDates, remainingWeekHorizon, weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal, StrategicProposalItem } from "../../../shared/strategicIntelligence";
-import { SHOWRUNNER_DEVELOPMENT_SOURCE } from "./showrunnerBriefing";
+import { DESK_PREPARATION_SOURCE, SHOWRUNNER_DEVELOPMENT_SOURCE } from "./showrunnerBriefing";
+import { addDaysYmd } from "../../analytics/businessPeriods";
 import type { ShowrunnerCallState } from "./showrunnerTurn";
 
 export type DebriefMissionUpdate = {
@@ -54,6 +55,8 @@ export async function recordShowrunnerTurn(input: {
   utterance: string;
   updates: DebriefMissionUpdate[];
   developments: DebriefDevelopment[];
+  /** Things the operator asked to be reminded to bring or prepare (desk planning). */
+  preparation?: string[];
   sourceEventId: string;
   conversationKey: string;
   now: Date;
@@ -103,6 +106,16 @@ export async function recordShowrunnerTurn(input: {
         idempotencyKey: `showrunner_outcome:${input.sourceEventId}:${u.itemId}`,
       });
     }
+  }
+  for (const need of input.preparation ?? []) {
+    await recordDaphneObservation({
+      ...base,
+      observationKind: "user_statement",
+      sourceType: DESK_PREPARATION_SOURCE,
+      sourceReference: input.conversationKey,
+      payload: { need, forDate: addDaysYmd(s.businessDate, 1), businessDate: s.businessDate, reported: true },
+      idempotencyKey: `desk_preparation:${input.sourceEventId}:${short(need)}`,
+    });
   }
   for (const d of input.developments) {
     await recordDaphneObservation({
@@ -338,6 +351,10 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
 }
 
 /** Voice approval of the revised plan Claire proposed in this call. */
+export async function identityForShowrunner(state: ShowrunnerCallState) {
+  return identityFor(state);
+}
+
 export async function approveShowrunnerReplan(state: ShowrunnerCallState): Promise<string | null> {
   if (!state.replan) return null;
   const identity = await identityFor(state);
@@ -349,8 +366,8 @@ export async function approveShowrunnerReplan(state: ShowrunnerCallState): Promi
     proposalId: p.id,
     revision: p.revision,
     action: "approve",
-    itemIds: p.items.map(i => i.id),
-    source: "authenticated_voice",
+    itemIds: state.replan.itemIds ?? p.items.map(i => i.id),
+    source: state.purpose === "desk_planning" ? "authenticated_app" : "authenticated_voice",
   });
   return r.failedItems.length ? null : r.speech;
 }

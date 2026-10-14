@@ -8,6 +8,12 @@ import {
 } from "../../_core/trpc";
 import { remainingWeekHorizon } from "../../../shared/weeklyMissionReadiness";
 import { requireCanonicalOperatorIdentityForUser } from "../../agents/persistentOperator/identity";
+import { buildDeskMission } from "../desk/deskMission";
+import { buildShowrunnerBriefing } from "../showrunner/showrunnerBriefing";
+import { runShowrunnerTurn, type ShowrunnerCallState } from "../showrunner/showrunnerTurn";
+import { claireConversationStateStore } from "../turn/conversationStateStore";
+import { transcribeAudio } from "../../_core/voiceTranscription";
+import { CLAIRE_XAI_TTS_PATH, isClaireXaiTtsEnabled, issueClaireXaiSpeechToken } from "../xaiTts";
 import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import {
   grantStrategicCallAuthorization,
@@ -15,6 +21,7 @@ import {
   readStrategicCallConsent,
 } from "../../agents/persistentOperator/strategicCallAuthorization";
 import {
+  ensureDailyClaireAppointments,
   grantDailyClaireCall,
   readDailyClaireCallStatus,
   revokeDailyClaireCall,
@@ -34,7 +41,7 @@ import {
   reviseStrategicProposal,
   readVerifiedStrategicApprovalItemIds,
 } from "../../strategy/strategicApproval";
-import { resolveOperatorTimeZone } from "../../agents/persistentOperator/operatorAppointmentPolicy";
+import { createDefaultOperatorAppointmentStore, resolveOperatorTimeZone } from "../../agents/persistentOperator/operatorAppointmentPolicy";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   weekStartMonday,
@@ -173,7 +180,7 @@ export const weeklyMissionRouter = router({
         user: ctx.user,
         subsystem: "claire.daily_call_grant",
       });
-      return grantDailyClaireCall({
+      const grant = await grantDailyClaireCall({
         identity,
         purpose: input.purpose,
         weekdays: input.weekdays,
@@ -182,6 +189,10 @@ export const weeklyMissionRouter = router({
         timeZone: input.timeZone,
         sourceReference: `authenticated_app:${randomUUID()}`,
       });
+      // Seed today's appointment now when today's window is still open; later days seed on their own day.
+      await ensureDailyClaireAppointments({ store: createDefaultOperatorAppointmentStore(), tenantId: identity.tenantId }).catch(() => null);
+      const status = await readDailyClaireCallStatus(identity);
+      return { grant, status: status[input.purpose] as { enabled: boolean; nextWindow: Date | null; nextScheduled: Date | null } };
     }),
   revokeDailyCalls: legacyDayforgeTenantOperatorProcedure
     .input(z.object({ purpose: z.enum(["morning_readiness", "evening_debrief"]) }))
@@ -192,6 +203,109 @@ export const weeklyMissionRouter = router({
         subsystem: "claire.daily_call_revoke",
       });
       return revokeDailyClaireCall(identity, input.purpose);
+    }),
+  deskMission: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const identity = await requireCanonicalOperatorIdentityForUser({ tenantId: ctx.tenantId, user: ctx.user, subsystem: "claire.desk_mission" });
+    const zone = await resolveOperatorTimeZone(ctx.tenantId);
+    if (!zone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure the business timezone before planning" });
+    return buildDeskMission({ identity, timeZone: zone });
+  }),
+  /** OPEN COMMS: an in-app conversation with the same Claire runtime as the daily calls. No phone. */
+  deskComms: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        sessionId: z.string().trim().min(8).max(64),
+        utterance: z.string().trim().max(1500).optional(),
+        /** A recorded operator turn (data:audio/...;base64), transcribed server-side. */
+        audioDataUrl: z.string().max(8_000_000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const identity = await requireCanonicalOperatorIdentityForUser({ tenantId: ctx.tenantId, user: ctx.user, subsystem: "claire.desk_comms" });
+      const zone = await resolveOperatorTimeZone(ctx.tenantId);
+      if (!zone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure the business timezone before planning" });
+      const key = `claire-desk-comms:${identity.tenantId}:${identity.canonicalOperatorId}:${input.sessionId}`;
+      const owner = { tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, surface: "voice" as const };
+      type Session = { showrunner: ShowrunnerCallState; history: Array<{ speaker: string; text: string }> };
+      const store = claireConversationStateStore();
+      const stored = await store.load<Session>(key);
+      const now = new Date();
+      let session = stored && stored.tenantId === owner.tenantId && stored.operatorUserId === owner.operatorUserId ? stored.state : null;
+      if (!session) {
+        const briefing = await buildShowrunnerBriefing({ identity, purpose: "desk_planning", timeZone: zone, now });
+        session = {
+          history: [],
+          showrunner: {
+            purpose: "desk_planning",
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            operatorUserId: identity.canonicalOpenId,
+            dayDirectorActorId: identity.dayDirectorActorId,
+            dayDirectorActorIds: identity.dayDirectorActorIds,
+            timeZone: zone,
+            businessDate: formatInTimeZone(now, zone, "yyyy-MM-dd"),
+            briefing,
+            captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
+            replan: null,
+            turns: 0,
+          },
+        };
+      }
+      // Claire's own voice (the same xAI voice as her calls) when configured; otherwise the client says so.
+      const voiced = <T extends { speak: string }>(r: T) => ({
+        ...r,
+        speechUrl: isClaireXaiTtsEnabled() ? `${CLAIRE_XAI_TTS_PATH}?token=${encodeURIComponent(issueClaireXaiSpeechToken(r.speak))}&format=web` : null,
+      });
+      let utterance = input.utterance?.trim();
+      if (!utterance && input.audioDataUrl) {
+        const match = input.audioDataUrl.match(/^data:(audio\/[a-zA-Z0-9.+-]+)(?:;codecs=[a-zA-Z0-9.,-]+)?;base64,([\s\S]+)$/);
+        if (!match) throw new TRPCError({ code: "BAD_REQUEST", message: "Audio recording format is invalid" });
+        // Transcribed in memory; the recording itself is not stored.
+        const heard = await transcribeAudio({
+          audio: { data: Buffer.from(match[2]!, "base64"), mimeType: match[1]! },
+          language: "en",
+          prompt: "An operator talking to Claire, their chief of staff, about a laundry business: customers, missions, times, the Day Line.",
+        });
+        if ("error" in heard) console.warn("[Claire desk comms] transcription failed", heard.code, heard.details ?? heard.error);
+        utterance = "error" in heard ? "" : heard.text.trim();
+        if (!utterance)
+          return voiced({ speak: "Sorry, I didn't catch that. Could you say it again?", heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: true });
+      }
+      if (!utterance) {
+        const b = session.showrunner.briefing;
+        const open = [...b.today, ...b.tomorrow].filter(i => i.status === "open");
+        const pending = b.pendingDecision?.items ?? [];
+        const speak = [
+          "Claire here.",
+          open.length ? `On your Day Line: ${open.slice(0, 3).map(i => `${i.title}${i.window ? ` (${i.window})` : ""}`).join(", ")}.` : "Nothing is on your Day Line for today or tomorrow.",
+          pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
+          "What do you need?",
+        ].filter(Boolean).join(" ");
+        if (!session.history.length) session.history.push({ speaker: "claire", text: speak });
+        await store.save(key, owner, session, 2 * 3600_000);
+        return voiced({ speak, heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: false });
+      }
+      const turn = await runShowrunnerTurn({
+        state: session.showrunner,
+        history: session.history,
+        utterance,
+        sourceEventId: `desk_comms:${input.sessionId}:${session.showrunner.turns + 1}`,
+        conversationKey: key,
+      });
+      session = {
+        showrunner: turn.state,
+        history: [...session.history, { speaker: "operator", text: utterance }, { speaker: "claire", text: turn.speak }].slice(-30),
+      };
+      await store.save(key, owner, session, 2 * 3600_000);
+      const replan = turn.state.replan;
+      return voiced({
+        speak: turn.speak,
+        heard: utterance,
+        saved: turn.saved ?? [],
+        awaitingApproval: replan && !replan.approved ? { summary: replan.summary } : null,
+        end: turn.end,
+        transcriptionFailed: false,
+      });
     }),
   preparedProposal: legacyDayforgeTenantOperatorProcedure.query(
     async ({ ctx }) => {
