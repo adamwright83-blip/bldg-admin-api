@@ -6,7 +6,7 @@ import {
   type ApprovedDataset,
   type Row,
 } from "./approvedViews";
-import { validateAnalysisSql } from "./sqlPolicy";
+import { validateAnalysisSql, type AnalysisMoneyUnit } from "./sqlPolicy";
 
 export const ANALYSIS_LIMITS = Object.freeze({
   datasetBytes: 16 * 1024 * 1024,
@@ -31,6 +31,8 @@ export type QueryReceipt = {
 export type AnalysisQueryResult = {
   columns: string[];
   rows: Row[];
+  /** Derived from validated expression lineage, not model-selected labels. */
+  monetaryUnits?: Record<string, AnalysisMoneyUnit>;
   receipt: QueryReceipt;
   error?: string;
 };
@@ -155,6 +157,16 @@ export async function executeAnalysisQuery(input: {
     return {
       columns: result.columns ?? [],
       rows: result.rows ?? [],
+      monetaryUnits: Object.fromEntries(
+        (result.columns ?? []).map((name: string) => {
+          const key = name.toLowerCase();
+          // Direct SELECT * of a trusted money column has no explicit alias.
+          const direct = APPROVED_VIEWS.some(view =>
+            view.columns.some(c => c.name === key && c.name.endsWith("_cents"))
+          );
+          return [key, checked.outputUnits[key] ?? (direct ? "cents" : "none")];
+        })
+      ),
       ...(result.error ? { error: result.error } : {}),
       receipt,
     };
