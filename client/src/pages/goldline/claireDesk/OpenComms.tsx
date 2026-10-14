@@ -1,21 +1,34 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 
-type Phase = "idle" | "connecting" | "listening" | "processing" | "speaking" | "ended" | "error";
+type Phase = "idle" | "connecting" | "listening" | "hearing" | "processing" | "speaking" | "ended" | "error";
 type Line = { who: "you" | "claire"; text: string };
+type Turn = {
+  speak: string;
+  heard: string | null;
+  saved: string[];
+  awaitingApproval: { summary: string } | null;
+  end: boolean;
+  transcriptionFailed: boolean;
+  speechUrl: string | null;
+};
 
 const PHASE_LABEL: Record<Phase, string> = {
   idle: "Comms closed",
   connecting: "Connecting to Claire…",
-  listening: "Listening — speak, then pause",
+  listening: "Listening — go ahead",
+  hearing: "Hearing you…",
   processing: "Claire is thinking…",
-  speaking: "Claire is speaking — tap the mic to interrupt",
+  speaking: "Claire is speaking — just talk to interrupt",
   ended: "Comms ended",
   error: "Comms problem",
 };
 
-const SILENCE_MS = 1800;
+// Voice-activity thresholds on RMS of the mic signal (0..1).
+const SPEECH_LEVEL = 0.035;
+const BARGE_IN_LEVEL = 0.07;
+const END_SILENCE_MS = 1300;
+const MAX_TURN_MS = 30_000;
 
 function newSessionId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -23,10 +36,19 @@ function newSessionId() {
     : `desk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
 /**
  * OPEN COMMS: an in-app voice conversation with the same Claire runtime as the
- * daily calls. Browser speech in, server Claire turn, browser speech out. Text
- * is always available. Nothing is "saved" unless the server says it persisted.
+ * daily calls. Microphone audio is transcribed on the server, Claire answers
+ * from her real business context, and she speaks in her own call voice. Text is
+ * always available. Nothing is "saved" unless the server says it persisted.
  */
 export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const comms = trpc.system.weeklyMission.deskComms.useMutation();
@@ -34,84 +56,174 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [saved, setSaved] = useState<string[]>([]);
   const [pendingApproval, setPendingApproval] = useState<string | null>(null);
-  const [live, setLive] = useState("");
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [voiceIn, setVoiceIn] = useState(true);
-  const sessionId = useRef<string>(newSessionId());
-  const recognition = useRef<BrowserSpeechSession | null>(null);
-  const silenceTimer = useRef<number | null>(null);
-  const transcript = useRef("");
+  const [voiceNote, setVoiceNote] = useState<string | null>(null);
+  const [micNote, setMicNote] = useState<string | null>(null);
+  const [level, setLevel] = useState(0);
+  const sessionId = useRef(newSessionId());
+  const stream = useRef<MediaStream | null>(null);
+  const analyser = useRef<AnalyserNode | null>(null);
+  const audioCtx = useRef<AudioContext | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const player = useRef<HTMLAudioElement | null>(null);
+  const loop = useRef<number | null>(null);
+  const phaseRef = useRef<Phase>("idle");
+  const micOn = useRef(false);
+  const setP = (p: Phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  };
   const active = phase !== "idle" && phase !== "ended";
-  const voiceOut = typeof window !== "undefined" && "speechSynthesis" in window;
 
-  const stopListening = useCallback(() => {
-    if (silenceTimer.current) window.clearTimeout(silenceTimer.current);
-    silenceTimer.current = null;
-    recognition.current?.abort();
-    recognition.current = null;
+  const rms = () => {
+    const a = analyser.current;
+    if (!a) return 0;
+    const buf = new Float32Array(a.fftSize);
+    a.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) sum += v * v;
+    return Math.sqrt(sum / buf.length);
+  };
+
+  const stopLoop = () => {
+    if (loop.current) cancelAnimationFrame(loop.current);
+    loop.current = null;
+  };
+
+  const stopAudio = () => {
+    player.current?.pause();
+    player.current = null;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  const teardown = useCallback(() => {
+    stopLoop();
+    stopAudio();
+    if (recorder.current?.state === "recording") recorder.current.stop();
+    recorder.current = null;
+    stream.current?.getTracks().forEach(t => t.stop());
+    stream.current = null;
+    void audioCtx.current?.close().catch(() => undefined);
+    audioCtx.current = null;
+    analyser.current = null;
+    micOn.current = false;
   }, []);
 
   const send = useCallback(
-    async (utterance?: string) => {
-      stopListening();
-      const text = utterance?.trim();
-      if (utterance !== undefined && !text) return;
+    async (input: { utterance?: string; audioDataUrl?: string }) => {
+      stopLoop();
+      const text = input.utterance?.trim();
       if (text) setLines(l => [...l, { who: "you", text }]);
-      setLive("");
-      setPhase(text ? "processing" : "connecting");
+      setP(input.utterance || input.audioDataUrl ? "processing" : "connecting");
       setError(null);
       try {
-        const r = await comms.mutateAsync({ sessionId: sessionId.current, ...(text ? { utterance: text } : {}) });
+        const r = (await comms.mutateAsync({ sessionId: sessionId.current, ...input })) as Turn;
+        if (input.audioDataUrl && r.heard) setLines(l => [...l, { who: "you", text: r.heard! }]);
         setLines(l => [...l, { who: "claire", text: r.speak }]);
         if (r.saved.length) setSaved(s => [...s, ...r.saved]);
         setPendingApproval(r.awaitingApproval?.summary ?? null);
         onChanged();
-        speak(r.speak, r.end);
+        speak(r);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Claire could not be reached.");
-        setPhase("error");
+        setError(`${e instanceof Error ? e.message : "Claire could not be reached."} Nothing from that turn was saved.`);
+        setP("error");
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [comms, onChanged, stopListening]
+    [comms, onChanged]
   );
 
+  /** Records one operator turn: waits for speech, stops after a pause, sends the audio. */
   const listen = useCallback(() => {
-    if (!voiceIn) {
-      setPhase("listening");
+    if (!micOn.current || !stream.current) {
+      setP("listening");
       return;
     }
-    transcript.current = "";
-    const session = startBrowserSpeechTranscript({
-      onTranscript: text => {
-        transcript.current = text;
-        setLive(text);
-        if (silenceTimer.current) window.clearTimeout(silenceTimer.current);
-        silenceTimer.current = window.setTimeout(() => void send(transcript.current), SILENCE_MS);
-      },
-    });
-    if (!session) {
-      setVoiceIn(false);
-      setError("Voice input isn't available in this browser or the microphone was blocked. Type to Claire below.");
-    }
-    recognition.current = session;
-    setPhase("listening");
-  }, [send, voiceIn]);
+    const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(t => MediaRecorder.isTypeSupported(t)) ?? "";
+    const rec = new MediaRecorder(stream.current, mime ? { mimeType: mime } : undefined);
+    const chunks: Blob[] = [];
+    let spoke = false;
+    let lastVoice = 0;
+    const started = performance.now();
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      stopLoop();
+      if (!spoke || phaseRef.current === "ended" || phaseRef.current === "idle") return;
+      const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+      void blobToDataUrl(blob).then(audioDataUrl => send({ audioDataUrl }));
+    };
+    recorder.current = rec;
+    rec.start(250);
+    setP("listening");
+    const tick = () => {
+      const v = rms();
+      setLevel(v);
+      const now = performance.now();
+      if (v > SPEECH_LEVEL) {
+        if (!spoke) setP("hearing");
+        spoke = true;
+        lastVoice = now;
+      }
+      if ((spoke && now - lastVoice > END_SILENCE_MS) || now - started > MAX_TURN_MS) {
+        if (rec.state === "recording") rec.stop();
+        if (!spoke) listen(); // nothing said yet: keep the line open
+        return;
+      }
+      loop.current = requestAnimationFrame(tick);
+    };
+    loop.current = requestAnimationFrame(tick);
+  }, [send]);
 
+  /** Plays Claire's reply; speaking over her interrupts (barge-in). */
   const speak = useCallback(
-    (text: string, end: boolean) => {
-      const finish = () => (end ? setPhase("ended") : listen());
-      if (!voiceOut) return finish();
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.02;
-      u.onend = finish;
-      u.onerror = finish;
-      setPhase("speaking");
-      window.speechSynthesis.speak(u);
+    (r: Turn) => {
+      const after = () => {
+        stopLoop();
+        if (r.end) setP("ended");
+        else listen();
+      };
+      const watchBargeIn = () => {
+        if (!micOn.current) return;
+        let loud = 0;
+        const tick = () => {
+          if (phaseRef.current !== "speaking") return;
+          if (rms() > BARGE_IN_LEVEL) loud += 1;
+          else loud = 0;
+          if (loud > 8) {
+            stopAudio();
+            listen();
+            return;
+          }
+          loop.current = requestAnimationFrame(tick);
+        };
+        loop.current = requestAnimationFrame(tick);
+      };
+      const browserVoice = (why: string) => {
+        if (!("speechSynthesis" in window)) {
+          setVoiceNote(`${why} Read Claire's reply below.`);
+          return after();
+        }
+        setVoiceNote(`${why} Using the browser voice instead.`);
+        const u = new SpeechSynthesisUtterance(r.speak);
+        u.onend = after;
+        u.onerror = after;
+        setP("speaking");
+        window.speechSynthesis.speak(u);
+        watchBargeIn();
+      };
+      if (!r.speechUrl) return browserVoice("Claire's voice isn't configured here.");
+      const audio = new Audio(r.speechUrl);
+      player.current = audio;
+      audio.onended = after;
+      audio.onerror = () => browserVoice("Claire's voice couldn't load.");
+      setP("speaking");
+      setVoiceNote(null);
+      audio.play().then(watchBargeIn, (e: unknown) =>
+        browserVoice(`The browser didn't play Claire's audio (${e instanceof DOMException ? e.name : "playback error"}).`)
+      );
     },
-    [listen, voiceOut]
+    [listen]
   );
 
   async function open() {
@@ -120,29 +232,37 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     setSaved([]);
     setPendingApproval(null);
     setError(null);
-    setPhase("connecting");
-    // Ask for the microphone up front so the operator sees the browser prompt once.
-    if (voiceIn && navigator.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-      } catch {
-        setVoiceIn(false);
-        setError("Microphone permission was not granted. You can type to Claire instead.");
-      }
+    setVoiceNote(null);
+    setMicNote(null);
+    setP("connecting");
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      stream.current = s;
+      const ctx = new AudioContext();
+      audioCtx.current = ctx;
+      const a = ctx.createAnalyser();
+      a.fftSize = 1024;
+      ctx.createMediaStreamSource(s).connect(a);
+      analyser.current = a;
+      micOn.current = true;
+    } catch (e) {
+      micOn.current = false;
+      setMicNote(
+        `Claire can't hear you: the microphone ${e instanceof DOMException && e.name === "NotAllowedError" ? "permission wasn't granted" : "isn't available"}. Type to her below, or allow the microphone and reopen comms.`
+      );
     }
-    await send();
+    await send({});
   }
 
   function interrupt() {
-    if (voiceOut) window.speechSynthesis.cancel();
+    stopLoop();
+    stopAudio();
     listen();
   }
 
   function end() {
-    stopListening();
-    if (voiceOut) window.speechSynthesis.cancel();
-    setPhase("ended");
+    setP("ended");
+    teardown();
   }
 
   function submitTyped(e: FormEvent) {
@@ -150,11 +270,16 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     const text = typed.trim();
     if (!text || phase === "processing") return;
     setTyped("");
-    if (voiceOut) window.speechSynthesis.cancel();
-    void send(text);
+    stopLoop();
+    stopAudio();
+    if (recorder.current?.state === "recording") {
+      recorder.current.onstop = null;
+      recorder.current.stop();
+    }
+    void send({ utterance: text });
   }
 
-  useEffect(() => () => end(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => teardown(), [teardown]);
 
   return (
     <section className="cd-comms" aria-label="Open comms with Claire" data-testid="open-comms">
@@ -171,19 +296,27 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
           <div className="cd-comms-status" role="status" aria-live="polite" data-testid="open-comms-phase" data-phase={phase}>
             <span className={`cd-dot cd-dot-${phase}`} aria-hidden />
             {PHASE_LABEL[phase]}
+            {micOn.current && (phase === "listening" || phase === "hearing") ? (
+              <span className="cd-meter" aria-hidden>
+                <span style={{ width: `${Math.min(100, level * 600)}%` }} />
+              </span>
+            ) : null}
           </div>
-          {live ? <p className="cd-comms-heard">Hearing: “{live}”</p> : null}
           <div className="cd-comms-controls">
             {phase === "speaking" ? (
-              <button type="button" onClick={interrupt}>Interrupt</button>
-            ) : phase === "listening" && voiceIn ? (
-              <button type="button" onClick={() => void send(transcript.current)} disabled={!live}>Done talking</button>
+              <button type="button" onClick={interrupt} data-testid="open-comms-interrupt">Interrupt</button>
+            ) : phase === "hearing" ? (
+              <button type="button" onClick={() => recorder.current?.state === "recording" && recorder.current.stop()}>Done talking</button>
+            ) : phase === "error" ? (
+              <button type="button" onClick={() => listen()}>Try again</button>
             ) : null}
             <button type="button" className="cd-end" onClick={end} data-testid="open-comms-end">End comms</button>
           </div>
         </div>
       )}
-      {error ? <p role="alert" className="cd-error">{error}</p> : null}
+      {micNote ? <p role="alert" className="cd-error" data-testid="open-comms-mic-note">{micNote}</p> : null}
+      {voiceNote ? <p className="cd-small" data-testid="open-comms-voice-note">{voiceNote}</p> : null}
+      {error ? <p role="alert" className="cd-error" data-testid="open-comms-error">{error}</p> : null}
       {lines.length ? (
         <ol className="cd-comms-log" data-testid="open-comms-log">
           {lines.map((l, i) => (

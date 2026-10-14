@@ -12,6 +12,8 @@ import { buildDeskMission } from "../desk/deskMission";
 import { buildShowrunnerBriefing } from "../showrunner/showrunnerBriefing";
 import { runShowrunnerTurn, type ShowrunnerCallState } from "../showrunner/showrunnerTurn";
 import { claireConversationStateStore } from "../turn/conversationStateStore";
+import { transcribeAudio } from "../../_core/voiceTranscription";
+import { CLAIRE_XAI_TTS_PATH, isClaireXaiTtsEnabled, issueClaireXaiSpeechToken } from "../xaiTts";
 import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import {
   grantStrategicCallAuthorization,
@@ -210,7 +212,14 @@ export const weeklyMissionRouter = router({
   }),
   /** OPEN COMMS: an in-app conversation with the same Claire runtime as the daily calls. No phone. */
   deskComms: legacyDayforgeTenantOperatorProcedure
-    .input(z.object({ sessionId: z.string().trim().min(8).max(64), utterance: z.string().trim().max(1500).optional() }))
+    .input(
+      z.object({
+        sessionId: z.string().trim().min(8).max(64),
+        utterance: z.string().trim().max(1500).optional(),
+        /** A recorded operator turn (data:audio/...;base64), transcribed server-side. */
+        audioDataUrl: z.string().max(8_000_000).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const identity = await requireCanonicalOperatorIdentityForUser({ tenantId: ctx.tenantId, user: ctx.user, subsystem: "claire.desk_comms" });
       const zone = await resolveOperatorTimeZone(ctx.tenantId);
@@ -242,7 +251,26 @@ export const weeklyMissionRouter = router({
           },
         };
       }
-      const utterance = input.utterance?.trim();
+      // Claire's own voice (the same xAI voice as her calls) when configured; otherwise the client says so.
+      const voiced = <T extends { speak: string }>(r: T) => ({
+        ...r,
+        speechUrl: isClaireXaiTtsEnabled() ? `${CLAIRE_XAI_TTS_PATH}?token=${encodeURIComponent(issueClaireXaiSpeechToken(r.speak))}&format=web` : null,
+      });
+      let utterance = input.utterance?.trim();
+      if (!utterance && input.audioDataUrl) {
+        const match = input.audioDataUrl.match(/^data:(audio\/[a-zA-Z0-9.+-]+)(?:;codecs=[a-zA-Z0-9.,-]+)?;base64,([\s\S]+)$/);
+        if (!match) throw new TRPCError({ code: "BAD_REQUEST", message: "Audio recording format is invalid" });
+        // Transcribed in memory; the recording itself is not stored.
+        const heard = await transcribeAudio({
+          audio: { data: Buffer.from(match[2]!, "base64"), mimeType: match[1]! },
+          language: "en",
+          prompt: "An operator talking to Claire, their chief of staff, about a laundry business: customers, missions, times, the Day Line.",
+        });
+        if ("error" in heard) console.warn("[Claire desk comms] transcription failed", heard.code, heard.details ?? heard.error);
+        utterance = "error" in heard ? "" : heard.text.trim();
+        if (!utterance)
+          return voiced({ speak: "Sorry, I didn't catch that. Could you say it again?", heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: true });
+      }
       if (!utterance) {
         const b = session.showrunner.briefing;
         const open = [...b.today, ...b.tomorrow].filter(i => i.status === "open");
@@ -255,7 +283,7 @@ export const weeklyMissionRouter = router({
         ].filter(Boolean).join(" ");
         if (!session.history.length) session.history.push({ speaker: "claire", text: speak });
         await store.save(key, owner, session, 2 * 3600_000);
-        return { speak, heard: null, saved: [] as string[], awaitingApproval: null, end: false };
+        return voiced({ speak, heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: false });
       }
       const turn = await runShowrunnerTurn({
         state: session.showrunner,
@@ -270,13 +298,14 @@ export const weeklyMissionRouter = router({
       };
       await store.save(key, owner, session, 2 * 3600_000);
       const replan = turn.state.replan;
-      return {
+      return voiced({
         speak: turn.speak,
         heard: utterance,
         saved: turn.saved ?? [],
         awaitingApproval: replan && !replan.approved ? { summary: replan.summary } : null,
         end: turn.end,
-      };
+        transcriptionFailed: false,
+      });
     }),
   preparedProposal: legacyDayforgeTenantOperatorProcedure.query(
     async ({ ctx }) => {

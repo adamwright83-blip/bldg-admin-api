@@ -28,7 +28,9 @@
 import { ENV } from "./env";
 
 export type TranscribeOptions = {
-  audioUrl: string; // URL to the audio file (e.g., S3 URL)
+  audioUrl?: string; // URL to the audio file (e.g., S3 URL)
+  /** Audio already in memory (e.g. a recorded OPEN COMMS turn); skips the download. */
+  audio?: { data: Buffer; mimeType: string };
   language?: string; // Optional: specify language code (e.g., "en", "es", "zh")
   prompt?: string; // Optional: custom prompt for the transcription
   mimeType?: string; // Optional trusted recorder MIME hint from the upload boundary
@@ -76,26 +78,27 @@ export async function transcribeAudio(
   options: TranscribeOptions
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
-    // Step 1: Validate environment configuration
-    if (!ENV.forgeApiUrl) {
+    // Step 1: Choose the Whisper endpoint: the configured forge proxy, else OpenAI directly.
+    const service = transcriptionService();
+    if (!service) {
       return {
         error: "Voice transcription service is not configured",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set"
-      };
-    }
-    if (!ENV.forgeApiKey) {
-      return {
-        error: "Voice transcription service authentication is missing",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set"
+        details: "Neither a valid BUILT_IN_FORGE_API_URL/KEY nor OPENAI_API_KEY is set",
       };
     }
 
-    // Step 2: Download audio from URL
+    // Step 2: Use in-memory audio, or download it from the URL
     let audioBuffer: Buffer;
     let mimeType: string;
-    try {
+    if (options.audio) {
+      audioBuffer = options.audio.data;
+      mimeType = normalizeMimeType(options.audio.mimeType) || "audio/webm";
+      if (audioBuffer.length > 16 * 1024 * 1024) {
+        return { error: "Audio file exceeds maximum size limit", code: "FILE_TOO_LARGE" };
+      }
+    } else try {
+      if (!options.audioUrl) throw new Error("No audio provided");
       const response = await fetch(options.audioUrl);
       if (!response.ok) {
         return {
@@ -144,20 +147,13 @@ export async function transcribeAudio(
     );
     formData.append("prompt", prompt);
 
-    // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/")
-      ? ENV.forgeApiUrl
-      : `${ENV.forgeApiUrl}/`;
-    
-    const fullUrl = new URL(
-      "v1/audio/transcriptions",
-      baseUrl
-    ).toString();
+    if (service.kind === "gemini") return transcribeWithGemini(service, audioBuffer, mimeType, prompt);
 
-    const response = await fetch(fullUrl, {
+    // Step 4: Call the transcription service
+    const response = await fetch(service.url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        authorization: `Bearer ${service.key}`,
         "Accept-Encoding": "identity",
       },
       body: formData,
@@ -194,6 +190,59 @@ export async function transcribeAudio(
       details: error instanceof Error ? error.message : "An unexpected error occurred"
     };
   }
+}
+
+type TranscriptionService = { kind: "whisper" | "gemini"; url: string; key: string };
+
+/** Forge Whisper proxy when validly configured, else Gemini, else OpenAI Whisper. */
+function transcriptionService(): TranscriptionService | null {
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    try {
+      const base = new URL(ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`);
+      if (base.protocol === "https:" || base.protocol === "http:")
+        return { kind: "whisper", url: new URL("v1/audio/transcriptions", base).toString(), key: ENV.forgeApiKey };
+    } catch {
+      // Not a URL: fall through to the direct provider.
+    }
+  }
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (geminiKey) {
+    const model = process.env.CLAIRE_TRANSCRIPTION_GEMINI_MODEL?.trim() || "gemini-flash-latest";
+    return { kind: "gemini", url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, key: geminiKey };
+  }
+  const openAiKey = process.env.OPENAI_API_KEY?.trim();
+  return openAiKey ? { kind: "whisper", url: "https://api.openai.com/v1/audio/transcriptions", key: openAiKey } : null;
+}
+
+async function transcribeWithGemini(
+  service: TranscriptionService,
+  audio: Buffer,
+  mimeType: string,
+  prompt: string
+): Promise<TranscriptionResponse | TranscriptionError> {
+  const response = await fetch(service.url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": service.key },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: `${prompt}\nTranscribe the audio verbatim. Return only the words spoken, nothing else. If there is no speech, return an empty string.` },
+            { inline_data: { mime_type: mimeType, data: audio.toString("base64") } },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0 },
+    }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    return { error: "Transcription service request failed", code: "TRANSCRIPTION_FAILED", details: `${response.status}: ${errorText.slice(0, 300)}` };
+  }
+  const body = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const text = (body.candidates?.[0]?.content?.parts ?? []).map(p => p.text ?? "").join("").trim().replace(/^"|"$/g, "");
+  if (!text) return { error: "No speech recognized", code: "TRANSCRIPTION_FAILED" };
+  return { task: "transcribe", language: "en", duration: 0, text, segments: [] };
 }
 
 /** Normalize signed-download content types and recorder parameter forms. */

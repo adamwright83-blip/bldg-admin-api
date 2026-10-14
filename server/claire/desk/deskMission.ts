@@ -19,6 +19,8 @@ export type DeskMissionItem = {
   note: string | null;
 };
 
+const STATUS_ORDER: Record<DeskMissionItem["status"], number> = { committed: 0, awaiting_approval: 1, completed: 2 };
+
 /**
  * Everything the Claire Desk shows, from stored truth only. Unknown values are
  * null, never estimated; nothing here writes.
@@ -59,7 +61,10 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
     }),
     ...briefing.today.filter(i => i.status === "open").map(fromDayLine(businessDate)),
     ...briefing.tomorrow.map(fromDayLine(tomorrow)),
-  ].filter(i => !/^Claire confirmed workday plan$/i.test(i.title));
+  ]
+    .filter(i => !/^Claire confirmed workday plan$/i.test(i.title))
+    // Earliest work first; on the same day, what is already committed leads what still awaits approval.
+    .sort((a, b) => a.date.localeCompare(b.date) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
   const winBack = await readWinBackDossier({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId, timeZone, now }).catch(() => null);
   const reminders = await listRecentDaphneObservationsBySource({
     tenantId: identity.tenantId,

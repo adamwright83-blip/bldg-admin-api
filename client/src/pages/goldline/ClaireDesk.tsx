@@ -306,16 +306,17 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
     { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–9:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "09:00" },
     { purpose: "evening_debrief" as const, label: "Evening debrief", when: "Monday–Saturday, 5:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6], start: "17:30", end: "19:00" },
   ];
-  const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled);
+  // Rows stay visible while they show this session's verified result.
+  const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled || result[p.purpose]);
   if (!data || !off.length) return null;
   return (
     <section className="cd-card cd-activate" aria-label="Daily routine" data-testid="activate-routine">
-      <p className="cd-kicker">DAILY ROUTINE · NOT ACTIVE</p>
+      <p className="cd-kicker">DAILY ROUTINE</p>
       <p className="cd-small">Recommended. Each call is its own permission; allowing one never allows the other. Times are {zone ?? "business time"}.</p>
       {off.map(p => (
         <div key={p.purpose} className="cd-activate-row">
           <span><strong>{p.label}</strong> — {p.when}</span>
-          <button
+          {result[p.purpose] ? null : <button
             type="button"
             className="cd-gold"
             disabled={grant.isPending || !zone}
@@ -332,8 +333,8 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
             }
           >
             Allow {p.label.toLowerCase()} calls
-          </button>
-          {result[p.purpose] ? <p role="status" className="cd-small">{result[p.purpose]}</p> : null}
+          </button>}
+          {result[p.purpose] ? <p role="status" className="cd-small" data-testid={`activate-${p.purpose}-result`}>{result[p.purpose]}</p> : null}
         </div>
       ))}
     </section>
