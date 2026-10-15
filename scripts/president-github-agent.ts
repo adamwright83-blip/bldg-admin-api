@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Mission, ReviewVerdict } from "../shared/presidentCycle";
 import {
   assertSafeValidationCommand,
@@ -19,7 +20,7 @@ const API =
     /\/$/,
     ""
   );
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_MISSIONS = 1;
 
 type ExecutionClaim = {
