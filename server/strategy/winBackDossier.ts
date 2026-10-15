@@ -1,4 +1,5 @@
 import { defaultBusinessQuery, defaultBusinessQueryDeps, runBusinessQuery } from "../analytics/businessQuery";
+import { claireCustomerTruthWithholdingSentence } from "../analytics/customerTruthFreshnessDiagnostic";
 import {
   customerTruthDispositionOf,
   loadBusinessSourceCoverage,
@@ -86,7 +87,9 @@ export async function readWinBackDossier(input: {
     return withheld({
       area: area.label,
       freshness,
-      reason: `CleanCloud customer truth is ${freshness}. Personalized outreach is withheld until the book is current.`,
+      reason:
+        claireCustomerTruthWithholdingSentence(freshness) ??
+        `CleanCloud customer truth is ${freshness}. Personalized outreach is withheld until the book is current.`,
     });
   }
   const deps = { ...defaultBusinessQueryDeps, now: () => input.now, timeZone: () => input.timeZone };
