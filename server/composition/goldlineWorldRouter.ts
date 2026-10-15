@@ -44,7 +44,7 @@ import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperi
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
 import {
   getCozyEncounterMission,
-  sendCozyOutreachSms,
+  sendCozyOutreachNow,
 } from "../experience/lanternCity/cozyVillagerOutreachService";
 
 export const goldlineWorldRouter = router({
@@ -71,13 +71,14 @@ export const goldlineWorldRouter = router({
         limit: input?.limit,
       })
     ),
-  sendCozyOutreachSms: legacyDayforgeTenantOperatorProcedure
+  sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         customerId: z.string().min(1),
+        customerName: z.string().min(1),
         recipientPhone: z.string().min(5),
+        originalSuggestedDraft: z.string().min(1),
         messageBody: z.string().min(1).max(500),
-        idempotencyKey: z.string().uuid(),
         slotId: z.enum([
           "slot_01",
           "slot_02",
@@ -87,12 +88,12 @@ export const goldlineWorldRouter = router({
           "slot_06",
           "slot_07",
           "slot_08",
-        ]),
+        ]).optional(),
         territoryId: z.string().optional(),
       })
     )
     .mutation(({ ctx, input }) =>
-      sendCozyOutreachSms({
+      sendCozyOutreachNow({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         ...input,

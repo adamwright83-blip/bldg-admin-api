@@ -28,7 +28,7 @@ export function CozyNeighborhoodEncounter({
     { staleTime: 60000, refetchOnWindowFocus: false }
   );
 
-  const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachSms.useMutation();
+  const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachNow.useMutation();
   const scheduleMutation = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
   // Merge server query with local optimistic state
@@ -69,28 +69,41 @@ export function CozyNeighborhoodEncounter({
   const handleSendNow = async (
     target: CozyCustomerTarget,
     editedText: string,
-    idempotencyKey: string
+    _idempotencyKey: string
   ) => {
     try {
       const result = await sendMutation.mutateAsync({
         customerId: target.customerId,
+        customerName: target.displayName,
         recipientPhone: target.phone ?? "",
+        originalSuggestedDraft: target.suggestedMessage,
         messageBody: editedText,
-        idempotencyKey,
         slotId: target.slotId,
         territoryId,
       });
 
-      // Update truthful state with provider receipt
+      // Update truthful state with either dispatched receipt or awaiting setup
       const updated: CozyCustomerTarget = {
         ...target,
-        status: "accepted",
-        providerReceipt: {
-          messageSid: result.providerMessageId ?? "SM_verified",
-          status: result.providerStatus ?? "queued",
-          sentAt: result.timestamp,
-          evidenceName: result.evidenceName,
-        },
+        status: result.status === "dispatched" ? "accepted" : "awaiting_sender_setup",
+        providerReceipt:
+          result.status === "dispatched"
+            ? {
+                messageSid: result.externalMessageId ?? result.messageId,
+                status: "dispatched",
+                sentAt: result.dispatchedAt ?? new Date().toISOString(),
+                evidenceName: result.evidenceName,
+              }
+            : undefined,
+        scheduledDraft:
+          result.status === "awaiting_sender_setup"
+            ? {
+                messageId: result.messageId,
+                scheduledFor: new Date().toISOString(),
+                timezone: "America/Los_Angeles",
+                currentMessageBody: editedText,
+              }
+            : undefined,
       };
 
       setLocalTargets((prev) => ({

@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   getCozyEncounterMission,
-  sendCozyOutreachSms,
-  resetSessionOutreachReceipts,
+  sendCozyOutreachNow,
 } from "./cozyVillagerOutreachService";
-import { createFakeOutboundSendAdapter } from "../../spiritHumanRescue/outboundSendAdapter";
+import { _resetScheduledOutreachMemoryStore } from "./scheduledOutreachService";
 
 vi.mock("../../strategy/winBackDossier", () => ({
   readWinBackDossier: vi.fn().mockResolvedValue({
@@ -87,7 +86,7 @@ vi.mock("../../strategy/winBackDossier", () => ({
 
 describe("cozyVillagerOutreachService", () => {
   beforeEach(() => {
-    resetSessionOutreachReceipts();
+    _resetScheduledOutreachMemoryStore();
   });
 
   it("loads the 7-customer Silver Lake recovery mission with 7 active houses and 1 inactive", async () => {
@@ -102,7 +101,7 @@ describe("cozyVillagerOutreachService", () => {
     expect(mission.targets.length).toBe(7);
 
     // Slot IDs should be slot_01 to slot_07, slot_08 is inactive
-    const slots = mission.targets.map(t => t.slotId);
+    const slots = mission.targets.map((t) => t.slotId);
     expect(slots).toEqual([
       "slot_01",
       "slot_02",
@@ -124,67 +123,55 @@ describe("cozyVillagerOutreachService", () => {
     expect(mei.status).toBe("eligible");
   });
 
-  it("executes an authorized outreach SMS and returns a durable provider receipt", async () => {
-    const fakeAdapter = createFakeOutboundSendAdapter({ mode: "accept" });
-
-    const result = await sendCozyOutreachSms({
+  it("commits outreach to personal scheduled outbox and returns awaiting_sender_setup in Phase 1", async () => {
+    const result = await sendCozyOutreachNow({
       tenantId: "tenant_test",
       operatorId: "op_test",
       customerId: "cust_sl_001_mei",
+      customerName: "Mei Lin",
       recipientPhone: "+12135550141",
+      originalSuggestedDraft: "Claire's suggestion",
       messageBody: "Hey Mei, checking in from Laundry Farm!",
-      idempotencyKey: "11111111-1111-4111-a111-111111111111",
       slotId: "slot_01",
-      customAdapter: fakeAdapter,
+      isTestSenderAllowed: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("awaiting_sender_setup");
+    expect(result.messageId).toBeDefined();
+    expect(result.evidenceName).toBe("awaiting_sender_setup");
+    expect(result.dispatchedAt).toBeNull();
+  });
+
+  it("dispatches through personal sender when test sender is explicitly allowed", async () => {
+    const result = await sendCozyOutreachNow({
+      tenantId: "tenant_test",
+      operatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      customerName: "Mei Lin",
+      recipientPhone: "+12135550141",
+      originalSuggestedDraft: "Claire's suggestion",
+      messageBody: "Hey Mei, checking in from Laundry Farm!",
+      slotId: "slot_01",
+      isTestSenderAllowed: true,
     });
 
     expect(result.success).toBe(true);
-    expect(result.providerMessageId).toContain("SM_fake_");
-    expect(result.evidenceName).toBe("provider_accepted");
-    expect(fakeAdapter.attempts.length).toBe(1);
-    expect(fakeAdapter.attempts[0].to).toBe("+12135550141");
-    expect(fakeAdapter.attempts[0].body).toBe("Hey Mei, checking in from Laundry Farm!");
-  });
-
-  it("enforces idempotency on duplicate clicks/dispatches", async () => {
-    const fakeAdapter = createFakeOutboundSendAdapter({ mode: "accept" });
-
-    const first = await sendCozyOutreachSms({
-      tenantId: "tenant_test",
-      operatorId: "op_test",
-      customerId: "cust_sl_001_mei",
-      recipientPhone: "+12135550141",
-      messageBody: "First attempt",
-      idempotencyKey: "11111111-1111-4111-a111-111111111111",
-      slotId: "slot_01",
-      customAdapter: fakeAdapter,
-    });
-
-    const second = await sendCozyOutreachSms({
-      tenantId: "tenant_test",
-      operatorId: "op_test",
-      customerId: "cust_sl_001_mei",
-      recipientPhone: "+12135550141",
-      messageBody: "Duplicate attempt",
-      idempotencyKey: "11111111-1111-4111-a111-111111111111",
-      slotId: "slot_01",
-      customAdapter: fakeAdapter,
-    });
-
-    expect(first.providerMessageId).toBe(second.providerMessageId);
-    // Adapter send should only have been called once!
-    expect(fakeAdapter.attempts.length).toBe(1);
+    expect(result.status).toBe("dispatched");
+    expect(result.externalMessageId).toContain("android_msg_");
+    expect(result.dispatchedAt).toBeDefined();
   });
 
   it("blocks dispatch to opted-out recipients", async () => {
     await expect(
-      sendCozyOutreachSms({
+      sendCozyOutreachNow({
         tenantId: "tenant_test",
         operatorId: "op_test",
         customerId: "cust_opted_out",
+        customerName: "Opted Out User",
         recipientPhone: "+15550009999", // Known opt-out
+        originalSuggestedDraft: "Draft",
         messageBody: "Should fail",
-        idempotencyKey: "22222222-2222-4222-a222-222222222222",
         slotId: "slot_01",
       })
     ).rejects.toThrow("Recipient has opted out of SMS outreach");
@@ -192,15 +179,42 @@ describe("cozyVillagerOutreachService", () => {
 
   it("rejects empty message body", async () => {
     await expect(
-      sendCozyOutreachSms({
+      sendCozyOutreachNow({
         tenantId: "tenant_test",
         operatorId: "op_test",
         customerId: "cust_sl_001_mei",
+        customerName: "Mei Lin",
         recipientPhone: "+12135550141",
+        originalSuggestedDraft: "Draft",
         messageBody: "   ",
-        idempotencyKey: "33333333-3333-4333-a333-333333333333",
         slotId: "slot_01",
       })
     ).rejects.toThrow("Message body cannot be empty");
+  });
+
+  it("reflects existing scheduled outbox messages in getCozyEncounterMission", async () => {
+    // Schedule outreach for Mei
+    await sendCozyOutreachNow({
+      tenantId: "tenant_test",
+      operatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      customerName: "Mei Lin",
+      recipientPhone: "+12135550141",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Pending outbox message",
+      slotId: "slot_01",
+      isTestSenderAllowed: false,
+    });
+
+    const mission = await getCozyEncounterMission({
+      tenantId: "tenant_test",
+      canonicalOperatorId: "op_test",
+      territoryId: "silver-lake",
+    });
+
+    const mei = mission.targets.find((t) => t.customerId === "cust_sl_001_mei");
+    expect(mei?.status).toBe("scheduled");
+    expect(mei?.scheduledDraft).toBeDefined();
+    expect(mei?.scheduledDraft?.currentMessageBody).toBe("Pending outbox message");
   });
 });

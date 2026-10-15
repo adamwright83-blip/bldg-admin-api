@@ -218,8 +218,19 @@ describe("scheduledOutreachService unit tests", () => {
 
     expect(earlyResult.success).toBe(false);
     expect(earlyResult.status).toBe("awaiting_sender_setup");
-    expect(earlyResult.message.status).toBe("awaiting_sender_setup");
+    // Non-destructive: message status remains pending so it stays editable/reschedulable!
+    expect(earlyResult.message.status).toBe("pending");
     expect(earlyResult.evidenceName).toBe("awaiting_sender_setup");
+
+    // Prove it remains editable!
+    const edited = await editScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: draft.id,
+      newMessageBody: "Updated message while awaiting sender",
+      now: baseNow,
+    });
+    expect(edited.currentMessageBody).toBe("Updated message while awaiting sender");
   });
 
   it("lists scheduled outreach messages filtered by tenant and status", async () => {

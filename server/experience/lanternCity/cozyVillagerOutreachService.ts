@@ -9,33 +9,17 @@ import {
 } from "../../../shared/cozyVillagerOutreach";
 import { readWinBackDossier } from "../../strategy/winBackDossier";
 import { checkCommunicationPermission } from "../../strategy/communicationPermissionService";
-import {
-  twilioOutboundSendAdapter,
-  createFakeOutboundSendAdapter,
-  type OutboundSendAdapter,
-} from "../../spiritHumanRescue/outboundSendAdapter";
 import { normalizeSmsPhone } from "../../_core/sms";
-
-// In-memory durable store for demonstration & test idempotency across the session
-const sessionOutreachReceipts = new Map<
-  string,
-  {
-    messageSid: string;
-    status: string;
-    sentAt: string;
-    evidenceName: string;
-    customerId: string;
-    body: string;
-    recipientPhone: string;
-  }
->();
+import {
+  createScheduledOutreachDraft,
+  sendEarlyOutreachDraft,
+  listScheduledOutreachMessages,
+} from "./scheduledOutreachService";
 
 // Known opt-outs for safety enforcement
 const knownOptOutNumbers = new Set<string>([
   "+15550009999", // canonical opt-out test number
 ]);
-
-
 
 function buildClaireSuggestedMessage(name: string, daysSinceLastOrder: number): string {
   const firstName = name.split(" ")[0];
@@ -53,7 +37,10 @@ export async function getCozyEncounterMission(input: {
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const now = input.now ?? new Date();
   const territoryId = input.territoryId ?? "silver-lake";
-  const territoryName = territoryId === "silver-lake" ? "Silver Lake" : territoryId.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  const territoryName =
+    territoryId === "silver-lake"
+      ? "Silver Lake"
+      : territoryId.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
   // Attempt reading canonical dossier
   const realDossier = await readWinBackDossier({
@@ -65,9 +52,12 @@ export async function getCozyEncounterMission(input: {
   }).catch(() => null);
 
   const rawContacts =
-    realDossier && realDossier.contacts.length > 0
-      ? realDossier.contacts
-      : null;
+    realDossier && realDossier.contacts.length > 0 ? realDossier.contacts : null;
+
+  // Retrieve existing scheduled messages for the tenant
+  const existingScheduledList = await listScheduledOutreachMessages({
+    tenantId: input.tenantId,
+  }).catch(() => []);
 
   const targets: CozyCustomerTarget[] = [];
 
@@ -79,7 +69,6 @@ export async function getCozyEncounterMission(input: {
       const anchor = COZY_SLOT_ANCHORS[slotId];
       const days = contact.daysSinceLastOrder ?? 30;
       const phone = contact.phone ? normalizeSmsPhone(contact.phone) : null;
-      const existingReceipt = phone ? sessionOutreachReceipts.get(contact.identityId) : undefined;
 
       // Real G14 permission check
       const permCheck = await checkCommunicationPermission({
@@ -99,6 +88,36 @@ export async function getCozyEncounterMission(input: {
         ? "Missing verified phone number"
         : undefined;
 
+      const existingMsg = existingScheduledList.find(
+        (m) => m.customerId === contact.identityId && m.status !== "cancelled"
+      );
+
+      let status: CozyCustomerTarget["status"] = "eligible";
+      let providerReceipt: CozyCustomerTarget["providerReceipt"] = undefined;
+      let scheduledDraft: CozyCustomerTarget["scheduledDraft"] = undefined;
+
+      if (existingMsg) {
+        if (existingMsg.status === "dispatched") {
+          status = "accepted";
+          providerReceipt = {
+            messageSid: existingMsg.externalMessageId ?? existingMsg.id,
+            status: "dispatched",
+            sentAt: (existingMsg.dispatchedAt ?? existingMsg.createdAt).toISOString(),
+            evidenceName: "personal_android_sms",
+          };
+        } else if (existingMsg.status === "pending" || existingMsg.status === "claimed") {
+          status = "scheduled";
+          scheduledDraft = {
+            messageId: existingMsg.id,
+            scheduledFor: existingMsg.scheduledFor.toISOString(),
+            timezone: existingMsg.timezone,
+            currentMessageBody: existingMsg.currentMessageBody,
+          };
+        }
+      } else if (isOptedOut || !phone) {
+        status = "consent_blocked";
+      }
+
       targets.push({
         slotId,
         customerId: contact.identityId,
@@ -116,20 +135,11 @@ export async function getCozyEncounterMission(input: {
         consentReason,
         villagerVariant: anchor.defaultVariant,
         suggestedMessage: buildClaireSuggestedMessage(contact.name, days),
-        status: existingReceipt ? "accepted" : isOptedOut || !phone ? "consent_blocked" : "eligible",
-        providerReceipt: existingReceipt
-          ? {
-              messageSid: existingReceipt.messageSid,
-              status: existingReceipt.status,
-              sentAt: existingReceipt.sentAt,
-              evidenceName: existingReceipt.evidenceName,
-            }
-          : undefined,
+        status,
+        providerReceipt,
+        scheduledDraft,
       });
     }
-  } else {
-    // If no real dormant customers found in territory, return empty targets list
-    // (no invented fake customers in production)
   }
 
   return {
@@ -144,89 +154,70 @@ export async function getCozyEncounterMission(input: {
   };
 }
 
-export async function sendCozyOutreachSms(input: {
+export async function sendCozyOutreachNow(input: {
   tenantId: string;
   operatorId: string;
   customerId: string;
+  customerName: string;
   recipientPhone: string;
+  originalSuggestedDraft: string;
   messageBody: string;
-  idempotencyKey: string;
-  slotId: CozySlotId;
+  slotId?: CozySlotId;
   territoryId?: string;
-  customAdapter?: OutboundSendAdapter;
+  now?: Date;
+  isTestSenderAllowed?: boolean;
 }): Promise<{
   success: boolean;
-  providerMessageId: string | null;
-  providerStatus: string | null;
+  status: "dispatched" | "awaiting_sender_setup";
+  messageId: string;
   evidenceName: string;
-  timestamp: string;
-  customerId: string;
-  slotId: CozySlotId;
+  dispatchedAt: string | null;
+  externalMessageId: string | null;
 }> {
   if (!input.messageBody || input.messageBody.trim().length === 0) {
     throw new Error("Message body cannot be empty");
   }
 
   const normalizedPhone = normalizeSmsPhone(input.recipientPhone);
-
-  // Consent & opt-out gate
   if (knownOptOutNumbers.has(normalizedPhone)) {
     throw new Error("Recipient has opted out of SMS outreach");
   }
 
-  // Idempotency: return existing receipt if duplicate request
-  const existing = sessionOutreachReceipts.get(input.customerId);
-  if (existing && existing.messageSid) {
-    return {
-      success: true,
-      providerMessageId: existing.messageSid,
-      providerStatus: existing.status,
-      evidenceName: existing.evidenceName,
-      timestamp: existing.sentAt,
-      customerId: input.customerId,
-      slotId: input.slotId,
-    };
-  }
+  const now = input.now ?? new Date();
 
-  // Choose adapter: fake for tests/dev fallback or production twilio adapter
-  const adapter =
-    input.customAdapter ??
-    (process.env.NODE_ENV === "test" || process.env.USE_FAKE_TWILIO === "true" || !process.env.TWILIO_ACCOUNT_SID
-      ? createFakeOutboundSendAdapter({ mode: "accept" })
-      : twilioOutboundSendAdapter);
-
-  const receipt = await adapter.send({
-    to: normalizedPhone,
-    body: input.messageBody.trim(),
-    idempotencyKey: input.idempotencyKey,
+  // 1. Commit draft to the scheduled outbox
+  const draft = await createScheduledOutreachDraft({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    customerId: input.customerId,
+    customerName: input.customerName,
+    recipientPhone: normalizedPhone,
+    originalSuggestedDraft: input.originalSuggestedDraft,
+    messageBody: input.messageBody.trim(),
+    scheduledFor: now,
+    timezone: "America/Los_Angeles",
+    slotId: input.slotId,
+    territoryId: input.territoryId,
+    allowImmediate: true,
+    now,
   });
 
-  if (!receipt.accepted) {
-    throw new Error(`Outreach SMS dispatch failed: ${receipt.evidenceName}`);
-  }
-
-  const sentAt = new Date().toISOString();
-  sessionOutreachReceipts.set(input.customerId, {
-    messageSid: receipt.providerMessageId ?? `SM_gen_${randomUUID()}`,
-    status: receipt.providerStatus ?? "queued",
-    sentAt,
-    evidenceName: receipt.evidenceName,
-    customerId: input.customerId,
-    body: input.messageBody.trim(),
-    recipientPhone: normalizedPhone,
+  // 2. Dispatch through verified personal Android connection
+  const sendResult = await sendEarlyOutreachDraft({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    messageId: draft.id,
+    leaseHolder: `operator_${input.operatorId}`,
+    isTestSenderAllowed: input.isTestSenderAllowed,
+    now,
   });
 
   return {
-    success: true,
-    providerMessageId: receipt.providerMessageId,
-    providerStatus: receipt.providerStatus,
-    evidenceName: receipt.evidenceName,
-    timestamp: sentAt,
-    customerId: input.customerId,
-    slotId: input.slotId,
+    success: sendResult.success,
+    status: sendResult.status as "dispatched" | "awaiting_sender_setup",
+    messageId: draft.id,
+    evidenceName: sendResult.evidenceName,
+    dispatchedAt: sendResult.message.dispatchedAt?.toISOString() ?? null,
+    externalMessageId: sendResult.message.externalMessageId ?? null,
   };
-}
-
-export function resetSessionOutreachReceipts() {
-  sessionOutreachReceipts.clear();
 }

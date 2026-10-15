@@ -86,6 +86,12 @@ for (const statement of mitchEventDdl.split(";").map(sql => sql.trim()).filter(B
   await runRequired(statement, "Mitch producer event inbox");
 }
 
+// Scheduled outreach messages and revisions (PR #583: Android personal-number outreach system).
+const scheduledOutreachDdl = await readFile(new URL("../drizzle/0132_scheduled_outreach_outbox.sql", import.meta.url), "utf8");
+for (const statement of scheduledOutreachDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Scheduled outreach outbox and revisions");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5355,6 +5361,24 @@ if (!(await requiredColumnExists("tenant_standing_authorizations", "allowedWeekd
 // Superset only: values are never removed, so existing appointment rows stay valid.
 await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning','daily_morning_readiness','daily_evening_debrief') NOT NULL", "Claire appointment kinds");
 await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJson"]);
-await assertEnumContainsValues("operator_appointments", "appointmentKind", ["weekday_strategic_planning", "daily_morning_readiness", "daily_evening_debrief"]);
+await assertRequiredColumns("scheduled_outreach_messages", [
+  "id",
+  "tenant_id",
+  "customer_id",
+  "customer_name",
+  "recipient_phone",
+  "current_message_body",
+  "revision_count",
+  "scheduled_for",
+  "status",
+]);
+await assertRequiredColumns("scheduled_outreach_revisions", [
+  "id",
+  "outreach_message_id",
+  "tenant_id",
+  "revision_number",
+  "message_body",
+  "edited_by",
+]);
 console.log("\nMigration complete.");
 await conn.end();
