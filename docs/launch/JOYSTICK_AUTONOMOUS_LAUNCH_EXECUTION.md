@@ -1,6 +1,6 @@
 # JOYSTICK launch execution
 
-Operational ledger. Integration branch: `cursor/joystick-launch-integration-50a9`. Base: `origin/main` `0fbc857e`. Do not merge to `main` without a separate approval.
+Operational ledger. Integration branch: `cursor/joystick-launch-integration-50a9`. Draft PR: https://github.com/adamwright83-blip/bldg-admin-api/pull/590. Base: `origin/main` `0fbc857e`. Do not merge to `main` without a separate approval.
 
 | Track | Branch | State | Evidence | Next |
 |---|---|---|---|---|
