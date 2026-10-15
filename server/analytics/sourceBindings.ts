@@ -320,7 +320,7 @@ export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.no
     rows(db, sql`select \`storeId\`, \`lastSuccessAt\` from \`cleancloud_browser_sync_bindings\` where \`tenantId\` = ${tenantId} limit 1`),
     rows(db, sql`select \`receiptJson\`, \`createdAt\` from \`cleancloud_browser_sync_receipts\` where \`tenantId\` = ${tenantId} order by \`createdAt\` desc limit 2000`),
     rows(db, sql`select \`createdAt\`, \`outcome\`, \`rangeFrom\`, \`rangeTo\` from \`cleancloud_browser_sync_attempts\` where \`tenantId\` = ${tenantId} order by \`createdAt\` desc limit 1`),
-    rows(db, sql`select max(\`paidAt\`) as \`last\` from \`orders\` where COALESCE(\`tenantId\`, 'default') = ${tenantId} and \`paid\` = 1`),
+    rows(db, sql`select max(\`paidAt\`) as \`last\` from \`orders\` where \`tenantId\` = ${tenantId} and \`paid\` = 1`),
     rows(db, sql`select max(COALESCE(\`paymentDateUtc\`, \`paidDateUtc\`)) as \`last\` from \`cleancloud_paid_orders\` where \`tenantId\` = ${tenantId}`),
   ]);
 

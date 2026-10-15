@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import type { CozyCustomerTarget } from "@shared/cozyVillagerOutreach";
+import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
 import styles from "./cozy-neighborhood.module.css";
 
 interface CozyMessageComposerProps {
-  target: CozyCustomerTarget;
+  target: CozyProjectedTarget;
   targetIndex: number;
   totalTargets: number;
   isSending: boolean;
-  onSendNow: (target: CozyCustomerTarget, editedText: string, idempotencyKey: string) => void;
+  onSendNow: (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => void;
   onScheduleSend: (
-    target: CozyCustomerTarget,
+    target: CozyProjectedTarget,
     editedText: string,
     scheduledForIso: string,
     idempotencyKey?: string
@@ -28,7 +28,7 @@ export function CozyMessageComposer({
   onClose,
   onSelectIndex,
 }: CozyMessageComposerProps) {
-  const [message, setMessage] = useState(target.suggestedMessage);
+  const [message, setMessage] = useState(target.preparedMessage || target.suggestedMessage);
   const [isListening, setIsListening] = useState(false);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
 
@@ -57,9 +57,9 @@ export function CozyMessageComposer({
 
   // Sync draft message when switching between villagers
   useEffect(() => {
-    setMessage(target.suggestedMessage);
+    setMessage(target.preparedMessage || target.suggestedMessage);
     setShowSchedulePicker(false);
-  }, [target.customerId, target.suggestedMessage]);
+  }, [target.customerId, target.preparedMessage, target.suggestedMessage]);
 
   const handleTalkToText = () => {
     if (isListening) {
@@ -118,19 +118,27 @@ export function CozyMessageComposer({
     setShowSchedulePicker(false);
   };
 
-  const isDispatched = target.status === "accepted" || !!target.providerReceipt;
-  const isScheduled = target.status === "scheduled" || !!target.scheduledDraft;
-  const isAwaitingSender = target.status === "awaiting_sender_setup";
+  const state = target.communicationState;
+  const isDispatched = state === "send_observed";
+  const isScheduled = state === "scheduled" || state === "claimed";
+  const isAwaitingSender = state === "awaiting_sender" || state === "send_not_observed";
+  const isFailed = state === "failed";
   const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
   const canSend = target.hasConsent && message.trim().length > 0 && !isSending && !isActionCommitted;
 
   return (
-    <aside className={styles.composerDrawer} aria-label="Customer Outreach Composer">
+    <aside
+      className={styles.composerDrawer}
+      aria-label="Customer Outreach Composer"
+      data-customer-id={target.customerId}
+      data-communication-state={state ?? "draft_prepared"}
+      data-message-id={target.messageId ?? ""}
+    >
       <div className={styles.composerHeader}>
         <div>
           <h3 className={styles.recipientTitle}>{target.displayName}</h3>
           <div className={styles.recipientMeta}>
-            {target.address} · {target.phone ?? "No phone"}
+            {target.territoryName} · {target.phone ?? "No phone"}
           </div>
         </div>
         <button className={styles.closeButton} onClick={onClose} aria-label="Close drawer">
@@ -162,7 +170,11 @@ export function CozyMessageComposer({
 
       {/* Claire Draft Badge */}
       <div className={styles.claireBadge}>
-        <span>✨</span> Claire's Suggested Reactivation Draft
+        <span>✨</span> {target.communicationLabel ?? "Draft Prepared"}
+      </div>
+      <div className={styles.recipientMeta}>
+        Reply: unavailable · Paid order after this message:{" "}
+        {target.paidOrder?.status === "verified" ? target.paidOrder.orderId : "not verified"}
       </div>
 
       {/* Message Editing */}
@@ -199,9 +211,11 @@ export function CozyMessageComposer({
           <div className={styles.scheduledBanner}>
             <span>⏰</span>
             <div>
-              <strong>Committed to Scheduled Outbox</strong>
+              <strong>{state === "claimed" ? "Claimed — send not observed" : "Scheduled — not sent"}</strong>
               <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
-                Scheduled for {target.scheduledDraft ? new Date(target.scheduledDraft.scheduledFor).toLocaleString() : "future delivery"}. Editable anytime in Admin → Claire → Scheduled Outreach.
+                {target.scheduledDraft
+                  ? `Pacific window ${new Date(target.scheduledDraft.scheduledFor).toLocaleString("en-US", { timeZone: target.scheduledDraft.timezone || "America/Los_Angeles" })}. Editable in Admin → Claire → Scheduled Outreach.`
+                  : "Editable in Admin → Claire → Scheduled Outreach."}
               </div>
             </div>
           </div>
@@ -221,13 +235,27 @@ export function CozyMessageComposer({
         )}
 
         {/* Dispatched Confirmation Banner */}
+        {isFailed && (
+          <div className={styles.scheduledBanner} style={{ borderColor: "#fecaca", background: "#fef2f2", color: "#991b1b" }}>
+            <span>!</span>
+            <div>
+              <strong>Failed — not sent</strong>
+              <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
+                The outbox recorded a failure. You can edit and send again. This is not a send observation.
+              </div>
+            </div>
+          </div>
+        )}
+
         {isDispatched && (
           <div className={styles.receiptBanner}>
             <span>✓</span>
             <div>
-              <strong>Personal Dispatch Initiated</strong>
+              <strong>{target.transport === "simulated" ? "Simulated send observed" : "Send observed"}</strong>
               <div style={{ fontSize: "10.5px", opacity: 0.85 }}>
-                Originates from verified cellular number in Google Messages.
+                {target.transport === "simulated"
+                  ? "Transport is simulated. Delivery, reply, and payment are not verified."
+                  : "A provider reference was recorded. Delivery, reply, and payment are not verified."}
               </div>
             </div>
           </div>

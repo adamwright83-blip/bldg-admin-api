@@ -26,9 +26,15 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     // Environment plate and 4-sided cloud overlays are rendered
     await expect(page.locator('img[alt="Lantern City Cozy Neighborhood"]')).toBeVisible();
 
+    // The mission read arrives after the cottages paint. Wait for the bound customer.
+    await expect(page.locator("[data-customer-id]").first()).toBeVisible({
+      timeout: 15000,
+    });
+
     // Check that all 8 slots are accounted for (either active villager button or resting cottage)
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
     const restingSlots = page.getByText(/· Resting/);
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 15000 });
     const activeCount = await villagerButtons.count();
     const restingCount = await restingSlots.count();
     expect(activeCount + restingCount).toBe(8);
@@ -92,8 +98,10 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(commitBtn).toBeVisible();
     await commitBtn.click();
 
-    await expect(drawer.getByText(/Committed to Scheduled Outbox/i)).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByText(/Scheduled — not sent/i)).toBeVisible({ timeout: 5000 });
+    await expect(drawer).toHaveAttribute("data-communication-state", "scheduled");
     await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
+    await expect(drawer.getByText(/Simulated send observed/i)).toHaveCount(0);
 
     // 4. Navigate to Admin Scheduled Outreach Outbox
     await page.goto("/admin/claire/scheduled-outreach");
@@ -151,14 +159,14 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const confirmCancelBtn = page.getByRole("button", { name: /Confirm Cancellation/i });
     await confirmCancelBtn.click();
 
-    await expect(page.getByText("CANCELLED")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible({ timeout: 5000 });
 
     // 8. Refresh page to verify durable persistence of cancelled status
     await page.reload();
     await expect(
       page.getByRole("heading", { name: "Claire · Scheduled Outreach Outbox" })
     ).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("CANCELLED")).toBeVisible();
+    await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible();
   });
 
   test("selects villager and executes SEND NOW in Phase 1 awaiting Android setup", async ({
@@ -185,7 +193,82 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(
       drawer.getByText(/Committed to Outbox \(Awaiting Phone Connection\)/i)
     ).toBeVisible({ timeout: 5000 });
+    await expect(drawer).toHaveAttribute("data-communication-state", "awaiting_sender");
     await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
+    await expect(villager).toHaveAttribute("data-pose", "wave");
+    await expect(drawer.getByText(/Simulated send observed/i)).toHaveCount(0);
+  });
+
+  test("Day Line card keeps the same objective-area customer open after a schedule", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.addInitScript(() => {
+      window.localStorage.setItem("goldline:day1:dismissed", "1");
+      window.localStorage.setItem(
+        "goldline:onboarding:v1",
+        JSON.stringify(["first_entry_explained"])
+      );
+    });
+
+    await page.goto("/growth/lantern-city?cozy=1");
+    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    await expect(encounter).toBeVisible({ timeout: 15_000 });
+    const villager = page.locator('div[role="button"][aria-label^="Select "]').first();
+    await expect(villager).toBeVisible({ timeout: 10_000 });
+    const customerId = await villager.getAttribute("data-customer-id");
+    expect(customerId).toBeTruthy();
+    await expect(villager).toHaveAttribute("data-communication-state", "draft_prepared");
+    await villager.click();
+
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveAttribute("data-customer-id", customerId!);
+    await expect(drawer).toHaveAttribute("data-communication-state", "draft_prepared");
+
+    await page.goto("/driver");
+    await expect(page.getByTestId("driver-day-home")).toBeVisible({ timeout: 30_000 });
+    const card = page.getByTestId("recovery-outreach-day-line-card");
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toHaveAttribute("data-objective-complete", "false");
+    await expect(card).toHaveAttribute(
+      "data-objective-id",
+      "dgoal_proof_silver_lake_objective"
+    );
+    await expect(card).toHaveAttribute("data-customer-id", customerId!);
+    await expect(card).toHaveAttribute("data-communication-state", "draft_prepared");
+    await expect(card.locator(".gdp-card-kicker strong")).toHaveText("OPEN");
+
+    await page.goto("/growth/lantern-city?cozy=1");
+    await expect(encounter).toBeVisible({ timeout: 15_000 });
+    await villager.click();
+    await drawer.getByRole("button", { name: /SCHEDULE/i }).click();
+    await drawer.getByRole("button", { name: /COMMIT/i }).click();
+    await expect(drawer.getByText(/Scheduled — not sent/i)).toBeVisible({ timeout: 10_000 });
+    await expect(drawer).toHaveAttribute("data-communication-state", "scheduled");
+    await expect(villager).toHaveAttribute("data-communication-state", "scheduled");
+    await expect(villager).toHaveAttribute("data-pose", "wave");
+
+    await page.reload();
+    await expect(encounter).toBeVisible({ timeout: 15_000 });
+    await expect(villager).toHaveAttribute("data-customer-id", customerId!);
+    await expect(villager).toHaveAttribute("data-communication-state", "scheduled");
+
+    await page.goto("/driver");
+    await expect(page.getByTestId("driver-day-home")).toBeVisible({ timeout: 30_000 });
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toHaveAttribute("data-customer-id", customerId!);
+    await expect(card).toHaveAttribute("data-communication-state", "scheduled");
+    await expect(card).toHaveAttribute("data-objective-complete", "false");
+    await expect(card.locator(".gdp-card-kicker strong")).toHaveText("OPEN");
+    const messageId = await card.getAttribute("data-message-id");
+    expect(messageId && messageId.length > 0).toBeTruthy();
+
+    await page.reload();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toHaveAttribute("data-message-id", messageId!);
+    await expect(card).toHaveAttribute("data-objective-complete", "false");
+    await expect(card).toHaveAttribute("data-customer-id", customerId!);
   });
 
   test("supports mobile viewport with responsive bottom sheet", async ({

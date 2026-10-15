@@ -4,9 +4,9 @@ import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms } from "./claireDesk/OpenComms";
+import { callSheetWithheldCopy } from "./claireDesk/callSheetFreshness";
 import "./claireDesk/claireDesk.css";
 
-const BROWSER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const money = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const dayLabel = (date: string, today: string, tomorrow: string) =>
   date === today ? "Today" : date === tomorrow ? "Tomorrow" : new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
@@ -40,6 +40,7 @@ export default function ClaireDesk() {
   const primary = m?.items.find(i => i.status !== "completed") ?? null;
   const secondary = m?.items.filter(i => i.status !== "completed" && i.id !== primary?.id)[0] ?? null;
   const pendingTomorrow = m?.items.filter(i => i.status === "awaiting_approval" && i.date === m.tomorrow) ?? [];
+  const withheldSheet = m?.winBack ? callSheetWithheldCopy(m.winBack) : null;
 
   async function approve(itemId: string) {
     if (!m?.pendingApproval) return;
@@ -60,9 +61,13 @@ export default function ClaireDesk() {
   }
 
   async function confirmTomorrow() {
+    if (!m?.timeZone) {
+      setConfirmState({ state: "error", text: "Tomorrow was not saved. The business timezone is not loaded." });
+      return;
+    }
     setConfirmState({ state: "saving" });
     try {
-      const r = await confirm.mutateAsync({ timeZone: BROWSER_ZONE });
+      const r = await confirm.mutateAsync({ timeZone: m.timeZone });
       if (!r.verified) throw new Error("The save could not be read back, so it is not confirmed.");
       setConfirmState({
         state: "ok",
@@ -155,6 +160,14 @@ export default function ClaireDesk() {
               ) : null}
             </section>
 
+            {withheldSheet ? (
+              <section className="cd-card" aria-label="Call sheet" data-testid="claire-desk-call-sheet-withheld">
+                <p className="cd-kicker">CLAIRE PREPARED · CALL SHEET</p>
+                <h3>{withheldSheet.heading}</h3>
+                <p className="cd-muted">{withheldSheet.body}</p>
+                <p className="cd-fine">Claire does not name customers for outreach until the book is current and consent is on file.</p>
+              </section>
+            ) : null}
             {m.winBack?.contacts.length ? (
               <section className="cd-card" aria-label="Call sheet" data-testid="claire-desk-call-sheet">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

@@ -18,6 +18,7 @@ import {
   listScheduledOutreachMessages,
   type OutboundTestSenderAdapter,
 } from "./scheduledOutreachService";
+import { evaluateGoogleMessagesBrowserTransport } from "./personalNumber/googleMessagesBrowserTransport";
 
 // Known opt-outs for safety enforcement
 const knownOptOutNumbers = new Set<string>([
@@ -338,6 +339,8 @@ export async function sendCozyOutreachNow(input: {
   evidenceName: string;
   dispatchedAt: string | null;
   externalMessageId: string | null;
+  blockReason?: string;
+  carrierDeliveryObserved: false;
 }> {
   if (!input.messageBody || input.messageBody.trim().length === 0) {
     throw new Error("Message body cannot be empty");
@@ -381,6 +384,7 @@ export async function sendCozyOutreachNow(input: {
   });
 
   if (!hasSender) {
+    const browser = evaluateGoogleMessagesBrowserTransport();
     return {
       success: false,
       status: "awaiting_sender_setup",
@@ -388,6 +392,8 @@ export async function sendCozyOutreachNow(input: {
       evidenceName: "awaiting_sender_setup",
       dispatchedAt: null,
       externalMessageId: null,
+      blockReason: browser.reason,
+      carrierDeliveryObserved: false,
     };
   }
 
@@ -408,5 +414,7 @@ export async function sendCozyOutreachNow(input: {
     evidenceName: sendResult.evidenceName,
     dispatchedAt: sendResult.message.dispatchedAt?.toISOString() ?? null,
     externalMessageId: sendResult.message.externalMessageId ?? null,
+    blockReason: sendResult.blockReason,
+    carrierDeliveryObserved: false,
   };
 }

@@ -643,7 +643,9 @@ export default function LanternCityScene({
           onExit={() => {
             setCozyEncounterTerritory(null);
             if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cozy")) {
-              window.history.replaceState({}, "", "/growth/lantern-city");
+              // Dropping ?cozy=1 closes the encounter. Keeping ?scene=v6 stops
+              // the next host render from switching this route to the island board.
+              window.history.replaceState({}, "", "/growth/lantern-city?scene=v6");
             }
           }}
           onOpenCustomer={onOpenCustomer}

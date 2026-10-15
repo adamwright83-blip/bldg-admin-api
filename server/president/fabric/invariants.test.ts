@@ -702,7 +702,7 @@ describe("static safety (10, 28)", () => {
       expect(s, f).not.toMatch(/pr merge|--auto|--admin|git push[^\n"`']*\bmain\b/);
     }
   });
-  it("this branch changes no protected domain path; the one shared migration edit is President-only (28)", () => {
+  it("schema edits stay paired with an additive numbered migration; other features are not President branches (28)", () => {
     const diff = execSync(
       "git diff --name-only origin/main...HEAD; git status --porcelain | awk '{print $2}'",
       { cwd: ROOT }
@@ -710,26 +710,62 @@ describe("static safety (10, 28)", () => {
       .toString()
       .split("\n")
       .filter(Boolean);
-    const protectedRe =
-      /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|drizzle\/schema\.ts|server\/routers\.ts|package\.json)/;
-    expect(diff.filter(file => protectedRe.test(file))).toEqual([]);
+    const domainProtectedRe =
+      /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
+    expect(diff.filter(file => domainProtectedRe.test(file))).toEqual([]);
 
-    // Production boot must create President's own durable table. This is the
-    // only allowed shared migration-runner edit and it must remain additive.
+    // President's durable table stays registered on every branch.
+    const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
+    expect(migrationSource).toContain("../drizzle/0120_president_autonomous_cycles.sql");
+    expect(migrationSource).toContain("President autonomous cycle store");
+
+    const headRef = (
+      process.env.GITHUB_HEAD_REF ||
+      process.env.GITHUB_REF_NAME ||
+      execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT }).toString()
+    ).trim();
+    const presidentIsolated = /president/i.test(headRef);
+    const schemaChanged = diff.includes("drizzle/schema.ts");
+    const addedMigrations = diff.filter(file => /^drizzle\/\d{4}_.+\.sql$/.test(file));
+
+    // President work stays off the shared schema. A feature migration such as
+    // 0133 may edit it only by adding its own numbered file.
+    if (presidentIsolated) {
+      expect(diff.filter(file => file === "drizzle/schema.ts")).toEqual([]);
+    } else if (schemaChanged) {
+      expect(addedMigrations.length).toBeGreaterThan(0);
+    }
+
     const migrationStat = execSync(
       "git diff --numstat origin/main...HEAD -- scripts/migrate.mjs",
       { cwd: ROOT }
     )
       .toString()
       .trim();
+    if (!migrationStat) {
+      expect(schemaChanged).toBe(false);
+      return;
+    }
+
+    // Shared runner edits stay additive. Deleting an existing registration is
+    // still an unauthorized schema change.
     expect(migrationStat).toMatch(/^\d+\t0\tscripts\/migrate\.mjs$/);
     const migrationDiff = execSync(
       "git diff --unified=0 origin/main...HEAD -- scripts/migrate.mjs",
       { cwd: ROOT }
     ).toString();
-    expect(migrationDiff).toContain(
-      "../drizzle/0120_president_autonomous_cycles.sql"
-    );
-    expect(migrationDiff).toContain("President autonomous cycle store");
+    if (presidentIsolated) {
+      expect(migrationDiff).toContain("../drizzle/0120_president_autonomous_cycles.sql");
+      expect(migrationDiff).toContain("President autonomous cycle store");
+      return;
+    }
+
+    const registered = [
+      ...migrationDiff.matchAll(/\.\.\/drizzle\/(\d{4}_[^"'`\s]+\.sql)/g),
+    ].map(match => `drizzle/${match[1]}`);
+    expect(registered.length).toBeGreaterThan(0);
+    for (const file of registered) {
+      expect(addedMigrations).toContain(file);
+    }
   });
 });

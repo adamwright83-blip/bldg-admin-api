@@ -10,6 +10,9 @@ import { getDb } from "../../db";
 import { isMysqlDuplicateKeyError } from "../../mysqlErrors";
 import { checkCommunicationPermission } from "../../strategy/communicationPermissionService";
 import { normalizeSmsPhone } from "../../_core/sms";
+import type { PersonalNumberTransport } from "./personalNumber/androidDeviceSender";
+import { evaluateGoogleMessagesBrowserTransport } from "./personalNumber/googleMessagesBrowserTransport";
+import { isStrictUsE164 } from "./personalNumber/personalSenderHealth";
 
 export interface ScheduledOutreachDraftInput {
   tenantId: string;
@@ -82,6 +85,8 @@ export interface SendEarlyOutreachInput {
   messageId: string;
   leaseHolder: string;
   testSenderAdapter?: OutboundTestSenderAdapter;
+  /** Test-only simulated handset, or a future device transport. Production omits this. */
+  personalTransport?: PersonalNumberTransport;
   now?: Date;
 }
 
@@ -896,16 +901,13 @@ export async function claimDueOutreachLeases(
 }
 
 /**
- * SEND EARLY action:
- * In Phase 1, the Google Messages paired session bridge is not yet connected.
- * Unless a testSenderAdapter is explicitly injected in automated tests, this function
- * ALWAYS returns { success: false, status: "awaiting_sender_setup" } without mutating
- * the database row away from 'pending'.
- *
- * When a testSenderAdapter is present:
- * 1. Transactionally acquire the lease claim FIRST with atomic CAS and record attempt intent.
- * 2. Only invoke the test adapter AFTER the row is durable fenced against competing workers.
- * 3. Commit terminal dispatched state upon success, or failed state upon error.
+ * SEND EARLY action.
+ * Production personal-number sends go through the blocked Google Messages browser
+ * assessment and do not transmit. They do not call Twilio.
+ * An explicit testSenderAdapter remains the historical test injection.
+ * personalTransport is the simulated or future handset path. A not-started
+ * preflight leaves the row untouched. After the lease is taken, an ambiguous
+ * result is never retried.
  */
 export async function sendEarlyOutreachDraft(
   input: SendEarlyOutreachInput
@@ -914,6 +916,8 @@ export async function sendEarlyOutreachDraft(
   status: "dispatched" | "awaiting_sender_setup";
   message: ScheduledOutreachMessageRow;
   evidenceName: string;
+  blockReason?: string;
+  carrierDeliveryObserved: false;
 }> {
   const now = input.now ?? new Date();
   const db = await requireDb();
@@ -1083,17 +1087,386 @@ export async function sendEarlyOutreachDraft(
       status: "dispatched",
       message: updated,
       evidenceName: sendResult.evidenceName ?? "personal_android_dispatched",
+      carrierDeliveryObserved: false,
     };
   }
 
-  // Phase 1 production path: No paired phone yet.
-  // Non-destructive: message remains pending and editable in outbox!
+  if (input.personalTransport) {
+    return dispatchThroughPersonalTransport(input, existing, now);
+  }
+
+  const browser = evaluateGoogleMessagesBrowserTransport();
   return {
     success: false,
     status: "awaiting_sender_setup",
     message: existing,
     evidenceName: "awaiting_sender_setup",
+    blockReason: browser.reason,
+    carrierDeliveryObserved: false,
   };
+}
+
+async function dispatchThroughPersonalTransport(
+  input: SendEarlyOutreachInput,
+  existing: ScheduledOutreachMessageRow,
+  now: Date
+): Promise<{
+  success: boolean;
+  status: "dispatched" | "awaiting_sender_setup";
+  message: ScheduledOutreachMessageRow;
+  evidenceName: string;
+  blockReason?: string;
+  carrierDeliveryObserved: false;
+}> {
+  const transport = input.personalTransport;
+  if (!transport) {
+    throw new Error("Personal transport is not configured");
+  }
+  if (transport.transportLabel !== "simulated" && transport.transportLabel !== "blocked_device") {
+    throw new Error("Personal-number outreach refuses this transport");
+  }
+  if (existing.tenantId !== input.tenantId || existing.operatorId !== input.operatorId) {
+    throw new Error("Fail closed: tenant or operator does not match this draft.");
+  }
+  if (!isStrictUsE164(existing.recipientPhone) || !existing.currentMessageBody.trim()) {
+    throw new Error("Fail closed: destination or message body could not be verified.");
+  }
+
+  const draftContext = {
+    tenantId: existing.tenantId,
+    operatorId: existing.operatorId,
+    messageId: existing.id,
+    recipientPhone: existing.recipientPhone,
+    body: existing.currentMessageBody,
+    revisionCount: existing.revisionCount,
+  };
+  const preflight = transport.preflight(draftContext);
+  if (preflight.phase !== "ready") {
+    throw new Error(preflight.blockReason);
+  }
+
+  const leaseDurationMs = 60_000;
+  const leasedUntil = new Date(now.getTime() + leaseDurationMs);
+  const db = await requireDb();
+  const claimed = await claimPersonalDispatch({
+    db,
+    existing,
+    input,
+    now,
+    leasedUntil,
+  });
+  if (!claimed) {
+    throw new Error(
+      "Send Early failed: draft was claimed, dispatched, or already attempted by another worker"
+    );
+  }
+
+  if (transport.afterClaim) {
+    try {
+      await transport.afterClaim();
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "dispatch interrupted before send";
+      const failed = await markAmbiguousTransmission({
+        db,
+        existing,
+        input,
+        now,
+        reason: `Dispatch interrupted before a verified send. Automatic retry is refused. ${reason}`,
+      });
+      throw new Error(failed.failureReason ?? reason);
+    }
+  }
+
+  const consent = await checkCommunicationPermission({
+    tenantId: input.tenantId,
+    subjectType: "customer",
+    subjectId: existing.customerId,
+    channel: "sms",
+    now,
+  });
+  if (!consent.allowed) {
+    await cancelWithoutTransmission({
+      db,
+      existing,
+      input,
+      now,
+      reason: `Pre-send permission check failed after lease: ${consent.reason ?? "opt-out"}`,
+    });
+    throw new Error(`Customer is no longer eligible: ${consent.reason ?? "opt-out"}`);
+  }
+
+  let executed;
+  try {
+    executed = await transport.execute(draftContext);
+  } catch {
+    const failed = await markAmbiguousTransmission({
+      db,
+      existing,
+      input,
+      now,
+      reason:
+        "Ambiguous transmission. The personal transport threw after the send attempt was armed. Automatic retry is refused. This is not a carrier delivery receipt.",
+    });
+    throw new Error(failed.failureReason ?? "ambiguous_transmission");
+  }
+
+  if (executed.phase === "not_started") {
+    await revertUnsentPersonalDispatch({ db, existing, input, now });
+    throw new Error(executed.blockReason);
+  }
+
+  if (executed.phase === "ambiguous") {
+    const failed = await markAmbiguousTransmission({
+      db,
+      existing,
+      input,
+      now,
+      reason: executed.blockReason,
+    });
+    throw new Error(failed.failureReason ?? executed.blockReason);
+  }
+
+  const localId = executed.localObservationId;
+  if (
+    transport.transportLabel !== "simulated" ||
+    !localId.startsWith("local_") ||
+    executed.evidenceName !== "simulated_personal_send"
+  ) {
+    const failed = await markAmbiguousTransmission({
+      db,
+      existing,
+      input,
+      now,
+      reason:
+        "Fail closed: the transport result was not a labeled simulated observation. Automatic retry is refused.",
+    });
+    throw new Error(failed.failureReason ?? "unverified transport result");
+  }
+
+  const externalMessageId = `simulated:${localId}`;
+  const updated = await markSimulatedObservation({
+    db,
+    existing,
+    input,
+    now,
+    externalMessageId,
+  });
+  return {
+    success: true,
+    status: "dispatched",
+    message: updated,
+    evidenceName: "simulated_personal_send",
+    blockReason:
+      "Simulated transport only. The local observation is not a carrier delivery receipt.",
+    carrierDeliveryObserved: false,
+  };
+}
+
+async function claimPersonalDispatch(args: {
+  db: Awaited<ReturnType<typeof requireDb>>;
+  existing: ScheduledOutreachMessageRow;
+  input: SendEarlyOutreachInput;
+  now: Date;
+  leasedUntil: Date;
+}): Promise<boolean> {
+  const { db, existing, input, now, leasedUntil } = args;
+  if (db) {
+    const claimResult = await db
+      .update(scheduledOutreachMessages)
+      .set({
+        status: "claimed",
+        leaseHolder: input.leaseHolder,
+        leasedUntil,
+        dispatchAttemptedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, existing.id),
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId),
+          eq(scheduledOutreachMessages.status, "pending"),
+          isNull(scheduledOutreachMessages.dispatchedAt),
+          isNull(scheduledOutreachMessages.dispatchAttemptedAt),
+          or(
+            isNull(scheduledOutreachMessages.leasedUntil),
+            lt(scheduledOutreachMessages.leasedUntil, now)
+          )
+        )
+      );
+    return affectedRows(claimResult) > 0;
+  }
+
+  const mem = testMemoryMessages.get(existing.id);
+  if (!mem || mem.status !== "pending" || mem.dispatchAttemptedAt) return false;
+  if (mem.tenantId !== input.tenantId || mem.operatorId !== input.operatorId) return false;
+  mem.status = "claimed";
+  mem.leaseHolder = input.leaseHolder;
+  mem.leasedUntil = leasedUntil;
+  mem.dispatchAttemptedAt = now;
+  mem.updatedAt = now;
+  testMemoryMessages.set(existing.id, mem);
+  return true;
+}
+
+async function cancelWithoutTransmission(args: {
+  db: Awaited<ReturnType<typeof requireDb>>;
+  existing: ScheduledOutreachMessageRow;
+  input: SendEarlyOutreachInput;
+  now: Date;
+  reason: string;
+}): Promise<ScheduledOutreachMessageRow> {
+  const { db, existing, input, now, reason } = args;
+  if (db) {
+    await db
+      .update(scheduledOutreachMessages)
+      .set({
+        status: "cancelled",
+        cancelledAt: now,
+        cancellationReason: reason,
+        leaseHolder: null,
+        leasedUntil: null,
+        dispatchAttemptedAt: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, existing.id),
+          eq(scheduledOutreachMessages.leaseHolder, input.leaseHolder),
+          isNull(scheduledOutreachMessages.dispatchedAt)
+        )
+      );
+  }
+  const current = testMemoryMessages.get(existing.id) ?? existing;
+  const updated: ScheduledOutreachMessageRow = {
+    ...current,
+    status: "cancelled",
+    cancelledAt: now,
+    cancellationReason: reason,
+    leaseHolder: null,
+    leasedUntil: null,
+    dispatchAttemptedAt: null,
+    updatedAt: now,
+  };
+  if (!db) testMemoryMessages.set(existing.id, updated);
+  return updated;
+}
+
+async function revertUnsentPersonalDispatch(args: {
+  db: Awaited<ReturnType<typeof requireDb>>;
+  existing: ScheduledOutreachMessageRow;
+  input: SendEarlyOutreachInput;
+  now: Date;
+}): Promise<ScheduledOutreachMessageRow> {
+  const { db, existing, input, now } = args;
+  if (db) {
+    await db
+      .update(scheduledOutreachMessages)
+      .set({
+        status: "pending",
+        leaseHolder: null,
+        leasedUntil: null,
+        dispatchAttemptedAt: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, existing.id),
+          eq(scheduledOutreachMessages.leaseHolder, input.leaseHolder),
+          eq(scheduledOutreachMessages.status, "claimed"),
+          isNull(scheduledOutreachMessages.dispatchedAt)
+        )
+      );
+  }
+  const current = testMemoryMessages.get(existing.id) ?? existing;
+  const updated: ScheduledOutreachMessageRow = {
+    ...current,
+    status: "pending",
+    leaseHolder: null,
+    leasedUntil: null,
+    dispatchAttemptedAt: null,
+    updatedAt: now,
+  };
+  if (!db) testMemoryMessages.set(existing.id, updated);
+  return updated;
+}
+
+async function markAmbiguousTransmission(args: {
+  db: Awaited<ReturnType<typeof requireDb>>;
+  existing: ScheduledOutreachMessageRow;
+  input: SendEarlyOutreachInput;
+  now: Date;
+  reason: string;
+}): Promise<ScheduledOutreachMessageRow> {
+  const { db, existing, input, now, reason } = args;
+  if (db) {
+    await db
+      .update(scheduledOutreachMessages)
+      .set({
+        status: "failed",
+        failureReason: reason,
+        externalMessageId: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, existing.id),
+          eq(scheduledOutreachMessages.leaseHolder, input.leaseHolder),
+          isNull(scheduledOutreachMessages.dispatchedAt)
+        )
+      );
+  }
+  const current = testMemoryMessages.get(existing.id) ?? existing;
+  const updated: ScheduledOutreachMessageRow = {
+    ...current,
+    status: "failed",
+    failureReason: reason,
+    externalMessageId: null,
+    dispatchAttemptedAt: current.dispatchAttemptedAt ?? now,
+    updatedAt: now,
+  };
+  if (!db) testMemoryMessages.set(existing.id, updated);
+  return updated;
+}
+
+async function markSimulatedObservation(args: {
+  db: Awaited<ReturnType<typeof requireDb>>;
+  existing: ScheduledOutreachMessageRow;
+  input: SendEarlyOutreachInput;
+  now: Date;
+  externalMessageId: string;
+}): Promise<ScheduledOutreachMessageRow> {
+  const { db, existing, input, now, externalMessageId } = args;
+  if (!externalMessageId.startsWith("simulated:")) {
+    throw new Error("Simulated observations must be labeled simulated");
+  }
+  if (db) {
+    await db
+      .update(scheduledOutreachMessages)
+      .set({
+        status: "dispatched",
+        dispatchedAt: now,
+        externalMessageId,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, existing.id),
+          eq(scheduledOutreachMessages.leaseHolder, input.leaseHolder)
+        )
+      );
+  }
+  const current = testMemoryMessages.get(existing.id) ?? existing;
+  const updated: ScheduledOutreachMessageRow = {
+    ...current,
+    status: "dispatched",
+    dispatchedAt: now,
+    externalMessageId,
+    leaseHolder: input.leaseHolder,
+    updatedAt: now,
+  };
+  if (!db) testMemoryMessages.set(existing.id, updated);
+  return updated;
 }
 
 /**
