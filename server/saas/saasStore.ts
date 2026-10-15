@@ -38,6 +38,7 @@ import type {
   NormalizedTenantCustomer,
   NormalizedTenantOrder,
 } from "../../shared/tenantImports";
+import { advertisedPlanEnvSyncAllowed } from "./joystickStripeOffer";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as duplicateKey } from "../mysqlErrors";
 import { writeLegacyDayforgeEventWith } from "../legacy/dayforge/events/legacyDayforgeEventStore";
@@ -79,9 +80,14 @@ function allEntitlementsFromEnv(): SaasEntitlement[] {
 export async function syncConfiguredSaasPlan(): Promise<void> {
   const priceId = process.env.DAYFORGE_STRIPE_PRICE_ID?.trim();
   if (!priceId) return;
+  const planKey = process.env.DAYFORGE_STRIPE_PLAN_KEY?.trim() || "dayforge";
+  const trialDays = Math.max(
+    0,
+    Number(process.env.DAYFORGE_STRIPE_TRIAL_DAYS ?? "0") || 0
+  );
+  if (!advertisedPlanEnvSyncAllowed(planKey, trialDays)) return;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const planKey = process.env.DAYFORGE_STRIPE_PLAN_KEY?.trim() || "dayforge";
   const foundingPlan = process.env.DAYFORGE_STRIPE_FOUNDING_PLAN === "true";
   const maxSubscriptionsRaw = Number(
     process.env.DAYFORGE_STRIPE_MAX_SUBSCRIPTIONS ?? ""
@@ -98,10 +104,7 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
       displayName: process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "JOYSTICK",
       stripePriceId: priceId,
       stripeProductId: process.env.DAYFORGE_STRIPE_PRODUCT_ID?.trim() || null,
-      trialDays: Math.max(
-        0,
-        Number(process.env.DAYFORGE_STRIPE_TRIAL_DAYS ?? "0") || 0
-      ),
+      trialDays,
       foundingPlan,
       maxSubscriptions:
         Number.isInteger(maxSubscriptionsRaw) && maxSubscriptionsRaw > 0
@@ -117,10 +120,7 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
           process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "JOYSTICK",
         stripePriceId: priceId,
         stripeProductId: process.env.DAYFORGE_STRIPE_PRODUCT_ID?.trim() || null,
-        trialDays: Math.max(
-          0,
-          Number(process.env.DAYFORGE_STRIPE_TRIAL_DAYS ?? "0") || 0
-        ),
+        trialDays,
         foundingPlan,
         maxSubscriptions:
           Number.isInteger(maxSubscriptionsRaw) && maxSubscriptionsRaw > 0
