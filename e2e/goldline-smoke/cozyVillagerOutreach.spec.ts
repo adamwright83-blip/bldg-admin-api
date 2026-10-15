@@ -29,6 +29,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     // Check that all 8 slots are accounted for (either active villager button or resting cottage)
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
     const restingSlots = page.getByText(/· Resting/);
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 15000 });
     const activeCount = await villagerButtons.count();
     const restingCount = await restingSlots.count();
     expect(activeCount + restingCount).toBe(8);
@@ -151,14 +152,14 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const confirmCancelBtn = page.getByRole("button", { name: /Confirm Cancellation/i });
     await confirmCancelBtn.click();
 
-    await expect(page.getByText("CANCELLED")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible({ timeout: 5000 });
 
     // 8. Refresh page to verify durable persistence of cancelled status
     await page.reload();
     await expect(
       page.getByRole("heading", { name: "Claire · Scheduled Outreach Outbox" })
     ).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("CANCELLED")).toBeVisible();
+    await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible();
   });
 
   test("selects villager and executes SEND NOW in Phase 1 awaiting Android setup", async ({
