@@ -717,7 +717,16 @@ function Router() {
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
-  // The public JOYSTICK domains share the approved marketing homepage.\n  // Keep historical Admin, Driver, Laundry Butler, and other roots unchanged.\n  if (\n    (hostname === "gojoystick.com" || hostname === "www.gojoystick.com") &&\n    window.location.pathname === "/"\n  ) {\n    return <JoystickLandingRoute />;\n  }\n\n  // Commercial SaaS members are intentionally confined to the supported
+  // The public JOYSTICK domains share the approved marketing homepage.
+  // Keep historical Admin, Driver, Laundry Butler, and other roots unchanged.
+  if (
+    (hostname === "gojoystick.com" || hostname === "www.gojoystick.com") &&
+    window.location.pathname === "/"
+  ) {
+    return <JoystickLandingRoute />;
+  }
+
+  // Commercial SaaS members are intentionally confined to the supported
   // JOYSTICK surface. Historical Admin/BLDG routes remain available to
   // platform admins, but a tenant member cannot wander into them and rely on
   // backend 403s as the product boundary.
