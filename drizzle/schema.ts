@@ -10227,3 +10227,96 @@ export const strategicProposalResponses = mysqlTable("strategic_proposal_respons
   responseJson: json("responseJson").notNull(),
   createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow().notNull(),
 }, t => ({ lookup: index("idx_strategic_response_proposal").on(t.tenantId, t.proposalId) }));
+
+/**
+ * Scheduled Outreach Messages (PR #583: Android Personal-Number Outreach System).
+ * Concurrency-safe leases, durable revision tracking, and outbox lifecycle.
+ */
+export const scheduledOutreachMessages = mysqlTable(
+  "scheduled_outreach_messages",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 64 }).notNull(),
+    customerId: varchar("customer_id", { length: 128 }).notNull(),
+    customerName: varchar("customer_name", { length: 255 }).notNull(),
+    recipientPhone: varchar("recipient_phone", { length: 32 }).notNull(),
+    senderPhone: varchar("sender_phone", { length: 32 }),
+    originalSuggestedDraft: text("original_suggested_draft").notNull(),
+    currentMessageBody: text("current_message_body").notNull(),
+    revisionCount: int("revision_count").notNull().default(1),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    timezone: varchar("timezone", { length: 64 }).notNull().default("America/Los_Angeles"),
+    status: mysqlEnum("status", [
+      "pending",
+      "claimed",
+      "dispatched",
+      "cancelled",
+      "failed",
+      "awaiting_sender_setup",
+    ]).notNull().default("pending"),
+    leaseHolder: varchar("lease_holder", { length: 64 }),
+    leasedUntil: timestamp("leased_until"),
+    dispatchAttemptedAt: timestamp("dispatch_attempted_at"),
+    dispatchedAt: timestamp("dispatched_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    cancellationReason: text("cancellation_reason"),
+    failureReason: text("failure_reason"),
+    externalMessageId: varchar("external_message_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    deliveryIntent: mysqlEnum("delivery_intent", ["immediate", "scheduled"]).notNull().default("scheduled"),
+    slotId: varchar("slot_id", { length: 32 }),
+    territoryId: varchar("territory_id", { length: 64 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (table) => ({
+    uniqueTenantIdempotency: uniqueIndex("uq_som_tenant_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    tenantCustomerPendingIdx: index("idx_som_tenant_customer_status").on(
+      table.tenantId,
+      table.customerId,
+      table.status
+    ),
+    tenantScheduledStatusIdx: index("idx_som_tenant_sched_status").on(
+      table.tenantId,
+      table.status,
+      table.scheduledFor
+    ),
+    tenantOperatorIdx: index("idx_som_tenant_operator_status").on(
+      table.tenantId,
+      table.operatorId,
+      table.status
+    ),
+    leaseIdx: index("idx_som_lease").on(table.status, table.leasedUntil),
+  })
+);
+
+export type ScheduledOutreachMessageRow = typeof scheduledOutreachMessages.$inferSelect;
+export type InsertScheduledOutreachMessage = typeof scheduledOutreachMessages.$inferInsert;
+
+export const scheduledOutreachRevisions = mysqlTable(
+  "scheduled_outreach_revisions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    outreachMessageId: varchar("outreach_message_id", { length: 64 }).notNull(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    revisionNumber: int("revision_number").notNull(),
+    messageBody: text("message_body").notNull(),
+    editedBy: varchar("edited_by", { length: 128 }).notNull(),
+    reason: varchar("reason", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    messageRevisionUnique: uniqueIndex("uq_sor_message_revision").on(
+      table.outreachMessageId,
+      table.revisionNumber
+    ),
+  })
+);
+
+export type ScheduledOutreachRevisionRow = typeof scheduledOutreachRevisions.$inferSelect;
+export type InsertScheduledOutreachRevision = typeof scheduledOutreachRevisions.$inferInsert;
+

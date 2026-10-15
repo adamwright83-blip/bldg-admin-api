@@ -24,6 +24,8 @@ const requiredTables = [
   "driver_sales_journals",
   "commercial_mission_irl_step_details",
   "commercial_mission_dispatches",
+  "scheduled_outreach_messages",
+  "scheduled_outreach_revisions",
 ];
 
 for (const tableName of requiredTables) {
@@ -182,6 +184,40 @@ await assertEnumValues("commercial_mission_dispatches", "status", [
   "opened",
   "not_configured",
   "cancelled",
+]);
+
+await assertIndex(
+  "scheduled_outreach_messages",
+  "idx_som_tenant_customer_status",
+  ["tenant_id", "customer_id", "status"]
+);
+await assertIndex(
+  "scheduled_outreach_messages",
+  "idx_som_tenant_sched_status",
+  ["tenant_id", "status", "scheduled_for"]
+);
+await assertIndex(
+  "scheduled_outreach_messages",
+  "idx_som_tenant_operator_status",
+  ["tenant_id", "operator_id", "status"]
+);
+await assertIndex(
+  "scheduled_outreach_messages",
+  "idx_som_lease",
+  ["status", "leased_until"]
+);
+await assertIndex(
+  "scheduled_outreach_revisions",
+  "uq_sor_message_revision",
+  ["outreach_message_id", "revision_number"]
+);
+await assertEnumValues("scheduled_outreach_messages", "status", [
+  "pending",
+  "claimed",
+  "dispatched",
+  "cancelled",
+  "failed",
+  "awaiting_sender_setup",
 ]);
 
 const [debriefColumns] = await conn.execute(

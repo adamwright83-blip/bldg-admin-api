@@ -95,6 +95,7 @@ describe("Admin six-domain shell", () => {
     expect(lanternSceneFor("/", "?scene=map")).toBe("map");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v7")).toBe("map");
     expect(lanternSceneFor("/", "?scene=v6")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1")).toBe("v6");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=atlas")).toBe("atlas");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v5")).toBe("atlas");
     // other pages mount no world at all (no hidden 3D board running behind them)

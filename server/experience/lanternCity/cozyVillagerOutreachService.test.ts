@@ -1,0 +1,248 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import {
+  getCozyEncounterMission,
+  sendCozyOutreachNow,
+  resolveCanonicalCustomerContact,
+} from "./cozyVillagerOutreachService";
+import { _resetScheduledOutreachMemoryStore } from "./scheduledOutreachService";
+
+vi.mock("../../strategy/winBackDossier", () => ({
+  readWinBackDossier: vi.fn().mockImplementation((input: { tenantId: string; limit?: number }) => {
+    return Promise.resolve({
+      area: "Silver Lake",
+      lapsedCount: 7,
+      contacts: [
+        {
+          identityId: "cust_sl_001_mei",
+          name: "Mei Lin",
+          phone: "+12135550141",
+          daysSinceLastOrder: 34,
+          paidOrders: 14,
+          lifetimeCents: 62400,
+          lastOrderDate: "2026-09-10",
+          lastOrderSummary: "Wash & Fold 32 lbs",
+        },
+        {
+          identityId: "cust_sl_002_barnaby",
+          name: "Barnaby Hayes",
+          phone: "+12135550142",
+          daysSinceLastOrder: 48,
+          paidOrders: 8,
+          lifetimeCents: 38200,
+          lastOrderDate: "2026-08-27",
+          lastOrderSummary: "Standard Wash & Fold",
+        },
+        {
+          identityId: "cust_sl_003_oliver",
+          name: "Oliver Bennett",
+          phone: "+12135550143",
+          daysSinceLastOrder: 62,
+          paidOrders: 11,
+          lifetimeCents: 51900,
+          lastOrderDate: "2026-08-13",
+          lastOrderSummary: "Duvet Comforter",
+        },
+        {
+          identityId: "cust_sl_004_bella",
+          name: "Bella Ramos",
+          phone: "+12135550144",
+          daysSinceLastOrder: 29,
+          paidOrders: 6,
+          lifetimeCents: 29400,
+          lastOrderDate: "2026-09-15",
+          lastOrderSummary: "Eco Wash & Fold",
+        },
+        {
+          identityId: "cust_sl_005_sammy",
+          name: "Sammy Cruz",
+          phone: "+12135550145",
+          daysSinceLastOrder: 76,
+          paidOrders: 19,
+          lifetimeCents: 84600,
+          lastOrderDate: "2026-07-30",
+          lastOrderSummary: "Commercial uniform linens",
+        },
+        {
+          identityId: "cust_sl_006_bramble",
+          name: "Bramble Vance",
+          phone: "+12135550146",
+          daysSinceLastOrder: 91,
+          paidOrders: 5,
+          lifetimeCents: 21500,
+          lastOrderDate: "2026-07-15",
+          lastOrderSummary: "Standard Wash & Fold",
+        },
+        {
+          identityId: "cust_sl_007_cleo",
+          name: "Cleo Montgomery",
+          phone: "+12135550147",
+          daysSinceLastOrder: 42,
+          paidOrders: 12,
+          lifetimeCents: 56800,
+          lastOrderDate: "2026-09-02",
+          lastOrderSummary: "Sheets & Towels",
+        },
+      ],
+    });
+  }),
+}));
+
+describe("cozyVillagerOutreachService", () => {
+  beforeEach(() => {
+    _resetScheduledOutreachMemoryStore();
+  });
+
+  it("loads the 7-customer Silver Lake recovery mission with truthful consent status", async () => {
+    const mission = await getCozyEncounterMission({
+      tenantId: "tenant_test",
+      canonicalOperatorId: "op_test",
+      territoryId: "silver-lake",
+    });
+
+    expect(mission.territoryId).toBe("silver-lake");
+    expect(mission.activeTargetCount).toBe(7);
+    expect(mission.targets.length).toBe(7);
+
+    // Slot IDs should be slot_01 to slot_07, slot_08 is inactive
+    const slots = mission.targets.map((t) => t.slotId);
+    expect(slots).toEqual([
+      "slot_01",
+      "slot_02",
+      "slot_03",
+      "slot_04",
+      "slot_05",
+      "slot_06",
+      "slot_07",
+    ]);
+    expect(slots).not.toContain("slot_08");
+
+    // Check Fox Mei in slot 1
+    const mei = mission.targets[0];
+    expect(mei.displayName).toBe("Mei Lin");
+    expect(mei.villagerVariant).toBe("fox");
+    expect(mei.daysSinceLastOrder).toBe(34);
+    expect(mei.suggestedMessage).toContain("Hey Mei! It's Adam from Laundry Farm.");
+    expect(mei.status).toBe("eligible");
+    // Unspecified G14 permission must NOT claim "verified_opt_in"
+    expect(mei.consentStatus).toBe("existing_customer_relationship");
+  });
+
+  it("resolves canonical customer contact details server-authoritatively", async () => {
+    const resolved = await resolveCanonicalCustomerContact({
+      tenantId: "tenant_test",
+      canonicalOperatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      territoryId: "silver-lake",
+      expectedPhone: "+12135550141",
+    });
+
+    expect(resolved.customerId).toBe("cust_sl_001_mei");
+    expect(resolved.customerName).toBe("Mei Lin");
+    expect(resolved.phone).toBe("+12135550141");
+    expect(resolved.territoryName).toBe("Silver Lake");
+    expect(resolved.consentStatus).toBe("existing_customer_relationship");
+  });
+
+  it("rejects caller attempt to associate a different phone number with an eligible customer ID", async () => {
+    await expect(
+      resolveCanonicalCustomerContact({
+        tenantId: "tenant_test",
+        canonicalOperatorId: "op_test",
+        customerId: "cust_sl_001_mei",
+        territoryId: "silver-lake",
+        expectedPhone: "+15559998888", // Attacker-provided phone
+      })
+    ).rejects.toThrow("Security violation: requested phone");
+  });
+
+  it("rejects territory mismatch when requesting customers outside their objective area", async () => {
+    await expect(
+      resolveCanonicalCustomerContact({
+        tenantId: "tenant_test",
+        canonicalOperatorId: "op_test",
+        customerId: "cust_sl_001_mei",
+        territoryId: "downtown-la", // Mismatch with Silver Lake dossier
+      })
+    ).rejects.toThrow("Territory mismatch");
+  });
+
+  it("commits outreach to personal scheduled outbox and returns awaiting_sender_setup in Phase 1", async () => {
+    const result = await sendCozyOutreachNow({
+      tenantId: "tenant_test",
+      operatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      expectedPhone: "+12135550141",
+      messageBody: "Hey Mei, checking in from Laundry Farm!",
+      slotId: "slot_01",
+      territoryId: "silver-lake",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("awaiting_sender_setup");
+    expect(result.messageId).toBeDefined();
+    expect(result.evidenceName).toBe("awaiting_sender_setup");
+    expect(result.dispatchedAt).toBeNull();
+  });
+
+  it("dispatches through personal sender only when an explicit test adapter is injected", async () => {
+    const fakeAdapter = {
+      send: vi.fn().mockResolvedValue({
+        externalMessageId: "android_msg_verified_123",
+        evidenceName: "personal_android_dispatched",
+      }),
+    };
+
+    const result = await sendCozyOutreachNow({
+      tenantId: "tenant_test",
+      operatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      expectedPhone: "+12135550141",
+      messageBody: "Hey Mei, checking in from Laundry Farm!",
+      slotId: "slot_01",
+      territoryId: "silver-lake",
+      testSenderAdapter: fakeAdapter,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.status).toBe("dispatched");
+    expect(result.externalMessageId).toBe("android_msg_verified_123");
+    expect(result.dispatchedAt).toBeDefined();
+    expect(fakeAdapter.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects empty message body", async () => {
+    await expect(
+      sendCozyOutreachNow({
+        tenantId: "tenant_test",
+        operatorId: "op_test",
+        customerId: "cust_sl_001_mei",
+        messageBody: "   ",
+        slotId: "slot_01",
+        territoryId: "silver-lake",
+      })
+    ).rejects.toThrow("Message body cannot be empty");
+  });
+
+  it("reflects existing scheduled outbox messages in getCozyEncounterMission", async () => {
+    // Immediate outreach in Phase 1 (no sender adapter) reflects as awaiting_sender_setup
+    await sendCozyOutreachNow({
+      tenantId: "tenant_test",
+      operatorId: "op_test",
+      customerId: "cust_sl_001_mei",
+      messageBody: "Pending outbox message",
+      slotId: "slot_01",
+      territoryId: "silver-lake",
+    });
+
+    const mission = await getCozyEncounterMission({
+      tenantId: "tenant_test",
+      canonicalOperatorId: "op_test",
+      territoryId: "silver-lake",
+    });
+
+    const mei = mission.targets.find((t) => t.customerId === "cust_sl_001_mei");
+    expect(mei?.status).toBe("awaiting_sender_setup");
+    expect(mei?.scheduledDraft).toBeDefined();
+    expect(mei?.scheduledDraft?.currentMessageBody).toBe("Pending outbox message");
+  });
+});

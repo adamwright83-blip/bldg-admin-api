@@ -86,6 +86,12 @@ for (const statement of mitchEventDdl.split(";").map(sql => sql.trim()).filter(B
   await runRequired(statement, "Mitch producer event inbox");
 }
 
+// Scheduled outreach messages and revisions (PR #583: Android personal-number outreach system).
+const scheduledOutreachDdl = await readFile(new URL("../drizzle/0132_scheduled_outreach_outbox.sql", import.meta.url), "utf8");
+for (const statement of scheduledOutreachDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Scheduled outreach outbox and revisions");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5355,6 +5361,35 @@ if (!(await requiredColumnExists("tenant_standing_authorizations", "allowedWeekd
 // Superset only: values are never removed, so existing appointment rows stay valid.
 await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning','daily_morning_readiness','daily_evening_debrief') NOT NULL", "Claire appointment kinds");
 await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJson"]);
-await assertEnumContainsValues("operator_appointments", "appointmentKind", ["weekday_strategic_planning", "daily_morning_readiness", "daily_evening_debrief"]);
+if (!(await requiredColumnExists("scheduled_outreach_messages", "idempotency_key"))) {
+  await runRequired("ALTER TABLE scheduled_outreach_messages ADD COLUMN idempotency_key varchar(128) NULL", "outreach message idempotency key");
+  await run("ALTER TABLE scheduled_outreach_messages ADD UNIQUE KEY uq_som_tenant_idempotency (tenant_id, idempotency_key)", "outreach message idempotency unique constraint");
+}
+if (!(await requiredColumnExists("scheduled_outreach_messages", "delivery_intent"))) {
+  await runRequired("ALTER TABLE scheduled_outreach_messages ADD COLUMN delivery_intent enum('immediate','scheduled') NOT NULL DEFAULT 'scheduled'", "outreach message delivery intent");
+}
+
+await assertRequiredColumns("scheduled_outreach_messages", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "customer_id",
+  "customer_name",
+  "recipient_phone",
+  "current_message_body",
+  "revision_count",
+  "scheduled_for",
+  "status",
+  "idempotency_key",
+  "delivery_intent",
+]);
+await assertRequiredColumns("scheduled_outreach_revisions", [
+  "id",
+  "outreach_message_id",
+  "tenant_id",
+  "revision_number",
+  "message_body",
+  "edited_by",
+]);
 console.log("\nMigration complete.");
 await conn.end();

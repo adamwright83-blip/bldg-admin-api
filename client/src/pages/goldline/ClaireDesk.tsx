@@ -157,10 +157,31 @@ export default function ClaireDesk() {
 
             {m.winBack?.contacts.length ? (
               <section className="cd-card" aria-label="Call sheet" data-testid="claire-desk-call-sheet">
-                <p className="cd-kicker">CLAIRE PREPARED · CALL SHEET</p>
-                <h3>
-                  Lapsed {m.winBack.area} customers — {m.winBack.contacts.length} of {m.winBack.lapsedCount}, highest spend first
-                </h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <p className="cd-kicker">CLAIRE PREPARED · CALL SHEET</p>
+                    <h3>
+                      Lapsed {m.winBack.area} customers — {m.winBack.contacts.length} of {m.winBack.lapsedCount}, highest spend first
+                    </h3>
+                  </div>
+                  <a
+                    href="/admin/claire/scheduled-outreach"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: "#b45309",
+                      background: "#fef3c7",
+                      padding: "4px 8px",
+                      borderRadius: "6px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    ⏰ Scheduled Outreach Outbox
+                  </a>
+                </div>
                 <ul className="cd-sheet">
                   {m.winBack.contacts.map(c => (
                     <li key={c.identityId}>

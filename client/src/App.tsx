@@ -360,6 +360,8 @@ function isSaasCustomerSafePath(pathname: string): boolean {
 
 const LOCAL_ADMIN_PATHS = new Set([
   "/claire",
+  "/claire/scheduled-outreach",
+  "/admin/claire/scheduled-outreach",
   "/president",
   "/war-room",
   "/driver/cockpit",
@@ -554,6 +556,8 @@ function AdminHostRouter() {
       </Route>
       <Route path="/sales-intel" component={AdminHostApp} />
       <Route path="/claire/calls/:sessionId" component={AdminHostApp} />
+      <Route path="/admin/claire/scheduled-outreach" component={AdminHostApp} />
+      <Route path="/claire/scheduled-outreach" component={AdminHostApp} />
       <Route path="/goldline/capability-gaps/:gapId" component={AdminHostApp} />
       <Route path="/claire" component={AdminHostApp} />
       <Route path="/operator" component={AdminHostApp} />
@@ -704,7 +708,9 @@ function Router() {
     hostname === "admin.bldg.chat" || hostname === "api.bldg.chat";
   const isLocalAdminPath =
     (hostname === "localhost" || hostname === "127.0.0.1") &&
-    LOCAL_ADMIN_PATHS.has(window.location.pathname);
+    (LOCAL_ADMIN_PATHS.has(window.location.pathname) ||
+      window.location.pathname.startsWith("/admin/") ||
+      window.location.pathname.startsWith("/claire/"));
   const isDriverHost = hostname === "driver.bldg.chat";
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
   const vendorSlug = isVendorHost
@@ -900,6 +906,8 @@ function Router() {
                 : HeldLandingRoute
         }
       />
+      <Route path={"/admin/claire/scheduled-outreach"} component={AdminHostApp} />
+      <Route path={"/claire/scheduled-outreach"} component={AdminHostApp} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/pnl"} component={AdminHostApp} />
       <Route path={"/driver"} component={Driver} />
