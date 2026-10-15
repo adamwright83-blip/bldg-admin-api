@@ -31,8 +31,8 @@ function PurposeCard({ purpose, status, timeZone, onChange }: { purpose: Purpose
   const copy = COPY[purpose];
   // Recommended schedule preselected; nothing is allowed until the operator presses Allow.
   const [days, setDays] = useState<number[]>([...copy.weekdays]);
-  const [start, setStart] = useState(copy.start);
-  const [end, setEnd] = useState(copy.end);
+  const [start, setStart] = useState<string>(copy.start);
+  const [end, setEnd] = useState<string>(copy.end);
   const [message, setMessage] = useState("");
   const busy = grant.isPending || revoke.isPending;
   const run = (fn: () => Promise<unknown>, ok: string | ((result: unknown) => string)) =>
