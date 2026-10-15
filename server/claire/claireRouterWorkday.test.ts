@@ -15,6 +15,9 @@ const workday = vi.hoisted(() => ({
 const assemble = vi.hoisted(() => ({
   assembleClaireDriveContext: vi.fn(),
 }));
+const operatorZone = vi.hoisted(() => ({
+  resolveOperatorTimeZone: vi.fn(),
+}));
 
 vi.mock("../saas/tenantAccess", () => ({
   resolveLegacyDayforgeMembership: access.resolveMembership,
@@ -23,6 +26,9 @@ vi.mock("../saas/tenantAccess", () => ({
 }));
 vi.mock("./contextAssembler", () => ({
   assembleClaireDriveContext: assemble.assembleClaireDriveContext,
+}));
+vi.mock("../agents/persistentOperator/operatorAppointmentPolicy", () => ({
+  resolveOperatorTimeZone: operatorZone.resolveOperatorTimeZone,
 }));
 vi.mock("./workdayPlanService", async importOriginal => {
   const actual = await importOriginal<typeof import("./workdayPlanService")>();
@@ -35,7 +41,9 @@ vi.mock("./workdayPlanService", async importOriginal => {
   };
 });
 
-import { claireRouter } from "./claireRouter";
+import { formatInTimeZone } from "date-fns-tz";
+import { addDaysYmd } from "../analytics/businessPeriods";
+import { claireRouter, confirmationTimeZone } from "./claireRouter";
 import {
   assembleTomorrowCandidates,
   confirmWorkdayPlan,
@@ -76,6 +84,7 @@ function caller() {
 
 describe("Claire workday router identifiers", () => {
   beforeEach(() => {
+    operatorZone.resolveOperatorTimeZone.mockResolvedValue("America/Los_Angeles");
     access.resolveMembership.mockResolvedValue({ role: "owner" });
     access.hasEntitlement.mockResolvedValue(true);
     assemble.assembleClaireDriveContext.mockResolvedValue(context);
@@ -123,7 +132,11 @@ describe("Claire workday router identifiers", () => {
   });
 
   it("confirmTomorrow reaches plan confirmation and candidate assembly", async () => {
-    const result = await caller().confirmTomorrow({ timeZone: "America/Los_Angeles" });
+    const result = await caller().confirmTomorrow({ timeZone: "UTC" });
+    expect(operatorZone.resolveOperatorTimeZone).toHaveBeenCalledWith("tenant-1");
+    expect(assemble.assembleClaireDriveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ timeZone: "America/Los_Angeles" })
+    );
     expect(workday.assembleTomorrowCandidates).toHaveBeenCalledWith(context);
     expect(workday.confirmWorkdayPlan).toHaveBeenCalledWith({
       tenantId: "tenant-1",
@@ -139,5 +152,16 @@ describe("Claire workday router identifiers", () => {
     workday.loadConfirmedWorkdayPlan.mockResolvedValue(null);
     const result = await caller().confirmTomorrow({ timeZone: "America/Los_Angeles" });
     expect(result.verified).toBe(false);
+  });
+
+  it("keeps tomorrow on the operator zone when the runner clock is already the next UTC day", () => {
+    const now = new Date("2026-10-15T05:34:00.000Z");
+    expect(confirmationTimeZone("America/Los_Angeles", "UTC")).toBe("America/Los_Angeles");
+    expect(confirmationTimeZone(null, "UTC")).toBe("UTC");
+    expect(confirmationTimeZone("  ", "UTC")).toBe("UTC");
+    const operatorTomorrow = addDaysYmd(formatInTimeZone(now, "America/Los_Angeles", "yyyy-MM-dd"), 1);
+    const utcTomorrow = addDaysYmd(formatInTimeZone(now, "UTC", "yyyy-MM-dd"), 1);
+    expect(operatorTomorrow).toBe("2026-10-15");
+    expect(utcTomorrow).toBe("2026-10-16");
   });
 });

@@ -146,13 +146,21 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
     console.log("Browser boundary: actual Day Line");
     // Open the item's business date; the runner's clock may already be on the next UTC day.
     await page.goto(`/play?date=${saved[0].businessDate}`,{waitUntil:"domcontentloaded"});
-    await expect(page.getByText("DAY LINE DETAILS", { exact: true })).toBeVisible();
-    await page.getByText("DAY LINE DETAILS", { exact: true }).click();
-    await expect(page.getByTestId("current-day-line")).toContainText(
-      selected.items[1]!.title
-    );
-    const line = await rpc(context.request, "system.currentDayLine.today");
-    expect(JSON.stringify(line)).toContain(saved[0].id);
+    await expect(page.getByText(selected.items[1]!.title, { exact: true })).toBeVisible();
+    const line = (await rpc(context.request, "system.currentDayLine.today")) as {
+      businessDate?: string;
+    };
+    // Today's canonical disclosure is omitted on any other selected date.
+    if (line?.businessDate === saved[0].businessDate) {
+      await expect(page.getByText("DAY LINE DETAILS", { exact: true })).toBeVisible();
+      await page.getByText("DAY LINE DETAILS", { exact: true }).click();
+      await expect(page.getByTestId("current-day-line")).toContainText(
+        selected.items[1]!.title
+      );
+      expect(JSON.stringify(line)).toContain(saved[0].id);
+    } else {
+      expect(JSON.stringify(line)).not.toContain(saved[0].id);
+    }
     await page.screenshot({
       path: "artifacts/claire-strategy/acceptance/browser/day-line.png",
       fullPage: true,
