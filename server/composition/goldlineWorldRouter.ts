@@ -42,10 +42,8 @@ import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
-import {
-  getCozyEncounterMission,
-  sendCozyOutreachNow,
-} from "../experience/lanternCity/cozyVillagerOutreachService";
+import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
+import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -64,13 +62,19 @@ export const goldlineWorldRouter = router({
         .optional()
     )
     .query(({ ctx, input }) =>
-      getCozyEncounterMission({
+      loadCozyRecoverySurfaces({
         tenantId: ctx.tenantId,
         canonicalOperatorId: ctx.user.openId,
         territoryId: input?.territoryId,
         limit: input?.limit,
-      })
+      }).then(surfaces => surfaces.mission)
     ),
+  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+    loadCozyRecoverySurfaces({
+      tenantId: ctx.tenantId,
+      canonicalOperatorId: ctx.user.openId,
+    }).then(surfaces => surfaces.dayLineCard)
+  ),
   sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({

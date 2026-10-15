@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { transportLabelFromExternalId } from "@shared/cozyVillagerEvidence";
 import { ArrowLeft, Clock, Edit2, Play, Trash2, Calendar, RefreshCw } from "lucide-react";
 
 function formatToWallClockIso(date: Date | string, timezone: string = "America/Los_Angeles"): string {
@@ -176,6 +177,10 @@ export default function ClaireScheduledOutreach() {
             return (
               <div
                 key={msg.id}
+                data-customer-id={msg.customerId}
+                data-message-id={msg.id}
+                data-outreach-status={msg.status}
+                data-transport={transportLabelFromExternalId(msg.externalMessageId) ?? ""}
                 style={{
                   background: "#ffffff",
                   border: "1px solid #e5e7eb",
@@ -231,6 +236,7 @@ export default function ClaireScheduledOutreach() {
                       }}
                     >
                       {msg.status.toUpperCase().replace(/_/g, " ")}
+                      {transportLabelFromExternalId(msg.externalMessageId) === "simulated" ? " · SIMULATED" : ""}
                     </span>
                   </div>
                 </div>

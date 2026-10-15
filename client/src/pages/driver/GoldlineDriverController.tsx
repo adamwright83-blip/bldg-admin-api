@@ -427,6 +427,10 @@ function LiveGoldlineDriverController({
     refetchInterval: 60_000,
     retry: false,
   });
+  const recoveryOutreachCard = trpc.system.goldlineWorld.cozyRecoveryDayLineCard.useQuery(
+    undefined,
+    { refetchInterval: 60_000, retry: false }
+  );
   const weeklyReadiness = trpc.system.weeklyMission.dailyReadiness.useQuery(
     {
       businessDate: selectedDate,
@@ -1595,6 +1599,10 @@ function LiveGoldlineDriverController({
           currentDayLine.data,
           selectedDate
         )}
+        recoveryOutreachCard={recoveryOutreachCard.data ?? null}
+        onOpenRecoveryOutreach={href => {
+          window.location.assign(href);
+        }}
         weeklyReadiness={weeklyReadiness.data ?? []}
         onEnterChapter={
           kingdomTwoUnlocked

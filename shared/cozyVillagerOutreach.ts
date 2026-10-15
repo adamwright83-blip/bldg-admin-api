@@ -155,7 +155,8 @@ export interface CozyCustomerTarget {
     | "accepted"
     | "consent_blocked"
     | "scheduled"
-    | "awaiting_sender_setup";
+    | "awaiting_sender_setup"
+    | "failed";
   providerReceipt?: {
     messageSid: string;
     status: string;

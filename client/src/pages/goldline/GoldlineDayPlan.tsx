@@ -43,6 +43,7 @@ import {
   type LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
 import type { TerritoryBundleHint } from "@shared/goldlineAdventure";
+import type { CozyRecoveryDayLineCard } from "@shared/cozyVillagerEvidence";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
@@ -171,6 +172,9 @@ export type GoldlineDayPlanProps = {
     status: string;
     onOpen: () => void;
   } | null;
+  /** Existing customer-recovery objective. A send does not complete it. */
+  recoveryOutreachCard?: CozyRecoveryDayLineCard | null;
+  onOpenRecoveryOutreach?: (href: string) => void;
 };
 
 const KIND_LABEL = {
@@ -226,6 +230,62 @@ export function isForcedMobileDayPlanViewport(input: {
     input.screenWidth <= 699 &&
     input.coarsePointer &&
     input.hoverless
+  );
+}
+
+function RecoveryOutreachCard({
+  card,
+  onOpen,
+}: {
+  card: CozyRecoveryDayLineCard;
+  onOpen?: (href: string) => void;
+}) {
+  return (
+    <article
+      className="gdp-stop gdp-stop--growth gdp-stop--ready"
+      data-testid="recovery-outreach-day-line-card"
+      data-objective-id={card.objectiveId}
+      data-customer-id={card.customerId ?? ""}
+      data-message-id={card.messageId ?? ""}
+      data-communication-state={card.communicationState ?? ""}
+      data-objective-complete="false"
+    >
+      <div className="gdp-node" aria-hidden="true">
+        1
+      </div>
+      <div className="gdp-card-copy">
+        <div className="gdp-card-kicker">
+          <span>CUSTOMER RECOVERY</span>
+          <strong>OPEN</strong>
+        </div>
+        <h2>
+          <button
+            type="button"
+            className="gdp-stop-open"
+            onClick={() => onOpen?.(card.openHref)}
+            aria-label={`Open ${card.missionTitle}`}
+          >
+            {card.missionTitle}
+            <ChevronRight size={17} />
+          </button>
+        </h2>
+        {card.missionTitle !== card.objectiveStatement ? <p>{card.objectiveStatement}</p> : null}
+        <div className="gdp-card-meta">
+          <span>
+            {card.customerDisplayName ?? "No unfinished customer"}
+            {card.customerId ? ` · ${card.customerId}` : ""}
+            {card.communicationLabel ? ` · ${card.communicationLabel}` : ""}
+          </span>
+        </div>
+        <div className="gdp-source">{card.nextAction}</div>
+        {card.timeWindow ? <div className="gdp-card-meta">{card.timeWindow}</div> : null}
+        {card.presentationNote ? <div className="gdp-source">{card.presentationNote}</div> : null}
+        <div className="gdp-source">{card.evidenceToComplete}</div>
+        {card.transport === "simulated" ? (
+          <div className="gdp-source">Simulated transport. Not a live carrier delivery.</div>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -785,6 +845,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           {completedCount} / {plan.stops.length} COMPLETE
         </span>
       </div>
+      {props.recoveryOutreachCard ? (
+        <RecoveryOutreachCard
+          card={props.recoveryOutreachCard}
+          onOpen={props.onOpenRecoveryOutreach}
+        />
+      ) : null}
 
       {artPreview && props.currentDayLine && (
         <details className="gdp-dayline-disclosure">
