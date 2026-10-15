@@ -15,7 +15,7 @@
  * do not count.
  *
  * This module does not write business rows and does not write unlock rows.
- * Insert-only chapter permanence needs a migration that is not added here.
+ * Insert-once chapter permanence lives in lostPropertyChapterUnlock.ts.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import {

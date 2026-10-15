@@ -14,6 +14,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  tinyint,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -10383,4 +10384,33 @@ export const smsComposeHandoffAudits = mysqlTable(
 
 export type SmsComposeHandoffAuditRow = typeof smsComposeHandoffAudits.$inferSelect;
 export type InsertSmsComposeHandoffAudit = typeof smsComposeHandoffAudits.$inferInsert;
+
+/**
+ * Insert-once Lost Property chapter unlock.
+ * openedAt is the ledger time that opened the chapter, not the insert time.
+ * A row stays when a later recompute would have withheld the evidence.
+ * Chapter is 1, 2, or 3. Chapter 4 is not stored.
+ */
+export const hiddenGameChapterUnlocks = mysqlTable(
+  "hidden_game_chapter_unlocks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    chapter: tinyint("chapter").notNull(),
+    openedAt: timestamp("openedAt", { fsp: 3 }).notNull(),
+    evidenceJson: json("evidenceJson").notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    unlockUnique: uniqueIndex("uq_hidden_game_chapter_unlock").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.chapter
+    ),
+  })
+);
+
+export type HiddenGameChapterUnlockRow = typeof hiddenGameChapterUnlocks.$inferSelect;
+export type InsertHiddenGameChapterUnlock = typeof hiddenGameChapterUnlocks.$inferInsert;
 
