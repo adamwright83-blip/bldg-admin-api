@@ -45,8 +45,17 @@ export async function refreshStrategicDiagnosis(input: {
     registry,
   });
   // Model-selected research enriches preparation as hypothesis evidence. Existing metric and ranking authority stays intact.
-  // Reuse the prepared diagnosis for an hour so scheduled calls do not repeatedly pay for research.
-  if (!prior || now.getTime() - Date.parse(prior.generatedAt) >= 3600000) {
+  // Reuse a receipt for an hour so scheduled calls do not repeatedly pay for research.
+  // A missing receipt is not reused: the first failure must not hide the source-backed read.
+  const priorResearch =
+    prior?.evidence.filter(e => e.source === "analyzeBusinessData") ?? [];
+  const reuseResearch =
+    Boolean(prior) &&
+    now.getTime() - Date.parse(prior!.generatedAt) < 3600000 &&
+    priorResearch.length > 0;
+  if (reuseResearch) {
+    facts.evidence.push(...priorResearch);
+  } else {
     const research = await investigateForPreparation({
       tenantId: input.identity.tenantId,
       objective: facts.focus?.statement ?? facts.goal.statement,
@@ -66,10 +75,6 @@ export async function refreshStrategicDiagnosis(input: {
         description: [research.answer, ...research.limitations].join(" "),
       });
     }
-  } else {
-    facts.evidence.push(
-      ...prior.evidence.filter(e => e.source === "analyzeBusinessData")
-    );
   }
   const diagnosis = assembleStrategicDiagnosis(facts, registry);
   const content = (d: typeof diagnosis) =>

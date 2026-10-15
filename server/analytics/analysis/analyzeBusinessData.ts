@@ -389,6 +389,46 @@ function sourcePopulationUnobserved(dataset: ApprovedDataset): boolean {
   return failed !== "" && failed !== "none";
 }
 
+const CONNECTED_CUSTOMER_SQL =
+  "SELECT name, lifetime_cents, paid_orders FROM customers";
+
+/** Model-free receipt. The server renders names and amounts from the tenant's approved rows. */
+export async function connectedCustomerReceipt(input: {
+  tenantId: string;
+  now: Date;
+  timeZone: string;
+  signal?: AbortSignal;
+}): Promise<BusinessAnalysisEvidence | null> {
+  if (!input.tenantId.trim()) return null;
+  try {
+    const dataset = await buildApprovedDataset({
+      tenantId: input.tenantId,
+      now: input.now,
+      timeZone: input.timeZone,
+      signal: input.signal,
+      lookbackDays: 395,
+    });
+    if (dataset.tenantId !== input.tenantId) return null;
+    const result = await executeAnalysisQuery({
+      tenantId: input.tenantId,
+      dataset,
+      sql: CONNECTED_CUSTOMER_SQL,
+      signal: input.signal,
+    });
+    if (result.receipt.status !== "ok" || result.receipt.tenantId !== input.tenantId)
+      return null;
+    return {
+      kind: "evidence",
+      answer: renderEvidence(result, dataset),
+      results: [result],
+      citedReceiptIds: [result.receipt.id],
+      limitations: dataset.limitations,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderEvidence(
   result: AnalysisQueryResult,
   dataset: ApprovedDataset

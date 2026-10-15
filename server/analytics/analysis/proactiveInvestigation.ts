@@ -1,5 +1,6 @@
 import {
   analyzeBusinessData,
+  connectedCustomerReceipt,
   PROACTIVE_ANALYSIS_BUDGET_MS,
   type BusinessAnalysisEvidence,
 } from "./analyzeBusinessData";
@@ -33,7 +34,8 @@ export function createProactiveResearchGate() {
 
   return async function investigate(
     input: Request,
-    analyze: typeof analyzeBusinessData = analyzeBusinessData
+    analyze: typeof analyzeBusinessData = analyzeBusinessData,
+    sourceReceipt: typeof connectedCustomerReceipt = connectedCustomerReceipt
   ): Promise<BusinessAnalysisEvidence | null> {
     const objective = input.objective?.trim();
     if (!input.tenantId.trim() || !objective) return null;
@@ -69,9 +71,18 @@ export function createProactiveResearchGate() {
             })
           ),
         ]);
-        return analysis?.kind === "evidence" ? analysis : null;
+        if (analysis?.kind === "evidence") return analysis;
+        return await sourceReceipt({
+          tenantId: input.tenantId,
+          now: input.now,
+          timeZone: input.timeZone,
+        });
       } catch {
-        return null;
+        return sourceReceipt({
+          tenantId: input.tenantId,
+          now: input.now,
+          timeZone: input.timeZone,
+        }).catch(() => null);
       } finally {
         clearTimeout(timer);
         controller.abort();

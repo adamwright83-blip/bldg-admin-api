@@ -578,7 +578,8 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
           now: FIXTURE_NOW,
           timeZone: FIXTURE_TZ,
         },
-        analyze
+        analyze,
+        async () => null
       )
     ).toBeNull();
     expect(analyze.mock.calls[0]![0]).toMatchObject({
@@ -586,6 +587,36 @@ describe("bounded investigation (mocked model; real sandbox)", () => {
       tenantId: "tenant-a",
       budgetMs: 25000,
     });
+  });
+  it("keeps the server-rendered customer receipt when the model does not return evidence", async () => {
+    const gate = createProactiveResearchGate();
+    const analyze = vi.fn(async () => ({ kind: "execution_error" }) as any);
+    const sourceReceipt = vi.fn(async () => ({
+      kind: "evidence" as const,
+      answer:
+        "The recorded evidence shows: Fixture Buyer, lifetime cents: $42.00, paid orders: 1.",
+      results: [],
+      citedReceiptIds: ["receipt-fixture"],
+      limitations: [],
+    }));
+    const result = await gate(
+      {
+        tenantId: "tenant-receipt",
+        objective: "See the recorded customer",
+        now: FIXTURE_NOW,
+        timeZone: FIXTURE_TZ,
+      },
+      analyze,
+      sourceReceipt
+    );
+    expect(sourceReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-receipt" })
+    );
+    expect(result?.kind).toBe("evidence");
+    expect(result?.answer).toContain("Fixture Buyer");
+    expect(result?.answer).toContain("$42.00");
+    expect(result?.answer).toContain("paid orders: 1");
+    expect(result?.citedReceiptIds).toEqual(["receipt-fixture"]);
   });
 });
 
@@ -681,9 +712,11 @@ describe("scheduled proactive model-call reuse", () => {
   it("failed investigations consume the cooldown and do not trigger paid retry storms", async () => {
     const gate = createProactiveResearchGate();
     const model = vi.fn(async () => { throw new Error("Provider failure"); });
+    const sourceReceipt = vi.fn(async () => null);
     const input = requestFor("reuse-failure", "Retention", FIXTURE_NOW);
-    expect(await gate(input, model as any)).toBeNull();
-    expect(await gate(input, model as any)).toBeNull();
+    expect(await gate(input, model as any, sourceReceipt)).toBeNull();
+    expect(await gate(input, model as any, sourceReceipt)).toBeNull();
     expect(model).toHaveBeenCalledTimes(1);
+    expect(sourceReceipt).toHaveBeenCalledTimes(1);
   });
 });
