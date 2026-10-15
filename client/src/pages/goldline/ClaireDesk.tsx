@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { CLAIRE_DAILY_CALL_DEFAULTS, matchesClaireDailyCallDefaults, type ClaireDailyCallPurpose } from "../../../../shared/claireDailyCallDefaults";
 import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
@@ -333,12 +334,17 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
   const [result, setResult] = useState<Record<string, string>>({});
   const data = calls as DailyCalls | null;
   const zone = data?.timeZone ?? null;
-  const plans = [
-    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–9:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "09:00" },
-    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "Monday–Saturday, 5:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6], start: "17:30", end: "19:00" },
-  ];
-  // Rows stay visible while they show this session's verified result.
-  const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled || result[p.purpose]);
+  const plans = (["morning_readiness", "evening_debrief"] as const).map(purpose => ({
+    purpose,
+    ...CLAIRE_DAILY_CALL_DEFAULTS[purpose],
+  }));
+  const saved = (purpose: ClaireDailyCallPurpose) =>
+    data?.[purpose] as { enabled?: boolean; grant?: { weekdays: number[]; localStart: string; localEnd: string } | null } | undefined;
+  const needsUpdate = (purpose: ClaireDailyCallPurpose) =>
+    Boolean(saved(purpose)?.enabled) && !matchesClaireDailyCallDefaults(purpose, saved(purpose)?.grant);
+  // Existing, previously consented schedules remain in force until the operator
+  // explicitly chooses the corrected one. Surface that correction prominently.
+  const off = plans.filter(p => !saved(p.purpose)?.enabled || needsUpdate(p.purpose) || result[p.purpose]);
   if (!data || !off.length) return null;
   return (
     <section className="cd-card cd-activate" aria-label="Daily routine" data-testid="activate-routine">
@@ -346,7 +352,10 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
       <p className="cd-small">Recommended. Each call is its own permission; allowing one never allows the other. Times are {zone ?? "business time"}.</p>
       {off.map(p => (
         <div key={p.purpose} className="cd-activate-row">
-          <span><strong>{p.label}</strong> — {p.when}</span>
+          <span>
+            <strong>{p.label}</strong> — {p.when}
+            {needsUpdate(p.purpose) ? <small> · Previously saved schedule differs. Update it to use this daily routine.</small> : null}
+          </span>
           {result[p.purpose] ? null : <button
             type="button"
             className="cd-gold"
@@ -354,7 +363,7 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
             data-testid={`activate-${p.purpose}`}
             onClick={() =>
               void grant
-                .mutateAsync({ purpose: p.purpose, weekdays: p.weekdays, localStart: p.start, localEnd: p.end, timeZone: zone!, consent: true })
+                .mutateAsync({ purpose: p.purpose, weekdays: [...p.weekdays], localStart: p.start, localEnd: p.end, timeZone: zone!, consent: true })
                 .then(r => {
                   const when = r.status?.nextScheduled ?? r.status?.nextWindow;
                   setResult(v => ({ ...v, [p.purpose]: when ? `Verified. First call window: ${new Date(when).toLocaleString()}.` : "Allowed, but no upcoming window was found." }));
@@ -363,7 +372,7 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
                 .finally(onChanged)
             }
           >
-            Allow {p.label.toLowerCase()} calls
+            {needsUpdate(p.purpose) ? "Update" : "Allow"} {p.label.toLowerCase()} calls
           </button>}
           {result[p.purpose] ? <p role="status" className="cd-small" data-testid={`activate-${p.purpose}-result`}>{result[p.purpose]}</p> : null}
         </div>
