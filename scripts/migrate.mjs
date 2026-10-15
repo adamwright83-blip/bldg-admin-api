@@ -5409,6 +5409,18 @@ await assertRequiredColumns("scheduled_outreach_revisions", [
   "message_body",
   "edited_by",
 ]);
+await assertRequiredColumns("sms_compose_handoff_audits", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "message_id",
+  "revision_count",
+  "body_digest",
+  "handoff_state",
+  "surface",
+  "invoked_at",
+  "created_at",
+]);
 await assertRequiredColumns("personal_sender_identities", [
   "id",
   "tenant_id",

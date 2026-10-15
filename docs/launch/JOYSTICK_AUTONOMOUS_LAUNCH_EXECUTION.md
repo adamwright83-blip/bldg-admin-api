@@ -4,9 +4,9 @@ Operational ledger. Integration branch: `cursor/joystick-launch-integration-50a9
 
 | Track | Branch | State | Evidence | Next |
 |---|---|---|---|---|
-| D Day Line action | `cursor/lantern-dayline-honest-action-50a9` | owner assigned, no pushed commit yet | — | edit/schedule the existing recovery draft on the one Day Line card |
-| A Android handoff | `cursor/android-sms-compose-handoff-50a9` | owner assigned, no pushed commit yet | — | `sms:` compose handoff; unattended send stays BLOCKED |
-| B CleanCloud freshness | `cursor/cleancloud-freshness-diagnostic-50a9` `b888e4f4` | integrated at `52ebed10` | 20 unit tests passed; no production customer read | wire into Claire's visible withholding only if the dossier sentence is not already enough |
-| F–I, K | — | waiting | — | start after D and A each have one pushed commit |
+| D Day Line action | `cursor/lantern-dayline-honest-action-50a9` `66281f12` | integrated | card schedules the existing draft; objective stays incomplete; schedule is not a send | browser pass on the card |
+| A Android handoff | `cursor/android-sms-compose-handoff-50a9` `cc44de54` | integrated | 52 sender/handoff tests reported; Android prefill not claimed; outbox not dispatched; `BLOCKED` | migration `0134` column check added on the integration branch; not applied to production |
+| B CleanCloud freshness | `cursor/cleancloud-freshness-diagnostic-50a9` `b888e4f4` | integrated | 20 unit tests passed; no production customer read | none for this slice |
+| F–I, K | starting | owners assigned after D/A/B commits | — | Stripe test-mode, onboarding, backup readiness, landing/domain checklist, optional AI Gateway flag |
 
 Blockers that are not engineering stops: no named production customer read, no SMS send, no Stripe live charge, no domain purchase, no production migration.
