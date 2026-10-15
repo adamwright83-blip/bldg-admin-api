@@ -42,6 +42,10 @@ import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
+import {
+  getCozyEncounterMission,
+  sendCozyOutreachSms,
+} from "../experience/lanternCity/cozyVillagerOutreachService";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -50,6 +54,50 @@ export const goldlineWorldRouter = router({
       operatorId: ctx.user.openId,
     })
   ),
+  cozyVillagerMission: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          territoryId: z.string().optional(),
+          limit: z.number().int().min(1).max(8).optional(),
+        })
+        .optional()
+    )
+    .query(({ ctx, input }) =>
+      getCozyEncounterMission({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: ctx.user.openId,
+        territoryId: input?.territoryId,
+        limit: input?.limit,
+      })
+    ),
+  sendCozyOutreachSms: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        customerId: z.string().min(1),
+        recipientPhone: z.string().min(5),
+        messageBody: z.string().min(1).max(500),
+        idempotencyKey: z.string().uuid(),
+        slotId: z.enum([
+          "slot_01",
+          "slot_02",
+          "slot_03",
+          "slot_04",
+          "slot_05",
+          "slot_06",
+          "slot_07",
+          "slot_08",
+        ]),
+        territoryId: z.string().optional(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      sendCozyOutreachSms({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        ...input,
+      })
+    ),
   frontierIntelligence: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({

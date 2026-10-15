@@ -24,6 +24,7 @@ import {
   type SceneObject,
   type TerritoryTruth,
 } from "./sceneTypes";
+import { CozyNeighborhoodEncounter } from "./CozyNeighborhoodEncounter";
 import styles from "./lantern-city-v6.module.css";
 
 function Room({
@@ -64,10 +65,12 @@ function TerritoryRoom({
   truth,
   onClose,
   onCustomers,
+  onOpenCozyEncounter,
 }: {
   truth: TerritoryTruth;
   onClose: () => void;
   onCustomers: () => void;
+  onOpenCozyEncounter?: (territoryId: string) => void;
 }) {
   const territory = truth.occupancy.territory;
   const center = territoryCenter(territory);
@@ -91,7 +94,25 @@ function TerritoryRoom({
             : "Unclaimed territory"}
       </p>
       {truth.customers.length ? (
-        <button onClick={onCustomers}>View customer records</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+          <button onClick={onCustomers}>View customer records</button>
+          {onOpenCozyEncounter && (
+            <button
+              onClick={() => onOpenCozyEncounter(territory.id)}
+              style={{
+                background: "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)",
+                color: "#3b2203",
+                fontWeight: 700,
+                border: "1px solid #d28510",
+                cursor: "pointer",
+                padding: "8px 12px",
+                borderRadius: "6px",
+              }}
+            >
+              🏮 Enter Cozy Villager Outreach ({truth.customers.length} Targets)
+            </button>
+          )}
+        </div>
       ) : (
         <p>Light the first lantern with a verified customer order.</p>
       )}
@@ -150,6 +171,11 @@ export default function LanternCityScene({
   );
   const [rekindle, setRekindle] = useState(false);
   const [search, setSearch] = useState("");
+  const [cozyEncounterTerritory, setCozyEncounterTerritory] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const p = new URLSearchParams(window.location.search);
+    return p.get("cozy") || p.get("encounter") ? (p.get("territory") ?? "silver-lake") : null;
+  });
   const transition = useWorldTransition();
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
     staleTime: 30000,
@@ -479,6 +505,26 @@ export default function LanternCityScene({
                 Select a customer group to review cadence and open its real
                 recovery workflow.
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCommand("map");
+                  setCozyEncounterTerritory("silver-lake");
+                }}
+                style={{
+                  background: "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)",
+                  color: "#3b2203",
+                  fontWeight: 700,
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #d28510",
+                  cursor: "pointer",
+                  marginBottom: "12px",
+                  textAlign: "center",
+                }}
+              >
+                🏮 Enter Cozy Villager Outreach (Silver Lake Recovery)
+              </button>
               {scene.objects
                 .filter(o => o.cluster && o.cluster.active < o.cluster.total)
                 .map(o => (
@@ -581,6 +627,26 @@ export default function LanternCityScene({
             if (requestedEntityId)
               window.history.replaceState({}, "", "/growth/lantern-city");
           }}
+        />
+      ) : null}
+      {selectedTerritory && !cozyEncounterTerritory && !inspect && !rekindle ? (
+        <TerritoryRoom
+          truth={selectedTerritory}
+          onClose={() => setTerritoryId(null)}
+          onCustomers={() => setCommand("customers")}
+          onOpenCozyEncounter={(tId) => setCozyEncounterTerritory(tId)}
+        />
+      ) : null}
+      {cozyEncounterTerritory ? (
+        <CozyNeighborhoodEncounter
+          territoryId={cozyEncounterTerritory}
+          onExit={() => {
+            setCozyEncounterTerritory(null);
+            if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cozy")) {
+              window.history.replaceState({}, "", "/growth/lantern-city");
+            }
+          }}
+          onOpenCustomer={onOpenCustomer}
         />
       ) : null}
     </main>
