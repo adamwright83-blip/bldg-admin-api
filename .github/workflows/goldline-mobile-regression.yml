@@ -240,7 +240,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 5
+    # Checkout, migrations, and Chromium use most of five minutes on a busy runner.
+    # The driver files below set their own budget. Every other lane stays at five.
+    timeout-minutes: ${{ matrix.timeout || 5 }}
     strategy:
       fail-fast: false
       matrix:
@@ -270,14 +272,35 @@ jobs:
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
               --grep 'five mount cycles'
-          - name: mobile-driver-shell-and-pixel
+          - name: mobile-driver-action-resume
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/businessActionResume.spec.ts
+          - name: mobile-driver-home-composition
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeComposition.spec.ts
+          - name: mobile-driver-home-p1-safety
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeP1Safety.spec.ts
+          - name: mobile-driver-home-world
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeWorldComposition.spec.ts
+          - name: mobile-driver-typography-floor
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/mobileTypographyFloor.spec.ts
+          - name: mobile-driver-pixel-layout
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/pixel9Layout.spec.ts
           - name: mobile-dayline-graphic-actions
             command: node --test extensions/gumballpals/pickup-page.test.mjs && pnpm exec playwright test --config playwright.dayline-art.config.ts
