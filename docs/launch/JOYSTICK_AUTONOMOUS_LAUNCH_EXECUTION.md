@@ -11,6 +11,6 @@ Operational ledger. Integration branch: `cursor/joystick-launch-integration-50a9
 | K2 AI Gateway | `cursor/cloudflare-ai-gateway-flag-50a9` `7f702358` | integrated, unused | flag default off; 9 tests passed; not wired into Claire, President, or speech | production traffic unchanged until a separate approval |
 | H Backup | `cursor/backup-restore-readiness-50a9` `a8efa10a` | integrated, not on main | drill refuses production; this branch's daily retention cannot delete; `main` cron is still unguarded | founder must enable a Railway daily volume backup and must not restore over production |
 | G Onboarding | `cursor/onboarding-first-value-50a9` `7c3d90d1` | integrated | unconnected preview labeled illustrative; first action is operator-reported; second tenant cannot read the session | focused tests 10 passed |
-| F Stripe | starting | owner assigned | — | not integrated yet |
+| F Stripe | `cursor/stripe-trial-checkout-50a9` `e9f340af` | integrated, checkout closed | monthly 4900 usd month and trial 7 required; annual if set must be 46800 usd year; no account id stored; 19 focused tests passed | founder must create the JOYSTICK Stripe prices and set the allowlisted account id before checkout can open |
 
 Blockers that are not engineering stops: no named production customer read, no SMS send, no Stripe live charge, no domain purchase, no production migration.
