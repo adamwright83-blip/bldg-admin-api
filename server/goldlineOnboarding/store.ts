@@ -3,14 +3,16 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
-import { nextGoldlineOnboardingQuestion, onboardingAnswersByKey, type GoldlineOnboardingQuestionKey, type GoldlineOnboardingSession } from "../../shared/goldlineOnboarding";
+import { nextGoldlineOnboardingQuestion, onboardingAnswersByKey, onboardingReadTenantId, sessionForReader, type GoldlineOnboardingQuestionKey, type GoldlineOnboardingSession } from "../../shared/goldlineOnboarding";
 export async function onboardingDb() { const db = await getDb(); if (!db) throw new Error("Database not available"); return db; }
 export function resultRows(result: unknown): any[] { return (result as any)[0] ?? []; }
 export async function readSession(tenantId: string): Promise<GoldlineOnboardingSession | null> {
+ const reader = onboardingReadTenantId(tenantId);
  const db = await onboardingDb();
- const rows = resultRows(await db.execute(sql`SELECT payload FROM goldline_onboarding_sessions WHERE tenantId=${tenantId}`));
+ const rows = resultRows(await db.execute(sql`SELECT payload FROM goldline_onboarding_sessions WHERE tenantId=${reader}`));
  if (!rows.length) return null;
- return typeof rows[0].payload === "string" ? JSON.parse(rows[0].payload) : rows[0].payload;
+ const session: GoldlineOnboardingSession = typeof rows[0].payload === "string" ? JSON.parse(rows[0].payload) : rows[0].payload;
+ return sessionForReader(session, reader);
 }
 /**
  * Does this tenant already own a canonical Goldline world it must keep?
