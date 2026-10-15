@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import { trpc } from "@/lib/trpc";
+import {
+  SMS_COMPOSE_APPROVAL_CONFIRMATION,
+  SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+  clientKindFromUserAgent,
+  type SmsComposeUriResult,
+} from "../../../../../../server/experience/lanternCity/personalNumber/smsComposeHandoff";
 import styles from "./cozy-neighborhood.module.css";
 
 interface CozyMessageComposerProps {
@@ -31,6 +38,16 @@ export function CozyMessageComposer({
   const [message, setMessage] = useState(target.preparedMessage || target.suggestedMessage);
   const [isListening, setIsListening] = useState(false);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [approvedBody, setApprovedBody] = useState<string | null>(null);
+  const [approvalRevision, setApprovalRevision] = useState(1);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffReveal, setHandoffReveal] = useState<SmsComposeUriResult & {
+    state: string;
+    verifiedSent: false;
+    pose: "idle" | "wave";
+  } | null>(null);
+  const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
+  const reportSent = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
 
   // Default schedule: tomorrow at 10:00 AM Pacific (America/Los_Angeles)
   const getDefaultScheduleIso = () => {
@@ -59,6 +76,10 @@ export function CozyMessageComposer({
   useEffect(() => {
     setMessage(target.preparedMessage || target.suggestedMessage);
     setShowSchedulePicker(false);
+    setApprovedBody(null);
+    setApprovalRevision(1);
+    setHandoffError(null);
+    setHandoffReveal(null);
   }, [target.customerId, target.preparedMessage, target.suggestedMessage]);
 
   const handleTalkToText = () => {
@@ -104,6 +125,70 @@ export function CozyMessageComposer({
     if (!message.trim() || isSending || !target.hasConsent) return;
     const idempotencyKey = crypto.randomUUID();
     onSendNow(target, message.trim(), idempotencyKey);
+  };
+
+  const textApproved = approvedBody !== null && approvedBody === message.trim();
+
+  const handleApproveText = () => {
+    const next = message.trim();
+    if (!next) return;
+    if (next !== approvedBody) {
+      setApprovalRevision((current) => (approvedBody === null ? 1 : current + 1));
+      setHandoffReveal(null);
+    }
+    setApprovedBody(next);
+    setHandoffError(null);
+  };
+
+  const handleOpenSms = async () => {
+    if (!textApproved || !approvedBody || !target.phone || isSending || !target.hasConsent) return;
+    setHandoffError(null);
+    try {
+      const clientKind = clientKindFromUserAgent(navigator.userAgent || "");
+      const result = await openHandoff.mutateAsync({
+        messageId: target.messageId ?? `cozy:${target.customerId}`,
+        revisionCount: approvalRevision,
+        approvedBody,
+        recipientPhone: target.phone,
+        confirmation: SMS_COMPOSE_APPROVAL_CONFIRMATION,
+        clientKind,
+        surface: "cozy_composer",
+        pageUrl: `${window.location.origin}${window.location.pathname}`,
+        origin: window.location.origin,
+      });
+      setHandoffReveal(result);
+    } catch (err: unknown) {
+      setHandoffError(err instanceof Error ? err.message : "The SMS app was not opened.");
+    }
+  };
+
+  const handleReportSent = async () => {
+    if (!textApproved || !approvedBody || handoffReveal?.state !== "compose_opened") return;
+    setHandoffError(null);
+    try {
+      const result = await reportSent.mutateAsync({
+        messageId: target.messageId ?? `cozy:${target.customerId}`,
+        revisionCount: approvalRevision,
+        approvedBody,
+        confirmation: SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+        surface: "cozy_composer",
+      });
+      setHandoffReveal((current) =>
+        current
+          ? {
+              ...current,
+              state: result.state,
+              verifiedSent: false,
+              pose: result.pose,
+              uri: null,
+              bodyPrefillClaimed: false,
+              prefillClaim: "not_prefilled",
+            }
+          : current
+      );
+    } catch (err: unknown) {
+      setHandoffError(err instanceof Error ? err.message : "The report was not recorded.");
+    }
   };
 
   const handleCommitSchedule = () => {
@@ -287,6 +372,61 @@ export function CozyMessageComposer({
           </div>
         )}
 
+        {textApproved ? (
+          <div className={styles.handoffNote} data-sms-approval="current">
+            Approved for this text, revision {approvalRevision}. Opening SMS does not send it.
+          </div>
+        ) : approvedBody ? (
+          <div className={styles.handoffNote} data-sms-approval="stale">
+            This edit is not covered by the earlier approval. Approve the new text before opening SMS.
+          </div>
+        ) : null}
+
+        {handoffReveal && (
+          <div
+            className={styles.handoffPanel}
+            data-sms-handoff-state={handoffReveal.state}
+            data-body-prefill-claimed={handoffReveal.bodyPrefillClaimed ? "true" : "false"}
+            data-villager-pose={handoffReveal.pose}
+            data-verified-sent="false"
+          >
+            <strong>
+              {handoffReveal.state === "operator_reported_sent"
+                ? "Operator reported sent"
+                : "Compose opened"}
+            </strong>
+            <p>
+              {handoffReveal.state === "operator_reported_sent"
+                ? "You reported that you sent this from your phone. That report is not an independent verification and the outbox was not marked dispatched."
+                : "The handoff is recorded. This is not a carrier receipt and the villager is not marked sent."}
+            </p>
+            {handoffReveal.kind === "desktop_continuation" && handoffReveal.continuationHref ? (
+              <>
+                <p>{handoffReveal.continuationLabel}</p>
+                <a href={handoffReveal.continuationHref}>{handoffReveal.continuationHref}</a>
+              </>
+            ) : null}
+            {handoffReveal.kind === "copy_fallback" && handoffReveal.copyBody ? (
+              <>
+                <p>{handoffReveal.copyLabel}</p>
+                <textarea readOnly value={handoffReveal.copyBody} rows={3} />
+              </>
+            ) : null}
+            {handoffReveal.kind === "missing_body" ? <p>{handoffReveal.copyLabel}</p> : null}
+            {handoffReveal.uri ? (
+              <a href={handoffReveal.uri}>
+                {handoffReveal.bodyPrefillClaimed ? "Open SMS with this message" : "Open the number in your SMS app"}
+              </a>
+            ) : null}
+            {handoffReveal.state === "compose_opened" ? (
+              <button type="button" onClick={() => void handleReportSent()} disabled={reportSent.isPending}>
+                I sent this from my phone
+              </button>
+            ) : null}
+          </div>
+        )}
+        {handoffError ? <div className={styles.handoffNote}>{handoffError}</div> : null}
+
         {/* Two Canonical Actions: SEND NOW & CLOCK ICON -> SCHEDULE SEND */}
         <div className={styles.buttonRow}>
           <button
@@ -306,6 +446,24 @@ export function CozyMessageComposer({
             title="Schedule Send"
           >
             ⏰ SCHEDULE
+          </button>
+
+          <button
+            type="button"
+            className={styles.scheduleButton}
+            onClick={handleApproveText}
+            disabled={!message.trim() || isActionCommitted}
+          >
+            APPROVE
+          </button>
+
+          <button
+            type="button"
+            className={styles.sendButton}
+            onClick={() => void handleOpenSms()}
+            disabled={!textApproved || !target.phone || !target.hasConsent || isSending || openHandoff.isPending}
+          >
+            {openHandoff.isPending ? "OPENING..." : "OPEN IN SMS"}
           </button>
 
           <button

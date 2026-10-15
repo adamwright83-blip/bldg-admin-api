@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { transportLabelFromExternalId } from "@shared/cozyVillagerEvidence";
+import {
+  SMS_COMPOSE_APPROVAL_CONFIRMATION,
+  SMS_COMPOSE_HANDOFF_STATE_LABELS,
+  SMS_COMPOSE_HANDOFF_STATES,
+  SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+  clientKindFromUserAgent,
+  type SmsComposeUriResult,
+} from "../../../../server/experience/lanternCity/personalNumber/smsComposeHandoff";
 import { ArrowLeft, Clock, Edit2, Play, Trash2, Calendar, RefreshCw } from "lucide-react";
 
 function formatToWallClockIso(date: Date | string, timezone: string = "America/Los_Angeles"): string {
@@ -90,6 +98,24 @@ export default function ClaireScheduledOutreach() {
   );
 
   const messages = outboxQuery.data ?? [];
+  const handoffItems = useMemo(
+    () =>
+      (outboxQuery.data ?? []).map((msg) => ({
+        messageId: msg.id,
+        revisionCount: msg.revisionCount,
+        approvedBody: msg.currentMessageBody,
+      })),
+    [outboxQuery.data]
+  );
+  const handoffQuery = trpc.system.goldlineWorld.smsComposeHandoffSnapshot.useQuery(
+    { items: handoffItems },
+    { enabled: handoffItems.length > 0 }
+  );
+  const [composeNotice, setComposeNotice] = useState<
+    Record<string, SmsComposeUriResult & { state: string; verifiedSent: false; pose: "idle" | "wave" }>
+  >({});
+  const openSmsMutation = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
+  const reportSmsMutation = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px 16px", fontFamily: "inherit" }}>
@@ -341,6 +367,45 @@ export default function ClaireScheduledOutreach() {
                   </div>
                 )}
 
+                {(() => {
+                  const handoff = handoffQuery.data?.find(
+                    (item) => item.messageId === msg.id && item.revisionCount === msg.revisionCount
+                  );
+                  const notice = composeNotice[msg.id];
+                  return (
+                    <div
+                      data-sms-handoff-state={handoff?.state ?? "draft"}
+                      data-sms-handoff-covers={handoff?.covers ? "true" : "false"}
+                      data-villager-pose={handoff?.pose ?? "idle"}
+                      data-verified-sent="false"
+                      style={{ fontSize: "12px", color: "#4b5563", marginBottom: "10px" }}
+                    >
+                      {handoff?.covers
+                        ? `${handoff.label}. Not an independent verification and not a carrier receipt.`
+                        : "No compose handoff covers this revision."}
+                      {notice?.kind === "desktop_continuation" && notice.continuationHref ? (
+                        <div style={{ marginTop: "6px" }}>
+                          <div>{notice.continuationLabel}</div>
+                          <a href={notice.continuationHref}>{notice.continuationHref}</a>
+                        </div>
+                      ) : null}
+                      {notice?.kind === "copy_fallback" && notice.copyBody ? (
+                        <div style={{ marginTop: "6px" }}>
+                          <div>{notice.copyLabel}</div>
+                          <textarea readOnly value={notice.copyBody} rows={3} style={{ width: "100%", marginTop: "4px" }} />
+                        </div>
+                      ) : null}
+                      {notice?.uri ? (
+                        <div style={{ marginTop: "6px" }}>
+                          <a href={notice.uri}>
+                            {notice.bodyPrefillClaimed ? "Open SMS with this message" : "Open the number in your SMS app"}
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
                 {/* Original Claire Draft Comparison if edited */}
                 {msg.revisionCount > 1 && msg.originalSuggestedDraft !== msg.currentMessageBody && (
                   <div style={{ fontSize: "11.5px", color: "#6b7280", marginBottom: "10px", paddingLeft: "4px" }}>
@@ -522,6 +587,109 @@ export default function ClaireScheduledOutreach() {
                       <Trash2 size={13} /> Cancel
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const result = await openSmsMutation.mutateAsync({
+                              messageId: msg.id,
+                              revisionCount: msg.revisionCount,
+                              approvedBody: msg.currentMessageBody,
+                              recipientPhone: msg.recipientPhone,
+                              confirmation: SMS_COMPOSE_APPROVAL_CONFIRMATION,
+                              clientKind: clientKindFromUserAgent(navigator.userAgent || ""),
+                              surface: "scheduled_outreach",
+                              pageUrl: `${window.location.origin}${window.location.pathname}`,
+                              origin: window.location.origin,
+                            });
+                            setComposeNotice((current) => ({ ...current, [msg.id]: result }));
+                            void utils.system.goldlineWorld.smsComposeHandoffSnapshot.invalidate();
+                          } catch (err: unknown) {
+                            alert(err instanceof Error ? err.message : "The SMS app was not opened.");
+                          }
+                        })();
+                      }}
+                      disabled={openSmsMutation.isPending}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "5px 12px",
+                        background: "#ffffff",
+                        color: "#1f2937",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "5px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                      }}
+                    >
+                      OPEN IN SMS
+                    </button>
+                    {handoffQuery.data?.find(
+                      (item) => item.messageId === msg.id && item.revisionCount === msg.revisionCount
+                    )?.state === "compose_opened" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              const result = await reportSmsMutation.mutateAsync({
+                                messageId: msg.id,
+                                revisionCount: msg.revisionCount,
+                                approvedBody: msg.currentMessageBody,
+                                confirmation: SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+                                surface: "scheduled_outreach",
+                              });
+                              setComposeNotice((current) => ({
+                                ...current,
+                                [msg.id]: {
+                                  ...(current[msg.id] ?? {
+                                    kind: "operator_report",
+                                    uri: null,
+                                    fallbackUri: null,
+                                    bodyPrefillClaimed: false,
+                                    prefillClaim: "not_prefilled",
+                                    copyBody: null,
+                                    copyLabel: null,
+                                    continuationHref: null,
+                                    continuationLabel: null,
+                                    actionSendto: false,
+                                  }),
+                                  state: result.state,
+                                  verifiedSent: false,
+                                  pose: result.pose,
+                                  uri: null,
+                                  bodyPrefillClaimed: false,
+                                  prefillClaim: "not_prefilled",
+                                },
+                              }));
+                              void utils.system.goldlineWorld.smsComposeHandoffSnapshot.invalidate();
+                            } catch (err: unknown) {
+                              alert(err instanceof Error ? err.message : "The report was not recorded.");
+                            }
+                          })();
+                        }}
+                        disabled={reportSmsMutation.isPending}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "5px 12px",
+                          background: "#ffffff",
+                          color: "#1f2937",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "5px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                        }}
+                      >
+                        I sent this from my phone
+                      </button>
+                    )}
+
                     {msg.status === "pending" && (
                       <button
                         onClick={() => sendEarlyMutation.mutate({ messageId: msg.id })}
@@ -628,6 +796,19 @@ function SenderStatusCard(props: {
             Controlled self-send: {props.status.humanGates.controlledSelfSend.status}. A connected session is not
             permission to text a customer.
           </p>
+          <div data-android-unattended={props.status.deviceTransport.status} style={{ marginTop: "10px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>SMS compose handoff</div>
+            <ul style={{ margin: "6px 0 0", paddingLeft: "18px", fontSize: "12px", color: "#4b5563" }}>
+              {SMS_COMPOSE_HANDOFF_STATES.map((state) => (
+                <li key={state}>{SMS_COMPOSE_HANDOFF_STATE_LABELS[state]}</li>
+              ))}
+            </ul>
+            <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#4b5563", lineHeight: 1.45 }}>
+              Compose opened and operator reported sent stay on those states. Neither one is independently verified
+              sent, and neither one marks the outbox dispatched. Opening the SMS app is not a carrier receipt.
+              Unattended Android transmit stays {props.status.deviceTransport.status}.
+            </p>
+          </div>
         </>
       )}
     </section>

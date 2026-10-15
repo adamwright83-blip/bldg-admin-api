@@ -101,6 +101,15 @@ for (const statement of personalSenderIdentityDdl
   await runRequired(statement, "Personal sender identity");
 }
 
+const smsComposeHandoffAuditDdl = await readFile(new URL("../drizzle/0134_sms_compose_handoff_audit.sql", import.meta.url), "utf8");
+for (const statement of smsComposeHandoffAuditDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "SMS compose handoff audit");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,

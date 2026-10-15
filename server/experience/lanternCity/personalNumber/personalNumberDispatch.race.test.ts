@@ -576,6 +576,8 @@ describe("personal-number dispatch races", () => {
       "server/experience/lanternCity/personalNumber/googleMessagesBrowserTransport.ts",
       "server/experience/lanternCity/personalNumber/personalSenderIdentityStore.ts",
       "server/experience/lanternCity/personalNumber/personalSenderHealth.ts",
+      "server/experience/lanternCity/personalNumber/smsComposeHandoff.ts",
+      "server/experience/lanternCity/personalNumber/smsComposeHandoffAudit.ts",
       "server/composition/goldlineWorldRouter.ts",
     ];
     for (const file of files) {
