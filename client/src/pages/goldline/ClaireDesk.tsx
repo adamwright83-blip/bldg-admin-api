@@ -6,7 +6,6 @@ import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms } from "./claireDesk/OpenComms";
 import "./claireDesk/claireDesk.css";
 
-const BROWSER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const money = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const dayLabel = (date: string, today: string, tomorrow: string) =>
   date === today ? "Today" : date === tomorrow ? "Tomorrow" : new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
@@ -60,9 +59,13 @@ export default function ClaireDesk() {
   }
 
   async function confirmTomorrow() {
+    if (!m?.timeZone) {
+      setConfirmState({ state: "error", text: "Tomorrow was not saved. The business timezone is not loaded." });
+      return;
+    }
     setConfirmState({ state: "saving" });
     try {
-      const r = await confirm.mutateAsync({ timeZone: BROWSER_ZONE });
+      const r = await confirm.mutateAsync({ timeZone: m.timeZone });
       if (!r.verified) throw new Error("The save could not be read back, so it is not confirmed.");
       setConfirmState({
         state: "ok",

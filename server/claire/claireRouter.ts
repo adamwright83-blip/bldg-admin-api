@@ -33,6 +33,7 @@ import {
   getClaireRelationshipState,
   listClaireTierTransitions,
 } from "./character/relationshipState";
+import { resolveOperatorTimeZone } from "../agents/persistentOperator/operatorAppointmentPolicy";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
   startClairePostStopCall,
@@ -85,6 +86,15 @@ import {
   loadCapabilityGapForOperator,
 } from "../goldline/engineering/capabilityEngineeringService";
 import { GOLDLINE_CAPABILITY_REGISTRY } from "../../shared/goldlineCapabilities";
+
+/** Desk readback uses the configured operator zone. A UTC runner clock must not move tomorrow. */
+export function confirmationTimeZone(
+  operatorZone: string | null,
+  requestedZone: string | undefined
+): string | undefined {
+  const zone = operatorZone?.trim();
+  return zone ? zone : requestedZone;
+}
 
 const uuid = z.string().uuid();
 
@@ -244,7 +254,10 @@ export const claireRouter = router({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         phase: "pre_drive",
-        timeZone: input.timeZone,
+        timeZone: confirmationTimeZone(
+          await resolveOperatorTimeZone(ctx.tenantId),
+          input.timeZone
+        ),
       });
       const target = {
         tenantId: ctx.tenantId,

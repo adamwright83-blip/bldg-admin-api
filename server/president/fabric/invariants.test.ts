@@ -714,14 +714,22 @@ describe("static safety (10, 28)", () => {
       /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|drizzle\/schema\.ts|server\/routers\.ts|package\.json)/;
     expect(diff.filter(file => protectedRe.test(file))).toEqual([]);
 
-    // Production boot must create President's own durable table. This is the
-    // only allowed shared migration-runner edit and it must remain additive.
+    // President's durable table stays registered. An empty diff (current main,
+    // or a branch that does not edit the runner) is not a protected-path violation.
+    const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
+    expect(migrationSource).toContain("../drizzle/0120_president_autonomous_cycles.sql");
+    expect(migrationSource).toContain("President autonomous cycle store");
+
     const migrationStat = execSync(
       "git diff --numstat origin/main...HEAD -- scripts/migrate.mjs",
       { cwd: ROOT }
     )
       .toString()
       .trim();
+    if (!migrationStat) return;
+
+    // A shared migration-runner edit on this branch must remain additive and
+    // must be the President registration itself.
     expect(migrationStat).toMatch(/^\d+\t0\tscripts\/migrate\.mjs$/);
     const migrationDiff = execSync(
       "git diff --unified=0 origin/main...HEAD -- scripts/migrate.mjs",

@@ -35,7 +35,9 @@ vi.mock("./workdayPlanService", async importOriginal => {
   };
 });
 
-import { claireRouter } from "./claireRouter";
+import { formatInTimeZone } from "date-fns-tz";
+import { addDaysYmd } from "../analytics/businessPeriods";
+import { claireRouter, confirmationTimeZone } from "./claireRouter";
 import {
   assembleTomorrowCandidates,
   confirmWorkdayPlan,
@@ -139,5 +141,16 @@ describe("Claire workday router identifiers", () => {
     workday.loadConfirmedWorkdayPlan.mockResolvedValue(null);
     const result = await caller().confirmTomorrow({ timeZone: "America/Los_Angeles" });
     expect(result.verified).toBe(false);
+  });
+
+  it("keeps tomorrow on the operator zone when the runner clock is already the next UTC day", () => {
+    const now = new Date("2026-10-15T05:34:00.000Z");
+    expect(confirmationTimeZone("America/Los_Angeles", "UTC")).toBe("America/Los_Angeles");
+    expect(confirmationTimeZone(null, "UTC")).toBe("UTC");
+    expect(confirmationTimeZone("  ", "UTC")).toBe("UTC");
+    const operatorTomorrow = addDaysYmd(formatInTimeZone(now, "America/Los_Angeles", "yyyy-MM-dd"), 1);
+    const utcTomorrow = addDaysYmd(formatInTimeZone(now, "UTC", "yyyy-MM-dd"), 1);
+    expect(operatorTomorrow).toBe("2026-10-15");
+    expect(utcTomorrow).toBe("2026-10-16");
   });
 });
