@@ -15,6 +15,9 @@ const workday = vi.hoisted(() => ({
 const assemble = vi.hoisted(() => ({
   assembleClaireDriveContext: vi.fn(),
 }));
+const operatorZone = vi.hoisted(() => ({
+  resolveOperatorTimeZone: vi.fn(),
+}));
 
 vi.mock("../saas/tenantAccess", () => ({
   resolveLegacyDayforgeMembership: access.resolveMembership,
@@ -23,6 +26,9 @@ vi.mock("../saas/tenantAccess", () => ({
 }));
 vi.mock("./contextAssembler", () => ({
   assembleClaireDriveContext: assemble.assembleClaireDriveContext,
+}));
+vi.mock("../agents/persistentOperator/operatorAppointmentPolicy", () => ({
+  resolveOperatorTimeZone: operatorZone.resolveOperatorTimeZone,
 }));
 vi.mock("./workdayPlanService", async importOriginal => {
   const actual = await importOriginal<typeof import("./workdayPlanService")>();
@@ -78,6 +84,7 @@ function caller() {
 
 describe("Claire workday router identifiers", () => {
   beforeEach(() => {
+    operatorZone.resolveOperatorTimeZone.mockResolvedValue("America/Los_Angeles");
     access.resolveMembership.mockResolvedValue({ role: "owner" });
     access.hasEntitlement.mockResolvedValue(true);
     assemble.assembleClaireDriveContext.mockResolvedValue(context);
@@ -125,7 +132,11 @@ describe("Claire workday router identifiers", () => {
   });
 
   it("confirmTomorrow reaches plan confirmation and candidate assembly", async () => {
-    const result = await caller().confirmTomorrow({ timeZone: "America/Los_Angeles" });
+    const result = await caller().confirmTomorrow({ timeZone: "UTC" });
+    expect(operatorZone.resolveOperatorTimeZone).toHaveBeenCalledWith("tenant-1");
+    expect(assemble.assembleClaireDriveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ timeZone: "America/Los_Angeles" })
+    );
     expect(workday.assembleTomorrowCandidates).toHaveBeenCalledWith(context);
     expect(workday.confirmWorkdayPlan).toHaveBeenCalledWith({
       tenantId: "tenant-1",
