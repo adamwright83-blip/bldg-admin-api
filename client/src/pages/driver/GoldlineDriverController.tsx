@@ -431,6 +431,9 @@ function LiveGoldlineDriverController({
     undefined,
     { refetchInterval: 60_000, retry: false }
   );
+  const scheduleRecoveryOutreach =
+    trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
+  const editRecoveryDraft = trpc.system.goldlineWorld.editScheduledOutreach.useMutation();
   const weeklyReadiness = trpc.system.weeklyMission.dailyReadiness.useQuery(
     {
       businessDate: selectedDate,
@@ -1602,6 +1605,27 @@ function LiveGoldlineDriverController({
         recoveryOutreachCard={recoveryOutreachCard.data ?? null}
         onOpenRecoveryOutreach={href => {
           window.location.assign(href);
+        }}
+        onScheduleRecoveryOutreach={async input => {
+          const row = await scheduleRecoveryOutreach.mutateAsync({
+            customerId: input.customerId,
+            messageBody: input.messageBody,
+            scheduledFor: input.scheduledFor,
+            timezone: input.timezone,
+            territoryId: input.territoryId,
+            idempotencyKey: input.idempotencyKey,
+          });
+          await recoveryOutreachCard.refetch();
+          return row;
+        }}
+        onEditRecoveryDraft={async input => {
+          const row = await editRecoveryDraft.mutateAsync({
+            messageId: input.messageId,
+            newMessageBody: input.newMessageBody,
+            reason: "Edited on the Day Line recovery card",
+          });
+          await recoveryOutreachCard.refetch();
+          return row;
         }}
         weeklyReadiness={weeklyReadiness.data ?? []}
         onEnterChapter={
