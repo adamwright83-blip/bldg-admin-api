@@ -1,22 +1,19 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { CLAIRE_DAILY_CALL_DEFAULTS, type ClaireDailyCallPurpose } from "../../../../shared/claireDailyCallDefaults";
 
-type Purpose = "morning_readiness" | "evening_debrief";
+type Purpose = ClaireDailyCallPurpose;
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const COPY: Record<Purpose, { title: string; blurb: string; start: string; end: string; days: number[] }> = {
+const COPY = {
   morning_readiness: {
+    ...CLAIRE_DAILY_CALL_DEFAULTS.morning_readiness,
     title: "Morning readiness calls",
     blurb: "Claire calls to get you ready for the day: today's objective, what she has prepared, anything missing, and your first move. This happens even if nothing needs approval.",
-    start: "07:30",
-    end: "09:00",
-    days: [1, 2, 3, 4, 5, 6, 7],
   },
   evening_debrief: {
+    ...CLAIRE_DAILY_CALL_DEFAULTS.evening_debrief,
     title: "Evening debrief calls",
     blurb: "Claire calls to hear how the day went, captures new developments, and revises tomorrow and the rest of the week for your approval.",
-    start: "17:30",
-    end: "19:00",
-    days: [1, 2, 3, 4, 5, 6],
   },
 };
 
@@ -33,7 +30,7 @@ function PurposeCard({ purpose, status, timeZone, onChange }: { purpose: Purpose
   const revoke = trpc.system.weeklyMission.revokeDailyCalls.useMutation();
   const copy = COPY[purpose];
   // Recommended schedule preselected; nothing is allowed until the operator presses Allow.
-  const [days, setDays] = useState<number[]>(copy.days);
+  const [days, setDays] = useState<number[]>([...copy.weekdays]);
   const [start, setStart] = useState(copy.start);
   const [end, setEnd] = useState(copy.end);
   const [message, setMessage] = useState("");
