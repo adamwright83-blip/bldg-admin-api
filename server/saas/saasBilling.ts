@@ -3,6 +3,16 @@ import { createHash } from "node:crypto";
 import Stripe from "stripe";
 import type { SaasSubscriptionStatus } from "../../shared/saasTenant";
 import {
+  advertisedTrialRefusal,
+  assertPortalCustomerForTenant,
+  checkAdvertisedStripePrice,
+  isAdvertisedJoystickPlan,
+  isRefundBillingEvent,
+  JOYSTICK_REQUIRED_TRIAL_DAYS,
+  JoystickCheckoutClosedError,
+  revenueCentsForBillingEvent,
+} from "./joystickStripeOffer";
+import {
   attachCheckoutToOnboarding,
   assertSaasPlanCanCheckout,
   expireOnboardingCheckout,
@@ -56,6 +66,14 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
         "Checkout is already linked to a different DayForge plan"
       );
     }
+    if (isAdvertisedJoystickPlan(input.planKey)) {
+      const plan = await assertSaasPlanCanCheckout(input.planKey);
+      return reuseAdvertisedCheckoutSession(
+        stripe,
+        existingOnboarding.stripeCheckoutSessionId,
+        plan
+      );
+    }
     const existing = await stripe.checkout.sessions.retrieve(
       existingOnboarding.stripeCheckoutSessionId
     );
@@ -63,13 +81,23 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   }
   await getActiveSaasPlan(input.planKey);
   const onboarding = await reserveOnboardingCheckout(input);
+  const plan = await assertSaasPlanCanCheckout(input.planKey);
   if (onboarding.stripeCheckoutSessionId) {
+    if (isAdvertisedJoystickPlan(plan.planKey)) {
+      return reuseAdvertisedCheckoutSession(
+        stripe,
+        onboarding.stripeCheckoutSessionId,
+        plan
+      );
+    }
     const existing = await stripe.checkout.sessions.retrieve(
       onboarding.stripeCheckoutSessionId
     );
     return { id: existing.id, url: existing.url };
   }
-  const plan = await assertSaasPlanCanCheckout(input.planKey);
+  const verifiedPriceId = isAdvertisedJoystickPlan(plan.planKey)
+    ? (await assertAdvertisedCheckoutIsOpen(stripe, plan)).id
+    : plan.stripePriceId;
   const checkoutRequestId = onboarding.checkoutRequestId ?? input.requestId;
   await reserveSaasCheckoutSlot({
     onboardingSessionId: onboarding.id,
@@ -81,19 +109,29 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
       mode: "subscription",
       customer_email: customerEmail,
       client_reference_id: onboarding.id,
-      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+      line_items: [{ price: verifiedPriceId, quantity: 1 }],
       success_url: `${appUrl()}${returnPath}?session=${onboarding.id}&checkout=success`,
       cancel_url: `${appUrl()}${returnPath}?session=${onboarding.id}&checkout=cancelled`,
       metadata: {
         legacyDayforgeOnboardingSessionId: onboarding.id,
         legacyDayforgePlanKey: plan.planKey,
       },
+      ...(isAdvertisedJoystickPlan(plan.planKey)
+        ? {
+            payment_method_collection: "always" as const,
+            payment_method_types: ["card" as const],
+          }
+        : {}),
       subscription_data: {
         metadata: {
           legacyDayforgeOnboardingSessionId: onboarding.id,
           legacyDayforgePlanKey: plan.planKey,
         },
-        ...(plan.trialDays > 0 ? { trial_period_days: plan.trialDays } : {}),
+        ...(isAdvertisedJoystickPlan(plan.planKey)
+          ? { trial_period_days: JOYSTICK_REQUIRED_TRIAL_DAYS }
+          : plan.trialDays > 0
+            ? { trial_period_days: plan.trialDays }
+            : {}),
       },
     },
     {
@@ -111,14 +149,80 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
 export async function createLegacyDayforgeBillingPortal(input: {
   tenantId: string;
   requestId: string;
+  requestedCustomerId?: string | null;
+  stripe?: Stripe;
 }) {
-  const stripe = getLegacyDayforgeBillingStripe();
   const customer = await getStripeCustomerForTenant(input.tenantId);
+  assertPortalCustomerForTenant({
+    tenantId: input.tenantId,
+    tenantCustomerId: customer,
+    requestedCustomerId: input.requestedCustomerId,
+  });
+  const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   const session = await stripe.billingPortal.sessions.create(
     { customer, return_url: `${appUrl()}/dayforge-settings` },
     { idempotencyKey: `dayforge:portal:${input.tenantId}:${input.requestId}` }
   );
   return { url: session.url };
+}
+
+type AdvertisedPlanPrice = {
+  planKey: string;
+  stripePriceId: string;
+  trialDays: number;
+};
+
+function checkoutSessionPriceId(session: Stripe.Checkout.Session): string | null {
+  const price = session.line_items?.data?.[0]?.price;
+  if (!price) return null;
+  return typeof price === "string" ? price : (price.id ?? null);
+}
+
+async function assertAdvertisedCheckoutIsOpen(
+  stripe: Stripe,
+  plan: AdvertisedPlanPrice
+): Promise<Stripe.Price> {
+  const trial = advertisedTrialRefusal(plan.planKey, plan.trialDays);
+  if (trial && !trial.ok) {
+    throw new JoystickCheckoutClosedError(trial.code, trial.reason);
+  }
+  let price: Stripe.Price;
+  try {
+    price = await stripe.prices.retrieve(plan.stripePriceId);
+  } catch {
+    throw new JoystickCheckoutClosedError(
+      "price_unverified",
+      "Configured Stripe price could not be retrieved"
+    );
+  }
+  const check = checkAdvertisedStripePrice({
+    planKey: plan.planKey,
+    trialDays: plan.trialDays,
+    configuredPriceId: plan.stripePriceId,
+    price,
+  });
+  if (!check.ok) {
+    throw new JoystickCheckoutClosedError(check.code, check.reason);
+  }
+  return price;
+}
+
+async function reuseAdvertisedCheckoutSession(
+  stripe: Stripe,
+  sessionId: string,
+  plan: AdvertisedPlanPrice
+) {
+  await assertAdvertisedCheckoutIsOpen(stripe, plan);
+  const existing = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ["line_items"],
+  });
+  if (checkoutSessionPriceId(existing) !== plan.stripePriceId) {
+    throw new JoystickCheckoutClosedError(
+      "stale_price",
+      `Checkout session ${sessionId} does not use configured price ${plan.stripePriceId}`
+    );
+  }
+  return { id: existing.id, url: existing.url };
 }
 
 function mapSubscriptionStatus(
@@ -154,6 +258,7 @@ async function syncStripeSubscription(input: {
   eventId: string;
   eventCreatedAt: Date;
   eventType: string;
+  recognizeRevenue: boolean;
 }) {
   const metadata = input.subscription.metadata ?? {};
   const onboardingSessionId = metadata.legacyDayforgeOnboardingSessionId;
@@ -169,7 +274,8 @@ async function syncStripeSubscription(input: {
     trial_end?: number | null;
   };
   const eventIsFailure = input.eventType === "invoice.payment_failed";
-  const eventIsPaid = input.eventType === "invoice.paid";
+  const eventIsPaid =
+    input.recognizeRevenue && input.eventType === "invoice.paid";
   const graceDays = Math.max(
     0,
     Number(process.env.DAYFORGE_BILLING_GRACE_DAYS ?? "7") || 0
@@ -286,6 +392,18 @@ export async function processLegacyDayforgeBillingWebhook(input: {
     };
   }
 
+  if (isRefundBillingEvent(event.type)) {
+    await finishBillingEvent({
+      stripeEventId: event.id,
+      status: "ignored",
+    });
+    return {
+      status: "ignored",
+      reason: "refund_not_revenue",
+      stripeEventId: event.id,
+    };
+  }
+
   const recognized =
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.expired" ||
@@ -331,6 +449,7 @@ export async function processLegacyDayforgeBillingWebhook(input: {
       eventId: event.id,
       eventCreatedAt: new Date(event.created * 1000),
       eventType: event.type,
+      recognizeRevenue: revenueCentsForBillingEvent(event) > 0,
     });
     await finishBillingEvent({
       stripeEventId: event.id,
