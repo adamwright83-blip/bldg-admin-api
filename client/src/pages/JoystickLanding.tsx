@@ -109,11 +109,6 @@ export default function JoystickLanding() {
             <span className="joystick-mobile__terms-sub">Card required at signup · Cancel anytime</span>
             <span className="joystick-mobile__terms-sub">Checkout is not open. This does not charge a card.</span>
           </div>
-          <p className="joystick-mobile__tagline">
-            THE MONSTERS ARE FAKE.
-            <br />
-            THE MONEY ISN’T.
-          </p>
         </div>
 
         <div className="joystick-mobile__mission" aria-hidden="true">

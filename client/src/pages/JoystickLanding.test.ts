@@ -14,6 +14,11 @@ describe("JOYSTICK public start", () => {
     expect(source).not.toContain('const START_PATH = "/onboarding";');
   });
 
+  it("does not use the unapproved monsters line", () => {
+    expect(source).not.toContain("THE MONSTERS ARE FAKE");
+    expect(source).not.toContain("THE MONEY ISN");
+  });
+
   it("keeps the approved hero line", () => {
     expect(source).toContain('aria-label="Joystick — Play the work you hate"');
     expect(source).toContain("PLAY THE");
