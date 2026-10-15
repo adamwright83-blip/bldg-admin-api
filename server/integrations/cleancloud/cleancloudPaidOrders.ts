@@ -421,13 +421,20 @@ export async function importCleanCloudPaidOrders(input: {
 
     const values = normalized.normalized;
     const paidAt = values.paymentDateUtc || values.paidDateUtc || null;
-    if (values.paid && values.totalCents > 0 && paidAt) {
+    const totalCents = values.totalCents;
+    if (
+      values.paid &&
+      typeof totalCents === "number" &&
+      Number.isFinite(totalCents) &&
+      totalCents > 0 &&
+      paidAt
+    ) {
       paidOrdersToBridge.push({
         cleancloudOrderId: String(values.cleancloudOrderId),
         cleancloudCustomerId: values.cleancloudCustomerId != null ? String(values.cleancloudCustomerId) : null,
         customerEmail: values.customerEmail ?? null,
         customerPhone: values.customerPhone ?? null,
-        totalCents: values.totalCents,
+        totalCents,
         paidAt,
       });
     }
