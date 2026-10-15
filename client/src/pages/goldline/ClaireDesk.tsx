@@ -363,7 +363,7 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
             data-testid={`activate-${p.purpose}`}
             onClick={() =>
               void grant
-                .mutateAsync({ purpose: p.purpose, weekdays: p.weekdays, localStart: p.start, localEnd: p.end, timeZone: zone!, consent: true })
+                .mutateAsync({ purpose: p.purpose, weekdays: [...p.weekdays], localStart: p.start, localEnd: p.end, timeZone: zone!, consent: true })
                 .then(r => {
                   const when = r.status?.nextScheduled ?? r.status?.nextWindow;
                   setResult(v => ({ ...v, [p.purpose]: when ? `Verified. First call window: ${new Date(when).toLocaleString()}.` : "Allowed, but no upcoming window was found." }));
