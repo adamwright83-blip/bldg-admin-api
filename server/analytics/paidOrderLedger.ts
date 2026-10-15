@@ -185,7 +185,8 @@ export type CleanCloudOrderRow = {
   storeLabel?: string | null;
 };
 
-export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: Date };
+export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: Date; maxSourceRows?: number;
+};
 
 export type LedgerLoaders = {
   paymentAuthority?: typeof readPaymentAuthorityReceipts;
@@ -374,7 +375,9 @@ async function pairedStoreLabel(db: NonNullable<Awaited<ReturnType<typeof getDb>
 export const databaseLedgerLoaders: LedgerLoaders = {
   reconciliation: loadSalesReconciliationEvidence,
   async laundry_butler(window) {
-    const candidates = await readNativePaidCandidates(window.tenantId);
+    const candidates = await readNativePaidCandidates(window.tenantId,
+      window.maxSourceRows
+    );
     const facts = await readNativePaymentFacts(candidates);
     return candidates.map(row => ({ ...row, paidAt: facts.get(row.id)?.occurredAt
       ? new Date(facts.get(row.id)!.occurredAt!) : row.paidAt }));
@@ -404,7 +407,7 @@ export const databaseLedgerLoaders: LedgerLoaders = {
       placedAtUtc: cleancloudPaidOrders.placedAtUtc,
       createdAt: cleancloudPaidOrders.createdAt,
     };
-    const rows: CleanCloudOrderRow[] = await db
+    const query = db
       .select(columns)
       .from(cleancloudPaidOrders)
       .where(
@@ -430,6 +433,11 @@ export const databaseLedgerLoaders: LedgerLoaders = {
           )
         )
       );
+    const rows: CleanCloudOrderRow[] = await (window.maxSourceRows
+      ? query.limit(window.maxSourceRows + 1)
+      : query);
+    if (window.maxSourceRows && rows.length > window.maxSourceRows)
+      throw new Error("CleanCloud materialization limit exceeded");
     // A Revenue-report row in the window may have a Sales-report twin dated
     // outside it; the Sales row wins, so load those twins before deduping.
     const withSales = new Set(rows.filter(r => r.sourceReportType === "orders_sales").map(r => r.cleancloudOrderId));
@@ -449,6 +457,8 @@ export const databaseLedgerLoaders: LedgerLoaders = {
           )
         );
       rows.push(...twins);
+    if (window.maxSourceRows && rows.length > window.maxSourceRows)
+        throw new Error("CleanCloud twin materialization limit exceeded");
     }
     const storeLabel = rows.length ? await pairedStoreLabel(db, window.tenantId) : null;
     return rows.map(row => ({ ...row, storeLabel }));
@@ -456,13 +466,15 @@ export const databaseLedgerLoaders: LedgerLoaders = {
 };
 
 export async function loadPaidOrderLedger(
-  input: { tenantId: string; startUtc: Date; endExclusiveUtc: Date; timeZone: string },
+  input: { tenantId: string; startUtc: Date; endExclusiveUtc: Date; timeZone: string; maxSourceRows?: number;
+  },
   loaders: LedgerLoaders = databaseLedgerLoaders
 ): Promise<PaidOrderLedger> {
   const window: LedgerWindow = {
     tenantId: input.tenantId,
     startUtc: input.startUtc,
     endExclusiveUtc: input.endExclusiveUtc,
+    maxSourceRows: input.maxSourceRows,
   };
   const [native, cleancloud, reconciliation] = await Promise.allSettled([
     loaders.laundry_butler(window),

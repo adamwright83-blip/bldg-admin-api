@@ -1,0 +1,39 @@
+name: Claire approved-view analysis
+on:
+  pull_request:
+    paths:
+      - 'server/analytics/**'
+      - 'server/claire/**'
+      - 'server/strategy/**'
+      - 'server/_core/llm*'
+      - 'server/domains/orders/orderHistoryReadService.ts'
+      - 'scripts/claire-analysis-*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/claire-analysis.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      ANTHROPIC_API_KEY: ''
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Canonical money, hostile SQL, resource limits, conversation, Showrunner and authority regressions
+        run: pnpm vitest run server/analytics server/claire server/strategy server/_core/llm.test.ts
+      - name: Verify production packaging and the trusted worker entrypoint
+        run: pnpm build && node --check dist/analysisWorker.cjs

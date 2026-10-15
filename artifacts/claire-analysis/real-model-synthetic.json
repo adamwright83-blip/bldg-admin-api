@@ -1,0 +1,294 @@
+{
+  "testMode": "real configured Anthropic; synthetic approved data; real SQLite workers",
+  "requestedModel": "claude-sonnet-4-6",
+  "servedModels": [
+    "claude-sonnet-4-6"
+  ],
+  "turns": [
+    {
+      "question": "Which Laundry Farm customers used to order weekly but stopped? Define weekly from their actual consecutive ordering intervals and use at least four orders with gaps between five and nine days, then no recorded paid order in the last thirty days.",
+      "elapsedMs": 11572,
+      "handled": true,
+      "populationCorrect": true,
+      "answer": "The recorded evidence shows: Fixture Customer A, paid orders: 5, lifetime cents: $50.00, first order date: 2026-06-01, last order date: 2026-06-29, weekly gap count: 4, days since last order: 107; Fixture Customer B, paid orders: 5, lifetime cents: $100.00, first order date: 2026-06-01, last order date: 2026-06-29, weekly gap count: 4, days since last order: 107; Fixture Customer C, paid orders: 5, lifetime cents: $150.00, first order date: 2026-06-01, last order date: 2026-06-29, weekly gap count: 4, days since last order: 107; Fixture Customer D, paid orders: 5, lifetime cents: $200.00, first order date: 2026-06-01, last order date: 2026-06-29, weekly gap count: 4, days since last order: 107; Fixture Customer E, paid orders: 5, lifetime cents: $250.00, first order date: 2026-06-01, last order date: 2026-06-29, weekly gap count: 4, days since last order: 107. I’ve shown the first five records in this result. Native open-order coverage only; CleanCloud outstanding orders are not synchronized. ZIP geography is approximate and cannot confirm Silver Lake residence. Costs are unavailable; revenue is not profit. Coverage is partial; inactivity is a candidate signal, not confirmed churn or a verified zero.",
+      "reader": "analysis",
+      "evidenceKind": "evidence",
+      "citedReceiptIds": [
+        "2d1d7adc-93fb-4bff-b2b9-2eb742864fcb"
+      ],
+      "customerIds": [
+        "cust_fixture0",
+        "cust_fixture1",
+        "cust_fixture2",
+        "cust_fixture3",
+        "cust_fixture4",
+        "cust_fixture5",
+        "cust_fixture6",
+        "cust_fixture7",
+        "cust_fixture8",
+        "cust_fixture9"
+      ]
+    },
+    {
+      "question": "Exclude anyone with an outstanding order.",
+      "elapsedMs": 5621,
+      "handled": true,
+      "populationCorrect": true,
+      "answer": "The recorded evidence shows: Fixture Customer A; Fixture Customer B; Fixture Customer C; Fixture Customer D; Fixture Customer E. I’ve shown the first five records in this result. Native open-order coverage only; CleanCloud outstanding orders are not synchronized. ZIP geography is approximate and cannot confirm Silver Lake residence. Costs are unavailable; revenue is not profit. Coverage is partial; inactivity is a candidate signal, not confirmed churn or a verified zero.",
+      "reader": "analysis",
+      "evidenceKind": "evidence",
+      "citedReceiptIds": [
+        "b75ad37a-c4bd-4a4c-87e0-2036f80bfea6"
+      ],
+      "customerIds": [
+        "cust_fixture0",
+        "cust_fixture1",
+        "cust_fixture2",
+        "cust_fixture3",
+        "cust_fixture4",
+        "cust_fixture5",
+        "cust_fixture6",
+        "cust_fixture7",
+        "cust_fixture9"
+      ]
+    },
+    {
+      "question": "Only Silver Lake.",
+      "elapsedMs": 5345,
+      "handled": true,
+      "populationCorrect": true,
+      "answer": "The recorded evidence shows: Fixture Customer A; Fixture Customer B; Fixture Customer C; Fixture Customer D; Fixture Customer E. I’ve shown the first five records in this result. Native open-order coverage only; CleanCloud outstanding orders are not synchronized. ZIP geography is approximate and cannot confirm Silver Lake residence. Costs are unavailable; revenue is not profit. Coverage is partial; inactivity is a candidate signal, not confirmed churn or a verified zero.",
+      "reader": "analysis",
+      "evidenceKind": "evidence",
+      "citedReceiptIds": [
+        "3b7459d3-7806-40b6-9e4a-2351fb179e12"
+      ],
+      "customerIds": [
+        "cust_fixture0",
+        "cust_fixture1",
+        "cust_fixture2",
+        "cust_fixture3",
+        "cust_fixture4",
+        "cust_fixture5",
+        "cust_fixture6",
+        "cust_fixture7"
+      ]
+    },
+    {
+      "question": "Show the five highest historical spenders among those remaining candidates, as evidence for Claire's existing strategic preparation. Do not independently decide whom to contact.",
+      "elapsedMs": 5853,
+      "handled": true,
+      "populationCorrect": true,
+      "answer": "The recorded evidence shows: Fixture Customer H, lifetime cents: $400.00, paid orders: 5, first order date: 2026-06-01, last order date: 2026-06-29; Fixture Customer G, lifetime cents: $350.00, paid orders: 5, first order date: 2026-06-01, last order date: 2026-06-29; Fixture Customer F, lifetime cents: $300.00, paid orders: 5, first order date: 2026-06-01, last order date: 2026-06-29; Fixture Customer E, lifetime cents: $250.00, paid orders: 5, first order date: 2026-06-01, last order date: 2026-06-29; Fixture Customer D, lifetime cents: $200.00, paid orders: 5, first order date: 2026-06-01, last order date: 2026-06-29. Native open-order coverage only; CleanCloud outstanding orders are not synchronized. ZIP geography is approximate and cannot confirm Silver Lake residence. Costs are unavailable; revenue is not profit. Coverage is partial; inactivity is a candidate signal, not confirmed churn or a verified zero.",
+      "reader": "analysis",
+      "evidenceKind": "evidence",
+      "citedReceiptIds": [
+        "caa36752-6429-4492-8b1e-13a7ca9a3d42"
+      ],
+      "customerIds": [
+        "cust_fixture7",
+        "cust_fixture6",
+        "cust_fixture5",
+        "cust_fixture4",
+        "cust_fixture3"
+      ]
+    },
+    {
+      "question": "What did the first one order last time?",
+      "elapsedMs": 4778,
+      "handled": true,
+      "populationCorrect": true,
+      "answer": "The recorded evidence shows: business date: 2026-06-29, amount cents: $80.00, service type: wash_fold, business line: laundry_farm, summary: Wash and fold, medium bag. Native open-order coverage only; CleanCloud outstanding orders are not synchronized. ZIP geography is approximate and cannot confirm Silver Lake residence. Costs are unavailable; revenue is not profit. Coverage is partial; inactivity is a candidate signal, not confirmed churn or a verified zero.",
+      "reader": "analysis",
+      "evidenceKind": "evidence",
+      "citedReceiptIds": [
+        "7a0a8848-8117-433f-bfe2-f8fc74d556d5"
+      ],
+      "customerIds": [
+        "cust_fixture7",
+        "cust_fixture6",
+        "cust_fixture5",
+        "cust_fixture4",
+        "cust_fixture3"
+      ]
+    }
+  ],
+  "proactive": {
+    "kind": "evidence",
+    "answer": "The recorded evidence shows: recency segment: active, freq segment: high_freq, customers: 2, with contact: 2, no contact: 0, avg orders: 6, avg lifetime dollars: 930, avg days since last: 2, avg cadence days: 26, avg active months: 3; recency segment: at_risk, freq segment: high_freq, customers: 14, with contact: 14, no contact: 0, avg orders: 5, avg lifetime dollars: 375, avg days since last: 100, avg cadence days: 9, avg active months: 1.3.",
+    "receiptIds": [
+      "2694d4f3-453f-45ba-a03a-d3534e5c7cd3"
+    ]
+  },
+  "traces": [
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 8053,
+      "usage": {
+        "prompt_tokens": 2418,
+        "completion_tokens": 607,
+        "total_tokens": 3025
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nWITH lf_orders AS (\n  SELECT\n    o.customer_id,\n    o.business_date,\n    ROW_NUMBER() OVER (PARTITION BY o.customer_id ORDER BY o.business_date) AS rn,\n    LAG(o.business_date) OVER (PARTITION BY o.customer_id ORDER BY o.business_date) AS prev_date\n  FROM orders o\n  WHERE o.business_line = 'laundry_farm'\n),\ngaps AS (\n  SELECT\n    customer_id,\n    business_date,\n    prev_date,\n    julianday(business_date) - julianday(prev_date) AS gap_days\n  FROM lf_orders\n  WHERE prev_date IS NOT NULL\n),\nweekly_gaps_per_customer AS (\n  SELECT\n    customer_id,\n    COUNT(*) AS weekly_gap_count\n  FROM gaps\n  WHERE gap_days BETWEEN 5 AND 9\n  GROUP BY customer_id\n),\nlast_order AS (\n  SELECT\n    customer_id,\n    MAX(business_date) AS last_order_date\n  FROM orders\n  WHERE business_line = 'laundry_farm'\n  GROUP BY customer_id\n),\nqualified AS (\n  SELECT\n    w.customer_id,\n    w.weekly_gap_count,\n    l.last_order_date\n  FROM weekly_gaps_per_customer w\n  JOIN last_order l ON l.customer_id = w.customer_id\n  WHERE w.weekly_gap_count >= 4\n    AND julianday('2026-10-14') - julianday(l.last_order_date) > 30\n)\nSELECT\n  c.customer_id,\n  c.name,\n  c.paid_orders,\n  c.lifetime_cents,\n  c.first_order_date,\n  q.last_order_date,\n  q.weekly_gap_count,\n  CAST(julianday('2026-10-14') - julianday(q.last_order_date) AS INTEGER) AS days_since_last_order\nFROM qualified q\nJOIN customers c ON c.customer_id = q.customer_id\nORDER BY q.weekly_gap_count DESC, days_since_last_order DESC\nLIMIT 100\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 3385,
+      "usage": {
+        "prompt_tokens": 3786,
+        "completion_tokens": 130,
+        "total_tokens": 3916
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "These Laundry Farm customers each had at least 4 consecutive order gaps of 5–9 days (a weekly cadence) but have placed no recorded paid order in the last 107 days. Their weekly habit appears to have broken around late June 2026. All 10 qualify as lapsed regulars worth re-engagement outreach."
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2678,
+      "usage": {
+        "prompt_tokens": 2340,
+        "completion_tokens": 185,
+        "total_tokens": 2525
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nSELECT c.customer_id, c.name\nFROM customers c\nWHERE c.customer_id IN (\n  'cust_fixture0','cust_fixture1','cust_fixture2','cust_fixture3','cust_fixture4',\n  'cust_fixture5','cust_fixture6','cust_fixture7','cust_fixture8','cust_fixture9'\n)\nAND c.customer_id NOT IN (\n  SELECT customer_id FROM open_orders WHERE customer_id IS NOT NULL\n)\nORDER BY c.customer_id\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2810,
+      "usage": {
+        "prompt_tokens": 2982,
+        "completion_tokens": 120,
+        "total_tokens": 3102
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "9 of the 10 previously selected customers have no outstanding native orders and remain in the selection. One customer (cust_fixture8 / Fixture Customer I) was excluded due to an open order. Note: CleanCloud open orders are not synced, so outstanding CleanCloud orders cannot be detected."
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2607,
+      "usage": {
+        "prompt_tokens": 2330,
+        "completion_tokens": 153,
+        "total_tokens": 2483
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nSELECT c.customer_id, c.name\nFROM customers c\nWHERE c.customer_id IN ('cust_fixture0','cust_fixture1','cust_fixture2','cust_fixture3','cust_fixture4','cust_fixture5','cust_fixture6','cust_fixture7','cust_fixture9')\n  AND c.neighborhoods LIKE '%Silver Lake%'\nORDER BY c.name\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2610,
+      "usage": {
+        "prompt_tokens": 2926,
+        "completion_tokens": 106,
+        "total_tokens": 3032
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "Of the 9 previously selected customers, 8 are mapped to Silver Lake based on their most recent order ZIP. One customer (cust_fixture9) does not have a Silver Lake neighborhood match and is excluded. Geography is ZIP-approximate."
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2659,
+      "usage": {
+        "prompt_tokens": 2467,
+        "completion_tokens": 173,
+        "total_tokens": 2640
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nSELECT\n  customer_id,\n  name,\n  lifetime_cents,\n  paid_orders,\n  first_order_date,\n  last_order_date\nFROM customers\nWHERE customer_id IN (\n  'cust_fixture0','cust_fixture1','cust_fixture2','cust_fixture3',\n  'cust_fixture4','cust_fixture5','cust_fixture6','cust_fixture7'\n)\nORDER BY lifetime_cents DESC\nLIMIT 5\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 3071,
+      "usage": {
+        "prompt_tokens": 3172,
+        "completion_tokens": 122,
+        "total_tokens": 3294
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "Among the candidate pool, the five highest historical spenders are Fixture Customers H, G, F, E, and D — each with 5 paid orders, all active within the same June 2026 window. Spending tiers are clearly differentiated, providing a natural priority ranking for Claire's existing strategic preparation."
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2220,
+      "usage": {
+        "prompt_tokens": 2380,
+        "completion_tokens": 144,
+        "total_tokens": 2524
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nSELECT o.order_ref, o.business_date, o.amount_cents, o.discount_cents, o.credit_cents, o.service_type, o.business_line, o.summary\nFROM orders o\nWHERE o.customer_id = 'cust_fixture7'\nORDER BY o.business_date DESC, o.order_ref DESC\nLIMIT 1\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 2449,
+      "usage": {
+        "prompt_tokens": 2927,
+        "completion_tokens": 94,
+        "total_tokens": 3021
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "The first customer's most recent order was a wash & fold (medium bag) through Laundry Farm, placed on June 29, 2026. No discount or credit was applied."
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 11585,
+      "usage": {
+        "prompt_tokens": 2297,
+        "completion_tokens": 914,
+        "total_tokens": 3211
+      },
+      "decision": {
+        "kind": "query",
+        "sql": "\nWITH customer_orders AS (\n  SELECT\n    customer_id,\n    order_month,\n    COUNT(*) AS monthly_orders,\n    SUM(amount_cents) AS monthly_cents\n  FROM orders\n  GROUP BY customer_id, order_month\n),\ncustomer_activity AS (\n  SELECT\n    c.customer_id,\n    c.name,\n    c.paid_orders,\n    c.lifetime_cents,\n    c.first_order_date,\n    c.last_order_date,\n    c.has_contact,\n    c.identity_matched,\n    c.neighborhoods,\n    -- months active (distinct months with orders)\n    (SELECT COUNT(DISTINCT order_month) FROM orders o WHERE o.customer_id = c.customer_id) AS active_months,\n    -- days since last order\n    CAST(julianday('2026-10-14') - julianday(c.last_order_date) AS INTEGER) AS days_since_last,\n    -- avg days between orders (window span / gaps)\n    CASE WHEN c.paid_orders > 1 THEN\n      CAST((julianday(c.last_order_date) - julianday(c.first_order_date)) / (c.paid_orders - 1) AS INTEGER)\n    ELSE NULL END AS avg_days_between_orders\n  FROM customers c\n  WHERE c.paid_orders >= 3\n    AND c.identity_matched = 1\n),\nsegmented AS (\n  SELECT *,\n    CASE\n      WHEN days_since_last <= 60 THEN 'active'\n      WHEN days_since_last <= 180 THEN 'at_risk'\n      WHEN days_since_last <= 365 THEN 'lapsed'\n      ELSE 'dormant'\n    END AS recency_segment,\n    CASE\n      WHEN avg_days_between_orders IS NOT NULL AND avg_days_between_orders <= 30 THEN 'high_freq'\n      WHEN avg_days_between_orders IS NOT NULL AND avg_days_between_orders <= 90 THEN 'mid_freq'\n      ELSE 'low_freq'\n    END AS freq_segment\n  FROM customer_activity\n)\nSELECT\n  recency_segment,\n  freq_segment,\n  COUNT(*) AS customers,\n  SUM(CASE WHEN has_contact = 1 THEN 1 ELSE 0 END) AS with_contact,\n  SUM(CASE WHEN has_contact = 0 THEN 1 ELSE 0 END) AS no_contact,\n  ROUND(AVG(paid_orders), 1) AS avg_orders,\n  ROUND(AVG(lifetime_cents) / 100.0, 2) AS avg_lifetime_dollars,\n  ROUND(AVG(days_since_last), 0) AS avg_days_since_last,\n  ROUND(AVG(avg_days_between_orders), 0) AS avg_cadence_days,\n  ROUND(AVG(active_months), 1) AS avg_active_months\nFROM segmented\nGROUP BY recency_segment, freq_segment\nORDER BY\n  CASE recency_segment WHEN 'active' THEN 1 WHEN 'at_risk' THEN 2 WHEN 'lapsed' THEN 3 ELSE 4 END,\n  CASE freq_segment WHEN 'high_freq' THEN 1 WHEN 'mid_freq' THEN 2 ELSE 3 END\n",
+        "answer": ""
+      }
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "elapsedMs": 5759,
+      "usage": {
+        "prompt_tokens": 3680,
+        "completion_tokens": 200,
+        "total_tokens": 3880
+      },
+      "decision": {
+        "kind": "final",
+        "sql": "",
+        "answer": "Recurring identity-matched customers (3+ orders) split into just two segments. The at-risk high-frequency group is the primary recovery target: frequent buyers (~9-day cadence) who have gone quiet for ~100 days — all have contact info, making outreach feasible. The two active high-frequency customers show healthy engagement. Missing evidence: costs (no margin view), CleanCloud open orders (some \"lapsed\" customers may have outstanding orders), and the broader lapsed/dormant population is absent from this cohort, suggesting most multi-order customers are either unmatched identities or below the 3-order threshold — a data-quality gap that limits recovery targeting."
+      }
+    }
+  ],
+  "passed": true
+}

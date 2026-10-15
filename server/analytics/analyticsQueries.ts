@@ -340,6 +340,54 @@ export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStat
   return { openTotal: rows.length, byStatus, awaitingPayment, unverifiedPayment };
 }
 
+/**
+ * Outstanding native orders (not delivered or cancelled) with the identity
+ * evidence used for customer reconciliation. Read-only; CleanCloud open
+ * orders are not synced, so this covers native orders only.
+ */
+export async function listOpenOrderIdentities(
+  tenantId: string,
+  maxRows = 20000
+): Promise<
+  Array<{
+    id: number;
+    status: string;
+    paid: boolean;
+    createdAt: Date;
+    phone: string | null;
+    email: string | null;
+    bldgUserId: number | null;
+  }>
+> {
+  if (!tenantId.trim()) throw new Error("Established tenant required");
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      id: orders.id,
+      status: orders.status,
+      paid: orders.paid,
+      createdAt: orders.createdAt,
+      phone: orders.phone,
+      email: orders.email,
+      bldgUserId: orders.bldgUserId,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.tenantId, tenantId),
+        sql`${orders.status} NOT IN ('delivered', 'cancelled')`
+      )
+    )
+    .limit(maxRows + 1);
+  if (rows.length > maxRows)
+    throw new Error("Open-order materialization limit exceeded");
+  return rows.map(r => ({
+    ...r,
+    paid: Boolean(r.paid),
+    createdAt: new Date(r.createdAt),
+  }));
+}
+
 /** Customer identities with paid orders in the range: repeat (≥2) vs one-time. */
 export async function getRepeatCustomerStats(
   tenantId: string,

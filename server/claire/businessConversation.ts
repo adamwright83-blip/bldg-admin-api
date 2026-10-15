@@ -1,3 +1,8 @@
+import {
+  analyzeBusinessData,
+  type AnalysisSession,
+  type BusinessAnalysisEvidence,
+} from "../analytics/analysis/analyzeBusinessData";
 import { z } from "zod";
 import { planGovernedBusinessQuestion } from "../analytics/governedBusinessQuery";
 import { invokeLLM } from "../_core/llm";
@@ -87,10 +92,9 @@ export type { ClaireSurface };
  * Claire's read-only business interrogation layer, shared by the live phone
  * call and desktop Claire.
  *
- * Understanding is deterministic first (and at most one LLM planning call
- * for phrasing the parser cannot resolve — the model only chooses criteria).
- * Numbers come only from runBusinessQuery and are spoken through fixed
- * templates, so no model ever writes a business figure. Follow-up context
+ * Governed queries retain their canonical readers and templates. Unfamiliar
+ * questions use the existing model through a bounded approved-view investigation;
+ * values and identities are rendered from executed results by the server. Follow-up context
  * (the last question, the customers, order, or group being discussed) lives
  * on the caller's conversation state and is never business truth.
  */
@@ -131,7 +135,8 @@ export type ClaireAnalyticsSession = {
   focus?: ClaireAnalyticsFocus;
 };
 
-export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null };
+export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null; businessAnalysis?: AnalysisSession | null;
+};
 
 export const CLAIRE_ANALYTICS_SESSION_TTL_MS = 20 * 60 * 1000;
 
@@ -147,11 +152,13 @@ export type ClaireBusinessReader =
   | "combine"
   | "compare_customers"
   | "planned_query"
-  | "query";
+  | "query"
+  | "analysis";
 
 export type ClaireBusinessTurn =
   | { handled: false }
-  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; reader?: ClaireBusinessReader };
+  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; analysisEvidence?: BusinessAnalysisEvidence;
+      reader?: ClaireBusinessReader };
 
 // ── Intent ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +194,8 @@ const COVERAGE =
 const SPEND = /\b(spend|spent|spending|generate[ds]?|pay us|paid us|worth)\b/;
 const QUESTION =
   /^(what|what'?s|whats|how|how'?s|who|which|when|did|do|does|was|were|is|are|has|have|compare|show|tell|give|pull|break|list|name|any|count)\b|\?\s*$|\b(what about|how about|compared|versus|vs\.?)\b/i;
+// Analytical requests need not be phrased as questions or name an existing metric.
+const ANALYTICAL_DIRECTIVE = /\b(?:calculate|compute|analy[sz]e|investigate|identify|summari[sz]e)\b/i;
 const REFINEMENT =
   /^(no|nope|nah|actually|instead|rather|ok(?:ay)?|and|just|only|what if|same|now|then)\b|\b(what about|how about|instead|which (?:one|period|was|had)|who (?:are|were) (?:they|those|them)|name them|list them|which customers|how many of (?:those|them)|of those|only (?:count|include|use|people|customers|repeat|the)|just (?:wash|dry|repeat|the)|more than once|at least (?:twice|two|\d)|(?:two|2) or more|exclud\w*|except|without)\b/;
 const PRECEDING = new RegExp(
@@ -1049,6 +1058,7 @@ function liveSession(state: ClaireAnalyticsState, nowMs: number): ClaireAnalytic
 }
 
 export type ClaireBusinessTurnDeps = {
+  analyze?: typeof analyzeBusinessData;
   runQuery: (tenantId: string, query: BusinessQuery) => Promise<BusinessQueryResult>;
   plan: typeof planBusinessQuestionWithLLM;
   now: () => Date;
@@ -1105,7 +1115,6 @@ export async function answerClaireBusinessTurn(
   const calculationQuery = await (deps.planCalculation ?? planGovernedBusinessQuestion)({
     question: input.utterance, previous: session?.query ?? null, now, timeZone,
   });
-  if (calculationQuery) return finishQuery({ kind: "query", query: calculationQuery, refinement: Boolean(session), hint: null }, false);
 
   let parsed: ParsedBusinessTurn;
   try {
@@ -1114,9 +1123,82 @@ export async function answerClaireBusinessTurn(
     console.warn("[Claire] business question parsing failed", error);
     return { handled: false };
   }
+  let reader: ClaireBusinessReader = "query";
+  // The model assesses whole-question adequacy before a greedy fixed metric can erase novel criteria.
+  // Legacy dependency-injected fixtures retain their established reader behavior; new tests inject analyze explicitly.
+  const mayInvestigate =
+    !looksLikeWorkRequest(input.utterance) &&
+    (parsed.kind !== "not_analytics" ||
+      Boolean(input.state.businessAnalysis) ||
+      QUESTION.test(input.utterance) ||
+      ANALYTICAL_DIRECTIVE.test(input.utterance));
+  if (mayInvestigate && (deps.analyze || !deps.runQuery)) {
+    const analysis = await (deps.analyze ?? analyzeBusinessData)({
+      tenantId: input.tenantId,
+      question: input.utterance,
+      now,
+      timeZone,
+      previous: input.state.businessAnalysis,
+      existingQuery:
+        calculationQuery ?? (parsed.kind === "query" ? parsed.query : null),
+    });
+    if (
+      analysis.kind === "evidence" ||
+      analysis.kind === "insufficient_evidence"
+    ) {
+      if (analysis.session) {
+        input.state.businessAnalysis = analysis.session;
+        input.state.analytics = {
+          query: session?.query ?? defaultBusinessQuery("customer_history"),
+          periods: session?.periods ?? [],
+          pendingClarification: null,
+          disclosed: session?.disclosed ?? [],
+          touchedAt: nowMs,
+          focus: {
+            ...(session?.focus ?? {}),
+            population: analysis.session.customers,
+            customers: analysis.session.customers.slice(0, 2),
+          },
+        };
+      }
+      const text = [analysis.answer, ...analysis.limitations].join(" ");
+      return guardedTurn({
+        handled: true,
+        speak: text,
+        facts:
+          analysis.kind === "evidence"
+            ? analysis.results.map(r => JSON.stringify(r))
+            : [],
+        reader: "analysis",
+        analysisEvidence: analysis,
+      });
+    }
+    if (analysis.kind === "existing") input.state.businessAnalysis = null;
+    if (analysis.kind === "execution_error" && !calculationQuery) {
+      return guardedTurn({
+        handled: true,
+        speak:
+          "I couldn't complete that investigation reliably just now, so I won't guess.",
+        facts: [],
+        reader: "analysis",
+      });
+    }
+    if (analysis.kind === "not_business" && parsed.kind === "not_analytics")
+      return { handled: false };
+  }
+  if (calculationQuery)
+    return finishQuery(
+      {
+        kind: "query",
+        query: calculationQuery,
+        refinement: Boolean(session),
+        hint: null,
+      },
+      false
+    );
   if (parsed.kind === "not_analytics") return { handled: false };
 
-  let reader: ClaireBusinessReader = "query";
+
 
   if (parsed.kind === "clarify") {
     reader = "clarify";

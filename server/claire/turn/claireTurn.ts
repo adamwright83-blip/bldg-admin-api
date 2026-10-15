@@ -1,3 +1,4 @@
+import { receiptFromAnalysis } from "../provenance/claimReceipts";
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import type { SalesInsightArtifact } from "../proactive/salesInsights";
 import { acceptSalesInsightChallenge } from "../proactive/growthChallenge";
@@ -2410,8 +2411,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   async function gatherDeterministicEvidence(question: string): Promise<ClaireRouteEvidence[]> {
     const questionLower = normalizeUtterance(question);
     const evidence: ClaireRouteEvidence[] = [];
-    const skipGreedyBusiness =
-      (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
+    // Existing strategic synthesis can use the discussed population without a new ranking authority.
+      const analysisSession = state.businessAnalysis;
+      if (
+        analysisSession?.tenantId === input.tenantId &&
+        nowMs - analysisSession.touchedAt < 20 * 60000
+      ) {
+        evidence.push({
+          source: "analytical_context",
+          text: JSON.stringify({
+            questions: analysisSession.questions,
+            customers: analysisSession.customers.map(c => c.displayName),
+            results: analysisSession.results,
+            authority:
+              "evidence only; Mission Director ranks work, exact approval authorizes execution",
+          }),
+        });
+      }
+      const skipGreedyBusiness =
+      (!state.businessAnalysis &&
+          isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
       Boolean(operationsQuestion(questionLower)) ||
       MEMORY_QUESTION.test(questionLower) ||
       (question === utterance && parsed.items.length > 0);
@@ -2422,7 +2441,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
-        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result, reader: business.reader ?? "query", factual: business.facts.length > 0 });
+        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result,
+              analysisEvidence: business.analysisEvidence, reader: business.reader ?? "query", factual: business.facts.length > 0 });
       } catch (error) {
         console.warn("[Claire] business evidence failed", error instanceof Error ? error.message : error);
       }
@@ -2807,7 +2827,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     const loadedEvidence: ClaireRouteEvidence[] = [];
-    if (encyclopediaResult?.kind !== "no_retrieval_needed"|| /\b(revenue|sales|spent|spend|customers?|ordered|orders?)\b|^who (?:is|was)\b/i.test(question)) {
+    if (state.businessAnalysis ||
+        encyclopediaResult?.kind !== "no_retrieval_needed"|| /\b(revenue|sales|spent|spend|customers?|ordered|orders?)\b|^who (?:is|was)\b/i.test(question)) {
       loadedEvidence.push(...(await gatherDeterministicEvidence(question)));
       if (encyclopediaResult && (encyclopediaResult.kind === "answered" || encyclopediaResult.kind === "unsupported_fact")) {
         for (const item of encyclopediaResult.evidence) {
@@ -2876,7 +2897,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const business = loadedEvidence.find(entry => entry.source.startsWith("business_reader"));
       if (business) {
         mark("business_reader", { businessReader: business.source.split(":")[1] ?? null });
-        if (business.businessResult?.status === "ok") {
+        if (business.analysisEvidence?.kind === "evidence") {
+            pendingReceipt = receiptFromAnalysis({
+              conversationKey: input.conversationKey,
+              claireTurnOrdinal: claireOrdinal,
+              nowMs,
+              answerText: business.text,
+              evidence: business.analysisEvidence,
+            });
+          } else if (business.businessResult?.status === "ok") {
           pendingReceipt = receiptFromBusinessResult({
             conversationKey: input.conversationKey,
             claireTurnOrdinal: claireOrdinal,

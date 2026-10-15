@@ -65,6 +65,34 @@ describe("E — shared Anthropic LLM behavior", () => {
     });
   });
 
+  it("structured investigation preserves assistant history and forwards cancellation without retries", async () => {
+    mocks.create.mockResolvedValue({
+      id: "msg",
+      model: "claude-test",
+      content: [{ type: "tool_use", name: "answer", input: { ok: true } }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    const controller = new AbortController();
+    await invokeLLM({
+      messages: [
+        { role: "user", content: "Investigate" },
+        { role: "assistant", content: '{"kind":"query"}' },
+        { role: "user", content: "Calculation result" },
+      ],
+      outputSchema: { name: "answer", schema: { type: "object" } },
+      signal: controller.signal,
+      timeoutMs: 1000,
+    });
+    expect(
+      mocks.create.mock.calls[0]![0].messages.map((m: any) => m.role)
+    ).toEqual(["user", "assistant", "user"]);
+    expect(mocks.create.mock.calls[0]![1]).toEqual({
+      signal: controller.signal,
+      maxRetries: 0,
+      timeout: 1000,
+    });
+  });
+
   it("returns ordinary assistant text and preserves spend and usage tracking", async () => {
     mocks.create.mockResolvedValue({
       id: "msg-text",

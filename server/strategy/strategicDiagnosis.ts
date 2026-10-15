@@ -442,6 +442,12 @@ export function assembleStrategicDiagnosis(
     revisionTrigger: action.reviewCondition,
     uncertainty: [
       "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
+      ...evidence
+        .filter(e => e.source === "analyzeBusinessData")
+        .map(
+          e =>
+            `Analytical research (model interpretation, not causal proof): ${e.description} [${e.id}]`
+        ),
       ...input.market.limitations,
       ...(!industry
         ? ["Industry metric readers unsupported."]

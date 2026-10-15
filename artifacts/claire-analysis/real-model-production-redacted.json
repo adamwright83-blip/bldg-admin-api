@@ -1,0 +1,235 @@
+{
+  "redacted": true,
+  "persistedRawRecords": false,
+  "productionBusinessWrites": false,
+  "source": "actual tenant-scoped canonical records in memory",
+  "checks": [
+    {
+      "case": "novel_interval_consistency",
+      "passed": true,
+      "diagnostic": {
+        "kind": "evidence",
+        "reason": ""
+      },
+      "populationCorrect": true,
+      "referenceCorrect": true,
+      "coverageDisclosed": true,
+      "receiptsGrounded": true
+    },
+    {
+      "case": "native_outstanding_exclusion",
+      "passed": true,
+      "diagnostic": {
+        "kind": "evidence",
+        "reason": ""
+      },
+      "populationCorrect": true,
+      "referenceCorrect": true,
+      "coverageDisclosed": true,
+      "receiptsGrounded": true
+    },
+    {
+      "case": "approximate_zip_scope",
+      "passed": true,
+      "diagnostic": {
+        "kind": "evidence",
+        "reason": ""
+      },
+      "populationCorrect": true,
+      "referenceCorrect": true,
+      "coverageDisclosed": true,
+      "receiptsGrounded": true
+    },
+    {
+      "case": "five_spending_candidates",
+      "passed": true,
+      "diagnostic": {
+        "kind": "evidence",
+        "reason": ""
+      },
+      "populationCorrect": true,
+      "referenceCorrect": true,
+      "coverageDisclosed": true,
+      "receiptsGrounded": true
+    },
+    {
+      "case": "first_customer_latest_order",
+      "passed": true,
+      "diagnostic": {
+        "kind": "evidence",
+        "reason": ""
+      },
+      "populationCorrect": true,
+      "referenceCorrect": true,
+      "coverageDisclosed": true,
+      "receiptsGrounded": true
+    },
+    {
+      "case": "canonical_reconciled_money",
+      "passed": true,
+      "queryHash": "a44639916537670b224595653dda13ed175f4c9f3f98d309f43e17733acc12b3"
+    },
+    {
+      "case": "missing_costs_and_cleancloud_open_orders",
+      "passed": true
+    }
+  ],
+  "originalFixedWindowRegression": {
+    "reportingWindowFrozenForThisRun": true,
+    "historicalReportingWindowProven": false,
+    "matchesPreviouslyReportedFourteen": true,
+    "historicalSnapshotIdentityProven": false,
+    "reason": "The prior raw snapshot and exact historical window were not retained; this repeats the governed calculation at the fixed acceptance clock against current canonical records"
+  },
+  "modelCalls": 13,
+  "calls": [
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 8756,
+      "completionTokens": 704,
+      "shapeComplete": true,
+      "queryHash": "13ebcb20fcd795396cacee09433f33ecb572bddc8511fbc634ac5f94f69bd8de"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 5894,
+      "completionTokens": 545,
+      "shapeComplete": true,
+      "queryHash": "bc349be14cd9ff518d81b5134cdb80ec0508a04d81b5493187a21aaa6aefdbbb"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 3917,
+      "completionTokens": 139,
+      "shapeComplete": true,
+      "queryHash": null
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 3236,
+      "completionTokens": 211,
+      "shapeComplete": true,
+      "queryHash": "6f7f14cf58346b1b9ffb0ff6bc27d35ac7919675c87b9cd43fc757844c7ebb20"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 2620,
+      "completionTokens": 104,
+      "shapeComplete": true,
+      "queryHash": null
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 2763,
+      "completionTokens": 192,
+      "shapeComplete": true,
+      "queryHash": "22212603272e7ca797e1b40c618ac51aa235e67f09589739451c1435d99d3bfc"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 2422,
+      "completionTokens": 119,
+      "shapeComplete": true,
+      "queryHash": null
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 2777,
+      "completionTokens": 155,
+      "shapeComplete": true,
+      "queryHash": "dfc72bab68850e090a6ef354dc8dc48f4a3eafb9dd7f4962fff12eee55f04338"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 2965,
+      "completionTokens": 123,
+      "shapeComplete": true,
+      "queryHash": null
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 2085,
+      "completionTokens": 130,
+      "shapeComplete": true,
+      "queryHash": "af14cc4138d83559bec202357fac820d8ff502c2094d57db3aaf59046c029207"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 2094,
+      "completionTokens": 95,
+      "shapeComplete": true,
+      "queryHash": null
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "query",
+      "elapsedMs": 1609,
+      "completionTokens": 61,
+      "shapeComplete": true,
+      "queryHash": "e71ec6b81e0e6711556117ce47fc02a3df4da6b9b2dd7a0c15ea5941466b4653"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "kind": "final",
+      "elapsedMs": 5008,
+      "completionTokens": 196,
+      "shapeComplete": true,
+      "queryHash": null
+    }
+  ],
+  "executions": [
+    {
+      "status": "rejected",
+      "elapsedMs": 13,
+      "category": "complexity"
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 128
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 118
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 99
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 117
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 115
+    },
+    {
+      "status": "ok",
+      "elapsedMs": 122
+    }
+  ],
+  "servedModels": [
+    "claude-sonnet-4-6"
+  ],
+  "queryHashes": [
+    "13ebcb20fcd795396cacee09433f33ecb572bddc8511fbc634ac5f94f69bd8de",
+    "bc349be14cd9ff518d81b5134cdb80ec0508a04d81b5493187a21aaa6aefdbbb",
+    "6f7f14cf58346b1b9ffb0ff6bc27d35ac7919675c87b9cd43fc757844c7ebb20",
+    "22212603272e7ca797e1b40c618ac51aa235e67f09589739451c1435d99d3bfc",
+    "dfc72bab68850e090a6ef354dc8dc48f4a3eafb9dd7f4962fff12eee55f04338",
+    "af14cc4138d83559bec202357fac820d8ff502c2094d57db3aaf59046c029207",
+    "e71ec6b81e0e6711556117ce47fc02a3df4da6b9b2dd7a0c15ea5941466b4653"
+  ],
+  "passed": true
+}

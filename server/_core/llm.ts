@@ -72,6 +72,9 @@ export type ToolChoice =
   | ToolChoiceExplicit;
 
 export type InvokeParams = {
+  /** Cancels bounded investigations at the provider boundary. */
+  signal?: AbortSignal;
+  timeoutMs?: number;
   messages: Message[];
   tenantId?: string;
   model?: string;
@@ -477,9 +480,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       }
       continue;
     }
-    if (m.role === "user") {
+    if (m.role === "user"|| m.role === "assistant") {
       anthropicMessages.push({
-        role: "user",
+        role: m.role,
         content: messageContentToAnthropicBlocks(m.content),
       });
       continue;
@@ -525,7 +528,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         name: toolName,
         disable_parallel_tool_use: true,
       },
-    });
+    },
+      {
+        ...(params.signal ? { signal: params.signal, maxRetries: 0 } : {}),
+        ...(params.timeoutMs ? { timeout: params.timeoutMs } : {}),
+      });
   } catch (e) {
     observeAnthropicCall({
       tenantId,
