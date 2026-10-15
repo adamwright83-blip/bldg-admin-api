@@ -10320,3 +10320,35 @@ export const scheduledOutreachRevisions = mysqlTable(
 export type ScheduledOutreachRevisionRow = typeof scheduledOutreachRevisions.$inferSelect;
 export type InsertScheduledOutreachRevision = typeof scheduledOutreachRevisions.$inferInsert;
 
+/**
+ * Personal sender identity observations.
+ * No pairing codes, cookies, or session secrets. A row is not permission to transmit.
+ */
+export const personalSenderIdentities = mysqlTable(
+  "personal_sender_identities",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 64 }).notNull(),
+    pairingPresent: boolean("pairing_present").notNull().default(false),
+    displacesExistingWebSession: boolean("displaces_existing_web_session").notNull().default(false),
+    pageLoaded: boolean("page_loaded").notNull().default(false),
+    deviceOnline: boolean("device_online").notNull().default(false),
+    sessionObservedAt: timestamp("session_observed_at"),
+    originatingPhone: varchar("originating_phone", { length: 32 }),
+    phoneVerified: boolean("phone_verified").notNull().default(false),
+    observationSource: varchar("observation_source", { length: 64 }).notNull(),
+    deviceId: varchar("device_id", { length: 128 }),
+    expectedDeviceId: varchar("expected_device_id", { length: 128 }),
+    transportProbeOk: boolean("transport_probe_ok").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (table) => ({
+    tenantOperator: uniqueIndex("uq_psi_tenant_operator").on(table.tenantId, table.operatorId),
+  })
+);
+
+export type PersonalSenderIdentityRow = typeof personalSenderIdentities.$inferSelect;
+export type InsertPersonalSenderIdentity = typeof personalSenderIdentities.$inferInsert;
+

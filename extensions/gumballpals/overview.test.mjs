@@ -267,6 +267,14 @@ test("screenshot is refused unless the visible tab is the CleanCloud store", () 
   assert.doesNotThrow(() =>
     assertCleanCloudScreenshotTarget({ url: "https://cleancloudapp.com/store", active: true })
   );
+  assert.throws(
+    () =>
+      assertCleanCloudScreenshotTarget({
+        url: "https://messages.google.com/web/conversations",
+        active: true,
+      }),
+    /BLOCKED: Gumball must not attach to Google Messages/
+  );
 });
 
 test("the screenshot permission is optional, user-granted, and target-guarded", () => {

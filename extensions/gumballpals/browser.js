@@ -1,4 +1,5 @@
 import { GOLDLINE, CLEANCLOUD, MAX_BYTES } from "./core.js";
+import { assertNotGoogleMessagesUrl } from "./sessionBoundary.js";
 
 export async function runInTab(tabId, func, args = []) {
   // Chrome rejects undefined script arguments. GET requests deliberately omit
@@ -635,6 +636,7 @@ export async function readMetricsOverview(range) {
 }
 
 export function assertCleanCloudScreenshotTarget(tab) {
+  assertNotGoogleMessagesUrl(tab?.url);
   let url;
   try {
     url = new URL(tab?.url || "");
