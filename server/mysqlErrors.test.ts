@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isMysqlDuplicateKeyError,
+  isMysqlLockConflictError,
   isMysqlMissingTableError,
   queryOptionalMysqlTable,
 } from "./mysqlErrors";
@@ -27,6 +28,55 @@ describe("MySQL duplicate-key recovery", () => {
     expect(
       isMysqlDuplicateKeyError({
         cause: { cause: { cause: { cause: { cause: { errno: 1062 } } } } },
+      })
+    ).toBe(false);
+  });
+});
+
+describe("MySQL lock-conflict recovery", () => {
+  it("recognizes direct and Drizzle-wrapped deadlocks and lock waits", () => {
+    expect(isMysqlLockConflictError({ code: "ER_LOCK_DEADLOCK", errno: 1213 })).toBe(
+      true
+    );
+    expect(
+      isMysqlLockConflictError({
+        message: "Failed query: select `id` from `daphne_observations`",
+        cause: {
+          code: "ER_LOCK_DEADLOCK",
+          errno: 1213,
+          message:
+            "Deadlock found when trying to get lock; try restarting transaction",
+        },
+      })
+    ).toBe(true);
+    expect(
+      isMysqlLockConflictError({
+        message: "Failed query",
+        cause: { code: "ER_LOCK_WAIT_TIMEOUT", errno: 1205 },
+      })
+    ).toBe(true);
+    expect(
+      isMysqlLockConflictError(
+        new Error("Lock wait timeout exceeded; try restarting transaction")
+      )
+    ).toBe(true);
+  });
+
+  it("does not treat materialization failures or deep cause chains as lock conflicts", () => {
+    expect(isMysqlLockConflictError(new Error("dream failure"))).toBe(false);
+    expect(
+      isMysqlLockConflictError({
+        code: "ER_SIGNAL_EXCEPTION",
+        errno: 1644,
+        message: "dream failure",
+      })
+    ).toBe(false);
+    expect(
+      isMysqlLockConflictError(new Error("Daphne epistemic claim did not persist"))
+    ).toBe(false);
+    expect(
+      isMysqlLockConflictError({
+        cause: { cause: { cause: { cause: { cause: { errno: 1213 } } } } },
       })
     ).toBe(false);
   });
