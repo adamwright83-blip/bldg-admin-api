@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { projectLatestNativeSale } from "./dataFreshness";
+import { capturedCents, projectLatestNativeSale } from "./dataFreshness";
 import type { NativePaymentFact } from "../domains/payment/nativePaymentReadService";
 
 const rows = [
@@ -50,6 +50,14 @@ describe("native data freshness Payment truth", () => {
 
   it("does not fabricate a native sale when no admitted occurrence exists", () => {
     expect(projectLatestNativeSale(rows, new Map())).toBeNull();
+  });
+
+  it("does not invent zero dollars for a missing CleanCloud amount", () => {
+    expect(capturedCents(null)).toBeNull();
+    expect(capturedCents(undefined)).toBeNull();
+    expect(capturedCents("")).toBeNull();
+    expect(capturedCents(0)).toBe(0);
+    expect(capturedCents(3375)).toBe(3375);
   });
 
   it("does not reconstruct native payment truth from raw Orders fields", () => {

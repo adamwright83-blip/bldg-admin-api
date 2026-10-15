@@ -60,7 +60,7 @@ import {
   type ReadBusinessSourceCoverage,
   type ReconciledRevenue,
 } from "./canonicalRevenue";
-import type { BusinessSourceCoverageSnapshot } from "./sourceCoverage";
+import { customerTruthDispositionOf, type BusinessSourceCoverageSnapshot } from "./sourceCoverage";
 import { loadDataFreshness, type DataFreshness } from "./dataFreshness";
 import {
   detectCrossSourceOverlap,
@@ -653,13 +653,22 @@ export async function runBusinessQuery(
         const result = newCustomerPopulation(history, period, lookbackStart!, query.minOrders);
         return ok({ kind: "customers", population: result, activeCount: result.activeCount, lookbackStart });
       }
-      case "dormant_customers":
+      case "dormant_customers": {
+        const population = dormantCustomerPopulation(history, period, lookbackStart!, query.minOrders);
+        if (population.count === 0) {
+          const seam = await readCoverageSeam(deps, tenantId, period);
+          const disposition = customerTruthDispositionOf(seam);
+          if (disposition !== "current") {
+            return unavailable(`customer_truth_${disposition}`);
+          }
+        }
         return ok({
           kind: "customers",
-          population: dormantCustomerPopulation(history, period, lookbackStart!, query.minOrders),
+          population,
           activeCount: null,
           lookbackStart,
         });
+      }
       case "top_customers":
         return ok({ kind: "top_customers", members: topCustomers(history, period, query.limit), rankedBy: "revenue" });
       case "frequent_customers":

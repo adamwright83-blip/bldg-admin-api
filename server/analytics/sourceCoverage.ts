@@ -61,6 +61,48 @@ export const SOURCE_COVERAGE_STATUSES = [
 ] as const;
 export type SourceCoverageStatus = (typeof SOURCE_COVERAGE_STATUSES)[number];
 
+/**
+ * Claire and dormant reads use this disposition. It is derived from the
+ * existing coverage clock and the latest Gumball attempt. It is not a second clock.
+ *
+ * current — the held book is fresh
+ * stale — the due checkpoint was missed
+ * missing — the source never connected and no rows are proven
+ * import_failed — the latest import failed; an empty read is not zero customers
+ * source_unavailable — the probe itself could not be read
+ * coverage_incomplete — some rows are readable and the span is not current
+ */
+export const CUSTOMER_TRUTH_DISPOSITIONS = [
+  "current",
+  "stale",
+  "missing",
+  "import_failed",
+  "source_unavailable",
+  "coverage_incomplete",
+] as const;
+export type CustomerTruthDisposition = (typeof CUSTOMER_TRUTH_DISPOSITIONS)[number];
+
+const IMPORT_FAILURE_OUTCOMES = new Set([
+  "extension_export",
+  "extension_failed",
+  "extension_parse",
+  "extension_import",
+  "rejected",
+  "conflict",
+  "unpaired",
+  "failed",
+  "unavailable",
+]);
+
+const DISPOSITION_RANK: Record<CustomerTruthDisposition, number> = {
+  current: 0,
+  stale: 1,
+  coverage_incomplete: 2,
+  missing: 3,
+  import_failed: 4,
+  source_unavailable: 5,
+};
+
 export type SourceAvailability = "available" | "unavailable" | "not_held";
 export type SourceRecordRead = "readable" | "none_proven" | "unknown";
 export type BusinessSourceId = "laundry_butler" | "cleancloud";
@@ -108,6 +150,11 @@ export type BusinessSourceCoverage = {
    * partial, or unavailable source.
    */
   emptyReadMeansNoRecords: boolean;
+  /**
+   * Finer than `status`. Absent on older hand-built fixtures; readers fall
+   * back through `customerTruthDispositionOf`.
+   */
+  customerTruthDisposition?: CustomerTruthDisposition;
   reason: string;
   provenance: {
     bindingState: SourceBindingState;
@@ -165,6 +212,8 @@ export type BusinessSourceCoverageSnapshot = {
     allCustomersLicensed: false;
     staleIsZero: false;
     missingIsNoCustomers: false;
+    /** Worst held-source disposition. Missing on fixtures that predate this field. */
+    customerTruthDisposition?: CustomerTruthDisposition;
   };
   blockingSources: Array<{
     sourceId: BusinessSourceId;
@@ -639,6 +688,120 @@ function combineBook(
   };
 }
 
+function attemptFailedAfterSuccess(evidence: SourceEvidence): boolean {
+  const attempt = evidence.latestAttempt;
+  if (!attempt) return false;
+  const outcome = attempt.outcome.trim().toLowerCase();
+  if (!outcome || outcome === "imported" || outcome === "replayed") return false;
+  const failed =
+    IMPORT_FAILURE_OUTCOMES.has(outcome) ||
+    outcome.includes("fail") ||
+    outcome.includes("reject");
+  if (!failed) return false;
+  const successAt = evidence.lastSuccessAt?.getTime() ?? null;
+  return successAt === null || attempt.at.getTime() >= successAt;
+}
+
+function latestCheckpointAssimilationFailed(
+  source: BusinessSourceCoverage,
+  receipts: readonly CleanCloudAssimilationReceipt[] | "unreadable"
+): boolean {
+  if (source.sourceId !== "cleancloud" || receipts === "unreadable") return false;
+  const expectedThrough = source.expectedThrough;
+  if (!expectedThrough) return false;
+  const covering = receipts.filter(
+    receipt =>
+      receipt.basis === "orders_created" &&
+      receipt.from <= expectedThrough &&
+      receipt.to >= expectedThrough
+  );
+  if (!covering.length) return false;
+  const latest = covering.reduce((best, receipt) =>
+    receipt.completedAt > best.completedAt ? receipt : best
+  );
+  return latest.customerTruth === "failed";
+}
+
+function dispositionFor(
+  source: BusinessSourceCoverage,
+  evidence: SourceEvidence,
+  receipts: readonly CleanCloudAssimilationReceipt[] | "unreadable"
+): CustomerTruthDisposition {
+  if (
+    source.sourceId === "cleancloud" &&
+    (attemptFailedAfterSuccess(evidence) ||
+      latestCheckpointAssimilationFailed(source, receipts))
+  ) {
+    return "import_failed";
+  }
+  if (
+    evidence.state === "unknown" ||
+    (source.sourceId === "cleancloud" && receipts === "unreadable")
+  ) {
+    return "source_unavailable";
+  }
+  if (!source.includedInCombinedBook) return "missing";
+  if (source.status === "fresh") return "current";
+  if (source.status === "stale") return "stale";
+  if (source.status === "partial") return "coverage_incomplete";
+  if (source.records !== "readable") return "missing";
+  return "source_unavailable";
+}
+
+function withCustomerTruthDisposition(
+  source: BusinessSourceCoverage,
+  evidence: SourceEvidence,
+  receipts: readonly CleanCloudAssimilationReceipt[] | "unreadable"
+): BusinessSourceCoverage {
+  const customerTruthDisposition = dispositionFor(source, evidence, receipts);
+  if (customerTruthDisposition === "import_failed" && source.status === "fresh") {
+    return {
+      ...source,
+      status: "partial",
+      supportsExhaustiveCurrentClaim: false,
+      customerTruthDisposition,
+      reason:
+        "The latest CleanCloud import failed. Known rows may still be read. This is not a current book, and an empty read is not zero customers.",
+    };
+  }
+  return { ...source, customerTruthDisposition };
+}
+
+function worstDisposition(
+  values: readonly CustomerTruthDisposition[]
+): CustomerTruthDisposition {
+  if (!values.length) return "source_unavailable";
+  return values.reduce((worst, value) =>
+    DISPOSITION_RANK[value] > DISPOSITION_RANK[worst] ? value : worst
+  );
+}
+
+/** Readers accept fixtures that predate `customerTruthDisposition`. */
+export function customerTruthDispositionOf(
+  snapshot:
+    | {
+        book: {
+          status: SourceCoverageStatus;
+          customerTruthDisposition?: CustomerTruthDisposition;
+        };
+      }
+    | null
+    | undefined
+): CustomerTruthDisposition {
+  if (!snapshot) return "source_unavailable";
+  if (snapshot.book.customerTruthDisposition) return snapshot.book.customerTruthDisposition;
+  switch (snapshot.book.status) {
+    case "fresh":
+      return "current";
+    case "stale":
+      return "stale";
+    case "partial":
+      return "coverage_incomplete";
+    default:
+      return "source_unavailable";
+  }
+}
+
 /**
  * Pure coverage decision. Same inputs always return the same snapshot.
  * `evidence` and `cleancloudReceipts` must already be scoped to `tenantId`.
@@ -647,21 +810,34 @@ export function deriveBusinessSourceCoverage(
   input: DeriveBusinessSourceCoverageInput
 ): BusinessSourceCoverageSnapshot {
   const sources = [
-    nativeCoverage(input.evidence.laundry_butler),
-    cleancloudCoverage(
+    withCustomerTruthDisposition(
+      nativeCoverage(input.evidence.laundry_butler),
+      input.evidence.laundry_butler,
+      input.cleancloudReceipts
+    ),
+    withCustomerTruthDisposition(
+      cleancloudCoverage(
+        input.evidence.cleancloud,
+        input.now,
+        input.cleancloudReceipts
+      ),
       input.evidence.cleancloud,
-      input.now,
       input.cleancloudReceipts
     ),
   ];
   const book = combineBook(sources, input.evidence.cleancloud.coverageRanges);
+  const customerTruthDisposition = worstDisposition(
+    sources
+      .filter(source => source.includedInCombinedBook)
+      .map(source => source.customerTruthDisposition ?? "source_unavailable")
+  );
   return {
     contractVersion: SOURCE_COVERAGE_CONTRACT_VERSION,
     tenantId: input.tenantId,
     checkedAt: input.now.toISOString(),
     timeZone: GUMBALL_TIME_ZONE,
     sources,
-    book,
+    book: { ...book, customerTruthDisposition },
     blockingSources: sources
       .filter(
         source => source.includedInCombinedBook && source.status !== "fresh"

@@ -17,6 +17,7 @@ import {
   commercialMissions,
   commercialOpportunities,
   commercialPipelineRecords,
+  customerContactPermissions,
   daphneGoals,
   entityLocations,
   goldlineEventReceipts,
@@ -41,6 +42,7 @@ import {
   admitAuthorityClaimWith,
   type AuthorityTransaction,
 } from "../server/platform/authority/authorityReceipt";
+import { hashIdentityKey } from "../server/strategy/dormantOutreachGate";
 import { stableTerritoryKey } from "../shared/goldlineTerritories";
 
 const TENANT = "default";
@@ -74,6 +76,7 @@ const PROOF_TENANT_TABLES = [
   "commercial_missions",
   "commercial_opportunities",
   "commercial_accounts",
+  "customer_contact_permissions",
   "orders",
 ] as const;
 
@@ -438,6 +441,33 @@ async function seed() {
       },
     });
   }
+
+  /**
+   * Disposable proof consent only. Production outreach still requires a
+   * recorded SMS opt-in; a phone on an order is not consent. This row lets
+   * the proof villager pass that gate without changing the gate.
+   */
+  await db
+    .insert(customerContactPermissions)
+    .values({
+      tenantId: TENANT,
+      customerKeyHash: hashIdentityKey(TENANT, `phone:${silverLakePhone}`),
+      channel: "sms",
+      purpose: "win_back_marketing",
+      status: "opted_in",
+      sourceReference: "proof-fixture:silver-lake-sms-opt-in",
+      capturedAt: new Date(),
+      expiresAt: null,
+      recordedBy: "proof-seed",
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        status: "opted_in",
+        sourceReference: "proof-fixture:silver-lake-sms-opt-in",
+        expiresAt: null,
+        recordedBy: "proof-seed",
+      },
+    });
 
   /**
    * Reconcile through the canonical entity-location WRITER before assigning

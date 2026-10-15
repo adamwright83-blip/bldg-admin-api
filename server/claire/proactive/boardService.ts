@@ -4,6 +4,12 @@ import { reconcileLedgerSpan } from "../../analytics/canonicalRevenue";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
+import { customerTruthDispositionOf, type CustomerTruthDisposition } from "../../analytics/sourceCoverage";
+import {
+  loadDormantContactFacts,
+  permissionForKeys,
+  type DormantContactFacts,
+} from "../../strategy/dormantOutreachGate";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
@@ -219,8 +225,11 @@ export async function ensureOperatorBoard(input: {
 
   const verifiedHistoryByIdentity = new Map<string, CustomerHistoryObservation[]>();
   let customers: CustomerEvidence[] = [];
+  let ledgerUnreadable = false;
+  let outreachDisposition: CustomerTruthDisposition = "source_unavailable";
+  let contactFacts: DormantContactFacts | null = null;
   try {
-    const [ledger, safetyEvidence] = await Promise.all([
+    const [ledger, safetyEvidence, facts] = await Promise.all([
       loadPaidOrderLedger({
         tenantId: input.tenantId,
         startUtc: zonedDayStartUtc("2020-01-01", timeZone),
@@ -232,7 +241,14 @@ export async function ensureOperatorBoard(input: {
         now: new Date(now),
         cooldownDays: rules.outreachCooldownDays,
       }).catch(() => null),
+      loadDormantContactFacts({
+        tenantId: input.tenantId,
+        now: new Date(now),
+        cooldownDays: rules.outreachCooldownDays,
+      }).catch(() => null),
     ]);
+    contactFacts = facts;
+    outreachDisposition = customerTruthDispositionOf(safetyEvidence?.coverage ?? null);
     customers = groupCustomers(reconcileLedgerSpan(ledger, { start: "2020-01-01", end: today }).includedEvents)
       .filter(group => group.matched && group.records.some(record => record.cents > 0))
       .map(group => {
@@ -261,14 +277,17 @@ export async function ensureOperatorBoard(input: {
           lastPaidOn: last.businessDate,
           daysSinceLastPaid: Math.max(0, daysBetween(today, last.businessDate)),
           expectedCadenceDays: cadence,
-          openOrderCount: safety ? (safety.openOrderCount ?? (safety.unavailableReason ? 1 : 0)) : 0,
+          openOrderCount: safety?.openOrderCount ?? 1,
           lastOutreachOn: safety?.lastOutreachOn ?? null,
           attestedOutreachOn: safety?.attestedOutreachOn ?? null,
         };
       });
   } catch (error) {
+    ledgerUnreadable = true;
     console.warn("[ClaireProactive] ledger unavailable", error instanceof Error ? error.message : error);
   }
+  const mayNameCustomers =
+    !ledgerUnreadable && outreachDisposition === "current" && contactFacts?.readable === true;
 
   for (const customer of customers) {
     const open = (await loadObligations(input.tenantId, input.operatorUserId)).find(
@@ -280,7 +299,9 @@ export async function ensureOperatorBoard(input: {
   }
 
   const live = await loadObligations(input.tenantId, input.operatorUserId);
-  const eligible = customers.filter(customer => isDormantEligible(customer, rules, today, live).eligible);
+  const eligible = mayNameCustomers
+    ? customers.filter(customer => isDormantEligible(customer, rules, today, live).eligible)
+    : [];
   const skipSales = rules.skipSalesUntil === today;
   const placed = scheduleRecoveryDays({
     today,
@@ -294,6 +315,11 @@ export async function ensureOperatorBoard(input: {
     const current = await loadObligations(input.tenantId, input.operatorUserId);
     const check = isDormantEligible(customer, rules, today, current);
     if (!check.eligible) continue;
+    const phoneDigits = customer.identityKey.startsWith("phone:")
+      ? customer.identityKey.slice("phone:".length)
+      : "";
+    if (phoneDigits.length !== 10 || !contactFacts) continue;
+    if (permissionForKeys(contactFacts, input.tenantId, [customer.identityKey]).state !== "opted_in") continue;
     // Single-order, ambiguous-ID and incomplete histories cannot support a
     // churn score. Never invent an order cadence, order IDs, or $50 purchases.
     const history = verifiedHistoryByIdentity.get(customer.identityKey);
@@ -389,7 +415,14 @@ export async function ensureOperatorBoard(input: {
     });
     if (warning) warnings.push(warning);
   } catch {
-    /* optional */
+    warnings.push("CleanCloud freshness could not be read. That is not an empty customer list.");
+  }
+  if (ledgerUnreadable) {
+    warnings.push("The customer book could not be read. That is not an empty customer list.");
+  } else if (outreachDisposition !== "current") {
+    warnings.push(
+      `CleanCloud customer truth is ${outreachDisposition}. Personalized recovery outreach is withheld.`
+    );
   }
 
   const insight = await loadSalesInsight(input.tenantId, new Date(now), timeZone).catch(() => null);

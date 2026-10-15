@@ -866,5 +866,98 @@ describe("business source coverage contract", () => {
     });
     expect(ordersOnly.book.scope.cleancloudEconomicEvents).toBeNull();
     expect(ordersOnly.book.paymentEventsProven).toBe(false);
+    expect(ordersOnly.book.customerTruthDisposition).toBe("current");
+  });
+});
+
+describe("customer truth disposition", () => {
+  it("does not call a book current when the latest import failed after the last success", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const failed = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: {
+        laundry_butler: {
+          state: "bound",
+          lastSuccessAt: BEFORE_DUE,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        },
+        cleancloud: {
+          state: "bound",
+          lastSuccessAt: completedAt,
+          coverageRanges: [range("2026-09-01", "2026-09-19", completedAt)],
+          latestAttempt: {
+            at: new Date("2026-09-20T02:00:00.000Z"),
+            outcome: "failed",
+            rangeFrom: "2026-09-01",
+            rangeTo: "2026-09-19",
+          },
+          isSystemOfRecord: false,
+        },
+      },
+      cleancloudReceipts: [receipt("2026-09-01", "2026-09-19", completedAt, "refreshed")],
+    });
+    expect(failed.book.customerTruthDisposition).toBe("import_failed");
+    expect(failed.book.current).toBe(false);
+    expect(failed.book.interpretEmptyAsNoCustomers).toBe(false);
+    expect(failed.book.missingIsNoCustomers).toBe(false);
+
+    const olderFailure = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: {
+        laundry_butler: {
+          state: "bound",
+          lastSuccessAt: BEFORE_DUE,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        },
+        cleancloud: {
+          state: "bound",
+          lastSuccessAt: completedAt,
+          coverageRanges: [range("2026-09-01", "2026-09-19", completedAt)],
+          latestAttempt: {
+            at: new Date("2026-09-19T01:00:00.000Z"),
+            outcome: "failed",
+            rangeFrom: null,
+            rangeTo: null,
+          },
+          isSystemOfRecord: false,
+        },
+      },
+      cleancloudReceipts: [receipt("2026-09-01", "2026-09-19", completedAt, "refreshed")],
+    });
+    expect(olderFailure.book.customerTruthDisposition).toBe("current");
+    expect(olderFailure.book.current).toBe(true);
+  });
+
+  it("treats a failed customer-truth assimilation on the due checkpoint as an import failure", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const result = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: {
+        laundry_butler: {
+          state: "bound",
+          lastSuccessAt: BEFORE_DUE,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        },
+        cleancloud: {
+          state: "bound",
+          lastSuccessAt: completedAt,
+          coverageRanges: [range("2026-09-01", "2026-09-19", completedAt)],
+          latestAttempt: null,
+          isSystemOfRecord: false,
+        },
+      },
+      cleancloudReceipts: [receipt("2026-09-01", "2026-09-19", completedAt, "failed")],
+    });
+    expect(result.book.customerTruthDisposition).toBe("import_failed");
+    expect(result.book.current).toBe(false);
   });
 });

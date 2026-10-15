@@ -97,6 +97,13 @@ function iso(value: Date | string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+/** A missing CleanCloud amount stays unknown. Zero is only zero when the row stored zero. */
+export function capturedCents(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function num(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
@@ -252,7 +259,7 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
     uniqueSales.push({
       orderNumber: row.orderNumber,
       customerName: row.customerName,
-      cents: Number(row.cents ?? 0),
+      cents: capturedCents(row.cents),
       paidAt: iso(row.paidAt),
       placedAt: iso(row.placedAt),
       ingestedAt: iso(row.ingestedAt),

@@ -9,6 +9,7 @@ import {
   fixtureCompleteness,
   fixtureLoaders,
 } from "./businessLedgerFixture";
+import { deriveBusinessSourceCoverage } from "./sourceCoverage";
 import { defaultBusinessQuery, runBusinessQuery, type BusinessQueryDeps } from "./businessQuery";
 import { loadPaidOrderLedger, type LedgerLoaders } from "./paidOrderLedger";
 
@@ -60,6 +61,43 @@ describe("runBusinessQuery", () => {
       data: { current: { revenueCents: 10000, orderCount: 2 } },
       coverage: { serviceFilterUnclassified: { orders: 1, cents: 3000 } },
     });
+  });
+
+  it("does not turn a failed CleanCloud import into an empty dormant customer list", async () => {
+    const coverage = deriveBusinessSourceCoverage({
+      tenantId: "tenant-1",
+      now: FIXTURE_NOW,
+      evidence: {
+        laundry_butler: {
+          state: "bound",
+          lastSuccessAt: FIXTURE_NOW,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        },
+        cleancloud: {
+          state: "bound",
+          lastSuccessAt: null,
+          coverageRanges: [],
+          latestAttempt: {
+            at: FIXTURE_NOW,
+            outcome: "failed",
+            rangeFrom: null,
+            rangeTo: null,
+          },
+          isSystemOfRecord: false,
+        },
+      },
+      cleancloudReceipts: [],
+    });
+    const result = await runBusinessQuery(
+      "tenant-1",
+      defaultBusinessQuery("dormant_customers"),
+      { ...deps(emptyLoaders), readSourceCoverage: async () => coverage }
+    );
+    expect(result.status).toBe("unavailable");
+    if (result.status === "unavailable") expect(result.reason).toBe("customer_truth_import_failed");
+    expect(JSON.stringify(result)).not.toContain("\"count\":0");
   });
 });
 
