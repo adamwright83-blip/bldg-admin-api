@@ -1,10 +1,89 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   getCozyEncounterMission,
   sendCozyOutreachSms,
   resetSessionOutreachReceipts,
 } from "./cozyVillagerOutreachService";
 import { createFakeOutboundSendAdapter } from "../../spiritHumanRescue/outboundSendAdapter";
+
+vi.mock("../../strategy/winBackDossier", () => ({
+  readWinBackDossier: vi.fn().mockResolvedValue({
+    area: "Silver Lake",
+    lapsedCount: 7,
+    contacts: [
+      {
+        identityId: "cust_sl_001_mei",
+        name: "Mei Lin",
+        phone: "+12135550141",
+        daysSinceLastOrder: 34,
+        paidOrders: 14,
+        lifetimeCents: 62400,
+        lastOrderDate: "2026-09-10",
+        lastOrderSummary: "Wash & Fold 32 lbs",
+      },
+      {
+        identityId: "cust_sl_002_barnaby",
+        name: "Barnaby Hayes",
+        phone: "+12135550142",
+        daysSinceLastOrder: 48,
+        paidOrders: 8,
+        lifetimeCents: 38200,
+        lastOrderDate: "2026-08-27",
+        lastOrderSummary: "Standard Wash & Fold",
+      },
+      {
+        identityId: "cust_sl_003_oliver",
+        name: "Oliver Bennett",
+        phone: "+12135550143",
+        daysSinceLastOrder: 62,
+        paidOrders: 11,
+        lifetimeCents: 51900,
+        lastOrderDate: "2026-08-13",
+        lastOrderSummary: "Duvet Comforter",
+      },
+      {
+        identityId: "cust_sl_004_bella",
+        name: "Bella Ramos",
+        phone: "+12135550144",
+        daysSinceLastOrder: 29,
+        paidOrders: 6,
+        lifetimeCents: 29400,
+        lastOrderDate: "2026-09-15",
+        lastOrderSummary: "Eco Wash & Fold",
+      },
+      {
+        identityId: "cust_sl_005_sammy",
+        name: "Sammy Cruz",
+        phone: "+12135550145",
+        daysSinceLastOrder: 76,
+        paidOrders: 19,
+        lifetimeCents: 84600,
+        lastOrderDate: "2026-07-30",
+        lastOrderSummary: "Commercial uniform linens",
+      },
+      {
+        identityId: "cust_sl_006_bramble",
+        name: "Bramble Vance",
+        phone: "+12135550146",
+        daysSinceLastOrder: 91,
+        paidOrders: 5,
+        lifetimeCents: 21500,
+        lastOrderDate: "2026-07-15",
+        lastOrderSummary: "Standard Wash & Fold",
+      },
+      {
+        identityId: "cust_sl_007_cleo",
+        name: "Cleo Montgomery",
+        phone: "+12135550147",
+        daysSinceLastOrder: 42,
+        paidOrders: 12,
+        lifetimeCents: 56800,
+        lastOrderDate: "2026-09-02",
+        lastOrderSummary: "Sheets & Towels",
+      },
+    ],
+  }),
+}));
 
 describe("cozyVillagerOutreachService", () => {
   beforeEach(() => {

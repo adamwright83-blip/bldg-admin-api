@@ -98,6 +98,147 @@ export const goldlineWorldRouter = router({
         ...input,
       })
     ),
+  scheduleCozyOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        customerId: z.string().min(1),
+        customerName: z.string().min(1),
+        recipientPhone: z.string().min(5),
+        originalSuggestedDraft: z.string().min(1),
+        messageBody: z.string().min(1).max(500),
+        scheduledForIso: z.string().datetime(),
+        timezone: z.string().default("America/Los_Angeles"),
+        slotId: z.string().optional(),
+        territoryId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { createScheduledOutreachDraft } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await createScheduledOutreachDraft({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        recipientPhone: input.recipientPhone,
+        originalSuggestedDraft: input.originalSuggestedDraft,
+        messageBody: input.messageBody,
+        scheduledFor: new Date(input.scheduledForIso),
+        timezone: input.timezone,
+        slotId: input.slotId,
+        territoryId: input.territoryId,
+      });
+    }),
+  listScheduledOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          status: z.string().optional(),
+          limit: z.number().int().min(1).max(100).optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const { listScheduledOutreachMessages } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await listScheduledOutreachMessages({
+        tenantId: ctx.tenantId,
+        status: input?.status,
+        limit: input?.limit,
+      });
+    }),
+  editScheduledOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+        newMessageBody: z.string().min(1).max(500),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { editScheduledOutreachDraft } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await editScheduledOutreachDraft({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        newMessageBody: input.newMessageBody,
+        reason: input.reason,
+      });
+    }),
+  rescheduleOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+        newScheduledForIso: z.string().datetime(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { rescheduleOutreachDraft } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await rescheduleOutreachDraft({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        newScheduledFor: new Date(input.newScheduledForIso),
+        reason: input.reason,
+      });
+    }),
+  cancelScheduledOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+        reason: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { cancelScheduledOutreachDraft } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await cancelScheduledOutreachDraft({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        reason: input.reason,
+      });
+    }),
+  sendEarlyOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { sendEarlyOutreachDraft } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await sendEarlyOutreachDraft({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        leaseHolder: `operator_${ctx.user.openId}`,
+      });
+    }),
+  getScheduledOutreachRevisions: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { getScheduledOutreachRevisions } = await import(
+        "../experience/lanternCity/scheduledOutreachService"
+      );
+      return await getScheduledOutreachRevisions({
+        tenantId: ctx.tenantId,
+        messageId: input.messageId,
+      });
+    }),
   frontierIntelligence: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({

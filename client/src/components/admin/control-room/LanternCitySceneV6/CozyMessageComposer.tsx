@@ -7,7 +7,8 @@ interface CozyMessageComposerProps {
   targetIndex: number;
   totalTargets: number;
   isSending: boolean;
-  onSend: (target: CozyCustomerTarget, editedText: string, idempotencyKey: string) => void;
+  onSendNow: (target: CozyCustomerTarget, editedText: string, idempotencyKey: string) => void;
+  onScheduleSend: (target: CozyCustomerTarget, editedText: string, scheduledForIso: string) => void;
   onClose: () => void;
   onSelectIndex: (index: number) => void;
 }
@@ -17,17 +18,32 @@ export function CozyMessageComposer({
   targetIndex,
   totalTargets,
   isSending,
-  onSend,
+  onSendNow,
+  onScheduleSend,
   onClose,
   onSelectIndex,
 }: CozyMessageComposerProps) {
   const [message, setMessage] = useState(target.suggestedMessage);
   const [isListening, setIsListening] = useState(false);
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+
+  // Default schedule: tomorrow at 10:00 AM Pacific
+  const getDefaultScheduleIso = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(10, 0, 0, 0);
+    // Format for datetime-local: YYYY-MM-DDTHH:mm
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const [scheduleDateTime, setScheduleDateTime] = useState(getDefaultScheduleIso());
   const recognitionRef = useRef<any>(null);
 
   // Sync draft message when switching between villagers
   useEffect(() => {
     setMessage(target.suggestedMessage);
+    setShowSchedulePicker(false);
   }, [target.customerId, target.suggestedMessage]);
 
   const handleTalkToText = () => {
@@ -69,14 +85,28 @@ export function CozyMessageComposer({
     }
   };
 
-  const handleSend = () => {
+  const handleSendNow = () => {
     if (!message.trim() || isSending || !target.hasConsent) return;
     const idempotencyKey = crypto.randomUUID();
-    onSend(target, message.trim(), idempotencyKey);
+    onSendNow(target, message.trim(), idempotencyKey);
   };
 
-  const isAccepted = target.status === "accepted" || !!target.providerReceipt;
-  const canSend = target.hasConsent && message.trim().length > 0 && !isSending && !isAccepted;
+  const handleCommitSchedule = () => {
+    if (!message.trim() || isSending || !target.hasConsent) return;
+    const scheduledDate = new Date(scheduleDateTime);
+    if (isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
+      alert("Please select a valid future date and time.");
+      return;
+    }
+    onScheduleSend(target, message.trim(), scheduledDate.toISOString());
+    setShowSchedulePicker(false);
+  };
+
+  const isDispatched = target.status === "accepted" || !!target.providerReceipt;
+  const isScheduled = target.status === "scheduled" || !!target.scheduledDraft;
+  const isAwaitingSender = target.status === "awaiting_sender_setup";
+  const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
+  const canSend = target.hasConsent && message.trim().length > 0 && !isSending && !isActionCommitted;
 
   return (
     <aside className={styles.composerDrawer} aria-label="Customer Outreach Composer">
@@ -126,7 +156,7 @@ export function CozyMessageComposer({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Personalize Claire's outreach message..."
-          disabled={isAccepted}
+          disabled={isActionCommitted}
           rows={4}
         />
       </div>
@@ -144,41 +174,105 @@ export function CozyMessageComposer({
           </span>
         </div>
 
-        {isAccepted && target.providerReceipt && (
-          <div className={styles.receiptBanner}>
-            <span>✓</span>
+        {/* Scheduled Confirmation Banner */}
+        {isScheduled && (
+          <div className={styles.scheduledBanner}>
+            <span>⏰</span>
             <div>
-              <strong>Twilio Accepted</strong> (SID: {target.providerReceipt.messageSid.slice(0, 16)}...)
-              <div style={{ fontSize: "10.5px", opacity: 0.85 }}>
-                Provider accepted request. Carrier delivery in flight.
+              <strong>Committed to Scheduled Outbox</strong>
+              <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
+                Scheduled for {target.scheduledDraft ? new Date(target.scheduledDraft.scheduledFor).toLocaleString() : "future delivery"}. Editable anytime in Admin → Claire → Scheduled Outreach.
               </div>
             </div>
           </div>
         )}
 
+        {/* Awaiting Sender Setup Banner */}
+        {isAwaitingSender && (
+          <div className={styles.scheduledBanner} style={{ borderColor: "#fcd34d", background: "#fefce8", color: "#854d0e" }}>
+            <span>📱</span>
+            <div>
+              <strong>Personal Android Connection Pending</strong>
+              <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
+                Committed to outbox. Message will send once Android Google Messages session is active.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dispatched Confirmation Banner */}
+        {isDispatched && (
+          <div className={styles.receiptBanner}>
+            <span>✓</span>
+            <div>
+              <strong>Personal Dispatch Initiated</strong>
+              <div style={{ fontSize: "10.5px", opacity: 0.85 }}>
+                Originates from verified cellular number in Google Messages.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Schedule Time Picker Expansion */}
+        {showSchedulePicker && !isActionCommitted && (
+          <div className={styles.schedulePickerBox}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "#7a4e1d" }}>
+              Select Future Dispatch Date & Time (Pacific Time)
+            </div>
+            <div className={styles.scheduleInputRow}>
+              <input
+                type="datetime-local"
+                className={styles.scheduleInput}
+                value={scheduleDateTime}
+                onChange={(e) => setScheduleDateTime(e.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.sendButton}
+                style={{ flex: "none", padding: "6px 14px", fontSize: "12px" }}
+                onClick={handleCommitSchedule}
+                disabled={!canSend}
+              >
+                COMMIT
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Two Canonical Actions: SEND NOW & CLOCK ICON -> SCHEDULE SEND */}
         <div className={styles.buttonRow}>
           <button
             type="button"
             className={styles.talkToTextButton}
             onClick={handleTalkToText}
-            disabled={isAccepted || isSending}
+            disabled={isActionCommitted || isSending}
           >
             🎤 {isListening ? "Listening..." : "TALK TO TEXT"}
           </button>
 
           <button
             type="button"
+            className={styles.scheduleButton}
+            onClick={() => setShowSchedulePicker(!showSchedulePicker)}
+            disabled={!canSend}
+            title="Schedule Send"
+          >
+            ⏰ SCHEDULE
+          </button>
+
+          <button
+            type="button"
             className={styles.sendButton}
-            onClick={handleSend}
+            onClick={handleSendNow}
             disabled={!canSend}
           >
             {isSending ? (
               "SENDING..."
-            ) : isAccepted ? (
-              "✓ SENT"
+            ) : isActionCommitted ? (
+              "✓ COMMITTED"
             ) : (
               <>
-                <span>✈</span> SEND TEXT
+                <span>✈</span> SEND NOW
               </>
             )}
           </button>

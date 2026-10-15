@@ -29,6 +29,7 @@ export function CozyNeighborhoodEncounter({
   );
 
   const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachSms.useMutation();
+  const scheduleMutation = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
   // Merge server query with local optimistic state
   const targets = useMemo(() => {
@@ -45,7 +46,14 @@ export function CozyNeighborhoodEncounter({
   }, [targets, selectedSlotId]);
 
   const sentCount = useMemo(() => {
-    return targets.filter((t) => t.status === "accepted" || !!t.providerReceipt).length;
+    return targets.filter(
+      (t) =>
+        t.status === "accepted" ||
+        t.status === "scheduled" ||
+        t.status === "awaiting_sender_setup" ||
+        !!t.providerReceipt ||
+        !!t.scheduledDraft
+    ).length;
   }, [targets]);
 
   const handleSelectSlot = (slotId: CozySlotId) => {
@@ -58,7 +66,7 @@ export function CozyNeighborhoodEncounter({
     }
   };
 
-  const handleAuthorizedSend = async (
+  const handleSendNow = async (
     target: CozyCustomerTarget,
     editedText: string,
     idempotencyKey: string
@@ -93,7 +101,11 @@ export function CozyNeighborhoodEncounter({
       // Auto-advance to next unsent customer after 1.5 seconds of joyful acknowledgment
       setTimeout(() => {
         const nextIndex = targets.findIndex(
-          (t, idx) => idx > selectedIndex && t.status !== "accepted"
+          (t, idx) =>
+            idx > selectedIndex &&
+            t.status !== "accepted" &&
+            t.status !== "scheduled" &&
+            t.status !== "awaiting_sender_setup"
         );
         if (nextIndex !== -1) {
           setSelectedSlotId(targets[nextIndex].slotId);
@@ -101,6 +113,58 @@ export function CozyNeighborhoodEncounter({
       }, 1500);
     } catch (err: any) {
       alert(`Send could not be authorized: ${err.message}`);
+    }
+  };
+
+  const handleScheduleSend = async (
+    target: CozyCustomerTarget,
+    editedText: string,
+    scheduledForIso: string
+  ) => {
+    try {
+      const result = await scheduleMutation.mutateAsync({
+        customerId: target.customerId,
+        customerName: target.displayName,
+        recipientPhone: target.phone ?? "",
+        originalSuggestedDraft: target.suggestedMessage,
+        messageBody: editedText,
+        scheduledForIso,
+        timezone: "America/Los_Angeles",
+        slotId: target.slotId,
+        territoryId,
+      });
+
+      const updated: CozyCustomerTarget = {
+        ...target,
+        status: "scheduled",
+        scheduledDraft: {
+          messageId: result.id,
+          scheduledFor: scheduledForIso,
+          timezone: result.timezone,
+          currentMessageBody: editedText,
+        },
+      };
+
+      setLocalTargets((prev) => ({
+        ...prev,
+        [target.customerId]: updated,
+      }));
+
+      // Auto-advance to next unsent customer after 1.5 seconds of joyful acknowledgment
+      setTimeout(() => {
+        const nextIndex = targets.findIndex(
+          (t, idx) =>
+            idx > selectedIndex &&
+            t.status !== "accepted" &&
+            t.status !== "scheduled" &&
+            t.status !== "awaiting_sender_setup"
+        );
+        if (nextIndex !== -1) {
+          setSelectedSlotId(targets[nextIndex].slotId);
+        }
+      }, 1500);
+    } catch (err: any) {
+      alert(`Schedule could not be committed: ${err.message}`);
     }
   };
 
@@ -273,8 +337,9 @@ export function CozyNeighborhoodEncounter({
             target={selectedTarget}
             targetIndex={selectedIndex}
             totalTargets={targets.length}
-            isSending={sendMutation.isPending}
-            onSend={handleAuthorizedSend}
+            isSending={sendMutation.isPending || scheduleMutation.isPending}
+            onSendNow={handleSendNow}
+            onScheduleSend={handleScheduleSend}
             onClose={() => setSelectedSlotId(null)}
             onSelectIndex={handleSelectIndex}
           />

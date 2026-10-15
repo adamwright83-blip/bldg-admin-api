@@ -51,7 +51,7 @@ export const COZY_SLOT_ANCHORS: Record<CozySlotId, SlotAnchor> = {
     x: 0.31,
     y: 0.4,
     zIndex: 20,
-    defaultVariant: "bunny",
+    defaultVariant: "fox",
   },
   slot_02: {
     slotId: "slot_02",
@@ -135,12 +135,24 @@ export interface CozyCustomerTarget {
   consentReason?: string;
   villagerVariant: VillagerVariant;
   suggestedMessage: string;
-  status: "eligible" | "draft_ready" | "accepted" | "consent_blocked";
+  status:
+    | "eligible"
+    | "draft_ready"
+    | "accepted"
+    | "consent_blocked"
+    | "scheduled"
+    | "awaiting_sender_setup";
   providerReceipt?: {
     messageSid: string;
     status: string;
     sentAt: string;
     evidenceName: string;
+  };
+  scheduledDraft?: {
+    messageId: string;
+    scheduledFor: string;
+    timezone: string;
+    currentMessageBody: string;
   };
 }
 

@@ -8,6 +8,7 @@ import {
   type VillagerVariant,
 } from "../../../shared/cozyVillagerOutreach";
 import { readWinBackDossier } from "../../strategy/winBackDossier";
+import { checkCommunicationPermission } from "../../strategy/communicationPermissionService";
 import {
   twilioOutboundSendAdapter,
   createFakeOutboundSendAdapter,
@@ -34,115 +35,7 @@ const knownOptOutNumbers = new Set<string>([
   "+15550009999", // canonical opt-out test number
 ]);
 
-/**
- * Verified canonical 7 dormant customer recovery cohort for Silver Lake.
- * Used when testing or when database business query returns empty in local environment.
- */
-const CANONICAL_SILVER_LAKE_COHORT: Array<{
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  days: number;
-  orders: number;
-  ltvCents: number;
-  lastDate: string;
-  lastSummary: string;
-  variant: VillagerVariant;
-  hasConsent: boolean;
-}> = [
-  {
-    id: "cust_sl_001_mei",
-    name: "Mei Lin",
-    phone: "+12135550141",
-    address: "2418 Silver Lake Blvd",
-    days: 34,
-    orders: 14,
-    ltvCents: 62400,
-    lastDate: "2026-09-10",
-    lastSummary: "Wash & Fold 32 lbs, Hang Dry Delicates",
-    variant: "fox",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_002_barnaby",
-    name: "Barnaby Hayes",
-    phone: "+12135550142",
-    address: "1825 Micheltorena St",
-    days: 48,
-    orders: 8,
-    ltvCents: 38200,
-    lastDate: "2026-08-27",
-    lastSummary: "Standard Wash & Fold 2 bags",
-    variant: "bear",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_003_oliver",
-    name: "Oliver Bennett",
-    phone: "+12135550143",
-    address: "2910 Rowena Ave",
-    days: 62,
-    orders: 11,
-    ltvCents: 51900,
-    lastDate: "2026-08-13",
-    lastSummary: "Duvet Comforter + 25 lbs laundry",
-    variant: "otter",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_004_bella",
-    name: "Bella Ramos",
-    phone: "+12135550144",
-    address: "1540 Moreno Dr",
-    days: 29,
-    orders: 6,
-    ltvCents: 29400,
-    lastDate: "2026-09-15",
-    lastSummary: "Eco Wash & Fold, Fragrance Free",
-    variant: "bunny",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_005_sammy",
-    name: "Sammy Cruz",
-    phone: "+12135550145",
-    address: "2204 Glendale Blvd",
-    days: 76,
-    orders: 19,
-    ltvCents: 84600,
-    lastDate: "2026-07-30",
-    lastSummary: "Commercial uniform linens & regular wash",
-    variant: "squirrel",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_006_bramble",
-    name: "Bramble Vance",
-    phone: "+12135550146",
-    address: "3102 Sunset Blvd #4",
-    days: 91,
-    orders: 5,
-    ltvCents: 21500,
-    lastDate: "2026-07-15",
-    lastSummary: "Standard Wash & Fold 18 lbs",
-    variant: "badger",
-    hasConsent: true,
-  },
-  {
-    id: "cust_sl_007_cleo",
-    name: "Cleo Montgomery",
-    phone: "+12135550147",
-    address: "2714 Armstrong Ave",
-    days: 42,
-    orders: 12,
-    ltvCents: 56800,
-    lastDate: "2026-09-02",
-    lastSummary: "Sheets, Towels & Everyday Laundry",
-    variant: "cat",
-    hasConsent: true,
-  },
-];
+
 
 function buildClaireSuggestedMessage(name: string, daysSinceLastOrder: number): string {
   const firstName = name.split(" ")[0];
@@ -180,13 +73,31 @@ export async function getCozyEncounterMission(input: {
 
   if (rawContacts) {
     const assignedSlots = COZY_SLOT_IDS.slice(0, Math.min(rawContacts.length, 8));
-    assignedSlots.forEach((slotId, index) => {
+    for (let index = 0; index < assignedSlots.length; index++) {
+      const slotId = assignedSlots[index];
       const contact = rawContacts[index];
       const anchor = COZY_SLOT_ANCHORS[slotId];
       const days = contact.daysSinceLastOrder ?? 30;
       const phone = contact.phone ? normalizeSmsPhone(contact.phone) : null;
-      const isOptedOut = phone ? knownOptOutNumbers.has(phone) : false;
       const existingReceipt = phone ? sessionOutreachReceipts.get(contact.identityId) : undefined;
+
+      // Real G14 permission check
+      const permCheck = await checkCommunicationPermission({
+        tenantId: input.tenantId,
+        subjectType: "customer",
+        subjectId: contact.identityId,
+        channel: "sms",
+        now,
+      });
+
+      const isOptedOut = !permCheck.allowed || (phone ? knownOptOutNumbers.has(phone) : false);
+      const consentReason = !permCheck.allowed
+        ? permCheck.reason
+        : isOptedOut
+        ? "Customer explicitly opted out of SMS"
+        : !phone
+        ? "Missing verified phone number"
+        : undefined;
 
       targets.push({
         slotId,
@@ -201,8 +112,8 @@ export async function getCozyEncounterMission(input: {
         lifetimeCents: contact.lifetimeCents,
         lastOrderDate: contact.lastOrderDate,
         lastOrderSummary: contact.lastOrderSummary,
-        hasConsent: !isOptedOut && !!phone,
-        consentReason: isOptedOut ? "Customer explicitly opted out of SMS" : !phone ? "Missing verified phone number" : undefined,
+        hasConsent: permCheck.allowed && !isOptedOut && !!phone,
+        consentReason,
         villagerVariant: anchor.defaultVariant,
         suggestedMessage: buildClaireSuggestedMessage(contact.name, days),
         status: existingReceipt ? "accepted" : isOptedOut || !phone ? "consent_blocked" : "eligible",
@@ -215,42 +126,10 @@ export async function getCozyEncounterMission(input: {
             }
           : undefined,
       });
-    });
+    }
   } else {
-    // Canonical 7 Silver Lake targets for reliable test and immediate playability
-    const assignedSlots = COZY_SLOT_IDS.slice(0, CANONICAL_SILVER_LAKE_COHORT.length);
-    assignedSlots.forEach((slotId, index) => {
-      const record = CANONICAL_SILVER_LAKE_COHORT[index];
-      const anchor = COZY_SLOT_ANCHORS[slotId];
-      const existingReceipt = sessionOutreachReceipts.get(record.id);
-
-      targets.push({
-        slotId,
-        customerId: record.id,
-        displayName: record.name,
-        phone: record.phone,
-        address: record.address,
-        territoryId,
-        territoryName,
-        daysSinceLastOrder: record.days,
-        paidOrders: record.orders,
-        lifetimeCents: record.ltvCents,
-        lastOrderDate: record.lastDate,
-        lastOrderSummary: record.lastSummary,
-        hasConsent: record.hasConsent,
-        villagerVariant: record.variant,
-        suggestedMessage: buildClaireSuggestedMessage(record.name, record.days),
-        status: existingReceipt ? "accepted" : "eligible",
-        providerReceipt: existingReceipt
-          ? {
-              messageSid: existingReceipt.messageSid,
-              status: existingReceipt.status,
-              sentAt: existingReceipt.sentAt,
-              evidenceName: existingReceipt.evidenceName,
-            }
-          : undefined,
-      });
-    });
+    // If no real dormant customers found in territory, return empty targets list
+    // (no invented fake customers in production)
   }
 
   return {

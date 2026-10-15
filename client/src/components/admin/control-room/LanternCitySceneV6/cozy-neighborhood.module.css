@@ -522,6 +522,32 @@
   filter: grayscale(0.4);
 }
 
+.scheduleButton {
+  background: #fdfaf5;
+  border: 1.5px solid #d99a38;
+  color: #8c5310;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.scheduleButton:hover:not(:disabled) {
+  background: #fbf0df;
+  border-color: #b87515;
+}
+
+.scheduleButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .receiptBanner {
   background: #edf8ef;
   border: 1px solid #b7e3bf;
@@ -532,6 +558,43 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.scheduledBanner {
+  background: #fef8ec;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedulePickerBox {
+  background: #fffdfa;
+  border: 1px solid #e2d1bc;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scheduleInputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.scheduleInput {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #c9b092;
+  border-radius: 6px;
+  font-size: 12.5px;
 }
 
 /* Target Pagination Controls */

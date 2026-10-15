@@ -59,6 +59,7 @@ const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
+const ClaireScheduledOutreach = lazy(() => import("./admin/ClaireScheduledOutreach"));
 const OperatorRepresentative = lazy(() => import("./operator/OperatorRepresentative"));
 const ClaireCallAnalysis = lazy(() => import("./goldline/ClaireCallAnalysis"));
 const ClaireRoutingAudit = lazy(() => import("./goldline/ClaireRoutingAudit"));
@@ -214,12 +215,18 @@ export default function AdminHostApp() {
   const isChurnRadar = path === "/churn-radar";
   const isSalesIntel = path === "/sales-intel";
   const isClaireDesk = path === "/claire";
+  const isClaireScheduledOutreach =
+    path === "/claire/scheduled-outreach" || path === "/admin/claire/scheduled-outreach";
   const isClaireCallAnalysis = path.startsWith("/claire/calls/");
   // Claire Intelligence Repair Part 2, Slice A: the routing audit's numbers.
   const isClaireRoutingAudit = path === "/claire/routing-audit";
   const isCapabilityGap = path.startsWith("/goldline/capability-gaps/");
   const isClaireSurface =
-    isClaireDesk || isClaireCallAnalysis || isClaireRoutingAudit || isCapabilityGap;
+    isClaireDesk ||
+    isClaireScheduledOutreach ||
+    isClaireCallAnalysis ||
+    isClaireRoutingAudit ||
+    isCapabilityGap;
   const isMoney = path === "/money";
   const isSettings = path === "/settings";
   const isCatalog = path === "/catalog" || path === "/pricing";
@@ -575,6 +582,14 @@ export default function AdminHostApp() {
             }
           >
             <CapabilityGapPage gapId={path.split("/goldline/capability-gaps/")[1]?.split("/")[0] ?? ""} />
+          </Suspense>
+        ) : isClaireScheduledOutreach ? (
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">Loading Scheduled Outreach…</div>
+            }
+          >
+            <ClaireScheduledOutreach />
           </Suspense>
         ) : isClaireDesk ? (
           <Suspense
