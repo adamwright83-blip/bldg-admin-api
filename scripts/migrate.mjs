@@ -93,7 +93,11 @@ for (const statement of scheduledOutreachDdl.split(";").map(sql => sql.trim()).f
 }
 
 const personalSenderIdentityDdl = await readFile(new URL("../drizzle/0133_personal_sender_identity.sql", import.meta.url), "utf8");
-for (const statement of personalSenderIdentityDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+for (const statement of personalSenderIdentityDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
   await runRequired(statement, "Personal sender identity");
 }
 

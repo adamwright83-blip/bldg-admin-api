@@ -1,6 +1,6 @@
 -- Personal sender identity observations for Lantern City personal-number outreach.
 -- Stores handset observations only. No pairing codes, tokens, cookies, or session secrets.
--- Additive and idempotent. Classification is recomputed on read; a stored row is not a send grant.
+-- Additive and idempotent. Classification is recomputed on read. A stored row is not a send grant.
 CREATE TABLE IF NOT EXISTS `personal_sender_identities` (
   `id` varchar(64) NOT NULL,
   `tenant_id` varchar(64) NOT NULL,
