@@ -88,6 +88,7 @@ export const goldlineWorldRouter = router({
           "slot_08",
         ]).optional(),
         territoryId: z.string().optional(),
+        idempotencyKey: z.string().optional(),
       })
     )
     .mutation(({ ctx, input }) =>
@@ -99,6 +100,7 @@ export const goldlineWorldRouter = router({
         expectedPhone: input.expectedPhone,
         slotId: input.slotId,
         territoryId: input.territoryId,
+        idempotencyKey: input.idempotencyKey,
       })
     ),
   scheduleCozyOutreach: legacyDayforgeTenantOperatorProcedure
@@ -112,6 +114,7 @@ export const goldlineWorldRouter = router({
         slotId: z.string().optional(),
         territoryId: z.string().optional(),
         dstAmbiguityChoice: z.enum(["first", "second"]).optional(),
+        idempotencyKey: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -144,6 +147,7 @@ export const goldlineWorldRouter = router({
         dstAmbiguityChoice: input.dstAmbiguityChoice,
         slotId: input.slotId,
         territoryId: resolved.territoryId,
+        idempotencyKey: input.idempotencyKey,
       });
     }),
   listScheduledOutreach: legacyDayforgeTenantOperatorProcedure

@@ -8,7 +8,12 @@ interface CozyMessageComposerProps {
   totalTargets: number;
   isSending: boolean;
   onSendNow: (target: CozyCustomerTarget, editedText: string, idempotencyKey: string) => void;
-  onScheduleSend: (target: CozyCustomerTarget, editedText: string, scheduledForIso: string) => void;
+  onScheduleSend: (
+    target: CozyCustomerTarget,
+    editedText: string,
+    scheduledForIso: string,
+    idempotencyKey?: string
+  ) => void;
   onClose: () => void;
   onSelectIndex: (index: number) => void;
 }
@@ -107,8 +112,9 @@ export function CozyMessageComposer({
       alert("Please select a date and time.");
       return;
     }
+    const idempotencyKey = crypto.randomUUID();
     // Pass wall-clock date and time string directly to server for authoritative Pacific conversion
-    onScheduleSend(target, message.trim(), scheduleDateTime);
+    onScheduleSend(target, message.trim(), scheduleDateTime, idempotencyKey);
     setShowSchedulePicker(false);
   };
 

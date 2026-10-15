@@ -10263,12 +10263,18 @@ export const scheduledOutreachMessages = mysqlTable(
     cancellationReason: text("cancellation_reason"),
     failureReason: text("failure_reason"),
     externalMessageId: varchar("external_message_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    deliveryIntent: mysqlEnum("delivery_intent", ["immediate", "scheduled"]).notNull().default("scheduled"),
     slotId: varchar("slot_id", { length: 32 }),
     territoryId: varchar("territory_id", { length: 64 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   },
   (table) => ({
+    uniqueTenantIdempotency: uniqueIndex("uq_som_tenant_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
     tenantCustomerPendingIdx: index("idx_som_tenant_customer_status").on(
       table.tenantId,
       table.customerId,

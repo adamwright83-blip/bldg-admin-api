@@ -224,7 +224,7 @@ describe("cozyVillagerOutreachService", () => {
   });
 
   it("reflects existing scheduled outbox messages in getCozyEncounterMission", async () => {
-    // Schedule outreach for Mei
+    // Immediate outreach in Phase 1 (no sender adapter) reflects as awaiting_sender_setup
     await sendCozyOutreachNow({
       tenantId: "tenant_test",
       operatorId: "op_test",
@@ -241,7 +241,7 @@ describe("cozyVillagerOutreachService", () => {
     });
 
     const mei = mission.targets.find((t) => t.customerId === "cust_sl_001_mei");
-    expect(mei?.status).toBe("scheduled");
+    expect(mei?.status).toBe("awaiting_sender_setup");
     expect(mei?.scheduledDraft).toBeDefined();
     expect(mei?.scheduledDraft?.currentMessageBody).toBe("Pending outbox message");
   });

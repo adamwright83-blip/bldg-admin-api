@@ -69,7 +69,7 @@ export function CozyNeighborhoodEncounter({
   const handleSendNow = async (
     target: CozyCustomerTarget,
     editedText: string,
-    _idempotencyKey: string
+    idempotencyKey: string
   ) => {
     try {
       const result = await sendMutation.mutateAsync({
@@ -78,6 +78,7 @@ export function CozyNeighborhoodEncounter({
         expectedPhone: target.phone ?? undefined,
         slotId: target.slotId,
         territoryId,
+        idempotencyKey,
       });
 
       // Update truthful state with either dispatched receipt or awaiting setup
@@ -130,7 +131,8 @@ export function CozyNeighborhoodEncounter({
   const handleScheduleSend = async (
     target: CozyCustomerTarget,
     editedText: string,
-    scheduledForIso: string
+    scheduledForIso: string,
+    idempotencyKey?: string
   ) => {
     try {
       const result = await scheduleMutation.mutateAsync({
@@ -141,6 +143,7 @@ export function CozyNeighborhoodEncounter({
         expectedPhone: target.phone ?? undefined,
         slotId: target.slotId,
         territoryId,
+        idempotencyKey,
       });
 
       const updated: CozyCustomerTarget = {

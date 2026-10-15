@@ -75,8 +75,14 @@ export async function checkCommunicationPermission(input: {
           reason: match.reason,
         };
       }
-    } catch {
-      // Fallback to memory store
+    } catch (err: any) {
+      // Fail closed on database query failure for safety
+      console.error("[communicationPermission] Database permission query failed (failing closed):", err);
+      return {
+        allowed: false,
+        permissionStatus: "unspecified",
+        reason: `Communication permission check failed due to database error (failing closed for safety): ${err?.message ?? String(err)}`,
+      };
     }
   }
 

@@ -5361,6 +5361,14 @@ if (!(await requiredColumnExists("tenant_standing_authorizations", "allowedWeekd
 // Superset only: values are never removed, so existing appointment rows stay valid.
 await runRequired("ALTER TABLE operator_appointments MODIFY COLUMN appointmentKind enum('sunday_weekly_planning','weekly_planning_callback','weekday_strategic_planning','daily_morning_readiness','daily_evening_debrief') NOT NULL", "Claire appointment kinds");
 await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJson"]);
+if (!(await requiredColumnExists("scheduled_outreach_messages", "idempotency_key"))) {
+  await runRequired("ALTER TABLE scheduled_outreach_messages ADD COLUMN idempotency_key varchar(128) NULL", "outreach message idempotency key");
+  await run("ALTER TABLE scheduled_outreach_messages ADD UNIQUE KEY uq_som_tenant_idempotency (tenant_id, idempotency_key)", "outreach message idempotency unique constraint");
+}
+if (!(await requiredColumnExists("scheduled_outreach_messages", "delivery_intent"))) {
+  await runRequired("ALTER TABLE scheduled_outreach_messages ADD COLUMN delivery_intent enum('immediate','scheduled') NOT NULL DEFAULT 'scheduled'", "outreach message delivery intent");
+}
+
 await assertRequiredColumns("scheduled_outreach_messages", [
   "id",
   "tenant_id",
@@ -5372,6 +5380,8 @@ await assertRequiredColumns("scheduled_outreach_messages", [
   "revision_count",
   "scheduled_for",
   "status",
+  "idempotency_key",
+  "delivery_intent",
 ]);
 await assertRequiredColumns("scheduled_outreach_revisions", [
   "id",

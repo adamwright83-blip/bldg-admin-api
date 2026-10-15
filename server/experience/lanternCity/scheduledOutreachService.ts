@@ -7,6 +7,7 @@ import {
   type ScheduledOutreachMessageRow,
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
+import { isMysqlDuplicateKeyError } from "../../mysqlErrors";
 import { checkCommunicationPermission } from "../../strategy/communicationPermissionService";
 import { normalizeSmsPhone } from "../../_core/sms";
 
@@ -25,6 +26,9 @@ export interface ScheduledOutreachDraftInput {
   territoryId?: string;
   senderPhone?: string;
   allowImmediate?: boolean;
+  idempotencyKey?: string;
+  deliveryIntent?: "immediate" | "scheduled";
+  status?: "pending" | "awaiting_sender_setup";
   now?: Date;
 }
 
@@ -236,6 +240,39 @@ export async function createScheduledOutreachDraft(
     );
   }
 
+  const db = await requireDb();
+
+  // 1. Durable idempotency: if an idempotencyKey is provided, check if a message with this key already exists
+  if (input.idempotencyKey) {
+    if (db) {
+      const [existing] = await db
+        .select()
+        .from(scheduledOutreachMessages)
+        .where(
+          and(
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.idempotencyKey, input.idempotencyKey)
+          )
+        )
+        .limit(1);
+      if (existing) {
+        return existing;
+      }
+    } else {
+      const memExisting = Array.from(testMemoryMessages.values()).find(
+        (m) => m.tenantId === input.tenantId && m.idempotencyKey === input.idempotencyKey
+      );
+      if (memExisting) {
+        return memExisting;
+      }
+    }
+  }
+
+  const initialStatus = input.status ?? "pending";
+  const deliveryIntent =
+    input.deliveryIntent ??
+    (initialStatus === "awaiting_sender_setup" ? "immediate" : "scheduled");
+
   const messageId = `som_${randomUUID()}`;
   const row: ScheduledOutreachMessageRow = {
     id: messageId,
@@ -250,7 +287,9 @@ export async function createScheduledOutreachDraft(
     revisionCount: 1,
     scheduledFor,
     timezone,
-    status: "pending",
+    status: initialStatus,
+    idempotencyKey: input.idempotencyKey ?? null,
+    deliveryIntent,
     leaseHolder: null,
     leasedUntil: null,
     dispatchAttemptedAt: null,
@@ -265,22 +304,38 @@ export async function createScheduledOutreachDraft(
     updatedAt: now,
   };
 
-  const db = await requireDb();
   if (db) {
-    return await db.transaction(async (tx) => {
-      await tx.insert(scheduledOutreachMessages).values(row);
-      await tx.insert(scheduledOutreachRevisions).values({
-        id: `sor_${randomUUID()}`,
-        outreachMessageId: messageId,
-        tenantId: input.tenantId,
-        revisionNumber: 1,
-        messageBody: trimmedBody,
-        editedBy: input.operatorId,
-        reason: "Initial scheduled draft",
-        createdAt: now,
+    try {
+      return await db.transaction(async (tx) => {
+        await tx.insert(scheduledOutreachMessages).values(row);
+        await tx.insert(scheduledOutreachRevisions).values({
+          id: `sor_${randomUUID()}`,
+          outreachMessageId: messageId,
+          tenantId: input.tenantId,
+          revisionNumber: 1,
+          messageBody: trimmedBody,
+          editedBy: input.operatorId,
+          reason: "Initial scheduled draft",
+          createdAt: now,
+        });
+        return row;
       });
-      return row;
-    });
+    } catch (err: any) {
+      if (input.idempotencyKey && isMysqlDuplicateKeyError(err)) {
+        const [existing] = await db
+          .select()
+          .from(scheduledOutreachMessages)
+          .where(
+            and(
+              eq(scheduledOutreachMessages.tenantId, input.tenantId),
+              eq(scheduledOutreachMessages.idempotencyKey, input.idempotencyKey)
+            )
+          )
+          .limit(1);
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
 
   // Unit-test in-memory mode only
@@ -338,9 +393,9 @@ export async function editScheduledOutreachDraft(
         );
       }
 
-      if (existing.status !== "pending") {
+      if (existing.status !== "pending" && existing.status !== "awaiting_sender_setup") {
         throw new Error(
-          `Cannot edit message with status "${existing.status}". Only pending drafts can be edited.`
+          `Cannot edit message with status "${existing.status}". Only pending or awaiting sender setup drafts can be edited.`
         );
       }
 
@@ -372,7 +427,10 @@ export async function editScheduledOutreachDraft(
             eq(scheduledOutreachMessages.tenantId, input.tenantId),
             eq(scheduledOutreachMessages.operatorId, input.operatorId),
             eq(scheduledOutreachMessages.revisionCount, existing.revisionCount),
-            eq(scheduledOutreachMessages.status, "pending")
+            or(
+              eq(scheduledOutreachMessages.status, "pending"),
+              eq(scheduledOutreachMessages.status, "awaiting_sender_setup")
+            )
           )
         );
 
@@ -408,8 +466,8 @@ export async function editScheduledOutreachDraft(
     );
   }
 
-  if (mem.status !== "pending") {
-    throw new Error(`Cannot edit message with status "${mem.status}". Only pending drafts can be edited.`);
+  if (mem.status !== "pending" && mem.status !== "awaiting_sender_setup") {
+    throw new Error(`Cannot edit message with status "${mem.status}". Only pending or awaiting sender setup drafts can be edited.`);
   }
 
   if (
@@ -474,9 +532,9 @@ export async function rescheduleOutreachDraft(
       );
     }
 
-    if (existing.status !== "pending") {
+    if (existing.status !== "pending" && existing.status !== "awaiting_sender_setup") {
       throw new Error(
-        `Cannot reschedule message with status "${existing.status}". Only pending drafts can be rescheduled.`
+        `Cannot reschedule message with status "${existing.status}". Only pending or awaiting sender setup drafts can be rescheduled.`
       );
     }
 
@@ -496,6 +554,8 @@ export async function rescheduleOutreachDraft(
       .set({
         scheduledFor: newScheduledFor,
         timezone: targetTz,
+        status: "pending",
+        deliveryIntent: "scheduled",
         updatedAt: now,
       })
       .where(
@@ -503,7 +563,10 @@ export async function rescheduleOutreachDraft(
           eq(scheduledOutreachMessages.id, input.messageId),
           eq(scheduledOutreachMessages.tenantId, input.tenantId),
           eq(scheduledOutreachMessages.operatorId, input.operatorId),
-          eq(scheduledOutreachMessages.status, "pending"),
+          or(
+            eq(scheduledOutreachMessages.status, "pending"),
+            eq(scheduledOutreachMessages.status, "awaiting_sender_setup")
+          ),
           or(
             isNull(scheduledOutreachMessages.leasedUntil),
             lt(scheduledOutreachMessages.leasedUntil, now)
@@ -519,6 +582,8 @@ export async function rescheduleOutreachDraft(
       ...existing,
       scheduledFor: newScheduledFor,
       timezone: targetTz,
+      status: "pending",
+      deliveryIntent: "scheduled",
       updatedAt: now,
     };
   }
@@ -531,8 +596,8 @@ export async function rescheduleOutreachDraft(
     );
   }
 
-  if (mem.status !== "pending") {
-    throw new Error(`Cannot reschedule message with status "${mem.status}". Only pending drafts can be rescheduled.`);
+  if (mem.status !== "pending" && mem.status !== "awaiting_sender_setup") {
+    throw new Error(`Cannot reschedule message with status "${mem.status}". Only pending or awaiting sender setup drafts can be rescheduled.`);
   }
 
   const targetTz = input.timezone ?? mem.timezone;
@@ -549,6 +614,8 @@ export async function rescheduleOutreachDraft(
     ...mem,
     scheduledFor: newScheduledFor,
     timezone: targetTz,
+    status: "pending",
+    deliveryIntent: "scheduled",
     updatedAt: now,
   };
   testMemoryMessages.set(input.messageId, updated);
@@ -613,6 +680,7 @@ export async function cancelScheduledOutreachDraft(
           isNull(scheduledOutreachMessages.dispatchAttemptedAt),
           or(
             eq(scheduledOutreachMessages.status, "pending"),
+            eq(scheduledOutreachMessages.status, "awaiting_sender_setup"),
             and(
               eq(scheduledOutreachMessages.status, "claimed"),
               isNull(scheduledOutreachMessages.dispatchedAt),

@@ -668,4 +668,143 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
     expect(rows[0].status).toBe("cancelled");
     expect(rows[0].cancellation_reason).toContain("Pre-send permission check failed");
   });
+
+  it("Step 14: Real-MySQL idempotency deduplication returns existing draft and creates exactly 1 row", async () => {
+    const idempotencyKey = `idem_${randomUUID()}`;
+    const scheduledFor = new Date(baseNow.getTime() + 24 * 3600 * 1000);
+    const input = {
+      tenantId,
+      operatorId,
+      customerId: `cust_sql_${suffix}_idem`,
+      customerName: "Idempotency Customer",
+      recipientPhone: "+12135550160",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Draft body with idempotency",
+      scheduledFor,
+      idempotencyKey,
+      now: baseNow,
+    };
+
+    // First call creates the draft
+    const draft1 = await createScheduledOutreachDraft(input);
+    expect(draft1.id).toBeDefined();
+    expect(draft1.idempotencyKey).toBe(idempotencyKey);
+
+    // Second call with same idempotencyKey returns the same row
+    const draft2 = await createScheduledOutreachDraft(input);
+    expect(draft2.id).toBe(draft1.id);
+
+    // Parallel calls with same idempotencyKey both resolve to same draft without error
+    const parallelKey = `idem_par_${randomUUID()}`;
+    const parallelInput = { ...input, customerId: `cust_sql_${suffix}_idem_par`, idempotencyKey: parallelKey };
+    const [p1, p2] = await Promise.all([
+      createScheduledOutreachDraft(parallelInput),
+      createScheduledOutreachDraft(parallelInput),
+    ]);
+    expect(p1.id).toBe(p2.id);
+
+    // Verify raw MySQL count: exactly 1 row for each idempotencyKey
+    const [rows1] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT count(*) as count FROM scheduled_outreach_messages WHERE tenant_id = ? AND idempotency_key = ?",
+      [tenantId, idempotencyKey]
+    );
+    expect(Number(rows1[0].count)).toBe(1);
+
+    const [rows2] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT count(*) as count FROM scheduled_outreach_messages WHERE tenant_id = ? AND idempotency_key = ?",
+      [tenantId, parallelKey]
+    );
+    expect(Number(rows2[0].count)).toBe(1);
+  });
+
+  it("Step 15: Real-MySQL awaiting_sender_setup immediate draft is NOT claimed by due leases, remains editable and cancellable", async () => {
+    const immediateDraft = await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: `cust_sql_${suffix}_awaiting`,
+      customerName: "Awaiting Setup Customer",
+      recipientPhone: "+12135550161",
+      originalSuggestedDraft: "Immediate draft",
+      messageBody: "Immediate draft",
+      scheduledFor: baseNow,
+      status: "awaiting_sender_setup",
+      deliveryIntent: "immediate",
+      allowImmediate: true,
+      now: baseNow,
+    });
+
+    expect(immediateDraft.status).toBe("awaiting_sender_setup");
+    expect(immediateDraft.deliveryIntent).toBe("immediate");
+
+    // Advance clock past scheduled time
+    const futureTime = new Date(baseNow.getTime() + 10 * 60 * 1000);
+    const claimed = await claimDueOutreachLeases({
+      tenantId,
+      leaseHolder: "worker_bridge",
+      leaseDurationSeconds: 60,
+      limit: 10,
+      now: futureTime,
+    });
+
+    // Overdue awaiting_sender_setup drafts MUST NOT be claimed as pending leases
+    expect(claimed.some((m) => m.id === immediateDraft.id)).toBe(false);
+
+    // Draft can be edited in place while in awaiting_sender_setup
+    const edited = await editScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: immediateDraft.id,
+      expectedRevisionCount: 1,
+      newMessageBody: "Updated immediate draft text",
+      reason: "Operator corrected wording",
+      now: futureTime,
+    });
+    expect(edited.revisionCount).toBe(2);
+
+    // Draft can be rescheduled to a future time, returning to status 'pending'
+    const rescheduledTime = new Date(futureTime.getTime() + 24 * 3600 * 1000);
+    const rescheduled = await rescheduleOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: immediateDraft.id,
+      newScheduledFor: rescheduledTime,
+      now: futureTime,
+    });
+    expect(rescheduled.status).toBe("pending");
+    expect(rescheduled.deliveryIntent).toBe("scheduled");
+
+    // Draft can be cancelled
+    const cancelled = await cancelScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: immediateDraft.id,
+      reason: "No longer needed",
+      now: futureTime,
+    });
+    expect(cancelled.status).toBe("cancelled");
+  });
+
+  it("Step 16: Communication permission check fails closed when database fails", async () => {
+    const { checkCommunicationPermission } = await import("../../strategy/communicationPermissionService");
+    const { getDb } = await import("../../db");
+    const realDb = await getDb();
+    if (realDb) {
+      const origSelect = realDb.select;
+      try {
+        (realDb as any).select = () => {
+          throw new Error("Simulated MySQL connection outage");
+        };
+        const failClosedResult = await checkCommunicationPermission({
+          tenantId,
+          subjectType: "customer",
+          subjectId: "cust_err",
+          channel: "sms",
+        });
+        expect(failClosedResult.allowed).toBe(false);
+        expect(failClosedResult.reason).toContain("failing closed for safety");
+      } finally {
+        realDb.select = origSelect;
+      }
+    }
+  });
 });

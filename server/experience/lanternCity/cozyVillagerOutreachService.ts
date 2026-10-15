@@ -265,6 +265,14 @@ export async function getCozyEncounterMission(input: {
             timezone: existingMsg.timezone,
             currentMessageBody: existingMsg.currentMessageBody,
           };
+        } else if (existingMsg.status === "awaiting_sender_setup") {
+          status = "awaiting_sender_setup";
+          scheduledDraft = {
+            messageId: existingMsg.id,
+            scheduledFor: existingMsg.scheduledFor.toISOString(),
+            timezone: existingMsg.timezone,
+            currentMessageBody: existingMsg.currentMessageBody,
+          };
         }
       } else if (isOptedOut || !phone) {
         status = "consent_blocked";
@@ -320,6 +328,7 @@ export async function sendCozyOutreachNow(input: {
   slotId?: CozySlotId;
   territoryId?: string;
   expectedPhone?: string;
+  idempotencyKey?: string;
   now?: Date;
   testSenderAdapter?: OutboundTestSenderAdapter;
 }): Promise<{
@@ -347,6 +356,11 @@ export async function sendCozyOutreachNow(input: {
   });
 
   // 2. Commit draft to the scheduled outbox
+  // If no sender adapter is available (Phase 1), persist with explicit status: 'awaiting_sender_setup'
+  // and deliveryIntent: 'immediate' so it is NOT automatically claimed by due lease timers as an overdue send.
+  const hasSender = Boolean(input.testSenderAdapter);
+  const initialStatus = hasSender ? "pending" : "awaiting_sender_setup";
+
   const draft = await createScheduledOutreachDraft({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
@@ -360,10 +374,24 @@ export async function sendCozyOutreachNow(input: {
     slotId: input.slotId,
     territoryId: resolved.territoryId,
     allowImmediate: true,
+    status: initialStatus,
+    deliveryIntent: "immediate",
+    idempotencyKey: input.idempotencyKey,
     now,
   });
 
-  // 3. Dispatch through verified personal Android connection (or return awaiting_sender_setup in Phase 1)
+  if (!hasSender) {
+    return {
+      success: false,
+      status: "awaiting_sender_setup",
+      messageId: draft.id,
+      evidenceName: "awaiting_sender_setup",
+      dispatchedAt: null,
+      externalMessageId: null,
+    };
+  }
+
+  // 3. Dispatch through verified personal Android connection (injected test adapter)
   const sendResult = await sendEarlyOutreachDraft({
     tenantId: input.tenantId,
     operatorId: input.operatorId,

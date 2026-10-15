@@ -435,8 +435,8 @@ export default function ClaireScheduledOutreach() {
                   </div>
                 )}
 
-                {/* Action Buttons for Pending Messages */}
-                {msg.status === "pending" && !isEditing && !isRescheduling && !isCancelling && (
+                {/* Action Buttons for Pending or Awaiting Sender Setup Messages */}
+                {(msg.status === "pending" || msg.status === "awaiting_sender_setup") && !isEditing && !isRescheduling && !isCancelling && (
                   <div style={{ display: "flex", gap: "8px", borderTop: "1px solid #f3f4f6", paddingTop: "10px" }}>
                     <button
                       onClick={() => {
@@ -504,26 +504,28 @@ export default function ClaireScheduledOutreach() {
                       <Trash2 size={13} /> Cancel
                     </button>
 
-                    <button
-                      onClick={() => sendEarlyMutation.mutate({ messageId: msg.id })}
-                      disabled={sendEarlyMutation.isPending}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        marginLeft: "auto",
-                        padding: "5px 12px",
-                        background: "#10b981",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: "5px",
-                        fontSize: "12px",
-                        fontWeight: "700",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Play size={13} /> SEND EARLY
-                    </button>
+                    {msg.status === "pending" && (
+                      <button
+                        onClick={() => sendEarlyMutation.mutate({ messageId: msg.id })}
+                        disabled={sendEarlyMutation.isPending}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          marginLeft: "auto",
+                          padding: "5px 12px",
+                          background: "#10b981",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "5px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Play size={13} /> SEND EARLY
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
