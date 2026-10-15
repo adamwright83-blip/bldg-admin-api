@@ -137,4 +137,40 @@ describe("CleanCloud paid order imports", () => {
 
     expect(sumCleanCloudClearentCandidates(rows)).toBe(19407);
   });
+
+  it("rejects a paid row with no captured amount instead of storing zero", () => {
+    const result = normalizeCleanCloudPaidOrderRow(
+      {
+        "Order ID": "500",
+        Customer: "No Amount",
+        Paid: "1",
+        "Payment Date": "12 May 2026 21:38",
+      },
+      {
+        sourceReportType: "orders_sales",
+        sourceFileName: "CC-Orders.csv",
+        importBatchId: 1,
+        tenantId: "tenant-a",
+      }
+    );
+    expect(result.normalized).toBeNull();
+    expect(result.error).toMatch(/captured amount/i);
+  });
+
+  it("does not treat an explicit unpaid flag as paid because a payment date is present", () => {
+    const result = normalizeCleanCloudPaidOrderRow(
+      {
+        ...may12SalesRows[0],
+        Paid: "0",
+      },
+      {
+        sourceReportType: "orders_sales",
+        sourceFileName: "CC-Orders.csv",
+        importBatchId: 1,
+        tenantId: "tenant-a",
+      }
+    );
+    expect(result.normalized?.paid).toBe(false);
+    expect(result.normalized?.totalCents).toBe(3375);
+  });
 });

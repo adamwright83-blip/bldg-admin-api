@@ -277,9 +277,21 @@ export function normalizeCleanCloudPaidOrderRow(
   const totalCents =
     input.sourceReportType === "orders_sales"
       ? (parseCleanCloudMoneyCents(pick(row, ["Total after Credit Used"])) ??
-        parseCleanCloudMoneyCents(pick(row, ["Total"])) ??
-        0)
-      : (parseCleanCloudMoneyCents(pick(row, ["Total"])) ?? 0);
+        parseCleanCloudMoneyCents(pick(row, ["Total"])))
+      : parseCleanCloudMoneyCents(pick(row, ["Total"]));
+  if (totalCents === null) {
+    return {
+      normalized: null,
+      error: "Missing captured amount",
+      candidateForClearent: false,
+    };
+  }
+  const paidFlag = pick(row, ["Paid"]).trim().toLowerCase();
+  const explicitUnpaid = ["0", "false", "no", "unpaid"].includes(paidFlag);
+  const datedPayment = Boolean(
+    parseCleanCloudPacificDate(pick(row, ["Payment Date", "Paid Date"]))
+  );
+  const paid = explicitUnpaid ? false : parseCleanCloudBool(paidFlag) || datedPayment;
 
   const normalized: InsertCleancloudPaidOrder = {
     tenantId: requireCleanCloudTenantId(input.tenantId),
@@ -306,11 +318,7 @@ export function normalizeCleanCloudPaidOrderRow(
     collectedAtUtc: parseCleanCloudPacificDate(pick(row, ["Collected"])),
     cleanedAtUtc: parseCleanCloudPacificDate(pick(row, ["Cleaned"])),
     orderStatus: pick(row, ["Status"]).trim() || null,
-    paid:
-      parseCleanCloudBool(pick(row, ["Paid"])) ||
-      Boolean(
-        parseCleanCloudPacificDate(pick(row, ["Payment Date", "Paid Date"]))
-      ),
+    paid,
     paymentType: pick(row, ["Payment Type"]).trim() || null,
     cardPaymentType: pick(row, ["Card Payment Type"]).trim() || null,
     totalCents,
@@ -412,14 +420,15 @@ export async function importCleanCloudPaidOrders(input: {
       unresolvedBuildingCount += 1;
 
     const values = normalized.normalized;
-    if (values.paid && (values.totalCents ?? 0) > 0) {
+    const paidAt = values.paymentDateUtc || values.paidDateUtc || null;
+    if (values.paid && values.totalCents > 0 && paidAt) {
       paidOrdersToBridge.push({
         cleancloudOrderId: String(values.cleancloudOrderId),
         cleancloudCustomerId: values.cleancloudCustomerId != null ? String(values.cleancloudCustomerId) : null,
         customerEmail: values.customerEmail ?? null,
         customerPhone: values.customerPhone ?? null,
-        totalCents: values.totalCents ?? 0,
-        paidAt: values.paymentDateUtc || values.paidDateUtc || values.placedAtUtc || new Date(),
+        totalCents: values.totalCents,
+        paidAt,
       });
     }
     const physicalEntityId = values.buildingResolutionStatus === "resolved"

@@ -301,7 +301,8 @@ export async function executeCleanCloudIngestion(
         physicalIds.get(row.cleancloudOrderId) ?? null
       );
 
-      if (row.paid && (row.totalCents ?? 0) > 0) {
+      const paidAt = row.paymentDateUtc || row.paidDateUtc || null;
+      if (row.paid && row.totalCents != null && row.totalCents > 0 && paidAt) {
         paidToBridge.push({
           cleancloudOrderId: String(row.cleancloudOrderId),
           cleancloudCustomerId:
@@ -310,12 +311,8 @@ export async function executeCleanCloudIngestion(
               : null,
           customerEmail: row.customerEmail ?? null,
           customerPhone: row.customerPhone ?? null,
-          totalCents: row.totalCents ?? 0,
-          paidAt:
-            row.paymentDateUtc ||
-            row.paidDateUtc ||
-            row.placedAtUtc ||
-            new Date(),
+          totalCents: row.totalCents,
+          paidAt,
         });
       }
 

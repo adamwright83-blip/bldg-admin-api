@@ -11,9 +11,11 @@ import {
   strategyCustomerSnapshotId,
 } from "../strategy/snapshotDormantCustomers";
 import {
+  customerTruthDispositionOf,
   loadBusinessSourceCoverage,
   SOURCE_COVERAGE_CONTRACT_VERSION,
   type BusinessSourceCoverageSnapshot,
+  type CustomerTruthDisposition,
   type SourceCoverageStatus,
 } from "./sourceCoverage";
 
@@ -76,6 +78,7 @@ export type CanonicalDormantCoverage = {
   incomplete: boolean;
   knownRecordsReadable: boolean;
   interpretEmptyAsNoCustomers: boolean;
+  customerTruthDisposition: CustomerTruthDisposition;
   blockingSources: BusinessSourceCoverageSnapshot["blockingSources"];
 };
 
@@ -215,6 +218,7 @@ function coverageView(
       incomplete: true,
       knownRecordsReadable: false,
       interpretEmptyAsNoCustomers: false,
+      customerTruthDisposition: "source_unavailable",
       blockingSources: [],
     };
   }
@@ -227,15 +231,23 @@ function coverageView(
     incomplete: !current,
     knownRecordsReadable: snapshot.book.knownRecordsReadable,
     interpretEmptyAsNoCustomers: snapshot.book.interpretEmptyAsNoCustomers,
+    customerTruthDisposition: customerTruthDispositionOf(snapshot),
     blockingSources: snapshot.blockingSources.map(source => ({ ...source })),
   };
 }
 
 function listReason(
   claim: DormantQueueClaim,
-  bookStatus: SourceCoverageStatus | null
+  bookStatus: SourceCoverageStatus | null,
+  disposition: CustomerTruthDisposition
 ): string {
   if (claim === "unreadable") {
+    if (disposition === "import_failed") {
+      return "The latest CleanCloud import failed. This is not an empty dormant queue.";
+    }
+    if (disposition === "missing") {
+      return "CleanCloud coverage is missing. This is not an empty dormant queue.";
+    }
     return "The customer book could not be read. This is not an empty dormant queue.";
   }
   if (claim === "known_candidates") {
@@ -315,12 +327,10 @@ export function deriveCanonicalDormantQueue(input: {
   const coverage = coverageView(snapshot);
   const bookReadable = input.records !== null;
   const currentHeldBook =
-    bookReadable && coverage.snapshotRead && !coverage.incomplete;
-  const claim: DormantQueueClaim = !bookReadable
-    ? "unreadable"
-    : currentHeldBook
-      ? "current_held_book"
-      : "known_candidates";
+    bookReadable &&
+    coverage.snapshotRead &&
+    !coverage.incomplete &&
+    coverage.customerTruthDisposition === "current";
   const customers = bookReadable
     ? qualifyCustomers({
         tenantId: input.tenantId,
@@ -329,7 +339,18 @@ export function deriveCanonicalDormantQueue(input: {
         held: heldSources(snapshot),
       })
     : [];
-  const customerCount = bookReadable ? customers.length : null;
+  const untrustedEmpty =
+    bookReadable &&
+    customers.length === 0 &&
+    (coverage.customerTruthDisposition === "import_failed" ||
+      coverage.customerTruthDisposition === "source_unavailable" ||
+      coverage.customerTruthDisposition === "missing");
+  const claim: DormantQueueClaim = !bookReadable || untrustedEmpty
+    ? "unreadable"
+    : currentHeldBook
+      ? "current_held_book"
+      : "known_candidates";
+  const customerCount = claim === "unreadable" ? null : customers.length;
   return {
     contractVersion: DORMANT_QUEUE_CONTRACT_VERSION,
     tenantId: input.tenantId,
@@ -345,7 +366,7 @@ export function deriveCanonicalDormantQueue(input: {
       claim === "current_held_book" && customerCount === 0,
     customerCount,
     customers,
-    listReason: listReason(claim, coverage.bookStatus),
+    listReason: listReason(claim, coverage.bookStatus, coverage.customerTruthDisposition),
     coverage,
     rescueIntegration: DORMANT_QUEUE_RESCUE_INTEGRATION,
   };

@@ -106,7 +106,7 @@ export function economicRevisionFields(
   return {
     economicKey: hash(JSON.stringify([tenantId, "cleancloud", row.cleancloudOrderId])),
     paid: Boolean(row.paid),
-    amountCents: row.totalCents ?? 0,
+    amountCents: row.totalCents,
     paymentAt:
       paymentDate && Number.isFinite(paymentDate.getTime())
         ? paymentDate.toISOString()
@@ -146,12 +146,13 @@ export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleanc
   const [head] = await tx.select().from(economicHeads)
     .where(eq(economicHeads.economicKey, snapshot.economicKey)).for("update");
   if (head.fingerprint === fingerprint) return;
+  if (snapshot.amountCents == null) return;
   if (head.revision === 0 && (!snapshot.paid || !snapshot.paymentAt)) return;
   const revision = head.revision + 1;
   const id = `${snapshot.economicKey}:${revision}`;
   const tenantId = requireCleanCloudTenantId(row.tenantId);
   const cleanCloudEvidence =
-    snapshot.paid && snapshot.paymentAt
+    snapshot.paid && snapshot.paymentAt && snapshot.amountCents != null
       ? await admitCleanCloudPaidObservationWith(tx, {
           tenantId,
           cleancloudOrderId: String(row.cleancloudOrderId),

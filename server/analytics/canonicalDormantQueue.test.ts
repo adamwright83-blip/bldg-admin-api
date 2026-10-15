@@ -762,4 +762,46 @@ describe("canonical dormant queue", () => {
     };
     expect(() => toPublicDormantObjectivePayload(leaked)).toThrow(/forbidden field phone/);
   });
+
+  it("does not turn a failed import and zero rows into an empty dormant queue", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const coverage = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: {
+        laundry_butler: {
+          state: "bound",
+          lastSuccessAt: BEFORE_DUE,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        },
+        cleancloud: {
+          state: "bound",
+          lastSuccessAt: completedAt,
+          coverageRanges: [range("2026-09-01", "2026-09-19", completedAt)],
+          latestAttempt: {
+            at: new Date("2026-09-20T02:00:00.000Z"),
+            outcome: "extension_import",
+            rangeFrom: "2026-09-01",
+            rangeTo: "2026-09-19",
+          },
+          isSystemOfRecord: false,
+        },
+      },
+      cleancloudReceipts: [receipt("2026-09-01", "2026-09-19", completedAt)],
+    });
+    const result = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [],
+      coverage,
+    });
+    expect(result.claim).toBe("unreadable");
+    expect(result.customerCount).toBeNull();
+    expect(result.customers).toEqual([]);
+    expect(result.emptyMeansNoDormantCustomers).toBe(false);
+    expect(result.listReason).toMatch(/import failed/i);
+    expect(result.coverage.customerTruthDisposition).toBe("import_failed");
+  });
 });
