@@ -34,6 +34,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     // Check that all 8 slots are accounted for (either active villager button or resting cottage)
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
     const restingSlots = page.getByText(/· Resting/);
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 15000 });
     const activeCount = await villagerButtons.count();
     const restingCount = await restingSlots.count();
     expect(activeCount + restingCount).toBe(8);
