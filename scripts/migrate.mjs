@@ -110,6 +110,15 @@ for (const statement of smsComposeHandoffAuditDdl
   await runRequired(statement, "SMS compose handoff audit");
 }
 
+const hiddenGameChapterUnlockDdl = await readFile(new URL("../drizzle/0135_hidden_game_chapter_unlocks.sql", import.meta.url), "utf8");
+for (const statement of hiddenGameChapterUnlockDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "Lost Property chapter unlocks");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5436,6 +5445,15 @@ await assertRequiredColumns("personal_sender_identities", [
   "device_id",
   "expected_device_id",
   "transport_probe_ok",
+]);
+await assertRequiredColumns("hidden_game_chapter_unlocks", [
+  "id",
+  "tenantId",
+  "canonicalOperatorId",
+  "chapter",
+  "openedAt",
+  "evidenceJson",
+  "createdAt",
 ]);
 console.log("\nMigration complete.");
 await conn.end();
