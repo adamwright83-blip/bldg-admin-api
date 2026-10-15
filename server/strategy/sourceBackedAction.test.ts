@@ -18,6 +18,9 @@ import {
 } from "./strategicApproval";
 import { loadStrategicProposal, strategicResponses } from "./strategicStore";
 
+/** Historical tenant table. The identifier cannot change; the product is JOYSTICK. */
+const legacyDayforgeSaasTenants = "dayforge_saas_tenants";
+
 const HOST = "127.0.0.1";
 const PORT = 3399;
 const NOW = new Date("2026-10-14T17:00:00.000Z");
@@ -215,7 +218,7 @@ describe("source-backed analysis becomes an approved Day Line item", () => {
       connectionLimit: 4,
     });
     const statements = [
-      `CREATE TABLE dayforge_saas_tenants (
+      `CREATE TABLE ${legacyDayforgeSaasTenants} (
         id varchar(64) NOT NULL,
         slug varchar(64) NOT NULL,
         businessName varchar(255) NOT NULL,
@@ -236,7 +239,7 @@ describe("source-backed analysis becomes an approved Day Line item", () => {
         createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
-        UNIQUE KEY uq_dayforge_saas_tenants_slug (slug)
+        UNIQUE KEY uq_${legacyDayforgeSaasTenants}_slug (slug)
       )`,
       `CREATE TABLE strategic_diagnoses (
         id varchar(64) PRIMARY KEY, tenantId varchar(64) NOT NULL, canonicalOperatorId varchar(191) NOT NULL,
@@ -344,7 +347,7 @@ describe("source-backed analysis becomes an approved Day Line item", () => {
       [tenantB, `fixture-b-${suffix}`],
     ] as const) {
       await pool.query(
-        `INSERT INTO dayforge_saas_tenants
+        `INSERT INTO ${legacyDayforgeSaasTenants}
           (id, slug, businessName, brandName, primaryColor, contactName, contactEmail, timeZone, status)
          VALUES (?, ?, 'Fixture Laundry', 'Fixture', '#111111', 'Fixture Operator', 'fixture@fixture.test', ?, 'active')`,
         [id, slug, ZONE]

@@ -213,15 +213,15 @@ export function isRefundBillingEvent(eventType: string): boolean {
 
 export function revenueCentsForBillingEvent(event: {
   type: string;
-  data?: { object?: Record<string, unknown> | null };
+  data?: { object?: object | null };
 }): number {
   if (isRefundBillingEvent(event.type)) return 0;
   if (event.type !== "invoice.paid") return 0;
-  const object = event.data?.object ?? {};
+  const source = event.data?.object ?? null;
   return recognizedSubscriptionRevenueCents({
-    amountPaidCents: numberField(object.amount_paid),
-    amountRefundedCents: numberField(object.amount_refunded),
-    postPaymentCreditNoteCents: numberField(object.post_payment_credit_notes_amount),
+    amountPaidCents: invoiceNumber(source, "amount_paid"),
+    amountRefundedCents: invoiceNumber(source, "amount_refunded"),
+    postPaymentCreditNoteCents: invoiceNumber(source, "post_payment_credit_notes_amount"),
   });
 }
 
@@ -246,6 +246,8 @@ function nonNegativeInt(value: number | null | undefined): number {
   return Math.max(0, Math.trunc(value));
 }
 
-function numberField(value: unknown): number {
+function invoiceNumber(source: object | null, key: string): number {
+  if (!source) return 0;
+  const value: unknown = Reflect.get(source, key);
   return typeof value === "number" ? value : 0;
 }
