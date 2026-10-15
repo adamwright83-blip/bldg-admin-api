@@ -4,6 +4,7 @@ import {
   claireCustomerTruthWithholdingSentence,
   diagnoseCustomerTruthFreshness,
   loadCustomerTruthFreshnessDiagnostic,
+  productionCandidateDiagnosticPlan,
   type CustomerTruthFreshnessDiagnostic,
   type CustomerTruthImporterStatus,
 } from "./customerTruthFreshnessDiagnostic";
@@ -144,6 +145,7 @@ describe("customer truth freshness diagnostic", () => {
     expect(diagnostic.latestAttemptOutcome).toBe("imported");
     expect(diagnostic.coverageWatermark).toBe("2026-09-19");
     expect(diagnostic.withholdingSentence).toBeNull();
+    expect(diagnostic.coverageGap).toBe("none");
     expect(diagnostic.eligiblePopulation).toBe("not_evaluated");
     expect(diagnostic.cleancloudPresence).toBe("held");
     expect(diagnostic.interpretEmptyAsNoCustomers).toBe(false);
@@ -162,6 +164,7 @@ describe("customer truth freshness diagnostic", () => {
     const diagnostic = diagnose(coverage, null);
 
     expect(diagnostic.disposition).toBe("source_unavailable");
+    expect(diagnostic.coverageGap).toBe("cleancloud_unreadable");
     expect(diagnostic.cleancloudPresence).toBe("unreadable");
     expect(diagnostic.cleancloudDisposition).toBe("source_unavailable");
     expect(diagnostic.eligiblePopulation).toBe("withheld");
@@ -301,6 +304,38 @@ describe("customer truth freshness diagnostic", () => {
     expect(diagnostic.disposition).toBe("current");
     expect(diagnostic.latestAttemptFailed).toBe(false);
     expect(diagnostic.eligiblePopulation).toBe("not_evaluated");
+  });
+
+  it("names a missing CleanCloud connection without calling absence zero customers", () => {
+    const diagnostic = diagnose(
+      coverageOf({
+        cleancloud: "absent",
+        cleancloudLastSuccessAt: null,
+        ranges: [],
+        receipts: [],
+      }),
+      null
+    );
+    expect(diagnostic.coverageGap).toBe("cleancloud_not_connected");
+    expect(diagnostic.cleancloudPresence).toBe("absent");
+    expect(diagnostic.missingIsNoCustomers).toBe(false);
+    expect(diagnostic.eligiblePopulation).not.toBe("empty_verified");
+    assertNoCustomerIdentity(diagnostic);
+  });
+
+  it("prepares a production candidate diagnostic and does not execute it", () => {
+    expect(productionCandidateDiagnosticPlan({})).toEqual({
+      executes: false,
+      selectsIdentityColumns: false,
+      procedure: "customerTruthFreshness.diagnostic",
+      reason: "Missing founder authorization. No production read was opened.",
+    });
+    expect(
+      productionCandidateDiagnosticPlan({
+        authorization: "founder_authorized_non_identifying",
+      }).executes
+    ).toBe(false);
+    expect(diagnose(null, null).coverageGap).toBe("coverage_unreadable");
   });
 
   it("fails closed without a database when coverage cannot be read", async () => {

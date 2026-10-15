@@ -33,7 +33,7 @@ export const SMS_COMPOSE_HANDOFF_STATE_LABELS: Record<SmsComposeHandoffState, st
 };
 
 export const SMS_COMPOSE_COPY_FALLBACK_LABEL =
-  "Copy this message into your SMS app. The link opens the number only. The body was not prefilled.";
+  "The link includes this message for an SMS app that reads a body query. Prefill is not guaranteed. Copy it if the app opens to the number only. Nothing was sent.";
 
 export const SMS_COMPOSE_MISSING_BODY_LABEL =
   "No approved message body. The SMS app opens to the number only. Nothing was prefilled.";
@@ -122,10 +122,12 @@ export function buildSameOriginPhoneContinuation(input: {
 }
 
 /**
- * `sms:+1${digits}?body=` matches the manual composer already used for recovery drafts.
- * Android SMS apps sometimes drop that query, so Android and unknown clients use the
- * number-only URI plus a copy body and never claim the body was prefilled.
- * iOS keeps the encoded query. Desktop never builds an sms: URI.
+ * A webpage cannot set Android `ACTION_SENDTO` extras such as `sms_body`.
+ * The strongest link a page can open is `sms:+1${digits}?body=`. Android
+ * messaging apps often read that query and often drop it. The copy body stays
+ * visible, the number-only URI stays as `fallbackUri`, and Android never
+ * claims the body was prefilled. iOS keeps the encoded query and may claim
+ * that query. Desktop never builds an sms: URI.
  */
 export function buildSmsComposeUri(input: {
   recipientPhone: string;
@@ -175,7 +177,7 @@ export function buildSmsComposeUri(input: {
   if (!bodyPrefillReliable) {
     return {
       kind: "copy_fallback",
-      uri: numberUri,
+      uri: `${numberUri}?body=${encodeURIComponent(body)}`,
       fallbackUri: numberUri,
       bodyPrefillClaimed: false,
       prefillClaim: "not_prefilled",

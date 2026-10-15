@@ -398,8 +398,11 @@ export default function ClaireScheduledOutreach() {
                       {notice?.uri ? (
                         <div style={{ marginTop: "6px" }}>
                           <a href={notice.uri}>
-                            {notice.bodyPrefillClaimed ? "Open SMS with this message" : "Open the number in your SMS app"}
+                            {notice.bodyPrefillClaimed ? "Open SMS with this message" : "Open SMS. Prefill is not guaranteed."}
                           </a>
+                          {notice.fallbackUri && notice.fallbackUri !== notice.uri ? (
+                            <a href={notice.fallbackUri} style={{ marginLeft: "8px" }}>Open the number only</a>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

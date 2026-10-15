@@ -179,7 +179,10 @@ export default function JoystickLanding() {
       <section id="examples" className="joystick-briefing-section" data-testid="section-examples">
         <div className="joystick-section__inner">
           <p className="joystick-section__kicker">FIELD ARCHIVE</p>
-          <h2>REAL MISSIONS. REAL REVENUE.</h2>
+          <h2>EXAMPLE MISSIONS. NOT OBSERVED RESULTS.</h2>
+          <p data-testid="landing-examples-illustration">
+            These cards are illustrations. They are not your customers, sales, or reviews.
+          </p>
           <div className="joystick-grid-3">
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
@@ -187,7 +190,7 @@ export default function JoystickLanding() {
               </div>
               <h3>The Silent Estimate</h3>
               <p className="joystick-card__desc">Direct follow-up on unaccepted proposals sent over 48 hours ago using Claire’s objection-handling script.</p>
-              <div className="joystick-card__reward"><strong>Result:</strong> 1 Closed Contract ($3,400)</div>
+              <div className="joystick-card__reward"><strong>Illustration:</strong> 1 Closed Contract ($3,400)</div>
             </div>
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
@@ -195,7 +198,7 @@ export default function JoystickLanding() {
               </div>
               <h3>The Review Harvest</h3>
               <p className="joystick-card__desc">Deliver SMS review invites to yesterday’s 5-star completed tickets with pre-filled satisfaction prompts.</p>
-              <div className="joystick-card__reward"><strong>Result:</strong> +4 Verified 5-Star Reviews</div>
+              <div className="joystick-card__reward"><strong>Illustration:</strong> +4 Verified 5-Star Reviews</div>
             </div>
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
@@ -203,7 +206,7 @@ export default function JoystickLanding() {
               </div>
               <h3>The Cold Reconnect</h3>
               <p className="joystick-card__desc">Re-engage 5 past commercial clients who haven’t ordered in 90 days with seasonal equipment inspection offers.</p>
-              <div className="joystick-card__reward"><strong>Result:</strong> 2 Rebooked Recurring Routes</div>
+              <div className="joystick-card__reward"><strong>Illustration:</strong> 2 Rebooked Recurring Routes</div>
             </div>
           </div>
 

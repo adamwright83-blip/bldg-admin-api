@@ -49,6 +49,22 @@ const IDENTITY_KEYS = new Set([
 
 export type EligiblePopulationState = "withheld" | "empty_verified" | "not_evaluated";
 
+/**
+ * Why the book is not current. Derived from the coverage snapshot already
+ * loaded. It names a gate, not a customer.
+ */
+export const CUSTOMER_TRUTH_COVERAGE_GAPS = [
+  "none",
+  "coverage_unreadable",
+  "cleancloud_not_connected",
+  "cleancloud_unreadable",
+  "import_failed",
+  "coverage_stale",
+  "coverage_incomplete",
+  "book_not_current",
+] as const;
+export type CustomerTruthCoverageGap = (typeof CUSTOMER_TRUTH_COVERAGE_GAPS)[number];
+
 export type CleanCloudPresence = "absent" | "held" | "unreadable";
 
 /** Importer clocks already recorded. No customer identity. */
@@ -85,6 +101,8 @@ export type CustomerTruthFreshnessDiagnostic = {
   cleancloudDisposition: CustomerTruthDisposition;
   /** Copied from the coverage contract. Absence is never "no customers". */
   missingIsNoCustomers: false;
+  /** Exact coverage or connection gate. `none` only when the book is current. */
+  coverageGap: CustomerTruthCoverageGap;
   interpretEmptyAsNoCustomers: boolean;
 };
 
@@ -136,6 +154,53 @@ function assertNoIdentityFields(value: unknown, path = "diagnostic"): void {
   }
 }
 
+export function coverageGapOf(input: {
+  coverage: BusinessSourceCoverageSnapshot | null;
+  disposition: CustomerTruthDisposition;
+  cleancloudPresence: CleanCloudPresence;
+  latestAttemptFailed: boolean | null;
+}): CustomerTruthCoverageGap {
+  if (!input.coverage) return "coverage_unreadable";
+  if (input.cleancloudPresence === "absent" || input.disposition === "missing") {
+    return "cleancloud_not_connected";
+  }
+  if (input.disposition === "current") return "none";
+  if (
+    input.cleancloudPresence === "unreadable" ||
+    input.disposition === "source_unavailable"
+  ) {
+    return "cleancloud_unreadable";
+  }
+  if (input.disposition === "import_failed" || input.latestAttemptFailed) return "import_failed";
+  if (input.disposition === "stale") return "coverage_stale";
+  if (input.disposition === "coverage_incomplete") return "coverage_incomplete";
+  return "book_not_current";
+}
+
+/**
+ * The production candidate read is prepared and not executed. An operator
+ * session may later call the existing diagnostic procedure. This function
+ * does not open a database and does not accept a customer name or phone.
+ */
+export function productionCandidateDiagnosticPlan(input: {
+  authorization?: string;
+}): {
+  executes: false;
+  selectsIdentityColumns: false;
+  procedure: "customerTruthFreshness.diagnostic";
+  reason: string;
+} {
+  const authorized = input.authorization === "founder_authorized_non_identifying";
+  return {
+    executes: false,
+    selectsIdentityColumns: false,
+    procedure: "customerTruthFreshness.diagnostic",
+    reason: authorized
+      ? "Authorized for a later operator-scoped diagnostic. This process still does not read production."
+      : "Missing founder authorization. No production read was opened.",
+  };
+}
+
 function cleancloudOf(snapshot: BusinessSourceCoverageSnapshot | null) {
   const source = snapshot?.sources.find(item => item.sourceId === "cleancloud");
   if (!snapshot || !source) {
@@ -179,6 +244,10 @@ export function diagnoseCustomerTruthFreshness(input: {
   const storedSyncAt = isoOrNull(input.importer?.lastSuccessfulSyncAt);
   const lastSuccessfulSyncAt = storedSyncAt ?? cleancloud.lastSuccessfulAssimilationAt;
   const outcome = importerAttempt?.outcome.trim() ?? "";
+  const latestAttemptFailed = attemptFailed(
+    importerAttempt && attemptAt ? { at: attemptAt, outcome: importerAttempt.outcome } : null,
+    lastSuccessfulSyncAt
+  );
   const diagnostic: CustomerTruthFreshnessDiagnostic = {
     tenantId: coverage?.tenantId ?? "",
     checkedAt: coverage?.checkedAt ?? (input.now ?? new Date()).toISOString(),
@@ -186,10 +255,7 @@ export function diagnoseCustomerTruthFreshness(input: {
     lastSuccessfulSyncAt,
     lastSuccessfulAssimilationAt: cleancloud.lastSuccessfulAssimilationAt,
     latestAttemptAt: attemptAt,
-    latestAttemptFailed: attemptFailed(
-      importerAttempt && attemptAt ? { at: attemptAt, outcome: importerAttempt.outcome } : null,
-      lastSuccessfulSyncAt
-    ),
+    latestAttemptFailed,
     latestAttemptOutcome: outcome ? outcome.slice(0, 32) : null,
     coverageWatermark: cleancloud.coverageWatermark,
     withholdingSentence: claireCustomerTruthWithholdingSentence(disposition),
@@ -203,6 +269,12 @@ export function diagnoseCustomerTruthFreshness(input: {
     cleancloudDisposition: cleancloud.disposition,
     missingIsNoCustomers: false,
     interpretEmptyAsNoCustomers: coverage?.book.interpretEmptyAsNoCustomers ?? false,
+    coverageGap: coverageGapOf({
+      coverage,
+      disposition,
+      cleancloudPresence: cleancloud.presence,
+      latestAttemptFailed,
+    }),
   };
   assertNoIdentityFields(diagnostic);
   return diagnostic;

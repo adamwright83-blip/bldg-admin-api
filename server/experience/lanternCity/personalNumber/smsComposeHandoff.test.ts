@@ -91,9 +91,9 @@ describe("sms compose URI", () => {
       clientKind: "android",
     });
     expect(result.kind).toBe("copy_fallback");
-    expect(result.uri).toBe("sms:+12135550199");
-    expect(result.uri).not.toContain("body");
-    expect(result.uri).not.toContain(encodeURIComponent(body));
+    expect(result.uri).toBe(`sms:+12135550199?body=${encodeURIComponent(body)}`);
+    expect(result.fallbackUri).toBe("sms:+12135550199");
+    expect(result.fallbackUri).not.toContain("body");
     expect(result.bodyPrefillClaimed).toBe(false);
     expect(result.prefillClaim).toBe("not_prefilled");
     expect(result.copyBody).toBe(body);

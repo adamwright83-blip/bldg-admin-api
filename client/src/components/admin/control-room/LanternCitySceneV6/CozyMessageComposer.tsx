@@ -415,8 +415,11 @@ export function CozyMessageComposer({
             {handoffReveal.kind === "missing_body" ? <p>{handoffReveal.copyLabel}</p> : null}
             {handoffReveal.uri ? (
               <a href={handoffReveal.uri}>
-                {handoffReveal.bodyPrefillClaimed ? "Open SMS with this message" : "Open the number in your SMS app"}
+                {handoffReveal.bodyPrefillClaimed ? "Open SMS with this message" : "Open SMS. Prefill is not guaranteed."}
               </a>
+            ) : null}
+            {handoffReveal.fallbackUri && handoffReveal.fallbackUri !== handoffReveal.uri ? (
+              <a href={handoffReveal.fallbackUri}>Open the number only</a>
             ) : null}
             {handoffReveal.state === "compose_opened" ? (
               <button type="button" onClick={() => void handleReportSent()} disabled={reportSent.isPending}>

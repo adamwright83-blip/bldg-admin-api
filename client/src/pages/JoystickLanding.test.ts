@@ -19,6 +19,13 @@ describe("JOYSTICK public start", () => {
     expect(source).not.toContain("THE MONEY ISN");
   });
 
+  it("labels example missions as illustrations", () => {
+    expect(source).toContain("EXAMPLE MISSIONS. NOT OBSERVED RESULTS.");
+    expect(source).toContain('data-testid="landing-examples-illustration"');
+    expect(source).not.toContain("REAL MISSIONS. REAL REVENUE.");
+    expect(source).not.toContain("<strong>Result:</strong>");
+  });
+
   it("keeps the approved hero line", () => {
     expect(source).toContain('aria-label="Joystick — Play the work you hate"');
     expect(source).toContain("PLAY THE");
