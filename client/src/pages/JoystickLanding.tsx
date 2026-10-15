@@ -11,6 +11,18 @@ export default function JoystickLanding() {
       path: typeof window !== "undefined" ? window.location.pathname : "/joystick",
       source: "joystick_landing",
     });
+    captureProductEvent("landing_pricing_viewed", {
+      monthly_usd: 49,
+      trial_days: 7,
+      card_required_at_signup: true,
+      annual_shown: false,
+      checkout_live: false,
+      source: "joystick_landing",
+    });
+    captureProductEvent("landing_checkout_unavailable", {
+      checkout_live: false,
+      source: "joystick_landing",
+    });
   }, []);
 
   return (
@@ -38,10 +50,13 @@ export default function JoystickLanding() {
         </nav>
 
         <div className="joystick-desktop__terms" data-testid="landing-commercial-terms">
-          <span className="joystick-terms-pill">7-day trial</span>
-          <span className="joystick-terms-pill">$49/month</span>
-          <span className="joystick-terms-pill">Card required</span>
-          <span className="joystick-terms-pill">Cancel anytime</span>
+          <div className="joystick-desktop__terms-row">
+            <span className="joystick-terms-pill">7-day trial</span>
+            <span className="joystick-terms-pill">$49/month</span>
+            <span className="joystick-terms-pill">Card required at signup</span>
+            <span className="joystick-terms-pill">Cancel anytime</span>
+          </div>
+          <p className="joystick-desktop__checkout-note">Checkout is not open. This does not charge a card.</p>
         </div>
 
         <a
@@ -91,7 +106,8 @@ export default function JoystickLanding() {
           </a>
           <div className="joystick-mobile__terms" data-testid="mobile-commercial-terms">
             <span className="joystick-mobile__terms-badge">7-day trial · $49/month</span>
-            <span className="joystick-mobile__terms-sub">Card required · Cancel anytime</span>
+            <span className="joystick-mobile__terms-sub">Card required at signup · Cancel anytime</span>
+            <span className="joystick-mobile__terms-sub">Checkout is not open. This does not charge a card.</span>
           </div>
           <p className="joystick-mobile__tagline">
             THE MONSTERS ARE FAKE.
@@ -173,7 +189,6 @@ export default function JoystickLanding() {
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
                 <span className="joystick-card__tag">TACTICAL MISSION</span>
-                <span className="joystick-card__xp">+200 XP</span>
               </div>
               <h3>The Silent Estimate</h3>
               <p className="joystick-card__desc">Direct follow-up on unaccepted proposals sent over 48 hours ago using Claire’s objection-handling script.</p>
@@ -182,7 +197,6 @@ export default function JoystickLanding() {
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
                 <span className="joystick-card__tag">REPUTATION RAID</span>
-                <span className="joystick-card__xp">+75 XP</span>
               </div>
               <h3>The Review Harvest</h3>
               <p className="joystick-card__desc">Deliver SMS review invites to yesterday’s 5-star completed tickets with pre-filled satisfaction prompts.</p>
@@ -191,7 +205,6 @@ export default function JoystickLanding() {
             <div className="joystick-card joystick-card--mission">
               <div className="joystick-card__mission-header">
                 <span className="joystick-card__tag">TERRITORY EXPEDITION</span>
-                <span className="joystick-card__xp">+150 XP</span>
               </div>
               <h3>The Cold Reconnect</h3>
               <p className="joystick-card__desc">Re-engage 5 past commercial clients who haven’t ordered in 90 days with seasonal equipment inspection offers.</p>
@@ -203,15 +216,11 @@ export default function JoystickLanding() {
             <div className="joystick-pricing-card__terms">
               <p className="joystick-pricing-kicker">READY TO TAKE COMMAND?</p>
               <h3>7-Day Free Trial, Then $49/Month</h3>
-              <p className="joystick-pricing-meta">Card required · One comprehensive tier · Cancel anytime</p>
+              <p className="joystick-pricing-meta">Card required at signup · Cancel anytime</p>
             </div>
-            <a
-              className="joystick-pricing-cta"
-              href={START_PATH}
-              onClick={() => captureProductEvent("joystick_start_clicked", { source: "landing_footer" })}
-            >
-              START 7-DAY TRIAL →
-            </a>
+            <p className="joystick-checkout-closed" data-testid="landing-checkout-unavailable">
+              Checkout is not open. This does not charge a card.
+            </p>
           </div>
         </div>
       </section>
