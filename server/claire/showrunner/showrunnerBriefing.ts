@@ -8,7 +8,8 @@ import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/mi
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
-import { readWinBackDossier } from "../../strategy/winBackDossier";
+import { readWinBackDossier, type WinBackDossier } from "../../strategy/winBackDossier";
+import type { CustomerTruthDisposition } from "../../analytics/sourceCoverage";
 
 export const SHOWRUNNER_DEVELOPMENT_SOURCE = "claire_showrunner_development";
 export const DESK_PREPARATION_SOURCE = "claire_desk_preparation";
@@ -43,9 +44,47 @@ export type ShowrunnerBriefing = {
     diagnosis: string;
     approach: string;
     evidence: string[];
+    customerTruth: CustomerTruthDisposition | null;
+    lapsedCount: number | null;
+    emptyMeansNoLapsedCustomers: boolean;
+    withheldReason: string | null;
     lapsedCustomers: Array<{ name: string; lastOrderDate: string | null; paidOrders: number; lifetimeDollars: number; contactOnFile: boolean }>;
   };
 };
+
+const UNREADABLE_WIN_BACK = "Win-back dossier could not be read. That is not an empty customer list.";
+
+/** Empty lapsed names stay empty. The withheld reason says why that is not zero customers. */
+export function describeWinBackForBriefing(dossier: WinBackDossier | null): {
+  customerTruth: CustomerTruthDisposition | null;
+  lapsedCount: number | null;
+  emptyMeansNoLapsedCustomers: boolean;
+  withheldReason: string | null;
+  lapsedCustomers: NonNullable<ShowrunnerBriefing["opportunity"]>["lapsedCustomers"];
+} {
+  if (!dossier) {
+    return {
+      customerTruth: null,
+      lapsedCount: null,
+      emptyMeansNoLapsedCustomers: false,
+      withheldReason: UNREADABLE_WIN_BACK,
+      lapsedCustomers: [],
+    };
+  }
+  return {
+    customerTruth: dossier.freshness,
+    lapsedCount: dossier.lapsedCount,
+    emptyMeansNoLapsedCustomers: dossier.emptyMeansNoLapsedCustomers,
+    withheldReason: dossier.withheldReason,
+    lapsedCustomers: dossier.contacts.map(c => ({
+      name: c.name,
+      lastOrderDate: c.lastOrderDate,
+      paidOrders: c.paidOrders,
+      lifetimeDollars: Math.round(c.lifetimeCents / 100),
+      contactOnFile: Boolean(c.phone || c.email),
+    })),
+  };
+}
 
 function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): BriefingItem[] {
   return state.commitments.map(c => ({
@@ -142,17 +181,13 @@ export async function buildShowrunnerBriefing(input: {
   if (input.purpose === "desk_planning" && proposal) {
     const refs = new Set(proposal.diagnosis.supportingEvidence);
     const dossier = await readWinBackDossier({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId, timeZone, now }).catch(() => null);
+    const winBack = describeWinBackForBriefing(dossier);
+    if (winBack.withheldReason) uncertain.push(winBack.withheldReason);
     opportunity = {
       diagnosis: proposal.diagnosis.diagnosis,
       approach: proposal.diagnosis.selectedApproach,
       evidence: proposal.diagnosis.evidence.filter(e => refs.has(e.id)).map(e => `${e.description} [${e.classification}]`),
-      lapsedCustomers: (dossier?.contacts ?? []).map(c => ({
-        name: c.name,
-        lastOrderDate: c.lastOrderDate,
-        paidOrders: c.paidOrders,
-        lifetimeDollars: Math.round(c.lifetimeCents / 100),
-        contactOnFile: Boolean(c.phone || c.email),
-      })),
+      ...winBack,
     };
   }
   let analyticalEvidence: ShowrunnerBriefing["analyticalEvidence"] = null;
