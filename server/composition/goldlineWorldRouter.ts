@@ -255,6 +255,15 @@ export const goldlineWorldRouter = router({
         leaseHolder: `operator_${ctx.user.openId}`,
       });
     }),
+  personalSenderStatus: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const { getPersonalSenderStatus } = await import(
+      "../experience/lanternCity/personalNumber/personalSenderIdentityStore"
+    );
+    return await getPersonalSenderStatus({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    });
+  }),
   getScheduledOutreachRevisions: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({

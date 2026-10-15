@@ -92,6 +92,15 @@ for (const statement of scheduledOutreachDdl.split(";").map(sql => sql.trim()).f
   await runRequired(statement, "Scheduled outreach outbox and revisions");
 }
 
+const personalSenderIdentityDdl = await readFile(new URL("../drizzle/0133_personal_sender_identity.sql", import.meta.url), "utf8");
+for (const statement of personalSenderIdentityDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "Personal sender identity");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5390,6 +5399,22 @@ await assertRequiredColumns("scheduled_outreach_revisions", [
   "revision_number",
   "message_body",
   "edited_by",
+]);
+await assertRequiredColumns("personal_sender_identities", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "pairing_present",
+  "displaces_existing_web_session",
+  "page_loaded",
+  "device_online",
+  "session_observed_at",
+  "originating_phone",
+  "phone_verified",
+  "observation_source",
+  "device_id",
+  "expected_device_id",
+  "transport_probe_ok",
 ]);
 console.log("\nMigration complete.");
 await conn.end();

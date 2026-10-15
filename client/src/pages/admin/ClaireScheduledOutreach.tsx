@@ -34,6 +34,11 @@ export default function ClaireScheduledOutreach() {
   const [cancelReason, setCancelReason] = useState("");
   const [activeHistoryMessageId, setActiveHistoryMessageId] = useState<string | null>(null);
 
+  const senderStatusQuery = trpc.system.goldlineWorld.personalSenderStatus.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+  const senderStatus = senderStatusQuery.data;
+
   const outboxQuery = trpc.system.goldlineWorld.listScheduledOutreach.useQuery(
     { status: statusFilter, limit: 100 },
     { refetchInterval: 15000 }
@@ -62,10 +67,15 @@ export default function ClaireScheduledOutreach() {
 
   const sendEarlyMutation = trpc.system.goldlineWorld.sendEarlyOutreach.useMutation({
     onSuccess: (res) => {
-      if (res.status === "awaiting_sender_setup") {
-        alert("Personal Android sender connection pending. Message remains committed to outbox.");
+      if (res.status !== "dispatched") {
+        alert(res.blockReason || "Personal Android sender is not authorized. The draft was not sent.");
+      } else if (
+        res.evidenceName.includes("simulated") ||
+        (res.message.externalMessageId ?? "").startsWith("simulated:")
+      ) {
+        alert("Simulated transport only. No personal-number message was sent.");
       } else {
-        alert("Message dispatched through personal messaging connection.");
+        alert("A personal-number send was observed locally. This is not a carrier delivery receipt.");
       }
       void utils.system.goldlineWorld.listScheduledOutreach.invalidate();
     },
@@ -125,6 +135,8 @@ export default function ClaireScheduledOutreach() {
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
+
+      <SenderStatusCard status={senderStatus} loading={senderStatusQuery.isLoading} />
 
       {/* Filter Tabs */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px", borderBottom: "1px solid #e5e7eb", paddingBottom: "10px" }}>
@@ -540,5 +552,84 @@ export default function ClaireScheduledOutreach() {
         </div>
       )}
     </div>
+  );
+}
+
+function SenderStatusCard(props: {
+  loading: boolean;
+  status?: {
+    stateLabel: string;
+    authorizedToTransmit: boolean;
+    originatingPhone: string | null;
+    blockReason: string;
+    browserTransport: { status: string };
+    deviceTransport: { status: string };
+    humanGates: {
+      livePairing: { status: string };
+      controlledSelfSend: { status: string };
+    };
+  };
+}) {
+  const tone =
+    props.status?.stateLabel === "Connected"
+      ? { bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46" }
+      : props.status?.stateLabel === "Identity Unverified"
+        ? { bg: "#fef2f2", border: "#fecaca", text: "#991b1b" }
+        : props.status?.stateLabel === "Unhealthy"
+          ? { bg: "#fffbeb", border: "#fde68a", text: "#92400e" }
+          : { bg: "#f8fafc", border: "#e2e8f0", text: "#334155" };
+
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e5e7eb",
+        borderRadius: "12px",
+        padding: "14px 16px",
+        marginBottom: "16px",
+      }}
+    >
+      <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.04em", color: "#6b7280" }}>
+        PERSONAL SENDER
+      </div>
+      {props.loading || !props.status ? (
+        <p style={{ margin: "8px 0 0", color: "#6b7280", fontSize: "14px" }}>Checking sender connection…</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "8px", flexWrap: "wrap" }}>
+            <span
+              style={{
+                background: tone.bg,
+                border: `1px solid ${tone.border}`,
+                color: tone.text,
+                borderRadius: "999px",
+                padding: "4px 10px",
+                fontSize: "13px",
+                fontWeight: 700,
+              }}
+            >
+              {props.status.stateLabel}
+            </span>
+            <span style={{ fontSize: "13px", color: "#374151" }}>
+              Transmit {props.status.authorizedToTransmit ? "authorized" : "blocked"}
+            </span>
+            <span style={{ fontSize: "13px", color: "#374151" }}>
+              {props.status.originatingPhone
+                ? `Originating number ${props.status.originatingPhone}`
+                : "Originating number not verified"}
+            </span>
+          </div>
+          <p style={{ margin: "8px 0 0", fontSize: "13px", color: "#4b5563", lineHeight: 1.45 }}>
+            {props.status.blockReason}
+          </p>
+          <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#6b7280" }}>
+            Google Messages browser: {props.status.browserTransport.status}. Android handset:{" "}
+            {props.status.deviceTransport.status}. Live pairing: {props.status.humanGates.livePairing.status}.
+            Controlled self-send: {props.status.humanGates.controlledSelfSend.status}. A connected session is not
+            permission to text a customer.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
