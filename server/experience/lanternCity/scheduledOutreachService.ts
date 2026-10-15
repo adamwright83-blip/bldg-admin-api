@@ -256,6 +256,14 @@ export async function createScheduledOutreachDraft(
         )
         .limit(1);
       if (existing) {
+        if (
+          existing.customerId !== input.customerId ||
+          (existing.recipientPhone && existing.recipientPhone !== normalizedPhone)
+        ) {
+          throw new Error(
+            `Idempotency key "${input.idempotencyKey}" already exists for a different customer ("${existing.customerId}") or recipient phone`
+          );
+        }
         return existing;
       }
     } else {
@@ -263,6 +271,14 @@ export async function createScheduledOutreachDraft(
         (m) => m.tenantId === input.tenantId && m.idempotencyKey === input.idempotencyKey
       );
       if (memExisting) {
+        if (
+          memExisting.customerId !== input.customerId ||
+          (memExisting.recipientPhone && memExisting.recipientPhone !== normalizedPhone)
+        ) {
+          throw new Error(
+            `Idempotency key "${input.idempotencyKey}" already exists for a different customer ("${memExisting.customerId}") or recipient phone`
+          );
+        }
         return memExisting;
       }
     }
@@ -332,7 +348,17 @@ export async function createScheduledOutreachDraft(
             )
           )
           .limit(1);
-        if (existing) return existing;
+        if (existing) {
+          if (
+            existing.customerId !== input.customerId ||
+            (existing.recipientPhone && existing.recipientPhone !== normalizedPhone)
+          ) {
+            throw new Error(
+              `Idempotency key "${input.idempotencyKey}" already exists for a different customer ("${existing.customerId}") or recipient phone`
+            );
+          }
+          return existing;
+        }
       }
       throw err;
     }

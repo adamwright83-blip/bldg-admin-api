@@ -7,18 +7,11 @@ const ADMIN_PASSWORD =
 test.describe.configure({ mode: "serial" });
 
 test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
-  test.beforeAll(async ({ request }) => {
-    await resetGoldlineProofWorld(request);
-  });
-
   test.beforeEach(async ({ page }) => {
-    const login = await page.request.post("/api/auth/login", {
-      data: { password: ADMIN_PASSWORD, role: "admin" },
-    });
-    expect(login.status()).toBe(200);
+    await resetGoldlineProofWorld(page.request);
   });
 
-  test("mounts 8-house cozy encounter with 4-sided clouds and truthful village states", async ({
+  test("mounts 8-house cozy encounter with 4-sided clouds and truthful village layout", async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -39,11 +32,30 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const activeCount = await villagerButtons.count();
     const restingCount = await restingSlots.count();
     expect(activeCount + restingCount).toBe(8);
+    expect(activeCount).toBeGreaterThanOrEqual(1);
 
     expect(errors).toEqual([]);
   });
 
-  test("full customer outreach lifecycle: Lantern City -> schedule -> Admin outbox -> edit -> reschedule -> cancel -> reload", async ({
+  test("proves empty-village resting state for territory without dormant customers", async ({
+    page,
+  }) => {
+    // Navigate to a territory without dormant customers
+    await page.goto("/growth/lantern-city?cozy=1&territory=century-city");
+
+    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    await expect(encounter).toBeVisible({ timeout: 10000 });
+
+    // All 8 houses show resting state
+    const restingLabels = page.getByText(/· Resting/);
+    await expect(restingLabels).toHaveCount(8);
+
+    // Zero active selectable villager buttons
+    const activeVillagers = page.locator('div[role="button"][aria-label^="Select "]');
+    await expect(activeVillagers).toHaveCount(0);
+  });
+
+  test("full customer outreach lifecycle: Lantern City -> schedule -> Admin outbox -> edit -> reschedule -> cancel -> refresh", async ({
     page,
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
@@ -52,56 +64,36 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(encounter).toBeVisible({ timeout: 10000 });
 
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
-    const activeCount = await villagerButtons.count();
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
-    let targetCustomerName = "";
-    const uniqueText = `Playwright outreach acceptance ${Date.now()}`;
+    // 1. Select genuine order-backed villager (Mei Lin / Fox Mei)
+    const firstVillager = villagerButtons.first();
+    const label = await firstVillager.getAttribute("aria-label");
+    const customerName = label?.replace(/^Select\s+/, "") ?? "";
+    expect(customerName.length).toBeGreaterThan(0);
+    await firstVillager.click();
 
-    if (activeCount > 0) {
-      // 1. Select first active villager from dynamic customer mission
-      const firstVillager = villagerButtons.first();
-      await expect(firstVillager).toBeVisible();
-      const label = await firstVillager.getAttribute("aria-label");
-      targetCustomerName = label?.replace(/^Select\s+/, "") ?? "";
-      await firstVillager.click();
+    // 2. Verify Composer drawer opens with real customer details
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: customerName })).toBeVisible();
 
-      // 2. Verify Composer drawer opens with real customer details
-      const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
-      await expect(drawer).toBeVisible();
-      if (targetCustomerName) {
-        await expect(drawer.getByRole("heading", { name: targetCustomerName })).toBeVisible();
-      }
+    const uniqueText = `Playwright outreach acceptance text ${Date.now()}`;
+    const textarea = drawer.locator("textarea");
+    await expect(textarea).toBeVisible();
+    await textarea.fill(uniqueText);
 
-      const textarea = drawer.locator("textarea");
-      await expect(textarea).toBeVisible();
-      await textarea.fill(uniqueText);
+    // 3. Commit future schedule
+    const scheduleBtn = drawer.getByRole("button", { name: /SCHEDULE/i });
+    await expect(scheduleBtn).toBeEnabled();
+    await scheduleBtn.click();
 
-      // 3. Commit future schedule
-      const scheduleBtn = drawer.getByRole("button", { name: /SCHEDULE/i });
-      await expect(scheduleBtn).toBeEnabled();
-      await scheduleBtn.click();
+    const commitBtn = drawer.getByRole("button", { name: /COMMIT/i });
+    await expect(commitBtn).toBeVisible();
+    await commitBtn.click();
 
-      const commitBtn = drawer.getByRole("button", { name: /COMMIT/i });
-      await expect(commitBtn).toBeVisible();
-      await commitBtn.click();
-
-      await expect(drawer.getByText(/Committed to Scheduled Outbox/i)).toBeVisible({ timeout: 5000 });
-      await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
-    } else {
-      // Resting village state: create a test draft directly to verify Admin Outbox lifecycle
-      targetCustomerName = "Acceptance Test Customer";
-      await page.request.post("/api/trpc/system.goldlineWorld.scheduleCozyOutreach", {
-        data: {
-          json: {
-            customerId: `cust_e2e_${Date.now()}`,
-            messageBody: uniqueText,
-            scheduledFor: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-            timezone: "America/Los_Angeles",
-            expectedPhone: "+12135550199",
-          },
-        },
-      });
-    }
+    await expect(drawer.getByText(/Committed to Scheduled Outbox/i)).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
 
     // 4. Navigate to Admin Scheduled Outreach Outbox
     await page.goto("/admin/claire/scheduled-outreach");
@@ -129,25 +121,31 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     await expect(page.getByText(editedText)).toBeVisible({ timeout: 5000 });
 
-    // 6. Reschedule outreach
+    // 6. Reschedule outreach using dynamically computed date
     const rescheduleBtn = page.getByRole("button", { name: /Reschedule/i }).first();
     await expect(rescheduleBtn).toBeVisible();
     await rescheduleBtn.click();
 
     const dateInput = page.locator('input[type="datetime-local"]').first();
     await expect(dateInput).toBeVisible();
-    await dateInput.fill("2026-11-20T11:00");
+
+    // Dynamic future date: 5 days from now at 14:00
+    const futureDate = new Date(Date.now() + 5 * 86400000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dynamicDateIso = `${futureDate.getFullYear()}-${pad(futureDate.getMonth() + 1)}-${pad(futureDate.getDate())}T14:00`;
+    await dateInput.fill(dynamicDateIso);
 
     const confirmRescheduleBtn = page.getByRole("button", { name: /Confirm Reschedule/i });
     await confirmRescheduleBtn.click();
+    await expect(confirmRescheduleBtn).not.toBeVisible({ timeout: 5000 });
 
-    // 7. Cancel outreach
-    const cancelBtn = page.getByRole("button", { name: /Cancel/i }).first();
-    await expect(cancelBtn).toBeVisible();
+    // 7. Cancel outreach with reason (exact match 'Cancel' to avoid matching the 'Cancelled' filter tab)
+    const cancelBtn = page.getByRole("button", { name: "Cancel", exact: true }).first();
+    await expect(cancelBtn).toBeVisible({ timeout: 5000 });
     await cancelBtn.click();
 
     const reasonInput = page.locator('input[placeholder*="Customer ordered today"]').first();
-    await expect(reasonInput).toBeVisible();
+    await expect(reasonInput).toBeVisible({ timeout: 5000 });
     await reasonInput.fill("Cancelled during Playwright full acceptance test");
 
     const confirmCancelBtn = page.getByRole("button", { name: /Confirm Cancellation/i });
@@ -155,7 +153,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     await expect(page.getByText("CANCELLED")).toBeVisible({ timeout: 5000 });
 
-    // 8. Page reload to verify durable persistence
+    // 8. Refresh page to verify durable persistence of cancelled status
     await page.reload();
     await expect(
       page.getByRole("heading", { name: "Claire · Scheduled Outreach Outbox" })
@@ -172,25 +170,22 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(encounter).toBeVisible({ timeout: 10000 });
 
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
-    const count = await villagerButtons.count();
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
-    if (count > 0) {
-      const villager = villagerButtons.first();
-      await villager.click();
+    const villager = villagerButtons.first();
+    await villager.click();
 
-      const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
-      await expect(drawer).toBeVisible();
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible();
 
-      const sendNowBtn = drawer.getByRole("button", { name: /SEND NOW/i });
-      if (await sendNowBtn.isEnabled()) {
-        await sendNowBtn.click();
+    const sendNowBtn = drawer.getByRole("button", { name: /SEND NOW/i });
+    await expect(sendNowBtn).toBeEnabled();
+    await sendNowBtn.click();
 
-        await expect(
-          drawer.getByText(/Committed to Outbox \(Awaiting Phone Connection\)/i)
-        ).toBeVisible({ timeout: 5000 });
-        await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
-      }
-    }
+    await expect(
+      drawer.getByText(/Committed to Outbox \(Awaiting Phone Connection\)/i)
+    ).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
   });
 
   test("supports mobile viewport with responsive bottom sheet", async ({
@@ -203,20 +198,18 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(encounter).toBeVisible();
 
     const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
-    const count = await villagerButtons.count();
+    await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
-    if (count > 0) {
-      const first = villagerButtons.first();
-      await first.click();
+    const first = villagerButtons.first();
+    await first.click();
 
-      const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible();
+
+    const nextBtn = drawer.getByRole("button", { name: /Next ▶/i });
+    if (await nextBtn.isEnabled()) {
+      await nextBtn.click();
       await expect(drawer).toBeVisible();
-
-      const nextBtn = drawer.getByRole("button", { name: /Next ▶/i });
-      if (await nextBtn.isEnabled()) {
-        await nextBtn.click();
-        await expect(drawer).toBeVisible();
-      }
     }
   });
 
@@ -224,13 +217,14 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     page,
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
-    await expect(page.locator('[data-testid="cozy-neighborhood-encounter"]')).toBeVisible();
+    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    await expect(encounter).toBeVisible({ timeout: 10000 });
 
-    const returnBtn = page.getByRole("button", { name: /Return to Wide City/i });
-    await expect(returnBtn).toBeVisible();
+    const returnBtn = page.getByRole("button", { name: /Return to (Wide )?City/i });
+    await expect(returnBtn).toBeVisible({ timeout: 10000 });
     await returnBtn.click();
 
-    await expect(page.locator('[data-testid="cozy-neighborhood-encounter"]')).toHaveCount(0);
-    await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();
+    await expect(encounter).toHaveCount(0);
+    await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible({ timeout: 10000 });
   });
 });

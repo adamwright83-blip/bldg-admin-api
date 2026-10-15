@@ -19,7 +19,7 @@ if [ "${NODE_ENV:-}" = "production" ]; then
   exit 1
 fi
 
-PROOF_DATABASE_URL="mysql://root:root@127.0.0.1:3399/goldline_proof"
+PROOF_DATABASE_URL="${DATABASE_URL:-mysql://root:root@127.0.0.1:3399/goldline_proof}"
 case "$PROOF_DATABASE_URL" in
   *127.0.0.1*|*localhost*) ;;
   *) echo "goldline-proof-server: proof database must be local" >&2; exit 1 ;;

@@ -715,6 +715,15 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
       [tenantId, parallelKey]
     );
     expect(Number(rows2[0].count)).toBe(1);
+
+    // Reusing idempotency key with a different customer must reject
+    await expect(
+      createScheduledOutreachDraft({
+        ...input,
+        customerId: `cust_sql_${suffix}_mismatch`,
+        customerName: "Different Customer",
+      })
+    ).rejects.toThrow(/already exists for a different customer/);
   });
 
   it("Step 15: Real-MySQL awaiting_sender_setup immediate draft is NOT claimed by due leases, remains editable and cancellable", async () => {

@@ -17,6 +17,7 @@ import {
   commercialMissions,
   commercialOpportunities,
   commercialPipelineRecords,
+  daphneGoals,
   entityLocations,
   goldlineEventReceipts,
   goldlineTerritoryDefinitions,
@@ -36,12 +37,20 @@ import {
   normalizeSourceAddress,
   syncGeographicEntities,
 } from "../server/geography/geographicTruthService";
+import {
+  admitAuthorityClaimWith,
+  type AuthorityTransaction,
+} from "../server/platform/authority/authorityReceipt";
 import { stableTerritoryKey } from "../shared/goldlineTerritories";
 
 const TENANT = "default";
 
 /** Proof-tenant tables tests and this fixture write. Auth/users are left alone. */
 const PROOF_TENANT_TABLES = [
+  "authority_receipts",
+  "scheduled_outreach_revisions",
+  "scheduled_outreach_messages",
+  "daphne_goals",
   "goldline_campaign_revisions",
   "goldline_campaign_instances",
   "goldline_fiction_assignments",
@@ -86,7 +95,14 @@ function daysAgo(days: number) {
 async function wipeProofTenant(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
   await db.execute(sql.raw("SET FOREIGN_KEY_CHECKS=0"));
   for (const table of PROOF_TENANT_TABLES) {
-    await db.execute(sql.raw(`DELETE FROM \`${table}\` WHERE tenantId = '${TENANT}'`));
+    const col =
+      table === "scheduled_outreach_messages" ||
+      table === "scheduled_outreach_revisions"
+        ? "tenant_id"
+        : "tenantId";
+    await db.execute(
+      sql.raw(`DELETE FROM \`${table}\` WHERE \`${col}\` = '${TENANT}'`)
+    );
   }
   await db.execute(sql.raw("SET FOREIGN_KEY_CHECKS=1"));
 }
@@ -364,6 +380,66 @@ async function seed() {
   );
 
   /**
+   * Dormant customer in Silver Lake with genuine order history, supporting
+   * Lantern City cozy villager outreach browser acceptance.
+   */
+  const silverLakeAddress = "2418 Silver Lake Blvd, Los Angeles, CA 90039";
+  const silverLakePhone = "3105550141";
+  await db.insert(orders).values(
+    [120, 90, 60].map((days, index) => ({
+      tenantId: TENANT,
+      firstName: "Mei",
+      lastName: "Lin",
+      phone: silverLakePhone,
+      email: "mei.lin@example.com",
+      address: silverLakeAddress,
+      status: "delivered" as const,
+      paid: true,
+      stripePaymentIntentId: `pi_proof_silver_lake_${index + 1}`,
+      total: "54.00",
+      serviceType: "wash_fold" as const,
+      createdAt: daysAgo(days),
+      updatedAt: daysAgo(days),
+      paidAt: daysAgo(days),
+      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupTimeWindow: "9:00-11:00",
+      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      specialInstructions: `proof-fixture-silverlake-${index}`,
+    })) as never
+  );
+
+  const silverLakeOrders = await db
+    .select({
+      id: orders.id,
+      stripePaymentIntentId: orders.stripePaymentIntentId,
+      paidAt: orders.paidAt,
+    })
+    .from(orders)
+    .where(and(eq(orders.tenantId, TENANT), eq(orders.phone, silverLakePhone)));
+
+  for (const o of silverLakeOrders) {
+    if (!o.stripePaymentIntentId) continue;
+    await admitAuthorityClaimWith(db as unknown as AuthorityTransaction, {
+      tenantId: TENANT,
+      claimType: "payment_verified",
+      subjectType: "order",
+      subjectId: String(o.id),
+      sourceType: "stripe_payment_intent",
+      sourceRef: o.stripePaymentIntentId,
+      actorType: "stripe",
+      evidenceClass: "authoritative_external",
+      verificationClass: "VERIFIED",
+      admissionPolicy: "stripe_webhook_v1",
+      occurredAt: o.paidAt,
+      metadata: {
+        captureEvidence: "stripe_amount_received_v1",
+        capturedCurrency: "usd",
+        capturedAmountCents: 5400,
+      },
+    });
+  }
+
+  /**
    * Reconcile through the canonical entity-location WRITER before assigning
    * test-only coordinates. getGeographicTruth is intentionally read-only and
    * must never manufacture entities during a customer atlas read.
@@ -429,6 +505,50 @@ async function seed() {
         )
       )
     );
+  await db
+    .update(entityLocations)
+    .set({
+      canonicalAddress: silverLakeAddress,
+      latitude: "34.0980000",
+      longitude: "-118.2670000",
+      geocodeStatus: "success",
+      geocodeProvider: "proof_fixture",
+      geocodedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(entityLocations.tenantId, TENANT),
+        eq(entityLocations.entityType, "customer"),
+        eq(
+          entityLocations.normalizedSourceAddress,
+          normalizeSourceAddress(silverLakeAddress)
+        )
+      )
+    );
+
+  /**
+   * Active Daphne goal with Silver Lake address scope, authorizing canonical
+   * win-back dossier and Lantern City cozy villager missions.
+   */
+  await db
+    .insert(daphneGoals)
+    .values({
+      id: "dgoal_proof_silver_lake_objective",
+      tenantId: TENANT,
+      canonicalOperatorId: process.env.OWNER_OPEN_ID || "admin-owner",
+      goalKey: "silver_lake_recovery",
+      horizon: "current",
+      statement: "Recover dormant laundry customers in Silver Lake",
+      priority: 10,
+      status: "active",
+      sourceObservationId: "proof_obs_silver_lake",
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        status: "active",
+        statement: "Recover dormant laundry customers in Silver Lake",
+      },
+    });
 
   // Real history, so the building has something honest to remember.
   const chronicle = [

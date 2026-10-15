@@ -70,7 +70,8 @@ export function lanternSceneFor(path: string, search: string): LanternScene {
   if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
   const scene = new URLSearchParams(search).get("scene");
   if (scene === "map" || scene === "v7") return "map";
-  if (scene === "v6") return "v6";
+  const params = new URLSearchParams(search);
+  if (scene === "v6" || params.get("cozy") === "1" || params.get("encounter") === "1") return "v6";
   if (scene === "atlas" || scene === "v5") return "atlas";
   return "islands";
 }

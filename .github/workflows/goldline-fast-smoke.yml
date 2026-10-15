@@ -373,6 +373,7 @@ jobs:
               e2e/goldline-smoke/worldSmoke.spec.ts
               e2e/goldline-smoke/lanternCityMount.spec.ts
               e2e/goldline-smoke/operatorRepresentative.spec.ts
+              e2e/goldline-smoke/cozyVillagerOutreach.spec.ts
           - name: fast-smoke-territories
             timeout: 5
             command: >-

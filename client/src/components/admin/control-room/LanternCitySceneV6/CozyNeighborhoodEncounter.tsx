@@ -265,7 +265,7 @@ export function CozyNeighborhoodEncounter({
             </span>
           </div>
 
-          <button type="button" className={styles.exitButton} onClick={onExit} aria-label="Return to City">
+          <button type="button" className={styles.exitButton} onClick={onExit} aria-label="Return to Wide City">
             <span>⤾</span> Return to Wide City
           </button>
         </header>
