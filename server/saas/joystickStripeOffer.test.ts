@@ -276,6 +276,50 @@ describe("JOYSTICK public checkout fail-closed", () => {
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
+  it("refuses a monthly price that is not 4900 usd cents and a trial that is not seven days", async () => {
+    const stripe = checkoutStripe();
+    await preparePlan({
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      stripePriceId: "price_monthly_test",
+      trialDays: 7,
+    });
+    stripe.prices.retrieve.mockResolvedValue(monthlyPrice({ unit_amount: 49000 }));
+    await expect(
+      createLegacyDayforgeSubscriptionCheckout({
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        resumeToken: "resume-token",
+        planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+        requestId: "req-checkout-monthly-mismatch",
+        stripe: stripe as never,
+      })
+    ).rejects.toMatchObject({
+      name: "JoystickCheckoutClosedError",
+      code: "price_mismatch",
+    });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+
+    await preparePlan({
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      stripePriceId: "price_monthly_test",
+      trialDays: 14,
+    });
+    await expect(
+      createLegacyDayforgeSubscriptionCheckout({
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        resumeToken: "resume-token",
+        planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+        requestId: "req-checkout-trial-mismatch",
+        stripe: stripe as never,
+      })
+    ).rejects.toMatchObject({
+      name: "JoystickCheckoutClosedError",
+      code: "trial_days",
+    });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS).toBe(4900);
+    expect(JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS).toBe(46800);
+  });
+
   it("refuses an unverified, stale, or non-advertised annual amount", async () => {
     const stripe = checkoutStripe();
     await preparePlan({
