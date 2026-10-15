@@ -42,6 +42,19 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -pdisposable_claire"
           --health-interval=5s --health-timeout=5s --health-retries=20
+      # Same disposable server the source-backed fixture opens itself. It is not the acceptance database.
+      source_backed_mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: source_backed_disposable
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

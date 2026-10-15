@@ -20,6 +20,12 @@ import { ingestVerifiedDaphneStage3bOutcome } from "./stage3bLearning";
 
 const VERSION = "daphne-consolidation-v1";
 
+function isLockConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  const code = String((error as { code?: unknown }).code);
+  return code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT";
+}
+
 /** The immutable observation is the durable work item; its receipt is a derived claim. */
 export async function runDaphneConsolidationBatch(
   input: { limit?: number; observationId?: string } = {}
@@ -381,6 +387,9 @@ export async function runDaphneConsolidationBatch(
       { isolationLevel: "read committed" }
     );
   } catch (error) {
+    // A lock conflict rolls the batch back. It is not a materialization failure,
+    // so the observation stays eligible for the next attempt.
+    if (isLockConflict(error)) throw error;
     const scope = failing as {
       tenantId: string;
       canonicalOperatorId: string;
@@ -444,16 +453,28 @@ export function startDaphneConsolidationWorker() {
   let inFlight: Promise<unknown> | undefined;
   const tick = () => {
     if (stopped) return;
-    inFlight = runDaphneConsolidationBatch()
-      .then(() => {
-        failures = 0;
-      })
-      .catch(() => {
-        failures++;
-        console.warn(
-          "[Daphne] consolidation failed; durable work remains pending"
-        );
-      })
+    inFlight = (async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await runDaphneConsolidationBatch();
+          failures = 0;
+          return;
+        } catch (error) {
+          if (isLockConflict(error) && attempt < 2) continue;
+          failures++;
+          const code =
+            error && typeof error === "object" && "code" in error
+              ? String((error as { code?: unknown }).code)
+              : "";
+          console.warn(
+            code
+              ? `[Daphne] consolidation failed; durable work remains pending (${code})`
+              : "[Daphne] consolidation failed; durable work remains pending"
+          );
+          return;
+        }
+      }
+    })()
       .finally(() => {
         if (!stopped) {
           timer = setTimeout(

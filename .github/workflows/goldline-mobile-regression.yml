@@ -88,7 +88,8 @@ jobs:
   mobile-build-and-schema:
     name: mobile-build-and-schema
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # Checkout on a cold runner has used most of an 8 minute budget before the production build starts.
+    timeout-minutes: 15
     services:
       mysql:
         image: mysql:8.0
