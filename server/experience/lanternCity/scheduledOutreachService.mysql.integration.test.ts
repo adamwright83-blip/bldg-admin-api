@@ -10,6 +10,7 @@ import {
   sendEarlyOutreachDraft,
   listScheduledOutreachMessages,
   getScheduledOutreachRevisions,
+  normalizeScheduledForUtc,
 } from "./scheduledOutreachService";
 
 const describeMysql = process.env.DATABASE_URL ? describe : describe.skip;
@@ -23,11 +24,12 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
 
   beforeAll(async () => {
     sql = await mysql.createConnection(process.env.DATABASE_URL!);
-    // Ensure table existence if running directly against test DB
+    // Ensure table existence matching production schema
     await sql.execute(`
       CREATE TABLE IF NOT EXISTS scheduled_outreach_messages (
         id VARCHAR(64) PRIMARY KEY,
         tenant_id VARCHAR(64) NOT NULL,
+        operator_id VARCHAR(64) NOT NULL,
         customer_id VARCHAR(128) NOT NULL,
         customer_name VARCHAR(255) NOT NULL,
         recipient_phone VARCHAR(32) NOT NULL,
@@ -52,6 +54,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_som_tenant_customer_status (tenant_id, customer_id, status),
         INDEX idx_som_tenant_sched_status (tenant_id, status, scheduled_for),
+        INDEX idx_som_tenant_operator_status (tenant_id, operator_id, status),
         INDEX idx_som_lease (status, leased_until)
       );
     `);
@@ -66,6 +69,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
         edited_by VARCHAR(128) NOT NULL,
         reason VARCHAR(255),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_sor_message_revision (outreach_message_id, revision_number),
         INDEX idx_sor_message_revision (outreach_message_id, revision_number)
       );
     `);
@@ -79,7 +83,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
     }
   });
 
-  it("Step 1: Creates scheduled draft, verifies real MySQL persistence and survival across query reload", async () => {
+  it("Step 1: Creates scheduled draft, verifies real MySQL persistence and initial revision", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 48 * 3600 * 1000);
     const created = await createScheduledOutreachDraft({
       tenantId,
@@ -105,6 +109,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
 
     expect(rows.length).toBe(1);
     expect(rows[0].customer_name).toBe("Mei Lin");
+    expect(rows[0].operator_id).toBe(operatorId);
     expect(rows[0].status).toBe("pending");
     expect(rows[0].revision_count).toBe(1);
 
@@ -136,6 +141,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
       operatorId,
       messageId: created.id,
       newMessageBody: "Personalized message edited outside Lantern City",
+      expectedRevisionCount: 1,
       reason: "Added friendly detail",
       now: new Date(baseNow.getTime() + 60000),
     });
@@ -158,7 +164,62 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
     expect(revisions.length).toBe(2);
   });
 
-  it("Step 3: Reschedules message to a different time", async () => {
+  it("Step 3: Simultaneous-edit protection: race between two competing edits rejects conflicting revision", async () => {
+    const scheduledFor = new Date(baseNow.getTime() + 48 * 3600 * 1000);
+    const created = await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: `cust_sql_${suffix}_race`,
+      customerName: "Race Customer",
+      recipientPhone: "+12135550149",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Draft",
+      scheduledFor,
+      now: baseNow,
+    });
+
+    // Worker 1 and Worker 2 both attempt to edit from revision 1 simultaneously
+    const edit1Promise = editScheduledOutreachDraft({
+      tenantId,
+      operatorId: "worker_1",
+      messageId: created.id,
+      newMessageBody: "Edit from worker 1",
+      expectedRevisionCount: 1,
+      now: baseNow,
+    });
+
+    const edit2Promise = editScheduledOutreachDraft({
+      tenantId,
+      operatorId: "worker_2",
+      messageId: created.id,
+      newMessageBody: "Edit from worker 2",
+      expectedRevisionCount: 1,
+      now: baseNow,
+    });
+
+    const results = await Promise.allSettled([edit1Promise, edit2Promise]);
+    const succeeded = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    // Exactly one must win the compare-and-set revision increment; the second must be rejected with revision conflict
+    expect(succeeded.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    // Verify DB shows revision_count = 2 and exactly 2 revision records exist
+    const [rows] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT revision_count FROM scheduled_outreach_messages WHERE id = ?",
+      [created.id]
+    );
+    expect(rows[0].revision_count).toBe(2);
+
+    const [revs] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT revision_number FROM scheduled_outreach_revisions WHERE outreach_message_id = ?",
+      [created.id]
+    );
+    expect(revs.length).toBe(2);
+  });
+
+  it("Step 4: Reschedules message to a different time", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 24 * 3600 * 1000);
     const created = await createScheduledOutreachDraft({
       tenantId,
@@ -184,7 +245,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
     expect(new Date(updated.scheduledFor).getTime()).toBe(newTarget.getTime());
   });
 
-  it("Step 4: Cancels message and proves lease worker cannot acquire it", async () => {
+  it("Step 5: Prohibits cancelling an actively claimed message; cancels when unleased and prevents worker lease", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 1000); // 1s from now
     const created = await createScheduledOutreachDraft({
       tenantId,
@@ -198,31 +259,81 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
       now: baseNow,
     });
 
-    await cancelScheduledOutreachDraft({
+    // Claim the message
+    const futureTime = new Date(baseNow.getTime() + 2000);
+    const [claimed] = await claimDueOutreachLeases({
+      leaseHolder: "worker_active",
+      leaseDurationMs: 60000,
+      now: futureTime,
+    });
+    expect(claimed).toBeDefined();
+
+    // Cancellation while actively claimed must fail
+    await expect(
+      cancelScheduledOutreachDraft({
+        tenantId,
+        operatorId,
+        messageId: created.id,
+        reason: "Attempted cancellation during claim",
+        now: futureTime,
+      })
+    ).rejects.toThrow("Cannot cancel message: draft is currently claimed");
+
+    // After lease expiry (61s later), cancellation is permitted
+    const expiredTime = new Date(futureTime.getTime() + 65000);
+    const cancelled = await cancelScheduledOutreachDraft({
       tenantId,
       operatorId,
       messageId: created.id,
-      reason: "Cancelled by operator via Admin Outbox",
+      reason: "Cancelled after lease expiry",
+      now: expiredTime,
+    });
+    expect(cancelled.status).toBe("cancelled");
+
+    // Workers cannot claim cancelled message
+    const laterClaims = await claimDueOutreachLeases({
+      leaseHolder: "worker_subsequent",
+      now: new Date(expiredTime.getTime() + 1000),
+    });
+    expect(laterClaims.find((c) => c.id === created.id)).toBeUndefined();
+  });
+
+  it("Step 6: Worker lease crash recovery: expired claimed row without dispatch is safely recovered", async () => {
+    const scheduledFor = new Date(baseNow.getTime() + 1000);
+    const created = await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: `cust_sql_${suffix}_recovery`,
+      customerName: "Crash Customer",
+      recipientPhone: "+12135550145",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Draft",
+      scheduledFor,
       now: baseNow,
     });
 
-    // Check DB status
-    const [rows] = await sql.execute<mysql.RowDataPacket[]>(
-      "SELECT status, cancellation_reason FROM scheduled_outreach_messages WHERE id = ?",
-      [created.id]
-    );
-    expect(rows[0].status).toBe("cancelled");
-    expect(rows[0].cancellation_reason).toBe("Cancelled by operator via Admin Outbox");
-
-    // Lease query past time
-    const claimed = await claimDueOutreachLeases({
-      leaseHolder: "worker_test",
-      now: new Date(baseNow.getTime() + 5000),
+    // Worker 1 claims with 5s lease
+    const claimTime = new Date(baseNow.getTime() + 2000);
+    const [firstClaim] = await claimDueOutreachLeases({
+      leaseHolder: "worker_crashed",
+      leaseDurationMs: 5000,
+      now: claimTime,
     });
-    expect(claimed.find((c) => c.id === created.id)).toBeUndefined();
+    expect(firstClaim.leaseHolder).toBe("worker_crashed");
+
+    // Advance 10s into future: Worker 1 crashed without dispatching. Worker 2 recovers lease!
+    const recoveryTime = new Date(claimTime.getTime() + 10000);
+    const [recovered] = await claimDueOutreachLeases({
+      leaseHolder: "worker_recovery",
+      now: recoveryTime,
+    });
+
+    expect(recovered).toBeDefined();
+    expect(recovered.id).toBe(created.id);
+    expect(recovered.leaseHolder).toBe("worker_recovery");
   });
 
-  it("Step 5: Concurrency lease race condition test: two workers competing for the same due message", async () => {
+  it("Step 7: Concurrency lease race condition test: two workers competing for the same due message", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 1000);
     const created = await createScheduledOutreachDraft({
       tenantId,
@@ -251,7 +362,7 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
     expect(alphaClaimed !== betaClaimed).toBe(true);
   });
 
-  it("Step 6: SEND EARLY competing with scheduled lease race", async () => {
+  it("Step 8: SEND EARLY with test adapter competing with scheduled lease race", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 1000);
     const created = await createScheduledOutreachDraft({
       tenantId,
@@ -265,13 +376,20 @@ describeMysql("Scheduled Outreach Service: Real-MySQL Journey", () => {
       now: baseNow,
     });
 
+    const fakeAdapter = {
+      send: async () => ({
+        externalMessageId: `test_msg_${randomUUID()}`,
+        evidenceName: "personal_android_dispatched",
+      }),
+    };
+
     // Send early
     const early = await sendEarlyOutreachDraft({
       tenantId,
       operatorId,
       messageId: created.id,
       leaseHolder: "op_early",
-      isTestSenderAllowed: true,
+      testSenderAdapter: fakeAdapter,
       now: baseNow,
     });
 

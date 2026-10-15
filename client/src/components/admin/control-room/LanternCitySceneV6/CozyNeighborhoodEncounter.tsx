@@ -74,10 +74,8 @@ export function CozyNeighborhoodEncounter({
     try {
       const result = await sendMutation.mutateAsync({
         customerId: target.customerId,
-        customerName: target.displayName,
-        recipientPhone: target.phone ?? "",
-        originalSuggestedDraft: target.suggestedMessage,
         messageBody: editedText,
+        expectedPhone: target.phone ?? undefined,
         slotId: target.slotId,
         territoryId,
       });
@@ -137,12 +135,10 @@ export function CozyNeighborhoodEncounter({
     try {
       const result = await scheduleMutation.mutateAsync({
         customerId: target.customerId,
-        customerName: target.displayName,
-        recipientPhone: target.phone ?? "",
-        originalSuggestedDraft: target.suggestedMessage,
         messageBody: editedText,
-        scheduledForIso,
+        scheduledFor: scheduledForIso,
         timezone: "America/Los_Angeles",
+        expectedPhone: target.phone ?? undefined,
         slotId: target.slotId,
         territoryId,
       });

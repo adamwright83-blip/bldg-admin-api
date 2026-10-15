@@ -75,10 +75,8 @@ export const goldlineWorldRouter = router({
     .input(
       z.object({
         customerId: z.string().min(1),
-        customerName: z.string().min(1),
-        recipientPhone: z.string().min(5),
-        originalSuggestedDraft: z.string().min(1),
         messageBody: z.string().min(1).max(500),
+        expectedPhone: z.string().optional(),
         slotId: z.enum([
           "slot_01",
           "slot_02",
@@ -96,39 +94,54 @@ export const goldlineWorldRouter = router({
       sendCozyOutreachNow({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        ...input,
+        customerId: input.customerId,
+        messageBody: input.messageBody,
+        expectedPhone: input.expectedPhone,
+        slotId: input.slotId,
+        territoryId: input.territoryId,
       })
     ),
   scheduleCozyOutreach: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         customerId: z.string().min(1),
-        customerName: z.string().min(1),
-        recipientPhone: z.string().min(5),
-        originalSuggestedDraft: z.string().min(1),
         messageBody: z.string().min(1).max(500),
-        scheduledForIso: z.string().datetime(),
+        scheduledFor: z.string().min(1),
         timezone: z.string().default("America/Los_Angeles"),
+        expectedPhone: z.string().optional(),
         slotId: z.string().optional(),
         territoryId: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const { resolveCanonicalCustomerContact } = await import(
+        "../experience/lanternCity/cozyVillagerOutreachService"
+      );
       const { createScheduledOutreachDraft } = await import(
         "../experience/lanternCity/scheduledOutreachService"
       );
+
+      const resolved = await resolveCanonicalCustomerContact({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: ctx.user.openId,
+        customerId: input.customerId,
+        territoryId: input.territoryId,
+        expectedPhone: input.expectedPhone,
+        timeZone: input.timezone,
+      });
+
       return await createScheduledOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        customerId: input.customerId,
-        customerName: input.customerName,
-        recipientPhone: input.recipientPhone,
-        originalSuggestedDraft: input.originalSuggestedDraft,
-        messageBody: input.messageBody,
-        scheduledFor: new Date(input.scheduledForIso),
+        customerId: resolved.customerId,
+        customerName: resolved.customerName,
+        recipientPhone: resolved.phone,
+        originalSuggestedDraft: resolved.suggestedMessage,
+        messageBody: input.messageBody.trim(),
+        scheduledFor: input.scheduledFor,
         timezone: input.timezone,
         slotId: input.slotId,
-        territoryId: input.territoryId,
+        territoryId: resolved.territoryId,
       });
     }),
   listScheduledOutreach: legacyDayforgeTenantOperatorProcedure
@@ -146,6 +159,7 @@ export const goldlineWorldRouter = router({
       );
       return await listScheduledOutreachMessages({
         tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
         status: input?.status,
         limit: input?.limit,
       });
@@ -155,6 +169,7 @@ export const goldlineWorldRouter = router({
       z.object({
         messageId: z.string().min(1),
         newMessageBody: z.string().min(1).max(500),
+        expectedRevisionCount: z.number().int().positive().optional(),
         reason: z.string().optional(),
       })
     )
@@ -167,6 +182,7 @@ export const goldlineWorldRouter = router({
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         newMessageBody: input.newMessageBody,
+        expectedRevisionCount: input.expectedRevisionCount,
         reason: input.reason,
       });
     }),
@@ -174,7 +190,8 @@ export const goldlineWorldRouter = router({
     .input(
       z.object({
         messageId: z.string().min(1),
-        newScheduledForIso: z.string().datetime(),
+        newScheduledFor: z.string().min(1),
+        timezone: z.string().default("America/Los_Angeles"),
         reason: z.string().optional(),
       })
     )
@@ -186,7 +203,8 @@ export const goldlineWorldRouter = router({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
-        newScheduledFor: new Date(input.newScheduledForIso),
+        newScheduledFor: input.newScheduledFor,
+        timezone: input.timezone,
         reason: input.reason,
       });
     }),

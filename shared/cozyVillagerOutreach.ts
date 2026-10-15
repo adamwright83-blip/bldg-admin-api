@@ -118,6 +118,12 @@ export const COZY_SLOT_ANCHORS: Record<CozySlotId, SlotAnchor> = {
   },
 };
 
+export type CozyConsentStatus =
+  | "verified_opt_in"
+  | "existing_customer_relationship"
+  | "blocked_opt_out"
+  | "missing_phone";
+
 export interface CozyCustomerTarget {
   slotId: CozySlotId;
   customerId: string;
@@ -132,6 +138,7 @@ export interface CozyCustomerTarget {
   lastOrderDate: string | null;
   lastOrderSummary: string | null;
   hasConsent: boolean;
+  consentStatus: CozyConsentStatus;
   consentReason?: string;
   villagerVariant: VillagerVariant;
   suggestedMessage: string;

@@ -93,12 +93,12 @@ export function CozyMessageComposer({
 
   const handleCommitSchedule = () => {
     if (!message.trim() || isSending || !target.hasConsent) return;
-    const scheduledDate = new Date(scheduleDateTime);
-    if (isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
-      alert("Please select a valid future date and time.");
+    if (!scheduleDateTime) {
+      alert("Please select a date and time.");
       return;
     }
-    onScheduleSend(target, message.trim(), scheduledDate.toISOString());
+    // Pass wall-clock date and time string directly to server for authoritative Pacific conversion
+    onScheduleSend(target, message.trim(), scheduleDateTime);
     setShowSchedulePicker(false);
   };
 
@@ -164,12 +164,16 @@ export function CozyMessageComposer({
       {/* Controls & Feedback */}
       <div className={styles.composerFooter}>
         <div className={styles.composerMetaRow}>
-          <span>{message.length} / 160 characters</span>
+          <span>{message.length} / 500 characters</span>
           <span>
-            {target.hasConsent ? (
-              <span style={{ color: "#2d8a4e" }}>✓ SMS Consent Verified</span>
+            {target.consentStatus === "verified_opt_in" ? (
+              <span style={{ color: "#2d8a4e" }}>✓ Verified Opt-In Consent</span>
+            ) : target.consentStatus === "existing_customer_relationship" ? (
+              <span style={{ color: "#2563eb" }}>ℹ Eligible Prior Customer (Unspecified Consent)</span>
+            ) : target.consentStatus === "missing_phone" ? (
+              <span style={{ color: "#c2410c" }}>⚠ Missing Verified Phone</span>
             ) : (
-              <span style={{ color: "#c2410c" }}>⚠ {target.consentReason ?? "Consent Required"}</span>
+              <span style={{ color: "#c2410c" }}>⚠ {target.consentReason ?? "Recipient Opted Out"}</span>
             )}
           </span>
         </div>
@@ -192,9 +196,9 @@ export function CozyMessageComposer({
           <div className={styles.scheduledBanner} style={{ borderColor: "#fcd34d", background: "#fefce8", color: "#854d0e" }}>
             <span>📱</span>
             <div>
-              <strong>Personal Android Connection Pending</strong>
+              <strong>Committed to Outbox (Awaiting Phone Connection)</strong>
               <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
-                Committed to outbox. Message will send once Android Google Messages session is active.
+                Saved in Admin → Claire → Scheduled Outreach. Message will send once your personal Android phone is connected in Phase 2.
               </div>
             </div>
           </div>

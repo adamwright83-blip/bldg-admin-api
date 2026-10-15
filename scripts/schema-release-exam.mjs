@@ -198,12 +198,17 @@ await assertIndex(
 );
 await assertIndex(
   "scheduled_outreach_messages",
+  "idx_som_tenant_operator_status",
+  ["tenant_id", "operator_id", "status"]
+);
+await assertIndex(
+  "scheduled_outreach_messages",
   "idx_som_lease",
   ["status", "leased_until"]
 );
 await assertIndex(
   "scheduled_outreach_revisions",
-  "idx_sor_message_revision",
+  "uq_sor_message_revision",
   ["outreach_message_id", "revision_number"]
 );
 await assertEnumValues("scheduled_outreach_messages", "status", [

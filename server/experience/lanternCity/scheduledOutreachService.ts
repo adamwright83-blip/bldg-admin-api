@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
-import { fromZonedTime } from "date-fns-tz";
+import { and, desc, eq, isNull, lt, lte, or } from "drizzle-orm";
+import { fromZonedTime, format } from "date-fns-tz";
 import {
   scheduledOutreachMessages,
   scheduledOutreachRevisions,
@@ -18,7 +18,7 @@ export interface ScheduledOutreachDraftInput {
   recipientPhone: string;
   originalSuggestedDraft: string;
   messageBody: string;
-  scheduledFor: Date;
+  scheduledFor: Date | string;
   timezone?: string;
   slotId?: string;
   territoryId?: string;
@@ -32,6 +32,7 @@ export interface EditScheduledOutreachInput {
   operatorId: string;
   messageId: string;
   newMessageBody: string;
+  expectedRevisionCount?: number;
   reason?: string;
   now?: Date;
 }
@@ -40,7 +41,8 @@ export interface RescheduleOutreachInput {
   tenantId: string;
   operatorId: string;
   messageId: string;
-  newScheduledFor: Date;
+  newScheduledFor: Date | string;
+  timezone?: string;
   reason?: string;
   now?: Date;
 }
@@ -60,12 +62,20 @@ export interface ClaimDueOutreachLeaseInput {
   limit?: number;
 }
 
+export interface OutboundTestSenderAdapter {
+  send: (params: {
+    to: string;
+    body: string;
+    messageId: string;
+  }) => Promise<{ externalMessageId: string; evidenceName?: string }>;
+}
+
 export interface SendEarlyOutreachInput {
   tenantId: string;
   operatorId: string;
   messageId: string;
   leaseHolder: string;
-  isTestSenderAllowed?: boolean;
+  testSenderAdapter?: OutboundTestSenderAdapter;
   now?: Date;
 }
 
@@ -110,25 +120,57 @@ async function requireDb() {
 
 /**
  * Validates and converts scheduled dispatch time safely across timezones and Daylight Saving Time.
+ * Rejects nonexistent spring-forward gap times and handles ambiguous fall-back times.
  */
-export function normalizeScheduledForUtc(inputTime: Date | string, timezone: string = "America/Los_Angeles"): Date {
-  const dateObj = typeof inputTime === "string" ? new Date(inputTime) : inputTime;
-  if (isNaN(dateObj.getTime())) {
-    throw new Error(`Invalid scheduled date time: ${String(inputTime)}`);
+export function normalizeScheduledForUtc(
+  inputTime: Date | string,
+  timezone: string = "America/Los_Angeles"
+): Date {
+  if (inputTime instanceof Date) {
+    if (isNaN(inputTime.getTime())) {
+      throw new Error(`Invalid scheduled date object: ${String(inputTime)}`);
+    }
+    return inputTime;
   }
 
-  // If provided as a string without timezone offset (e.g. YYYY-MM-DDTHH:mm:ss), interpret in target timezone
-  if (typeof inputTime === "string" && !inputTime.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(inputTime)) {
-    return fromZonedTime(inputTime, timezone);
+  const str = String(inputTime).trim();
+  if (!str) {
+    throw new Error("Scheduled send time cannot be empty");
   }
 
-  return dateObj;
+  // If provided with an explicit UTC or timezone offset (e.g. 2026-10-25T14:30:00Z or +07:00)
+  if (str.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(str)) {
+    const parsed = new Date(str);
+    if (isNaN(parsed.getTime())) {
+      throw new Error(`Invalid scheduled timestamp string: ${str}`);
+    }
+    return parsed;
+  }
+
+  // Wall-clock input without offset (e.g. "2027-03-14T02:30:00" or "2027-03-14 02:30")
+  const normalizedStr = str.replace(" ", "T");
+  const utcDate = fromZonedTime(normalizedStr, timezone);
+  if (isNaN(utcDate.getTime())) {
+    throw new Error(`Could not parse wall time "${str}" in timezone "${timezone}"`);
+  }
+
+  // DST non-existent spring-forward gap verification:
+  // Format the resolved UTC date back in the target timezone to verify that the wall time actually exists.
+  const formattedBack = format(utcDate, "yyyy-MM-dd'T'HH:mm", { timeZone: timezone });
+  const requestedPrefix = normalizedStr.slice(0, 16);
+  if (formattedBack !== requestedPrefix) {
+    throw new Error(
+      `Invalid scheduled time: "${str}" does not exist in timezone "${timezone}" due to Daylight Saving Time transition.`
+    );
+  }
+
+  return utcDate;
 }
 
 /**
  * Creates a validated, scheduled customer outreach message.
  * Enforces future scheduled date, minimum content, phone format, and G14 communication consent.
- * Durable MySQL persistence: never silently falls back to memory in production.
+ * Durable MySQL persistence: transactional insert of message row and initial revision.
  */
 export async function createScheduledOutreachDraft(
   input: ScheduledOutreachDraftInput
@@ -162,13 +204,16 @@ export async function createScheduledOutreachDraft(
   });
 
   if (!consent.allowed) {
-    throw new Error(`Outreach blocked by customer permission: ${consent.reason ?? "Opted out or frequency cap exceeded"}`);
+    throw new Error(
+      `Outreach blocked by customer permission: ${consent.reason ?? "Opted out or frequency cap exceeded"}`
+    );
   }
 
   const messageId = `som_${randomUUID()}`;
   const row: ScheduledOutreachMessageRow = {
     id: messageId,
     tenantId: input.tenantId,
+    operatorId: input.operatorId,
     customerId: input.customerId,
     customerName: input.customerName,
     recipientPhone: normalizedPhone,
@@ -195,18 +240,20 @@ export async function createScheduledOutreachDraft(
 
   const db = await requireDb();
   if (db) {
-    await db.insert(scheduledOutreachMessages).values(row);
-    await db.insert(scheduledOutreachRevisions).values({
-      id: `sor_${randomUUID()}`,
-      outreachMessageId: messageId,
-      tenantId: input.tenantId,
-      revisionNumber: 1,
-      messageBody: trimmedBody,
-      editedBy: input.operatorId,
-      reason: "Initial scheduled draft",
-      createdAt: now,
+    return await db.transaction(async (tx) => {
+      await tx.insert(scheduledOutreachMessages).values(row);
+      await tx.insert(scheduledOutreachRevisions).values({
+        id: `sor_${randomUUID()}`,
+        outreachMessageId: messageId,
+        tenantId: input.tenantId,
+        revisionNumber: 1,
+        messageBody: trimmedBody,
+        editedBy: input.operatorId,
+        reason: "Initial scheduled draft",
+        createdAt: now,
+      });
+      return row;
     });
-    return row;
   }
 
   // Unit-test in-memory mode only
@@ -229,8 +276,9 @@ export async function createScheduledOutreachDraft(
 
 /**
  * In-place edit of a pending scheduled outreach draft.
- * Concurrency-safe: atomically updates only if status is still 'pending'.
- * Increments revision count, preserves audit history, and replaces the pending version before dispatch.
+ * Concurrency-safe: atomically updates only if status is still 'pending' and unleased.
+ * Enforces compare-and-set optimistic concurrency control when expectedRevisionCount is provided.
+ * Transactional: updates draft and appends revision history atomically.
  */
 export async function editScheduledOutreachDraft(
   input: EditScheduledOutreachInput
@@ -244,69 +292,81 @@ export async function editScheduledOutreachDraft(
 
   const db = await requireDb();
   if (db) {
-    const [existing] = await db
-      .select()
-      .from(scheduledOutreachMessages)
-      .where(
-        and(
-          eq(scheduledOutreachMessages.id, input.messageId),
-          eq(scheduledOutreachMessages.tenantId, input.tenantId)
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(scheduledOutreachMessages)
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, input.messageId),
+            eq(scheduledOutreachMessages.tenantId, input.tenantId)
+          )
         )
-      );
+        .for("update");
 
-    if (!existing) {
-      throw new Error(`Scheduled message not found: ${input.messageId}`);
-    }
+      if (!existing) {
+        throw new Error(`Scheduled message not found: ${input.messageId}`);
+      }
 
-    if (existing.status !== "pending") {
-      throw new Error(
-        `Cannot edit message with status "${existing.status}". Only pending drafts can be edited.`
-      );
-    }
+      if (existing.status !== "pending") {
+        throw new Error(
+          `Cannot edit message with status "${existing.status}". Only pending drafts can be edited.`
+        );
+      }
 
-    const nextRevision = (existing.revisionCount ?? 1) + 1;
+      if (existing.leasedUntil && existing.leasedUntil.getTime() > now.getTime()) {
+        throw new Error("Cannot edit message while actively leased by worker");
+      }
 
-    // Concurrency fence: ensure message is STILL pending and not leased
-    const result = await db
-      .update(scheduledOutreachMessages)
-      .set({
+      if (
+        input.expectedRevisionCount !== undefined &&
+        existing.revisionCount !== input.expectedRevisionCount
+      ) {
+        throw new Error(
+          `Revision conflict: draft has been modified by another operator (expected revision ${input.expectedRevisionCount}, current is ${existing.revisionCount})`
+        );
+      }
+
+      const nextRevision = existing.revisionCount + 1;
+
+      const result = await tx
+        .update(scheduledOutreachMessages)
+        .set({
+          currentMessageBody: trimmedBody,
+          revisionCount: nextRevision,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, input.messageId),
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.revisionCount, existing.revisionCount),
+            eq(scheduledOutreachMessages.status, "pending")
+          )
+        );
+
+      if (affectedRows(result) === 0) {
+        throw new Error("Concurrent edit detected: revision was modified by another operation");
+      }
+
+      await tx.insert(scheduledOutreachRevisions).values({
+        id: `sor_${randomUUID()}`,
+        outreachMessageId: input.messageId,
+        tenantId: input.tenantId,
+        revisionNumber: nextRevision,
+        messageBody: trimmedBody,
+        editedBy: input.operatorId,
+        reason: input.reason ?? "Operator draft edit",
+        createdAt: now,
+      });
+
+      return {
+        ...existing,
         currentMessageBody: trimmedBody,
         revisionCount: nextRevision,
         updatedAt: now,
-      })
-      .where(
-        and(
-          eq(scheduledOutreachMessages.id, input.messageId),
-          eq(scheduledOutreachMessages.tenantId, input.tenantId),
-          eq(scheduledOutreachMessages.status, "pending"),
-          or(
-            isNull(scheduledOutreachMessages.leasedUntil),
-            lt(scheduledOutreachMessages.leasedUntil, now)
-          )
-        )
-      );
-
-    if (affectedRows(result) === 0) {
-      throw new Error("Failed to edit draft: message is currently leased or was already dispatched");
-    }
-
-    await db.insert(scheduledOutreachRevisions).values({
-      id: `sor_${randomUUID()}`,
-      outreachMessageId: input.messageId,
-      tenantId: input.tenantId,
-      revisionNumber: nextRevision,
-      messageBody: trimmedBody,
-      editedBy: input.operatorId,
-      reason: input.reason ?? "Operator draft edit",
-      createdAt: now,
+      };
     });
-
-    return {
-      ...existing,
-      currentMessageBody: trimmedBody,
-      revisionCount: nextRevision,
-      updatedAt: now,
-    };
   }
 
   // Unit-test in-memory mode only
@@ -317,6 +377,15 @@ export async function editScheduledOutreachDraft(
 
   if (mem.status !== "pending") {
     throw new Error(`Cannot edit message with status "${mem.status}". Only pending drafts can be edited.`);
+  }
+
+  if (
+    input.expectedRevisionCount !== undefined &&
+    mem.revisionCount !== input.expectedRevisionCount
+  ) {
+    throw new Error(
+      `Revision conflict: draft has been modified by another operator (expected revision ${input.expectedRevisionCount}, current is ${mem.revisionCount})`
+    );
   }
 
   const nextRevision = mem.revisionCount + 1;
@@ -375,7 +444,8 @@ export async function rescheduleOutreachDraft(
       );
     }
 
-    const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, existing.timezone);
+    const targetTz = input.timezone ?? existing.timezone;
+    const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, targetTz);
 
     if (newScheduledFor.getTime() <= now.getTime()) {
       throw new Error("New scheduled send time must be in the future");
@@ -385,6 +455,7 @@ export async function rescheduleOutreachDraft(
       .update(scheduledOutreachMessages)
       .set({
         scheduledFor: newScheduledFor,
+        timezone: targetTz,
         updatedAt: now,
       })
       .where(
@@ -406,6 +477,7 @@ export async function rescheduleOutreachDraft(
     return {
       ...existing,
       scheduledFor: newScheduledFor,
+      timezone: targetTz,
       updatedAt: now,
     };
   }
@@ -420,7 +492,8 @@ export async function rescheduleOutreachDraft(
     throw new Error(`Cannot reschedule message with status "${mem.status}". Only pending drafts can be rescheduled.`);
   }
 
-  const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, mem.timezone);
+  const targetTz = input.timezone ?? mem.timezone;
+  const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, targetTz);
   if (newScheduledFor.getTime() <= now.getTime()) {
     throw new Error("New scheduled send time must be in the future");
   }
@@ -428,6 +501,7 @@ export async function rescheduleOutreachDraft(
   const updated: ScheduledOutreachMessageRow = {
     ...mem,
     scheduledFor: newScheduledFor,
+    timezone: targetTz,
     updatedAt: now,
   };
   testMemoryMessages.set(input.messageId, updated);
@@ -436,7 +510,7 @@ export async function rescheduleOutreachDraft(
 
 /**
  * Cancel a pending scheduled outreach draft, reliably preventing unclaimed workers from sending it.
- * Concurrency-safe: atomically cancels message if not already dispatched.
+ * Concurrency-safe: prohibits cancelling actively claimed or dispatched messages.
  */
 export async function cancelScheduledOutreachDraft(
   input: CancelScheduledOutreachInput
@@ -463,6 +537,10 @@ export async function cancelScheduledOutreachDraft(
       throw new Error("Cannot cancel a message that has already been dispatched");
     }
 
+    if (existing.status === "claimed" && existing.leasedUntil && existing.leasedUntil.getTime() > now.getTime()) {
+      throw new Error("Cannot cancel message: draft is currently claimed by active dispatch worker");
+    }
+
     const result = await db
       .update(scheduledOutreachMessages)
       .set({
@@ -479,14 +557,23 @@ export async function cancelScheduledOutreachDraft(
           eq(scheduledOutreachMessages.tenantId, input.tenantId),
           or(
             eq(scheduledOutreachMessages.status, "pending"),
-            eq(scheduledOutreachMessages.status, "claimed"),
-            eq(scheduledOutreachMessages.status, "awaiting_sender_setup")
+            and(
+              eq(scheduledOutreachMessages.status, "claimed"),
+              isNull(scheduledOutreachMessages.dispatchedAt),
+              lt(scheduledOutreachMessages.leasedUntil, now)
+            )
+          ),
+          or(
+            isNull(scheduledOutreachMessages.leasedUntil),
+            lt(scheduledOutreachMessages.leasedUntil, now)
           )
         )
       );
 
     if (affectedRows(result) === 0) {
-      throw new Error("Cannot cancel message: already dispatched or in non-cancellable state");
+      throw new Error(
+        "Cannot cancel message: draft is not in pending state or is currently leased by an active worker"
+      );
     }
 
     return {
@@ -510,6 +597,10 @@ export async function cancelScheduledOutreachDraft(
     throw new Error("Cannot cancel a message that has already been dispatched");
   }
 
+  if (mem.status === "claimed" && mem.leasedUntil && mem.leasedUntil.getTime() > now.getTime()) {
+    throw new Error("Cannot cancel message: draft is currently claimed by active dispatch worker");
+  }
+
   const updated: ScheduledOutreachMessageRow = {
     ...mem,
     status: "cancelled",
@@ -525,7 +616,9 @@ export async function cancelScheduledOutreachDraft(
 
 /**
  * Acquire concurrency-safe leases on due scheduled messages.
- * Only messages with status 'pending' whose scheduledFor <= now AND (leasedUntil IS NULL or expired) can be claimed.
+ * Only messages whose scheduledFor <= now AND dispatchedAt IS NULL can be claimed:
+ * - Pending messages with no active lease
+ * - Recoverable claimed messages whose previous worker lease expired before dispatch
  */
 export async function claimDueOutreachLeases(
   input: ClaimDueOutreachLeaseInput
@@ -542,11 +635,20 @@ export async function claimDueOutreachLeases(
       .from(scheduledOutreachMessages)
       .where(
         and(
-          eq(scheduledOutreachMessages.status, "pending"),
-          lt(scheduledOutreachMessages.scheduledFor, now),
+          lte(scheduledOutreachMessages.scheduledFor, now),
+          isNull(scheduledOutreachMessages.dispatchedAt),
           or(
-            isNull(scheduledOutreachMessages.leasedUntil),
-            lt(scheduledOutreachMessages.leasedUntil, now)
+            and(
+              eq(scheduledOutreachMessages.status, "pending"),
+              or(
+                isNull(scheduledOutreachMessages.leasedUntil),
+                lt(scheduledOutreachMessages.leasedUntil, now)
+              )
+            ),
+            and(
+              eq(scheduledOutreachMessages.status, "claimed"),
+              lt(scheduledOutreachMessages.leasedUntil, now)
+            )
           )
         )
       )
@@ -567,10 +669,20 @@ export async function claimDueOutreachLeases(
         .where(
           and(
             eq(scheduledOutreachMessages.id, candidate.id),
-            eq(scheduledOutreachMessages.status, "pending"),
+            lte(scheduledOutreachMessages.scheduledFor, now),
+            isNull(scheduledOutreachMessages.dispatchedAt),
             or(
-              isNull(scheduledOutreachMessages.leasedUntil),
-              lt(scheduledOutreachMessages.leasedUntil, now)
+              and(
+                eq(scheduledOutreachMessages.status, "pending"),
+                or(
+                  isNull(scheduledOutreachMessages.leasedUntil),
+                  lt(scheduledOutreachMessages.leasedUntil, now)
+                )
+              ),
+              and(
+                eq(scheduledOutreachMessages.status, "claimed"),
+                lt(scheduledOutreachMessages.leasedUntil, now)
+              )
             )
           )
         );
@@ -593,11 +705,14 @@ export async function claimDueOutreachLeases(
   // Unit-test in-memory mode only
   const claimed: ScheduledOutreachMessageRow[] = [];
   for (const [id, msg] of testMemoryMessages.entries()) {
-    if (
-      msg.status === "pending" &&
-      msg.scheduledFor.getTime() <= now.getTime() &&
-      (!msg.leasedUntil || msg.leasedUntil.getTime() < now.getTime())
-    ) {
+    const isDue = msg.scheduledFor.getTime() <= now.getTime();
+    const isNotDispatched = !msg.dispatchedAt;
+    const isPendingUnleased =
+      msg.status === "pending" && (!msg.leasedUntil || msg.leasedUntil.getTime() < now.getTime());
+    const isClaimedExpired =
+      msg.status === "claimed" && msg.leasedUntil && msg.leasedUntil.getTime() < now.getTime();
+
+    if (isDue && isNotDispatched && (isPendingUnleased || isClaimedExpired)) {
       const updated: ScheduledOutreachMessageRow = {
         ...msg,
         status: "claimed",
@@ -617,10 +732,12 @@ export async function claimDueOutreachLeases(
 
 /**
  * SEND EARLY action:
- * Attempts immediate dispatch through personal-number connection.
- * Critical bugfix: Does NOT permanently mutate pending draft to awaiting_sender_setup.
- * If verified sender is not yet connected (Phase 1 constraint), the draft remains editable and scheduled in status 'pending',
- * returning an informational awaiting_sender_setup response without losing the ability to edit or reschedule.
+ * In Phase 1, the Google Messages paired session bridge is not yet connected.
+ * Unless a testSenderAdapter is explicitly injected in automated tests, this function
+ * ALWAYS returns { success: false, status: "awaiting_sender_setup" } without mutating
+ * the database row away from 'pending'.
+ * This guarantees the operator can continue editing or rescheduling outside Lantern City,
+ * and eliminates any possibility of a fake "dispatched" status in production.
  */
 export async function sendEarlyOutreachDraft(
   input: SendEarlyOutreachInput
@@ -680,77 +797,77 @@ export async function sendEarlyOutreachDraft(
     throw new Error(`Customer is no longer eligible: ${consent.reason}`);
   }
 
-  // Phase 1 sender gate
-  const allowFakeTest =
-    input.isTestSenderAllowed !== undefined
-      ? input.isTestSenderAllowed
-      : process.env.NODE_ENV === "test" || process.env.USE_FAKE_SENDER === "true";
+  // If a test adapter is injected (automated test only), simulate verified dispatch
+  if (input.testSenderAdapter) {
+    const sendResult = await input.testSenderAdapter.send({
+      to: existing.recipientPhone,
+      body: existing.currentMessageBody,
+      messageId: existing.id,
+    });
 
-  if (!allowFakeTest) {
-    // Non-destructive check: Do NOT mutate status away from 'pending'.
-    // Draft remains scheduled and editable.
+    if (db) {
+      const result = await db
+        .update(scheduledOutreachMessages)
+        .set({
+          status: "dispatched",
+          dispatchedAt: now,
+          externalMessageId: sendResult.externalMessageId,
+          leaseHolder: input.leaseHolder,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, existing.id),
+            eq(scheduledOutreachMessages.status, "pending"),
+            or(
+              isNull(scheduledOutreachMessages.leasedUntil),
+              lt(scheduledOutreachMessages.leasedUntil, now)
+            )
+          )
+        );
+
+      if (affectedRows(result) === 0) {
+        throw new Error("Send Early failed: draft was claimed or modified by another worker");
+      }
+    }
+
+    const updated: ScheduledOutreachMessageRow = {
+      ...existing,
+      status: "dispatched",
+      dispatchedAt: now,
+      externalMessageId: sendResult.externalMessageId,
+      leaseHolder: input.leaseHolder,
+      updatedAt: now,
+    };
+
+    if (!db) {
+      testMemoryMessages.set(existing.id, updated);
+    }
+
     return {
-      success: false,
-      status: "awaiting_sender_setup",
-      message: existing,
-      evidenceName: "awaiting_sender_setup",
+      success: true,
+      status: "dispatched",
+      message: updated,
+      evidenceName: sendResult.evidenceName ?? "personal_android_dispatched",
     };
   }
 
-  // Test mode simulated personal dispatch
-  const externalMessageId = `android_msg_${randomUUID()}`;
-  if (db) {
-    const result = await db
-      .update(scheduledOutreachMessages)
-      .set({
-        status: "dispatched",
-        dispatchedAt: now,
-        externalMessageId,
-        leaseHolder: input.leaseHolder,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(scheduledOutreachMessages.id, existing.id),
-          eq(scheduledOutreachMessages.status, "pending"),
-          or(
-            isNull(scheduledOutreachMessages.leasedUntil),
-            lt(scheduledOutreachMessages.leasedUntil, now)
-          )
-        )
-      );
-
-    if (affectedRows(result) === 0) {
-      throw new Error("Send Early failed: draft was claimed or modified by another worker");
-    }
-  }
-
-  const updated: ScheduledOutreachMessageRow = {
-    ...existing,
-    status: "dispatched",
-    dispatchedAt: now,
-    externalMessageId,
-    leaseHolder: input.leaseHolder,
-    updatedAt: now,
-  };
-
-  if (!db) {
-    testMemoryMessages.set(existing.id, updated);
-  }
-
+  // Phase 1 production path: No paired phone yet.
+  // Non-destructive: message remains pending and editable in outbox!
   return {
-    success: true,
-    status: "dispatched",
-    message: updated,
-    evidenceName: "personal_number_dispatched",
+    success: false,
+    status: "awaiting_sender_setup",
+    message: existing,
+    evidenceName: "awaiting_sender_setup",
   };
 }
 
 /**
- * List scheduled outreach messages for admin outbox.
+ * Lists scheduled outreach messages for a tenant, optionally filtered by status or operator.
  */
 export async function listScheduledOutreachMessages(input: {
   tenantId: string;
+  operatorId?: string;
   status?: string;
   limit?: number;
 }): Promise<ScheduledOutreachMessageRow[]> {
@@ -758,17 +875,18 @@ export async function listScheduledOutreachMessages(input: {
   const db = await requireDb();
 
   if (db) {
+    const conditions = [eq(scheduledOutreachMessages.tenantId, input.tenantId)];
+    if (input.status) {
+      conditions.push(eq(scheduledOutreachMessages.status, input.status as any));
+    }
+    if (input.operatorId) {
+      conditions.push(eq(scheduledOutreachMessages.operatorId, input.operatorId));
+    }
+
     const query = db
       .select()
       .from(scheduledOutreachMessages)
-      .where(
-        input.status
-          ? and(
-              eq(scheduledOutreachMessages.tenantId, input.tenantId),
-              eq(scheduledOutreachMessages.status, input.status as any)
-            )
-          : eq(scheduledOutreachMessages.tenantId, input.tenantId)
-      )
+      .where(and(...conditions))
       .orderBy(desc(scheduledOutreachMessages.scheduledFor))
       .limit(limit);
 
@@ -779,18 +897,19 @@ export async function listScheduledOutreachMessages(input: {
   const list: ScheduledOutreachMessageRow[] = [];
   for (const row of testMemoryMessages.values()) {
     if (row.tenantId === input.tenantId) {
-      if (!input.status || row.status === input.status) {
-        list.push(row);
-      }
+      if (input.status && row.status !== input.status) continue;
+      if (input.operatorId && row.operatorId !== input.operatorId) continue;
+      list.push(row);
     }
   }
 
-  list.sort((a, b) => b.scheduledFor.getTime() - a.scheduledFor.getTime());
-  return list.slice(0, limit);
+  return list
+    .sort((a, b) => b.scheduledFor.getTime() - a.scheduledFor.getTime())
+    .slice(0, limit);
 }
 
 /**
- * Get revision history for a scheduled outreach message.
+ * Retrieves the complete revision history for a scheduled outreach draft.
  */
 export async function getScheduledOutreachRevisions(input: {
   tenantId: string;

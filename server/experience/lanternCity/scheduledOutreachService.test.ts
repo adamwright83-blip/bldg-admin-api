@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createScheduledOutreachDraft,
   editScheduledOutreachDraft,
@@ -8,6 +8,7 @@ import {
   sendEarlyOutreachDraft,
   listScheduledOutreachMessages,
   getScheduledOutreachRevisions,
+  normalizeScheduledForUtc,
   _resetScheduledOutreachMemoryStore,
 } from "./scheduledOutreachService";
 
@@ -18,6 +19,29 @@ describe("scheduledOutreachService unit tests", () => {
 
   beforeEach(() => {
     _resetScheduledOutreachMemoryStore();
+  });
+
+  describe("Timezone and DST Normalization", () => {
+    it("converts Pacific Daylight Time (PDT, UTC-7) wall clock correctly", () => {
+      const utc = normalizeScheduledForUtc("2026-10-25 14:30:00", "America/Los_Angeles");
+      expect(utc.toISOString()).toBe("2026-10-25T21:30:00.000Z");
+    });
+
+    it("converts Pacific Standard Time (PST, UTC-8) wall clock correctly", () => {
+      const utc = normalizeScheduledForUtc("2026-12-25 14:30:00", "America/Los_Angeles");
+      expect(utc.toISOString()).toBe("2026-12-25T22:30:00.000Z");
+    });
+
+    it("rejects nonexistent DST spring-forward gap time (2:30 AM on March 14, 2027)", () => {
+      expect(() => {
+        normalizeScheduledForUtc("2027-03-14 02:30:00", "America/Los_Angeles");
+      }).toThrow(/does not exist in timezone .* due to Daylight Saving Time/);
+    });
+
+    it("safely handles ambiguous DST fall-back time (1:30 AM on November 1, 2026)", () => {
+      const utc = normalizeScheduledForUtc("2026-11-01 01:30:00", "America/Los_Angeles");
+      expect(utc.toISOString()).toBe("2026-11-01T08:30:00.000Z");
+    });
   });
 
   it("creates a validated scheduled outreach draft with initial revision", async () => {
@@ -40,6 +64,7 @@ describe("scheduledOutreachService unit tests", () => {
     expect(draft.id).toBeDefined();
     expect(draft.status).toBe("pending");
     expect(draft.revisionCount).toBe(1);
+    expect(draft.operatorId).toBe(operatorId);
     expect(draft.recipientPhone).toBe("+12135550141");
     expect(draft.currentMessageBody).toContain("checking in on your laundry");
 
@@ -52,7 +77,7 @@ describe("scheduledOutreachService unit tests", () => {
     expect(revisions[0].editedBy).toBe(operatorId);
   });
 
-  it("rejects scheduled times in the past", async () => {
+  it("rejects scheduled times in the past unless allowImmediate is set", async () => {
     const pastDate = new Date(baseNow.getTime() - 1000);
     await expect(
       createScheduledOutreachDraft({
@@ -69,7 +94,7 @@ describe("scheduledOutreachService unit tests", () => {
     ).rejects.toThrow("Scheduled send time must be in the future");
   });
 
-  it("edits a pending scheduled draft in-place, incrementing revision and saving audit history", async () => {
+  it("edits a pending scheduled draft in-place and increments revision", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 12 * 3600 * 1000);
     const draft = await createScheduledOutreachDraft({
       tenantId,
@@ -88,6 +113,7 @@ describe("scheduledOutreachService unit tests", () => {
       operatorId,
       messageId: draft.id,
       newMessageBody: "Updated draft personalized by Adam",
+      expectedRevisionCount: 1,
       reason: "Added friendly greeting",
       now: new Date(baseNow.getTime() + 1000),
     });
@@ -102,6 +128,43 @@ describe("scheduledOutreachService unit tests", () => {
     expect(revisions.length).toBe(2);
     expect(revisions[0].revisionNumber).toBe(2);
     expect(revisions[0].messageBody).toBe("Updated draft personalized by Adam");
+  });
+
+  it("enforces compare-and-set version check to prevent simultaneous overwrite", async () => {
+    const scheduledFor = new Date(baseNow.getTime() + 12 * 3600 * 1000);
+    const draft = await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: "cust_cas",
+      customerName: "Oliver",
+      recipientPhone: "+12135550143",
+      originalSuggestedDraft: "Original draft",
+      messageBody: "Original draft",
+      scheduledFor,
+      now: baseNow,
+    });
+
+    // First edit succeeds (advancing from rev 1 to 2)
+    await editScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: draft.id,
+      newMessageBody: "First edit",
+      expectedRevisionCount: 1,
+      now: baseNow,
+    });
+
+    // Second edit with stale expected revision 1 must be rejected
+    await expect(
+      editScheduledOutreachDraft({
+        tenantId,
+        operatorId,
+        messageId: draft.id,
+        newMessageBody: "Conflicting edit",
+        expectedRevisionCount: 1,
+        now: baseNow,
+      })
+    ).rejects.toThrow("Revision conflict");
   });
 
   it("reschedules a pending draft to a new future time", async () => {
@@ -164,12 +227,47 @@ describe("scheduledOutreachService unit tests", () => {
     expect(claimed.find((m) => m.id === draft.id)).toBeUndefined();
   });
 
-  it("SEND EARLY claims pending lease and executes simulated dispatch in test mode", async () => {
-    const scheduledFor = new Date(baseNow.getTime() + 3600 * 1000);
+  it("prohibits cancelling an actively claimed draft", async () => {
+    const scheduledFor = new Date(baseNow.getTime() + 1000);
     const draft = await createScheduledOutreachDraft({
       tenantId,
       operatorId,
-      customerId: "cust_106",
+      customerId: "cust_claim_cancel",
+      customerName: "Sammy",
+      recipientPhone: "+12135550145",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Draft",
+      scheduledFor,
+      now: baseNow,
+    });
+
+    // Claim the lease
+    const futureTime = new Date(baseNow.getTime() + 2000);
+    const [claimed] = await claimDueOutreachLeases({
+      leaseHolder: "worker_active",
+      leaseDurationMs: 60000,
+      now: futureTime,
+    });
+    expect(claimed).toBeDefined();
+
+    // Cancellation while actively claimed must fail
+    await expect(
+      cancelScheduledOutreachDraft({
+        tenantId,
+        operatorId,
+        messageId: draft.id,
+        reason: "Attempt cancellation during active claim",
+        now: futureTime,
+      })
+    ).rejects.toThrow("Cannot cancel message: draft is currently claimed");
+  });
+
+  it("recovers expired claimed rows after worker crash", async () => {
+    const scheduledFor = new Date(baseNow.getTime() + 1000);
+    const draft = await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: "cust_crash_recovery",
       customerName: "Bramble",
       recipientPhone: "+12135550146",
       originalSuggestedDraft: "Draft",
@@ -178,22 +276,28 @@ describe("scheduledOutreachService unit tests", () => {
       now: baseNow,
     });
 
-    const earlyResult = await sendEarlyOutreachDraft({
-      tenantId,
-      operatorId,
-      messageId: draft.id,
-      leaseHolder: "operator_early",
-      isTestSenderAllowed: true,
-      now: baseNow,
+    // Worker A claims with 5s lease duration
+    const workerATime = new Date(baseNow.getTime() + 2000);
+    const [claimedA] = await claimDueOutreachLeases({
+      leaseHolder: "worker_crashed",
+      leaseDurationMs: 5000,
+      now: workerATime,
+    });
+    expect(claimedA.leaseHolder).toBe("worker_crashed");
+
+    // Time advances past lease expiry (6s later); worker A has crashed without dispatching
+    const workerBTime = new Date(workerATime.getTime() + 8000);
+    const [claimedB] = await claimDueOutreachLeases({
+      leaseHolder: "worker_rescuer",
+      now: workerBTime,
     });
 
-    expect(earlyResult.success).toBe(true);
-    expect(earlyResult.status).toBe("dispatched");
-    expect(earlyResult.message.status).toBe("dispatched");
-    expect(earlyResult.message.externalMessageId).toContain("android_msg_");
+    expect(claimedB).toBeDefined();
+    expect(claimedB.id).toBe(draft.id);
+    expect(claimedB.leaseHolder).toBe("worker_rescuer");
   });
 
-  it("SEND EARLY marks awaiting_sender_setup when real sender is not configured (Phase 1 constraint)", async () => {
+  it("SEND EARLY marks awaiting_sender_setup without modifying draft status when no adapter is passed", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 3600 * 1000);
     const draft = await createScheduledOutreachDraft({
       tenantId,
@@ -212,13 +316,11 @@ describe("scheduledOutreachService unit tests", () => {
       operatorId,
       messageId: draft.id,
       leaseHolder: "operator_early",
-      isTestSenderAllowed: false, // strictly enforce production gate
       now: baseNow,
     });
 
     expect(earlyResult.success).toBe(false);
     expect(earlyResult.status).toBe("awaiting_sender_setup");
-    // Non-destructive: message status remains pending so it stays editable/reschedulable!
     expect(earlyResult.message.status).toBe("pending");
     expect(earlyResult.evidenceName).toBe("awaiting_sender_setup");
 
@@ -233,21 +335,40 @@ describe("scheduledOutreachService unit tests", () => {
     expect(edited.currentMessageBody).toBe("Updated message while awaiting sender");
   });
 
-  it("lists scheduled outreach messages filtered by tenant and status", async () => {
+  it("SEND EARLY dispatches when an explicit test adapter is injected", async () => {
     const scheduledFor = new Date(baseNow.getTime() + 3600 * 1000);
-    await createScheduledOutreachDraft({
+    const draft = await createScheduledOutreachDraft({
       tenantId,
       operatorId,
-      customerId: "cust_108",
-      customerName: "Customer 1",
-      recipientPhone: "+12135550148",
-      originalSuggestedDraft: "Draft 1",
-      messageBody: "Draft 1",
+      customerId: "cust_injected",
+      customerName: "Bramble",
+      recipientPhone: "+12135550146",
+      originalSuggestedDraft: "Draft",
+      messageBody: "Draft",
       scheduledFor,
       now: baseNow,
     });
 
-    const list = await listScheduledOutreachMessages({ tenantId });
-    expect(list.length).toBeGreaterThanOrEqual(1);
+    const fakeAdapter = {
+      send: vi.fn().mockResolvedValue({
+        externalMessageId: "android_custom_msg_456",
+        evidenceName: "personal_android_dispatched",
+      }),
+    };
+
+    const earlyResult = await sendEarlyOutreachDraft({
+      tenantId,
+      operatorId,
+      messageId: draft.id,
+      leaseHolder: "operator_early",
+      testSenderAdapter: fakeAdapter,
+      now: baseNow,
+    });
+
+    expect(earlyResult.success).toBe(true);
+    expect(earlyResult.status).toBe("dispatched");
+    expect(earlyResult.message.status).toBe("dispatched");
+    expect(earlyResult.message.externalMessageId).toBe("android_custom_msg_456");
+    expect(fakeAdapter.send).toHaveBeenCalledTimes(1);
   });
 });

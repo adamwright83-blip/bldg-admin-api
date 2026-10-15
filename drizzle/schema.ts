@@ -10237,6 +10237,7 @@ export const scheduledOutreachMessages = mysqlTable(
   {
     id: varchar("id", { length: 64 }).primaryKey(),
     tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 64 }).notNull(),
     customerId: varchar("customer_id", { length: 128 }).notNull(),
     customerName: varchar("customer_name", { length: 255 }).notNull(),
     recipientPhone: varchar("recipient_phone", { length: 32 }).notNull(),
@@ -10278,6 +10279,11 @@ export const scheduledOutreachMessages = mysqlTable(
       table.status,
       table.scheduledFor
     ),
+    tenantOperatorIdx: index("idx_som_tenant_operator_status").on(
+      table.tenantId,
+      table.operatorId,
+      table.status
+    ),
     leaseIdx: index("idx_som_lease").on(table.status, table.leasedUntil),
   })
 );
@@ -10298,7 +10304,7 @@ export const scheduledOutreachRevisions = mysqlTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
-    messageRevisionIdx: index("idx_sor_message_revision").on(
+    messageRevisionUnique: uniqueIndex("uq_sor_message_revision").on(
       table.outreachMessageId,
       table.revisionNumber
     ),

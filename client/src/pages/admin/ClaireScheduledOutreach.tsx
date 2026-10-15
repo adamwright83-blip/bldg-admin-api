@@ -253,6 +253,7 @@ export default function ClaireScheduledOutreach() {
                           editMutation.mutate({
                             messageId: msg.id,
                             newMessageBody: editText,
+                            expectedRevisionCount: msg.revisionCount,
                             reason: "Admin outbox manual update",
                           })
                         }
@@ -313,7 +314,7 @@ export default function ClaireScheduledOutreach() {
                 {isRescheduling && (
                   <div style={{ background: "#fef3c7", padding: "10px", borderRadius: "6px", marginBottom: "10px" }}>
                     <div style={{ fontSize: "12px", fontWeight: "600", color: "#92400e", marginBottom: "6px" }}>
-                      Select New Scheduled Date and Time (Pacific Time)
+                      Select New Scheduled Date and Time ({msg.timezone.includes("Los_Angeles") ? "Pacific Time" : msg.timezone})
                     </div>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <input
@@ -326,7 +327,8 @@ export default function ClaireScheduledOutreach() {
                         onClick={() =>
                           rescheduleMutation.mutate({
                             messageId: msg.id,
-                            newScheduledForIso: new Date(newScheduleIso).toISOString(),
+                            newScheduledFor: newScheduleIso,
+                            timezone: msg.timezone,
                           })
                         }
                         disabled={rescheduleMutation.isPending || !newScheduleIso}

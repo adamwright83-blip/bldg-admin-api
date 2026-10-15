@@ -5364,6 +5364,7 @@ await assertRequiredColumns("tenant_standing_authorizations", ["allowedWeekdaysJ
 await assertRequiredColumns("scheduled_outreach_messages", [
   "id",
   "tenant_id",
+  "operator_id",
   "customer_id",
   "customer_name",
   "recipient_phone",

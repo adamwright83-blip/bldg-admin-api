@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS `scheduled_outreach_messages` (
   `id` varchar(64) NOT NULL,
   `tenant_id` varchar(64) NOT NULL,
+  `operator_id` varchar(64) NOT NULL,
   `customer_id` varchar(128) NOT NULL,
   `customer_name` varchar(255) NOT NULL,
   `recipient_phone` varchar(32) NOT NULL,
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `scheduled_outreach_messages` (
   PRIMARY KEY (`id`),
   INDEX `idx_som_tenant_customer_status` (`tenant_id`, `customer_id`, `status`),
   INDEX `idx_som_tenant_sched_status` (`tenant_id`, `status`, `scheduled_for`),
+  INDEX `idx_som_tenant_operator_status` (`tenant_id`, `operator_id`, `status`),
   INDEX `idx_som_lease` (`status`, `leased_until`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -40,5 +42,6 @@ CREATE TABLE IF NOT EXISTS `scheduled_outreach_revisions` (
   `reason` varchar(255) NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_sor_message_revision` (`outreach_message_id`, `revision_number`),
   INDEX `idx_sor_message_revision` (`outreach_message_id`, `revision_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
