@@ -43,7 +43,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     expect(errors).toEqual([]);
   });
 
-  test("selects villager, loads Claire draft, edits text, and sends authorized Twilio SMS", async ({
+  test("selects villager, loads Claire draft, schedules future outreach, and commits to outbox", async ({
     page,
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
@@ -70,21 +70,77 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     // Edit message text
     await textarea.fill(
-      "Hey Mei! It's Adam from Laundry Farm. Checking in to see if we can help with laundry this week!"
+      "Hey Mei! It's Adam from Laundry Farm. Scheduled check-in for tomorrow morning!"
     );
 
-    // Explicit SEND TEXT action
-    const sendBtn = drawer.getByRole("button", { name: /SEND TEXT/i });
-    await expect(sendBtn).toBeEnabled();
-    await sendBtn.click();
+    // Click SCHEDULE button to reveal date/time picker
+    const scheduleBtn = drawer.getByRole("button", { name: /SCHEDULE/i });
+    await expect(scheduleBtn).toBeEnabled();
+    await scheduleBtn.click();
 
-    // Assert truthful provider acceptance feedback
-    await expect(drawer.getByText(/Twilio Accepted/i)).toBeVisible({ timeout: 5000 });
-    await expect(drawer.getByText(/Provider accepted request/i)).toBeVisible();
-    await expect(drawer.getByRole("button", { name: /✓ SENT/i })).toBeVisible();
+    // Commit future schedule
+    const commitBtn = drawer.getByRole("button", { name: /COMMIT/i });
+    await expect(commitBtn).toBeVisible();
+    await commitBtn.click();
 
-    // Verify villager tag updates to ✓ Sent
-    await expect(meiSlot.getByText("✓ Sent")).toBeVisible();
+    // Assert truthful scheduled confirmation feedback
+    await expect(drawer.getByText(/Committed to Scheduled Outbox/i)).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
+
+    // Verify villager tag updates to ⏰ Scheduled
+    await expect(meiSlot.getByText("⏰ Scheduled")).toBeVisible();
+  });
+
+  test("selects villager and executes SEND NOW awaiting personal Android connection", async ({
+    page,
+  }) => {
+    await page.goto("/growth/lantern-city?cozy=1");
+
+    // Select Barnaby Hayes (Slot 2)
+    const barnabySlot = page.locator('div[role="button"][aria-label="Select Barnaby Hayes"]');
+    await expect(barnabySlot).toBeVisible();
+    await barnabySlot.click();
+
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "Barnaby Hayes" })).toBeVisible();
+
+    // Click SEND NOW
+    const sendNowBtn = drawer.getByRole("button", { name: /SEND NOW/i });
+    await expect(sendNowBtn).toBeEnabled();
+    await sendNowBtn.click();
+
+    // Truthful feedback: committed to outbox awaiting phone connection (no Twilio claim)
+    await expect(drawer.getByText(/Committed to Outbox \(Awaiting Phone Connection\)/i)).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
+    await expect(barnabySlot.getByText("📱 Outbox")).toBeVisible();
+  });
+
+  test("manages scheduled outreach in Admin Outbox (edit, reschedule, cancel)", async ({
+    page,
+  }) => {
+    // Navigate to Admin Scheduled Outreach
+    await page.goto("/admin/claire/scheduled-outreach");
+
+    // Page header and table load
+    await expect(page.getByRole("heading", { name: "Scheduled Customer Outreach" })).toBeVisible({ timeout: 10000 });
+
+    // Outbox messages are listed
+    await expect(page.getByText("Mei Lin")).toBeVisible();
+
+    // Test in-place editing in Admin Outbox
+    const editBtn = page.locator('button[title="Edit message body"]').first();
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    const editInput = page.locator("textarea").first();
+    await expect(editInput).toBeVisible();
+    await editInput.fill("Updated text via Admin Outbox browser acceptance");
+
+    const saveBtn = page.getByRole("button", { name: /Save/i });
+    await saveBtn.click();
+
+    await expect(page.getByText("Updated text via Admin Outbox browser acceptance")).toBeVisible({ timeout: 5000 });
   });
 
   test("supports mobile viewport with responsive bottom sheet", async ({

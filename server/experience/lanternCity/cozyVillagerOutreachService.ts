@@ -3,6 +3,7 @@ import {
   COZY_SLOT_IDS,
   COZY_SLOT_ANCHORS,
   type CozyConsentStatus,
+  type CozyConsentBasis,
   type CozyCustomerTarget,
   type CozyEncounterMission,
   type CozySlotId,
@@ -51,6 +52,7 @@ export async function resolveCanonicalCustomerContact(input: {
   daysSinceLastOrder: number;
   hasConsent: boolean;
   consentStatus: CozyConsentStatus;
+  consentBasis: CozyConsentBasis;
   consentReason?: string;
   suggestedMessage: string;
 }> {
@@ -112,12 +114,19 @@ export async function resolveCanonicalCustomerContact(input: {
   const isOptedOut = !permCheck.allowed || knownOptOutNumbers.has(canonicalPhone);
 
   let consentStatus: CozyConsentStatus;
-  if (isOptedOut || permCheck.permissionStatus === "opted_out" || permCheck.permissionStatus === "refused") {
+  let consentBasis: CozyConsentBasis;
+  if (!canonicalPhone) {
+    consentStatus = "missing_phone";
+    consentBasis = "missing_contact_info";
+  } else if (isOptedOut || permCheck.permissionStatus === "opted_out" || permCheck.permissionStatus === "refused") {
     consentStatus = "blocked_opt_out";
+    consentBasis = "opted_out_blocked";
   } else if (permCheck.permissionStatus === "opted_in") {
     consentStatus = "verified_opt_in";
+    consentBasis = "explicit_consent_record";
   } else {
     consentStatus = "existing_customer_relationship";
+    consentBasis = "transactional_dormant_recovery";
   }
 
   if (isOptedOut || !permCheck.allowed) {
@@ -137,6 +146,7 @@ export async function resolveCanonicalCustomerContact(input: {
     daysSinceLastOrder: days,
     hasConsent: true,
     consentStatus,
+    consentBasis,
     suggestedMessage: buildClaireSuggestedMessage(contact.name, days),
   };
 }
@@ -207,14 +217,19 @@ export async function getCozyEncounterMission(input: {
       const isOptedOut = !permCheck.allowed || (phone ? knownOptOutNumbers.has(phone) : false);
 
       let consentStatus: CozyConsentStatus;
+      let consentBasis: CozyConsentBasis;
       if (!phone) {
         consentStatus = "missing_phone";
+        consentBasis = "missing_contact_info";
       } else if (isOptedOut || permCheck.permissionStatus === "opted_out" || permCheck.permissionStatus === "refused") {
         consentStatus = "blocked_opt_out";
+        consentBasis = "opted_out_blocked";
       } else if (permCheck.permissionStatus === "opted_in") {
         consentStatus = "verified_opt_in";
+        consentBasis = "explicit_consent_record";
       } else {
         consentStatus = "existing_customer_relationship";
+        consentBasis = "transactional_dormant_recovery";
       }
 
       const consentReason = !permCheck.allowed
@@ -270,6 +285,7 @@ export async function getCozyEncounterMission(input: {
         lastOrderSummary: contact.lastOrderSummary,
         hasConsent: permCheck.allowed && !isOptedOut && !!phone,
         consentStatus,
+        consentBasis,
         consentReason,
         villagerVariant: anchor.defaultVariant,
         suggestedMessage: buildClaireSuggestedMessage(contact.name, days),

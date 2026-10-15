@@ -124,6 +124,12 @@ export type CozyConsentStatus =
   | "blocked_opt_out"
   | "missing_phone";
 
+export type CozyConsentBasis =
+  | "explicit_consent_record"
+  | "transactional_dormant_recovery"
+  | "opted_out_blocked"
+  | "missing_contact_info";
+
 export interface CozyCustomerTarget {
   slotId: CozySlotId;
   customerId: string;
@@ -139,6 +145,7 @@ export interface CozyCustomerTarget {
   lastOrderSummary: string | null;
   hasConsent: boolean;
   consentStatus: CozyConsentStatus;
+  consentBasis: CozyConsentBasis;
   consentReason?: string;
   villagerVariant: VillagerVariant;
   suggestedMessage: string;

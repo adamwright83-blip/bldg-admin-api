@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull, lt, lte, or } from "drizzle-orm";
-import { fromZonedTime, format } from "date-fns-tz";
+import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import {
   scheduledOutreachMessages,
   scheduledOutreachRevisions,
@@ -20,6 +20,7 @@ export interface ScheduledOutreachDraftInput {
   messageBody: string;
   scheduledFor: Date | string;
   timezone?: string;
+  dstAmbiguityChoice?: "first" | "second";
   slotId?: string;
   territoryId?: string;
   senderPhone?: string;
@@ -43,6 +44,7 @@ export interface RescheduleOutreachInput {
   messageId: string;
   newScheduledFor: Date | string;
   timezone?: string;
+  dstAmbiguityChoice?: "first" | "second";
   reason?: string;
   now?: Date;
 }
@@ -124,7 +126,8 @@ async function requireDb() {
  */
 export function normalizeScheduledForUtc(
   inputTime: Date | string,
-  timezone: string = "America/Los_Angeles"
+  timezone: string = "America/Los_Angeles",
+  dstAmbiguityChoice?: "first" | "second"
 ): Date {
   if (inputTime instanceof Date) {
     if (isNaN(inputTime.getTime())) {
@@ -154,14 +157,34 @@ export function normalizeScheduledForUtc(
     throw new Error(`Could not parse wall time "${str}" in timezone "${timezone}"`);
   }
 
-  // DST non-existent spring-forward gap verification:
-  // Format the resolved UTC date back in the target timezone to verify that the wall time actually exists.
-  const formattedBack = format(utcDate, "yyyy-MM-dd'T'HH:mm", { timeZone: timezone });
+  // DST non-existent spring-forward gap verification using formatInTimeZone
+  const formattedBack = formatInTimeZone(utcDate, timezone, "yyyy-MM-dd'T'HH:mm");
   const requestedPrefix = normalizedStr.slice(0, 16);
   if (formattedBack !== requestedPrefix) {
     throw new Error(
       `Invalid scheduled time: "${str}" does not exist in timezone "${timezone}" due to Daylight Saving Time transition.`
     );
+  }
+
+  // Fall-back DST ambiguity detection (e.g. 1:30 AM occurs twice on fall-back transition day)
+  const laterUtc = new Date(utcDate.getTime() + 3600_000);
+  const laterWall = formatInTimeZone(laterUtc, timezone, "yyyy-MM-dd'T'HH:mm");
+  const earlierUtc = new Date(utcDate.getTime() - 3600_000);
+  const earlierWall = formatInTimeZone(earlierUtc, timezone, "yyyy-MM-dd'T'HH:mm");
+
+  const isAmbiguous = laterWall === requestedPrefix || earlierWall === requestedPrefix;
+  if (isAmbiguous) {
+    if (!dstAmbiguityChoice) {
+      throw new Error(
+        `Scheduled time "${str}" is ambiguous in timezone "${timezone}" because clocks turn back (occurs twice). Please specify dstAmbiguityChoice: "first" (earlier) or "second" (later).`
+      );
+    }
+    if (dstAmbiguityChoice === "second" && laterWall === requestedPrefix) {
+      return laterUtc;
+    }
+    if (dstAmbiguityChoice === "first" && earlierWall === requestedPrefix) {
+      return earlierUtc;
+    }
   }
 
   return utcDate;
@@ -183,7 +206,11 @@ export async function createScheduledOutreachDraft(
     throw new Error("Message body cannot be empty");
   }
 
-  const scheduledFor = normalizeScheduledForUtc(input.scheduledFor, timezone);
+  const scheduledFor = normalizeScheduledForUtc(
+    input.scheduledFor,
+    timezone,
+    input.dstAmbiguityChoice
+  );
 
   if (!input.allowImmediate && scheduledFor.getTime() <= now.getTime()) {
     throw new Error("Scheduled send time must be in the future");
@@ -299,13 +326,16 @@ export async function editScheduledOutreachDraft(
         .where(
           and(
             eq(scheduledOutreachMessages.id, input.messageId),
-            eq(scheduledOutreachMessages.tenantId, input.tenantId)
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.operatorId, input.operatorId)
           )
         )
         .for("update");
 
       if (!existing) {
-        throw new Error(`Scheduled message not found: ${input.messageId}`);
+        throw new Error(
+          `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+        );
       }
 
       if (existing.status !== "pending") {
@@ -340,6 +370,7 @@ export async function editScheduledOutreachDraft(
           and(
             eq(scheduledOutreachMessages.id, input.messageId),
             eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.operatorId, input.operatorId),
             eq(scheduledOutreachMessages.revisionCount, existing.revisionCount),
             eq(scheduledOutreachMessages.status, "pending")
           )
@@ -371,8 +402,10 @@ export async function editScheduledOutreachDraft(
 
   // Unit-test in-memory mode only
   const mem = testMemoryMessages.get(input.messageId);
-  if (!mem || mem.tenantId !== input.tenantId) {
-    throw new Error(`Scheduled message not found: ${input.messageId}`);
+  if (!mem || mem.tenantId !== input.tenantId || mem.operatorId !== input.operatorId) {
+    throw new Error(
+      `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+    );
   }
 
   if (mem.status !== "pending") {
@@ -430,12 +463,15 @@ export async function rescheduleOutreachDraft(
       .where(
         and(
           eq(scheduledOutreachMessages.id, input.messageId),
-          eq(scheduledOutreachMessages.tenantId, input.tenantId)
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId)
         )
       );
 
     if (!existing) {
-      throw new Error(`Scheduled message not found: ${input.messageId}`);
+      throw new Error(
+        `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+      );
     }
 
     if (existing.status !== "pending") {
@@ -445,7 +481,11 @@ export async function rescheduleOutreachDraft(
     }
 
     const targetTz = input.timezone ?? existing.timezone;
-    const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, targetTz);
+    const newScheduledFor = normalizeScheduledForUtc(
+      input.newScheduledFor,
+      targetTz,
+      input.dstAmbiguityChoice
+    );
 
     if (newScheduledFor.getTime() <= now.getTime()) {
       throw new Error("New scheduled send time must be in the future");
@@ -462,6 +502,7 @@ export async function rescheduleOutreachDraft(
         and(
           eq(scheduledOutreachMessages.id, input.messageId),
           eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId),
           eq(scheduledOutreachMessages.status, "pending"),
           or(
             isNull(scheduledOutreachMessages.leasedUntil),
@@ -484,8 +525,10 @@ export async function rescheduleOutreachDraft(
 
   // Unit-test in-memory mode only
   const mem = testMemoryMessages.get(input.messageId);
-  if (!mem || mem.tenantId !== input.tenantId) {
-    throw new Error(`Scheduled message not found: ${input.messageId}`);
+  if (!mem || mem.tenantId !== input.tenantId || mem.operatorId !== input.operatorId) {
+    throw new Error(
+      `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+    );
   }
 
   if (mem.status !== "pending") {
@@ -493,7 +536,11 @@ export async function rescheduleOutreachDraft(
   }
 
   const targetTz = input.timezone ?? mem.timezone;
-  const newScheduledFor = normalizeScheduledForUtc(input.newScheduledFor, targetTz);
+  const newScheduledFor = normalizeScheduledForUtc(
+    input.newScheduledFor,
+    targetTz,
+    input.dstAmbiguityChoice
+  );
   if (newScheduledFor.getTime() <= now.getTime()) {
     throw new Error("New scheduled send time must be in the future");
   }
@@ -510,7 +557,7 @@ export async function rescheduleOutreachDraft(
 
 /**
  * Cancel a pending scheduled outreach draft, reliably preventing unclaimed workers from sending it.
- * Concurrency-safe: prohibits cancelling actively claimed or dispatched messages.
+ * Concurrency-safe: prohibits cancelling actively claimed, attempted, or dispatched messages.
  */
 export async function cancelScheduledOutreachDraft(
   input: CancelScheduledOutreachInput
@@ -525,16 +572,23 @@ export async function cancelScheduledOutreachDraft(
       .where(
         and(
           eq(scheduledOutreachMessages.id, input.messageId),
-          eq(scheduledOutreachMessages.tenantId, input.tenantId)
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId)
         )
       );
 
     if (!existing) {
-      throw new Error(`Scheduled message not found: ${input.messageId}`);
+      throw new Error(
+        `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+      );
     }
 
     if (existing.status === "dispatched") {
       throw new Error("Cannot cancel a message that has already been dispatched");
+    }
+
+    if (existing.dispatchAttemptedAt) {
+      throw new Error("Cannot cancel message: an external dispatch attempt has already been initiated");
     }
 
     if (existing.status === "claimed" && existing.leasedUntil && existing.leasedUntil.getTime() > now.getTime()) {
@@ -555,6 +609,8 @@ export async function cancelScheduledOutreachDraft(
         and(
           eq(scheduledOutreachMessages.id, input.messageId),
           eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId),
+          isNull(scheduledOutreachMessages.dispatchAttemptedAt),
           or(
             eq(scheduledOutreachMessages.status, "pending"),
             and(
@@ -589,12 +645,18 @@ export async function cancelScheduledOutreachDraft(
 
   // Unit-test in-memory mode only
   const mem = testMemoryMessages.get(input.messageId);
-  if (!mem || mem.tenantId !== input.tenantId) {
-    throw new Error(`Scheduled message not found: ${input.messageId}`);
+  if (!mem || mem.tenantId !== input.tenantId || mem.operatorId !== input.operatorId) {
+    throw new Error(
+      `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+    );
   }
 
   if (mem.status === "dispatched") {
     throw new Error("Cannot cancel a message that has already been dispatched");
+  }
+
+  if (mem.dispatchAttemptedAt) {
+    throw new Error("Cannot cancel message: an external dispatch attempt has already been initiated");
   }
 
   if (mem.status === "claimed" && mem.leasedUntil && mem.leasedUntil.getTime() > now.getTime()) {
@@ -618,7 +680,12 @@ export async function cancelScheduledOutreachDraft(
  * Acquire concurrency-safe leases on due scheduled messages.
  * Only messages whose scheduledFor <= now AND dispatchedAt IS NULL can be claimed:
  * - Pending messages with no active lease
- * - Recoverable claimed messages whose previous worker lease expired before dispatch
+ * - Recoverable claimed messages whose previous worker lease expired before dispatch AND no dispatch attempt was ever initiated
+ *
+ * CRITICAL SAFETY FENCE:
+ * If a worker crashed after initiating an external attempt (dispatchAttemptedAt IS NOT NULL),
+ * that row's outcome is ambiguous. It MUST NEVER be automatically re-claimed by a worker,
+ * preventing duplicate text messages to customers.
  */
 export async function claimDueOutreachLeases(
   input: ClaimDueOutreachLeaseInput
@@ -637,6 +704,8 @@ export async function claimDueOutreachLeases(
         and(
           lte(scheduledOutreachMessages.scheduledFor, now),
           isNull(scheduledOutreachMessages.dispatchedAt),
+          isNull(scheduledOutreachMessages.cancelledAt),
+          isNull(scheduledOutreachMessages.dispatchAttemptedAt), // Never reclaim if attempt initiated!
           or(
             and(
               eq(scheduledOutreachMessages.status, "pending"),
@@ -663,7 +732,6 @@ export async function claimDueOutreachLeases(
           status: "claimed",
           leaseHolder: input.leaseHolder,
           leasedUntil,
-          dispatchAttemptedAt: now,
           updatedAt: now,
         })
         .where(
@@ -671,6 +739,8 @@ export async function claimDueOutreachLeases(
             eq(scheduledOutreachMessages.id, candidate.id),
             lte(scheduledOutreachMessages.scheduledFor, now),
             isNull(scheduledOutreachMessages.dispatchedAt),
+            isNull(scheduledOutreachMessages.cancelledAt),
+            isNull(scheduledOutreachMessages.dispatchAttemptedAt),
             or(
               and(
                 eq(scheduledOutreachMessages.status, "pending"),
@@ -693,7 +763,7 @@ export async function claimDueOutreachLeases(
           status: "claimed",
           leaseHolder: input.leaseHolder,
           leasedUntil,
-          dispatchAttemptedAt: now,
+          dispatchAttemptedAt: null,
           updatedAt: now,
         });
       }
@@ -707,18 +777,19 @@ export async function claimDueOutreachLeases(
   for (const [id, msg] of testMemoryMessages.entries()) {
     const isDue = msg.scheduledFor.getTime() <= now.getTime();
     const isNotDispatched = !msg.dispatchedAt;
+    const isNotCancelled = !msg.cancelledAt;
+    const isNoAttempt = !msg.dispatchAttemptedAt;
     const isPendingUnleased =
       msg.status === "pending" && (!msg.leasedUntil || msg.leasedUntil.getTime() < now.getTime());
     const isClaimedExpired =
       msg.status === "claimed" && msg.leasedUntil && msg.leasedUntil.getTime() < now.getTime();
 
-    if (isDue && isNotDispatched && (isPendingUnleased || isClaimedExpired)) {
+    if (isDue && isNotDispatched && isNotCancelled && isNoAttempt && (isPendingUnleased || isClaimedExpired)) {
       const updated: ScheduledOutreachMessageRow = {
         ...msg,
         status: "claimed",
         leaseHolder: input.leaseHolder,
         leasedUntil,
-        dispatchAttemptedAt: now,
         updatedAt: now,
       };
       testMemoryMessages.set(id, updated);
@@ -736,8 +807,11 @@ export async function claimDueOutreachLeases(
  * Unless a testSenderAdapter is explicitly injected in automated tests, this function
  * ALWAYS returns { success: false, status: "awaiting_sender_setup" } without mutating
  * the database row away from 'pending'.
- * This guarantees the operator can continue editing or rescheduling outside Lantern City,
- * and eliminates any possibility of a fake "dispatched" status in production.
+ *
+ * When a testSenderAdapter is present:
+ * 1. Transactionally acquire the lease claim FIRST with atomic CAS and record attempt intent.
+ * 2. Only invoke the test adapter AFTER the row is durable fenced against competing workers.
+ * 3. Commit terminal dispatched state upon success, or failed state upon error.
  */
 export async function sendEarlyOutreachDraft(
   input: SendEarlyOutreachInput
@@ -759,7 +833,8 @@ export async function sendEarlyOutreachDraft(
       .where(
         and(
           eq(scheduledOutreachMessages.id, input.messageId),
-          eq(scheduledOutreachMessages.tenantId, input.tenantId)
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId)
         )
       );
     existing = row ?? null;
@@ -767,8 +842,14 @@ export async function sendEarlyOutreachDraft(
     existing = testMemoryMessages.get(input.messageId) ?? null;
   }
 
-  if (!existing || existing.tenantId !== input.tenantId) {
-    throw new Error(`Scheduled message not found: ${input.messageId}`);
+  if (
+    !existing ||
+    existing.tenantId !== input.tenantId ||
+    existing.operatorId !== input.operatorId
+  ) {
+    throw new Error(
+      `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+    );
   }
 
   if (existing.status !== "pending") {
@@ -777,7 +858,7 @@ export async function sendEarlyOutreachDraft(
     );
   }
 
-  // Final G14 pre-dispatch re-validation
+  // Final G14 pre-dispatch re-validation: re-resolve customer permissions
   const consent = await checkCommunicationPermission({
     tenantId: input.tenantId,
     subjectType: "customer",
@@ -799,26 +880,28 @@ export async function sendEarlyOutreachDraft(
 
   // If a test adapter is injected (automated test only), simulate verified dispatch
   if (input.testSenderAdapter) {
-    const sendResult = await input.testSenderAdapter.send({
-      to: existing.recipientPhone,
-      body: existing.currentMessageBody,
-      messageId: existing.id,
-    });
+    const leaseDurationMs = 60_000;
+    const leasedUntil = new Date(now.getTime() + leaseDurationMs);
 
+    // 1. Transactionally acquire lease claim and mark attempt initiation BEFORE calling adapter
     if (db) {
-      const result = await db
+      const claimResult = await db
         .update(scheduledOutreachMessages)
         .set({
-          status: "dispatched",
-          dispatchedAt: now,
-          externalMessageId: sendResult.externalMessageId,
+          status: "claimed",
           leaseHolder: input.leaseHolder,
+          leasedUntil,
+          dispatchAttemptedAt: now,
           updatedAt: now,
         })
         .where(
           and(
             eq(scheduledOutreachMessages.id, existing.id),
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.operatorId, input.operatorId),
             eq(scheduledOutreachMessages.status, "pending"),
+            isNull(scheduledOutreachMessages.dispatchedAt),
+            isNull(scheduledOutreachMessages.dispatchAttemptedAt),
             or(
               isNull(scheduledOutreachMessages.leasedUntil),
               lt(scheduledOutreachMessages.leasedUntil, now)
@@ -826,9 +909,65 @@ export async function sendEarlyOutreachDraft(
           )
         );
 
-      if (affectedRows(result) === 0) {
-        throw new Error("Send Early failed: draft was claimed or modified by another worker");
+      if (affectedRows(claimResult) === 0) {
+        throw new Error(
+          "Send Early failed: draft was claimed, dispatched, or already attempted by another worker"
+        );
       }
+    } else {
+      if (existing.status !== "pending" || existing.dispatchAttemptedAt) {
+        throw new Error(
+          "Send Early failed: draft was claimed, dispatched, or already attempted by another worker"
+        );
+      }
+      existing.status = "claimed";
+      existing.leaseHolder = input.leaseHolder;
+      existing.leasedUntil = leasedUntil;
+      existing.dispatchAttemptedAt = now;
+    }
+
+    // 2. Invoke the external test adapter with lease securely held
+    let sendResult: { externalMessageId: string; evidenceName?: string };
+    try {
+      sendResult = await input.testSenderAdapter.send({
+        to: existing.recipientPhone,
+        body: existing.currentMessageBody,
+        messageId: existing.id,
+      });
+    } catch (err) {
+      const failureReason = err instanceof Error ? err.message : String(err);
+      if (db) {
+        await db
+          .update(scheduledOutreachMessages)
+          .set({
+            status: "failed",
+            failureReason,
+            updatedAt: now,
+          })
+          .where(eq(scheduledOutreachMessages.id, existing.id));
+      } else {
+        existing.status = "failed";
+        existing.failureReason = failureReason;
+      }
+      throw err;
+    }
+
+    // 3. Mark terminal dispatched state
+    if (db) {
+      await db
+        .update(scheduledOutreachMessages)
+        .set({
+          status: "dispatched",
+          dispatchedAt: now,
+          externalMessageId: sendResult.externalMessageId,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, existing.id),
+            eq(scheduledOutreachMessages.leaseHolder, input.leaseHolder)
+          )
+        );
     }
 
     const updated: ScheduledOutreachMessageRow = {
@@ -837,6 +976,7 @@ export async function sendEarlyOutreachDraft(
       dispatchedAt: now,
       externalMessageId: sendResult.externalMessageId,
       leaseHolder: input.leaseHolder,
+      dispatchAttemptedAt: now,
       updatedAt: now,
     };
 
@@ -910,13 +1050,33 @@ export async function listScheduledOutreachMessages(input: {
 
 /**
  * Retrieves the complete revision history for a scheduled outreach draft.
+ * Verifies that the draft belongs to the requesting tenant and (when provided) operator.
  */
 export async function getScheduledOutreachRevisions(input: {
   tenantId: string;
   messageId: string;
+  operatorId?: string;
 }) {
   const db = await requireDb();
   if (db) {
+    if (input.operatorId) {
+      const [msg] = await db
+        .select({ id: scheduledOutreachMessages.id })
+        .from(scheduledOutreachMessages)
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, input.messageId),
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.operatorId, input.operatorId)
+          )
+        );
+      if (!msg) {
+        throw new Error(
+          `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+        );
+      }
+    }
+
     return await db
       .select()
       .from(scheduledOutreachRevisions)
@@ -930,6 +1090,15 @@ export async function getScheduledOutreachRevisions(input: {
   }
 
   // Unit-test in-memory mode only
+  if (input.operatorId) {
+    const msg = testMemoryMessages.get(input.messageId);
+    if (!msg || msg.tenantId !== input.tenantId || msg.operatorId !== input.operatorId) {
+      throw new Error(
+        `Scheduled message not found or unauthorized for operator: ${input.messageId}`
+      );
+    }
+  }
+
   return (testMemoryRevisions.get(input.messageId) ?? []).sort(
     (a, b) => b.revisionNumber - a.revisionNumber
   );

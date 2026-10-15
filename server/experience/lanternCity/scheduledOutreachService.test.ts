@@ -38,9 +38,27 @@ describe("scheduledOutreachService unit tests", () => {
       }).toThrow(/does not exist in timezone .* due to Daylight Saving Time/);
     });
 
-    it("safely handles ambiguous DST fall-back time (1:30 AM on November 1, 2026)", () => {
-      const utc = normalizeScheduledForUtc("2026-11-01 01:30:00", "America/Los_Angeles");
-      expect(utc.toISOString()).toBe("2026-11-01T08:30:00.000Z");
+    it("detects ambiguous DST fall-back time and resolves with dstAmbiguityChoice", () => {
+      // Without ambiguity choice, throws explicit error
+      expect(() => {
+        normalizeScheduledForUtc("2026-11-01 01:30:00", "America/Los_Angeles");
+      }).toThrow(/is ambiguous in timezone .* because clocks turn back/);
+
+      // With "first" (earlier instance, PDT, UTC-7)
+      const utcFirst = normalizeScheduledForUtc(
+        "2026-11-01 01:30:00",
+        "America/Los_Angeles",
+        "first"
+      );
+      expect(utcFirst.toISOString()).toBe("2026-11-01T08:30:00.000Z");
+
+      // With "second" (later instance, PST, UTC-8)
+      const utcSecond = normalizeScheduledForUtc(
+        "2026-11-01 01:30:00",
+        "America/Los_Angeles",
+        "second"
+      );
+      expect(utcSecond.toISOString()).toBe("2026-11-01T09:30:00.000Z");
     });
   });
 
@@ -370,5 +388,133 @@ describe("scheduledOutreachService unit tests", () => {
     expect(earlyResult.message.status).toBe("dispatched");
     expect(earlyResult.message.externalMessageId).toBe("android_custom_msg_456");
     expect(fakeAdapter.send).toHaveBeenCalledTimes(1);
+  });
+
+  describe("Operator Ownership and Cross-Operator Isolation", () => {
+    it("rejects edit, reschedule, cancel, sendEarly, and revision reads by an unauthorized operator", async () => {
+      const scheduledFor = new Date(baseNow.getTime() + 12 * 3600 * 1000);
+      const draft = await createScheduledOutreachDraft({
+        tenantId,
+        operatorId: "op_owner",
+        customerId: "cust_isolated",
+        customerName: "Henry",
+        recipientPhone: "+12135550148",
+        originalSuggestedDraft: "Draft",
+        messageBody: "Draft",
+        scheduledFor,
+        now: baseNow,
+      });
+
+      const imposter = "op_intruder";
+
+      // Unauthorized edit
+      await expect(
+        editScheduledOutreachDraft({
+          tenantId,
+          operatorId: imposter,
+          messageId: draft.id,
+          newMessageBody: "Hacked content",
+          now: baseNow,
+        })
+      ).rejects.toThrow(/not found or unauthorized for operator/);
+
+      // Unauthorized reschedule
+      await expect(
+        rescheduleOutreachDraft({
+          tenantId,
+          operatorId: imposter,
+          messageId: draft.id,
+          newScheduledFor: new Date(baseNow.getTime() + 24 * 3600 * 1000),
+          now: baseNow,
+        })
+      ).rejects.toThrow(/not found or unauthorized for operator/);
+
+      // Unauthorized cancel
+      await expect(
+        cancelScheduledOutreachDraft({
+          tenantId,
+          operatorId: imposter,
+          messageId: draft.id,
+          reason: "Intruder cancellation",
+          now: baseNow,
+        })
+      ).rejects.toThrow(/not found or unauthorized for operator/);
+
+      // Unauthorized sendEarly
+      await expect(
+        sendEarlyOutreachDraft({
+          tenantId,
+          operatorId: imposter,
+          messageId: draft.id,
+          leaseHolder: "intruder_worker",
+          now: baseNow,
+        })
+      ).rejects.toThrow(/not found or unauthorized for operator/);
+
+      // Unauthorized getScheduledOutreachRevisions
+      await expect(
+        getScheduledOutreachRevisions({
+          tenantId,
+          operatorId: imposter,
+          messageId: draft.id,
+        })
+      ).rejects.toThrow(/not found or unauthorized for operator/);
+    });
+  });
+
+  describe("Dispatch Claim Safety & Crash Non-Recovery", () => {
+    it("never auto-reclaims an expired lease if dispatchAttemptedAt was recorded", async () => {
+      const scheduledFor = new Date(baseNow.getTime() + 1000);
+      const draft = await createScheduledOutreachDraft({
+        tenantId,
+        operatorId,
+        customerId: "cust_ambiguous_crash",
+        customerName: "Henry",
+        recipientPhone: "+12135550148",
+        originalSuggestedDraft: "Draft",
+        messageBody: "Draft",
+        scheduledFor,
+        now: baseNow,
+      });
+
+      // Adapter that throws an error after attempting dispatch
+      const crashingAdapter = {
+        send: vi.fn().mockRejectedValue(new Error("Network drop during transmission")),
+      };
+
+      // sendEarly attempts dispatch, records dispatchAttemptedAt, and fails
+      await expect(
+        sendEarlyOutreachDraft({
+          tenantId,
+          operatorId,
+          messageId: draft.id,
+          leaseHolder: "worker_crashed_mid_send",
+          testSenderAdapter: crashingAdapter,
+          now: baseNow,
+        })
+      ).rejects.toThrow("Network drop during transmission");
+
+      // Advance time past any lease expiry
+      const futureTime = new Date(baseNow.getTime() + 120000);
+
+      // Leaser should NOT reclaim this message because dispatch was already attempted (could have reached handset!)
+      const claimed = await claimDueOutreachLeases({
+        leaseHolder: "worker_rescuer",
+        now: futureTime,
+      });
+
+      expect(claimed.find((m) => m.id === draft.id)).toBeUndefined();
+
+      // Furthermore, manual cancellation must be rejected because dispatch was attempted
+      await expect(
+        cancelScheduledOutreachDraft({
+          tenantId,
+          operatorId,
+          messageId: draft.id,
+          reason: "Cancel after crash",
+          now: futureTime,
+        })
+      ).rejects.toThrow(/Cannot cancel message: an external dispatch attempt has already been initiated/);
+    });
   });
 });

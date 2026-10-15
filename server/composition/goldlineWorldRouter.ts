@@ -111,6 +111,7 @@ export const goldlineWorldRouter = router({
         expectedPhone: z.string().optional(),
         slotId: z.string().optional(),
         territoryId: z.string().optional(),
+        dstAmbiguityChoice: z.enum(["first", "second"]).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -140,6 +141,7 @@ export const goldlineWorldRouter = router({
         messageBody: input.messageBody.trim(),
         scheduledFor: input.scheduledFor,
         timezone: input.timezone,
+        dstAmbiguityChoice: input.dstAmbiguityChoice,
         slotId: input.slotId,
         territoryId: resolved.territoryId,
       });
@@ -192,6 +194,7 @@ export const goldlineWorldRouter = router({
         messageId: z.string().min(1),
         newScheduledFor: z.string().min(1),
         timezone: z.string().default("America/Los_Angeles"),
+        dstAmbiguityChoice: z.enum(["first", "second"]).optional(),
         reason: z.string().optional(),
       })
     )
@@ -205,6 +208,7 @@ export const goldlineWorldRouter = router({
         messageId: input.messageId,
         newScheduledFor: input.newScheduledFor,
         timezone: input.timezone,
+        dstAmbiguityChoice: input.dstAmbiguityChoice,
         reason: input.reason,
       });
     }),
@@ -255,6 +259,7 @@ export const goldlineWorldRouter = router({
       );
       return await getScheduledOutreachRevisions({
         tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
         messageId: input.messageId,
       });
     }),

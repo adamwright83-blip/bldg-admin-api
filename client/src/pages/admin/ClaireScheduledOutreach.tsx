@@ -2,6 +2,26 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Clock, Edit2, Play, Trash2, Calendar, RefreshCw } from "lucide-react";
 
+function formatToWallClockIso(date: Date | string, timezone: string = "America/Los_Angeles"): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    map[part.type] = part.value;
+  }
+  const hour = map.hour === "24" ? "00" : map.hour;
+  return `${map.year}-${map.month}-${map.day}T${hour}:${map.minute}`;
+}
+
 export default function ClaireScheduledOutreach() {
   const utils = trpc.useUtils();
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
@@ -442,7 +462,9 @@ export default function ClaireScheduledOutreach() {
                     <button
                       onClick={() => {
                         setReschedulingMessageId(msg.id);
-                        setNewScheduleIso(new Date(msg.scheduledFor).toISOString().slice(0, 16));
+                        setNewScheduleIso(
+                          formatToWallClockIso(msg.scheduledFor, msg.timezone || "America/Los_Angeles")
+                        );
                       }}
                       style={{
                         display: "inline-flex",

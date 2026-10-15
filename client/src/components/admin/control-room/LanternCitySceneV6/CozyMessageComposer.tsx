@@ -27,14 +27,24 @@ export function CozyMessageComposer({
   const [isListening, setIsListening] = useState(false);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
 
-  // Default schedule: tomorrow at 10:00 AM Pacific
+  // Default schedule: tomorrow at 10:00 AM Pacific (America/Los_Angeles)
   const getDefaultScheduleIso = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(10, 0, 0, 0);
-    // Format for datetime-local: YYYY-MM-DDTHH:mm
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
+    const now = new Date();
+    const laDateStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    const [year, month, day] = laDateStr.split("-").map(Number);
+    const tomorrowUtc = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+    const tomorrowStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(tomorrowUtc);
+    return `${tomorrowStr}T10:00`;
   };
 
   const [scheduleDateTime, setScheduleDateTime] = useState(getDefaultScheduleIso());
