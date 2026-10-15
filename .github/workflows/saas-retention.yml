@@ -8,6 +8,11 @@ on:
         required: false
         default: true
         type: boolean
+      confirm_delete:
+        description: "Required with dry_run=false. Scheduled runs cannot delete."
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "17 11 * * *"
 
@@ -27,11 +32,26 @@ jobs:
       JOYSTICK_RETENTION_URL: ${{ secrets.JOYSTICK_RETENTION_URL }}
       JOYSTICK_RETENTION_SECRET: ${{ secrets.JOYSTICK_RETENTION_SECRET }}
       JOYSTICK_RETENTION_BATCH_LIMIT: ${{ vars.JOYSTICK_RETENTION_BATCH_LIMIT }}
-      JOYSTICK_RETENTION_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+      - name: Resolve retention mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_CONFIRM_DELETE: ${{ inputs.confirm_delete }}
+        run: |
+          set -eu
+          dry=1
+          confirm=0
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "false" ] && [ "$INPUT_CONFIRM_DELETE" = "true" ]; then
+            dry=0
+            confirm=1
+          fi
+          echo "JOYSTICK_RETENTION_DRY_RUN=$dry" >> "$GITHUB_ENV"
+          echo "JOYSTICK_RETENTION_CONFIRM_DELETE=$confirm" >> "$GITHUB_ENV"
+          echo "GITHUB_EVENT_NAME=$EVENT_NAME" >> "$GITHUB_ENV"
       - name: Run bounded retention batch
         run: node scripts/run-saas-retention.mjs

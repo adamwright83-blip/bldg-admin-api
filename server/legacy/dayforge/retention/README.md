@@ -10,7 +10,7 @@ Example body:
 { "dryRun": true, "batchLimit": 250 }
 ```
 
-Schedule a dry run first, then a regular small production batch. A run never removes `dayforge_audit_events`, operational outcome evidence, or the current authoritative game-result/replay row. Replay payload redaction begins only after the schema can preserve a replay hash and redaction proof. The executable matrix in `retentionPolicy.ts` is the source of truth for lifetimes. Tables are detected before use, including the optional future evidence-upload table, so cleanup remains safe during staged rollouts.
+Run a dry count first, then one manually confirmed small production batch. The daily schedule cannot delete. A run never removes `dayforge_audit_events`, operational outcome evidence, or the current authoritative game-result/replay row. Replay payload redaction begins only after the schema can preserve a replay hash and redaction proof. The executable matrix in `retentionPolicy.ts` is the source of truth for lifetimes. Tables are detected before use, including the optional future evidence-upload table, so cleanup remains safe during staged rollouts.
 
 ## JOYSTICK scheduled operation
 
@@ -31,7 +31,7 @@ Safe activation sequence:
 3. Leave `JOYSTICK_RETENTION_ENABLED` unset and manually dispatch the workflow with `dry_run=true`.
 4. Verify the returned policy version/resource counts.
 5. Set `JOYSTICK_RETENTION_ENABLED=1`.
-6. Manually run one bounded non-dry batch and verify expected deletion counts.
-7. Leave the daily schedule enabled.
+6. Manually dispatch one bounded batch with `dry_run=false` and `confirm_delete=true`, then verify expected deletion counts.
+7. Leave the daily schedule enabled. Scheduled runs stay dry-run and cannot delete.
 
-If the scheduler is disabled it exits successfully without touching data. If enabled but its URL or secret is missing it fails closed. No scheduler path can bypass the endpoint's authentication, batch ceiling, retention policy, or evidence-object deletion safeguards.
+If the scheduler is disabled it exits successfully without touching data. If enabled but its URL or secret is missing it fails closed. A live delete is sent only when the workflow event is `workflow_dispatch`, `JOYSTICK_RETENTION_DRY_RUN=0`, and `JOYSTICK_RETENTION_CONFIRM_DELETE=1`. Any other combination refuses before the request is sent. No scheduler path can bypass the endpoint's authentication, batch ceiling, retention policy, or evidence-object deletion safeguards.
