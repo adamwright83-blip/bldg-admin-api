@@ -10,6 +10,11 @@ import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
 import { readWinBackDossier, type WinBackDossier } from "../../strategy/winBackDossier";
 import type { CustomerTruthDisposition } from "../../analytics/sourceCoverage";
+import {
+  loadDriverDayLineForCall,
+  speakDriverDayLineCall,
+  type DriverDayLineCallFacts,
+} from "./driverDayLineCall";
 
 export const SHOWRUNNER_DEVELOPMENT_SOURCE = "claire_showrunner_development";
 export const DESK_PREPARATION_SOURCE = "claire_desk_preparation";
@@ -40,6 +45,11 @@ export type ShowrunnerBriefing = {
   weekToDate: { reportedOutcomes: string[]; planChanges: string[] };
   /** Desk only: the revenue opportunity Claire found, from stored evidence. */
   analyticalEvidence?: { answer: string; receiptIds: string[]; limitations: string[] } | null;
+  /**
+   * The Day Line the driver executes for this business date.
+   * Morning and evening calls speak this, not a separate list.
+   */
+  driverDayLine?: DriverDayLineCallFacts | null;
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -105,6 +115,7 @@ export async function buildShowrunnerBriefing(input: {
   purpose: ShowrunnerPurpose;
   timeZone: string;
   now: Date;
+  loadDriverDayLine?: typeof loadDriverDayLineForCall;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -223,9 +234,29 @@ export async function buildShowrunnerBriefing(input: {
         };
     }
   }
+  const pendingApproval =
+    pendingDecision?.items.map(item => ({ id: item.id, title: item.title })) ?? [];
+  const driverDayLine =
+    input.purpose === "desk_planning"
+      ? null
+      : await (input.loadDriverDayLine ?? loadDriverDayLineForCall)({
+          caller: {
+            tenantId: identity.tenantId,
+            userId: identity.canonicalOpenId,
+            includeAllAssignees: identity.membership.canonical !== "field",
+            dayDirectorActorId: identity.dayDirectorActorId,
+            dayDirectorActorIds: identity.dayDirectorActorIds,
+            canonicalOperatorId: identity.canonicalOperatorId,
+          },
+          businessDate,
+          now,
+          timeZone,
+          pendingApproval,
+        });
   return {
     analyticalEvidence,
     opportunity,
+    driverDayLine,
     purpose: input.purpose,
     businessDate,
     weekday: formatInTimeZone(now, timeZone, "EEEE"),
@@ -249,27 +280,25 @@ export async function buildShowrunnerBriefing(input: {
 }
 
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
-const withWindow = (i: BriefingItem) => `${i.title}${i.window ? ` (${i.window})` : ""}`;
 
 /** The spoken opening, built only from briefing facts. */
 export function showrunnerOpening(b: ShowrunnerBriefing): string {
-  const open = b.today.filter(i => i.status === "open");
-  if (b.purpose === "morning_readiness") {
-    return [
-      `Good morning, it's Claire.`,
-      b.objective ? `This week is about: ${b.objective}.` : "",
-      open.length
-        ? `Today you've got ${list(open.map(withWindow))}.`
-        : b.today.length
-          ? "Today's Day Line is already done."
-          : "Nothing is on today's Day Line yet.",
-      b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
-      b.pendingDecision ? `One change is waiting for your OK: ${b.pendingDecision.summary}` : "",
-      "Are you ready to get going?",
-    ]
-      .filter(Boolean)
-      .join(" ");
+  if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
+    const line = speakDriverDayLineCall(b.driverDayLine, b.purpose);
+    if (b.purpose === "morning_readiness") {
+      return [
+        "Good morning, it's Claire.",
+        b.objective ? `This week is about: ${b.objective}.` : "",
+        line,
+        b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
+        "Are you ready to get going?",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    return ["Hi, it's Claire for today's wrap.", line, "How did it go?"].join(" ");
   }
+  const open = b.today.filter(i => i.status === "open");
   return [
     `Hi, it's Claire for today's wrap.`,
     open.length || b.today.length
