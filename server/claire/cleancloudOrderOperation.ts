@@ -50,11 +50,11 @@ export type CleanCloudOrderOperationReceipt = {
   eventId: number | null;
 };
 
-type CapturedOrder = Awaited<ReturnType<typeof listIntake>>["orders"][number];
+type ListedOrder = NonNullable<Awaited<ReturnType<typeof listIntake>>["orders"][number]>;
 
-const fail = (message: string, code: "CONFLICT" | "FORBIDDEN" | "BAD_REQUEST" = "CONFLICT"): never => {
+function fail(message: string, code: "CONFLICT" | "FORBIDDEN" | "BAD_REQUEST" = "CONFLICT"): never {
   throw new TRPCError({ code, message });
-};
+}
 
 function observedIso(value: Date | string): string {
   const time = value instanceof Date ? value.getTime() : Date.parse(value);
@@ -110,17 +110,27 @@ export function prepareOperationFingerprint(input: {
     .digest("hex");
 }
 
-async function capturedOrder(actor: PickupActor, orderId: string) {
+async function capturedOrder(
+  actor: PickupActor,
+  orderId: string
+): Promise<{ catalog: IntakeProduct[]; row: ListedOrder }> {
   const current = await listIntake(actor);
   if (!current.enabled) fail("Connect the intake pilot in Gumball first.");
   const row = current.orders.find(order => order.id === orderId);
-  if (!row || !row.sourcePresent) fail("Order unavailable or held.");
+  if (row == null || !row.sourcePresent) {
+    throw new TRPCError({ code: "CONFLICT", message: "Order unavailable or held." });
+  }
   return { catalog: current.catalog, row };
 }
 
-function preparePlan(row: CapturedOrder, catalog: IntakeProduct[], plan: IntakePlan | undefined) {
+function preparePlan(row: ListedOrder, catalog: IntakeProduct[], plan: IntakePlan | undefined): IntakePlan {
   assertFresh(row.observedAt, 300_000);
-  if (!plan) fail("Enter the actual quantities before Claire can propose preparation.", "BAD_REQUEST");
+  if (plan === undefined) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Enter the actual quantities before Claire can propose preparation.",
+    });
+  }
   return validateIntakePlan(plan, catalog);
 }
 
@@ -156,11 +166,12 @@ export async function proposeCleanCloudOrderOperation(input: {
     };
   }
   if (input.action !== "approve_submit") fail("That CleanCloud order operation is not available.", "BAD_REQUEST");
-  if (row.state !== "review" || !row.preparedJson || !row.preparedAt || !row.revision) {
-    fail("No prepared draft is waiting for approval.");
-  }
-  assertFresh(row.preparedAt, 600_000);
   const draft = row.preparedJson;
+  const preparedAt = row.preparedAt;
+  if (row.state !== "review" || draft == null || preparedAt == null || row.revision == null) {
+    throw new TRPCError({ code: "CONFLICT", message: "No prepared draft is waiting for approval." });
+  }
+  assertFresh(preparedAt, 600_000);
   const dollars = `$${(draft.totalCents / 100).toFixed(2)}`;
   return {
     status: "pending_approval",
@@ -287,8 +298,11 @@ export async function commitCleanCloudOrderOperation(input: {
 
   if (input.action !== "approve_submit") fail("That CleanCloud order operation is not available.", "BAD_REQUEST");
   const draft = row.preparedJson;
-  if (!draft || draft.fingerprint !== input.fingerprint) {
-    fail("This proposal does not match the captured order. Nothing was queued.");
+  if (draft == null || draft.fingerprint !== input.fingerprint) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "This proposal does not match the captured order. Nothing was queued.",
+    });
   }
   const queued = row.state === "submit_pending" || row.state === "submitting";
   if (queued && row.revision === input.revision) {

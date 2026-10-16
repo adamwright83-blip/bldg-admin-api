@@ -1,7 +1,7 @@
 /**
  * Claire queues CleanCloud intake only after an exact approval.
  * The database is a local disposable schema created by this file.
- * DATABASE_URL stays unset. No CleanCloud host is contacted.
+ * The application DATABASE_URL is unset before any order work. No CleanCloud host is contacted.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -30,6 +30,20 @@ const HOST = "127.0.0.1";
 const PORT = Number(process.env.CLAIRE_ORDER_OPS_PORT ?? 3306);
 const USER = process.env.CLAIRE_ORDER_OPS_USER ?? "claire";
 const PASSWORD = process.env.CLAIRE_ORDER_OPS_PASSWORD ?? "disposable";
+
+/** Local server account only. A configured DATABASE_URL is read for that account, then unset. */
+function disposableAdmin(): { host: string; port: number; user: string; password: string } {
+  const configured = process.env.DATABASE_URL;
+  if (!configured) return { host: HOST, port: PORT, user: USER, password: PASSWORD };
+  const url = new URL(configured);
+  if (url.hostname !== "127.0.0.1") throw new Error("Local database host required");
+  return {
+    host: url.hostname,
+    port: Number(url.port || "3306"),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+  };
+}
 const BANNED =
   /sms (?:message )?(?:was )?sent|text (?:message )?(?:was )?sent|charge was made|was charged|card was charged|called the customer|order was submitted|submitted to cleancloud/i;
 
@@ -72,7 +86,8 @@ describe("Claire approved CleanCloud order operation on disposable MySQL", () =>
 
   beforeAll(async () => {
     if (!databaseName.endsWith("_disposable")) throw new Error("Disposable database name required");
-    if (HOST !== "127.0.0.1") throw new Error("Local database host required");
+    const adminAuth = disposableAdmin();
+    if (adminAuth.host !== "127.0.0.1") throw new Error("Local database host required");
     delete process.env.DATABASE_URL;
     if (previousDatabaseUrl) {
       const prior = new URL(previousDatabaseUrl);
@@ -82,18 +97,18 @@ describe("Claire approved CleanCloud order operation on disposable MySQL", () =>
     }
     fetchSpy.mockRejectedValue(new Error("live provider blocked"));
     admin = await mysql.createConnection({
-      host: HOST,
-      port: PORT,
-      user: USER,
-      password: PASSWORD,
+      host: adminAuth.host,
+      port: adminAuth.port,
+      user: adminAuth.user,
+      password: adminAuth.password,
       connectTimeout: 5_000,
     });
     await admin.query(`CREATE DATABASE \`${databaseName}\``);
     pool = mysql.createPool({
-      host: HOST,
-      port: PORT,
-      user: USER,
-      password: PASSWORD,
+      host: adminAuth.host,
+      port: adminAuth.port,
+      user: adminAuth.user,
+      password: adminAuth.password,
       database: databaseName,
       connectionLimit: 4,
       timezone: "Z",
