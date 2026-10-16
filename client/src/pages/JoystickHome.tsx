@@ -421,13 +421,13 @@ export default function JoystickHome({
                     : "Nothing is asking for immediate action."}
               </p>
             </div>
-            <Link href="/play" className="jh-round-link" aria-label="Open current Day Line item">
+            <Link href={current?.destinationPath ?? "/play"} className="jh-round-link" aria-label="Open current Day Line item">
               <ArrowRight />
             </Link>
           </header>
           <div className="jh-up-next">
             {upcoming.length ? upcoming.map(item => (
-              <Link key={item.id} href="/play" data-day-line-id={item.id}>
+              <Link key={item.id} href={item.destinationPath ?? "/play"} data-day-line-id={item.id}>
                 <time>{item.timeLabel}</time>
                 <span>{item.title}</span>
               </Link>

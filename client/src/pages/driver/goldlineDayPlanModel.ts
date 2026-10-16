@@ -203,6 +203,8 @@ export type DayPlanStop = {
   whySurfaced?: string | null;
   sourceEvidenceReference?: string | null;
   sourceOccurredAt?: string | null;
+  /** Where Home opens this stop. Absent means the driver Day Line itself. */
+  destinationPath?: string | null;
 };
 
 export type DayPlanProjection = {
@@ -581,6 +583,7 @@ export function buildDayPlanProjection(input: {
         whySurfaced: objective.explanation,
         sourceEvidenceReference: objective.sourceEvidenceReference,
         sourceOccurredAt: objective.sourceOccurredAt,
+        destinationPath: objective.destinationPath ?? null,
       })
     ),
   ];

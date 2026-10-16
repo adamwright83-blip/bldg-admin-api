@@ -460,6 +460,7 @@ describe("commercial-mission linkage survives the living-world projection", () =
       s.id.includes("living-world-follow-up:aea4bdae-c62d-4b27-833a-ab0181289f09")
     );
     expect(stop?.action).toEqual({ type: "commercial", missionId: 8 });
+    expect(stop?.destinationPath).toBe("/driver/sales-mission/8");
   });
 
   it("a living-world objective with no missionId gets no action, so it cannot invoke a mission-aware call", () => {
