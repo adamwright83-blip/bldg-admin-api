@@ -2,7 +2,7 @@
 name: Claire conversation integrity (isolated verification)
 on:
   push:
-    branches: [codex/claire-repair-verification]
+    branches: [codex/claire-repair-verification, claude/claire-work-ledger]
   workflow_dispatch:
 permissions:
   contents: read
@@ -63,3 +63,14 @@ jobs:
         env:
           CLAIRE_REPAIR_LIVE_MODEL: '1'
         run: pnpm vitest run --config vitest.integration.config.ts server/claire/briefing/conversationIntegrity.live.integration.test.ts --minWorkers=1 --maxWorkers=1
+      - name: Work ledger — real-model replay of the 2026-10-15 call, PR 599 and evening scenarios
+        if: ${{ !cancelled() && matrix.mode == 'live-model' }}
+        env:
+          DATABASE_URL: ''
+          CLAIRE_WORK_LEDGER_LIVE: '1'
+        run: pnpm vitest run server/claire/workLedger/workLedger.live.test.ts --minWorkers=1 --maxWorkers=1
+      - name: Work ledger — production Relay turn path, real models, disposable MySQL
+        if: ${{ !cancelled() && matrix.mode == 'live-model' }}
+        env:
+          CLAIRE_WORK_LEDGER_LIVE: '1'
+        run: pnpm vitest run --config vitest.integration.config.ts server/claire/workLedger/workLedgerCall.live.integration.test.ts --minWorkers=1 --maxWorkers=1
