@@ -189,7 +189,7 @@ describe("Claire pre-drive conversation", () => {
         brief: null,
         context,
       })
-    ).toBe("Give me a second—ask me that once more.");
+    ).toBe("I have your last message. I couldn’t finish my response just now.");
     for (const utterance of ["hello", "What did you say?", "repeat that", "asdfghjkl"]) {
       const spoken = conservativeClaireFollowUp({ utterance, brief: null, context });
       expect(spoken).not.toContain("No opening briefing was spoken");

@@ -188,7 +188,14 @@ import { recordDaphneStage3bExecution, loadDaphneStage3bRecommendation } from ".
 /** Re-exported so Slice A's tests can read a trace without a second import path. */
 export type ClaireTurnTraceForTest = ClaireTurnTrace;
 
-export type ClaireTurnHistoryEntry = { speaker: "operator" | "claire"; text: string; at: number };
+export type ClaireTurnHistoryEntry = { speaker: "operator" | "claire"; text: string; at: number;
+  delivery?: "generated" | "queued" | "interrupted" | "confirmed_heard" };
+
+/** Generation is context, never proof that the caller heard a response. */
+export function conversationHistoryForModel(history: ClaireTurnHistoryEntry[] = []) {
+  return history.map(entry => ({ speaker: entry.speaker, text: entry.speaker === "claire" && entry.delivery !== "confirmed_heard"
+    ? `[${entry.delivery === "interrupted" ? "Playback interrupted" : "Playback unconfirmed"}] ${entry.text}` : entry.text }));
+}
 
 export type PendingBriefing = { parsed: ParsedBriefing; createdAt: number };
 
@@ -198,6 +205,8 @@ export type ClaireTurnState = PendingProposalState &
     strategicProposalRevision?: string | null;
     history?: ClaireTurnHistoryEntry[];
     pendingBriefing?: PendingBriefing | null;
+    /** Uncommitted work outside the most recently offered/authorized bundle. */
+    heldBriefingItems?: BriefingItem[];
     pendingAccountFollowUp?: PendingAccountFollowUp | null;
     /** A spoken thought the phone cut off at a pause ("Desired timing is."). */
     pendingFragment?: string | null;
@@ -406,7 +415,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     business: {},
     commitment: handleVoiceCommitmentTurn,
     followUp: answerClairePreDriveFollowUp,
-    extractModel: ENV.anthropicApiKey?.trim() ? extractBriefingWithModel : null,
+    extractModel: extractBriefingWithModel,
     loadExisting: loadExistingWork,
     commit: commitBriefing,
     campaign: getClaireCampaignSummary,
@@ -455,7 +464,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
   };
 }
 
-const HISTORY_LIMIT = 16;
+const HISTORY_LIMIT = 32;
 /** Hard turn-level ceiling on the challenge classifier, whatever the injected implementation does. */
 const CLASSIFIER_TURN_BUDGET_MS = 2000;
 const SEMANTIC_REFERENT_MAX_WORDS = 80;
@@ -463,9 +472,9 @@ const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
 const CLOSED_DECISION_CONFIDENCE_THRESHOLD = 0.3;
 const CLOSED_DECISION_MARGIN_THRESHOLD = 0.1;
 
-function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
+function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number, delivery?: ClaireTurnHistoryEntry["delivery"]): void {
   if (!text.trim()) return;
-  state.history = [...(state.history ?? []), { speaker, text: text.slice(0, 1_200), at }].slice(-HISTORY_LIMIT);
+  state.history = [...(state.history ?? []), { speaker, text: text.slice(0, 1_200), at, ...(delivery ? { delivery } : {}) }].slice(-HISTORY_LIMIT);
 }
 
 function recoveryRefsNamedInSpeech(
@@ -650,9 +659,9 @@ function singleIntentFlow(utterance: string): boolean {
 export { MEMORY_QUESTION } from "../answerRouter";
 
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
-  // A new turn on this call means the previous line was actually spoken: that is the delivery
-  // boundary at which a pending personal reveal is committed (fragment disclosed, entitlement consumed).
-  if (isClaireProgressionEnabled(input.tenantId)) {
+  // Barge-in and reconnects are not evidence of complete playback.
+  const previousClaire = input.state.history?.findLast(entry => entry.speaker === "claire");
+  if (isClaireProgressionEnabled(input.tenantId) && (input.surface === "text" || previousClaire?.delivery === "confirmed_heard")) {
     await commitPendingDisclosuresForConversation(getProgressionStore(), { tenantId: input.tenantId, conversationId: input.conversationKey });
   }
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
@@ -890,7 +899,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
-    remember(state, "claire", guarded.speak, nowMs);
+    remember(state, "claire", guarded.speak, nowMs, input.surface === "voice" ? "generated" : "queued");
     state.claireTurnCount = claireOrdinal;
     if (knownAccounts.length && guarded.speak) {
       state.coverage = recordClaireQuestionCoverage(state.coverage, { claireText: guarded.speak, accounts: knownAccounts, turnOrdinal: claireOrdinal });
@@ -985,7 +994,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     });
   };
 
-  const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
+  const history = () => conversationHistoryForModel(state.history);
   const lower = normalizeUtterance(utterance);
 
   trace.turnKind ??= null;
@@ -1771,6 +1780,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       )
     );
     const explicitPendingCommit =
+      brainV3.act === "confirmation" &&
       ownsPendingBriefing &&
       (brainV3.workDisposition === "commit" ||
         brainV3.dayLineDisposition === "accept" ||
@@ -1795,7 +1805,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ownsPendingBriefing && brainV3.act === "correction" && !explicitPendingCommit
         ? brainV3.canonicalWork ?? utterance
         : null;
-    if (revisionText) {
+    if (revisionText && !deps.extractModel) {
       const revision = reviseBriefing(state.pendingBriefing.parsed, revisionText, clock);
       if (revision.changes.length) {
         state.pendingBriefing = { parsed: revision.parsed, createdAt: nowMs };
@@ -1808,7 +1818,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         });
       }
     }
-    if (((ownsPendingBriefing && reply.decision === "yes") || explicitPendingCommit) && !revisionText) {
+    if (brainV3.act === "confirmation" && ((ownsPendingBriefing && reply.decision === "yes") || explicitPendingCommit) && !revisionText) {
       const pending = state.pendingBriefing.parsed;
       const result = await deps.commit(pending, {
         tenantId: input.tenantId,
@@ -1821,7 +1831,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         (result?.receipts?.length ?? 0) > 0 ||
         (result?.commitmentIds?.length ?? 0) > 0
       );
-      if (writeSucceeded) {
+      if (result?.failed?.length) {
+        state.pendingBriefing = { parsed: { ...pending, items: result.failed.map(failure => failure.item) }, createdAt: nowMs };
+      } else if (writeSucceeded) {
         state.pendingBriefing = null;
       }
       mark("briefing");
@@ -1880,7 +1892,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       conversationTarget !== "pending_briefing" &&
       effectivePendingRelationship !== "continues_pending"
     ) {
-      state.pendingBriefing = null;
       state.pendingReminded = false;
     }
   }
@@ -2028,21 +2039,43 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
   const workExecutionText = brainV3.canonicalWork ?? utterance;
   let parsed = parseBriefingDeterministically(brainAllowsWork ? workExecutionText : utterance, clock);
-  if (
+  let modelRevisedPending = false;
+  const structuredRecovery = brainAllowsWork && state.surfacedRecoveryAccounts?.length && referencesStructuredRecoveryGroup(utterance)
+    ? assembleReferencedDayLineWork({ utterance, priorOperatorUtterances: [], clock, unfinished: looksUnfinished, surfacedAccounts: state.surfacedRecoveryAccounts })
+    : [];
+  if (structuredRecovery.length) {
+    // Preserve already-resolved customer IDs; a model must not replace these with names.
+    parsed = { ...parsed, items: structuredRecovery };
+  } else if (brainAllowsWork && deps.extractModel) {
+    const vocabulary = await deps.vocabulary(input.tenantId).catch(() => [] as string[]);
+    modelRevisedPending = Boolean(state.pendingBriefing && conversationTarget === "pending_briefing" && brainV3.workDisposition !== "commit");
+    const model = await deps.extractModel({
+      tenantId: input.tenantId, utterance, canonicalWork: brainV3.canonicalWork,
+      clock, vocabulary, recentTurns: history(),
+      pendingItems: state.pendingBriefing?.parsed.items,
+      heldItems: state.heldBriefingItems,
+      revisePending: modelRevisedPending,
+    }).catch(() => null);
+    if (!model) {
+      // Never silently substitute a keyword parser for a failed semantic extraction.
+      // The operator turn is already in durable conversation state; held work remains intact.
+      mark("fallback", { fallbackReason: "work_interpretation_unavailable" });
+      return finish({ speak: "I have what you said, but I couldn't safely organize that work yet. Nothing new was saved.", kind: "answered" });
+    }
+    parsed = model;
+  } else if (
     brainAllowsWork &&
     (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance))
   ) {
+    // Explicitly injected offline compatibility path. Production always uses
+    // semantic extraction and fails closed if it cannot return a grounded result.
     const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
-    const priorOnly = prior.at(-1) === utterance ? prior.slice(0, -1) : prior;
     const assembled = assembleReferencedDayLineWork({
-      utterance,
-      priorOperatorUtterances: priorOnly,
-      clock,
-      unfinished: looksUnfinished,
-      history: state.history,
+      utterance, priorOperatorUtterances: prior.at(-1) === utterance ? prior.slice(0, -1) : prior,
+      clock, unfinished: looksUnfinished, history: state.history,
       surfacedAccounts: state.surfacedRecoveryAccounts,
     });
-    if (assembled.length) parsed = { ...parsed, items: assembled, source: "deterministic" };
+    if (assembled.length && (brainV3.canonicalWork || !interpretTurn(utterance).hasBusinessQuestion)) parsed = { ...parsed, items: assembled };
   }
   /** Brain V3 is the only authority for whether task-shaped language is actually work. */
   const skipBriefing =
@@ -2065,6 +2098,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       )));
   const explicitCommitNow =
     brainV3.workDisposition === "commit" &&
+    (brainV3.act !== "narration" && brainV3.act !== "acknowledgement" && brainV3.act !== "unclear") &&
     !state.dayLineSuppressed &&
     !wantsBatchProposal &&
     parsed.items.length > 0 &&
@@ -2083,8 +2117,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const same = openItems.filter(
       item => item.existing && (!item.executionType || item.existing.executionType === item.executionType)
     );
-    state.pendingBriefing = null;
-    state.pendingProposal = null;
+    const heldBeforeCommit = state.pendingBriefing;
     state.pendingReminded = false;
     if (!creates.length && !updates.length && same.length) {
       mark("briefing");
@@ -2103,13 +2136,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         vehicleId: input.operatorUserId,
       }
     );
+    // Preserve unrelated work without making the next "yes" authorize it.
+    const savedKeys = new Set([...(result.added ?? []), ...(result.completed ?? []), ...(result.alreadyPresent ?? []), ...same]
+      .map(item => `${item.businessDate}:${item.title.toLowerCase()}`));
+    const attemptedKeys = new Set(openItems.map(item => `${item.businessDate}:${item.title.toLowerCase()}`));
+    const unrelated = [...(state.heldBriefingItems ?? []), ...(heldBeforeCommit?.parsed.items ?? [])]
+      .filter(item => !savedKeys.has(`${item.businessDate}:${item.title.toLowerCase()}`) && !attemptedKeys.has(`${item.businessDate}:${item.title.toLowerCase()}`));
+    state.heldBriefingItems = Array.from(new Map(unrelated.map(item => [`${item.businessDate}:${item.title.toLowerCase()}`, item])).values());
+    state.pendingBriefing = result.failed?.length
+      ? { parsed: { ...reconciled, items: result.failed.map(failure => failure.item) }, createdAt: nowMs } : null;
     mark("briefing");
     const weeklySpeech = await completeMorningReconciliation();
     const updateSpeech = (result.receipts ?? [])
       .filter(receipt => receipt.claimedState === "updated")
       .map(receipt => `Updated: ${receipt.statement}.`)
       .join(" ");
-    const createdSpeech = result.added?.length ? speakBriefingCommit(result, today) : "";
+    const createdSpeech = speakBriefingCommit(result, today);
     return finish({
       speak: weeklySpeech,
       receiptBackedCommit: [createdSpeech, updateSpeech].filter(Boolean).join(" "),
@@ -2133,15 +2175,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     wantsBatchProposal;
   const singleFlow = !multiItem && parsed.items.length <= 1 && singleIntentFlow(workExecutionText);
 
-  if (!businessQuestion && (multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(workExecutionText) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
-    const vocabulary = await deps.vocabulary(input.tenantId).catch(() => [] as string[]);
-    if (deps.extractModel && (input.surface === "voice" || parsed.unparsed.length > 0)) {
-      const model = await deps.extractModel({ tenantId: input.tenantId, utterance: workExecutionText, clock, vocabulary, recentTurns: history() });
-      if (model && model.items.length >= Math.max(1, parsed.items.length - 1)) {
-        parsed = { ...model, questions: model.questions.length ? model.questions : parsed.questions, context: model.context.length ? model.context : parsed.context };
-      }
-    }
-    const earlier = [...(state.pendingBriefing?.parsed.items ?? []), ...carried];
+  if (!businessQuestion && (parsed.source === "model" || multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(workExecutionText) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
+    const earlier = modelRevisedPending ? [] : [...(state.pendingBriefing?.parsed.items ?? []), ...carried];
     const combinedItems = [...earlier];
 
     const heldActionKey = (title: string): string => {
@@ -2244,6 +2279,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (
       addable &&
       brainV3.workDisposition === "commit" &&
+      (brainV3.act !== "narration" && brainV3.act !== "acknowledgement" && brainV3.act !== "unclear") &&
       !state.dayLineSuppressed &&
       !wantsBatchProposal
     ) {
@@ -2282,6 +2318,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
   if (
     brainAllowsWork &&
+    parsed.source !== "model" &&
     !commitmentTried &&
     !isCombineRequest(lower) &&
     (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))
@@ -2322,6 +2359,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   if (
     brainAllowsWork &&
+    parsed.source !== "model" &&
     !commitmentTried &&
     !isCombineRequest(lower) &&
     !parsed.questions.length &&

@@ -23,7 +23,7 @@ describe("briefing canonical readback", () => {
     const f = fixture();
     const result = await commitBriefing(parsed(), scope, f.ports);
     expect(result.added).toHaveLength(2);
-    expect(speakBriefingCommit(result, "2026-10-11")).toBe("Done. 2 on tomorrow's line.");
+    expect(speakBriefingCommit(result, "2026-10-11")).toBe("Added Call Ava for tomorrow. Added Send Blake the estimate for tomorrow.");
     expect(f.readCanonical).toHaveBeenCalledTimes(2);
     expect(f.readCanonical.mock.calls.every(([arg]) => arg.actorId === "1" && arg.businessDate === "2026-10-12" && arg.tenantId === "tenant-a")).toBe(true);
   });
@@ -43,7 +43,7 @@ describe("briefing canonical readback", () => {
     expect(replay.added).toHaveLength(0);
     expect(replay.alreadyPresent).toHaveLength(2);
     expect(replay.receipts.every(receipt => receipt.claimedState !== "created")).toBe(true);
-    expect(speakBriefingCommit(replay, "2026-10-11")).toMatch(/2 already on/);
+    expect(speakBriefingCommit(replay, "2026-10-11")).toBe("Already saved Call Ava for tomorrow. Already saved Send Blake the estimate for tomorrow.");
   });
   it("does not treat an attempted completion as verified completion", async () => {
     const f = fixture();

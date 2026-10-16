@@ -4,6 +4,7 @@ import { claireModelRequest } from "../claireModel";
 import { isValidYmd } from "../../analytics/businessPeriods";
 import { dayMention, parseTiming, spokenDay } from "./briefingTiming";
 import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from "./briefingTypes";
+import { explicitOperatorExecutionType } from "../../../shared/objectiveExecution";
 import { enforceTitleContract, explicitTrackingRequest } from "./titleContract";
 
 /**
@@ -28,6 +29,7 @@ const itemSchema = z.object({
   needs: z.string(),
   /** commitment = a stated obligation/assignment or an explicit ask to track; fyi_plan = casual plans/answers about their day. */
   intent: z.enum(["commitment", "fyi_plan"]).optional(),
+  executionType: z.enum(["mission", "challenge", "hybrid_objective"]).nullable().optional(),
 });
 
 const outputSchema = z.object({
@@ -49,7 +51,7 @@ const JSON_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["kind", "title", "quote", "day", "date", "timingWords", "quantity", "people", "place", "needs"],
+          required: ["kind", "title", "quote", "day", "date", "timingWords", "quantity", "people", "place", "needs", "intent", "executionType"],
           properties: {
             kind: { type: "string", enum: ["completed", "new_work"] },
             title: { type: "string" },
@@ -61,6 +63,7 @@ const JSON_SCHEMA = {
             people: { type: "array", items: { type: "string" } },
             place: { type: "string" },
             needs: { type: "string" },
+            executionType: { type: ["string", "null"], enum: ["mission", "challenge", "hybrid_objective", null] },
             intent: { type: "string", enum: ["commitment", "fyi_plan"] },
           },
         },
@@ -119,25 +122,37 @@ export type ModelBriefingInput = {
   clock: BriefingClock;
   /** Names Goldline already knows (accounts, buildings, locations, customers). */
   vocabulary: string[];
+  /** Resolved scope from the turn interpreter; never substitutes for source speech. */
+  canonicalWork?: string | null;
+  /** Held work is context; only revise the complete bundle when revisePending is true. */
+  pendingItems?: BriefingItem[];
+  /** Earlier uncommitted work outside the currently offered bundle. */
+  heldItems?: BriefingItem[];
+  revisePending?: boolean;
   recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
 };
 
 export function validateModelBriefing(raw: z.infer<typeof outputSchema>, input: ModelBriefingInput): ParsedBriefing {
   const { utterance, clock, vocabulary } = input;
   const vocabularyText = vocabulary.join(" ");
+  const operatorSource = [
+    ...(input.recentTurns ?? []).filter(turn => turn.speaker === "operator").map(turn => turn.text),
+    ...(input.pendingItems ?? []).map(item => item.quote),
+    ...(input.heldItems ?? []).map(item => item.quote),
+    utterance,
+  ].join(" ");
   const context = raw.context.filter(line => grounded(line, utterance)).map(line => line.trim());
   const items: BriefingItem[] = [];
   for (const candidate of raw.items) {
     const quote = candidate.quote.trim();
-    if (!quote || !grounded(quote, utterance)) continue;
-    // Day: explicit words in the quote win; otherwise the model's day only if the utterance supports it.
+    if (!quote || !grounded(quote, operatorSource)) continue;
+    // The extractor resolves the work date separately from dates inside quoted copy.
     let businessDate = clock.today;
-    const quoteDay = dayMention(quote, clock.today);
-    if (quoteDay) businessDate = quoteDay.ymd;
-    else if (candidate.day === "tomorrow" && /\b(?:tomorrow|tmrw)\b/i.test(utterance)) businessDate = dayMention("tomorrow", clock.today)!.ymd;
+    if (candidate.day === "today") businessDate = clock.today;
+    else if (candidate.day === "tomorrow" && /\b(?:tomorrow|tmrw)\b/i.test(operatorSource)) businessDate = dayMention("tomorrow", clock.today)!.ymd;
     else if (candidate.day === "date" && isValidYmd(candidate.date) && candidate.date >= clock.today) {
       const words = spokenDay(candidate.date, clock.today).toLowerCase().split(/[,\s]+/).filter(word => word.length > 2);
-      if (words.some(word => normalize(utterance).includes(word))) businessDate = candidate.date;
+      if (words.some(word => normalize(operatorSource).includes(word))) businessDate = candidate.date;
     }
     // Timing: only from words in the quote itself — never from "It's 9:30am" context.
     let timing: BriefingTiming = { kind: "none" };
@@ -172,6 +187,7 @@ export function validateModelBriefing(raw: z.infer<typeof outputSchema>, input: 
       place: candidate.place.trim() && (grounded(candidate.place, quote) || grounded(candidate.place, vocabularyText)) ? candidate.place.trim() : null,
       needs: candidate.kind === "new_work" && candidate.needs.trim() ? candidate.needs.trim() : null,
       existing: null,
+      executionType: candidate.executionType ?? explicitOperatorExecutionType(quote),
     });
   }
   const questions = raw.questions.filter(question => grounded(question, utterance)).map(question => question.trim());
@@ -186,11 +202,14 @@ export async function extractBriefingWithModel(
   const timeoutMs = deps.timeoutMs ?? 7_000;
   const system = [
     `You split an operator's spoken or typed briefing into distinct pieces of work. Business-local now: ${input.clock.today}, ${String(Math.floor(input.clock.minutesNow / 60)).padStart(2, "0")}:${String(input.clock.minutesNow % 60).padStart(2, "0")} (Los Angeles).`,
-    "One item per distinct task. A list of five errands is five items. Never merge separate tasks and never drop any.",
+    "One item per distinct task. Keep a linked campaign and its requested deliverables together when the operator asks to track that campaign. Preserve conditions, dependencies and every deliverable in quote; never reduce 'charge only unpaid orders' to unconditional charging.",
+    "The current utterance controls scope. Use recentConversation to resolve references, not to collect everything ever discussed. canonicalWork is a scope hint, not evidence. pendingItems is the current offered bundle. heldItems is earlier uncommitted work outside that bundle; use it only if the current request explicitly refers to it. Neither list is authorization to save it all. If revisePending is true, return the complete updated bundle, including untouched work; otherwise return only the work in the current request. Apply corrections only to their referents.",
+    "Quoted ad copy, scripts, examples and hypothetical customer promises are context, not operational work. 'The ad says pickup tomorrow' never creates a pickup task. The campaign deadline is separate from dates advertised to customers.",
+    "executionType: preserve an explicitly requested marketing challenge as challenge, sales mission as mission, hybrid objective as hybrid_objective. Otherwise null; do not invent classification. intent must be commitment or fyi_plan.",
     "kind 'completed' = work the operator says is already done (\"delivered John's order\", \"John is already delivered\"). kind 'new_work' = work still to do.",
     "Statements of the current time or date (\"It's 9:30am on Tuesday\") are context, never a task time. Hearsay, feelings, and background are context.",
     "day: 'tomorrow' only for work the operator places tomorrow; a 'Tomorrow…' section applies to the work listed under it. 'date' with date=YYYY-MM-DD for a named future date or weekday. Otherwise 'today'.",
-    "quote: copy the exact words of the utterance that describe this item (verbatim, including any timing words). title: THE ACTION ONLY, 3 to 8 words, verb + object, in the operator's own words (e.g. 'Make Zeely Instagram static ad'). Never put reasons, feelings, who asked, worries, or background in a title; those stay in the quote/context. You may correct an obviously misheard business name using the vocabulary list, but never add facts.",
+    "quote: copy the exact words of the operator utterance or earlier operator turns that describe this item (verbatim, including any timing words). title: THE ACTION ONLY, 3 to 8 words, verb + object, in the operator's own words (e.g. 'Make Zeely Instagram static ad'). Never put reasons, feelings, who asked, worries, or background in a title; those stay in the quote/context. You may correct an obviously misheard business name using the vocabulary list, but never add facts.",
     "intent: 'commitment' when the operator states an obligation, assignment, deadline, or asks you to add/track/remind. 'fyi_plan' for casual statements of personal plans, routines, or answers to a question about their day (church, resting, chores, 'no sales stops'). An answer to your question is NOT a request to create tasks.",
     "timingWords: the exact words giving this task's time (\"before noon\", \"at seven\", \"9 - 10am window\"), or ''.",
     "quantity: an integer only when the operator said a number for this item, else 0. people/place: only names the operator said (or the vocabulary spelling of a misheard one), else [] / ''.",
@@ -211,7 +230,11 @@ export async function extractBriefingWithModel(
         role: "user",
         content: JSON.stringify({
           vocabulary: input.vocabulary.slice(0, 120),
-          recentConversation: (input.recentTurns ?? []).slice(-6),
+          recentConversation: (input.recentTurns ?? []).slice(-16),
+          canonicalWork: input.canonicalWork ?? null,
+          pendingItems: input.pendingItems ?? null,
+          heldItems: input.heldItems ?? null,
+          revisePending: input.revisePending ?? false,
           utterance: input.utterance.slice(0, 4_000),
         }),
       },
@@ -226,7 +249,7 @@ export async function extractBriefingWithModel(
       }),
     ]);
     if (!result) {
-      console.warn("[Claire] briefing extraction timed out; using structural parse");
+      console.warn("[Claire] briefing extraction timed out; no semantic result");
       return null;
     }
     const content = result.choices[0]?.message?.content;
@@ -234,7 +257,7 @@ export async function extractBriefingWithModel(
     if (!parsed.success) return null;
     return validateModelBriefing(parsed.data, input);
   } catch (error) {
-    console.warn("[Claire] briefing extraction failed; using structural parse", error instanceof Error ? error.message : error);
+    console.warn("[Claire] briefing extraction failed; no semantic result", error instanceof Error ? error.message : error);
     return null;
   } finally {
     if (timer) clearTimeout(timer);

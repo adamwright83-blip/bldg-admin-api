@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksUnfinished, replyDecision } from "./claireTurn";
+import { conversationHistoryForModel, looksUnfinished, replyDecision } from "./claireTurn";
 import { createDatabaseConversationStateStore, createMemoryConversationStateStore } from "./conversationStateStore";
 
 const owner = { tenantId: "default", operatorUserId: "adam-admin", surface: "voice" as const };
@@ -46,5 +46,18 @@ describe("what counts as an answer to Claire's question", () => {
     expect(looksUnfinished("and then I have to")).toBe(true);
     expect(looksUnfinished("Timing is 9:30am.")).toBe(false);
     expect(looksUnfinished("Yes.")).toBe(false);
+  });
+});
+
+
+describe("speech is not automatically heard", () => {
+  it("keeps generated and interrupted responses distinct from playback-confirmed responses", () => {
+    const history = conversationHistoryForModel([
+      { speaker: "operator", text: "Save it.", at: 1 },
+      { speaker: "claire", text: "It is saved.", at: 2, delivery: "generated" },
+      { speaker: "claire", text: "Here is the plan.", at: 3, delivery: "interrupted" },
+      { speaker: "claire", text: "Which day?", at: 4, delivery: "confirmed_heard" },
+    ]);
+    expect(history.map(turn => turn.text)).toEqual(["Save it.", "[Playback unconfirmed] It is saved.", "[Playback interrupted] Here is the plan.", "Which day?"]);
   });
 });

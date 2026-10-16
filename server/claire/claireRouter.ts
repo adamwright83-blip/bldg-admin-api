@@ -63,14 +63,7 @@ import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
-import {
-  brainV2CallControlResult,
-  brainV2ExecutionFailureResult,
-  executeGrantBoundLegacyAdapter,
-  isClaireBrainV2LiveEnabled,
-  runClaireBrainV2LiveTurn,
-  shouldFallbackToClaireLegacy,
-} from "./brain/live/runClaireBrainV2LiveTurn";
+
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import {
@@ -349,82 +342,7 @@ export const claireRouter = router({
           surface: "desktop",
         },
         async () => {
-          const liveV2 = await runClaireBrainV2LiveTurn({
-            rawText: input.utterance,
-            assembledText: input.utterance,
-            state: readOnlyWorkingMemorySource(state),
-            tenantId: scope.tenantId,
-            operatorUserId: scope.operatorUserId,
-            surface: "text",
-            conversationKey: key,
-            live: {
-              tenantId: scope.tenantId,
-              operatorUserId: scope.operatorUserId,
-              conversationId: input.conversationId ?? "desk",
-              dayDirectorActorId: actorId,
-              timeZone: input.timeZone ?? "America/Los_Angeles",
-              businessDate:
-                context.businessDate ?? new Date().toISOString().slice(0, 10),
-              surface: "text",
-              priorClaimReceipts: state.claimReceipts ?? [],
-            },
-            executeLegacyAdapter: async grant =>
-              executeGrantBoundLegacyAdapter({
-                grant,
-                state,
-                tenantId: scope.tenantId,
-                operatorUserId: scope.operatorUserId,
-                dayDirectorActorId: actorId,
-                conversationKey: key,
-                timeZone: input.timeZone ?? "America/Los_Angeles",
-                surface: "text",
-              }),
-          });
-          if (liveV2.active) {
-            const turnResult = liveV2.adapterResult
-              ? liveV2.adapterResult
-              : liveV2.result.candidateEndCall
-                ? brainV2CallControlResult({
-                    candidateSpeak: liveV2.result.candidateSpeak,
-                    assembledUtterance: input.utterance,
-                  })
-                : (() => {
-                    throw new Error(
-                      "Brain V2 live action returned without a grant-bound adapter result"
-                    );
-                  })();
-            console.info("[ClaireBrainV2]", {
-              event: "claire_brain_v2_live",
-              surface: "desktop",
-              conversationKey: key,
-              actionClasses: liveV2.actionClasses,
-              endCall: liveV2.result.candidateEndCall,
-              adapterKind: liveV2.adapterResult?.kind ?? null,
-              actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
-              mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
-              receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
-            });
-            return {
-              brainV2LiveHandled: true,
-              result: turnResult,
-            };
-          }
-
-          if (!shouldFallbackToClaireLegacy(liveV2)) {
-            console.warn("[ClaireBrainV2]", {
-              event: "claire_brain_v2_live_execution_failed",
-              surface: "desktop",
-              conversationKey: key,
-              reason: liveV2.reason,
-            });
-            return {
-              brainV2LiveHandled: true,
-              result: brainV2ExecutionFailureResult({
-                assembledUtterance: input.utterance,
-              }),
-            };
-          }
-
+          // Phone and desk share the same live conversation/work owner.
           return {
             brainV2LiveHandled: false,
             result: await runLegacyAdapter(),
@@ -442,11 +360,7 @@ export const claireRouter = router({
       const observation = observationUtteranceForBrain(result);
       if (
         observation.observe &&
-        !brainV2LiveHandled &&
-        !isClaireBrainV2LiveEnabled({
-          tenantId: scope.tenantId,
-          operatorUserId: scope.operatorUserId,
-        })
+        !brainV2LiveHandled
       ) {
         observeShadowTurnDetached({
           rawText: observation.assembledText,

@@ -27,6 +27,15 @@ export type GoldlineCapability = {
 
 export const GOLDLINE_CAPABILITY_REGISTRY: GoldlineCapability[] = [
   {
+    id: "claire.authorized_operator_calls",
+    domain: "claire",
+    description: "Claire places authorized scheduled calls to the operator, including morning readiness and evening debrief. This does not authorize calls to customers.",
+    status: "CONDITIONALLY_SUPPORTED",
+    allowedSurfaces: ["phone"],
+    permissionLevel: "human_approval",
+    implementation: "placePreDriveCall",
+  },
+  {
     id: "dayline.create",
     domain: "dayline",
     description: "Add a Day Director commitment to the Daily Line",
@@ -113,7 +122,8 @@ export function formatCapabilityBriefing(
     unsupported.length
       ? `Not yet supported: ${unsupported.join(", ")}. If asked, say so and offer engineering; never pretend.`
       : "",
-    "The registry is authoritative.",
+    "Claire can place authorized scheduled calls to the operator, including morning readiness and evening debrief. Never deny that capability. A particular call or disconnect cause is unknown unless a call event is supplied. This does not authorize customer outreach.",
+    "The registry describes platform capabilities; absence from it is not evidence that a specific call did not happen.",
   ]
     .filter(Boolean)
     .join(" ");

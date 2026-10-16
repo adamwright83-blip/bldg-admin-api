@@ -14,6 +14,7 @@ export type ClaireGenerationDiagnostic = {
   kind: ClaireGenerationKind;
   source: ClaireGenerationSource;
   failureReason: string | null;
+  failureStage?: string;
   /**
    * PR1 Claire Intelligence Repair (test-matrix items 20/21): the model
    * requested for this generation (e.g. ENV.anthropicModelClaire ||
@@ -83,6 +84,8 @@ const counters = new Map<string, { attempts: number; fallbacks: number }>();
 
 export function safeClaireFailureReason(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
+  if (/identity truth contradiction/i.test(message)) return "identity_contradiction";
+  if (/timeout|timed out|aborted/i.test(message)) return "timeout";
   if (/hard limit|spend/i.test(message)) return "spend_limit";
   if (/authentication|api key/i.test(message)) return "authentication_failed";
   if (/rate limit/i.test(message)) return "rate_limited";
@@ -115,6 +118,7 @@ export async function recordClaireGeneration(input: {
     kind: input.diagnostic.kind,
     source: input.diagnostic.source,
     failureReason: input.diagnostic.failureReason,
+    failureStage: input.diagnostic.failureStage ?? null,
     modelRequested: input.diagnostic.modelRequested ?? null,
     surface: input.diagnostic.surface ?? "voice",
     stopReason: input.diagnostic.stopReason ?? null,

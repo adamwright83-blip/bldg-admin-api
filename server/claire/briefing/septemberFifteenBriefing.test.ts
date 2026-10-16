@@ -251,7 +251,9 @@ describe("existing work and truthful saving", () => {
     expect(accepted.filter(entry => entry.businessDate === TOMORROW)).toHaveLength(1);
     expect(new Set(accepted.map(entry => entry.promptKey)).size).toBe(accepted.length);
     expect(complete).toHaveBeenCalledTimes(1);
-    expect(speakBriefingCommit(result, TODAY)).toBe("Done. 7 on today's line, 1 on tomorrow's line, and 1 marked done.");
+    for (const item of result.added) expect(speakBriefingCommit(result, TODAY)).toContain(item.title);
+    expect(speakBriefingCommit(result, TODAY)).toContain("for tomorrow");
+    expect(speakBriefingCommit(result, TODAY)).toContain("Marked done");
 
     const again = await commitBriefing(parsed, { tenantId: "default", dayDirectorActorId: "1", conversationKey: "call-1" }, {
       accept: accept as never,
@@ -274,7 +276,8 @@ describe("existing work and truthful saving", () => {
       update: vi.fn(async () => ({ ok: true as const, id: "x" })) as never,
     });
     const spoken = speakBriefingCommit(result, TODAY);
-    expect(spoken).toBe("I saved 1 item, but 1 didn't save: Call Todd. Want me to try those again?");
+    expect(spoken).toContain("Added Pick up OPUS towels for today.");
+    expect(spoken).toContain("1 didn't save: Call Todd");
     expect(spoken).not.toMatch(/^Done/);
   });
 });
@@ -469,7 +472,9 @@ describe("the September 15 call, replayed through Claire", () => {
     expect(state.pendingBriefing?.parsed.items).toHaveLength(9);
     const saved = await turn(state, "Yes.", deps);
     expect(deps.commit).toHaveBeenCalledTimes(1);
-    expect(saved.speak).toBe("Done. 7 on today's line, 1 on tomorrow's line, and 1 marked done.");
+    expect(saved.speak).toContain("Added Pickup KITH TREATS aprons");
+    expect(saved.speak).toContain("for tomorrow");
+    expect(saved.speak).toContain("Marked done Delivered John's order");
     expect(state.pendingBriefing).toBeNull();
   });
 
@@ -495,7 +500,7 @@ describe("the September 15 call, replayed through Claire", () => {
     expect(saved.kind).toBe("briefing_saved");
     expect(saved.actionIds?.length).toBeGreaterThan(0);
     expect(saved.mutationReceipts?.length).toBeGreaterThan(0);
-    expect(saved.speak).toMatch(/Done\./);
+    expect(saved.speak).toContain("Added Call Todd for today.");
     expect(state.pendingBriefing).toBeNull();
   });
 
@@ -558,7 +563,66 @@ describe("the September 15 call, replayed through Claire", () => {
     const result = await turn(state, "How much has John spent with us, and remind me to pick his laundry up Friday.", deps, "text");
     expect(result.kind).toBe("briefing_saved");
     expect(result.speak).toContain("John Cunningham has spent $476 across 7 paid orders");
-    expect(result.speak).toMatch(/Done\./);
+    expect(result.speak).toMatch(/Added .*for Friday/);
     expect(result.speak).not.toMatch(/Want me to put that on the Day Line\?$/);
+  });
+});
+
+describe("October 15 conversation integrity (injected semantic results)", () => {
+  const campaignText = "Before I leave work, create the Laundry Farm landing page and Instagram ad. The ad says we will pick up tomorrow, 20 pounds free.";
+  const campaign = (utterance = "Add the marketing challenge to the Day Line for today.") => validateModelBriefing({
+    items: [{ kind: "new_work", title: "Create Laundry Farm landing page and Instagram ad", quote: campaignText,
+      day: "today", date: "", timingWords: "", quantity: 0, people: [], place: "", needs: "",
+      intent: "commitment", executionType: "challenge" }], context: [], questions: [],
+  }, { tenantId: "default", utterance, clock, vocabulary: [], recentTurns: [{ speaker: "operator", text: campaignText }] });
+  const brain = (act: "action_request" | "work_commitment", disposition: "commit" | "propose") => vi.fn(async () => ({
+    target: "open_conversation" as const, act, workDisposition: disposition, dayLineDisposition: "none" as const,
+    priorClaim: "none" as const, weeklyDisposition: "none" as const, broadBriefingRequest: false,
+    canonicalWork: campaignText, referent: "marketing campaign", rationale: "Test supplies semantic result, not a live model replay.",
+  }));
+
+  it("keeps both campaign deliverables, explicit classification, and today's work date despite tomorrow in the ad", () => {
+    const result = campaign();
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ businessDate: TODAY, executionType: "challenge" });
+    expect(result.items[0].title).toMatch(/landing page.*Instagram ad/);
+    expect(result.items[0].quote).toBe(campaignText);
+  });
+
+  it("extracts explicit add commands before committing and preserves unrelated held deliveries", async () => {
+    const held = parseBriefingDeterministically("I have to deliver two dry cleaning orders tonight.", clock);
+    const state: ClaireTurnState = { pendingBriefing: { parsed: held, createdAt: NOW.getTime() },
+      history: [{ speaker: "operator", text: campaignText, at: NOW.getTime() }] };
+    const extractModel = vi.fn(async () => campaign());
+    const deps = turnDeps({ brainV3: brain("action_request", "commit"), extractModel });
+    const result = await turn(state, "Add the marketing challenge to the Day Line for today.", deps);
+    expect(extractModel).toHaveBeenCalledOnce();
+    expect(deps.commit).toHaveBeenCalledOnce();
+    expect((deps.commit as ReturnType<typeof vi.fn>).mock.calls[0][0].items).toEqual(campaign().items);
+    expect(state.heldBriefingItems).toEqual(held.items);
+    expect(state.pendingBriefing).toBeNull();
+    expect(result.speak).toMatch(/challenge.*today/);
+    expect(state.history?.some(entry => entry.text === campaignText)).toBe(true);
+  });
+
+  it("does not replace a failed semantic extraction with keyword writes and retains the accepted instruction", async () => {
+    const state: ClaireTurnState = {};
+    const deps = turnDeps({ brainV3: brain("action_request", "commit"), extractModel: vi.fn(async () => null) });
+    const utterance = "Add the marketing challenge to the Day Line for today.";
+    const result = await turn(state, utterance, deps);
+    expect(deps.commit).not.toHaveBeenCalled();
+    expect(result.speak).toContain("Nothing new was saved");
+    expect(state.history?.some(entry => entry.speaker === "operator" && entry.text === utterance)).toBe(true);
+  });
+
+  it("holds a failed explicit save for retry instead of losing the work", async () => {
+    const parsed = campaign();
+    const state: ClaireTurnState = {};
+    const deps = turnDeps({ brainV3: brain("action_request", "commit"), extractModel: vi.fn(async () => parsed),
+      commit: vi.fn(async () => ({ added: [], completed: [], failed: [{ item: parsed.items[0], error: "write failed" }], commitmentIds: [], receipts: [] })) });
+    const result = await turn(state, "Add the marketing challenge to the Day Line for today.", deps);
+    expect(state.pendingBriefing?.parsed.items).toEqual(parsed.items);
+    expect(result.speak).toMatch(/didn.t save|couldn.t verify the save|nothing saved/i);
+    expect(result.actionIds).toEqual([]);
   });
 });

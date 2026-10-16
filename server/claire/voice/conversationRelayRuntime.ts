@@ -25,6 +25,7 @@ export type RelaySemanticTurnInput = {
   callSid: string | null;
   token: string;
   allowFragmentWait: false;
+  previousSpeech?: ClaireSpeechAccount;
 };
 
 export type RelaySemanticTurnResult = {
@@ -171,6 +172,7 @@ export class ConversationRelaySocketRuntime {
       callSid: this.callSid,
       token: this.options.token,
       allowFragmentWait: false,
+      ...(this.speech ? { previousSpeech: { ...this.speech } } : {}),
     });
     if (this.intentionalEnd || this.stoppedGenerations.has(generation)) {
       this.speech = applyBargeIn(
