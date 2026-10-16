@@ -3,6 +3,7 @@ import type { CozyCustomerTarget, CozyEncounterMission } from "./cozyVillagerOut
 import {
   COZY_VILLAGER_EVIDENCE_CONTRACT,
   chooseOutreachEvidence,
+  communicationStateForRow,
   poseForCommunicationState,
   projectCozyRecoverySurfaces,
   villagerSprite,
@@ -79,6 +80,24 @@ const objective = {
 };
 
 describe("cozy villager evidence contract", () => {
+  it("reads a personal handoff draft as scheduled or awaiting, never sent", () => {
+    expect(
+      communicationStateForRow(
+        row({ status: "awaiting_sender_setup", deliveryIntent: "scheduled", dispatchedAt: null, externalMessageId: null }),
+        false
+      )
+    ).toBe("scheduled");
+    expect(
+      communicationStateForRow(
+        row({ status: "awaiting_sender_setup", deliveryIntent: "immediate", dispatchedAt: null, externalMessageId: null }),
+        false
+      )
+    ).toBe("awaiting_sender");
+    expect(poseForCommunicationState("scheduled")).not.toBe("acknowledged");
+    expect(poseForCommunicationState("awaiting_sender")).not.toBe("acknowledged");
+    expect(poseForCommunicationState("send_observed")).toBe("acknowledged");
+  });
+
   it("keeps reply and paid-order unavailable unless admitted evidence is supplied", () => {
     expect(COZY_VILLAGER_EVIDENCE_CONTRACT.reply).toMatch(/Unavailable/);
     expect(COZY_VILLAGER_EVIDENCE_CONTRACT.paidOrder).toMatch(/not a paid order/i);

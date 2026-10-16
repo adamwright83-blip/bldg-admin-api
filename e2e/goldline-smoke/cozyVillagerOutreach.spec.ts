@@ -84,7 +84,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole("heading", { name: customerName })).toBeVisible();
 
-    const uniqueText = `Playwright outreach acceptance text ${Date.now()}`;
+    const uniqueText = `Playwright outreach acceptance text ${Date.now()}. Reply STOP if you don't want these texts.`;
     const textarea = drawer.locator("textarea");
     await expect(textarea).toBeVisible();
     await textarea.fill(uniqueText);
@@ -190,9 +190,9 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(sendNowBtn).toBeEnabled();
     await sendNowBtn.click();
 
-    await expect(
-      drawer.getByText(/Committed to Outbox \(Awaiting Phone Connection\)/i)
-    ).toBeVisible({ timeout: 5000 });
+    await expect(drawer.getByText(/Saved for your phone\. Not sent\./i)).toBeVisible({
+      timeout: 5000,
+    });
     await expect(drawer).toHaveAttribute("data-communication-state", "awaiting_sender");
     await expect(drawer.getByRole("button", { name: /✓ COMMITTED/i })).toBeVisible();
     await expect(villager).toHaveAttribute("data-pose", "wave");
@@ -309,5 +309,140 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     await expect(encounter).toHaveCount(0);
     await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible({ timeout: 10000 });
+  });
+
+  test("opens the named Silver Lake customer and hands the exact text to Google Messages", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    await resetGoldlineProofWorld(page.request);
+    await page.addInitScript(() => {
+      window.localStorage.setItem("goldline:day1:dismissed", "1");
+      window.localStorage.setItem(
+        "goldline:onboarding:v1",
+        JSON.stringify(["first_entry_explained"])
+      );
+    });
+
+    await page.goto(
+      "/growth/lantern-city?cozy=1&territory=silver-lake&customer=phone%3A3105550141"
+    );
+    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    await expect(encounter).toBeVisible({ timeout: 15_000 });
+    const villagers = page.locator('div[role="button"][aria-label^="Select "]');
+    await expect(villagers).toHaveCount(1, { timeout: 15_000 });
+    const villager = villagers.first();
+    await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
+    await expect(villager).toHaveAttribute("data-house-title", /Cottage/);
+    await expect(villager).not.toHaveAttribute("data-pose", "acknowledged");
+    await expect(page.locator('[data-customer-id="phone:3105550199"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Select Rex Out" })).toHaveCount(0);
+
+    const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
+    await expect(drawer).toBeVisible({ timeout: 10_000 });
+    await expect(drawer).toHaveAttribute("data-customer-id", "phone:3105550141");
+    await expect(drawer.getByText(/orders \(\$/)).toBeVisible();
+    await expect(drawer.getByText(/days since last order/)).toBeVisible();
+
+    const textarea = drawer.locator("textarea").first();
+    const suggested = await textarea.inputValue();
+    expect(suggested).toMatch(/Hey Mei/i);
+    expect(suggested).toMatch(/Reply STOP/i);
+    const approved = suggested.replace(
+      "We can take laundry off your plate when you want.",
+      "We can take laundry off your plate this week when you want."
+    );
+    expect(approved).toMatch(/Reply STOP/i);
+    expect(approved).not.toBe(suggested);
+    await textarea.fill(approved);
+    await drawer.getByRole("button", { name: "APPROVE" }).click();
+    await expect(drawer.locator("[data-sms-approval='current']")).toBeVisible();
+    await drawer.getByRole("button", { name: "OPEN IN SMS" }).click();
+
+    const link = drawer.locator("[data-sms-open='google-messages']");
+    await expect(link).toBeVisible({ timeout: 15_000 });
+    const href = await link.getAttribute("href");
+    expect(href).toContain("intent://");
+    expect(href).toContain("com.google.android.apps.messaging");
+    expect(href).toContain("action=android.intent.action.VIEW");
+    expect(href).not.toContain("sms_body");
+    expect(href).not.toContain("body=");
+    await expect(drawer.locator("[data-sms-copy-fallback]")).toHaveValue(approved);
+    await expect(drawer.locator("[data-verified-sent='false']")).toBeVisible();
+    await expect(drawer.locator("[data-body-prefill-claimed='false']")).toBeVisible();
+    await expect(drawer.locator("[data-villager-pose='idle']")).toBeVisible();
+    await expect(villager).not.toHaveAttribute("data-pose", "acknowledged");
+    await expect(villager).not.toHaveAttribute("data-communication-state", "send_observed");
+
+    await page.reload();
+    await expect(encounter).toBeVisible({ timeout: 15_000 });
+    await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
+    await expect(villager).not.toHaveAttribute("data-communication-state", "send_observed");
+
+    await page.goto("/driver");
+    await expect(page.getByTestId("driver-day-home")).toBeVisible({ timeout: 30_000 });
+    const card = page.getByTestId("recovery-outreach-day-line-card");
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toHaveAttribute("data-customer-id", "phone:3105550141");
+    await expect(card).toHaveAttribute("data-objective-complete", "false");
+    await expect(card).not.toHaveAttribute("data-communication-state", "send_observed");
+    await expect(card.locator(".gdp-card-kicker strong")).toHaveText("OPEN");
+    const messageId = await card.getAttribute("data-message-id");
+    expect(messageId && messageId.length > 0).toBeTruthy();
+    await page.reload();
+    await expect(card).toHaveAttribute("data-message-id", messageId!);
+    await expect(card).toHaveAttribute("data-customer-id", "phone:3105550141");
+    await expect(card).toHaveAttribute("data-objective-complete", "false");
+    await context.close();
+  });
+
+  test("refuses an opt-out and a phone that is not a relationship", async ({ page }) => {
+    const scheduledFor = new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString();
+    const body = "Hey there. Reply STOP if you don't want these texts.";
+    const optOut = await page.request.post("/api/trpc/system.goldlineWorld.scheduleCozyOutreach", {
+      data: {
+        json: {
+          customerId: "phone:3105550199",
+          messageBody: body,
+          scheduledFor,
+          timezone: "America/Los_Angeles",
+          territoryId: "silver-lake",
+          idempotencyKey: "day-line-recovery:negative:phone:3105550199",
+        },
+      },
+    });
+    const optOutBody = await optOut.text();
+    expect(optOut.ok(), optOutBody).toBeFalsy();
+    expect(optOutBody).toMatch(/opt-out/i);
+    expect(optOutBody).toMatch(/never bypassed/i);
+
+    const stranger = await page.request.post("/api/trpc/system.goldlineWorld.scheduleCozyOutreach", {
+      data: {
+        json: {
+          customerId: "phone:3105550100",
+          messageBody: body,
+          scheduledFor,
+          timezone: "America/Los_Angeles",
+          territoryId: "silver-lake",
+          idempotencyKey: "day-line-recovery:negative:phone:3105550100",
+        },
+      },
+    });
+    const strangerBody = await stranger.text();
+    expect(stranger.ok(), strangerBody).toBeFalsy();
+    expect(strangerBody).toMatch(/not an existing relationship/i);
+    expect(strangerBody).toMatch(/not proof that nobody is inactive/i);
+
+    const listed = await page.request.get("/api/trpc/system.goldlineWorld.listScheduledOutreach");
+    expect(listed.ok(), await listed.text()).toBeTruthy();
+    const listedText = JSON.stringify(await listed.json());
+    expect(listedText).not.toContain("phone:3105550199");
+    expect(listedText).not.toContain("phone:3105550100");
   });
 });

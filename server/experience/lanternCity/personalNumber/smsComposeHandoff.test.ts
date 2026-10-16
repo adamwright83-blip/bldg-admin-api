@@ -5,7 +5,9 @@ import {
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
   SMS_COMPOSE_COPY_FALLBACK_LABEL,
   SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+  GOOGLE_MESSAGES_PACKAGE,
   SMS_COMPOSE_USES_ANDROID_INTENT,
+  googleMessagesThreadIntent,
   approvedBodyDigest,
   buildSameOriginPhoneContinuation,
   buildSmsComposeUri,
@@ -84,21 +86,25 @@ describe("sms compose URI", () => {
     expect(result.copyLabel).toMatch(/Nothing was prefilled/);
   });
 
-  it("falls back on Android without claiming the body was prefilled", () => {
+  it("opens the Google Messages thread on Android and does not claim a prefill", () => {
     const result = buildSmsComposeUri({
       recipientPhone: phone,
       body,
       clientKind: "android",
     });
     expect(result.kind).toBe("copy_fallback");
-    expect(result.uri).toBe(`sms:+12135550199?body=${encodeURIComponent(body)}`);
+    expect(result.uri).toBe(googleMessagesThreadIntent("2135550199"));
+    expect(result.uri).toContain(`package=${GOOGLE_MESSAGES_PACKAGE}`);
+    expect(result.uri).toContain("action=android.intent.action.VIEW");
+    expect(result.uri).not.toContain("sms_body");
+    expect(result.uri).not.toContain("body=");
     expect(result.fallbackUri).toBe("sms:+12135550199");
     expect(result.fallbackUri).not.toContain("body");
     expect(result.bodyPrefillClaimed).toBe(false);
     expect(result.prefillClaim).toBe("not_prefilled");
     expect(result.copyBody).toBe(body);
     expect(result.copyLabel).toBe(SMS_COMPOSE_COPY_FALLBACK_LABEL);
-    expect(result.copyLabel?.toLowerCase()).not.toMatch(/body was prefilled|prefilled the body|message is prefilled/);
+    expect(result.messagesPackage).toBe(GOOGLE_MESSAGES_PACKAGE);
     expect(result.actionSendto).toBe(false);
   });
 
@@ -135,14 +141,16 @@ describe("sms compose URI", () => {
     ).toThrow(/shortener/);
   });
 
-  it("does not use an Android intent bridge", () => {
-    expect(SMS_COMPOSE_USES_ANDROID_INTENT).toBe(false);
+  it("uses a browser intent for Google Messages and does not automate a send", () => {
+    expect(SMS_COMPOSE_USES_ANDROID_INTENT).toBe(true);
     expect(clientKindFromUserAgent("Mozilla/5.0 (Linux; Android 14)")).toBe("android");
     expect(clientKindFromUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe("ios");
     expect(clientKindFromUserAgent("Mozilla/5.0 (Macintosh)")).toBe("desktop");
     const source = readFileSync(new URL("./smsComposeHandoff.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/startActivity/);
-    expect(source).not.toMatch(/intent:/);
+    expect(source).not.toMatch(/messages\.google\.com/);
+    expect(source).not.toMatch(/sms_body/);
+    expect(source).toContain(GOOGLE_MESSAGES_PACKAGE);
   });
 });
 
