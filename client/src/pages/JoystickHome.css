@@ -63,6 +63,10 @@
 .jh-world-facts b{font:600 24px Georgia,serif}.jh-world-facts span{font-size:11px;color:#6f6c65}
 .jh-enter{margin-top:auto;display:flex;align-items:center;gap:18px;padding:14px 17px;border-radius:14px;background:#fff;color:#111!important;font:600 18px Georgia,serif;box-shadow:0 10px 30px rgba(30,35,40,.15)}
 .jh-enter svg{width:17px}
+.jh-city-clicks{position:absolute;z-index:4;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:240px}
+.jh-city-clicks button{pointer-events:auto;border:0;border-radius:999px;background:#fff;color:#17324a;font:700 12px/1.2 Georgia,serif;padding:8px 12px;box-shadow:0 8px 20px rgba(20,30,40,.18);cursor:pointer}
+.jh-customer-inspection{position:absolute;z-index:5;right:16px;top:16px;width:220px;padding:12px 14px;border-radius:14px;background:#fff;color:#17324a;display:flex;flex-direction:column;gap:4px}
+.jh-customer-inspection strong{font-size:13px}.jh-customer-inspection span{font-size:12px;word-break:break-all}
 .jh-right-rail{display:grid;grid-template-rows:1fr .72fr;gap:14px}
 .jh-panel{padding:17px}
 .jh-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:13px}

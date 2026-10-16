@@ -86,6 +86,9 @@ jobs:
       - name: Run production-service release journey
         run: pnpm test:legacy-dayforge:release:integration
 
+      - name: Claire CleanCloud order operation on disposable MySQL
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/claire/cleancloudOrderOperation.mysql.integration.test.ts
+
       - name: Build production bundles
         run: pnpm build
 

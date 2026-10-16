@@ -220,6 +220,7 @@ export async function reportSmsComposeOperatorSent(input: {
     continuationHref: null,
     continuationLabel: null,
     actionSendto: false,
+    messagesPackage: null,
     state: after.state,
     label: after.label,
     covers: after.covers,

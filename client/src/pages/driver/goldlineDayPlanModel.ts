@@ -203,6 +203,8 @@ export type DayPlanStop = {
   whySurfaced?: string | null;
   sourceEvidenceReference?: string | null;
   sourceOccurredAt?: string | null;
+  /** Where Home opens this stop. Absent means the driver Day Line itself. */
+  destinationPath?: string | null;
 };
 
 export type DayPlanProjection = {
@@ -401,6 +403,18 @@ function commercialStop(
   };
 }
 
+/** Stops the driver can start. The Day Plan's next stop is the first of these. */
+export function executableDayLineStops(
+  stops: readonly DayPlanStop[]
+): DayPlanStop[] {
+  return stops.filter(
+    stop =>
+      stop.status !== "completed" &&
+      stop.status !== "cancelled" &&
+      stop.status !== "blocked"
+  );
+}
+
 export function buildDayPlanProjection(input: {
   businessDate: string;
   pickups?: Order[];
@@ -569,6 +583,7 @@ export function buildDayPlanProjection(input: {
         whySurfaced: objective.explanation,
         sourceEvidenceReference: objective.sourceEvidenceReference,
         sourceOccurredAt: objective.sourceOccurredAt,
+        destinationPath: objective.destinationPath ?? null,
       })
     ),
   ];

@@ -126,36 +126,22 @@ export const goldlineWorldRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { resolveCanonicalCustomerContact } = await import(
+      const { commitPersonalOutreachDraft } = await import(
         "../experience/lanternCity/cozyVillagerOutreachService"
       );
-      const { createScheduledOutreachDraft } = await import(
-        "../experience/lanternCity/scheduledOutreachService"
-      );
-
-      const resolved = await resolveCanonicalCustomerContact({
-        tenantId: ctx.tenantId,
-        canonicalOperatorId: ctx.user.openId,
-        customerId: input.customerId,
-        territoryId: input.territoryId,
-        expectedPhone: input.expectedPhone,
-        timeZone: input.timezone,
-      });
-
-      return await createScheduledOutreachDraft({
+      return await commitPersonalOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        customerId: resolved.customerId,
-        customerName: resolved.customerName,
-        recipientPhone: resolved.phone,
-        originalSuggestedDraft: resolved.suggestedMessage,
-        messageBody: input.messageBody.trim(),
+        customerId: input.customerId,
+        messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
         timezone: input.timezone,
-        dstAmbiguityChoice: input.dstAmbiguityChoice,
+        expectedPhone: input.expectedPhone,
         slotId: input.slotId,
-        territoryId: resolved.territoryId,
+        territoryId: input.territoryId,
+        dstAmbiguityChoice: input.dstAmbiguityChoice,
         idempotencyKey: input.idempotencyKey,
+        deliveryIntent: "scheduled",
       });
     }),
   listScheduledOutreach: legacyDayforgeTenantOperatorProcedure

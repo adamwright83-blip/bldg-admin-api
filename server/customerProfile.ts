@@ -72,12 +72,34 @@ export type CustomerOrderLine = {
   id: number;
   createdAt: Date;
   serviceType: Order["serviceType"];
+  /** Stored order total in cents. This is not captured money. */
+  orderTotalCents: number | null;
   total: string | null;
+  /** Immutable provider capture. Null when the receipt does not carry it. */
+  capturedCents: number | null;
+  /** Order total minus captured cents, only when both are known. */
+  unpaidCents: number | null;
+  paymentAdmission: "admitted" | "not_admitted";
+  paymentEvidence: {
+    authorityReceiptId: string;
+    sourceType: string;
+    sourceRef: string;
+    occurredAt: string | null;
+    captureEvidence: string | null;
+  } | null;
   paid: boolean;
   status: Order["status"];
   adminReceiptHref: string;
   externalReceiptUrl: string | null;
 };
+
+function orderTotalCents(total: string | null | undefined): number | null {
+  if (total == null || String(total).trim() === "") return null;
+  const dollars = Number(total);
+  if (!Number.isFinite(dollars)) return null;
+  const cents = Math.round(dollars * 100);
+  return Number.isSafeInteger(cents) && cents >= 0 ? cents : null;
+}
 
 export type CustomerProfilePayload = {
   phone: string;
@@ -163,12 +185,34 @@ export function buildCustomerProfile(
       const j = o.portalJwt.trim();
       if (j.startsWith("http://") || j.startsWith("https://")) external = j;
     }
+    const receipt = receipts.get(o.id);
+    const admitted = hasNativePaymentAuthority(o, receipt);
+    const capturedCents = admitted ? nativeCapturedAmountCents(receipt) : null;
+    const totalCents = orderTotalCents(o.total);
     return {
       id: o.id,
       createdAt: o.createdAt,
       serviceType: o.serviceType,
+      orderTotalCents: totalCents,
       total: o.total != null ? String(o.total) : null,
-      paid: hasNativePaymentAuthority(o, receipts.get(o.id)),
+      capturedCents,
+      unpaidCents:
+        totalCents != null && capturedCents != null ? totalCents - capturedCents : null,
+      paymentAdmission: admitted ? "admitted" : "not_admitted",
+      paymentEvidence:
+        admitted && receipt
+          ? {
+              authorityReceiptId: receipt.id,
+              sourceType: receipt.sourceType,
+              sourceRef: receipt.sourceRef,
+              occurredAt: receipt.occurredAt,
+              captureEvidence:
+                typeof receipt.metadata?.captureEvidence === "string"
+                  ? receipt.metadata.captureEvidence
+                  : null,
+            }
+          : null,
+      paid: admitted,
       status: o.status,
       adminReceiptHref: `/receipt/${o.id}`,
       externalReceiptUrl: external,

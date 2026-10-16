@@ -16,6 +16,35 @@ const STATUS: Record<string, string> = {
   completed: "Done",
 };
 
+function ClaireEvidenceReceipts({
+  evidence,
+}: {
+  evidence: Array<{
+    id: string;
+    source: string;
+    description: string;
+    value: number | string | null;
+  }>;
+}) {
+  const receipts = evidence.filter(item => item.source === "analyzeBusinessData");
+  if (!receipts.length) {
+    return (
+      <p className="cd-note" data-testid="claire-approval-evidence-absent">
+        No analyzeBusinessData receipt is attached. Approval will not invent one.
+      </p>
+    );
+  }
+  return (
+    <>
+      {receipts.map(item => (
+        <p key={item.id} className="cd-note" data-testid="claire-source-backed-receipt" data-evidence-source="analyzeBusinessData">
+          analyzeBusinessData: {String(item.value ?? item.description)} Receipt {item.id}.
+        </p>
+      ))}
+    </>
+  );
+}
+
 /**
  * JOYSTICK · Claire Desk. An operating cockpit: objective, opportunity, the one
  * mission, its runway, what Claire prepared, and what actually happened. Every
@@ -131,10 +160,11 @@ export default function ClaireDesk() {
                     {primary.when ? <span>{primary.when}</span> : null}
                   </p>
                   {primary.status === "awaiting_approval" ? (
-                    <div className="cd-approve">
+                    <div className="cd-approve" data-testid="claire-approval-control">
                       {/offer/i.test(primary.objective ?? "") ? (
                         <p className="cd-note">No offer is approved. Calls can be plain check-ins; any discount is your decision, and Claire won't promise one.</p>
                       ) : null}
+                      <ClaireEvidenceReceipts evidence={m.rationale?.evidence ?? []} />
                       <button type="button" className="cd-gold" disabled={approval.state === "saving"} onClick={() => void approve(primary.id)} data-testid="approve-primary-mission">
                         {approval.state === "saving" ? "Saving approval…" : "Approve this mission"}
                       </button>
@@ -334,8 +364,8 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
   const data = calls as DailyCalls | null;
   const zone = data?.timeZone ?? null;
   const plans = [
-    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–9:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "09:00" },
-    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "Monday–Saturday, 5:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6], start: "17:30", end: "19:00" },
+    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–8:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "08:00" },
+    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "every day, 6:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "18:30", end: "19:00" },
   ];
   // Rows stay visible while they show this session's verified result.
   const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled || result[p.purpose]);

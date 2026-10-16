@@ -1,4 +1,6 @@
-const SAME_ORIGIN_API_HOSTS = new Set(["admin.bldg.chat"]);
+import { JOYSTICK_SAME_ORIGIN_API_HOSTS } from "@shared/joystickHostRouting";
+
+const SAME_ORIGIN_API_HOSTS = new Set<string>(JOYSTICK_SAME_ORIGIN_API_HOSTS);
 
 export function resolveApiBase(
   hostname: string | undefined,

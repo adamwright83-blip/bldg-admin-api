@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   COZY_SLOT_IDS,
@@ -12,6 +12,13 @@ import {
 import { CozyMessageComposer } from "./CozyMessageComposer";
 import styles from "./cozy-neighborhood.module.css";
 
+/** Canonical identity id from the URL, for example `phone:3105550141`. */
+function requestedCustomerId(): string | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("customer")?.trim() ?? "";
+  return value.length > 0 ? value : null;
+}
+
 interface CozyNeighborhoodEncounterProps {
   territoryId?: string;
   onExit: () => void;
@@ -22,7 +29,10 @@ export function CozyNeighborhoodEncounter({
   territoryId = "silver-lake",
   onExit,
 }: CozyNeighborhoodEncounterProps) {
-  const [selectedSlotId, setSelectedSlotId] = useState<CozySlotId | null>("slot_01");
+  const requestedId = requestedCustomerId();
+  const [selectedSlotId, setSelectedSlotId] = useState<CozySlotId | null>(() =>
+    requestedCustomerId() ? null : "slot_01"
+  );
   const [hoveredSlotId, setHoveredSlotId] = useState<CozySlotId | null>(null);
   const utils = trpc.useUtils();
 
@@ -38,9 +48,18 @@ export function CozyNeighborhoodEncounter({
     return (missionQuery.data?.targets ?? []) as CozyProjectedTarget[];
   }, [missionQuery.data]);
 
+  useEffect(() => {
+    if (!requestedId) return;
+    const match = targets.find((target) => target.customerId === requestedId);
+    if (match) setSelectedSlotId(match.slotId);
+  }, [requestedId, targets]);
+
   const selectedTarget = useMemo(() => {
-    return targets.find((t) => t.slotId === selectedSlotId) ?? targets[0] ?? null;
-  }, [targets, selectedSlotId]);
+    const bySlot = targets.find((t) => t.slotId === selectedSlotId);
+    if (bySlot) return bySlot;
+    if (requestedId) return null;
+    return targets[0] ?? null;
+  }, [targets, selectedSlotId, requestedId]);
 
   const selectedIndex = useMemo(() => {
     return targets.findIndex((t) => t.slotId === selectedSlotId);
@@ -158,6 +177,18 @@ export function CozyNeighborhoodEncounter({
             </span>
           </div>
 
+          {missionQuery.data?.withheldReason ? (
+            <p className={styles.handoffNote} data-outreach-withheld="true">
+              {missionQuery.data.withheldReason}
+            </p>
+          ) : missionQuery.data?.emptyMeansNoLapsedCustomers ? (
+            <p data-outreach-empty-verified="true">No inactive customers are in this area on the current book.</p>
+          ) : null}
+          {requestedId && missionQuery.isSuccess && !targets.some((target) => target.customerId === requestedId) ? (
+            <p data-customer-not-in-village="true">
+              {requestedId} is not a contactable customer in this village.
+            </p>
+          ) : null}
           <button type="button" className={styles.exitButton} onClick={onExit} aria-label="Return to Wide City">
             <span>⤾</span> Return to Wide City
           </button>
@@ -211,6 +242,7 @@ export function CozyNeighborhoodEncounter({
               tabIndex={0}
               aria-label={`Select ${target.displayName}`}
               data-customer-id={target.customerId}
+              data-house-title={anchor.houseTitle}
               data-communication-state={target.communicationState ?? "draft_prepared"}
               data-pose={sprite.pose}
               data-transport={target.transport ?? ""}
@@ -255,7 +287,8 @@ export function CozyNeighborhoodEncounter({
             target={selectedTarget}
             targetIndex={selectedIndex}
             totalTargets={targets.length}
-            isSending={sendMutation.isPending || scheduleMutation.isPending}
+            objectiveId={missionQuery.data?.objectiveId ?? null}
+            isSending={sendMutation.isPending || scheduleMutation.isPending || false}
             onSendNow={handleSendNow}
             onScheduleSend={handleScheduleSend}
             onClose={() => setSelectedSlotId(null)}

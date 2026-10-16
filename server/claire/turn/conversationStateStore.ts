@@ -307,6 +307,15 @@ export function createDatabaseConversationStateStore(
 
 let productionStore: ClaireConversationStateStore | null = null;
 
+/**
+ * Whether the Claire-owned database handle is present.
+ * Callers outside this store ask here instead of opening the database themselves.
+ */
+export async function claireOwnedDatabasePresent(): Promise<boolean> {
+  const db = await getDb();
+  return db != null;
+}
+
 export function claireConversationStateStore(): ClaireConversationStateStore {
   productionStore ??= createDatabaseConversationStateStore();
   return productionStore;

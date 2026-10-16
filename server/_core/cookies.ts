@@ -21,6 +21,14 @@ function isSecureRequest(req: Request) {
   return protoList.some(proto => proto.trim().toLowerCase() === "https");
 }
 
+/**
+ * Host-only on every hostname, including gojoystick.com and bldg.chat.
+ * A parent Domain would share the session across customer, admin, and driver.
+ */
+export function sessionCookieDomainForHost(_hostname: string | undefined): undefined {
+  return undefined;
+}
+
 export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
@@ -45,6 +53,7 @@ export function getSessionCookieOptions(
   // each keep their own session for the same membership, and preview or
   // vendor hosts must not receive that cookie.
   return {
+    domain: sessionCookieDomainForHost(req.hostname),
     httpOnly: true,
     path: "/",
     sameSite: isLocal ? "lax" : "none",
