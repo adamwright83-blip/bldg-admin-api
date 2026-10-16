@@ -4,7 +4,9 @@ import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import {
   buildDayPlanProjection,
+  executableDayLineStops,
   liveObjectivesFromFieldToday,
+  type DayPlanStop,
 } from "./goldlineDayPlanModel";
 
 const native = (id: number, status: Order["status"] = "new") =>
@@ -501,5 +503,16 @@ describe("Day Line overlay projection", () => {
       salesMissions: [mission],
     });
     expect(plan.stops.some(item => /Maybourne/i.test(item.title))).toBe(false);
+  });
+
+  it("starts only stops the driver can execute", () => {
+    const stops = [
+      { id: "done", status: "completed" },
+      { id: "now", status: "ready" },
+      { id: "held", status: "blocked" },
+      { id: "next", status: "upcoming" },
+      { id: "off", status: "cancelled" },
+    ] as DayPlanStop[];
+    expect(executableDayLineStops(stops).map(stop => stop.id)).toEqual(["now", "next"]);
   });
 });

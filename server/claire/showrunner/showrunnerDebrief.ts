@@ -81,8 +81,10 @@ export async function recordShowrunnerTurn(input: {
     idempotencyKey: `showrunner_turn:${input.sourceEventId}`,
   });
   const items = [...s.briefing.today, ...s.briefing.tomorrow];
+  const driverStops = s.briefing.driverDayLine?.stops ?? [];
   for (const u of input.updates) {
     const item = items.find(i => i.id === u.itemId);
+    const driverStop = driverStops.find(stop => stop.id === u.itemId);
     if (u.outcome !== "done" && u.operatorWords.trim()) {
       await recordMissionExplanation({
         tenantId: s.tenantId,
@@ -91,9 +93,9 @@ export async function recordShowrunnerTurn(input: {
         missionType: "growth",
         answer: u.operatorWords,
         sourceType: "claire_debrief_mission_outcome",
-        sourceReference: `day_director_commitments:${u.itemId}`,
+        sourceReference: item ? `day_director_commitments:${u.itemId}` : `driver_day_line:${u.itemId}`,
         idempotencyKey: `showrunner_outcome:${input.sourceEventId}:${u.itemId}`,
-        extraPayload: { outcome: u.outcome, title: item?.title ?? null, businessDate: s.businessDate, reported: true },
+        extraPayload: { outcome: u.outcome, title: item?.title ?? driverStop?.title ?? null, businessDate: s.businessDate, reported: true },
         now: input.now,
       });
     } else {
@@ -101,8 +103,8 @@ export async function recordShowrunnerTurn(input: {
         ...base,
         observationKind: "user_statement",
         sourceType: "claire_debrief_mission_outcome",
-        sourceReference: `day_director_commitments:${u.itemId}`,
-        payload: { outcome: u.outcome, operatorWords: u.operatorWords, title: item?.title ?? null, businessDate: s.businessDate, reported: true },
+        sourceReference: item ? `day_director_commitments:${u.itemId}` : `driver_day_line:${u.itemId}`,
+        payload: { outcome: u.outcome, operatorWords: u.operatorWords, title: item?.title ?? driverStop?.title ?? null, businessDate: s.businessDate, reported: true },
         idempotencyKey: `showrunner_outcome:${input.sourceEventId}:${u.itemId}`,
       });
     }
