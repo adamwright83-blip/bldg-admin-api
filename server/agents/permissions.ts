@@ -80,6 +80,8 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
     "extractReceiptLineItemsTool",
     "completeDryCleaningIntakeTool",
     "draftCustomerMessageTool",
+    "proposeCleanCloudOrderOperationTool",
+    "commitCleanCloudOrderOperationTool",
   ]),
   vendor_agent: new Set([
     "requestVendorConfirmationTool",
