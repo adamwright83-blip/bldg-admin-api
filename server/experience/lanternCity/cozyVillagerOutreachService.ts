@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   COZY_SLOT_IDS,
   COZY_SLOT_ANCHORS,
@@ -9,12 +8,18 @@ import {
   type CozySlotId,
   type VillagerVariant,
 } from "../../../shared/cozyVillagerOutreach";
-import { readWinBackDossier, type WinBackContact } from "../../strategy/winBackDossier";
+import { readWinBackDossier } from "../../strategy/winBackDossier";
 import { checkCommunicationPermission } from "../../strategy/communicationPermissionService";
+import {
+  assertPersonalOutreachHandoff,
+  buildPersonalSuggestedMessage,
+  readPersonalOutreachRoster,
+  type PersonalOutreachContact,
+} from "../../strategy/personalOutreachWrite";
 import { normalizeSmsPhone } from "../../_core/sms";
 import {
   createScheduledOutreachDraft,
-  sendEarlyOutreachDraft,
+  editScheduledOutreachDraft,
   listScheduledOutreachMessages,
   type OutboundTestSenderAdapter,
 } from "./scheduledOutreachService";
@@ -26,8 +31,7 @@ const knownOptOutNumbers = new Set<string>([
 ]);
 
 function buildClaireSuggestedMessage(name: string, daysSinceLastOrder: number): string {
-  const firstName = name.split(" ")[0];
-  return `Hey ${firstName}! It's Adam from Laundry Farm. Just checking in to see how you've been—we noticed it's been about ${daysSinceLastOrder} days since your last pickup. We'd love to help take laundry off your plate whenever you need us!`;
+  return buildPersonalSuggestedMessage(name, daysSinceLastOrder);
 }
 
 /**
@@ -168,26 +172,27 @@ export async function getCozyEncounterMission(input: {
       ? "Silver Lake"
       : territoryId.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
-  // Attempt reading canonical dossier
-  const realDossier = await readWinBackDossier({
+  const roster = await readPersonalOutreachRoster({
     tenantId: input.tenantId,
     canonicalOperatorId: input.canonicalOperatorId,
     timeZone,
     now,
+    territoryId,
     limit: input.limit ?? 8,
   }).catch((err) => {
-    console.error("[cozyVillagerOutreach] Failed to read win-back dossier:", err);
+    console.error("[cozyVillagerOutreach] Failed to read personal outreach roster:", err);
     return null;
   });
 
-  // Verify territory match: if requested territory does not match the dossier area, do not show wrong customers
-  let rawContacts: WinBackContact[] | null = null;
-  if (realDossier && realDossier.contacts && realDossier.contacts.length > 0) {
-    const normDossier = realDossier.area.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const normRequested = territoryId.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!normDossier || !normRequested || normDossier.includes(normRequested) || normRequested.includes(normDossier)) {
-      rawContacts = realDossier.contacts;
-    }
+  const withheldReason =
+    roster?.withheldReason ??
+    (roster
+      ? null
+      : "Dormant customers could not be read. Missing customers are not proof that nobody is inactive.");
+
+  let rawContacts: PersonalOutreachContact[] | null = null;
+  if (roster && !withheldReason && roster.contacts.length > 0) {
+    rawContacts = roster.contacts;
   }
 
   // Retrieve existing scheduled messages for the tenant
@@ -215,17 +220,23 @@ export async function getCozyEncounterMission(input: {
         now,
       });
 
-      const isOptedOut = !permCheck.allowed || (phone ? knownOptOutNumbers.has(phone) : false);
+      const recordedOptOut =
+        contact.smsConsent === "opted_out" ||
+        !permCheck.allowed ||
+        permCheck.permissionStatus === "opted_out" ||
+        permCheck.permissionStatus === "refused" ||
+        (phone ? knownOptOutNumbers.has(phone) : false);
+      const hasPaidRelationship = contact.paidOrders > 0 && contact.lifetimeCents > 0;
 
       let consentStatus: CozyConsentStatus;
       let consentBasis: CozyConsentBasis;
       if (!phone) {
         consentStatus = "missing_phone";
         consentBasis = "missing_contact_info";
-      } else if (isOptedOut || permCheck.permissionStatus === "opted_out" || permCheck.permissionStatus === "refused") {
+      } else if (recordedOptOut) {
         consentStatus = "blocked_opt_out";
         consentBasis = "opted_out_blocked";
-      } else if (permCheck.permissionStatus === "opted_in") {
+      } else if (contact.smsConsent === "opted_in" || permCheck.permissionStatus === "opted_in") {
         consentStatus = "verified_opt_in";
         consentBasis = "explicit_consent_record";
       } else {
@@ -233,12 +244,12 @@ export async function getCozyEncounterMission(input: {
         consentBasis = "transactional_dormant_recovery";
       }
 
-      const consentReason = !permCheck.allowed
-        ? permCheck.reason
-        : isOptedOut
-        ? "Customer explicitly opted out of SMS"
+      const consentReason = recordedOptOut
+        ? permCheck.reason ?? "A recorded opt-out blocks this handoff."
         : !phone
         ? "Missing verified phone number"
+        : !hasPaidRelationship
+        ? "A phone number alone is not an existing relationship."
         : undefined;
 
       const existingMsg = existingScheduledList.find(
@@ -267,7 +278,7 @@ export async function getCozyEncounterMission(input: {
             currentMessageBody: existingMsg.currentMessageBody,
           };
         } else if (existingMsg.status === "awaiting_sender_setup") {
-          status = "awaiting_sender_setup";
+          status = existingMsg.deliveryIntent === "scheduled" ? "scheduled" : "awaiting_sender_setup";
           scheduledDraft = {
             messageId: existingMsg.id,
             scheduledFor: existingMsg.scheduledFor.toISOString(),
@@ -275,7 +286,7 @@ export async function getCozyEncounterMission(input: {
             currentMessageBody: existingMsg.currentMessageBody,
           };
         }
-      } else if (isOptedOut || !phone) {
+      } else if (recordedOptOut || !phone || !hasPaidRelationship) {
         status = "consent_blocked";
       }
 
@@ -292,7 +303,7 @@ export async function getCozyEncounterMission(input: {
         lifetimeCents: contact.lifetimeCents,
         lastOrderDate: contact.lastOrderDate,
         lastOrderSummary: contact.lastOrderSummary,
-        hasConsent: permCheck.allowed && !isOptedOut && !!phone,
+        hasConsent: hasPaidRelationship && !recordedOptOut && !!phone,
         consentStatus,
         consentBasis,
         consentReason,
@@ -311,15 +322,98 @@ export async function getCozyEncounterMission(input: {
     objective: `Reconnect with ${targets.length} dormant customers in ${territoryName}`,
     territoryId,
     territoryName,
-    totalLapsedInTerritory: realDossier?.lapsedCount ?? targets.length,
+    totalLapsedInTerritory: roster?.emptyMeansNoLapsedCustomers ? 0 : (roster?.lapsedCount ?? targets.length),
     activeTargetCount: targets.length,
     targets,
+    withheldReason,
+    emptyMeansNoLapsedCustomers: roster?.emptyMeansNoLapsedCustomers ?? false,
   };
 }
 
 /**
- * Dispatches or queues outreach from Lantern City directly into JOYSTICK's personal outbox.
- * Resolves customer identity and contact information server-authoritatively.
+ * Writes one personal outreach draft after the personal-handoff rule.
+ * The row is awaiting_sender_setup, so the due-lease worker does not transmit it.
+ * Marketing SMS opt-in is not this gate. A test sender adapter is ignored:
+ * this channel does not dispatch.
+ */
+export async function commitPersonalOutreachDraft(input: {
+  tenantId: string;
+  operatorId: string;
+  customerId: string;
+  messageBody: string;
+  scheduledFor: Date | string;
+  timezone?: string;
+  expectedPhone?: string;
+  slotId?: string;
+  territoryId?: string;
+  idempotencyKey?: string;
+  allowImmediate?: boolean;
+  deliveryIntent?: "immediate" | "scheduled";
+  dstAmbiguityChoice?: "first" | "second";
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const timezone = input.timezone ?? "America/Los_Angeles";
+  const messageBody = input.messageBody.trim();
+  if (!messageBody) throw new Error("Message body cannot be empty");
+  const allowed = await assertPersonalOutreachHandoff({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.operatorId,
+    customerId: input.customerId,
+    messageBody,
+    territoryId: input.territoryId,
+    now,
+    timeZone: timezone,
+  });
+  if (input.expectedPhone) {
+    const expected = normalizeSmsPhone(input.expectedPhone);
+    const actual = normalizeSmsPhone(allowed.phone);
+    if (!expected || expected !== actual) {
+      throw new Error(
+        `Security violation: requested phone "${input.expectedPhone}" does not match verified canonical phone for customer "${allowed.customerId}"`
+      );
+    }
+  }
+  const deliveryIntent = input.deliveryIntent ?? "scheduled";
+  const draft = await createScheduledOutreachDraft({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    customerId: allowed.customerId,
+    customerName: allowed.customerName,
+    recipientPhone: normalizeSmsPhone(allowed.phone) ?? allowed.phone,
+    originalSuggestedDraft: allowed.suggestedMessage,
+    messageBody,
+    scheduledFor: input.scheduledFor,
+    timezone,
+    dstAmbiguityChoice: input.dstAmbiguityChoice,
+    slotId: input.slotId,
+    territoryId: allowed.territoryId,
+    allowImmediate: input.allowImmediate,
+    status: "awaiting_sender_setup",
+    deliveryIntent,
+    idempotencyKey: input.idempotencyKey,
+    now,
+  });
+  if (
+    draft.currentMessageBody.trim() !== messageBody &&
+    (draft.status === "pending" || draft.status === "awaiting_sender_setup")
+  ) {
+    return editScheduledOutreachDraft({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      messageId: draft.id,
+      newMessageBody: messageBody,
+      expectedRevisionCount: draft.revisionCount,
+      reason: "The approved text changed. The earlier handoff does not cover this message.",
+      now,
+    });
+  }
+  return draft;
+}
+
+/**
+ * Saves the operator's manual draft. It does not transmit, even when a test
+ * adapter is passed. Opening Google Messages is a separate handoff.
  */
 export async function sendCozyOutreachNow(input: {
   tenantId: string;
@@ -345,76 +439,32 @@ export async function sendCozyOutreachNow(input: {
   if (!input.messageBody || input.messageBody.trim().length === 0) {
     throw new Error("Message body cannot be empty");
   }
-
   const now = input.now ?? new Date();
-
-  // 1. Server-authoritative customer identity, phone, and territory resolution
-  const resolved = await resolveCanonicalCustomerContact({
-    tenantId: input.tenantId,
-    canonicalOperatorId: input.operatorId,
-    customerId: input.customerId,
-    territoryId: input.territoryId,
-    expectedPhone: input.expectedPhone,
-    now,
-  });
-
-  // 2. Commit draft to the scheduled outbox
-  // If no sender adapter is available (Phase 1), persist with explicit status: 'awaiting_sender_setup'
-  // and deliveryIntent: 'immediate' so it is NOT automatically claimed by due lease timers as an overdue send.
-  const hasSender = Boolean(input.testSenderAdapter);
-  const initialStatus = hasSender ? "pending" : "awaiting_sender_setup";
-
-  const draft = await createScheduledOutreachDraft({
+  const draft = await commitPersonalOutreachDraft({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
-    customerId: resolved.customerId,
-    customerName: resolved.customerName,
-    recipientPhone: resolved.phone,
-    originalSuggestedDraft: resolved.suggestedMessage,
-    messageBody: input.messageBody.trim(),
-    scheduledFor: now,
-    timezone: "America/Los_Angeles",
+    customerId: input.customerId,
+    messageBody: input.messageBody,
+    expectedPhone: input.expectedPhone,
     slotId: input.slotId,
-    territoryId: resolved.territoryId,
+    territoryId: input.territoryId,
+    scheduledFor: now,
     allowImmediate: true,
-    status: initialStatus,
     deliveryIntent: "immediate",
     idempotencyKey: input.idempotencyKey,
     now,
   });
-
-  if (!hasSender) {
-    const browser = evaluateGoogleMessagesBrowserTransport();
-    return {
-      success: false,
-      status: "awaiting_sender_setup",
-      messageId: draft.id,
-      evidenceName: "awaiting_sender_setup",
-      dispatchedAt: null,
-      externalMessageId: null,
-      blockReason: browser.reason,
-      carrierDeliveryObserved: false,
-    };
-  }
-
-  // 3. Dispatch through verified personal Android connection (injected test adapter)
-  const sendResult = await sendEarlyOutreachDraft({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    messageId: draft.id,
-    leaseHolder: `operator_${input.operatorId}`,
-    testSenderAdapter: input.testSenderAdapter,
-    now,
-  });
-
+  const browser = evaluateGoogleMessagesBrowserTransport();
   return {
-    success: sendResult.success,
-    status: sendResult.status as "dispatched" | "awaiting_sender_setup",
+    success: false,
+    status: "awaiting_sender_setup",
     messageId: draft.id,
-    evidenceName: sendResult.evidenceName,
-    dispatchedAt: sendResult.message.dispatchedAt?.toISOString() ?? null,
-    externalMessageId: sendResult.message.externalMessageId ?? null,
-    blockReason: sendResult.blockReason,
+    evidenceName: "awaiting_sender_setup",
+    dispatchedAt: null,
+    externalMessageId: null,
+    blockReason: input.testSenderAdapter
+      ? "This personal handoff does not dispatch through a sender adapter. The operator sends from their own phone."
+      : browser.reason,
     carrierDeliveryObserved: false,
   };
 }

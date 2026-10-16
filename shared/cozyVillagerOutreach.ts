@@ -180,4 +180,7 @@ export interface CozyEncounterMission {
   totalLapsedInTerritory: number;
   activeTargetCount: number;
   targets: CozyCustomerTarget[];
+  /** Set when the book cannot be presented. An empty village is not this. */
+  withheldReason?: string | null;
+  emptyMeansNoLapsedCustomers?: boolean;
 }
