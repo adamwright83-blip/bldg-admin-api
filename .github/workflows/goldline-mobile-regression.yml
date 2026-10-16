@@ -241,7 +241,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
     # Checkout, migrations, and Chromium use most of five minutes on a busy runner.
-    # The driver files below set their own budget. Every other lane stays at five.
+    # Lanes that already finished their tests inside that cap, or that run several
+    # files, set their own budget. Every other lane stays at five.
     timeout-minutes: ${{ matrix.timeout || 5 }}
     strategy:
       fail-fast: false
@@ -320,6 +321,7 @@ jobs:
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/expandableWorld.spec.ts
           - name: mobile-immersion-fiction
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/immersion-gate.spec.ts
