@@ -2036,7 +2036,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   const brainAllowsWork =
     !state.dayLineSuppressed &&
-    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit");
+    (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit" ||
+      (brainV3.act === "correction" && conversationTarget === "pending_briefing" && Boolean(state.pendingBriefing)));
   const workExecutionText = brainV3.canonicalWork ?? utterance;
   let parsed = parseBriefingDeterministically(brainAllowsWork ? workExecutionText : utterance, clock);
   let modelRevisedPending = false;
@@ -2056,13 +2057,18 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       heldItems: state.heldBriefingItems,
       revisePending: modelRevisedPending,
     }).catch(() => null);
-    if (!model) {
+    if (!model || (brainV3.workDisposition === "commit" && model.items.length === 0)) {
       // Never silently substitute a keyword parser for a failed semantic extraction.
       // The operator turn is already in durable conversation state; held work remains intact.
       mark("fallback", { fallbackReason: "work_interpretation_unavailable" });
       return finish({ speak: "I have what you said, but I couldn't safely organize that work yet. Nothing new was saved.", kind: "answered" });
     }
     parsed = model;
+    if (modelRevisedPending && !model.items.length) {
+      state.pendingBriefing = null;
+      mark("briefing");
+      return finish({ speak: "That leaves nothing in the pending list to add. Nothing new was saved.", kind: "briefing_proposed" });
+    }
   } else if (
     brainAllowsWork &&
     (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance))
@@ -2293,7 +2299,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mark("briefing");
         return finish({ speak: "I understood it, but nothing saved. Want me to try again?", kind: "briefing_proposed" });
       }
-      state.pendingBriefing = null;
+      state.pendingBriefing = result.failed?.length
+        ? { parsed: { ...reconciled, items: result.failed.map(failure => failure.item) }, createdAt: nowMs } : null;
       mark("briefing");
       const weeklySpeech = await completeMorningReconciliation();
       return finish({

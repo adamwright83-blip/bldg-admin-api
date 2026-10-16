@@ -48,7 +48,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm db:legacy-dayforge:release
+      - name: Bootstrap the disposable database using the production schema authority
+        run: node scripts/migrate.mjs
       - name: Real writes, independent reads, fresh state stores and failed-readback retries
         run: pnpm vitest run --config vitest.integration.config.ts server/claire/briefing/conversationIntegrity.mysql.integration.test.ts --minWorkers=1 --maxWorkers=1
       - name: Scheduled calls and simulated phone transport

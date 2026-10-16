@@ -615,6 +615,22 @@ describe("October 15 conversation integrity (injected semantic results)", () => 
     expect(state.history?.some(entry => entry.speaker === "operator" && entry.text === utterance)).toBe(true);
   });
 
+  it("revises identified pending work even when a correction does not authorize saving", async () => {
+    const held = campaign();
+    const revised = { ...held, items: held.items.map(item => ({ ...item, businessDate: TOMORROW })) };
+    const state: ClaireTurnState = { pendingBriefing: { parsed: held, createdAt: NOW.getTime() } };
+    const extractModel = vi.fn(async () => revised);
+    const deps = turnDeps({ extractModel, brainV3: async () => ({
+      target: "pending_briefing", act: "correction", workDisposition: "none", dayLineDisposition: "none",
+      priorClaim: "none", weeklyDisposition: "none", broadBriefingRequest: false,
+      canonicalWork: null, referent: "marketing campaign", rationale: "Change the pending date without saving.",
+    }) });
+    await turn(state, "Actually, move the campaign to tomorrow.", deps);
+    expect(extractModel).toHaveBeenCalledWith(expect.objectContaining({ pendingItems: held.items, revisePending: true }));
+    expect(state.pendingBriefing?.parsed.items[0].businessDate).toBe(TOMORROW);
+    expect(deps.commit).not.toHaveBeenCalled();
+  });
+
   it("holds a failed explicit save for retry instead of losing the work", async () => {
     const parsed = campaign();
     const state: ClaireTurnState = {};
