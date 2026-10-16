@@ -634,6 +634,8 @@ export const goldlineWorldRouter = router({
         rulesVersion: result.assignment.preferredTemplateId ? FICTION_ELIGIBILITY_CATALOG.find(t => t.id === result.assignment.preferredTemplateId)?.rulesVersion ?? null : null,
         assignmentProbability: result.assignment.assignmentProbability,
         assignmentMechanism: result.assignment.assignmentMechanism,
+        /** False when Daphne throttled this occasion to the baseline (not randomized). */
+        availability: result.assignment.availability,
         decisionPointId: result.assignment.decisionPointId,
         eligibleOptions: result.assignment.eligibleOptions,
         proximalOutcomeWindowMinutes: result.assignment.proximalOutcomeWindowMinutes,

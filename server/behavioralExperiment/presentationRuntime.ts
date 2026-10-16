@@ -8,6 +8,8 @@ import { loadDaphneMetaPreferences } from "../agents/daphne/goalsPreferences";
 import { loadOperatorFictionGrammar } from "../experience/goldline/world/campaignService";
 import { assignExperimentalPresentation } from "./assignPresentation";
 import { listBehavioralLedgerEventsForDecisionPoint, recordBehavioralLedgerEvent, type BehavioralLedgerStore } from "../behavioralLedger/behavioralLedger";
+import { loadMissionPresentations } from "../agents/daphne/missionFollowUp";
+import { loadPresentationAssignmentOutcomes, presentationOutcomesAsDaphneEvidence } from "./presentationOutcomes";
 
 export type PresentationScope = { tenantId: string; operatorUserId: string };
 export type PresentationConsent = { adaptationAllowed: boolean; experimentationAllowed: boolean; evidenceRefs: string[] };
@@ -22,8 +24,21 @@ export async function loadPresentationConsent(scope: PresentationScope): Promise
   return { adaptationAllowed, experimentationAllowed: adaptationAllowed && enabled("safe_experimentation"),
     evidenceRefs: [preferences.adaptation_enabled?.id, preferences.safe_experimentation?.id].filter((id): id is string => Boolean(id)) };
 }
+/** The operator's own "plain, no story" request, recorded by Daphne from their explanation of unfinished work. */
+export async function loadDeclaredPlainPresentation(scope: PresentationScope): Promise<{ sourceRef: string } | null> {
+  const identity = await resolveCanonicalOperatorIdentity({ tenantId: scope.tenantId,
+    source: { type: "open_id", value: scope.operatorUserId }, subsystem: "daphne.presentation" });
+  if (!identity.ok) return null;
+  const presentations = await loadMissionPresentations({ tenantId: scope.tenantId, canonicalOperatorId: identity.identity.canonicalOperatorId });
+  for (const presentation of presentations.values()) {
+    if (presentation.adjustment.kind === "presentation_style" && presentation.adjustment.style === "plain")
+      return { sourceRef: `daphne_observations:${presentation.sourceObservationId}` };
+  }
+  return null;
+}
 export type PresentationRuntimePorts = {
   loadConsent: typeof loadPresentationConsent;
+  loadDeclaredPlainPresentation: typeof loadDeclaredPlainPresentation;
   loadGrammar: (scope: PresentationScope & { occasionId?: string }) => Promise<ActionGrammar | null>;
   store?: BehavioralLedgerStore;
   randomInt?: (n: number) => number;
@@ -31,17 +46,39 @@ export type PresentationRuntimePorts = {
 };
 const defaults: PresentationRuntimePorts = {
   loadConsent: loadPresentationConsent,
+  loadDeclaredPlainPresentation,
   loadGrammar: scope => loadOperatorFictionGrammar({ tenantId: scope.tenantId, operatorId: scope.operatorUserId, occasionId: scope.occasionId }),
 };
-/** Client grammar, template, outcome and consent claims never supply authority. */
-export async function assignAuthorizedPresentation(input: PresentationScope & { correlationId: string; occasionId: string; emergency?: boolean }, ports: PresentationRuntimePorts = defaults) {
+/**
+ * The Goldline presentation decision point: chooses `preferredTemplateId` for
+ * one mission occasion. Daphne gates it (safe_experimentation consent, a
+ * declared plain preference, fatigue from joined outcomes) and makes the draw;
+ * every decision is recorded before it is returned. Without consent nothing is
+ * assigned or recorded. Client grammar, template, outcome and consent claims
+ * never supply authority.
+ */
+export async function assignAuthorizedPresentation(input: PresentationScope & { correlationId: string; occasionId: string; emergency?: boolean; now?: Date }, ports: PresentationRuntimePorts = defaults) {
   const consent = await ports.loadConsent(input);
   const unavailable = (skipReason: string) => ({ usedExperiment: false as const, skipReason, assignment: null, consent });
   if (!consent.experimentationAllowed) return unavailable("fresh_operator_experimentation_consent_required");
   const grammar = await ports.loadGrammar(input);
   if (!grammar || behavioralSubjectFromGrammar(grammar) !== input.correlationId) return unavailable("canonical_mission_grammar_unavailable");
   const result = await assignExperimentalPresentation({ ...input, grammar, registry: FICTION_ELIGIBILITY_CATALOG,
-    policy: ports.policy ?? resolveProductionExperimentPolicy(), store: ports.store, randomInt: ports.randomInt });
+    policy: ports.policy ?? resolveProductionExperimentPolicy(), store: ports.store, randomInt: ports.randomInt,
+    daphne: async () => {
+      const history = await Promise.all([
+        loadPresentationAssignmentOutcomes({ tenantId: input.tenantId, operatorUserId: input.operatorUserId }, ports.store),
+        ports.loadDeclaredPlainPresentation(input),
+      ]).catch(() => null);
+      if (!history) return null;
+      const [outcomes, declaredPlainPresentation] = history;
+      return {
+        preferences: { adaptationEnabled: consent.adaptationAllowed, safeExperimentation: consent.experimentationAllowed,
+          consentRevoked: !consent.adaptationAllowed },
+        evidence: presentationOutcomesAsDaphneEvidence(outcomes),
+        declaredPlainPresentation,
+      };
+    } });
   return { ...result, consent };
 }
 /** UI acknowledgment proves a reported viewable surface; it never proves attention or business completion. */

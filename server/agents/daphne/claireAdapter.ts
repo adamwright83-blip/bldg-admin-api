@@ -1,13 +1,6 @@
 import { resolveCanonicalOperatorIdentity } from "../persistentOperator/identity";
 import { buildDaphneV2OperatorCard } from "./engine";
 import type { DaphneOperatorCard } from "./operatorCard";
-import {
-  assignDaphneMrtMissionFraming,
-  type DaphneMrtFramingResult,
-} from "./missionFramingExperiment";
-
-type DaphneMrtAssignmentResult = DaphneMrtFramingResult;
-type DaphneMrtExperimentInput = Parameters<typeof assignDaphneMrtMissionFraming>[0];
 
 export type DaphneClaireGuidance = {
   cardGeneratedAt: string;
@@ -15,8 +8,6 @@ export type DaphneClaireGuidance = {
   promptSection: string;
   /** Active, durable detail preference for deterministic Claire renderers. */
   responseDetail?: number | null;
-  /** MRT framing assigned for consented behavioral experimentation, if evaluated. */
-  mrtAssignment?: DaphneMrtAssignmentResult;
 };
 
 export function isDaphneV2ClaireEnabled(
@@ -95,10 +86,6 @@ export function buildDaphneClairePromptSection(card:DaphneOperatorCard):string|n
 export async function loadDaphneClaireGuidance(input: {
   tenantId: string;
   operatorUserId: string;
-  mrtExperiment?: Omit<
-    DaphneMrtExperimentInput,
-    "tenantId" | "operatorUserId" | "preferences"
-  >;
 }): Promise<DaphneClaireGuidance | null> {
   if (!isDaphneV2ClaireEnabled(input.tenantId)) return null;
   const raw = input.operatorUserId.trim();
@@ -119,27 +106,13 @@ export async function loadDaphneClaireGuidance(input: {
   });
   const promptSection = buildDaphneClairePromptSection(card);
   if (!promptSection) return null;
-
-  let mrtAssignment: DaphneMrtAssignmentResult | undefined;
-  if (input.mrtExperiment) {
-    mrtAssignment = assignDaphneMrtMissionFraming({
-      tenantId: input.tenantId,
-      operatorUserId: input.operatorUserId,
-      preferences: {
-        adaptationEnabled: card.metaPreferences.adaptation_enabled !== false,
-        // Experimentation needs its own explicit consent; adaptation alone is not enough.
-        safeExperimentation: card.metaPreferences.safe_experimentation === true,
-        consentRevoked: card.metaPreferences.adaptation_enabled === false,
-      },
-      ...input.mrtExperiment,
-    });
-  }
-
+  // MRT presentation assignment is not made here: an unrecorded draw would be
+  // observational forever. It happens, and is recorded, at the presentation
+  // decision point (server/behavioralExperiment/presentationRuntime.ts).
   return {
     cardGeneratedAt: card.generatedAt,
     evidenceCount: card.evidenceRefs.length,
     promptSection,
     responseDetail: numberPref(card, "response_detail"),
-    ...(mrtAssignment ? { mrtAssignment } : {}),
   };
 }

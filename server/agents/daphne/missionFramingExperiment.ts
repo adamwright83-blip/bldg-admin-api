@@ -28,10 +28,15 @@ export type DaphneMissionPresentationEvidence = {
   tenantId: string;
   operatorUserId: string;
   missionId: string;
-  missionType: string;
-  trigger: DaphneMissionTrigger;
+  /**
+   * Absent on evidence joined from the behavioral ledger, which records the
+   * assigned arm but not a mission type, trigger or immersion level. Such
+   * evidence can feed the fatigue gate but never an immersion hypothesis.
+   */
+  missionType?: string;
+  trigger?: DaphneMissionTrigger;
   variantId: string;
-  immersionLevel: 1 | 2 | 3 | 4 | 5;
+  immersionLevel?: 1 | 2 | 3 | 4 | 5;
   outcome: "completed" | "skipped" | "unknown";
   verificationStatus: "verified" | "attested" | "disputed" | "rejected";
   sourceRef: string;
@@ -121,7 +126,7 @@ export function proposeDaphneImmersionExperiment(input: {
   // A repeated skip at the same or greater immersion is not evidence to keep
   // blindly increasing the fantasy level.
   const priorEscalationSkipped = eligible.slice(1).some(e =>
-    e.outcome === "skipped" && e.immersionLevel < active.immersionLevel
+    e.outcome === "skipped" && e.immersionLevel != null && e.immersionLevel < active.immersionLevel
   );
   if (priorEscalationSkipped) {
     return abstain("prior_immersion_increase_did_not_resolve_skip", [latest.sourceRef]);
@@ -247,7 +252,8 @@ export type DaphneMrtFramingResult =
       assignmentMechanism: "randomized_assignment";
       assignmentProbability: number;
       baselineArmIncluded: true;
-      proposedCandidateId: string;
+      /** The immersion step under test; null when the arms are a policy-frozen option set. */
+      proposedCandidateId: string | null;
       evidenceRefs: string[];
     };
 
@@ -257,12 +263,26 @@ export type DaphneMrtFramingResult =
  * - Enforces explicit experimentation consent (`safeExperimentation === true`),
  * - Throttles to `STANDARD_PRESENTATION` when recent skips or explicit dislike indicate burden/fatigue,
  * - Includes `STANDARD_PRESENTATION` as the baseline comparison arm with known non-zero assignment probability.
+ *
+ * Production calls this at the Goldline presentation decision point
+ * (server/behavioralExperiment/presentationRuntime.ts) with `frozenOptions`;
+ * the caller must durably record whatever this returns before using it.
  */
 export function assignDaphneMrtMissionFraming(input: {
   tenantId: string;
   operatorUserId: string;
   missionId: string;
   occasionId: string;
+  /** Behavioral subject for the decision point. Defaults to `ops_task:<missionId>`. */
+  correlationId?: string;
+  /**
+   * The decision point's option set, frozen by the versioned experiment policy
+   * after safety/eligibility gating. When present, the draw is over exactly these
+   * options and must include STANDARD_PRESENTATION; no immersion step is proposed.
+   */
+  frozenOptions?: readonly string[];
+  /** The operator explicitly asked for plain presentation (Daphne `presentation_style: plain`). */
+  declaredPlainPresentation?: { sourceRef: string } | null;
   missionType: string;
   trigger: DaphneMissionTrigger;
   activeVariantId: string;
@@ -294,9 +314,10 @@ export function assignDaphneMrtMissionFraming(input: {
     return { status: "abstain", reason: "experimentation_not_consented", evidenceRefs: [] };
   }
 
-  const correlationId = input.missionId.startsWith("ops_task:") || input.missionId.startsWith("campaign:")
-    ? input.missionId
-    : `ops_task:${input.missionId}`;
+  const correlationId = input.correlationId?.trim() ||
+    (input.missionId.startsWith("ops_task:") || input.missionId.startsWith("campaign:")
+      ? input.missionId
+      : `ops_task:${input.missionId}`);
   const decisionPointId = presentationDecisionPointId({
     correlationId,
     occasionId: input.occasionId,
@@ -310,6 +331,22 @@ export function assignDaphneMrtMissionFraming(input: {
     fatigueWindowMs: input.fatigueWindowMs,
     maxSkipsBeforeThrottle: input.maxSkipsBeforeThrottle,
   });
+  // An explicit request for plain presentation outranks any experiment, however old.
+  const declaredPlainRef = input.declaredPlainPresentation?.sourceRef.trim();
+  if (declaredPlainRef) {
+    return {
+      status: "throttled_to_baseline",
+      epistemicStatus: "fatigue_throttled_baseline",
+      missionId: input.missionId,
+      decisionPointId,
+      assignedOption: STANDARD_PRESENTATION,
+      assignmentMechanism: "fatigue_throttle",
+      assignmentProbability: 1,
+      fatigueReason: "explicit_dislike_reported",
+      recentSkipCount: fatigue.recentSkipCount,
+      evidenceRefs: [declaredPlainRef],
+    };
+  }
   if (fatigue.throttled && fatigue.reason !== "none") {
     return {
       status: "throttled_to_baseline",
@@ -321,6 +358,36 @@ export function assignDaphneMrtMissionFraming(input: {
       assignmentProbability: 1,
       fatigueReason: fatigue.reason,
       recentSkipCount: fatigue.recentSkipCount,
+      evidenceRefs: fatigue.evidenceRefs,
+    };
+  }
+
+  if (input.frozenOptions) {
+    const options = Array.from(new Set(input.frozenOptions.map(option => option.trim()).filter(Boolean)));
+    if (!options.includes(STANDARD_PRESENTATION)) {
+      return { status: "abstain", reason: "baseline_arm_missing", evidenceRefs: fatigue.evidenceRefs };
+    }
+    if (options.length < 2) {
+      return { status: "abstain", reason: "too_few_options", evidenceRefs: fatigue.evidenceRefs };
+    }
+    const draw = drawEqualProbabilityArm({
+      options,
+      randomInt: input.randomInt ?? (n => cryptoRandomInt(n)),
+    });
+    if (!isValidAssignmentProbability(draw.assignmentProbability) || draw.assignmentProbability >= 1) {
+      return { status: "abstain", reason: "invalid_mrt_probability", evidenceRefs: fatigue.evidenceRefs };
+    }
+    return {
+      status: "assigned",
+      epistemicStatus: "causal_mrt_randomized",
+      missionId: input.missionId,
+      decisionPointId,
+      eligibleOptions: options,
+      assignedOption: draw.assignedOption,
+      assignmentMechanism: "randomized_assignment",
+      assignmentProbability: draw.assignmentProbability,
+      baselineArmIncluded: true,
+      proposedCandidateId: null,
       evidenceRefs: fatigue.evidenceRefs,
     };
   }
