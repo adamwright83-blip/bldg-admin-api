@@ -6,7 +6,7 @@ Additive front doors onto the existing app and the existing main API. This pass 
 
 Epistemic labels:
 
-- **VERIFIED** — observed in this checkout, a test, a Railway read, or a public DNS/HTTP header check on 2026-10-16.
+- **VERIFIED** — observed in this checkout, a test, a Railway read, a Vercel project read, or a public DNS/HTTP header check on 2026-10-16.
 - **INFERRED** — supported by that evidence, not a direct setting read.
 - **UNKNOWN** — not inspected, or the read was refused.
 
@@ -39,7 +39,7 @@ Read-only. No domain, DNS, TLS, or env write was performed.
 - `bldg-admin-api` (`9d63863a-2626-47a0-bd65-c3ba8db54258`): `bldg-admin-api-production.up.railway.app`, `admin.bldg.chat`, `driver.bldg.chat`.
 - `bldg-resident` (`b9949d56-06f2-4181-bfe5-91e29f87fb4f`): `api.bldg.chat`.
 
-**UNKNOWN.** Vercel project domain list. MCP `list_project_domains` returned 403 for team `team_wAwGtg6kKGxTn2GrFFWCg4oh` / project `prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`. The Vercel CLI is not installed. The HTML shell match makes it likely that `gojoystick.com`, `www.gojoystick.com`, `driver.bldg.chat`, `laundrybutler.bldg.chat`, and `laundryfarm.bldg.chat` are this app, but the Vercel project id behind those domains was not listed.
+**VERIFIED.** Vercel project `bldg-admin-api` (`prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`) currently serves `gojoystick.com`. `get_project` and `list_project_domains` without `teamId` returned that project. Domains already on it: `gojoystick.com`, `www.gojoystick.com`, `admin.bldg.chat`, `driver.bldg.chat`, `laundryfarm.bldg.chat`, `laundrybutler.bldg.chat`, plus `bldg-admin-api.vercel.app`, `bldg-admin-api-adamwright83-2158s-projects.vercel.app`, and `bldg-admin-api-git-main-adamwright83-2158s-projects.vercel.app`. `app.gojoystick.com`, `admin.gojoystick.com`, and `driver.gojoystick.com` are absent. The earlier 403 was `GET /v9/projects/{idOrName}/domains` with `teamId` `team_wAwGtg6kKGxTn2GrFFWCg4oh`. The same read without `teamId` succeeded. No domain was attached.
 
 **INFERRED.** These hosts are not behind Cloudflare. Response `server` is `Vercel` or `railway-hikari`. No Cloudflare header was present on the checks above.
 
@@ -122,15 +122,15 @@ Do not perform these from this PR. Current value is what was observed. Proposed 
 
 ### Vercel (existing project that serves this app)
 
-Project id used for the refused read: `prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`. Confirm the project before attaching anything. **UNKNOWN** which project id currently owns `gojoystick.com`.
+**VERIFIED.** The project is `bldg-admin-api`, id `prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`. It already has `gojoystick.com`, `www.gojoystick.com`, `admin.bldg.chat`, `driver.bldg.chat`, `laundryfarm.bldg.chat`, `laundrybutler.bldg.chat`, and the three `bldg-admin-api` `vercel.app` aliases named above. `app.gojoystick.com`, `admin.gojoystick.com`, and `driver.gojoystick.com` are absent. Do not attach them in this pass.
 
 | Domain | Current | Proposed later |
 | --- | --- | --- |
-| `gojoystick.com` | Live on Vercel, `HTTP 200` marketing shell | No change |
-| `www.gojoystick.com` | Live Vercel `308` to `https://gojoystick.com` + path/query | No change. This PR's `vercel.json` redirect matches that 308 for when this deployment serves `www` |
-| `app.gojoystick.com` | No DNS. Not verified on a Vercel project | Attach to this app's Vercel project. No redirect |
-| `admin.gojoystick.com` | No DNS | Attach to this app's Vercel project. No redirect. Do not remove `admin.bldg.chat` |
-| `driver.gojoystick.com` | No DNS | Attach to this app's Vercel project. No redirect. Do not remove `driver.bldg.chat` |
+| `gojoystick.com` | On `prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`. Live `HTTP 200` marketing shell | No change |
+| `www.gojoystick.com` | On the same project. Live Vercel `308` to `https://gojoystick.com` + path/query | No change. This PR's `vercel.json` redirect matches that 308 for when this deployment serves `www` |
+| `app.gojoystick.com` | No DNS. Absent from `prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV` | Attach to this project. No redirect |
+| `admin.gojoystick.com` | No DNS. Absent from this project | Attach to this project. No redirect. Do not remove `admin.bldg.chat` |
+| `driver.gojoystick.com` | No DNS. Absent from this project | Attach to this project. No redirect. Do not remove `driver.bldg.chat` |
 | `api.gojoystick.com` | No DNS | Do **not** attach to Vercel. That would serve this SPA, not the API |
 
 ### Railway
@@ -174,7 +174,7 @@ Production values were not read.
 
 ## UNKNOWN items that can break a new primary domain
 
-1. Vercel project ownership for `gojoystick.com` / `www.gojoystick.com` was not listed (403). Attaching the new names to a different project would serve the wrong app.
+1. Vercel ownership of `gojoystick.com` and `www.gojoystick.com` is **VERIFIED** as `bldg-admin-api` (`prj_8i7YrMmWXB7wWSZhbouHAKWMJFpV`). The earlier 403 was the team-scoped GET. Attaching `app.gojoystick.com`, `admin.gojoystick.com`, or `driver.gojoystick.com` to a different project would still serve the wrong app. Those three names are absent from this project.
 2. OAuth provider redirect URIs were not listed. Password and membership login use same-origin `/api`. OAuth login on a new host stays broken until those URIs are registered.
 3. Calendar and Gmail redirects stay on the legacy hosts. Those flows on the new hosts will not match the provider console.
 4. Stripe return URLs stay on `admin.bldg.chat` until `DAYFORGE_BILLING_APP_URL` is deliberately changed. That change is not part of making the new host primary.
