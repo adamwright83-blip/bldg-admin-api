@@ -1,3 +1,5 @@
+import { isJoystickPlatformHost } from "./joystickHostRouting";
+
 type TemplateType = "butler" | "laundryfarm";
 
 export type TenantId = "default" | "laundry_farm";
@@ -133,6 +135,19 @@ export const resolveTenantIdFromHost = (
       host: "",
       matchType: "fallback",
       matched: false,
+    };
+  }
+
+  // JOYSTICK front doors share the existing platform tenant id with
+  // admin.bldg.chat. They are not laundry_farm, and this match runs before
+  // alias and wildcard rules so a later laundry pattern cannot claim them.
+  // Membership sessions still use the persisted tenant, not this host id.
+  if (hostVariants.some(variant => isJoystickPlatformHost(variant))) {
+    return {
+      tenantId: DEFAULT_TENANT_ID,
+      host,
+      matchType: "exact",
+      matched: true,
     };
   }
 
