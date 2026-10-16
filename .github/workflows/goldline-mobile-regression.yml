@@ -88,7 +88,8 @@ jobs:
   mobile-build-and-schema:
     name: mobile-build-and-schema
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # Checkout on a cold runner has used most of an 8 minute budget before the production build starts.
+    timeout-minutes: 15
     services:
       mysql:
         image: mysql:8.0
@@ -239,7 +240,10 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 5
+    # Checkout, migrations, and Chromium use most of five minutes on a busy runner.
+    # Lanes that already finished their tests inside that cap, or that run several
+    # files, set their own budget. Every other lane stays at eight.
+    timeout-minutes: ${{ matrix.timeout || 8 }}
     strategy:
       fail-fast: false
       matrix:
@@ -269,14 +273,35 @@ jobs:
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
               --grep 'five mount cycles'
-          - name: mobile-driver-shell-and-pixel
+          - name: mobile-driver-action-resume
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/businessActionResume.spec.ts
+          - name: mobile-driver-home-composition
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeComposition.spec.ts
+          - name: mobile-driver-home-p1-safety
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeP1Safety.spec.ts
+          - name: mobile-driver-home-world
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/driverHomeWorldComposition.spec.ts
+          - name: mobile-driver-typography-floor
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/mobileTypographyFloor.spec.ts
+          - name: mobile-driver-pixel-layout
+            timeout: 8
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/pixel9Layout.spec.ts
           - name: mobile-dayline-graphic-actions
             command: node --test extensions/gumballpals/pickup-page.test.mjs && pnpm exec playwright test --config playwright.dayline-art.config.ts
@@ -296,6 +321,7 @@ jobs:
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/expandableWorld.spec.ts
           - name: mobile-immersion-fiction
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/immersion-gate.spec.ts
@@ -316,6 +342,7 @@ jobs:
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'six ambient|CI preview'
           - name: mobile-inhabited-anchor-gatekeeper
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
@@ -326,6 +353,7 @@ jobs:
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'Ghost'
           - name: mobile-inhabited-staller
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
@@ -341,6 +369,7 @@ jobs:
               e2e/goldline/pickupDeliveryWorldObjective.spec.ts
               e2e/goldline/realityProgression.spec.ts
           - name: mobile-route-wayward
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/today-route-persistence.spec.ts
@@ -393,7 +422,7 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 7
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:

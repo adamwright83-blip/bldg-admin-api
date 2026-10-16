@@ -1,8 +1,10 @@
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import {
+  adminActionLog,
   cleancloudPaidOrders,
   clearentDailySummaries,
+  clearentTransactions,
   paymentReconciliationMatches,
   type CleancloudPaidOrder,
   type ClearentDailySummary,
@@ -367,21 +369,39 @@ export async function reconcileClearentDailySummaries(input: PaymentReconciliati
   const localDates = Array.from(
     new Set(summaryRows.map((summary) => localBusinessDateForUtc(summary.reportDateUtc)).filter((date): date is string => Boolean(date)))
   );
+  const preservedByDate = new Map<string, PaymentReconciliationMatch[]>();
   for (const localDate of localDates) {
+    const preserved = await db
+      .select()
+      .from(paymentReconciliationMatches)
+      .where(
+        and(
+          eq(paymentReconciliationMatches.processor, "clearent"),
+          eq(paymentReconciliationMatches.processorSourceType, "clearent_daily_summary"),
+          eq(paymentReconciliationMatches.localBusinessDate, localDate),
+          sql`${paymentReconciliationMatches.matchStatus} IN ('manual_match','ignored')`
+        )
+      );
+    preservedByDate.set(localDate, preserved);
     await db
       .delete(paymentReconciliationMatches)
       .where(
         and(
           eq(paymentReconciliationMatches.processor, "clearent"),
           eq(paymentReconciliationMatches.processorSourceType, "clearent_daily_summary"),
-          eq(paymentReconciliationMatches.localBusinessDate, localDate)
+          eq(paymentReconciliationMatches.localBusinessDate, localDate),
+          sql`${paymentReconciliationMatches.matchStatus} NOT IN ('manual_match','ignored')`
         )
       );
   }
 
   for (const summary of summaryRows) {
-    const reconciliation = reconcileClearentDailySummaryWithCleanCloudCandidates(summary, candidates);
-    const rows = buildMatchRows(summary, reconciliation);
+    const localDate = localBusinessDateForUtc(summary.reportDateUtc) ?? "";
+    const rows = automaticRowsRespectingOperatorDecisions({
+      summary,
+      candidates,
+      preserved: preservedByDate.get(localDate) ?? [],
+    });
     if (rows.length) await db.insert(paymentReconciliationMatches).values(rows);
   }
 
@@ -431,6 +451,24 @@ export async function getPaymentReconciliationDashboard(input: PaymentReconcilia
     .orderBy(desc(paymentReconciliationMatches.localBusinessDate), desc(paymentReconciliationMatches.id));
 
   const needsReviewRows = matchedRows.filter((row) => row.matchStatus === "needs_review");
+  const ignoredRows = matchedRows.filter((row) => row.matchStatus === "ignored");
+  const clearentTransactionRows = await db
+    .select({
+      id: clearentTransactions.id,
+      clearentTransactionId: clearentTransactions.clearentTransactionId,
+      grossAmountCents: clearentTransactions.grossAmountCents,
+      enteredDateUtc: clearentTransactions.enteredDateUtc,
+      customerName: clearentTransactions.customerName,
+      sourceReportBasis: clearentTransactions.sourceReportBasis,
+    })
+    .from(clearentTransactions)
+    .where(
+      and(
+        gte(clearentTransactions.enteredDateUtc, filters.startUtc),
+        lt(clearentTransactions.enteredDateUtc, filters.endExclusiveUtc)
+      )
+    )
+    .orderBy(desc(clearentTransactions.enteredDateUtc));
   const unmatchedClearentRows = matchedRows.filter((row) => row.matchStatus === "unmatched");
   const exactMatchedRows = matchedRows.filter((row) => row.matchStatus === "date_total_match" || row.matchStatus === "customer_match" || row.matchStatus === "manual_match");
   const visibleMatchedRows = exactMatchedRows;
@@ -478,6 +516,8 @@ export async function getPaymentReconciliationDashboard(input: PaymentReconcilia
     cleancloudCandidateOrders: candidates,
     matchedRows: visibleMatchedRows,
     needsReviewRows,
+    ignoredRows,
+    clearentTransactions: clearentTransactionRows,
     unmatchedClearentRows,
     unmatchedCleanCloudRows: [],
     sourceCoverage,
@@ -523,4 +563,464 @@ export async function listReconciledCleanCloudCustomerRevenue(): Promise<Reconci
     byKey.set(key, existing);
   }
   return Array.from(byKey.values());
+}
+
+const COUNTED_MATCH_STATUSES = new Set(["date_total_match", "customer_match", "manual_match"]);
+
+export function isCountedReconciliationStatus(status: string): boolean {
+  return COUNTED_MATCH_STATUSES.has(status);
+}
+
+export type ReconciliationAuditReceipt = {
+  ok: true;
+  outcome: "recorded" | "already_recorded";
+  action: "manual_match" | "ignore";
+  matchId: number;
+  requestId: string;
+  tenantId: string;
+  matchedAmountCents: number;
+  amountSource: "clearent_transaction_gross" | "unchanged";
+  reconciledRevenueChanged: boolean;
+  reason: string;
+  auditLogId: number | null;
+  sources: {
+    clearentTransactionId: number | null;
+    clearentDailySummaryId: number | null;
+    cleancloudPaidOrderId: number | null;
+    cleancloudOrderId: string | null;
+  };
+};
+
+export type ReconciliationDecision =
+  | {
+      ok: true;
+      outcome: "record" | "already_recorded";
+      matchedAmountCents: number;
+      amountSource: "clearent_transaction_gross" | "unchanged";
+      reason: string;
+      existingMatchId: number | null;
+    }
+  | { ok: false; reason: string };
+
+function storedRequestId(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== "object") return null;
+  const value = (rawJson as { requestId?: unknown }).requestId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function evaluateManualMatch(input: {
+  tenantId: string;
+  confirmed: boolean;
+  requestId: string;
+  candidate: CleanCloudCandidateOrder | null;
+  transaction: {
+    id: number;
+    grossAmountCents: number | null;
+    enteredDateUtc: Date | null;
+  } | null;
+  existing: Array<{
+    id: number;
+    tenantId: string;
+    matchStatus: string;
+    matchedAmountCents: number;
+    processorSourceId: string | null;
+    cleancloudOrderId: string | null;
+    requestId: string | null;
+  }>;
+}): ReconciliationDecision {
+  const requestId = input.requestId.trim();
+  if (!requestId) return { ok: false, reason: "A request id is required so a repeated confirmation does not create a second match." };
+  if (input.confirmed !== true) return { ok: false, reason: "Operator confirmation is required before a match is recorded." };
+  if (input.tenantId !== "default") return { ok: false, reason: "Clearent transactions are not authorized for this tenant." };
+  if (!input.transaction) return { ok: false, reason: "That Clearent transaction does not exist. A daily summary is not this order's captured money." };
+  if (!input.candidate) return { ok: false, reason: "That CleanCloud order does not exist." };
+  if (input.candidate.tenantId !== input.tenantId) return { ok: false, reason: "That CleanCloud order belongs to a different tenant." };
+  if (!isCleanCloudClearentCandidate(input.candidate)) {
+    return { ok: false, reason: "This order is not a paid Clearent card candidate, so it cannot be matched." };
+  }
+  const repeated = input.existing.find(row => row.requestId === requestId);
+  if (repeated) {
+    return {
+      ok: true,
+      outcome: "already_recorded",
+      matchedAmountCents: repeated.matchedAmountCents,
+      amountSource: "unchanged",
+      reason: "This confirmation was already recorded. The stored amount was left unchanged.",
+      existingMatchId: repeated.id,
+    };
+  }
+  const transactionDate = localBusinessDateForUtc(input.transaction.enteredDateUtc);
+  if (!transactionDate) return { ok: false, reason: "This Clearent transaction has no entered date, so it cannot be matched to an order date." };
+  const orderDate = cleanCloudCandidateDate(input.candidate);
+  if (orderDate !== transactionDate) {
+    return { ok: false, reason: `The order date (${orderDate ?? "unknown"}) is not the Clearent transaction's entered date (${transactionDate}).` };
+  }
+  const captured = input.transaction.grossAmountCents;
+  if (captured == null || !Number.isSafeInteger(captured) || captured < 0) {
+    return { ok: false, reason: "This Clearent transaction has no stored gross amount. The order total was not used as captured money." };
+  }
+  if (captured !== input.candidate.totalCents) {
+    return {
+      ok: false,
+      reason: `The Clearent transaction is ${captured} cents. The order total is ${input.candidate.totalCents} cents. Those are different facts, so no match was recorded and the order total was not treated as captured money.`,
+    };
+  }
+  const sameTransaction = input.existing.find(
+    row => row.processorSourceId === String(input.transaction!.id) && isCountedReconciliationStatus(row.matchStatus)
+  );
+  if (sameTransaction && sameTransaction.cleancloudOrderId === input.candidate.cleancloudOrderId) {
+    return {
+      ok: true,
+      outcome: "already_recorded",
+      matchedAmountCents: sameTransaction.matchedAmountCents,
+      amountSource: "unchanged",
+      reason: "This transaction is already matched to that order. The stored amount was left unchanged.",
+      existingMatchId: sameTransaction.id,
+    };
+  }
+  if (sameTransaction) return { ok: false, reason: "This Clearent transaction is already matched to a different order." };
+  const sameOrder = input.existing.find(
+    row => row.cleancloudOrderId === input.candidate!.cleancloudOrderId && isCountedReconciliationStatus(row.matchStatus)
+  );
+  if (sameOrder) return { ok: false, reason: "This order is already matched to a different Clearent source." };
+  return {
+    ok: true,
+    outcome: "record",
+    matchedAmountCents: captured,
+    amountSource: "clearent_transaction_gross",
+    reason: "Matched the stored Clearent transaction gross amount. The order total was not copied.",
+    existingMatchId: null,
+  };
+}
+
+export function evaluateIgnore(input: {
+  tenantId: string;
+  confirmed: boolean;
+  requestId: string;
+  reason: string;
+  match: {
+    id: number;
+    tenantId: string;
+    matchStatus: string;
+    matchedAmountCents: number;
+    requestId: string | null;
+  } | null;
+}): ReconciliationDecision {
+  const requestId = input.requestId.trim();
+  const reason = input.reason.trim();
+  if (!requestId) return { ok: false, reason: "A request id is required so a repeated ignore does not create a second receipt." };
+  if (input.confirmed !== true) return { ok: false, reason: "Operator confirmation is required before a row is ignored." };
+  if (!reason) return { ok: false, reason: "Say why this row is being ignored." };
+  if (input.tenantId !== "default") return { ok: false, reason: "Clearent reconciliation rows are not authorized for this tenant." };
+  if (!input.match) return { ok: false, reason: "That reconciliation row does not exist." };
+  if (input.match.tenantId !== input.tenantId) return { ok: false, reason: "That reconciliation row belongs to a different tenant." };
+  if (input.match.requestId === requestId || input.match.matchStatus === "ignored") {
+    return {
+      ok: true,
+      outcome: "already_recorded",
+      matchedAmountCents: input.match.matchedAmountCents,
+      amountSource: "unchanged",
+      reason: "This row is already ignored. Captured revenue was not changed.",
+      existingMatchId: input.match.id,
+    };
+  }
+  if (isCountedReconciliationStatus(input.match.matchStatus)) {
+    return { ok: false, reason: "This row is already counted as reconciled revenue. Ignoring it would change that claim without a reversing source fact." };
+  }
+  if (!["needs_review", "unmatched", "possible_duplicate"].includes(input.match.matchStatus)) {
+    return { ok: false, reason: `A ${input.match.matchStatus} row cannot be ignored from this page.` };
+  }
+  return {
+    ok: true,
+    outcome: "record",
+    matchedAmountCents: input.match.matchedAmountCents,
+    amountSource: "unchanged",
+    reason,
+    existingMatchId: input.match.id,
+  };
+}
+
+export function automaticRowsRespectingOperatorDecisions(input: {
+  summary: ClearentDailySummary;
+  candidates: CleanCloudCandidateOrder[];
+  preserved: PaymentReconciliationMatch[];
+}): InsertPaymentReconciliationMatch[] {
+  const summaryId = String(input.summary.id);
+  const preservedForSummary = input.preserved.filter(row => row.processorSourceId === summaryId);
+  if (preservedForSummary.some(row => row.matchStatus === "ignored")) return [];
+  const manual = preservedForSummary.filter(row => row.matchStatus === "manual_match");
+  const excluded = new Set(manual.map(row => row.cleancloudOrderId).filter((id): id is string => Boolean(id)));
+  const reservedCents = manual.reduce((sum, row) => sum + row.matchedAmountCents, 0);
+  const remainingCents = input.summary.totalSalesCents - reservedCents;
+  const remainingCandidates = input.candidates.filter(row => !excluded.has(row.cleancloudOrderId));
+  if (remainingCents < 0) return [];
+  if (remainingCandidates.length === 0 && remainingCents === 0) return [];
+  const virtualSummary = { ...input.summary, totalSalesCents: remainingCents };
+  return buildMatchRows(
+    virtualSummary,
+    reconcileClearentDailySummaryWithCleanCloudCandidates(virtualSummary, remainingCandidates)
+  );
+}
+
+async function writeReconciliationReceipt(input: {
+  tenantId: string;
+  actionType: "payment_reconciliation_manual_match" | "payment_reconciliation_ignore";
+  entityId: string;
+  dollarValueCents: number;
+  metadata: Record<string, unknown>;
+}): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const inserted = await db.insert(adminActionLog).values({
+    tenantId: input.tenantId,
+    actionType: input.actionType,
+    entityType: "order",
+    entityId: input.entityId,
+    dollarValueCents: input.dollarValueCents,
+    status: "delivered",
+    source: "manual_action",
+    metadata: input.metadata,
+  });
+  return Number(inserted[0]?.insertId ?? 0) || null;
+}
+
+export async function recordManualReconciliationMatch(input: {
+  tenantId: string;
+  actorUserId: string;
+  confirmed: boolean;
+  requestId: string;
+  clearentTransactionId: number;
+  cleancloudPaidOrderId: number;
+}): Promise<ReconciliationAuditReceipt | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "Database unavailable. No match was recorded." };
+  const [transaction] = await db
+    .select()
+    .from(clearentTransactions)
+    .where(eq(clearentTransactions.id, input.clearentTransactionId))
+    .limit(1);
+  const [candidate] = await db
+    .select()
+    .from(cleancloudPaidOrders)
+    .where(eq(cleancloudPaidOrders.id, input.cleancloudPaidOrderId))
+    .limit(1);
+  const existingRows = await db
+    .select()
+    .from(paymentReconciliationMatches)
+    .where(eq(paymentReconciliationMatches.tenantId, input.tenantId));
+  const existing = existingRows.map(row => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    matchStatus: row.matchStatus,
+    matchedAmountCents: row.matchedAmountCents,
+    processorSourceId: row.processorSourceId,
+    cleancloudOrderId: row.cleancloudOrderId,
+    requestId: storedRequestId(row.rawJson),
+  }));
+  const decision = evaluateManualMatch({
+    tenantId: input.tenantId,
+    confirmed: input.confirmed,
+    requestId: input.requestId,
+    candidate: candidate ?? null,
+    transaction: transaction
+      ? { id: transaction.id, grossAmountCents: transaction.grossAmountCents, enteredDateUtc: transaction.enteredDateUtc }
+      : null,
+    existing,
+  });
+  if (!decision.ok) return decision;
+  if (decision.outcome === "already_recorded" && decision.existingMatchId) {
+    const prior = existingRows.find(row => row.id === decision.existingMatchId);
+    return {
+      ok: true,
+      outcome: "already_recorded",
+      action: "manual_match",
+      matchId: decision.existingMatchId,
+      requestId: storedRequestId(prior?.rawJson) ?? input.requestId.trim(),
+      tenantId: input.tenantId,
+      matchedAmountCents: decision.matchedAmountCents,
+      amountSource: "unchanged",
+      reconciledRevenueChanged: false,
+      reason: decision.reason,
+      auditLogId: null,
+      sources: {
+        clearentTransactionId: transaction?.id ?? null,
+        clearentDailySummaryId: null,
+        cleancloudPaidOrderId: candidate?.id ?? null,
+        cleancloudOrderId: candidate?.cleancloudOrderId ?? prior?.cleancloudOrderId ?? null,
+      },
+    };
+  }
+  if (!candidate || !transaction) return { ok: false, reason: "The source rows disappeared before the match could be recorded." };
+  const localBusinessDate = localBusinessDateForUtc(transaction.enteredDateUtc) ?? "";
+  const inserted = await db.insert(paymentReconciliationMatches).values({
+    tenantId: input.tenantId,
+    processor: "clearent",
+    processorSourceType: "clearent_transaction",
+    processorSourceId: String(transaction.id),
+    orderSource: candidate.sourceReportType === "orders_sales" ? "cleancloud_orders_sales" : "cleancloud_orders_revenue",
+    orderId: null,
+    cleancloudOrderId: candidate.cleancloudOrderId,
+    cleancloudCustomerId: candidate.cleancloudCustomerId,
+    customerName: transaction.customerName ?? candidate.customerName,
+    customerEmail: candidate.customerEmail,
+    customerPhone: candidate.customerPhone,
+    buildingName: candidate.buildingName,
+    buildingSlug: candidate.buildingSlug,
+    tower: candidate.tower,
+    unit: candidate.unit,
+    matchedAmountCents: decision.matchedAmountCents,
+    matchStatus: "manual_match",
+    matchConfidence: "high",
+    matchReason: decision.reason,
+    localBusinessDate,
+    rawJson: {
+      operatorDecision: true,
+      requestId: input.requestId.trim(),
+      actorUserId: input.actorUserId,
+      confirmed: true,
+      amountSource: "clearent_transaction_gross",
+      clearentTransactionRowId: transaction.id,
+      clearentTransactionId: transaction.clearentTransactionId,
+      cleancloudPaidOrderId: candidate.id,
+      orderTotalCents: candidate.totalCents,
+    },
+  });
+  const matchId = Number(inserted[0]?.insertId ?? 0);
+  const auditLogId = await writeReconciliationReceipt({
+    tenantId: input.tenantId,
+    actionType: "payment_reconciliation_manual_match",
+    entityId: candidate.cleancloudOrderId,
+    dollarValueCents: decision.matchedAmountCents,
+    metadata: {
+      requestId: input.requestId.trim(),
+      matchId,
+      amountSource: "clearent_transaction_gross",
+      clearentTransactionRowId: transaction.id,
+      cleancloudPaidOrderId: candidate.id,
+      orderTotalCentsNotUsedAsCaptured: candidate.totalCents,
+    },
+  });
+  return {
+    ok: true,
+    outcome: "recorded",
+    action: "manual_match",
+    matchId,
+    requestId: input.requestId.trim(),
+    tenantId: input.tenantId,
+    matchedAmountCents: decision.matchedAmountCents,
+    amountSource: "clearent_transaction_gross",
+    reconciledRevenueChanged: true,
+    reason: decision.reason,
+    auditLogId,
+    sources: {
+      clearentTransactionId: transaction.id,
+      clearentDailySummaryId: null,
+      cleancloudPaidOrderId: candidate.id,
+      cleancloudOrderId: candidate.cleancloudOrderId,
+    },
+  };
+}
+
+export async function ignoreReconciliationRow(input: {
+  tenantId: string;
+  actorUserId: string;
+  confirmed: boolean;
+  requestId: string;
+  reason: string;
+  matchId: number;
+}): Promise<ReconciliationAuditReceipt | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "Database unavailable. Nothing was ignored." };
+  const [match] = await db
+    .select()
+    .from(paymentReconciliationMatches)
+    .where(and(eq(paymentReconciliationMatches.id, input.matchId), eq(paymentReconciliationMatches.tenantId, input.tenantId)))
+    .limit(1);
+  const decision = evaluateIgnore({
+    tenantId: input.tenantId,
+    confirmed: input.confirmed,
+    requestId: input.requestId,
+    reason: input.reason,
+    match: match
+      ? {
+          id: match.id,
+          tenantId: match.tenantId,
+          matchStatus: match.matchStatus,
+          matchedAmountCents: match.matchedAmountCents,
+          requestId: storedRequestId(match.rawJson),
+        }
+      : null,
+  });
+  if (!decision.ok) return decision;
+  if (decision.outcome === "already_recorded") {
+    return {
+      ok: true,
+      outcome: "already_recorded",
+      action: "ignore",
+      matchId: match?.id ?? input.matchId,
+      requestId: storedRequestId(match?.rawJson) ?? input.requestId.trim(),
+      tenantId: input.tenantId,
+      matchedAmountCents: decision.matchedAmountCents,
+      amountSource: "unchanged",
+      reconciledRevenueChanged: false,
+      reason: decision.reason,
+      auditLogId: null,
+      sources: {
+        clearentTransactionId: null,
+        clearentDailySummaryId: match?.processorSourceId ? Number(match.processorSourceId) : null,
+        cleancloudPaidOrderId: null,
+        cleancloudOrderId: match?.cleancloudOrderId ?? null,
+      },
+    };
+  }
+  if (!match) return { ok: false, reason: "That reconciliation row does not exist." };
+  const previousRaw = match.rawJson && typeof match.rawJson === "object" ? match.rawJson : {};
+  await db
+    .update(paymentReconciliationMatches)
+    .set({
+      matchStatus: "ignored",
+      matchedAmountCents: match.matchedAmountCents,
+      matchReason: decision.reason,
+      rawJson: {
+        ...(previousRaw as Record<string, unknown>),
+        operatorDecision: true,
+        requestId: input.requestId.trim(),
+        actorUserId: input.actorUserId,
+        confirmed: true,
+        ignoredFromStatus: match.matchStatus,
+      },
+    })
+    .where(and(eq(paymentReconciliationMatches.id, match.id), eq(paymentReconciliationMatches.tenantId, input.tenantId)));
+  const auditLogId = await writeReconciliationReceipt({
+    tenantId: input.tenantId,
+    actionType: "payment_reconciliation_ignore",
+    entityId: match.cleancloudOrderId || `payment-reconciliation-match:${match.id}`,
+    dollarValueCents: 0,
+    metadata: {
+      requestId: input.requestId.trim(),
+      matchId: match.id,
+      previousStatus: match.matchStatus,
+      reason: decision.reason,
+      capturedRevenueUnchanged: true,
+    },
+  });
+  return {
+    ok: true,
+    outcome: "recorded",
+    action: "ignore",
+    matchId: match.id,
+    requestId: input.requestId.trim(),
+    tenantId: input.tenantId,
+    matchedAmountCents: match.matchedAmountCents,
+    amountSource: "unchanged",
+    reconciledRevenueChanged: false,
+    reason: decision.reason,
+    auditLogId,
+    sources: {
+      clearentTransactionId: null,
+      clearentDailySummaryId: match.processorSourceId ? Number(match.processorSourceId) : null,
+      cleancloudPaidOrderId: null,
+      cleancloudOrderId: match.cleancloudOrderId,
+    },
+  };
 }

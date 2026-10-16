@@ -60,7 +60,8 @@ test.describe("ACCEPTANCE 1: Public Landing → Start Journey", () => {
     const pricingCard = page.locator('[data-testid="landing-pricing-card"]');
     await expect(pricingCard).toBeAttached();
     await expect(pricingCard).toContainText("7-Day Free Trial, Then $49/Month");
-    await expect(pricingCard).toContainText("Card required");
+    await expect(pricingCard).toContainText("Card required at signup");
+    await expect(pricingCard).toContainText("Checkout is not open. This does not charge a card.");
 
     // 5. Test nav anchor scrolling
     const howItWorksLink = page.locator('nav.joystick-desktop__nav a[href="#how-it-works"]');
@@ -93,7 +94,8 @@ test.describe("ACCEPTANCE 1: Public Landing → Start Journey", () => {
     const mobileTerms = page.locator('[data-testid="mobile-commercial-terms"]');
     await expect(mobileTerms).toBeVisible();
     await expect(mobileTerms).toContainText("7-day trial · $49/month");
-    await expect(mobileTerms).toContainText("Card required · Cancel anytime");
+    await expect(mobileTerms).toContainText("Card required at signup · Cancel anytime");
+    await expect(mobileTerms).toContainText("Checkout is not open. This does not charge a card.");
 
     // 3. Verify mobile primary CTA reaches /joystick-start
     const mobileCta = page.locator(".joystick-mobile__cta");

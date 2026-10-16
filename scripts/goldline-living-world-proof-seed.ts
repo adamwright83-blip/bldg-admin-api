@@ -443,9 +443,9 @@ async function seed() {
   }
 
   /**
-   * Disposable proof consent only. Production outreach still requires a
-   * recorded SMS opt-in; a phone on an order is not consent. This row lets
-   * the proof villager pass that gate without changing the gate.
+   * Disposable marketing opt-in. The automated win-back gate still requires
+   * this. The personal Google Messages handoff does not. A phone on an order
+   * is not a relationship and is not consent.
    */
   await db
     .insert(customerContactPermissions)
@@ -466,6 +466,80 @@ async function seed() {
         sourceReference: "proof-fixture:silver-lake-sms-opt-in",
         expiresAt: null,
         recordedBy: "proof-seed",
+      },
+    });
+
+  /**
+   * Disposable opt-out. Paid history makes an existing relationship, and the
+   * recorded opt-out still blocks a personal handoff. This person is not a
+   * live customer and is not presented as contactable.
+   */
+  const optedOutPhone = "3105550199";
+  const optedOutAddress = "1180 Silver Lake Blvd, Los Angeles, CA 90026";
+  await db.insert(orders).values(
+    [110, 75].map((days, index) => ({
+      tenantId: TENANT,
+      firstName: "Rex",
+      lastName: "Out",
+      phone: optedOutPhone,
+      email: "rex.out@example.com",
+      address: optedOutAddress,
+      status: "delivered" as const,
+      paid: true,
+      stripePaymentIntentId: `pi_proof_silver_lake_opt_out_${index + 1}`,
+      total: "42.00",
+      serviceType: "wash_fold" as const,
+      createdAt: daysAgo(days),
+      updatedAt: daysAgo(days),
+      paidAt: daysAgo(days),
+      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupTimeWindow: "9:00-11:00",
+      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      specialInstructions: `proof-fixture-silverlake-opt-out-${index}`,
+    })) as never
+  );
+  const optedOutOrders = await db
+    .select({ id: orders.id, stripePaymentIntentId: orders.stripePaymentIntentId, paidAt: orders.paidAt })
+    .from(orders)
+    .where(and(eq(orders.tenantId, TENANT), eq(orders.phone, optedOutPhone)));
+  for (const o of optedOutOrders) {
+    if (!o.stripePaymentIntentId) continue;
+    await admitAuthorityClaimWith(db as unknown as AuthorityTransaction, {
+      tenantId: TENANT,
+      claimType: "payment_verified",
+      subjectType: "order",
+      subjectId: String(o.id),
+      sourceType: "stripe_payment_intent",
+      sourceRef: o.stripePaymentIntentId,
+      actorType: "stripe",
+      evidenceClass: "authoritative_external",
+      verificationClass: "VERIFIED",
+      admissionPolicy: "stripe_webhook_v1",
+      occurredAt: o.paidAt,
+      metadata: {
+        captureEvidence: "stripe_amount_received_v1",
+        capturedCurrency: "usd",
+        capturedAmountCents: 4200,
+      },
+    });
+  }
+  await db
+    .insert(customerContactPermissions)
+    .values({
+      tenantId: TENANT,
+      customerKeyHash: hashIdentityKey(TENANT, `phone:${optedOutPhone}`),
+      channel: "sms",
+      purpose: "win_back_marketing",
+      status: "opted_out",
+      sourceReference: "proof-fixture:silver-lake-sms-opt-out",
+      capturedAt: new Date(),
+      expiresAt: null,
+      recordedBy: "proof-seed",
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        status: "opted_out",
+        sourceReference: "proof-fixture:silver-lake-sms-opt-out",
       },
     });
 

@@ -14,6 +14,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  tinyint,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -10351,4 +10352,65 @@ export const personalSenderIdentities = mysqlTable(
 
 export type PersonalSenderIdentityRow = typeof personalSenderIdentities.$inferSelect;
 export type InsertPersonalSenderIdentity = typeof personalSenderIdentities.$inferInsert;
+
+/**
+ * Append-only audit that an operator invoked an SMS compose handoff.
+ * The body is a fingerprint. Recipient, tokens, and message text are not columns.
+ * A row is not a dispatch and not a carrier receipt.
+ */
+export const smsComposeHandoffAudits = mysqlTable(
+  "sms_compose_handoff_audits",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 64 }).notNull(),
+    messageId: varchar("message_id", { length: 64 }).notNull(),
+    revisionCount: int("revision_count").notNull(),
+    bodyDigest: varchar("body_digest", { length: 64 }).notNull(),
+    handoffState: varchar("handoff_state", { length: 40 }).notNull(),
+    surface: varchar("surface", { length: 32 }).notNull(),
+    invokedAt: timestamp("invoked_at").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeIdx: index("idx_scha_scope").on(
+      table.tenantId,
+      table.operatorId,
+      table.messageId,
+      table.revisionCount
+    ),
+  })
+);
+
+export type SmsComposeHandoffAuditRow = typeof smsComposeHandoffAudits.$inferSelect;
+export type InsertSmsComposeHandoffAudit = typeof smsComposeHandoffAudits.$inferInsert;
+
+/**
+ * Insert-once Lost Property chapter unlock.
+ * openedAt is the ledger time that opened the chapter, not the insert time.
+ * A row stays when a later recompute would have withheld the evidence.
+ * Chapter is 1, 2, or 3. Chapter 4 is not stored.
+ */
+export const hiddenGameChapterUnlocks = mysqlTable(
+  "hidden_game_chapter_unlocks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    chapter: tinyint("chapter").notNull(),
+    openedAt: timestamp("openedAt", { fsp: 3 }).notNull(),
+    evidenceJson: json("evidenceJson").notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    unlockUnique: uniqueIndex("uq_hidden_game_chapter_unlock").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.chapter
+    ),
+  })
+);
+
+export type HiddenGameChapterUnlockRow = typeof hiddenGameChapterUnlocks.$inferSelect;
+export type InsertHiddenGameChapterUnlock = typeof hiddenGameChapterUnlocks.$inferInsert;
 

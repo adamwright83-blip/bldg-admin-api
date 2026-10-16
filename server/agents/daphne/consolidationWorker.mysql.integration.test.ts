@@ -116,7 +116,9 @@ describeMysql("Daphne actual scheduled consolidation executor", () => {
     const stopA = startDaphneConsolidationWorker(),
       stopB = startDaphneConsolidationWorker();
     try {
-      await until(async () => (await receipts(s)).length === 4);
+      // A lock conflict retries immediately and does not quarantine the observation.
+      // This poll still allows one later 10s backoff. The receipt count stays 4.
+      await until(async () => (await receipts(s)).length === 4, 20_000);
       const card = await buildDaphneV2OperatorCard({ ...s, agentId: "claire" });
       expect(JSON.stringify(card)).toContain("bakery");
       expect(JSON.stringify(card)).not.toContain("I own laundromat");
@@ -144,14 +146,14 @@ describeMysql("Daphne actual scheduled consolidation executor", () => {
     await seed(s, "I own a secret shop.", "denied");
     const stopDenied = startDaphneConsolidationWorker();
     try {
-      await until(async () => (await receipts(s)).length === 5);
+      await until(async () => (await receipts(s)).length === 5, 20_000);
     } finally {
       await stopDenied();
     }
     const denied = await buildDaphneV2OperatorCard({ ...s, agentId: "claire" });
     expect(JSON.stringify(denied)).not.toContain("secret shop");
     expect(denied.metaPreferences.adaptation_enabled).toBe(false);
-  }, 25_000); // polling allows 10s; exercise both scheduled workers under CI load
+  }, 50_000); // first poll allows one 10s backoff; receipt count stays 4, then 5
   it("consolidates only allowlisted tenants even when older Daphne is globally enabled", async () => {
     const allowed = scope();
     const excluded = scope();

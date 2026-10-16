@@ -4,6 +4,12 @@ import Stripe from "stripe";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import {
+  checkAdvertisedStripePrice,
+  JOYSTICK_ANNUAL_PLAN_KEY,
+  JOYSTICK_REQUIRED_TRIAL_DAYS,
+  resolveConfiguredAnnualPriceId,
+} from "./joystickStripeOffer";
+import {
   createLegacyDayforgeSubscriptionCheckout,
   processLegacyDayforgeBillingWebhook,
 } from "./saasBilling";
@@ -38,6 +44,66 @@ export interface RunStripeAcceptanceOptions {
   stripeClient?: Stripe;
   dbConnection?: Connection;
   onCheckoutReady?: (details: { sessionId: string; url: string }) => void;
+}
+
+async function assertConfiguredAnnualPrice(
+  db: Connection,
+  stripe: Stripe
+): Promise<StripeAcceptanceResult | null> {
+  const [annualRows] = await db.query(
+    "SELECT planKey, stripePriceId, trialDays FROM dayforge_saas_billing_plans WHERE planKey = ? AND active = true",
+    [JOYSTICK_ANNUAL_PLAN_KEY]
+  );
+  const annualPlan = (annualRows as Array<{
+    stripePriceId?: string;
+    trialDays?: number;
+  }>)[0];
+  const annualConfig = resolveConfiguredAnnualPriceId({
+    planPriceId: annualPlan?.stripePriceId,
+    envPriceId: process.env.JOYSTICK_STRIPE_ANNUAL_PRICE_ID,
+  });
+  if (annualConfig.status === "absent") return null;
+  if (annualConfig.status === "conflict") {
+    return {
+      status: "FAILED",
+      failureStep: "stripe_annual_price_validation",
+      reason: annualConfig.reason,
+    };
+  }
+  if (annualPlan && annualPlan.trialDays !== JOYSTICK_REQUIRED_TRIAL_DAYS) {
+    return {
+      status: "FAILED",
+      failureStep: "plan_trial_days_check",
+      reason: `Plan '${JOYSTICK_ANNUAL_PLAN_KEY}' has trialDays = ${annualPlan.trialDays}, expected ${JOYSTICK_REQUIRED_TRIAL_DAYS}`,
+    };
+  }
+  let annualPrice: Stripe.Price;
+  try {
+    annualPrice = await stripe.prices.retrieve(annualConfig.priceId);
+  } catch (err: any) {
+    return {
+      status: "FAILED",
+      failureStep: "stripe_annual_price_retrieval",
+      reason: `Failed to retrieve Stripe annual price ${annualConfig.priceId}: ${err.message}`,
+    };
+  }
+  const annualCheck = checkAdvertisedStripePrice({
+    planKey: JOYSTICK_ANNUAL_PLAN_KEY,
+    trialDays: annualPlan?.trialDays ?? JOYSTICK_REQUIRED_TRIAL_DAYS,
+    configuredPriceId: annualConfig.priceId,
+    price: annualPrice,
+  });
+  if (!annualCheck.ok) {
+    return {
+      status: "FAILED",
+      failureStep:
+        annualCheck.code === "trial_days"
+          ? "plan_trial_days_check"
+          : "stripe_annual_price_validation",
+      reason: annualCheck.reason,
+    };
+  }
+  return null;
 }
 
 export async function runStripeProviderAcceptance(
@@ -220,17 +286,22 @@ export async function runStripeProviderAcceptance(
       };
     }
 
-    if (
-      price.unit_amount !== 4900 ||
-      price.currency !== "usd" ||
-      price.recurring?.interval !== "month"
-    ) {
+    const monthlyCheck = checkAdvertisedStripePrice({
+      planKey,
+      trialDays: plan.trialDays,
+      configuredPriceId: plan.stripePriceId,
+      price,
+    });
+    if (!monthlyCheck.ok) {
       return {
         status: "FAILED",
         failureStep: "stripe_price_validation",
-        reason: `Stripe price ${plan.stripePriceId} mismatch: amount=${price.unit_amount} (expected 4900), currency=${price.currency} (expected usd), interval=${price.recurring?.interval} (expected month)`,
+        reason: monthlyCheck.reason,
       };
     }
+
+    const annualPriceFailure = await assertConfiguredAnnualPrice(db, stripe);
+    if (annualPriceFailure) return annualPriceFailure;
 
     // Step 4: Test Onboarding Setup and Checkout Creation
     const suffix = Date.now().toString(36);

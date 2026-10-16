@@ -44,6 +44,10 @@ import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperi
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
+import {
+  SMS_COMPOSE_APPROVAL_CONFIRMATION,
+  SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
+} from "../experience/lanternCity/personalNumber/smsComposeHandoff";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -122,36 +126,22 @@ export const goldlineWorldRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { resolveCanonicalCustomerContact } = await import(
+      const { commitPersonalOutreachDraft } = await import(
         "../experience/lanternCity/cozyVillagerOutreachService"
       );
-      const { createScheduledOutreachDraft } = await import(
-        "../experience/lanternCity/scheduledOutreachService"
-      );
-
-      const resolved = await resolveCanonicalCustomerContact({
-        tenantId: ctx.tenantId,
-        canonicalOperatorId: ctx.user.openId,
-        customerId: input.customerId,
-        territoryId: input.territoryId,
-        expectedPhone: input.expectedPhone,
-        timeZone: input.timezone,
-      });
-
-      return await createScheduledOutreachDraft({
+      return await commitPersonalOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        customerId: resolved.customerId,
-        customerName: resolved.customerName,
-        recipientPhone: resolved.phone,
-        originalSuggestedDraft: resolved.suggestedMessage,
-        messageBody: input.messageBody.trim(),
+        customerId: input.customerId,
+        messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
         timezone: input.timezone,
-        dstAmbiguityChoice: input.dstAmbiguityChoice,
+        expectedPhone: input.expectedPhone,
         slotId: input.slotId,
-        territoryId: resolved.territoryId,
+        territoryId: input.territoryId,
+        dstAmbiguityChoice: input.dstAmbiguityChoice,
         idempotencyKey: input.idempotencyKey,
+        deliveryIntent: "scheduled",
       });
     }),
   listScheduledOutreach: legacyDayforgeTenantOperatorProcedure
@@ -253,6 +243,86 @@ export const goldlineWorldRouter = router({
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         leaseHolder: `operator_${ctx.user.openId}`,
+      });
+    }),
+  openSmsComposeHandoff: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1).max(128),
+        revisionCount: z.number().int().positive(),
+        approvedBody: z.string().min(1).max(500),
+        recipientPhone: z.string().min(7).max(32),
+        confirmation: z.literal(SMS_COMPOSE_APPROVAL_CONFIRMATION),
+        clientKind: z.enum(["android", "ios", "desktop", "other"]),
+        surface: z.enum(["cozy_composer", "scheduled_outreach"]),
+        pageUrl: z.string().max(2000).optional(),
+        origin: z.string().max(2000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { openApprovedSmsCompose } = await import(
+        "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
+      );
+      return await openApprovedSmsCompose({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        revisionCount: input.revisionCount,
+        approvedBody: input.approvedBody,
+        recipientPhone: input.recipientPhone,
+        confirmation: input.confirmation,
+        clientKind: input.clientKind,
+        surface: input.surface,
+        pageUrl: input.pageUrl,
+        origin: input.origin,
+      });
+    }),
+  reportSmsComposeOperatorSent: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1).max(128),
+        revisionCount: z.number().int().positive(),
+        approvedBody: z.string().min(1).max(500),
+        confirmation: z.literal(SMS_COMPOSE_REPORTED_SENT_CONFIRMATION),
+        surface: z.enum(["cozy_composer", "scheduled_outreach"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { reportSmsComposeOperatorSent } = await import(
+        "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
+      );
+      return await reportSmsComposeOperatorSent({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        revisionCount: input.revisionCount,
+        approvedBody: input.approvedBody,
+        confirmation: input.confirmation,
+        surface: input.surface,
+      });
+    }),
+  smsComposeHandoffSnapshot: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        items: z
+          .array(
+            z.object({
+              messageId: z.string().min(1).max(128),
+              revisionCount: z.number().int().positive(),
+              approvedBody: z.string().max(500),
+            })
+          )
+          .max(100),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { smsComposeHandoffSnapshot } = await import(
+        "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
+      );
+      return await smsComposeHandoffSnapshot({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        items: input.items,
       });
     }),
   personalSenderStatus: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {

@@ -53,6 +53,40 @@ export const TODAY_STATUS_LINE: Record<LanternTodayStatus, string | null> = {
   no_coordinates: "Today's run has no targets with real coordinates yet.",
 };
 
+/** The executable stop Home and Driver already share. Presentation only. */
+export type DriverCurrentStop = {
+  id: string;
+  title: string;
+};
+
+export type HeroTodayNotice =
+  | { kind: "status"; line: string | null }
+  | { kind: "current-stop"; id: string; title: string; line: string };
+
+/**
+ * The map projection can have no lit target while the driver line still has a
+ * current stop. In that case the hero names the stop. It does not claim the
+ * Day Line is unavailable, and it does not invent a map coordinate.
+ */
+export function heroTodayNotice(input: {
+  todayStatus: LanternTodayStatus | null | undefined;
+  driverStop: DriverCurrentStop | null;
+}): HeroTodayNotice {
+  const title = input.driverStop?.title.trim() ?? "";
+  if (input.todayStatus === "day_line_unavailable" && input.driverStop && title) {
+    return {
+      kind: "current-stop",
+      id: input.driverStop.id,
+      title,
+      line: "Current stop. No map target is lit.",
+    };
+  }
+  return {
+    kind: "status",
+    line: input.todayStatus ? TODAY_STATUS_LINE[input.todayStatus] : null,
+  };
+}
+
 export function buildObjectiveMarkers(data: LanternObjectiveMarks | null | undefined): ObjectiveMarker[] {
   if (!data) return [];
   const markers: ObjectiveMarker[] = [];

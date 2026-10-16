@@ -346,6 +346,13 @@ test("CALL drives the full chain but a perfect arcade result cannot capture", as
 test("VISIT requires preparation, departure, arrival, and an authoritative outcome", async ({
   page,
 }) => {
+  // On a GitHub runner this visit consumes the whole 90s describe budget.
+  // The blur poll is the check in flight when that budget ends, so the
+  // reported error is the test timeout ("window:blur must not accumulate")
+  // with no received count. The poll keeps Playwright's 5s expect timeout:
+  // a listener that is still there still fails. The same application bytes
+  // passed this lane when the run finished inside 90s (job 116807730714).
+  test.setTimeout(150_000);
   await login(page, "VISIT");
   const listenersBefore = await stableListenerSnapshot(page);
   await test.step("reach physical encounter", async () => {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -15,7 +15,26 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { isLiveLanternCustomer } from "@/components/admin/control-room/customerGeography";
+import {
+  buildDayPlanProjection,
+  executableDayLineStops,
+  liveObjectivesFromFieldToday,
+} from "@/pages/driver/goldlineDayPlanModel";
+import {
+  homeCustomerId,
+  isSilverLakeRecoveryCustomer,
+  resolveHomeCityClick,
+  type HomeCityCustomer,
+} from "./homeCityClick";
 import "./JoystickHome.css";
+
+function localBusinessDate(date = new Date()): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 const LanternCityIslands = lazy(
   () => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands")
@@ -47,13 +66,6 @@ function money(value: number | null | undefined) {
   }).format(value);
 }
 
-function when(iso: string | null | undefined) {
-  if (!iso) return "Now";
-  const d = new Date(iso);
-  if (Number.isNaN(+d)) return "Now";
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 export default function JoystickHome({
   operatorName = "Adam",
   onNavigate = path => {
@@ -64,10 +76,33 @@ export default function JoystickHome({
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
-  const today = trpc.system.legacyDayforgeToday.list.useQuery(undefined, {
-    refetchInterval: 30_000,
-    retry: false,
-  });
+  const businessDate = localBusinessDate();
+  const pickupQuery = { date: businessDate, status: "new" as const, dateField: "pickupDate" as const };
+  const deliveryQuery = { date: businessDate, status: "ready" as const, dateField: "deliveryDate" as const };
+  const pickups = trpc.system.field.orders.listByDate.useQuery(pickupQuery, { retry: false });
+  const deliveries = trpc.system.field.orders.listByDate.useQuery(deliveryQuery, { retry: false });
+  const completedPickups = trpc.system.field.orders.listByDate.useQuery(
+    { date: businessDate, status: "collected" as const, dateField: "pickupDate" as const },
+    { retry: false }
+  );
+  const completedDeliveries = trpc.system.field.orders.listByDate.useQuery(
+    { date: businessDate, status: "delivered" as const, dateField: "deliveryDate" as const },
+    { retry: false }
+  );
+  const externalOrders = trpc.system.externalOrders.list.useQuery(
+    { scheduledDate: businessDate },
+    { retry: false }
+  );
+  const fieldToday = trpc.system.field.today.useQuery(undefined, { retry: false });
+  const dayDirector = trpc.system.dayDirector.state.useQuery(
+    { businessDate },
+    { retry: false }
+  );
+  const authoredDay = trpc.system.nightShift.today.useQuery(undefined, { retry: false });
+  const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(undefined, { retry: false });
+  const openChannel = trpc.system.openChannel.current.useQuery({ businessDate }, { retry: false });
+  const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, { retry: false });
+  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, { retry: false });
   const president = trpc.president.founderSurface.useQuery(undefined, {
     refetchInterval: 30_000,
     retry: false,
@@ -79,9 +114,54 @@ export default function JoystickHome({
 
   const firstName = operatorName.split(/\s+/)[0] || "Adam";
   const summary = dashboard.data;
-  const dayItems = today.data ?? [];
-  const current = dayItems[0] ?? null;
-  const upcoming = dayItems.slice(1, 4);
+  const dayLineLoading =
+    pickups.isLoading ||
+    deliveries.isLoading ||
+    completedPickups.isLoading ||
+    completedDeliveries.isLoading ||
+    externalOrders.isLoading ||
+    fieldToday.isLoading;
+  const dayLine = useMemo(() => {
+    const field =
+      fieldToday.data?.businessDate === businessDate ? fieldToday.data : undefined;
+    return buildDayPlanProjection({
+      businessDate,
+      pickups: [...(completedPickups.data ?? []), ...(pickups.data ?? [])],
+      deliveries: [...(completedDeliveries.data ?? []), ...(deliveries.data ?? [])],
+      externalOrders: externalOrders.data ?? [],
+      openChannelMission: openChannel.data,
+      salesMissions: builtMissions.data,
+      liveObjectives: liveObjectivesFromFieldToday(field?.timeline ?? []),
+      territoryBundles: (territories.data ?? [])
+        .filter(item => !item.state.cleared)
+        .map(item => ({
+          territoryId: item.definition.id,
+          memberPhysicalEntityIds: item.definition.members.map(member => member.physicalEntityId),
+        })),
+      campaignChapters: campaign.data?.campaign.chapters,
+      nextCommitmentAt: field?.nextFixedCommitment?.scheduledAt,
+      processingLocation: dayDirector.data?.processingLocation,
+      commitments: dayDirector.data?.commitments,
+      authoredDay: authoredDay.data?.available ? authoredDay.data.authoredDay : null,
+    });
+  }, [
+    authoredDay.data,
+    builtMissions.data,
+    businessDate,
+    campaign.data,
+    completedDeliveries.data,
+    completedPickups.data,
+    dayDirector.data,
+    deliveries.data,
+    externalOrders.data,
+    fieldToday.data,
+    openChannel.data,
+    pickups.data,
+    territories.data,
+  ]);
+  const executableStops = executableDayLineStops(dayLine.stops);
+  const current = dayLineLoading ? null : executableStops[0] ?? null;
+  const upcoming = dayLineLoading ? [] : executableStops.slice(1, 4);
   const questions = president.data?.brief.questions ?? [];
 
   const presidentRows = useMemo(
@@ -111,8 +191,12 @@ export default function JoystickHome({
     [questions]
   );
 
-  const lanternCount =
-    atlas.data?.customers?.filter(isLiveLanternCustomer).length ?? null;
+  const locatedCustomers = (atlas.data?.customers ?? []).filter(isLiveLanternCustomer) as HomeCityCustomer[];
+  const recoveryCustomers = locatedCustomers.filter(isSilverLakeRecoveryCustomer);
+  const inspectionCustomer =
+    locatedCustomers.find(customer => !isSilverLakeRecoveryCustomer(customer)) ?? null;
+  const [inspectedCustomerId, setInspectedCustomerId] = useState<string | null>(null);
+  const lanternCount = atlas.data ? locatedCustomers.length : null;
   const weekShare =
     summary?.revenueMonth != null && summary.revenueMonth > 0 && summary.revenueWeek != null
       ? Math.round((summary.revenueWeek / summary.revenueMonth) * 100)
@@ -192,6 +276,7 @@ export default function JoystickHome({
                 showUtilityDock={false}
                 onOpenCustomer={() => onNavigate("/customers")}
                 onNavigate={onNavigate}
+                driverCurrentStop={current ? { id: current.id, title: current.title } : null}
               />
             </Suspense>
           </div>
@@ -208,6 +293,73 @@ export default function JoystickHome({
               Open city <ArrowRight />
             </Link>
           </div>
+          <nav className="jh-city-clicks" aria-label="City clicks" data-testid="home-city-clicks">
+            <button
+              type="button"
+              data-testid="home-click-building-inspection"
+              onClick={() => {
+                const click = resolveHomeCityClick({ kind: "building", buildingId: "opus_la" });
+                if (click.action === "navigate") onNavigate(click.path);
+              }}
+            >
+              OPUS LA inspection
+            </button>
+            <button
+              type="button"
+              data-testid="home-click-tower-wars"
+              onClick={() => {
+                const click = resolveHomeCityClick({ kind: "building", buildingId: "century_park_east" });
+                if (click.action === "navigate") onNavigate(click.path);
+              }}
+            >
+              Century Park East
+            </button>
+            {inspectionCustomer ? (
+              <button
+                type="button"
+                data-testid="home-click-customer-inspection"
+                data-customer-id={homeCustomerId(inspectionCustomer)}
+                onClick={() => {
+                  const customerId = homeCustomerId(inspectionCustomer);
+                  const click = resolveHomeCityClick({ kind: "customer_inspection", customerId });
+                  if (click.action === "inspect") setInspectedCustomerId(click.customerId);
+                }}
+              >
+                Inspect {inspectionCustomer.displayName}
+              </button>
+            ) : null}
+            {recoveryCustomers.map(customer => {
+              const customerId = homeCustomerId(customer);
+              return (
+                <button
+                  key={customer.identityKey}
+                  type="button"
+                  data-testid="home-click-silver-lake"
+                  data-customer-id={customerId}
+                  onClick={() => {
+                    const click = resolveHomeCityClick({
+                      kind: "recovery_customer",
+                      customerId,
+                      territoryId: "silver-lake",
+                    });
+                    if (click.action === "navigate") onNavigate(click.path);
+                  }}
+                >
+                  {customer.displayName}
+                </button>
+              );
+            })}
+          </nav>
+          {inspectedCustomerId ? (
+            <aside
+              className="jh-customer-inspection"
+              data-testid="home-customer-inspection"
+              data-customer-id={inspectedCustomerId}
+            >
+              <strong>Customer inspection</strong>
+              <span>{inspectedCustomerId}</span>
+            </aside>
+          ) : null}
         </article>
 
         <div className="jh-right-rail">
@@ -256,25 +408,30 @@ export default function JoystickHome({
           </article>
         </div>
 
-        <article className="jh-panel jh-now">
+        <article className="jh-panel jh-now" data-testid="home-day-line" data-day-line-id={current?.id ?? ""}>
           <header>
             <div>
               <span className="jh-kicker">NOW · FROM YOUR DAY LINE</span>
-              <h2>{current?.displayTitle ?? "No ranked Day Line item"}</h2>
-              <p>{current ? `${current.accountName} · ${when(current.dueAt)}` : "Nothing is asking for immediate action."}</p>
+              <h2>{dayLineLoading ? "Reading today's Day Line…" : current?.title ?? "No executable Day Line stop"}</h2>
+              <p>
+                {current
+                  ? `${current.sourceLabel} · ${current.timeLabel}`
+                  : dayLineLoading
+                    ? "The driver line is still loading."
+                    : "Nothing is asking for immediate action."}
+              </p>
             </div>
             <Link href={current?.destinationPath ?? "/play"} className="jh-round-link" aria-label="Open current Day Line item">
               <ArrowRight />
             </Link>
           </header>
-          {current?.note ? <div className="jh-claire-note"><Mic /> <span><b>Claire briefing</b>{current.note}</span></div> : null}
           <div className="jh-up-next">
             {upcoming.length ? upcoming.map(item => (
-              <Link key={item.id} href={item.destinationPath}>
-                <time>{when(item.dueAt)}</time>
-                <span>{item.displayTitle}</span>
+              <Link key={item.id} href={item.destinationPath ?? "/play"} data-day-line-id={item.id}>
+                <time>{item.timeLabel}</time>
+                <span>{item.title}</span>
               </Link>
-            )) : <span className="jh-empty">Your next ranked actions will appear here.</span>}
+            )) : <span className="jh-empty">{dayLineLoading ? "Reading the next stops…" : "Your next stops will appear here."}</span>}
           </div>
         </article>
 
@@ -304,7 +461,11 @@ export default function JoystickHome({
           <blockquote>“{firstInsight}”</blockquote>
           <ul>
             <li>{summary?.distinctCustomerPhones ?? "—"} customer phones in the connected order history</li>
-            <li>{dayItems.filter(item => item.urgency === "overdue").length} overdue Day Line follow-ups</li>
+            <li>
+              {dayLineLoading
+                ? "Day Line stops are still loading."
+                : `${executableStops.length} executable Day Line stop${executableStops.length === 1 ? "" : "s"}`}
+            </li>
             <li>{lanternCount ?? "—"} customers with resolved geographic locations</li>
           </ul>
         </article>

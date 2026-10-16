@@ -1,7 +1,8 @@
 /**
- * Read-only Lost Property unlock query.
+ * Lost Property unlock query.
  * Session identity selects the tenant and operator. The client sends no
- * sale, objective, or chapter. This router does not write.
+ * sale, objective, or chapter. The durable read records a chapter the
+ * ledger just opened. This file does not issue SQL.
  */
 import { TRPCError } from "@trpc/server";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
@@ -11,10 +12,8 @@ import {
   type CanonicalOperatorIdentity,
 } from "../../agents/persistentOperator/identity";
 import type { LostPropertyUnlockRead } from "../../../shared/lostPropertyUnlock";
-import {
-  readLostPropertyUnlock,
-  type LostPropertyScope,
-} from "./lostPropertyUnlockRead";
+import { readDurableLostPropertyUnlock } from "./lostPropertyChapterUnlock";
+import type { LostPropertyScope } from "./lostPropertyUnlockRead";
 
 export type LostPropertyUnlockRouterDeps = {
   resolveIdentity: (input: {
@@ -62,7 +61,7 @@ const defaultRouterDeps: LostPropertyUnlockRouterDeps = {
       user: input.user,
       subsystem: "hidden_game.lost_property",
     }),
-  readUnlock: scope => readLostPropertyUnlock(scope),
+  readUnlock: scope => readDurableLostPropertyUnlock(scope),
 };
 
 export function createLostPropertyUnlockRouter(

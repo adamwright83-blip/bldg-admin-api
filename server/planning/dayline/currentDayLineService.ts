@@ -36,12 +36,44 @@ function rankingOf(outcome: MissionPlanOutcome): Array<{ campaignId: string }> {
   return outcome.ranking;
 }
 
-function authoritativeWorkRanking(outcome: MissionPlanOutcome): RankedDayWork[] | null {
+const COMMITMENT_WORK_MARKER = ":day_director_commitment:";
+
+/**
+ * A Day Director commitment belongs to its own business date. Today's line
+ * keeps one only when that date's state still includes it. Other ranked work
+ * is unchanged. A missing state does not invent a fence.
+ */
+function fencedOffToday(
+  item: {
+    workId: string;
+    sourceRefs?: ReadonlyArray<{ sourceType?: string; sourceId?: string }>;
+  },
+  todayCommitmentIds: ReadonlySet<string>
+): boolean {
+  const ids = new Set<string>();
+  for (const ref of item.sourceRefs ?? []) {
+    if (ref.sourceType === "day_director_commitment" && ref.sourceId) ids.add(ref.sourceId);
+  }
+  const markerAt = item.workId.lastIndexOf(COMMITMENT_WORK_MARKER);
+  if (markerAt >= 0) {
+    const id = item.workId.slice(markerAt + COMMITMENT_WORK_MARKER.length);
+    if (id) ids.add(id);
+  }
+  if (ids.size === 0) return false;
+  for (const id of ids) if (!todayCommitmentIds.has(id)) return true;
+  return false;
+}
+
+function authoritativeWorkRanking(
+  outcome: MissionPlanOutcome,
+  todayCommitmentIds: ReadonlySet<string> | null
+): RankedDayWork[] | null {
   const workPlan = outcome.workPlan;
   if (!workPlan) return null;
   if (workPlan.status !== "ranked") return [];
   return workPlan.ranking
     .filter(item => item.eligible)
+    .filter(item => todayCommitmentIds == null || !fencedOffToday(item, todayCommitmentIds))
     .map(item => ({
       id: item.workId,
       title: item.title,
@@ -77,6 +109,26 @@ function rankingStatusFor(
   if (outcome.status === "no_plan" && rankedCount === 0) return "no_plan";
   if (rankedCount === 0) return "unavailable";
   return "ranked";
+}
+
+/** The operator-designated primary for this date. Same rule the driver day line uses. */
+export function operatorDesignatedMission(
+  commitments: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    sourceText?: string | null;
+    command?: { role?: string | null; designatedAt?: string | null } | null;
+    operatorMission?: { completionCondition: string } | null;
+  }>,
+  outcome?: MissionPlanOutcome
+): { id: string; title: string } | null {
+  const picked = operatorDesignation(
+    { commitments: commitments as DayState["commitments"] } as DayState,
+    outcome,
+    []
+  );
+  return picked ? { id: picked.id, title: picked.title } : null;
 }
 
 function operatorDesignation(
@@ -239,7 +291,10 @@ export async function readCurrentDayLine(
         error instanceof Error ? error.message : error
       );
     }
-    const authoritativeWorks = authoritativeWorkRanking(plan.outcome);
+    const todayCommitmentIds = state
+      ? new Set(state.commitments.map(commitment => commitment.id))
+      : null;
+    const authoritativeWorks = authoritativeWorkRanking(plan.outcome, todayCommitmentIds);
     if (authoritativeWorks !== null) {
       return projectCurrentDayLine({
         businessDate,

@@ -374,10 +374,69 @@ function identityIds(
   });
   return [...new Set(ids)];
 }
+function coverageFact(dataset: ApprovedDataset, fact: string): string {
+  const row = dataset.tables.coverage?.find(entry => entry[0] === fact);
+  return row?.[1] == null ? "" : String(row[1]);
+}
+
+/** Empty approved tables are missing data unless coverage proves a complete book. */
+function sourcePopulationUnobserved(dataset: ApprovedDataset): boolean {
+  if ((dataset.tables.orders?.length ?? 0) > 0) return false;
+  if ((dataset.tables.customers?.length ?? 0) > 0) return false;
+  if (dataset.completeness !== "complete") return true;
+  if (coverageFact(dataset, "exact_sales_allowed") === "false") return true;
+  const failed = coverageFact(dataset, "sources_failed");
+  return failed !== "" && failed !== "none";
+}
+
+const CONNECTED_CUSTOMER_SQL =
+  "SELECT name, lifetime_cents, paid_orders FROM customers";
+
+/** Model-free receipt. The server renders names and amounts from the tenant's approved rows. */
+export async function connectedCustomerReceipt(input: {
+  tenantId: string;
+  now: Date;
+  timeZone: string;
+  signal?: AbortSignal;
+}): Promise<BusinessAnalysisEvidence | null> {
+  if (!input.tenantId.trim()) return null;
+  try {
+    const dataset = await buildApprovedDataset({
+      tenantId: input.tenantId,
+      now: input.now,
+      timeZone: input.timeZone,
+      signal: input.signal,
+      lookbackDays: 395,
+    });
+    if (dataset.tenantId !== input.tenantId) return null;
+    const result = await executeAnalysisQuery({
+      tenantId: input.tenantId,
+      dataset,
+      sql: CONNECTED_CUSTOMER_SQL,
+      signal: input.signal,
+    });
+    if (result.receipt.status !== "ok" || result.receipt.tenantId !== input.tenantId)
+      return null;
+    return {
+      kind: "evidence",
+      answer: renderEvidence(result, dataset),
+      results: [result],
+      citedReceiptIds: [result.receipt.id],
+      limitations: dataset.limitations,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderEvidence(
   result: AnalysisQueryResult,
   dataset: ApprovedDataset
 ): string {
+  // A COUNT or SUM over a missing book returns a row of zeros. That is not a
+  // measured population. Speak the withhold, and keep the query receipt.
+  if (sourcePopulationUnobserved(dataset))
+    return "Connected source data is missing or withheld. That is not zero customers and not zero sales.";
   if (!result.rows.length)
     return "No matching records were returned in the available window; incomplete coverage does not establish zero activity.";
   const idCol = result.columns.indexOf("customer_id");

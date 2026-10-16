@@ -4,7 +4,7 @@ import { previewCustomerCsv } from "./customerImport";
 import { runTenantImport } from "../saas/tenantImportService";
 import { z } from "zod";
 import { router, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
-import { answerSession, orderedGoldlineOnboardingAnswers } from "../../shared/goldlineOnboarding";
+import { answerSession, attachFirstAction, authorOperatorTask, orderedGoldlineOnboardingAnswers, prepareClaireOpening } from "../../shared/goldlineOnboarding";
 import { hasExistingWorld, readSession, saveSession, startSession } from "./store";
 import { interpretAnswers } from "./interpreter";
 export const goldlineOnboardingRouter = router({
@@ -24,4 +24,15 @@ export const goldlineOnboardingRouter = router({
   return saveSession(answerSession(session, input.question, input.answer), session.version);
  }),
  interpret: procedure.mutation(async ({ ctx }) => { const session = await startSession(ctx.tenantId); if (session.interpretation) return session; if (session.status !== "READY") throw new Error("Answer all five questions first."); const interpretation = await interpretAnswers(ctx.tenantId, orderedGoldlineOnboardingAnswers(session)); return saveSession({ ...session, interpretation, version: session.version + 1 }, session.version); }),
+ recordFirstAction: procedure.input(z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("operator_authored_task"), text: z.string().trim().min(1).max(2000), version: z.number().int() }),
+  z.object({ kind: z.literal("claire_preparation"), version: z.number().int() }),
+ ])).mutation(async ({ ctx, input }) => {
+  const session = await readSession(ctx.tenantId);
+  if (!session) throw new Error("Start onboarding before saving a first action.");
+  if (session.firstAction) return session;
+  if (input.version !== session.version) throw new Error("Reload to resume the latest answer.");
+  const action = input.kind === "operator_authored_task" ? authorOperatorTask(input.text) : prepareClaireOpening(session);
+  return saveSession(attachFirstAction(session, action), session.version);
+ }),
 });

@@ -101,6 +101,24 @@ for (const statement of personalSenderIdentityDdl
   await runRequired(statement, "Personal sender identity");
 }
 
+const smsComposeHandoffAuditDdl = await readFile(new URL("../drizzle/0134_sms_compose_handoff_audit.sql", import.meta.url), "utf8");
+for (const statement of smsComposeHandoffAuditDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "SMS compose handoff audit");
+}
+
+const hiddenGameChapterUnlockDdl = await readFile(new URL("../drizzle/0135_hidden_game_chapter_unlocks.sql", import.meta.url), "utf8");
+for (const statement of hiddenGameChapterUnlockDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "Lost Property chapter unlocks");
+}
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5400,6 +5418,18 @@ await assertRequiredColumns("scheduled_outreach_revisions", [
   "message_body",
   "edited_by",
 ]);
+await assertRequiredColumns("sms_compose_handoff_audits", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "message_id",
+  "revision_count",
+  "body_digest",
+  "handoff_state",
+  "surface",
+  "invoked_at",
+  "created_at",
+]);
 await assertRequiredColumns("personal_sender_identities", [
   "id",
   "tenant_id",
@@ -5415,6 +5445,15 @@ await assertRequiredColumns("personal_sender_identities", [
   "device_id",
   "expected_device_id",
   "transport_probe_ok",
+]);
+await assertRequiredColumns("hidden_game_chapter_unlocks", [
+  "id",
+  "tenantId",
+  "canonicalOperatorId",
+  "chapter",
+  "openedAt",
+  "evidenceJson",
+  "createdAt",
 ]);
 console.log("\nMigration complete.");
 await conn.end();
