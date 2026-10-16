@@ -1,4 +1,5 @@
 import type cors from "cors";
+import { JOYSTICK_EXACT_BROWSER_ORIGINS } from "@shared/joystickHostRouting";
 
 export const PUBLIC_FORM_ORIGINS = [
   "https://buildings.bldg.chat",
@@ -20,6 +21,7 @@ export function isPublicFormOrigin(origin?: string | null): boolean {
 export const ADMIN_ALLOWED_ORIGINS = [
   "https://admin.bldg.chat",
   "https://driver.bldg.chat",
+  ...JOYSTICK_EXACT_BROWSER_ORIGINS,
   ...PUBLIC_FORM_ORIGINS,
 ];
 

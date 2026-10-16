@@ -12,6 +12,7 @@ import type {
   JoystickDraftAnswerMap,
   JoystickDraftPreview,
 } from "@shared/joystickAcquisition";
+import { apiBase } from "@/lib/apiBase";
 import "./joystick-acquisition.css";
 
 type Credentials = { sessionId: string; resumeToken: string };
@@ -38,16 +39,6 @@ function questionText(key: GoldlineOnboardingQuestionKey): string {
 
 function requestId(): string {
   return crypto.randomUUID();
-}
-
-function apiBase(): string {
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname.toLowerCase() === "admin.bldg.chat"
-  ) {
-    return "";
-  }
-  return import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 }
 
 export default function JoystickAcquisitionPage() {
