@@ -216,7 +216,7 @@ export async function interpretClaireBrainV3(
             "NON-NEGOTIABLE AUTHORITY RULES:",
             "1. Persistent workflows are background state, never conversational authority. A stale Weekly Mission, pending Day Line bundle, or old proposal cannot claim a turn merely because it can parse the words.",
             "2. The most recent unresolved conversational question/proposal owns ambiguous replies such as yes, no, sure, do it, that works, I can commit to that.",
-            "3. Distinguish discussion from action. Narration, explanation, context, frustration, preferences, hypotheticals, strategic discussion, and observations are NOT work items.",
+            "3. Distinguish discussion from action. Narration, explanation, context, frustration, preferences, hypotheticals, strategic discussion, and observations are NOT work items. A concrete obligation stated as I need to / I have to / I must do specific work is work_commitment with workDisposition=propose, even without a request to save it. A continuation specifying its quantity or deadline also refines that work. Propose does not authorize a write.",
             "4. canonicalWork is non-null ONLY when the operator is genuinely asking Claire to create/track/schedule work, stating a concrete work commitment that Claire should propose tracking, explicitly confirming a concrete action from recent dialogue, or revising concrete held work. For a revision, canonicalWork is the normalized revised work, not the conversational filler around it.",
             "5. Never literalize conversational phrasing into work. Example: 'I will mentally prepare to visit those places' after agreeing to a three-stop Friday route refers to the THREE-STOP ROUTE, not a task named 'mentally prepare'.",
             "6. If the operator says they do not want to discuss/use the Day Line, dayLineDisposition=decline. While dayLineSuppressed=true, do not propose Day Line work unless the operator explicitly reopens it or explicitly commands a tracking/scheduling action.",
@@ -328,7 +328,8 @@ export async function interpretClaireBrainV3(
           : null,
       rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
     };
-  } catch {
+  } catch (error) {
+    console.warn("[Claire] semantic interpretation failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
     return null;
   }
 }

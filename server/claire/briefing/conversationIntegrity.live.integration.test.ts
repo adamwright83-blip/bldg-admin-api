@@ -53,7 +53,15 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
         utterance, state, conversationKey: key, allowFragmentWait: false };
       const deps: Partial<ClaireTurnDeps> = {
         now: () => now, timeZone: () => "America/Los_Angeles",
-        brainV3: interpretClaireBrainV3, extractModel: extractBriefingWithModel,
+        brainV3: async input => {
+          const result = await interpretClaireBrainV3(input);
+          console.info("CLAIRE_LIVE_INTERPRETATION", JSON.stringify({ mode, utterance: input.utterance, result }));
+          return result;
+        }, extractModel: async input => {
+          const result = await extractBriefingWithModel(input);
+          console.info("CLAIRE_LIVE_EXTRACTION", JSON.stringify({ mode, utterance: input.utterance, result }));
+          return result;
+        },
         // Empty isolated business fixture, not a substituted interpretation or write path.
         business: { plan: async () => null }, vocabulary: async () => [], accounts: async () => [], campaign: async () => null,
         searchMemory: async () => [], memoryBetween: async () => [], encyclopedia: null, watchBoard: undefined, doctrineTurn: undefined,
