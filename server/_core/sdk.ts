@@ -18,6 +18,11 @@ import type {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
 
+/** Hostname does not promote a session. Unknown roles stay users. */
+export function normalizeSessionRole(role: unknown): "admin" | "driver" | "user" {
+  return role === "admin" || role === "driver" ? role : "user";
+}
+
 export type SessionPayload = {
   openId: string;
   appId: string;
@@ -237,7 +242,7 @@ class SDKServer {
         openId,
         appId,
         name,
-        role: role === "admin" || role === "driver" ? role : "user",
+        role: normalizeSessionRole(role),
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));

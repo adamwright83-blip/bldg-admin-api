@@ -9,6 +9,7 @@ import {
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
+import type { DriverCurrentStop } from "./objectiveMarksView";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
 
@@ -41,6 +42,7 @@ export default function LanternCityIslands({
   onNavigate,
   showUtilityDock = true,
   showBrand = true,
+  driverCurrentStop = null,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -48,6 +50,8 @@ export default function LanternCityIslands({
   showUtilityDock?: boolean;
   /** The admin world shell owns all top-left scene chrome when this board is embedded there. */
   showBrand?: boolean;
+  /** Set by Home when the driver line has a current stop. Other boards omit it. */
+  driverCurrentStop?: DriverCurrentStop | null;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -154,7 +158,12 @@ export default function LanternCityIslands({
           </div>
         </>
       ) : null}
-      <ObjectiveMarksLayer board={board} ready={ready} onNavigate={onNavigate} />
+      <ObjectiveMarksLayer
+        board={board}
+        ready={ready}
+        onNavigate={onNavigate}
+        driverCurrentStop={driverCurrentStop}
+      />
 
       {island ? (
         <section className={styles.card} aria-label={island.name}>

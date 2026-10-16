@@ -20,6 +20,10 @@ import {
   authorizeIntakeSubmit,
   pauseIntake,
 } from "./service";
+import {
+  commitCleanCloudOrderOperation,
+  proposeCleanCloudOrderOperation,
+} from "../../../claire/cleancloudOrderOperation";
 const source = z.object({
   bindingId: z.string().uuid(),
   storeLabel: z.string().min(1).max(255),
@@ -102,4 +106,47 @@ export const cleancloudIntakeRouter = router({
         .strict()
     )
     .mutation(({ ctx, input }) => finishIntake(actor(ctx), input)),
+  clairePropose: admin
+    .input(
+      z
+        .object({
+          id: z.string().uuid(),
+          action: z.enum(["prepare", "approve_submit"]),
+          plan: intakePlanSchema.optional(),
+        })
+        .strict()
+    )
+    .mutation(({ ctx, input }) =>
+      proposeCleanCloudOrderOperation({
+        actor: actor(ctx),
+        orderId: input.id,
+        action: input.action,
+        plan: input.plan,
+      })
+    ),
+  claireCommit: admin
+    .input(
+      z
+        .object({
+          id: z.string().uuid(),
+          action: z.enum(["prepare", "approve_submit"]),
+          plan: intakePlanSchema.optional(),
+          fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+          revision: z.string().uuid().nullable(),
+          reviewed: z.literal(true),
+        })
+        .strict()
+    )
+    .mutation(({ ctx, input }) =>
+      commitCleanCloudOrderOperation({
+        actor: actor(ctx),
+        approvedByUserId: ctx.user.openId,
+        orderId: input.id,
+        action: input.action,
+        plan: input.plan,
+        fingerprint: input.fingerprint,
+        revision: input.revision,
+        reviewed: input.reviewed,
+      })
+    ),
 });

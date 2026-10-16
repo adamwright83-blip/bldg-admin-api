@@ -53,6 +53,10 @@ import { updateResidentAgentPlanTool } from "./tools/updateResidentAgentPlanTool
 import { createResidentCoordinatedRequestTool } from "./tools/createResidentCoordinatedRequestTool";
 import { createOrderFollowupTaskTool } from "./tools/createOrderFollowupTaskTool";
 import { cancelResidentOrderTool } from "./tools/cancelResidentOrderTool";
+import {
+  commitCleanCloudOrderOperationTool,
+  proposeCleanCloudOrderOperationTool,
+} from "./tools/cleancloudOrderOperationTool";
 
 export type ToolRiskClass =
   | "READ_ONLY"
@@ -126,6 +130,8 @@ const tools = [
   createResidentCoordinatedRequestTool,
   createOrderFollowupTaskTool,
   cancelResidentOrderTool,
+  proposeCleanCloudOrderOperationTool,
+  commitCleanCloudOrderOperationTool,
 ] satisfies AgentTool[];
 
 export const toolRegistry = new Map<string, AgentTool>(
@@ -152,6 +158,11 @@ const toolPolicyOverrides: Readonly<Record<string, ToolPolicyMetadata>> = {
     riskClass: "INTERNAL_REVERSIBLE",
     expectedObservation: "draft text only; no provider send",
     idempotencyContract: "draft may be regenerated without external effect",
+  },
+  proposeCleanCloudOrderOperationTool: {
+    riskClass: "READ_ONLY",
+    expectedObservation: "pending CleanCloud intake proposal; no provider contact",
+    idempotencyContract: "pure read of the captured order",
   },
   logOperatorTaskTool: {
     riskClass: "INTERNAL_REVERSIBLE",

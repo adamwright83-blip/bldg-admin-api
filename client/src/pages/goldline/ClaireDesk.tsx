@@ -17,6 +17,35 @@ const STATUS: Record<string, string> = {
   completed: "Done",
 };
 
+function ClaireEvidenceReceipts({
+  evidence,
+}: {
+  evidence: Array<{
+    id: string;
+    source: string;
+    description: string;
+    value: number | string | null;
+  }>;
+}) {
+  const receipts = evidence.filter(item => item.source === "analyzeBusinessData");
+  if (!receipts.length) {
+    return (
+      <p className="cd-note" data-testid="claire-approval-evidence-absent">
+        No analyzeBusinessData receipt is attached. Approval will not invent one.
+      </p>
+    );
+  }
+  return (
+    <>
+      {receipts.map(item => (
+        <p key={item.id} className="cd-note" data-testid="claire-source-backed-receipt" data-evidence-source="analyzeBusinessData">
+          analyzeBusinessData: {String(item.value ?? item.description)} Receipt {item.id}.
+        </p>
+      ))}
+    </>
+  );
+}
+
 /**
  * JOYSTICK · Claire Desk. An operating cockpit: objective, opportunity, the one
  * mission, its runway, what Claire prepared, and what actually happened. Every
@@ -132,10 +161,11 @@ export default function ClaireDesk() {
                     {primary.when ? <span>{primary.when}</span> : null}
                   </p>
                   {primary.status === "awaiting_approval" ? (
-                    <div className="cd-approve">
+                    <div className="cd-approve" data-testid="claire-approval-control">
                       {/offer/i.test(primary.objective ?? "") ? (
                         <p className="cd-note">No offer is approved. Calls can be plain check-ins; any discount is your decision, and Claire won't promise one.</p>
                       ) : null}
+                      <ClaireEvidenceReceipts evidence={m.rationale?.evidence ?? []} />
                       <button type="button" className="cd-gold" disabled={approval.state === "saving"} onClick={() => void approve(primary.id)} data-testid="approve-primary-mission">
                         {approval.state === "saving" ? "Saving approval…" : "Approve this mission"}
                       </button>

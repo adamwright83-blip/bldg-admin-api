@@ -11,6 +11,7 @@ export const approvalRequiredToolNames = new Set([
   "chargeCardTool",
   "refundCardTool",
   "cancelOrderTool",
+  "commitCleanCloudOrderOperationTool",
 ]);
 
 export type ApprovalDecision = {

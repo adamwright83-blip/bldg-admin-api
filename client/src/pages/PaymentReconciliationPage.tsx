@@ -68,6 +68,11 @@ export default function PaymentReconciliationPage() {
     [businessUnit, endDate, startDate, status]
   );
   const reconciliation = trpc.admin.paymentReconciliation.summary.useQuery(queryInput);
+  const manualMatch = trpc.admin.paymentReconciliation.manualMatch.useMutation();
+  const ignoreRow = trpc.admin.paymentReconciliation.ignore.useMutation();
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [ignoreDraft, setIgnoreDraft] = useState<{ matchId: number; requestId: string; reason: string; confirmed: boolean } | null>(null);
+  const [matchDraft, setMatchDraft] = useState<{ transactionId: number; orderId: string; requestId: string; confirmed: boolean } | null>(null);
   const data = reconciliation.data;
   const coverageByDate = useMemo(
     () => new Map((data?.sourceCoverage ?? []).map((row) => [row.localBusinessDate, row])),
@@ -90,6 +95,10 @@ export default function PaymentReconciliationPage() {
           Refresh
         </Button>
       </div>
+
+      {actionMessage ? (
+        <p role="status" className="rounded border border-black/10 bg-white p-3 text-sm" data-testid="reconciliation-action-result">{actionMessage}</p>
+      ) : null}
 
       <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
         <div className="flex gap-2">
@@ -224,8 +233,44 @@ export default function PaymentReconciliationPage() {
       <section className="rounded border border-black/10 bg-white">
         <div className="border-b border-black/10 p-4">
           <h2 className="font-semibold">Needs Review</h2>
-          <p className="mt-1 text-sm text-black/50">Mismatched daily totals stay out of customer rankings.</p>
+          <p className="mt-1 text-sm text-black/50">Mismatched daily totals stay out of customer rankings. Ignoring a row does not change captured money.</p>
         </div>
+        {ignoreDraft ? (
+          <form
+            className="space-y-2 border-b border-black/10 p-4 text-sm"
+            data-testid="ignore-confirmation"
+            onSubmit={event => {
+              event.preventDefault();
+              if (!ignoreDraft.confirmed || !ignoreDraft.reason.trim()) return;
+              void ignoreRow.mutateAsync({
+                confirmed: true,
+                requestId: ignoreDraft.requestId,
+                matchId: ignoreDraft.matchId,
+                reason: ignoreDraft.reason.trim(),
+              }).then(result => {
+                setActionMessage(`${result.outcome === "already_recorded" ? "Already ignored" : "Ignored"}. Receipt ${result.auditLogId ?? result.matchId}. Captured revenue was not changed.`);
+                setIgnoreDraft(null);
+                void reconciliation.refetch();
+              }).catch(error => {
+                setActionMessage(error instanceof Error ? error.message : "The row was not ignored.");
+              });
+            }}
+          >
+            <p>Ignore reconciliation row {ignoreDraft.matchId}. This does not change Clearent or CleanCloud amounts.</p>
+            <label className="block text-xs">
+              Why
+              <Input value={ignoreDraft.reason} onChange={event => setIgnoreDraft({ ...ignoreDraft, reason: event.target.value })} className="mt-1" />
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={ignoreDraft.confirmed} onChange={event => setIgnoreDraft({ ...ignoreDraft, confirmed: event.target.checked })} />
+              I confirm this ignore
+            </label>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={ignoreRow.isPending || !ignoreDraft.confirmed || !ignoreDraft.reason.trim()}>Record ignore</Button>
+              <Button type="button" variant="outline" onClick={() => setIgnoreDraft(null)}>Cancel</Button>
+            </div>
+          </form>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="min-w-[800px] w-full text-sm">
             <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
@@ -234,6 +279,7 @@ export default function PaymentReconciliationPage() {
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Reason</th>
                 <th className="px-3 py-3">Delta</th>
+                <th className="px-3 py-3">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/10">
@@ -245,10 +291,146 @@ export default function PaymentReconciliationPage() {
                     <td className="px-3 py-3 font-mono text-xs">{row.matchStatus}</td>
                     <td className="px-3 py-3">{row.matchReason}</td>
                     <td className="px-3 py-3">{money(raw?.unresolvedDeltaCents)}</td>
+                    <td className="px-3 py-3">
+                      <button
+                        type="button"
+                        className="rounded border border-black/20 px-2 py-1 text-xs"
+                        onClick={() => setIgnoreDraft({ matchId: row.id, requestId: crypto.randomUUID(), reason: "", confirmed: false })}
+                      >
+                        Ignore
+                      </button>
+                    </td>
                   </tr>
                 );
               }) : (
-                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={4}>No needs-review rows for these filters.</td></tr>
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={5}>No needs-review rows for these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded border border-black/10 bg-white" data-testid="ignored-decisions">
+        <div className="border-b border-black/10 p-4">
+          <h2 className="font-semibold">Ignored</h2>
+          <p className="mt-1 text-sm text-black/50">An ignore is a recorded decision. It does not change Clearent or CleanCloud amounts, and a later refresh does not put the row back into reconciled revenue.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[800px] w-full text-sm">
+            <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
+              <tr>
+                <th className="px-3 py-3">Date</th>
+                <th className="px-3 py-3">Reason</th>
+                <th className="px-3 py-3">Stored amount</th>
+                <th className="px-3 py-3">Receipt</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/10">
+              {data?.ignoredRows.length ? data.ignoredRows.map(row => (
+                <tr key={row.id} data-testid={`ignored-row-${row.id}`}>
+                  <td className="px-3 py-3">{row.localBusinessDate}</td>
+                  <td className="px-3 py-3">{row.matchReason}</td>
+                  <td className="px-3 py-3">{money(row.matchedAmountCents)} left unchanged</td>
+                  <td className="px-3 py-3 font-mono text-xs">match {row.id}</td>
+                </tr>
+              )) : (
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={4}>No ignored rows for these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded border border-black/10 bg-white">
+        <div className="border-b border-black/10 p-4">
+          <h2 className="font-semibold">Clearent transactions</h2>
+          <p className="mt-1 text-sm text-black/50">A match can use only a stored transaction gross amount. An order total is not captured money, and a daily summary cannot be assigned to one order.</p>
+        </div>
+        {matchDraft ? (
+          <form
+            className="space-y-2 border-b border-black/10 p-4 text-sm"
+            data-testid="match-confirmation"
+            onSubmit={event => {
+              event.preventDefault();
+              const orderId = Number(matchDraft.orderId);
+              if (!matchDraft.confirmed || !Number.isInteger(orderId) || orderId <= 0) return;
+              void manualMatch.mutateAsync({
+                confirmed: true,
+                requestId: matchDraft.requestId,
+                clearentTransactionId: matchDraft.transactionId,
+                cleancloudPaidOrderId: orderId,
+              }).then(result => {
+                setActionMessage(`${result.outcome === "already_recorded" ? "Already matched" : "Matched"} ${money(result.matchedAmountCents)} from the Clearent transaction. Receipt ${result.auditLogId ?? result.matchId}.`);
+                setMatchDraft(null);
+                void reconciliation.refetch();
+              }).catch(error => {
+                setActionMessage(error instanceof Error ? error.message : "No match was recorded.");
+              });
+            }}
+          >
+            <p>Match Clearent transaction {matchDraft.transactionId}. The recorded cents come from that transaction&apos;s gross amount.</p>
+            <label className="block text-xs">
+              CleanCloud order
+              <select
+                className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+                value={matchDraft.orderId}
+                onChange={event => setMatchDraft({ ...matchDraft, orderId: event.target.value })}
+              >
+                {(data?.cleancloudCandidateOrders ?? [])
+                  .filter(order => localDateKey(order.paymentDateUtc ?? order.paidDateUtc) === localDateKey(data?.clearentTransactions.find(row => row.id === matchDraft.transactionId)?.enteredDateUtc))
+                  .map(order => (
+                    <option key={order.id} value={order.id}>{order.cleancloudOrderId} · {money(order.totalCents)} order total</option>
+                  ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={matchDraft.confirmed} onChange={event => setMatchDraft({ ...matchDraft, confirmed: event.target.checked })} />
+              I confirm this match
+            </label>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={manualMatch.isPending || !matchDraft.confirmed || !matchDraft.orderId}>Record match</Button>
+              <Button type="button" variant="outline" onClick={() => setMatchDraft(null)}>Cancel</Button>
+            </div>
+          </form>
+        ) : null}
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
+              <tr>
+                <th className="px-3 py-3">Transaction</th>
+                <th className="px-3 py-3">Entered</th>
+                <th className="px-3 py-3">Gross</th>
+                <th className="px-3 py-3">Customer</th>
+                <th className="px-3 py-3">Order</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/10">
+              {data?.clearentTransactions.length ? data.clearentTransactions.map(row => {
+                const entered = localDateKey(row.enteredDateUtc);
+                const sameDay = (data.cleancloudCandidateOrders ?? []).filter(order => localDateKey(order.paymentDateUtc ?? order.paidDateUtc) === entered);
+                return (
+                  <tr key={row.id}>
+                    <td className="px-3 py-3 font-mono text-xs">{row.clearentTransactionId || row.id}</td>
+                    <td className="px-3 py-3">{entered ?? "-"}</td>
+                    <td className="px-3 py-3">{money(row.grossAmountCents)}</td>
+                    <td className="px-3 py-3">{row.customerName || "-"}</td>
+                    <td className="px-3 py-3">
+                      {sameDay.length ? (
+                        <button
+                          type="button"
+                          className="rounded border border-black/20 px-2 py-1 text-xs"
+                          onClick={() => setMatchDraft({ transactionId: row.id, orderId: String(sameDay[0]?.id ?? ""), requestId: crypto.randomUUID(), confirmed: false })}
+                        >
+                          Review match
+                        </button>
+                      ) : (
+                        <span className="text-xs text-black/45">No same-day Clearent candidate</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={5}>No Clearent transaction amounts in this range. Daily totals stay unmatched to a single order.</td></tr>
               )}
             </tbody>
           </table>

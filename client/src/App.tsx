@@ -22,6 +22,16 @@ import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
 import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 import { GoldlineCelebrationProvider } from "./components/goldline/GoldlineCelebrationProvider";
 import { LegacyLandingFrame } from "./product/LegacyProductNotice";
+import { CustomerHostApp } from "./hostRouting/CustomerHostApp";
+import {
+  JoystickApiHostRefused,
+  WwwGojoystickRedirect,
+} from "./hostRouting/JoystickHostFrames";
+import { PreservedLaundryHost } from "./hostRouting/PreservedLaundryHost";
+import {
+  isCustomerHostView,
+  resolveJoystickHostView,
+} from "@shared/joystickHostRouting";
 
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
@@ -700,31 +710,36 @@ function Router() {
   const { user } = useAuth();
   const isBoreslayHost =
     hostname === "boreslay.com" || hostname === "www.boreslay.com";
-  // api.bldg.chat is the real, working backend for this app (Railway); the
-  // admin.bldg.chat frontend has historically had no backend wired to it.
-  // Both hosts must render the admin shell so DayForge/commercial-mission
-  // routes are reachable wherever this app is actually being used.
+  // admin.bldg.chat and the historical api.bldg.chat SPA alias keep the admin
+  // shell. Live DNS for api.bldg.chat is the resident service, not this shell.
+  // api.gojoystick.com is refused here and belongs on the main API service.
+  const hostView = resolveJoystickHostView(hostname, window.location.pathname);
   const isAdminHost =
-    hostname === "admin.bldg.chat" || hostname === "api.bldg.chat";
+    hostname === "admin.bldg.chat" || hostname === "api.bldg.chat" || hostView === "admin-shell";
   const isLocalAdminPath =
     (hostname === "localhost" || hostname === "127.0.0.1") &&
     (LOCAL_ADMIN_PATHS.has(window.location.pathname) ||
       window.location.pathname.startsWith("/admin/") ||
       window.location.pathname.startsWith("/claire/"));
-  const isDriverHost = hostname === "driver.bldg.chat";
+  const isDriverHost = hostname === "driver.bldg.chat" || hostView === "driver-shell";
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
-  // The public JOYSTICK domains share the approved marketing homepage.
-  // Keep historical Admin, Driver, Laundry Butler, and other roots unchanged.
-  if (
-    (hostname === "gojoystick.com" || hostname === "www.gojoystick.com") &&
-    window.location.pathname === "/"
-  ) {
-    return <JoystickLandingRoute />;
+  // www.gojoystick.com already 308s to the apex and keeps the path. The client
+  // redirect is the same destination if this SPA is served on www directly.
+  if (hostView === "www-redirect") return <WwwGojoystickRedirect />;
+  // api.gojoystick.com is the main API host, not a second frontend.
+  if (hostView === "api-host-refused") return <JoystickApiHostRefused />;
+  // Resident laundry hosts keep their own sites.
+  if (hostView === "laundry-butler" || hostView === "laundry-farm") {
+    return <PreservedLaundryHost />;
   }
+  // Apex marketing stays the approved homepage. Other apex paths are unchanged.
+  if (hostView === "marketing-root") return <JoystickLandingRoute />;
+  // Customer host never enters the platform admin shell.
+  if (isCustomerHostView(hostView)) return <CustomerHostApp />;
 
   // Commercial SaaS members are intentionally confined to the supported
   // JOYSTICK surface. Historical Admin/BLDG routes remain available to

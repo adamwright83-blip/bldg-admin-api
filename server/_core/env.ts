@@ -8,6 +8,8 @@ export function normalizeAnthropicModel(raw: string): string {
   return RETIRED_ANTHROPIC_MODEL_REPLACEMENTS[raw] ?? raw;
 }
 
+export const DEFAULT_ADMIN_BASE_URL = "https://admin.bldg.chat";
+
 function anthropicModelEnv(name: string, fallback = ""): string {
   const raw = process.env[name]?.trim() || fallback;
   return normalizeAnthropicModel(raw);
@@ -60,7 +62,11 @@ export const ENV = {
     "ANTHROPIC_MODEL_SERVICE_AREA_VERIFIER"
   ),
   platformFeePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT ?? "5"),
-  adminBaseUrl: process.env.ADMIN_BASE_URL ?? "https://admin.bldg.chat",
+  /**
+   * Frozen callback base for Claire voice, recording, call-status, and Connect
+   * return URLs. New JOYSTICK front doors do not replace this default.
+   */
+  adminBaseUrl: process.env.ADMIN_BASE_URL ?? DEFAULT_ADMIN_BASE_URL,
   /**
    * When true, outbound reminder infrastructure exists; UI still shows "attempted" until log status is
    * `delivered` (webhook-confirmed only). Does not imply messages are sent.

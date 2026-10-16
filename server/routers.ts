@@ -181,7 +181,9 @@ import {
 } from "./analytics/vendorPaymentProjection";
 import {
   getPaymentReconciliationDashboard,
+  ignoreReconciliationRow,
   listReconciledCleanCloudCustomerRevenue,
+  recordManualReconciliationMatch,
 } from "./paymentReconciliation";
 import { getTruePnlCockpitSummary } from "./truePnlCockpit";
 import {
@@ -1281,6 +1283,48 @@ export const appRouter = router({
         .query(async ({ input }) =>
           getPaymentReconciliationDashboard(input ?? {})
         ),
+      manualMatch: protectedProcedure
+        .input(
+          z.object({
+            confirmed: z.literal(true),
+            requestId: z.string().uuid(),
+            clearentTransactionId: z.number().int().positive(),
+            cleancloudPaidOrderId: z.number().int().positive(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const result = await recordManualReconciliationMatch({
+            tenantId: ctx.tenantId,
+            actorUserId: ctx.user.openId,
+            confirmed: input.confirmed,
+            requestId: input.requestId,
+            clearentTransactionId: input.clearentTransactionId,
+            cleancloudPaidOrderId: input.cleancloudPaidOrderId,
+          });
+          if (!result.ok) throw new TRPCError({ code: "BAD_REQUEST", message: result.reason });
+          return result;
+        }),
+      ignore: protectedProcedure
+        .input(
+          z.object({
+            confirmed: z.literal(true),
+            requestId: z.string().uuid(),
+            matchId: z.number().int().positive(),
+            reason: z.string().trim().min(1).max(500),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const result = await ignoreReconciliationRow({
+            tenantId: ctx.tenantId,
+            actorUserId: ctx.user.openId,
+            confirmed: input.confirmed,
+            requestId: input.requestId,
+            matchId: input.matchId,
+            reason: input.reason,
+          });
+          if (!result.ok) throw new TRPCError({ code: "BAD_REQUEST", message: result.reason });
+          return result;
+        }),
     }),
 
     /** Manual recovery actions logged today (attempted/delivered — not cash collection). */

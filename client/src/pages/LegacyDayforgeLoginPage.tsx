@@ -3,16 +3,7 @@ import { useState, type FormEvent } from "react";
 import "./legacy-dayforge-onboarding.css";
 import { resolveLegacyDayforgeAuthenticatedDestination } from "@shared/legacyDayforgeContinuation";
 import { PRODUCT_NAME } from "@shared/productIdentity";
-
-function legacyDayforgeApiBase(): string {
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname.toLowerCase() === "admin.bldg.chat"
-  ) {
-    return "";
-  }
-  return import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-}
+import { apiBase } from "@/lib/apiBase";
 
 export default function LegacyDayforgeLoginPage() {
   const continuation = new URLSearchParams(window.location.search);
@@ -30,7 +21,7 @@ export default function LegacyDayforgeLoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${legacyDayforgeApiBase()}/api/dayforge/auth/login`, {
+      const response = await fetch(`${apiBase()}/api/dayforge/auth/login`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },

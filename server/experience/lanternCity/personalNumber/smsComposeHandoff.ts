@@ -1,12 +1,16 @@
 /**
  * Device-initiated SMS compose handoff.
- * Opens the operator's own SMS app with an approved draft. It does not transmit,
- * does not request the default-SMS role, and does not call a carrier API.
- * No client shell in this repo exposes an Android intent bridge, so this module
- * builds an sms: URI only.
+ * Opens the operator's own Google Messages thread with an approved draft.
+ * It does not transmit, does not request the default-SMS role, and does not
+ * call a carrier API. The Android link is a browser intent URL. This module
+ * does not launch a native activity, does not ship a companion app, and does not
+ * automate Messages for web.
  */
 
-export const SMS_COMPOSE_USES_ANDROID_INTENT = false;
+export const GOOGLE_MESSAGES_PACKAGE = "com.google.android.apps.messaging";
+
+/** True when Android uses a browser intent URL. Not a native activity bridge. */
+export const SMS_COMPOSE_USES_ANDROID_INTENT = true;
 
 export const SMS_COMPOSE_APPROVAL_CONFIRMATION =
   "I approve this exact message for this recipient and want to open my SMS app" as const;
@@ -33,7 +37,7 @@ export const SMS_COMPOSE_HANDOFF_STATE_LABELS: Record<SmsComposeHandoffState, st
 };
 
 export const SMS_COMPOSE_COPY_FALLBACK_LABEL =
-  "The link includes this message for an SMS app that reads a body query. Prefill is not guaranteed. Copy it if the app opens to the number only. Nothing was sent.";
+  "Copy this message into Google Messages. The link opens the existing thread for this number when Messages has one. The body was not prefilled. Opening Messages is not a send.";
 
 export const SMS_COMPOSE_MISSING_BODY_LABEL =
   "No approved message body. The SMS app opens to the number only. Nothing was prefilled.";
@@ -69,6 +73,7 @@ export type SmsComposeUriResult = {
   continuationHref: string | null;
   continuationLabel: string | null;
   actionSendto: false;
+  messagesPackage: typeof GOOGLE_MESSAGES_PACKAGE | null;
 };
 
 export function clientKindFromUserAgent(userAgent: string): SmsComposeClientKind {
@@ -122,13 +127,15 @@ export function buildSameOriginPhoneContinuation(input: {
 }
 
 /**
- * A webpage cannot set Android `ACTION_SENDTO` extras such as `sms_body`.
- * The strongest link a page can open is `sms:+1${digits}?body=`. Android
- * messaging apps often read that query and often drop it. The copy body stays
- * visible, the number-only URI stays as `fallbackUri`, and Android never
- * claims the body was prefilled. iOS keeps the encoded query and may claim
- * that query. Desktop never builds an sms: URI.
+ * Android sms: links do not reliably prefill a body. Chrome's intent URL can
+ * open Google Messages on the existing sms: thread for this number. The body
+ * is not put in the intent. The operator copies it. iOS may use an sms: body
+ * query. Desktop never builds an sms: URI.
  */
+export function googleMessagesThreadIntent(digits: string): string {
+  return `intent://send/+1${digits}#Intent;action=android.intent.action.VIEW;scheme=sms;package=${GOOGLE_MESSAGES_PACKAGE};end`;
+}
+
 export function buildSmsComposeUri(input: {
   recipientPhone: string;
   body: string | null | undefined;
@@ -152,6 +159,7 @@ export function buildSmsComposeUri(input: {
       continuationHref: continuation.href,
       continuationLabel: continuation.label,
       actionSendto: false,
+      messagesPackage: null,
     };
   }
 
@@ -170,14 +178,14 @@ export function buildSmsComposeUri(input: {
       continuationHref: null,
       continuationLabel: null,
       actionSendto: false,
+      messagesPackage: null,
     };
   }
 
-  const bodyPrefillReliable = input.clientKind === "ios";
-  if (!bodyPrefillReliable) {
+  if (input.clientKind === "android") {
     return {
       kind: "copy_fallback",
-      uri: `${numberUri}?body=${encodeURIComponent(body)}`,
+      uri: googleMessagesThreadIntent(digits),
       fallbackUri: numberUri,
       bodyPrefillClaimed: false,
       prefillClaim: "not_prefilled",
@@ -186,6 +194,24 @@ export function buildSmsComposeUri(input: {
       continuationHref: null,
       continuationLabel: null,
       actionSendto: false,
+      messagesPackage: GOOGLE_MESSAGES_PACKAGE,
+    };
+  }
+
+  const bodyPrefillReliable = input.clientKind === "ios";
+  if (!bodyPrefillReliable) {
+    return {
+      kind: "copy_fallback",
+      uri: numberUri,
+      fallbackUri: numberUri,
+      bodyPrefillClaimed: false,
+      prefillClaim: "not_prefilled",
+      copyBody: body,
+      copyLabel: SMS_COMPOSE_COPY_FALLBACK_LABEL,
+      continuationHref: null,
+      continuationLabel: null,
+      actionSendto: false,
+      messagesPackage: null,
     };
   }
 
@@ -200,6 +226,7 @@ export function buildSmsComposeUri(input: {
     continuationHref: null,
     continuationLabel: null,
     actionSendto: false,
+    messagesPackage: null,
   };
 }
 
