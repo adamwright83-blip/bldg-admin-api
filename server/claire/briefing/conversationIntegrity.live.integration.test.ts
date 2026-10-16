@@ -110,7 +110,10 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
     expect(orderRows.length, JSON.stringify(transcript)).toBeGreaterThan(0);
     const words = (row: mysql.RowDataPacket) => `${row.title} ${row.sourceText}`;
     expect(orderRows.some(r => r.businessDate === "2026-10-15" && /deliver/i.test(words(r)) && /\b(?:2|two)\b/i.test(words(r))), JSON.stringify(orderRows)).toBe(true);
-    expect(orderRows.some(r => r.businessDate === "2026-10-16" && /deliver/i.test(words(r)) && /afternoon/i.test(words(r))), JSON.stringify(orderRows)).toBe(true);
+    const tomorrowDelivery = orderRows.find(r => r.businessDate === "2026-10-16" && /deliver/i.test(words(r)) && /afternoon/i.test(words(r)));
+    expect(tomorrowDelivery, JSON.stringify(orderRows)).toBeTruthy();
+    const deliveryMetadata = typeof tomorrowDelivery!.metadataJson === "string" ? JSON.parse(tomorrowDelivery!.metadataJson) : tomorrowDelivery!.metadataJson;
+    expect(deliveryMetadata.scheduleLabel).toMatch(/afternoon/i);
     expect(orderRows.some(r => /charg/i.test(words(r)) && /only|if|not already|unpaid/i.test(words(r))), JSON.stringify(orderRows)).toBe(true);
     expect(orderRows.every(r => !/Instagram|landing page|20 pounds/i.test(words(r)))).toBe(true);
     console.info("CLAIRE_LIVE_REPLAY", JSON.stringify({ mode, transcript, rows: rows.map(r => ({ id: r.id, title: r.title, date: r.businessDate, metadata: r.metadataJson })) }));

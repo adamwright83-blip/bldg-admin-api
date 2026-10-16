@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { extractBriefingWithModel } from "./llmBriefing";
+import { extractBriefingWithModel, validateModelBriefing } from "./llmBriefing";
 import { briefingClock } from "./briefingTiming";
 
 const input = { tenantId: "repair", utterance: "Create the landing page and Instagram ad today.", vocabulary: [],
@@ -27,4 +27,24 @@ describe("briefing extraction latency and cancellation", () => {
     expect(await pending).toBeNull();
     expect(signal?.aborted).toBe(true);
   });
+});
+
+// Actual-model replay resolved the referent correctly, but local validation
+// stripped its action and dropped the next-day time of day.
+it("retains a resolved delivery referent and tomorrow afternoon in structured timing", () => {
+  const result = validateModelBriefing({ items: [{ kind: "new_work", title: "Deliver 1 dry cleaning order",
+    quote: "And 1 of them tomorrow afternoon.", day: "tomorrow", date: "", timingWords: "tomorrow afternoon",
+    quantity: 1, people: [], place: "", needs: "", intent: "commitment", executionType: null }], context: [], questions: [] },
+    { ...input, utterance: "And 1 of them tomorrow afternoon.", recentTurns: [{ speaker: "operator", text: "I need to deliver 2 dry cleaning orders tonight." }] });
+  expect(result.items[0]?.title).toBe("Deliver 1 dry cleaning order");
+  expect(result.items[0]?.businessDate).toBe("2026-10-16");
+  expect(result.items[0]?.timing).toEqual({ kind: "daypart", label: "tomorrow afternoon" });
+});
+
+it("validates the model's selected timing instead of substituting the first time in a multi-task quote", () => {
+  const quote = "Deliver one order tomorrow afternoon and deliver two orders tonight.";
+  const result = validateModelBriefing({ items: [{ kind: "new_work", title: "Deliver two orders",
+    quote, day: "today", date: "", timingWords: "tonight", quantity: 2, people: [], place: "", needs: "", intent: "commitment", executionType: null }], context: [], questions: [] },
+    { ...input, utterance: quote });
+  expect(result.items[0]?.timing).toEqual({ kind: "daypart", label: "tonight" });
 });

@@ -158,10 +158,10 @@ export function validateModelBriefing(raw: z.infer<typeof outputSchema>, input: 
     let timing: BriefingTiming = { kind: "none" };
     if (candidate.kind === "new_work") {
       const fromQuote = parseTiming(quote, { isToday: businessDate === clock.today, minutesNow: clock.minutesNow }).timing;
-      if (fromQuote.kind !== "none") timing = fromQuote;
-      else if (candidate.timingWords.trim() && grounded(candidate.timingWords, quote)) {
+      if (candidate.timingWords.trim() && grounded(candidate.timingWords, quote)) {
         timing = parseTiming(candidate.timingWords, { isToday: businessDate === clock.today, minutesNow: clock.minutesNow }).timing;
       }
+      if (timing.kind === "none") timing = fromQuote;
     }
     const quantity =
       candidate.quantity > 0 && new RegExp(`\\b(?:${candidate.quantity}|${["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"][candidate.quantity] ?? "__"})\\b`, "i").test(quote)
@@ -174,7 +174,7 @@ export function validateModelBriefing(raw: z.infer<typeof outputSchema>, input: 
       continue;
     }
     // The raw quote stays as provenance; the title is the action only, within the title contract.
-    const modelTitle = candidate.title.trim() && titleIsFaithful(candidate.title, quote, vocabulary) ? candidate.title.trim() : cleanQuoteTitle(quote);
+    const modelTitle = candidate.title.trim() && titleIsFaithful(candidate.title, operatorSource, vocabulary) ? candidate.title.trim() : cleanQuoteTitle(quote);
     const title = enforceTitleContract(modelTitle);
     items.push({
       kind: candidate.kind,
