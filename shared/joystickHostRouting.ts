@@ -29,18 +29,30 @@ export const JOYSTICK_EXACT_BROWSER_ORIGINS = [
 ] as const;
 
 /**
- * Frontend hosts that must call /api on themselves so the Vercel rewrite
- * reaches the main Railway API and the session cookie stays host-only.
- * api.gojoystick.com is the API host, not a frontend. Resident and laundry
- * hosts are intentionally absent.
+ * Hosts that must call /api on themselves. The Vercel rewrite then reaches
+ * the main Railway API, and a configured VITE_API_URL cannot send them to
+ * the resident service. api.gojoystick.com is included so a mis-attached
+ * SPA on that name still cannot follow VITE_API_URL to api.bldg.chat.
+ * It is not a customer, admin, or driver surface. Laundry hosts stay out.
  */
 export const JOYSTICK_SAME_ORIGIN_API_HOSTS = [
   "admin.bldg.chat",
   "gojoystick.com",
+  "www.gojoystick.com",
   "app.gojoystick.com",
   "admin.gojoystick.com",
   "driver.gojoystick.com",
+  "api.gojoystick.com",
 ] as const;
+
+const JOYSTICK_PLATFORM_HOSTS = new Set<string>([
+  JOYSTICK_APEX_HOST,
+  JOYSTICK_WWW_HOST,
+  JOYSTICK_APP_HOST,
+  JOYSTICK_ADMIN_HOST,
+  JOYSTICK_DRIVER_HOST,
+  JOYSTICK_API_HOST,
+]);
 
 export const JOYSTICK_MAIN_API_SERVICE_NAME = "bldg-admin-api";
 export const JOYSTICK_MAIN_API_RAILWAY_HOST =
@@ -192,4 +204,23 @@ export function resolveJoystickHostView(
 
 export function isExactJoystickBrowserOrigin(origin: string): boolean {
   return (JOYSTICK_EXACT_BROWSER_ORIGINS as readonly string[]).includes(origin);
+}
+
+export function isJoystickPlatformHost(hostname: string): boolean {
+  const host = normalizeHostname(hostname).split(":")[0] ?? "";
+  return JOYSTICK_PLATFORM_HOSTS.has(host);
+}
+
+/**
+ * Public-driver bypass stays on the two hosts that already had it.
+ * driver.gojoystick.com is not one of them.
+ */
+export function isPublicDriverBypassHost(hostname: string): boolean {
+  const host = normalizeHostname(hostname).split(":")[0] ?? "";
+  return host === JOYSTICK_MAIN_API_RAILWAY_HOST || host === LEGACY_DRIVER_HOST;
+}
+
+/** OAuth returns to the origin that started it. The provider console must list that URL. */
+export function oauthCallbackUrlForOrigin(origin: string): string {
+  return `${origin.replace(/\/+$/, "")}/api/oauth/callback`;
 }

@@ -20,6 +20,7 @@ import { getSessionCookieOptions } from "./cookies";
 import { sharedPasswordLoginSelection } from "../platform/tenancy/tenantIdentity";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
+import { isPublicDriverBypassHost } from "@shared/joystickHostRouting";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
@@ -452,9 +453,7 @@ async function startServer() {
   // role/tenant checks still see the configured driver identity.
   app.post("/api/auth/public-driver", async (req, res) => {
     const enabled = process.env.JOYSTICK_DRIVER_PUBLIC_ACCESS === "1";
-    const allowedHost =
-      req.hostname === "bldg-admin-api-production.up.railway.app" ||
-      req.hostname === "driver.bldg.chat";
+    const allowedHost = isPublicDriverBypassHost(req.hostname);
     if (!enabled || !allowedHost) {
       return res.status(404).json({ error: "Not found" });
     }

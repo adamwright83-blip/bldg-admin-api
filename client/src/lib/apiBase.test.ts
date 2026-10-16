@@ -28,6 +28,11 @@ describe("resolveApiBase", () => {
     }
   });
 
+  it("does not follow a resident API URL from the JOYSTICK API host", () => {
+    expect(resolveApiBase("api.gojoystick.com", "https://api.bldg.chat")).toBe("");
+    expect(resolveApiBase("www.gojoystick.com", "https://api.bldg.chat")).toBe("");
+  });
+
   it("does not send the resident API host through the main same-origin proxy", () => {
     expect(
       resolveApiBase(
