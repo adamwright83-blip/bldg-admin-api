@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import * as dbModule from "../../db";
+import * as revenueIntervention from "../../revenueIntervention";
 import type { OperatorMacroGoal } from "../../../drizzle/schema";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
 import { answerClaireBusinessTurn, parseBusinessTurn } from "../businessConversation";
@@ -296,11 +298,37 @@ describe("business goal engine", () => {
   });
 
   it("keeps a missing database as unavailable instead of an empty collection", async () => {
-    const read = await readBusinessGoalOpenCollections({
-      tenantId: "tenant-earnings",
-      now: NOW,
-    });
-    expect(read).toEqual({ status: "unavailable", reason: "Database unavailable" });
+    const dbSpy = vi.spyOn(dbModule, "getDb").mockResolvedValue(null);
+    const candidates = vi.spyOn(revenueIntervention, "listInterventionCandidates").mockResolvedValue([]);
+    try {
+      const read = await readBusinessGoalOpenCollections({
+        tenantId: "tenant-earnings",
+        now: NOW,
+      });
+      expect(candidates).not.toHaveBeenCalled();
+      expect(read).toEqual({ status: "unavailable", reason: "Database unavailable" });
+    } finally {
+      candidates.mockRestore();
+      dbSpy.mockRestore();
+    }
+  });
+
+  it("keeps a failed open-collection read unavailable", async () => {
+    const dbSpy = vi.spyOn(dbModule, "getDb").mockResolvedValue({} as never);
+    const candidates = vi.spyOn(revenueIntervention, "listInterventionCandidates").mockRejectedValue(
+      new Error("Open collections unavailable")
+    );
+    try {
+      const read = await readBusinessGoalOpenCollections({
+        tenantId: "tenant-earnings",
+        now: NOW,
+      });
+      expect(read).toEqual({ status: "unavailable", reason: "Open collections unavailable" });
+      expect(read).not.toEqual({ status: "available", items: [] });
+    } finally {
+      candidates.mockRestore();
+      dbSpy.mockRestore();
+    }
   });
 });
 
