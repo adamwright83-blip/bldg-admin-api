@@ -10,6 +10,7 @@ import { confirmTomorrowUtterance, speakMorningReconciliationAsk } from "../../.
 import { looksLikeCancelRequest, looksLikeEditRequest } from "../../../shared/goldlineDayLine";
 import { ENV } from "../../_core/env";
 import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsState, type ClaireBusinessTurnDeps } from "../businessConversation";
+import { parseBusinessGoal } from "../businessGoals/parseBusinessGoal";
 import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
@@ -1133,6 +1134,24 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   await deps.decisionStore.write(decisionRows);
 
   try {
+  if (parseBusinessGoal(utterance, now, timeZone).status !== "not_a_goal") {
+    const businessGoal = await answerClaireBusinessTurn(
+      {
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        dayDirectorActorId: input.dayDirectorActorId,
+        utterance,
+        state,
+        surface: input.surface,
+        context: input.context,
+      },
+      { now: deps.now, timeZone: deps.timeZone, ...deps.business }
+    );
+    if (businessGoal.handled && businessGoal.reader === "business_goal") {
+      mark("business_reader", { businessReader: "business_goal" });
+      return finish({ speak: businessGoal.speak, kind: "answered" });
+    }
+  }
   const effectiveTurnType = closedDecisions.turnType.effectiveOutput;
   const effectivePendingRelationship =
     closedDecisions.pendingActionRelationship.effectiveOutput;
@@ -2438,7 +2457,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (!skipGreedyBusiness) {
       try {
         const business = await answerClaireBusinessTurn(
-          { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
+          {
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            dayDirectorActorId: input.dayDirectorActorId,
+            utterance: question,
+            state,
+            surface: input.surface,
+            context: input.context,
+          },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
         if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result,
