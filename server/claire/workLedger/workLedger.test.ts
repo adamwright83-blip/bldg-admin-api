@@ -330,6 +330,8 @@ describe("speech hygiene", () => {
     expect(cleanLedgerReply("Reclassified as a marketing challenge. Want the ad copy in the notes?")).toBe("Want the ad copy in the notes?");
     expect(cleanLedgerReply("That's already on today's line as a marketing challenge.")).toBe("");
     expect(cleanLedgerReply("Sorry — got all of it now.")).toBe("Sorry — got all of it now.");
+    expect(cleanLedgerReply("Okay, dropped the landing page.")).toBe("");
+    expect(cleanLedgerReply("Got it, holding those.")).toBe("Got it, holding those.");
     expect(cleanLedgerReply("Should I add it? Say yes or no.")).toBe("Should I add it?");
   });
 });

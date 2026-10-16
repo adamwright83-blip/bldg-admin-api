@@ -207,4 +207,63 @@ describe.skipIf(!live)("work ledger — real-model replay of the 2026-10-15 prod
     },
     180_000
   );
+
+  it(
+    "holds what the operator is not ready to save, removes what they scratch, reclassifies, retimes, and ignores data questions",
+    async () => {
+      const dayLine = createFakeDayLine([
+        { id: "kith", title: "Pick up from KITH TREATS at 10", businessDate: TODAY, sourceText: "pick up from KITH TREATS at 10", scheduleLabel: "at 10" },
+        { id: "landing", title: "Build Laundry Farm landing page to match Instagram ad", businessDate: TODAY, executionType: "challenge" },
+        { id: "louise", title: "Call Louise about the contract", businessDate: TODAY },
+      ]);
+      const state: ClaireTurnState = { history: [{ speaker: "claire", text: "Claire here. What's up?", at: Date.parse("2026-10-15T17:00:00Z") }] };
+      const turns = [
+        "I've got two new dry cleaning pickups at Opus but don't put those on the line yet, I'm still figuring out the timing.",
+        "If Greystar calls back I'd want to visit them Thursday.",
+        "Actually scratch the landing page, I'm not doing that this week.",
+        "Make the Louise call a sales mission.",
+        "The Kith pickup is at 11, not 10.",
+        "How much did Opus spend with us last month?",
+        "Okay now put the Opus pickups on for tomorrow afternoon.",
+      ];
+      let clockMs = Date.parse("2026-10-15T17:00:30Z");
+      const log: string[] = [];
+      const outcomes: Awaited<ReturnType<typeof runWorkLedgerTurn>>[] = [];
+      for (const operator of turns) {
+        clockMs += 20_000;
+        const now = new Date(clockMs);
+        const outcome = await runWorkLedgerTurn(
+          {
+            tenantId: "default", operatorUserId: "adam-admin", dayDirectorActorId: "1",
+            conversationKey: "claire-call:replay-holds", surface: "voice", utterance: operator, state,
+            timeZone: ZONE, sessionKind: "pre_drive",
+          },
+          { now: () => now, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+        );
+        outcomes.push(outcome);
+        log.push(`OPERATOR: ${operator}`);
+        log.push(outcome.handled ? `CLAIRE [ledger ${outcome.latencyMs}ms]: ${outcome.result.speak}` : `   (ledger: ${outcome.reason})`);
+        if (!outcome.handled) state.history = [...(state.history ?? []), { speaker: "operator", text: operator, at: clockMs }, { speaker: "claire", text: "Opus spent $612 last month.", at: clockMs + 1 }];
+        log.push(`   held: ${(state.workLedger?.held ?? []).map(item => item.title).join(" · ") || "(none)"}`);
+        log.push(`   Day Line: ${dayLine.open().map(row => `[${row.businessDate}${row.executionType ? `/${row.executionType}` : ""}${row.scheduleLabel ? ` @${row.scheduleLabel}` : ""}] ${row.title}`).join(" · ")}`);
+      }
+      console.log(`\n${log.join("\n")}\nwrites:\n${dayLine.writes.join("\n")}`);
+      const rows = Array.from(dayLine.rows.values());
+      // Held, not saved, until the operator says so; then saved to tomorrow.
+      const opus = dayLine.open().filter(row => /opus/i.test(row.title));
+      expect(opus.length).toBeGreaterThanOrEqual(1);
+      expect(opus.every(row => row.businessDate === TOMORROW)).toBe(true);
+      expect(dayLine.writes.findIndex(write => /create .*opus/i.test(write))).toBeGreaterThan(-1);
+      // The hypothetical Greystar visit is never saved.
+      expect(dayLine.open().filter(row => /greystar/i.test(row.title))).toEqual([]);
+      // Scratched, reclassified, retimed.
+      expect(rows.find(row => row.id === "landing")!.cancelled).toBe(true);
+      expect(rows.find(row => row.id === "louise")!.executionType).toBe("mission");
+      const kith = rows.find(row => row.id === "kith")!;
+      expect(`${kith.title} ${kith.scheduleLabel}`).toMatch(/11/);
+      // The data question is not a work turn.
+      expect(outcomes[5]!.handled).toBe(false);
+    },
+    240_000
+  );
 });

@@ -131,7 +131,7 @@ export function workLedgerPromptSection(state: ClaireTurnState, today: string): 
 
 /** Sentences in which the model narrates a write itself; those belong to the receipt-backed confirmation. */
 const SELF_REPORTED_WRITE =
-  /\b(?:added|adding|saved|saving|updated|changed|reclassif\w*|tagged|logged|recorded|moved|removed|scheduled|marked|put (?:it|that|them|those)|on (?:the|your|today'?s|tomorrow'?s) (?:day ?)?line|done\.)/i;
+  /\b(?:added|adding|saved|saving|updated|changed|reclassif\w*|tagged|logged|recorded|moved|removed|deleted|dropped|scratched|cleared|cancell?ed|scheduled|marked|took (?:it|that|them|those) off|put (?:it|that|them|those)|on (?:the|your|today'?s|tomorrow'?s) (?:day ?)?line|done\.)/i;
 
 export function cleanLedgerReply(reply: string): string {
   if (!reply.trim()) return "";
