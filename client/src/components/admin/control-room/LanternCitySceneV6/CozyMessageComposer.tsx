@@ -13,6 +13,7 @@ interface CozyMessageComposerProps {
   target: CozyProjectedTarget;
   targetIndex: number;
   totalTargets: number;
+  objectiveId?: string | null;
   isSending: boolean;
   onSendNow: (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => void;
   onScheduleSend: (
@@ -29,6 +30,7 @@ export function CozyMessageComposer({
   target,
   targetIndex,
   totalTargets,
+  objectiveId = null,
   isSending,
   onSendNow,
   onScheduleSend,
@@ -48,6 +50,7 @@ export function CozyMessageComposer({
   } | null>(null);
   const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
   const reportSent = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
+  const ensureDraft = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
   // Default schedule: tomorrow at 10:00 AM Pacific (America/Los_Angeles)
   const getDefaultScheduleIso = () => {
@@ -123,8 +126,7 @@ export function CozyMessageComposer({
 
   const handleSendNow = () => {
     if (!message.trim() || isSending || !target.hasConsent) return;
-    const idempotencyKey = crypto.randomUUID();
-    onSendNow(target, message.trim(), idempotencyKey);
+    onSendNow(target, message.trim(), recoveryKey);
   };
 
   const textApproved = approvedBody !== null && approvedBody === message.trim();
@@ -140,14 +142,26 @@ export function CozyMessageComposer({
     setHandoffError(null);
   };
 
+  const recoveryKey = `day-line-recovery:${objectiveId ?? "personal"}:${target.customerId}`;
+
   const handleOpenSms = async () => {
     if (!textApproved || !approvedBody || !target.phone || isSending || !target.hasConsent) return;
     setHandoffError(null);
     try {
+      const draft = await ensureDraft.mutateAsync({
+        customerId: target.customerId,
+        messageBody: approvedBody,
+        scheduledFor: scheduleDateTime,
+        timezone: "America/Los_Angeles",
+        expectedPhone: target.phone,
+        slotId: target.slotId,
+        territoryId: target.territoryId,
+        idempotencyKey: recoveryKey,
+      });
       const clientKind = clientKindFromUserAgent(navigator.userAgent || "");
       const result = await openHandoff.mutateAsync({
-        messageId: target.messageId ?? `cozy:${target.customerId}`,
-        revisionCount: approvalRevision,
+        messageId: draft.id,
+        revisionCount: draft.revisionCount,
         approvedBody,
         recipientPhone: target.phone,
         confirmation: SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -197,9 +211,7 @@ export function CozyMessageComposer({
       alert("Please select a date and time.");
       return;
     }
-    const idempotencyKey = crypto.randomUUID();
-    // Pass wall-clock date and time string directly to server for authoritative Pacific conversion
-    onScheduleSend(target, message.trim(), scheduleDateTime, idempotencyKey);
+    onScheduleSend(target, message.trim(), scheduleDateTime, recoveryKey);
     setShowSchedulePicker(false);
   };
 
@@ -311,9 +323,9 @@ export function CozyMessageComposer({
           <div className={styles.scheduledBanner} style={{ borderColor: "#fcd34d", background: "#fefce8", color: "#854d0e" }}>
             <span>📱</span>
             <div>
-              <strong>Committed to Outbox (Awaiting Phone Connection)</strong>
+              <strong>Saved for your phone. Not sent.</strong>
               <div style={{ fontSize: "10.5px", opacity: 0.9 }}>
-                Saved in Admin → Claire → Scheduled Outreach. Message will send once your personal Android phone is connected in Phase 2.
+                This draft is waiting for you to send it from your own phone. Opening Messages is not a send.
               </div>
             </div>
           </div>
@@ -409,13 +421,19 @@ export function CozyMessageComposer({
             {handoffReveal.kind === "copy_fallback" && handoffReveal.copyBody ? (
               <>
                 <p>{handoffReveal.copyLabel}</p>
-                <textarea readOnly value={handoffReveal.copyBody} rows={3} />
+                <textarea readOnly value={handoffReveal.copyBody} rows={3} data-sms-copy-fallback="" />
               </>
             ) : null}
             {handoffReveal.kind === "missing_body" ? <p>{handoffReveal.copyLabel}</p> : null}
             {handoffReveal.uri ? (
-              <a href={handoffReveal.uri}>
-                {handoffReveal.bodyPrefillClaimed ? "Open SMS with this message" : "Open SMS. Prefill is not guaranteed."}
+              <a
+                href={handoffReveal.uri}
+                data-sms-open={handoffReveal.messagesPackage ? "google-messages" : "sms"}
+                data-messages-package={handoffReveal.messagesPackage ?? ""}
+              >
+                {handoffReveal.bodyPrefillClaimed
+                  ? "Open SMS with this message"
+                  : "Open the Google Messages thread. The message is not prefilled."}
               </a>
             ) : null}
             {handoffReveal.fallbackUri && handoffReveal.fallbackUri !== handoffReveal.uri ? (

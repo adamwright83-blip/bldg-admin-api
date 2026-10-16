@@ -298,7 +298,9 @@ export function communicationStateForRow(
   if (!row) return consentBlocked ? "consent_blocked" : "draft_prepared";
   if (isSendObserved(row)) return "send_observed";
   if (row.status === "failed") return "failed";
-  if (row.status === "awaiting_sender_setup") return "awaiting_sender";
+  if (row.status === "awaiting_sender_setup") {
+    return row.deliveryIntent === "scheduled" ? "scheduled" : "awaiting_sender";
+  }
   if (row.status === "claimed") return "claimed";
   if (row.status === "pending") {
     return row.deliveryIntent === "immediate" ? "awaiting_sender" : "scheduled";
