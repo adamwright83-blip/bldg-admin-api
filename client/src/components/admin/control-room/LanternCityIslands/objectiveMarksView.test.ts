@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { LanternObjectiveMarks } from "@shared/lanternCityObjectiveMarks";
-import { buildObjectiveMarkers, driverLinkForRun } from "./objectiveMarksView";
+import { buildObjectiveMarkers, driverLinkForRun, heroTodayNotice } from "./objectiveMarksView";
 
 function marks(over: Partial<LanternObjectiveMarks> = {}): LanternObjectiveMarks {
   return {
@@ -80,6 +80,40 @@ describe("buildObjectiveMarkers", () => {
 
   it("links to Driver with the run id only", () => {
     expect(driverLinkForRun("run 1/x")).toBe("/driver?lanternCampaignRun=run%201%2Fx");
+  });
+});
+
+describe("heroTodayNotice", () => {
+  it("names the current driver stop instead of calling the Day Line unavailable", () => {
+    const notice = heroTodayNotice({
+      todayStatus: "day_line_unavailable",
+      driverStop: { id: "native-pickup-1", title: "Dayline Proof" },
+    });
+    expect(notice).toEqual({
+      kind: "current-stop",
+      id: "native-pickup-1",
+      title: "Dayline Proof",
+      line: "Current stop. No map target is lit.",
+    });
+    expect(JSON.stringify(notice).toLowerCase()).not.toContain("unavailable");
+  });
+
+  it("keeps the unavailable sentence when the driver line has no current stop", () => {
+    expect(heroTodayNotice({ todayStatus: "day_line_unavailable", driverStop: null })).toEqual({
+      kind: "status",
+      line: "Today's Day Line is unavailable, so no target is lit.",
+    });
+  });
+
+  it("leaves other map statuses unchanged", () => {
+    expect(heroTodayNotice({ todayStatus: "no_primary", driverStop: { id: "s1", title: "Dayline Proof" } })).toEqual({
+      kind: "status",
+      line: "No ranked Day Line today, so no target is lit.",
+    });
+    expect(heroTodayNotice({ todayStatus: "ok", driverStop: { id: "s1", title: "Dayline Proof" } })).toEqual({
+      kind: "status",
+      line: null,
+    });
   });
 });
 

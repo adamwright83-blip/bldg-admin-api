@@ -266,6 +266,7 @@ export default function JoystickHome({
                 showUtilityDock={false}
                 onOpenCustomer={() => onNavigate("/customers")}
                 onNavigate={onNavigate}
+                driverCurrentStop={current ? { id: current.id, title: current.title } : null}
               />
             </Suspense>
           </div>
