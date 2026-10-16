@@ -20,6 +20,12 @@ import {
 } from "../analytics/sourceBindings";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
+import { parseBusinessGoal } from "./businessGoals/parseBusinessGoal";
+import {
+  runBusinessGoalEngine,
+  type BusinessGoalEngineInput,
+  type BusinessGoalPlan,
+} from "./businessGoals/businessGoalEngine";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import type { LedgerFilters } from "../analytics/businessLineage";
 import type { CustomerDetail, OrderBrief } from "../analytics/businessMetrics";
@@ -153,7 +159,8 @@ export type ClaireBusinessReader =
   | "compare_customers"
   | "planned_query"
   | "query"
-  | "analysis";
+  | "analysis"
+  | "business_goal";
 
 export type ClaireBusinessTurn =
   | { handled: false }
@@ -407,6 +414,7 @@ type CustomerTarget = { name: string } | { focus: FocusCustomer };
 
 export type ParsedBusinessTurn =
   | { kind: "not_analytics" }
+  | { kind: "business_goal" }
   | { kind: "clarify"; speak: string; pending: PendingAnalyticsClarification }
   | { kind: "unsupported"; speak: string }
   | { kind: "needs_planner"; reason: "unnamed_spend" | "broad" }
@@ -423,6 +431,7 @@ export function parseBusinessTurn(
 ): ParsedBusinessTurn {
   const text = utterance.trim();
   if (!text) return { kind: "not_analytics" };
+  if (parseBusinessGoal(text, now, timeZone).status !== "not_a_goal") return { kind: "business_goal" };
   const lower = normalizeUtterance(text);
   const words = lower.split(/\s+/).filter(Boolean).length;
   const focus = session?.focus ?? {};
@@ -1067,6 +1076,8 @@ export type ClaireBusinessTurnDeps = {
   speakResult?: typeof speakBusinessResult;
   /** Source membership/health/range evidence. Injectable so tests can prove coverage without a database. */
   loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
+  /** Injectable so tests can plan a business goal without a database. */
+  runBusinessGoal?: (input: BusinessGoalEngineInput) => Promise<BusinessGoalPlan>;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -1088,9 +1099,42 @@ const CUSTOMER_IDENTITY_METRICS = new Set<string>([
   "customer_history",
 ]);
 
+async function settleBusinessGoal(
+  input: {
+    tenantId: string;
+    operatorUserId?: string;
+    dayDirectorActorId?: string;
+    utterance: string;
+    context?: ClaireDriveContext | null;
+  },
+  deps: Partial<ClaireBusinessTurnDeps>,
+  now: Date,
+  timeZone: string
+): Promise<ClaireBusinessTurn | null> {
+  if (parseBusinessGoal(input.utterance, now, timeZone).status === "not_a_goal") return null;
+  const plan = await (deps.runBusinessGoal ?? runBusinessGoalEngine)({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    utterance: input.utterance,
+    now,
+    timeZone,
+  });
+  if (plan.status === "not_a_goal" || !plan.speak) return null;
+  const speak = sanitizeSpeakAgainstInventory(plan.speak, buildClaireVerifiedFactInventory(input.context));
+  return {
+    handled: true,
+    speak,
+    facts: speak === plan.speak ? plan.facts : [],
+    reader: "business_goal",
+  };
+}
+
 export async function answerClaireBusinessTurn(
   input: {
     tenantId: string;
+    operatorUserId?: string;
+    dayDirectorActorId?: string;
     utterance: string;
     state: ClaireAnalyticsState;
     surface: ClaireSurface;
@@ -1100,6 +1144,8 @@ export async function answerClaireBusinessTurn(
 ): Promise<ClaireBusinessTurn> {
   const now = (deps.now ?? (() => new Date()))();
   const timeZone = (deps.timeZone ?? getDashboardTimeZone)();
+  const goalTurn = await settleBusinessGoal(input, deps, now, timeZone);
+  if (goalTurn) return goalTurn;
   const nowMs = now.getTime();
   const today = businessToday(now, timeZone);
   const session = liveSession(input.state, nowMs);
@@ -1122,6 +1168,9 @@ export async function answerClaireBusinessTurn(
   } catch (error) {
     console.warn("[Claire] business question parsing failed", error);
     return { handled: false };
+  }
+  if (parsed.kind === "business_goal") {
+    return (await settleBusinessGoal(input, deps, now, timeZone)) ?? { handled: false };
   }
   let reader: ClaireBusinessReader = "query";
   // The model assesses whole-question adequacy before a greedy fixed metric can erase novel criteria.
