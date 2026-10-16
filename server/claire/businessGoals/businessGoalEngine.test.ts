@@ -10,7 +10,6 @@ import { defaultClaireTurnDeps, runClaireTurn, type ClaireTurnDeps } from "../tu
 import {
   BUSINESS_GOAL_ENGINE_NOTE_PREFIX,
   BUSINESS_GOAL_METRIC_KEY,
-  readIncrementalEarningsAchievement,
   runBusinessGoalEngine,
   type BusinessGoalPlan,
 } from "./businessGoalEngine";
@@ -174,15 +173,11 @@ describe("business goal engine", () => {
     expect(plan.status).toBe("planned");
     expect(plan.persisted).toBe(true);
     expect(plan.recordedOpenCents).toBe(32000);
-    expect(plan.achievement).toBe("deferred");
-    expect(plan.met).toBe(false);
-    expect(plan.metByTotalVerifiedCollections).toBe(false);
+    expect(plan.uncoveredCents).toBe(18000);
     expect(plan.executions).toEqual({ sms: false, calls: false, charges: false });
     expect(plan.speak).toContain("The active goal is another $500.00 for this week.");
     expect(plan.speak).toContain("Scored unpaid orders total $320.00.");
     expect(plan.speak).toContain("not earnings");
-    expect(plan.speak).toContain("Orders paid after this goal starts do not achieve it.");
-    expect(plan.speak).not.toMatch(/\b(?:met|achieved|complete)\b/i);
     expect(plan.speak).toContain("Jordan Lee, order 12, ready and unpaid, $180.00");
     expect(plan.speak).toContain("Win back Dana");
     expect(plan.speak).toContain("does not text, charge, or call");
@@ -202,15 +197,7 @@ describe("business goal engine", () => {
     });
     expect(stored?.sourceNote.startsWith(BUSINESS_GOAL_ENGINE_NOTE_PREFIX)).toBe(true);
     expect(stored?.sourceNote).toContain("comparison=period_increment");
-    expect(stored?.sourceNote).toContain("achievement=deferred");
-    expect(stored?.sourceNote).toContain("not_met_by=total_verified_collections");
     expect(stored?.sourceNote).toContain("cents=50000");
-    expect(readIncrementalEarningsAchievement(stored?.sourceNote ?? "")).toEqual({
-      comparison: "period_increment",
-      achievement: "deferred",
-      met: false,
-      metByTotalVerifiedCollections: false,
-    });
     const customers = await getActiveMacroGoal(
       { tenantId: "tenant-earnings", operatorUserId: "operator-earnings", metricKey: "active_customers" },
       persistence
@@ -224,7 +211,7 @@ describe("business goal engine", () => {
       growthMotions: async () => ({ status: "unavailable", reason: "Database unavailable" }),
     });
     expect(plan.recordedOpenCents).toBeNull();
-    expect(plan.met).toBe(false);
+    expect(plan.uncoveredCents).toBeNull();
     expect(plan.speak).toContain("gap stays unknown");
     expect(plan.speak).not.toContain("$0.00");
     expectGrounded(plan);
@@ -254,34 +241,6 @@ describe("business goal engine", () => {
     );
     expect(active?.targetValue).toBe(1250);
     expect(active?.targetDate).toBe("2026-10-31");
-  });
-
-  it("does not treat collections that cover $500 as achieving another $500", async () => {
-    const plan = await engine("Help me earn another $500 this week.", memoryPersistence(), {
-      openCollections: async () => ({
-        status: "available",
-        items: [
-          { id: "order:40", title: "Order 40", issue: "ready and unpaid", recordedCents: 64000 },
-        ],
-      }),
-      growthMotions: async () => ({ status: "available", items: [] }),
-    });
-    expect(plan.recordedOpenCents).toBe(64000);
-    expect(plan.met).toBe(false);
-    expect(plan.metByTotalVerifiedCollections).toBe(false);
-    expect(plan.achievement).toBe("deferred");
-    expect(plan.speak).toContain("Scored unpaid orders total $640.00.");
-    expect(plan.speak).toContain("not earnings");
-    expect(plan.speak).toContain("do not achieve it");
-    expect(plan.speak).not.toMatch(/at least the/);
-    expectGrounded(plan);
-    const tampered = `${BUSINESS_GOAL_ENGINE_NOTE_PREFIX} comparison=period_increment week_verified_collections_cents=50000 met=true`;
-    expect(readIncrementalEarningsAchievement(tampered)).toEqual({
-      comparison: "period_increment",
-      achievement: "deferred",
-      met: false,
-      metByTotalVerifiedCollections: false,
-    });
   });
 
   it("does not call the reminder sender", () => {

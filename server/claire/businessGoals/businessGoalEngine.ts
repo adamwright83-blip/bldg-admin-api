@@ -60,12 +60,10 @@ export type BusinessGoalPlan = {
   goal: IncrementalEarningsGoal | null;
   openCollections: OpenCollectionRead | null;
   growthMotions: GrowthMotionRead | null;
-  /** Sum of recorded positive open-order cents. Null when that read was unavailable. Not progress toward the increment. */
+  /** Sum of recorded positive open-order cents. Null when that read was unavailable. */
   recordedOpenCents: number | null;
-  /** This engine does not mark a period increment met. */
-  achievement: "deferred";
-  met: false;
-  metByTotalVerifiedCollections: false;
+  /** Target minus recorded open cents. Null when the open-order read was unavailable. */
+  uncoveredCents: number | null;
   speak: string;
   facts: string[];
   executions: { sms: false; calls: false; charges: false };
@@ -86,33 +84,7 @@ function amountPhrase(cents: number, explicitAnother: boolean): string {
   return explicitAnother ? `another ${money}` : money;
 }
 
-/**
- * Achievement is not decided here. Total verified collections, including
- * ordinary orders paid after the goal starts, are not "another $500."
- * The financial reader owns that split: total collections, goal-action
- * revenue, and substantiated additional earnings.
- */
-export type IncrementalEarningsAchievement = {
-  comparison: "period_increment";
-  achievement: "deferred";
-  met: false;
-  metByTotalVerifiedCollections: false;
-};
-
-export function readIncrementalEarningsAchievement(
-  sourceNote: string
-): IncrementalEarningsAchievement | null {
-  if (!sourceNote.includes(BUSINESS_GOAL_ENGINE_NOTE_PREFIX)) return null;
-  if (!sourceNote.includes("comparison=period_increment")) return null;
-  return {
-    comparison: "period_increment",
-    achievement: "deferred",
-    met: false,
-    metByTotalVerifiedCollections: false,
-  };
-}
-
-function sourceNote(goal: IncrementalEarningsGoal, startedAt: Date): string {
+function sourceNote(goal: IncrementalEarningsGoal): string {
   return [
     BUSINESS_GOAL_ENGINE_NOTE_PREFIX,
     "kind=incremental_earnings",
@@ -120,9 +92,6 @@ function sourceNote(goal: IncrementalEarningsGoal, startedAt: Date): string {
     `cents=${goal.amountCents}`,
     `horizon=${goal.horizon.startYmd}..${goal.horizon.endYmd}`,
     goal.explicitAnother ? "marker=another" : "marker=period",
-    "achievement=deferred",
-    "not_met_by=total_verified_collections",
-    `started_at=${startedAt.toISOString()}`,
   ].join(" ");
 }
 
@@ -219,8 +188,17 @@ export function speakBusinessGoal(input: {
   } else if (input.recordedOpenCents != null) {
     const recorded = pushMoney(draft, input.recordedOpenCents);
     draft.sentences.push(`Scored unpaid orders total ${recorded}. That is recorded open amount, not earnings.`);
+    if (input.recordedOpenCents >= goal.amountCents) {
+      draft.sentences.push(
+        `Recorded open amount is at least the ${pushMoney(draft, goal.amountCents)} target. It is still unpaid on the books.`
+      );
+    } else {
+      const uncovered = goal.amountCents - input.recordedOpenCents;
+      draft.sentences.push(
+        `${pushMoney(draft, uncovered)} of the target has no recorded dollar figure on those orders.`
+      );
+    }
   }
-  draft.sentences.push("Orders paid after this goal starts do not achieve it.");
   if (input.growthMotions?.status === "unavailable") {
     draft.sentences.push("Growth motions are unavailable, so none are listed.");
   } else if (input.growthMotions?.status === "available" && input.growthMotions.items.length === 0 && input.openCollections?.status === "available") {
@@ -283,9 +261,7 @@ export async function runBusinessGoalEngine(input: BusinessGoalEngineInput): Pro
       openCollections: null,
       growthMotions: null,
       recordedOpenCents: null,
-      achievement: "deferred",
-      met: false,
-      metByTotalVerifiedCollections: false,
+      uncoveredCents: null,
       speak: "",
       facts: [],
       executions: NO_EXECUTION,
@@ -311,9 +287,7 @@ export async function runBusinessGoalEngine(input: BusinessGoalEngineInput): Pro
       openCollections: null,
       growthMotions: null,
       recordedOpenCents: null,
-      achievement: "deferred",
-      met: false,
-      metByTotalVerifiedCollections: false,
+      uncoveredCents: null,
       speak: spoken.speak,
       facts: spoken.facts,
       executions: NO_EXECUTION,
@@ -339,6 +313,8 @@ export async function runBusinessGoalEngine(input: BusinessGoalEngineInput): Pro
         horizonEnd: goal.horizon.endYmd,
       });
   const recordedOpenCents = openCollections.status === "available" ? sumRecorded(openCollections.items) : null;
+  const uncoveredCents =
+    recordedOpenCents == null ? null : Math.max(0, goal.amountCents - recordedOpenCents);
 
   let persisted = false;
   let goalId: string | null = null;
@@ -355,7 +331,7 @@ export async function runBusinessGoalEngine(input: BusinessGoalEngineInput): Pro
           urgencyText: `period_increment ${goal.horizon.label}`.slice(0, 191),
           targetDate: goal.horizon.endYmd,
           source: "operator_attested",
-          sourceNote: sourceNote(goal, input.now).slice(0, 512),
+          sourceNote: sourceNote(goal).slice(0, 512),
         },
         input.persistence
       );
@@ -385,9 +361,7 @@ export async function runBusinessGoalEngine(input: BusinessGoalEngineInput): Pro
     openCollections,
     growthMotions,
     recordedOpenCents,
-    achievement: "deferred",
-    met: false,
-    metByTotalVerifiedCollections: false,
+    uncoveredCents,
     speak: spoken.speak,
     facts: spoken.facts,
     executions: NO_EXECUTION,
