@@ -1,4 +1,7 @@
-import { canonicalLanternTerritory } from "@/components/admin/control-room/customerGeography";
+import {
+  canonicalLanternTerritory,
+  type GeographicCustomer,
+} from "@/components/admin/control-room/customerGeography";
 import { resolveLanternCityClick } from "@/components/admin/control-room/lanternClickResolver";
 
 /**
@@ -14,11 +17,7 @@ export type HomeCityCustomer = {
   phone: string | null;
   address?: string | null;
   cadence: { state: "active" | "dimming" | "dark" };
-  location: {
-    latitude: number;
-    longitude: number;
-    canonicalAddress: string | null;
-  } | null;
+  location: GeographicCustomer["location"];
 };
 
 export type HomeCityClick =
