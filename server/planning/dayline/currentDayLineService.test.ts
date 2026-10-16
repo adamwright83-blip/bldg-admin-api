@@ -777,5 +777,77 @@ describe("readCurrentDayLine", () => {
     expect(line.items.every(item => item.lineage?.kind === "candidate")).toBe(true);
   });
 
+  it("omits a commitment fenced to another business date from today's line", async () => {
+    const todayId = "wgc:tenant-a:day_director_commitment:commit-1";
+    const fencedId = "wgc:tenant-a:day_director_commitment:commit-other";
+    const commitmentWork = (workId: string, commitmentId: string, title: string) => ({
+      workId,
+      title,
+      objective: title,
+      completionCondition: null,
+      sourceKind: "unfinished_growth_work" as const,
+      sourceRefs: [
+        {
+          sourceKind: "unfinished_growth_work" as const,
+          sourceType: "day_director_commitment",
+          sourceId: commitmentId,
+        },
+      ],
+      score: 300,
+      confidence: "high" as const,
+      executionType: "challenge" as const,
+      eligible: true,
+      blockedReasons: [],
+      factors: [],
+      warnings: [],
+    });
+    const diagnosis = {
+      workId: "wgc:tenant-a:diagnosis:audit",
+      title: "Audit missing business drivers",
+      objective: "Audit missing business drivers",
+      completionCondition: null,
+      sourceKind: "strategy_diagnosis" as const,
+      sourceRefs: [],
+      score: 100,
+      confidence: "low" as const,
+      executionType: "challenge" as const,
+      eligible: true,
+      blockedReasons: [],
+      factors: [],
+      warnings: [],
+    };
+    const line = await readCurrentDayLine(readerInput, {
+      planForDate: async () =>
+        ({
+          ...storedPlan,
+          outcome: {
+            status: "no_plan" as const,
+            reason: "AUTHORITATIVE_WORK_NOT_CAMPAIGN" as const,
+            remedy: "Read the authoritative work plan.",
+            workPlan: {
+              status: "ranked" as const,
+              primary: {
+                ...commitmentWork(todayId, "commit-1", "Call Dana"),
+                rankEvidence: {} as never,
+              },
+              ranking: [
+                commitmentWork(todayId, "commit-1", "Call Dana"),
+                commitmentWork(fencedId, "commit-other", "Browser fixture selected item 2"),
+                diagnosis,
+              ],
+              reason: null,
+            },
+          },
+        }) as never,
+      listCampaigns: async () => campaigns,
+      getDayDirectorState: async () => directorState,
+      listObjectives: async () => [],
+    });
+    const json = JSON.stringify(line);
+    expect(json).toContain("commit-1");
+    expect(json).not.toContain("commit-other");
+    expect(line.items.map(item => item.id)).toEqual([todayId, diagnosis.workId]);
+  });
+
 });
 
