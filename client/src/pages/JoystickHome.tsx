@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { isLiveLanternCustomer } from "@/components/admin/control-room/customerGeography";
+import {
+  homeCustomerId,
+  isSilverLakeRecoveryCustomer,
+  resolveHomeCityClick,
+  type HomeCityCustomer,
+} from "./homeCityClick";
 import "./JoystickHome.css";
 
 const LanternCityIslands = lazy(
@@ -111,8 +117,12 @@ export default function JoystickHome({
     [questions]
   );
 
-  const lanternCount =
-    atlas.data?.customers?.filter(isLiveLanternCustomer).length ?? null;
+  const locatedCustomers = (atlas.data?.customers ?? []).filter(isLiveLanternCustomer) as HomeCityCustomer[];
+  const recoveryCustomers = locatedCustomers.filter(isSilverLakeRecoveryCustomer);
+  const inspectionCustomer =
+    locatedCustomers.find(customer => !isSilverLakeRecoveryCustomer(customer)) ?? null;
+  const [inspectedCustomerId, setInspectedCustomerId] = useState<string | null>(null);
+  const lanternCount = atlas.data ? locatedCustomers.length : null;
   const weekShare =
     summary?.revenueMonth != null && summary.revenueMonth > 0 && summary.revenueWeek != null
       ? Math.round((summary.revenueWeek / summary.revenueMonth) * 100)
@@ -208,6 +218,73 @@ export default function JoystickHome({
               Open city <ArrowRight />
             </Link>
           </div>
+          <nav className="jh-city-clicks" aria-label="City clicks" data-testid="home-city-clicks">
+            <button
+              type="button"
+              data-testid="home-click-building-inspection"
+              onClick={() => {
+                const click = resolveHomeCityClick({ kind: "building", buildingId: "opus_la" });
+                if (click.action === "navigate") onNavigate(click.path);
+              }}
+            >
+              OPUS LA inspection
+            </button>
+            <button
+              type="button"
+              data-testid="home-click-tower-wars"
+              onClick={() => {
+                const click = resolveHomeCityClick({ kind: "building", buildingId: "century_park_east" });
+                if (click.action === "navigate") onNavigate(click.path);
+              }}
+            >
+              Century Park East
+            </button>
+            {inspectionCustomer ? (
+              <button
+                type="button"
+                data-testid="home-click-customer-inspection"
+                data-customer-id={homeCustomerId(inspectionCustomer)}
+                onClick={() => {
+                  const customerId = homeCustomerId(inspectionCustomer);
+                  const click = resolveHomeCityClick({ kind: "customer_inspection", customerId });
+                  if (click.action === "inspect") setInspectedCustomerId(click.customerId);
+                }}
+              >
+                Inspect {inspectionCustomer.displayName}
+              </button>
+            ) : null}
+            {recoveryCustomers.map(customer => {
+              const customerId = homeCustomerId(customer);
+              return (
+                <button
+                  key={customer.identityKey}
+                  type="button"
+                  data-testid="home-click-silver-lake"
+                  data-customer-id={customerId}
+                  onClick={() => {
+                    const click = resolveHomeCityClick({
+                      kind: "recovery_customer",
+                      customerId,
+                      territoryId: "silver-lake",
+                    });
+                    if (click.action === "navigate") onNavigate(click.path);
+                  }}
+                >
+                  {customer.displayName}
+                </button>
+              );
+            })}
+          </nav>
+          {inspectedCustomerId ? (
+            <aside
+              className="jh-customer-inspection"
+              data-testid="home-customer-inspection"
+              data-customer-id={inspectedCustomerId}
+            >
+              <strong>Customer inspection</strong>
+              <span>{inspectedCustomerId}</span>
+            </aside>
+          ) : null}
         </article>
 
         <div className="jh-right-rail">
