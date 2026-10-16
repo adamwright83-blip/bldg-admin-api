@@ -94,9 +94,10 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
     await expect(routine.getByTestId("activate-evening_debrief-result")).toContainText("Verified. First call window");
     expect(await grants()).toEqual(["claire.evening_debrief.call", "claire.morning_readiness.call"]);
     const [authRows]: any = await db.execute("SELECT exactAction,allowedWeekdaysJson,allowedLocalStart,allowedLocalEnd FROM tenant_standing_authorizations WHERE tenantId=? AND revokedAt IS NULL ORDER BY exactAction", [owner.tenantId]);
+    // Launch schedule: morning 7:30–8:00 AM and evening 6:30–7:00 PM, both every day.
     expect(authRows.map((r: any) => [r.exactAction, JSON.stringify(typeof r.allowedWeekdaysJson === "string" ? JSON.parse(r.allowedWeekdaysJson) : r.allowedWeekdaysJson), r.allowedLocalStart, r.allowedLocalEnd])).toEqual([
-      ["claire.evening_debrief.call", "[1,2,3,4,5,6]", "17:30", "19:00"],
-      ["claire.morning_readiness.call", "[1,2,3,4,5,6,7]", "07:30", "09:00"],
+      ["claire.evening_debrief.call", "[1,2,3,4,5,6,7]", "18:30", "19:00"],
+      ["claire.morning_readiness.call", "[1,2,3,4,5,6,7]", "07:30", "08:00"],
     ]);
 
     // 5. OPEN COMMS fallbacks without a model or voice provider: honest, nothing claimed saved.

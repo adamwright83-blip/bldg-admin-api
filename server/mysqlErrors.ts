@@ -27,6 +27,18 @@ export function isMysqlDuplicateKeyError(error: unknown): boolean {
   );
 }
 
+export function isMysqlLockConflictError(error: unknown): boolean {
+  return walkMysqlError(
+    error,
+    databaseError =>
+      databaseError.code === "ER_LOCK_DEADLOCK" ||
+      databaseError.code === "ER_LOCK_WAIT_TIMEOUT" ||
+      databaseError.errno === 1213 ||
+      databaseError.errno === 1205 ||
+      /deadlock found|lock wait timeout exceeded/i.test(databaseError.message ?? "")
+  );
+}
+
 export function isMysqlMissingTableError(error: unknown): boolean {
   return walkMysqlError(
     error,

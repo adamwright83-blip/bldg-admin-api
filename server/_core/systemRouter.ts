@@ -61,6 +61,7 @@ import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
+import { customerTruthFreshnessRouter } from "../analytics/customerTruthFreshnessRouter";
 import { persistentOperatorRouter } from "../agents/persistentOperator/persistentOperatorRouter";
 import { operatorRepresentativeRouter } from "../agents/operatorRepresentative/router";
 import { franchiseRouter } from "../franchise/franchiseRouter";
@@ -68,6 +69,7 @@ import { franchiseRouter } from "../franchise/franchiseRouter";
 export const systemRouter = router({
   franchise: franchiseRouter,
   strategy: strategyRouter,
+  customerTruthFreshness: customerTruthFreshnessRouter,
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
   gumball: cleancloudBrowserSyncRouter,

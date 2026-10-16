@@ -18,6 +18,21 @@ jobs:
   bounded-evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      # sourceBackedAction.test.ts opens its own disposable schema on 127.0.0.1:3399.
+      # DATABASE_URL stays empty so the rest of this job does not attach to it.
+      source_backed_mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: source_backed_disposable
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     env:
       NODE_ENV: test
       ANTHROPIC_API_KEY: ''

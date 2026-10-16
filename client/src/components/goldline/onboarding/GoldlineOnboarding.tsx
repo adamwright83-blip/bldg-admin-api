@@ -5,8 +5,9 @@ import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/b
 import { useEffect, useRef, useState } from "react";
 import { captureProductEvent } from "@/lib/posthog";
 import { trpc } from "@/lib/trpc";
-import { ONBOARDING_QUESTIONS, getGoldlineOnboardingAnswer, type GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
+import { ONBOARDING_QUESTIONS, getGoldlineOnboardingAnswer, onboardingPreviewForConnection, type GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
 import { PRODUCT_NAME } from "@shared/productIdentity";
+import { FirstActionDesk } from "./FirstActionDesk";
 import "./onboarding.css";
 const art = "/assets/goldline/procedural-world-v1/";
 
@@ -19,11 +20,13 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
  const speech = useRef<BrowserSpeechSession | null>(null);
  const [listening,setListening] = useState(false);
  const canSpeak = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+ const preview = onboardingPreviewForConnection({ connection: "none" });
  useEffect(()=>()=>speech.current?.abort(),[]);
  const stopSpeech=()=>{speech.current?.abort();speech.current=null;setListening(false);};
  return <main className="gl-onboarding" data-presentation="game_projection">
  <div className="gl-onboarding-sky" aria-hidden="true" />
   {demoActive&&<DemoExit/>}
+  <p className="gl-preview-label" data-testid="onboarding-preview-label" data-illustrative={preview.illustrative ? "true" : "false"}>{preview.note}</p>
   <div className="gl-onboarding-preview" aria-hidden="true">
    {Array.from({length: Math.max(1, Math.min(5, question + 1))}, (_,i) => <img key={i} src={art+"02-territory-island-generic.png"} alt="" style={{left:`${12+(i%3)*29}%`,top:`${5+Math.floor(i/3)*26}%`, animationDelay:`${i*100}ms`}} />)}
   </div>
@@ -39,6 +42,7 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
    {error && <p role="alert" className="gl-onboarding-error">{error}</p>}
    {question > 1 && question < 5 && <p className="gl-story-echo">{question === 4 ? `The resistance takes shape: “${getGoldlineOnboardingAnswer(session, "avoidance") ?? ""}”` : `Your world begins in “${getGoldlineOnboardingAnswer(session, "service_area") ?? ""}”`}</p>}
   </section>
+  <FirstActionDesk session={session} />
   <footer>Fantasy scenery · Your real customers and outcomes only appear from evidence.</footer>
  </main>;
 }

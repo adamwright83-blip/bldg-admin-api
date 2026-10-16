@@ -4,8 +4,10 @@ import { GOLDLINE_DAYLINE_OVERLAY_KEY } from "./goldlineDayLine";
 import {
   LOST_PROPERTY_NON_UNLOCK_EVIDENCE,
   LOST_PROPERTY_OBJECTIVES_PER_CHAPTER,
+  assertLostPropertyChapterPersist,
   collectEligibleObjectiveUnits,
   isRejectedUnlockEvidence,
+  lostPropertyChaptersToPersist,
   previewLostPropertyUnlock,
   projectLostPropertyUnlock,
   selectFirstVerifiedTerritorialSale,
@@ -338,6 +340,74 @@ describe("objective counting", () => {
     const read = projectLostPropertyUnlock({ firstSale: null, units: unitsFrom(12) });
     expect(read.unlockedChapters).toBe(0);
     expect(read.chapters).toEqual([]);
+  });
+});
+
+describe("chapter permanence", () => {
+  const sale = {
+    territoryId: "koreatown",
+    occurredAt: at(1, 18),
+    eventKey: "order:9",
+  };
+
+  function unitsFrom(count: number, startDay = 2) {
+    const objectives = Array.from({ length: count }, (_, index) => objective(`obj-${index}`));
+    const outcomes = objectives.map((row, index) => action(row.id, at(startDay + index)));
+    return collectEligibleObjectiveUnits(scope, { objectives, outcomes });
+  }
+
+  it("records chapter 1 from the sale and does not record it again", () => {
+    const first = lostPropertyChaptersToPersist({ firstSale: sale, units: [] });
+    expect(first).toEqual([
+      {
+        chapter: 1,
+        openedAt: sale.occurredAt,
+        evidence: {
+          ruleVersion: 2,
+          kind: "territorial_sale",
+          eventKey: "order:9",
+          territoryId: "koreatown",
+          occurredAt: sale.occurredAt,
+        },
+      },
+    ]);
+    expect(
+      lostPropertyChaptersToPersist({
+        firstSale: sale,
+        units: [],
+        persisted: first.map(row => ({ chapter: row.chapter, openedAt: row.openedAt })),
+      })
+    ).toEqual([]);
+  });
+
+  it("keeps a stored chapter 1 when the sale would no longer qualify, and still refuses chapter 4", () => {
+    const stored = [{ chapter: 1, openedAt: sale.occurredAt }];
+    expect(lostPropertyChaptersToPersist({ firstSale: null, units: [], persisted: stored })).toEqual([]);
+    const kept = projectLostPropertyUnlock({ firstSale: null, units: [], persisted: stored });
+    expect(kept.chapters).toEqual([{ chapter: 1, openedAt: sale.occurredAt }]);
+    const continued = lostPropertyChaptersToPersist({ firstSale: null, units: unitsFrom(12), persisted: stored });
+    expect(continued.map(row => row.chapter)).toEqual([2, 3]);
+    expect(
+      projectLostPropertyUnlock({ firstSale: null, units: unitsFrom(12), persisted: stored }).chapters.map(
+        chapter => chapter.chapter
+      )
+    ).toEqual([1, 2, 3]);
+    expect(lostPropertyChaptersToPersist({ firstSale: sale, units: unitsFrom(12) }).map(row => row.chapter)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(() =>
+      assertLostPropertyChapterPersist({
+        chapter: 4,
+        openedAt: sale.occurredAt,
+        evidence: {
+          ruleVersion: 2,
+          kind: "territorial_sale",
+          eventKey: "order:9",
+          territoryId: "koreatown",
+          occurredAt: sale.occurredAt,
+        },
+      })
+    ).toThrow(/chapter 4/);
   });
 });
 

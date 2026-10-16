@@ -3,7 +3,7 @@
  *
  * A sale opens Chapter 1. Three eligible completed Day Line Objectives open
  * Chapter 2, counted from that sale. Three more open Chapter 3, counted from
- * Chapter 2. Chapter 4 does not open. This module writes nothing.
+ * Chapter 2. Chapter 4 does not open. Stored chapters stay open. This module writes nothing.
  */
 import { OBJECTIVE_EXECUTION_TYPES } from "./objectiveExecution";
 import { isDayLineCancelled, readDayLineOverlay } from "./goldlineDayLine";
@@ -49,6 +49,30 @@ export type CompletedUnit = {
 export type UnlockRecord = {
   chapter: number;
   openedAt: string;
+};
+
+export type LostPropertySaleEvidence = {
+  ruleVersion: typeof LOST_PROPERTY_UNLOCK_RULE_VERSION;
+  kind: "territorial_sale";
+  eventKey: string;
+  territoryId: string;
+  occurredAt: string;
+};
+
+export type LostPropertyObjectiveEvidence = {
+  ruleVersion: typeof LOST_PROPERTY_UNLOCK_RULE_VERSION;
+  kind: "objective_completion";
+  unitKey: string;
+  completedAt: string;
+};
+
+export type LostPropertyChapterEvidence = LostPropertySaleEvidence | LostPropertyObjectiveEvidence;
+
+/** One chapter a caller may insert. Chapter 4 is not a member of this set. */
+export type LostPropertyChapterPersist = {
+  chapter: 1 | 2 | 3;
+  openedAt: string;
+  evidence: LostPropertyChapterEvidence;
 };
 
 export type ResolvedChapter = {
@@ -306,7 +330,7 @@ export function collectEligibleObjectiveUnits(
 export function resolveLostPropertyChapters(input: {
   firstSale: FirstVerifiedSale | null;
   units: readonly CompletedUnit[];
-  /** Optional permanence records. The production read has no table to supply these. */
+  /** Stored chapters. A stored chapter stays in the result when live evidence would not reopen it. */
   persisted?: readonly UnlockRecord[];
 }): ResolvedChapter[] {
   const persistedBy = new Map<number, string>();
@@ -391,6 +415,107 @@ export function projectLostPropertyUnlock(input: {
     objectivesRemaining: Math.max(0, LOST_PROPERTY_OBJECTIVES_PER_CHAPTER - counted),
     nextUnlockRequirement: "complete_objectives",
   };
+}
+
+function unitThatOpensChapter(units: readonly CompletedUnit[], previousOpenedAt: string): CompletedUnit | null {
+  const after = instant(previousOpenedAt);
+  if (after === null) return null;
+  const counted = dedupeCompletedUnits(units).filter(unit => {
+    const completed = instant(unit.completedAt);
+    return completed !== null && completed > after;
+  });
+  return counted[LOST_PROPERTY_OBJECTIVES_PER_CHAPTER - 1] ?? null;
+}
+
+export function assertLostPropertyChapterPersist(record: {
+  chapter: number;
+  openedAt: string;
+  evidence: LostPropertyChapterEvidence;
+}): asserts record is LostPropertyChapterPersist {
+  if (record.chapter !== 1 && record.chapter !== 2 && record.chapter !== 3) {
+    throw new Error("Lost Property chapter 4 is closed");
+  }
+  if (record.evidence.ruleVersion !== LOST_PROPERTY_UNLOCK_RULE_VERSION) {
+    throw new Error("Lost Property chapter unlock evidence is not the current rule");
+  }
+  if (instant(record.openedAt) === null) {
+    throw new Error("Lost Property chapter unlock requires a ledger time");
+  }
+  if (record.chapter === 1) {
+    if (
+      record.evidence.kind !== "territorial_sale" ||
+      record.evidence.occurredAt !== record.openedAt ||
+      !record.evidence.eventKey ||
+      !record.evidence.territoryId
+    ) {
+      throw new Error("Lost Property chapter 1 requires the territorial sale that opened it");
+    }
+    return;
+  }
+  if (
+    record.evidence.kind !== "objective_completion" ||
+    record.evidence.completedAt !== record.openedAt ||
+    !record.evidence.unitKey
+  ) {
+    throw new Error("Lost Property chapter requires the objective completion that opened it");
+  }
+}
+
+/**
+ * Chapters live evidence opens that are not already stored.
+ * A stored chapter is left out of the result. The result never closes one.
+ */
+export function lostPropertyChaptersToPersist(input: {
+  firstSale: FirstVerifiedSale | null;
+  units: readonly CompletedUnit[];
+  persisted?: readonly UnlockRecord[];
+}): LostPropertyChapterPersist[] {
+  const stored = new Set(
+    (input.persisted ?? [])
+      .filter(row => row.chapter >= 1 && row.chapter <= LOST_PROPERTY_PLAYABLE_CHAPTERS && instant(row.openedAt) !== null)
+      .map(row => row.chapter)
+  );
+  const resolved = resolveLostPropertyChapters(input);
+  const pending: LostPropertyChapterPersist[] = [];
+  for (const row of resolved) {
+    if (row.chapter < 1 || row.chapter > LOST_PROPERTY_PLAYABLE_CHAPTERS) continue;
+    if (stored.has(row.chapter)) continue;
+    if (row.chapter === 1) {
+      const sale = input.firstSale;
+      if (!sale || sale.occurredAt !== row.openedAt || !sale.eventKey || !sale.territoryId) continue;
+      const record: LostPropertyChapterPersist = {
+        chapter: 1,
+        openedAt: sale.occurredAt,
+        evidence: {
+          ruleVersion: LOST_PROPERTY_UNLOCK_RULE_VERSION,
+          kind: "territorial_sale",
+          eventKey: sale.eventKey,
+          territoryId: sale.territoryId,
+          occurredAt: sale.occurredAt,
+        },
+      };
+      assertLostPropertyChapterPersist(record);
+      pending.push(record);
+      continue;
+    }
+    const previous = resolved[row.chapter - 2];
+    if (!previous) continue;
+    const opening = unitThatOpensChapter(input.units, previous.openedAt);
+    if (!opening || opening.completedAt !== row.openedAt || !opening.key) continue;
+    const record: LostPropertyChapterPersist = {
+      chapter: row.chapter,
+      openedAt: opening.completedAt,
+      evidence: {
+        ruleVersion: LOST_PROPERTY_UNLOCK_RULE_VERSION,
+        kind: "objective_completion",
+        unitKey: opening.key,
+        completedAt: opening.completedAt,
+      },
+    };
+    assertLostPropertyChapterPersist(record);
+    pending.push(record);
+  }
+  return pending;
 }
 
 export function previewLostPropertyUnlock(): LostPropertyUnlockRead {

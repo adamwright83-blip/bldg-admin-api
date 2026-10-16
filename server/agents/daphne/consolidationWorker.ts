@@ -16,6 +16,7 @@ import {
 } from "./releaseSafety";
 import type { DaphneConversationItem } from "./conversationIngestion";
 import { recordDaphneMetricEvent } from "./metrics";
+import { isMysqlLockConflictError } from "../../mysqlErrors";
 import { ingestVerifiedDaphneStage3bOutcome } from "./stage3bLearning";
 
 const VERSION = "daphne-consolidation-v1";
@@ -96,18 +97,98 @@ export async function runDaphneConsolidationBatch(
           conditions.push(inArray(daphneObservations.tenantId, enabledTenants));
         if (workerTenants.length)
           conditions.push(inArray(daphneObservations.tenantId, workerTenants));
-        const rows = await tx
-          .select()
+        const candidates = await tx
+          .select({
+            id: daphneObservations.id,
+            tenantId: daphneObservations.tenantId,
+            canonicalOperatorId: daphneObservations.canonicalOperatorId,
+          })
           .from(daphneObservations)
           .where(and(...conditions))
           .orderBy(
             asc(daphneObservations.occurredAt),
             asc(daphneObservations.id)
           )
-          .limit(Math.max(1, Math.min(input.limit ?? 20, 50)))
+          .limit(Math.max(1, Math.min(input.limit ?? 20, 50)));
+        if (!candidates.length) return { processed: 0 };
+        const operators = [
+          ...new Map(
+            candidates.map(candidate => [
+              `${candidate.tenantId}\u0000${candidate.canonicalOperatorId}`,
+              {
+                tenantId: candidate.tenantId,
+                canonicalOperatorId: candidate.canonicalOperatorId,
+              },
+            ])
+          ).values(),
+        ].sort((left, right) =>
+          `${left.tenantId}\u0000${left.canonicalOperatorId}`.localeCompare(
+            `${right.tenantId}\u0000${right.canonicalOperatorId}`
+          )
+        );
+        for (const operator of operators) {
+          const [sentinel] = await tx
+            .select({ id: daphneObservations.id })
+            .from(daphneObservations)
+            .where(
+              and(
+                eq(daphneObservations.tenantId, operator.tenantId),
+                eq(
+                  daphneObservations.canonicalOperatorId,
+                  operator.canonicalOperatorId
+                )
+              )
+            )
+            .orderBy(
+              asc(daphneObservations.createdAt),
+              asc(daphneObservations.id)
+            )
+            .limit(1);
+          if (!sentinel) continue;
+          // Lock the sentinel by primary key. FOR UPDATE on the createdAt
+          // ordering examines the occurredAt index and locks every sibling,
+          // which deadlocks the other worker's already-locked subset.
+          await tx
+            .select({ id: daphneObservations.id })
+            .from(daphneObservations)
+            .where(eq(daphneObservations.id, sentinel.id))
+            .limit(1)
+            .for("update");
+        }
+        const rows = await tx
+          .select()
+          .from(daphneObservations)
+          .where(
+            inArray(
+              daphneObservations.id,
+              candidates.map(candidate => candidate.id)
+            )
+          )
+          .orderBy(
+            asc(daphneObservations.occurredAt),
+            asc(daphneObservations.id)
+          )
           .for("update", { skipLocked: true });
         let processed = 0;
         for (const row of rows) {
+          const [alreadyConsolidated] = await tx
+            .select({ id: daphneEpistemicClaims.id })
+            .from(daphneEpistemicClaims)
+            .where(
+              and(
+                eq(daphneEpistemicClaims.tenantId, row.tenantId),
+                eq(
+                  daphneEpistemicClaims.canonicalOperatorId,
+                  row.canonicalOperatorId
+                ),
+                eq(
+                  daphneEpistemicClaims.idempotencyKey,
+                  `consolidated:${row.id}`
+                )
+              )
+            )
+            .limit(1);
+          if (alreadyConsolidated) continue;
           failing = {
             tenantId: row.tenantId,
             canonicalOperatorId: row.canonicalOperatorId,
@@ -117,26 +198,6 @@ export async function runDaphneConsolidationBatch(
             tenantId: row.tenantId,
             canonicalOperatorId: row.canonicalOperatorId,
           };
-          // A stable existing source row serializes each operator's derived writes.
-          // The lock is transaction-scoped and recovers automatically on disconnect.
-          await tx
-            .select({ id: daphneObservations.id })
-            .from(daphneObservations)
-            .where(
-              and(
-                eq(daphneObservations.tenantId, row.tenantId),
-                eq(
-                  daphneObservations.canonicalOperatorId,
-                  row.canonicalOperatorId
-                )
-              )
-            )
-            .orderBy(
-              asc(daphneObservations.createdAt),
-              asc(daphneObservations.id)
-            )
-            .limit(1)
-            .for("update");
           const prefs = await tx
             .select()
             .from(daphneMetaPreferences)
@@ -381,6 +442,9 @@ export async function runDaphneConsolidationBatch(
       { isolationLevel: "read committed" }
     );
   } catch (error) {
+    // A lock conflict rolls the batch back. It is not a materialization failure,
+    // so the observation stays eligible for the next attempt.
+    if (isMysqlLockConflictError(error)) throw error;
     const scope = failing as {
       tenantId: string;
       canonicalOperatorId: string;
@@ -444,16 +508,28 @@ export function startDaphneConsolidationWorker() {
   let inFlight: Promise<unknown> | undefined;
   const tick = () => {
     if (stopped) return;
-    inFlight = runDaphneConsolidationBatch()
-      .then(() => {
-        failures = 0;
-      })
-      .catch(() => {
-        failures++;
-        console.warn(
-          "[Daphne] consolidation failed; durable work remains pending"
-        );
-      })
+    inFlight = (async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await runDaphneConsolidationBatch();
+          failures = 0;
+          return;
+        } catch (error) {
+          if (isMysqlLockConflictError(error) && attempt < 2) continue;
+          failures++;
+          const code =
+            error && typeof error === "object" && "code" in error
+              ? String((error as { code?: unknown }).code)
+              : "";
+          console.warn(
+            code
+              ? `[Daphne] consolidation failed; durable work remains pending (${code})`
+              : "[Daphne] consolidation failed; durable work remains pending"
+          );
+          return;
+        }
+      }
+    })()
       .finally(() => {
         if (!stopped) {
           timer = setTimeout(

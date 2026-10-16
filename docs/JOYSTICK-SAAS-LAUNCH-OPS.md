@@ -36,6 +36,8 @@ Railway volume backups may also support weekly/monthly schedules. Daily is the m
 
 Never prove recovery by restoring over production.
 
+A local logical dump can be loaded only by `scripts/disposable-restore-drill.mjs`, and only into an empty disposable database on localhost. The script refuses production hostnames, `RAILWAY_ENVIRONMENT=production`, and any non-local database. Operator notes: `docs/launch/BACKUP_RESTORE_READINESS.md`.
+
 1. Select a completed production backup.
 2. Restore it into a separate restored/sibling volume or service.
 3. Leave the source production volume untouched.
@@ -158,12 +160,12 @@ Repository secrets:
 
 1. Configure the matching secrets and production URL.
 2. Leave `JOYSTICK_RETENTION_ENABLED` disabled.
-3. Manually dispatch the workflow with `dry_run=true`.
+3. Manually dispatch the workflow with `dry_run=true` and `confirm_delete=false`.
 4. Verify policy version and eligible counts.
 5. Enable `JOYSTICK_RETENTION_ENABLED=1`.
-6. Run one bounded non-dry batch manually.
-7. Verify only expected expired data was removed.
-8. Leave the daily schedule active.
+6. The daily schedule counts eligible rows only. It cannot delete.
+7. A live delete requires a manual dispatch with `dry_run=false` and `confirm_delete=true`. Run one bounded batch that way and verify only expected expired data was removed.
+8. Leave the daily schedule active as a dry-run counter.
 
 ## 4. Customer launch canary
 
@@ -203,7 +205,7 @@ The public paid product is launch-ready only when all of these operations gates 
 - restore drill on a copy proven
 - live Stripe plans/secrets/webhook deliberately configured
 - controlled live billing canary passed
-- retention dry-run and bounded live run passed
+- retention dry-run passed, and one manually confirmed bounded live run passed (the daily schedule cannot delete)
 - production logs clean after the launch deployment
 
 PITR is strongly recommended before scale; enabling it requires a deliberate human-controlled Railway conversion because of the existing custom MySQL command.

@@ -178,6 +178,57 @@ describe("personal sender health", () => {
     expect(later.authorizedToTransmit).toBe(false);
   });
 
+  it("does not let a second tenant read the first tenant's sender identity", async () => {
+    const sharedOperator = "op_shared_handset";
+    await recordPersonalSenderObservation({
+      tenantId: "tenant_sender_a",
+      operatorId: sharedOperator,
+      pairingPresent: true,
+      displacesExistingWebSession: false,
+      pageLoaded: true,
+      deviceOnline: true,
+      sessionObservedAt: now,
+      originatingPhone: "+12135550100",
+      originatingPhoneVerified: true,
+      observationSource: "android_telephony_line",
+      deviceId: "pixel-operator",
+      expectedDeviceId: "pixel-operator",
+      transportProbeOk: true,
+      now,
+    });
+
+    const owner = await getPersonalSenderStatus({
+      tenantId: "tenant_sender_a",
+      operatorId: sharedOperator,
+      now,
+    });
+    expect(owner.tenantId).toBe("tenant_sender_a");
+    expect(owner.originatingPhone).toBe("+12135550100");
+    expect(owner.authorizedToTransmit).toBe(false);
+    expect(owner.deviceTransport.status).toBe("BLOCKED");
+
+    const intruder = await getPersonalSenderStatus({
+      tenantId: "tenant_sender_b",
+      operatorId: sharedOperator,
+      now,
+    });
+    expect(intruder.tenantId).toBe("tenant_sender_b");
+    expect(intruder.operatorId).toBe(sharedOperator);
+    expect(intruder.originatingPhone).toBeNull();
+    expect(intruder.stateLabel).toBe("Requires Pairing");
+    expect(intruder.authorizedToTransmit).toBe(false);
+    expect(intruder.deviceTransport.status).toBe("BLOCKED");
+    expect(intruder.browserTransport.status).toBe("BLOCKED");
+
+    const stillOwner = await getPersonalSenderStatus({
+      tenantId: "tenant_sender_a",
+      operatorId: sharedOperator,
+      now,
+    });
+    expect(stillOwner.originatingPhone).toBe("+12135550100");
+    expect(stillOwner.deviceTransport.status).toBe("BLOCKED");
+  });
+
   it("hides an originating number that came from a forbidden source", async () => {
     const status = await recordPersonalSenderObservation({
       tenantId: "tenant_health",

@@ -175,6 +175,15 @@ export type GoldlineDayPlanProps = {
   /** Existing customer-recovery objective. A send does not complete it. */
   recoveryOutreachCard?: CozyRecoveryDayLineCard | null;
   onOpenRecoveryOutreach?: (href: string) => void;
+  /** Schedules the card's existing draft. Scheduling is not a send. */
+  onScheduleRecoveryOutreach?: (
+    input: RecoveryOutreachScheduleInput
+  ) => Promise<RecoveryOutreachScheduleRow>;
+  /** Revises the same stored message. Does not create another outreach. */
+  onEditRecoveryDraft?: (input: {
+    messageId: string;
+    newMessageBody: string;
+  }) => Promise<RecoveryOutreachScheduleRow>;
 };
 
 const KIND_LABEL = {
@@ -233,21 +242,287 @@ export function isForcedMobileDayPlanViewport(input: {
   );
 }
 
-function RecoveryOutreachCard({
+export const RECOVERY_SCHEDULE_TIMEZONE = "America/Los_Angeles" as const;
+export const RECOVERY_SCHEDULED_LABEL = "Scheduled — not sent";
+
+export type RecoveryOutreachScheduleInput = {
+  customerId: string;
+  messageBody: string;
+  scheduledFor: string;
+  timezone: typeof RECOVERY_SCHEDULE_TIMEZONE;
+  territoryId?: string;
+  idempotencyKey: string;
+};
+
+export type RecoveryOutreachScheduleRow = {
+  id: string;
+  customerId: string;
+  status: string;
+  currentMessageBody: string;
+  dispatchedAt: Date | string | null;
+  externalMessageId: string | null;
+  deliveryIntent?: "immediate" | "scheduled" | null;
+};
+
+export type RecoveryScheduleResult = {
+  objectiveId: string;
+  customerId: string;
+  messageId: string;
+  objectiveComplete: false;
+  communicationState: "scheduled" | "awaiting_sender";
+  label: string;
+  messageSent: false;
+};
+
+/** Tomorrow at 10:00 Pacific, as a wall-clock string the outbox converts. */
+export function defaultRecoveryScheduleWallTime(now = new Date()): string {
+  const laDateStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: RECOVERY_SCHEDULE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const [year, month, day] = laDateStr.split("-").map(Number);
+  const tomorrowUtc = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+  const tomorrowStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: RECOVERY_SCHEDULE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(tomorrowUtc);
+  return `${tomorrowStr}T10:00`;
+}
+
+export function recoveryTerritoryId(openHref: string): string | undefined {
+  const match = /[?&]territory=([^&]+)/.exec(openHref);
+  if (!match?.[1]) return undefined;
+  try {
+    const value = decodeURIComponent(match[1]).trim();
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function recoveryScheduleIdempotencyKey(
+  card: Pick<CozyRecoveryDayLineCard, "objectiveId" | "customerId">
+): string {
+  return `day-line-recovery:${card.objectiveId}:${card.customerId ?? "none"}`;
+}
+
+export function recoveryScheduleLabel(state: string | null | undefined): string | null {
+  if (state === "scheduled") return RECOVERY_SCHEDULED_LABEL;
+  if (state === "claimed") return "Claimed — send not observed";
+  if (state === "awaiting_sender" || state === "send_not_observed") {
+    return "Awaiting sender. This is not a send.";
+  }
+  if (state === "failed") return "Failed — not sent";
+  return null;
+}
+
+/** A prepared draft with no outbox row can be scheduled. An existing row is not scheduled again. */
+export function canScheduleRecoveryDraft(card: CozyRecoveryDayLineCard): boolean {
+  return Boolean(
+    card.customerId &&
+      card.messageBody?.trim() &&
+      !card.messageId &&
+      (card.communicationState === "draft_prepared" || card.communicationState == null)
+  );
+}
+
+export function canEditRecoveryDraft(card: CozyRecoveryDayLineCard): boolean {
+  return Boolean(
+    card.customerId &&
+      card.messageId &&
+      (card.communicationState === "scheduled" || card.communicationState === "awaiting_sender")
+  );
+}
+
+function unsentScheduleState(
+  row: RecoveryOutreachScheduleRow,
+  customerId: string
+): RecoveryScheduleResult["communicationState"] {
+  if (row.customerId !== customerId) {
+    throw new Error("Schedule returned a different customer.");
+  }
+  if (row.dispatchedAt || row.externalMessageId || row.status === "dispatched") {
+    throw new Error("Schedule must not mark the message sent.");
+  }
+  if (row.status === "awaiting_sender_setup") return "awaiting_sender";
+  if (row.deliveryIntent === "immediate" || row.status !== "pending") {
+    throw new Error("Schedule must not mark the message sent.");
+  }
+  return "scheduled";
+}
+
+function recoveryResultFromRow(
+  card: CozyRecoveryDayLineCard,
+  row: RecoveryOutreachScheduleRow,
+  messageId: string
+): RecoveryScheduleResult {
+  const customerId = card.customerId;
+  if (!customerId) throw new Error("This recovery card has no customer.");
+  const communicationState = unsentScheduleState(row, customerId);
+  return {
+    objectiveId: card.objectiveId,
+    customerId,
+    messageId,
+    objectiveComplete: false,
+    communicationState,
+    label:
+      communicationState === "awaiting_sender"
+        ? "Awaiting sender. This is not a send."
+        : RECOVERY_SCHEDULED_LABEL,
+    messageSent: false,
+  };
+}
+
+function preparedDraftBody(editedBody: string): string {
+  const messageBody = editedBody.trim();
+  if (!messageBody) throw new Error("The draft is empty.");
+  if (messageBody.length > 500) throw new Error("Draft must be 500 characters or fewer.");
+  return messageBody;
+}
+
+/**
+ * Schedules the draft already on this card through `scheduleCozyOutreach`.
+ * One objective, one customer, one new outbox row. The objective stays open.
+ * A card that already has a message id must be edited in place.
+ */
+export async function scheduleExistingRecoveryDraft(input: {
+  card: CozyRecoveryDayLineCard;
+  editedBody: string;
+  scheduledFor: string;
+  schedule: (request: RecoveryOutreachScheduleInput) => Promise<RecoveryOutreachScheduleRow>;
+}): Promise<RecoveryScheduleResult> {
+  const customerId = input.card.customerId;
+  if (!customerId) throw new Error("This recovery card has no customer to schedule.");
+  if (input.card.messageId) {
+    throw new Error(
+      "This outreach already has a message. Edit that draft instead of scheduling another."
+    );
+  }
+  const scheduledFor = input.scheduledFor.trim();
+  if (!scheduledFor) throw new Error("Choose a future time. Scheduling is not sending.");
+  const territoryId = recoveryTerritoryId(input.card.openHref);
+  const row = await input.schedule({
+    customerId,
+    messageBody: preparedDraftBody(input.editedBody),
+    scheduledFor,
+    timezone: RECOVERY_SCHEDULE_TIMEZONE,
+    ...(territoryId ? { territoryId } : {}),
+    idempotencyKey: recoveryScheduleIdempotencyKey(input.card),
+  });
+  return recoveryResultFromRow(input.card, row, row.id);
+}
+
+/** Saves a revision of the same message id. Does not schedule a second outreach. */
+export async function editExistingRecoveryDraft(input: {
+  card: CozyRecoveryDayLineCard;
+  editedBody: string;
+  edit: (request: {
+    messageId: string;
+    newMessageBody: string;
+  }) => Promise<RecoveryOutreachScheduleRow>;
+}): Promise<RecoveryScheduleResult> {
+  const messageId = input.card.messageId;
+  if (!input.card.customerId || !messageId) {
+    throw new Error("This recovery card has no stored draft to edit.");
+  }
+  const row = await input.edit({
+    messageId,
+    newMessageBody: preparedDraftBody(input.editedBody),
+  });
+  if (row.id !== messageId) throw new Error("Edit returned a different message.");
+  return recoveryResultFromRow(input.card, row, messageId);
+}
+
+export function RecoveryOutreachCard({
   card,
   onOpen,
+  onSchedule,
+  onEdit,
 }: {
   card: CozyRecoveryDayLineCard;
   onOpen?: (href: string) => void;
+  onSchedule?: (input: RecoveryOutreachScheduleInput) => Promise<RecoveryOutreachScheduleRow>;
+  onEdit?: (input: {
+    messageId: string;
+    newMessageBody: string;
+  }) => Promise<RecoveryOutreachScheduleRow>;
 }) {
+  const [draft, setDraft] = useState(card.messageBody ?? "");
+  const [scheduledFor, setScheduledFor] = useState(() => defaultRecoveryScheduleWallTime());
+  const [outcome, setOutcome] = useState<RecoveryScheduleResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const draftKey = `${card.objectiveId}:${card.customerId ?? ""}:${card.messageId ?? ""}:${card.messageBody ?? ""}`;
+  const [seenKey, setSeenKey] = useState(draftKey);
+  if (draftKey !== seenKey) {
+    setSeenKey(draftKey);
+    setDraft(card.messageBody ?? "");
+    setOutcome(null);
+    setError(null);
+  }
+
+  const messageId = card.messageId || outcome?.messageId || "";
+  const communicationState =
+    card.messageId && card.communicationState && card.communicationState !== "draft_prepared"
+      ? card.communicationState
+      : (outcome?.communicationState ?? card.communicationState ?? "");
+  const statusLabel =
+    outcome && !card.messageId ? outcome.label : recoveryScheduleLabel(communicationState);
+  const scheduleReady = canScheduleRecoveryDraft(card) && !outcome?.messageId;
+  const editReady = canEditRecoveryDraft(card);
+  const draftChanged = draft.trim() !== (card.messageBody ?? "").trim();
+
+  const commitSchedule = async () => {
+    if (!onSchedule || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setOutcome(
+        await scheduleExistingRecoveryDraft({
+          card,
+          editedBody: draft,
+          scheduledFor,
+          schedule: onSchedule,
+        })
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Schedule could not be committed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitEdit = async () => {
+    if (!onEdit || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setOutcome(
+        await editExistingRecoveryDraft({
+          card,
+          editedBody: draft,
+          edit: onEdit,
+        })
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The draft could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <article
       className="gdp-stop gdp-stop--growth gdp-stop--ready"
       data-testid="recovery-outreach-day-line-card"
       data-objective-id={card.objectiveId}
       data-customer-id={card.customerId ?? ""}
-      data-message-id={card.messageId ?? ""}
-      data-communication-state={card.communicationState ?? ""}
+      data-message-id={messageId}
+      data-communication-state={communicationState}
       data-objective-complete="false"
     >
       <div className="gdp-node" aria-hidden="true">
@@ -283,6 +558,64 @@ function RecoveryOutreachCard({
         <div className="gdp-source">{card.evidenceToComplete}</div>
         {card.transport === "simulated" ? (
           <div className="gdp-source">Simulated transport. Not a live carrier delivery.</div>
+        ) : null}
+        {card.messageBody != null ? (
+          <div className="gdp-recovery-draft">
+            <label>
+              Draft
+              <textarea
+                data-testid="recovery-outreach-draft"
+                value={draft}
+                maxLength={500}
+                rows={4}
+                readOnly={!scheduleReady && !editReady}
+                onChange={event => setDraft(event.target.value)}
+              />
+            </label>
+            <div className="gdp-source">{draft.trim().length} / 500</div>
+            {scheduleReady ? (
+              <>
+                <label>
+                  Pacific time
+                  <input
+                    type="datetime-local"
+                    data-testid="recovery-outreach-schedule-time"
+                    value={scheduledFor}
+                    onChange={event => setScheduledFor(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  data-testid="recovery-outreach-schedule"
+                  disabled={!onSchedule || busy || !draft.trim() || !scheduledFor.trim()}
+                  onClick={() => void commitSchedule()}
+                >
+                  Schedule
+                </button>
+                <p className="gdp-source">Scheduling keeps this draft pending. It does not send it.</p>
+              </>
+            ) : null}
+            {editReady ? (
+              <button
+                type="button"
+                data-testid="recovery-outreach-save-draft"
+                disabled={!onEdit || busy || !draftChanged || !draft.trim()}
+                onClick={() => void commitEdit()}
+              >
+                Save draft
+              </button>
+            ) : null}
+            {statusLabel ? (
+              <p className="gdp-recovery-status" data-testid="recovery-outreach-schedule-state">
+                {statusLabel}
+              </p>
+            ) : null}
+            {error ? (
+              <p className="gdp-recovery-error" role="alert" data-testid="recovery-outreach-schedule-error">
+                {error}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </article>
@@ -849,6 +1182,8 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         <RecoveryOutreachCard
           card={props.recoveryOutreachCard}
           onOpen={props.onOpenRecoveryOutreach}
+          onSchedule={props.onScheduleRecoveryOutreach}
+          onEdit={props.onEditRecoveryDraft}
         />
       ) : null}
 
