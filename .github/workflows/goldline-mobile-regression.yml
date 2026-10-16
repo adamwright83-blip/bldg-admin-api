@@ -242,8 +242,8 @@ jobs:
     needs: mobile-build-and-schema
     # Checkout, migrations, and Chromium use most of five minutes on a busy runner.
     # Lanes that already finished their tests inside that cap, or that run several
-    # files, set their own budget. Every other lane stays at five.
-    timeout-minutes: ${{ matrix.timeout || 5 }}
+    # files, set their own budget. Every other lane stays at eight.
+    timeout-minutes: ${{ matrix.timeout || 8 }}
     strategy:
       fail-fast: false
       matrix:
