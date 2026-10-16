@@ -155,7 +155,7 @@ export function CustomerProfileDrawer({
         <SheetHeader className="text-left border-b border-black/10 pb-4 shrink-0">
           <SheetTitle className="text-black">Customer profile</SheetTitle>
           <SheetDescription className="text-black/50">
-            Grouped by phone. Lifetime spend counts paid orders only.
+            Grouped by phone. Lifetime spend sums captured cents on admitted payments. Order totals are separate.
           </SheetDescription>
         </SheetHeader>
 
@@ -300,7 +300,7 @@ export function CustomerProfileDrawer({
                       <p className="font-semibold text-black">
                         {profile.data.overview.lifetimeSpend === null ? "Unknown" : formatMoney(profile.data.overview.lifetimeSpend)}
                       </p>
-                      <p className="text-[10px] text-black/45">Paid orders only</p>
+                      <p className="text-[10px] text-black/45">Captured cents on admitted payments</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase text-black/40">Total orders</p>
@@ -374,9 +374,23 @@ export function CustomerProfileDrawer({
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-black/60">
                         <span>{o.serviceType === "wash_fold" ? "Wash & fold" : "Dry cleaning"}</span>
-                        <span>{o.paid ? formatMoney(parseFloat(o.total || "0")) : o.total ? `$${o.total} (unpaid)` : "—"}</span>
                         <span className="capitalize">{o.status}</span>
                       </div>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs" data-testid={`order-payment-${o.id}`}>
+                        <dt className="text-black/45">Order total</dt>
+                        <dd>{o.orderTotalCents == null ? "Unknown" : formatMoney(o.orderTotalCents / 100)}</dd>
+                        <dt className="text-black/45">Captured</dt>
+                        <dd>{o.capturedCents == null ? "Unknown" : formatMoney(o.capturedCents / 100)}</dd>
+                        <dt className="text-black/45">Unpaid</dt>
+                        <dd>{o.unpaidCents == null ? "Unknown" : formatMoney(o.unpaidCents / 100)}</dd>
+                        <dt className="text-black/45">Admission</dt>
+                        <dd>{o.paymentAdmission === "admitted" ? (o.capturedCents == null ? "Admitted, captured amount unknown" : "Admitted") : "Not admitted"}</dd>
+                      </dl>
+                      <p className="text-[11px] text-black/50">
+                        {o.paymentEvidence
+                          ? `Evidence ${o.paymentEvidence.authorityReceiptId} · ${o.paymentEvidence.sourceType} · ${o.paymentEvidence.sourceRef}${o.paymentEvidence.captureEvidence ? ` · ${o.paymentEvidence.captureEvidence}` : ""}`
+                          : "No payment admission receipt for this order."}
+                      </p>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" className="h-8 border-black/20" asChild>
                           <a href={o.adminReceiptHref} target="_blank" rel="noopener noreferrer">
