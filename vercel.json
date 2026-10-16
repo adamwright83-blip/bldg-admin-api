@@ -7,6 +7,20 @@
       "codex/**": false
     }
   },
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.gojoystick.com" }],
+      "destination": "https://gojoystick.com/",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.gojoystick.com" }],
+      "destination": "https://gojoystick.com/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/gumballpals",
