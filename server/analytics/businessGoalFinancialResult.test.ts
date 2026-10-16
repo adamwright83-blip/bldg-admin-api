@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { withFixturePaymentAuthority } from "./businessLedgerFixture";
 import {
   ANOTHER_FIVE_HUNDRED_DOLLARS,
@@ -30,7 +30,8 @@ function native(
   id: number,
   paidAt: string,
   total: string,
-  stripe = `pi_${id}`
+  stripe = `pi_${id}`,
+  extra: Partial<NativeOrderRow> = {}
 ): NativeOrderRow {
   return {
     id,
@@ -44,6 +45,7 @@ function native(
     phone: "3105550101",
     email: null,
     bldgUserId: null,
+    ...extra,
   };
 }
 
@@ -209,17 +211,14 @@ function measured(result: BusinessGoalFinancialResult) {
   return result;
 }
 
+const weekRows = {
+  nativeRows: [...beforeGoal, ...afterGoal],
+  cleancloudRows: afterGoalCleanCloud,
+};
+
 describe("weekly additional earnings from the paid-order ledger", () => {
-  it("counts another $500.00 after the goal starts and leaves earlier week money out", async () => {
-    const result = measured(
-      await readGoal(
-        {
-          nativeRows: [...beforeGoal, ...afterGoal],
-          cleancloudRows: afterGoalCleanCloud,
-        },
-        exactBook
-      )
-    );
+  it("keeps $500.00 collected after the goal starts out of additional earnings", async () => {
+    const result = measured(await readGoal(weekRows, exactBook));
     expect(result.ledger).toBe("paid_order_ledger");
     expect(result.week).toEqual({
       start: "2026-10-12",
@@ -229,21 +228,15 @@ describe("weekly additional earnings from the paid-order ledger", () => {
     });
     expect(result.countedFrom).toBe("2026-10-14T22:00:00.000Z");
     expect(result.target).toEqual({ currency: "usd", additionalCents: 50_000 });
-    expect(result.alreadyEarnedBeforeGoalCents).toBe(20_000);
-    expect(result.verifiedProgressCents).toBe(50_000);
-    expect(result.weekRecordedCents).toBe(70_000);
-    expect(result.remainingCents).toBe(0);
-    expect(result.orderCount).toBe(4);
-    expect(result.includedEventKeys).toEqual([
-      "order:3",
-      "order:4",
-      "cleancloud:cc-9",
-      "order:5",
-    ]);
+    expect(result.totalVerifiedCollectionsCents).toBe(70_000);
+    expect(result.collectionsOnOrAfterStartCents).toBe(50_000);
+    expect(result.goalActionRevenueCents).toBeNull();
+    expect(result.substantiatedAdditionalCents).toBeNull();
+    expect(result.remainingCents).toBeNull();
     expect(result.sources).toEqual(["cleancloud", "laundry_butler"]);
     expect(result.precision).toBe("exact");
     expect(result.mayStateExact).toBe(true);
-    expect(result.met).toBe(true);
+    expect(result.met).toBe(false);
     expect(result.withheld).toEqual({
       suspectedCount: 0,
       suspectedCents: 0,
@@ -256,7 +249,7 @@ describe("weekly additional earnings from the paid-order ledger", () => {
     });
   });
 
-  it("leaves $50.00 remaining when exact progress is $450.00", async () => {
+  it("does not meet the goal when exact collections after the start are $450.00", async () => {
     const result = measured(
       await readGoal(
         {
@@ -266,44 +259,144 @@ describe("weekly additional earnings from the paid-order ledger", () => {
         exactBook
       )
     );
-    expect(result.verifiedProgressCents).toBe(45_000);
-    expect(result.alreadyEarnedBeforeGoalCents).toBe(20_000);
-    expect(result.weekRecordedCents).toBe(65_000);
-    expect(result.remainingCents).toBe(5_000);
+    expect(result.totalVerifiedCollectionsCents).toBe(65_000);
+    expect(result.collectionsOnOrAfterStartCents).toBe(45_000);
+    expect(result.substantiatedAdditionalCents).toBeNull();
+    expect(result.remainingCents).toBeNull();
     expect(result.met).toBe(false);
     expect(result.precision).toBe("exact");
   });
 
   it("uses the captured cents, so a $500.00 order total captured at $120.00 is $120.00", async () => {
-    const quoted = native(8, "2026-10-16T19:00:00.000Z", "500.00");
+    const quoted = native(8, "2026-10-16T19:00:00.000Z", "500.00", "pi_8", {
+      createdAt: at("2026-10-16T19:00:00.000Z"),
+    });
     const base = loaders([quoted], []);
-    const result = measured(
-      await readGoal(
-        { nativeRows: [quoted], cleancloudRows: [] },
-        exactBook,
-        ANOTHER_FIVE_HUNDRED_DOLLARS,
-        {
-          ...base,
-          paymentAuthority: async input => {
-            const receipts = await base.paymentAuthority!(input);
-            return receipts.map(receipt => ({
-              ...receipt,
-              metadata: {
-                ...receipt.metadata,
-                captureEvidence: "stripe_amount_received_v1",
-                capturedCurrency: "usd",
-                capturedAmountCents: 12_000,
-              },
-            }));
+    const capturedLoaders = {
+      ...base,
+      paymentAuthority: async (input: {
+        tenantId: string;
+        expectations: Parameters<
+          NonNullable<LedgerLoaders["paymentAuthority"]>
+        >[0]["expectations"];
+      }) => {
+        const receipts = await base.paymentAuthority!(input);
+        return receipts.map(receipt => ({
+          ...receipt,
+          metadata: {
+            ...receipt.metadata,
+            captureEvidence: "stripe_amount_received_v1",
+            capturedCurrency: "usd",
+            capturedAmountCents: 12_000,
           },
-        }
+        }));
+      },
+    };
+    const result = measured(
+      await readBusinessGoalFinancialResult(
+        {
+          kind: "weekly_additional_earnings",
+          tenantId: TENANT,
+          target: ANOTHER_FIVE_HUNDRED_DOLLARS,
+          startedAt: GOAL_START,
+          now: NOW,
+          timeZone: TIME_ZONE,
+          goalActionLinks: [
+            {
+              eventKey: "order:8",
+              actionEvidenceRef: "goal-action:collect-8",
+              relation: "additional_earning",
+              substantiationRef: "new-sale:8",
+            },
+          ],
+        },
+        { coverage: exactBook, loaders: capturedLoaders }
       )
     );
-    expect(result.verifiedProgressCents).toBe(12_000);
-    expect(result.weekRecordedCents).toBe(12_000);
+    expect(result.totalVerifiedCollectionsCents).toBe(12_000);
+    expect(result.goalActionRevenueCents).toBe(12_000);
+    expect(result.substantiatedAdditionalCents).toBe(12_000);
     expect(result.remainingCents).toBe(38_000);
     expect(result.met).toBe(false);
     expect(result.precision).toBe("exact");
+  });
+
+  it("counts a new sale as additional earnings only when the action substantiates it", async () => {
+    const fresh = native(7, "2026-10-16T19:30:00.000Z", "500.00", "pi_7", {
+      createdAt: at("2026-10-16T19:30:00.000Z"),
+    });
+    const result = measured(
+      await readBusinessGoalFinancialResult(
+        {
+          kind: "weekly_additional_earnings",
+          tenantId: TENANT,
+          target: ANOTHER_FIVE_HUNDRED_DOLLARS,
+          startedAt: GOAL_START,
+          now: NOW,
+          timeZone: TIME_ZONE,
+          goalActionLinks: [
+            {
+              eventKey: "order:3",
+              actionEvidenceRef: "goal-action:collect-existing",
+              relation: "existing_collection",
+            },
+            {
+              eventKey: "order:7",
+              actionEvidenceRef: "goal-action:new-sale",
+              relation: "additional_earning",
+              substantiationRef: "new-sale:7",
+            },
+          ],
+        },
+        {
+          coverage: exactBook,
+          loaders: loaders(
+            [...weekRows.nativeRows, fresh],
+            weekRows.cleancloudRows
+          ),
+        }
+      )
+    );
+    expect(result.totalVerifiedCollectionsCents).toBe(120_000);
+    expect(result.collectionsOnOrAfterStartCents).toBe(100_000);
+    expect(result.goalActionRevenueCents).toBe(70_000);
+    expect(result.goalActionEventKeys).toEqual(["order:3", "order:7"]);
+    expect(result.substantiatedAdditionalCents).toBe(50_000);
+    expect(result.substantiatedEventKeys).toEqual(["order:7"]);
+    expect(result.remainingCents).toBe(0);
+    expect(result.met).toBe(true);
+  });
+
+  it("does not treat a paid order that already existed as additional earnings", async () => {
+    const existing = native(6, "2026-10-16T19:00:00.000Z", "500.00", "pi_6", {
+      createdAt: at("2026-10-13T19:00:00.000Z"),
+    });
+    const result = measured(
+      await readBusinessGoalFinancialResult(
+        {
+          kind: "weekly_additional_earnings",
+          tenantId: TENANT,
+          target: ANOTHER_FIVE_HUNDRED_DOLLARS,
+          startedAt: GOAL_START,
+          now: NOW,
+          timeZone: TIME_ZONE,
+          goalActionLinks: [
+            {
+              eventKey: "order:6",
+              actionEvidenceRef: "goal-action:collect-6",
+              relation: "additional_earning",
+              substantiationRef: "claimed-new-sale:6",
+            },
+          ],
+        },
+        { coverage: exactBook, loaders: loaders([existing], []) }
+      )
+    );
+    expect(result.totalVerifiedCollectionsCents).toBe(50_000);
+    expect(result.goalActionRevenueCents).toBe(50_000);
+    expect(result.substantiatedAdditionalCents).toBe(0);
+    expect(result.remainingCents).toBe(50_000);
+    expect(result.met).toBe(false);
   });
 
   it("does not complete another $500 when a paid row has no payment receipt", async () => {
@@ -317,20 +410,19 @@ describe("weekly additional earnings from the paid-order ledger", () => {
         exactBook
       )
     );
-    expect(result.verifiedProgressCents).toBe(50_000);
+    expect(result.totalVerifiedCollectionsCents).toBe(70_000);
+    expect(result.collectionsOnOrAfterStartCents).toBe(50_000);
+    expect(result.substantiatedAdditionalCents).toBeNull();
     expect(result.withheld.unverifiedNativeCents).toBe(7_000);
     expect(result.mayStateExact).toBe(false);
     expect(result.precision).toBe("recorded_only");
     expect(result.met).toBe(false);
   });
 
-  it("does not complete a stale book that has recorded the target", async () => {
+  it("does not complete a stale book that has recorded the collections", async () => {
     const result = measured(
       await readGoal(
-        {
-          nativeRows: [...beforeGoal, ...afterGoal],
-          cleancloudRows: afterGoalCleanCloud,
-        },
+        weekRows,
         coverage({
           exhaustiveCurrent: false,
           paymentEventsProven: false,
@@ -339,11 +431,13 @@ describe("weekly additional earnings from the paid-order ledger", () => {
         })
       )
     );
-    expect(result.verifiedProgressCents).toBe(50_000);
+    expect(result.totalVerifiedCollectionsCents).toBe(70_000);
+    expect(result.collectionsOnOrAfterStartCents).toBe(50_000);
+    expect(result.substantiatedAdditionalCents).toBeNull();
     expect(result.precision).toBe("recorded_only");
     expect(result.mayStateExact).toBe(false);
     expect(result.met).toBe(false);
-    expect(result.remainingCents).toBe(0);
+    expect(result.remainingCents).toBeNull();
   });
 
   it("reports an unreadable book as unavailable rather than zero earned", async () => {
@@ -363,13 +457,113 @@ describe("weekly additional earnings from the paid-order ledger", () => {
     expect(result).toMatchObject({
       status: "unavailable",
       ledger: "paid_order_ledger",
-      verifiedProgressCents: null,
+      totalVerifiedCollectionsCents: null,
+      goalActionRevenueCents: null,
+      substantiatedAdditionalCents: null,
       remainingCents: null,
       met: false,
       precision: "missing",
       reason: "sources_unavailable",
       target: { currency: "usd", additionalCents: 50_000 },
     });
+  });
+
+  it("scores a period_increment note across its horizon and ignores the trailing-30 targetValue", async () => {
+    const readRevenue = vi.fn(async () => {
+      throw new Error("trailing-30 reader must not be used");
+    });
+    const refused = await readBusinessGoalFinancialResult(
+      {
+        kind: "stored_macro_goal",
+        tenantId: TENANT,
+        metricKey: "net_sales_per_period",
+        targetValue: 1874.16,
+        unit: "USD",
+        sourceNote: "Operator attested trailing thirty day sales",
+        now: NOW,
+        timeZone: TIME_ZONE,
+      },
+      { readRevenue }
+    );
+    expect(refused).toEqual({
+      status: "not_period_increment",
+      ledger: "paid_order_ledger",
+      tenantId: TENANT,
+      metricKey: "net_sales_per_period",
+      targetValue: 1874.16,
+      met: false,
+      reason: "target_value_is_not_a_period_increment",
+    });
+    expect(readRevenue).not.toHaveBeenCalled();
+
+    const result = measured(
+      await readBusinessGoalFinancialResult(
+        {
+          kind: "stored_macro_goal",
+          tenantId: TENANT,
+          metricKey: "net_sales_per_period",
+          targetValue: 500,
+          unit: "USD",
+          sourceNote:
+            "business_goal_engine:v1 kind=incremental_earnings comparison=period_increment cents=50000 horizon=2026-10-12..2026-10-18 marker=another",
+          targetDate: "2026-10-18",
+          now: NOW,
+          timeZone: TIME_ZONE,
+        },
+        {
+          coverage: exactBook,
+          loaders: loaders(weekRows.nativeRows, weekRows.cleancloudRows),
+        }
+      )
+    );
+    expect(result.goalKind).toBe("period_increment");
+    expect(result.ignoredTargetValue).toBe(500);
+    expect(result.target).toEqual({ currency: "usd", additionalCents: 50_000 });
+    expect(result.horizon).toEqual({
+      start: "2026-10-12",
+      end: "2026-10-18",
+      observedThrough: "2026-10-16",
+    });
+    expect(result.week.end).toBe("2026-10-16");
+    expect(result.totalVerifiedCollectionsCents).toBe(70_000);
+    expect(result.collectionsOnOrAfterStartCents).toBeNull();
+    expect(result.goalActionRevenueCents).toBeNull();
+    expect(result.substantiatedAdditionalCents).toBeNull();
+    expect(result.met).toBe(false);
+  });
+
+  it("does not meet a period increment when the only proof is an existing order that got paid", async () => {
+    const existing = native(6, "2026-10-16T19:00:00.000Z", "500.00", "pi_6", {
+      createdAt: at("2026-10-11T19:00:00.000Z"),
+    });
+    const result = measured(
+      await readBusinessGoalFinancialResult(
+        {
+          kind: "stored_macro_goal",
+          tenantId: TENANT,
+          metricKey: "net_sales_per_period",
+          targetValue: 500,
+          unit: "USD",
+          sourceNote:
+            "business_goal_engine:v1 kind=incremental_earnings comparison=period_increment cents=50000 horizon=2026-10-12..2026-10-18 marker=another",
+          now: NOW,
+          timeZone: TIME_ZONE,
+          goalActionLinks: [
+            {
+              eventKey: "order:6",
+              actionEvidenceRef: "goal-action:collect-6",
+              relation: "additional_earning",
+              substantiationRef: "claimed-new-sale:6",
+            },
+          ],
+        },
+        { coverage: exactBook, loaders: loaders([existing], []) }
+      )
+    );
+    expect(result.totalVerifiedCollectionsCents).toBe(50_000);
+    expect(result.goalActionRevenueCents).toBe(50_000);
+    expect(result.substantiatedAdditionalCents).toBe(0);
+    expect(result.met).toBe(false);
   });
 
   it("does not read the Clearent match table or invent a stored earnings ledger", () => {
