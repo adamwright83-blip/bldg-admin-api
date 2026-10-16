@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import {
   buildDayPlanProjection,
+  executableDayLineStops,
   liveObjectivesFromFieldToday,
 } from "./goldlineDayPlanModel";
 
@@ -467,6 +469,35 @@ describe("commercial-mission linkage survives the living-world projection", () =
     });
     const stop = plan.stops.find(s => s.id.includes("recovery:abc"));
     expect(stop?.action).toBeUndefined();
+  });
+});
+
+describe("executable Day Line stops", () => {
+  it("uses the same next-stop predicate the driver starts", () => {
+    const stops = [
+      { id: "done", status: "completed" },
+      { id: "nope", status: "cancelled" },
+      { id: "wait", status: "blocked" },
+      { id: "now", status: "ready" },
+      { id: "next", status: "upcoming" },
+    ] as ReturnType<typeof buildDayPlanProjection>["stops"];
+    expect(executableDayLineStops(stops).map(stop => stop.id)).toEqual(["now", "next"]);
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      pickups: [native(1, "collected"), native(2, "new")],
+    });
+    const executable = executableDayLineStops(plan.stops);
+    expect(executable.map(stop => stop.id)).toContain("native-pickup-2");
+    expect(executable.map(stop => stop.id)).not.toContain("native-pickup-1");
+  });
+
+  it("makes Home read the driver projection instead of the legacy follow-up list", () => {
+    const home = readFileSync(new URL("../JoystickHome.tsx", import.meta.url), "utf8");
+    const driver = readFileSync(new URL("../goldline/GoldlineDayPlan.tsx", import.meta.url), "utf8");
+    expect(home).toContain("buildDayPlanProjection");
+    expect(home).toContain("executableDayLineStops");
+    expect(home).not.toContain("legacyDayforgeToday");
+    expect(driver).toContain("executableDayLineStops(plan.stops)");
   });
 });
 
