@@ -15,6 +15,7 @@ import {
   type BusinessGoalPlan,
 } from "./businessGoalEngine";
 import { parseBusinessGoal } from "./parseBusinessGoal";
+import { readBusinessGoalOpenCollections } from "./productionReaders";
 
 const NOW = new Date("2026-10-16T17:00:00.000Z");
 const TZ = "America/Los_Angeles";
@@ -290,6 +291,16 @@ describe("business goal engine", () => {
     expect(source).not.toContain("sendPaymentReminderForOrder");
     expect(readers).not.toContain("sendPaymentReminderForOrder");
     expect(source).not.toContain("activateMacroGoalAndQueue");
+    expect(readers).not.toMatch(/\bgetDb\s*\(/);
+    expect(readers).toContain("claireOwnedDatabasePresent");
+  });
+
+  it("keeps a missing database as unavailable instead of an empty collection", async () => {
+    const read = await readBusinessGoalOpenCollections({
+      tenantId: "tenant-earnings",
+      now: NOW,
+    });
+    expect(read).toEqual({ status: "unavailable", reason: "Database unavailable" });
   });
 });
 
