@@ -1,4 +1,4 @@
-import { getDb } from "../../db";
+import { claireOwnedDatabasePresent } from "../turn/conversationStateStore";
 import {
   listInterventionCandidates,
   type IssueLabel,
@@ -56,8 +56,9 @@ export async function readBusinessGoalOpenCollections(input: {
   now: Date;
 }): Promise<OpenCollectionRead> {
   try {
-    const db = await getDb();
-    if (!db) return { status: "unavailable", reason: "Database unavailable" };
+    if (!(await claireOwnedDatabasePresent())) {
+      return { status: "unavailable", reason: "Database unavailable" };
+    }
     const candidates = await listInterventionCandidates(input.tenantId, input.now);
     return {
       status: "available",
