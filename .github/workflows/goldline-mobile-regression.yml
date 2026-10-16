@@ -342,6 +342,7 @@ jobs:
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'six ambient|CI preview'
           - name: mobile-inhabited-anchor-gatekeeper
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
@@ -352,6 +353,7 @@ jobs:
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'Ghost'
           - name: mobile-inhabited-staller
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts

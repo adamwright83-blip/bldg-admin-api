@@ -10,7 +10,9 @@ permissions:
 jobs:
   plan-cogs:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A cold MySQL image pull has consumed this whole job before checkout.
+    # The cap stays above that startup so typecheck, migrate, and the exam still run.
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.0
