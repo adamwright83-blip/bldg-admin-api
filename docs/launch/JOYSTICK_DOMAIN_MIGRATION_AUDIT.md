@@ -64,7 +64,7 @@ Shared classifier: `shared/joystickHostRouting.ts`. The router in `client/src/Ap
 
 Customer host allows `/`, `/product`, `/play`, `/onboarding`, `/goldline/start`, `/joystick-start`, `/claire` (desk only), `/growth/lantern-city`, `/goldline-chapter`, `/operator`, settings/billing/invite, and receipts. `/home`, `/admin`, `/pnl`, `/war-room`, `/president`, `/driver/cockpit`, `/claire/*`, and other control-room paths render a refusal. Platform `role === "admin"` is refused on this host. **VERIFIED** by `shared/joystickHostRouting.test.ts` and `client/src/hostRouting/joystickHostRender.test.ts`.
 
-`driver.gojoystick.com` does **not** join the public-driver bypass. That bypass stays `bldg-admin-api-production.up.railway.app` and `driver.bldg.chat` (`server/_core/index.ts` lines 453–457). **PRESERVE.**
+`driver.gojoystick.com` does **not** join the public-driver bypass. `isPublicDriverBypassHost` allows only `bldg-admin-api-production.up.railway.app` and `driver.bldg.chat`. `server/_core/index.ts` calls that function. **PRESERVE.**
 
 ## CORS, cookies, API origin
 
@@ -78,12 +78,12 @@ Customer host allows `/`, `/product`, `/play`, `/onboarding`, `/goldline/start`,
 | Session cookie domain | `sessionCookieDomainForHost` returns `undefined` (`server/_core/cookies.ts`). `JOYSTICK_SESSION_COOKIE_DOMAIN` in `server/platform/tenancy/tenantIdentity.ts` stays unset | PRESERVE host-only cookies. A cookie on `admin.bldg.chat` is not sent to `admin.gojoystick.com` |
 | OAuth callback | `OAUTH_CALLBACK_REDIRECT_PATH = "/"` (`server/_core/oauth.ts`). Relative, same host. `sdk.ts` does not rewrite the provider redirect URI | PRESERVE code. LATER: the OAuth provider must list new callback URLs or OAuth login on a new host fails |
 | Session role | `normalizeSessionRole` in `server/_core/sdk.ts` allows only `admin`, `driver`, or `user` | PRESERVE |
-| Same-origin `/api` | `JOYSTICK_SAME_ORIGIN_API_HOSTS` includes `admin.bldg.chat` plus `gojoystick.com`, `app`, `admin`, and `driver` gojoystick hosts. Not `api.bldg.chat`. Not laundry hosts | ADD so those front doors use the Vercel `/api` rewrite |
+| Same-origin `/api` | `JOYSTICK_SAME_ORIGIN_API_HOSTS` includes `admin.bldg.chat`, `gojoystick.com`, `www`, `app`, `admin`, `driver`, and `api.gojoystick.com`. Not `api.bldg.chat`. Not laundry hosts. A configured resident `VITE_API_URL` is ignored on these hosts | ADD so those hosts use the main API rewrite and cannot follow `VITE_API_URL` to the resident service |
 | `/api/:path*` | `vercel.json` → `https://bldg-admin-api-production.up.railway.app/api/:path*` | PRESERVE. This is the main API |
 | `/resident-api/:path*` | `vercel.json` → `https://api.bldg.chat/api/:path*` | PRESERVE |
 | Dev server hosts | `vite.config.ts` `allowedHosts` adds the six exact gojoystick names. No `.gojoystick.com` suffix | ADD for local Vite only |
 
-`api.gojoystick.com` is intentionally not a same-origin frontend host. The contract constant `JOYSTICK_MAIN_API_SERVICE_NAME` is `bldg-admin-api`.
+`api.gojoystick.com` is same-origin for API calls so it cannot be sent to `api.bldg.chat`, and the SPA still refuses to render an app there (`api-host-refused`). The contract constant `JOYSTICK_MAIN_API_SERVICE_NAME` is `bldg-admin-api`. Public-driver bypass is `isPublicDriverBypassHost`: the Railway production host and `driver.bldg.chat` only.
 
 ## Callbacks and checkout left unchanged
 
@@ -91,7 +91,7 @@ Customer host allows `/`, `/product`, `/play`, `/onboarding`, `/goldline/start`,
 | --- | --- | --- |
 | `ADMIN_BASE_URL` default | `server/_core/env.ts` line 11 and line 69: `https://admin.bldg.chat` | PRESERVE |
 | Claire voice, recording, call-status | `server/claire/claireTwilio.ts` `publicBaseUrl()` line 224 uses `ENV.adminBaseUrl`. Paths lines 126–127 | PRESERVE. No prompt, memory, Brain, Showrunner, or Day Line execution edit |
-| Conversation Relay URL base | `server/claire/voice/conversationRelayUpgrade.ts` falls back to `ENV.adminBaseUrl` | PRESERVE |
+| Conversation Relay WebSocket | `conversationRelayValidationUrl` builds `wss://` from `ENV.adminBaseUrl`. `validateConversationRelayUpgrade` discards `Host` and `X-Forwarded-Host`. `CLAIRE_TWILIO_RELAY_PUBLIC_BASE_URL` stays unset | PRESERVE. The relay does not move to a gojoystick host |
 | Twilio signature | `server/claire/conversation/twilioSignature.ts` `isValidTwilioWebhook` | PRESERVE. Empty production signature still fails |
 | Stripe success, cancel, portal | `server/saas/saasBilling.ts` lines 29–33, 85–86, 118. Default app URL `https://admin.bldg.chat` via `DAYFORGE_BILLING_APP_URL` | PRESERVE. Checkout return does not move to gojoystick.com in this pass |
 | Stripe webhook routes | `/api/dayforge/billing/stripe-webhook`, `/api/marketplace-payments/stripe-webhook` | PRESERVE |
@@ -105,7 +105,7 @@ Customer host allows `/`, `/product`, `/play`, `/onboarding`, `/goldline/start`,
 | Welcome handoff origin | `server/welcomeHandoff.ts` line 10 | PRESERVE |
 | Campaign link origin | `server/commercialCampaigns/commercialCampaignRouter.ts` line 23 defaults to `https://app.bldg.chat` | PRESERVE. Not replaced with app.gojoystick.com |
 | Vendor booking and signup URLs | `vendorsignup.bldg.chat` literals in `server/vendorBookingPublicApi.ts` and `server/_core/index.ts` | PRESERVE |
-| Tenant host map | `shared/tenantConfig.ts`. gojoystick hosts are not laundry tenants | PRESERVE |
+| Tenant host map | `resolveTenantIdFromHost` matches JOYSTICK platform hosts to tenant id `default` before laundry alias or wildcard rules. That is the same platform tenant id `admin.bldg.chat` already uses. It is not `laundry_farm`. Membership sessions still use the persisted tenant (`tenantForAuthenticatedUser`). Laundry customer sites stay on their own hosts | ADD explicit match. No new tenant row |
 | Canonical tags | `client/legacy-dayforge-flagship.html`, `client/codexlfinal.html` still point at `admin.bldg.chat` | HISTORICAL pages. No SEO edit |
 | Gumball Pals extension | `extensions/gumballpals/*` still targets `https://admin.bldg.chat` | PRESERVE |
 | President workflow base | `.github/workflows/president-autonomous-agent.yml` `https://admin.bldg.chat` | PRESERVE |
@@ -163,7 +163,7 @@ Production values were not read.
 | --- | --- | --- |
 | `ADMIN_BASE_URL` | `https://admin.bldg.chat` | No change. Claire and Connect callbacks stay here |
 | `DAYFORGE_BILLING_APP_URL` | unset in code, fallback `https://admin.bldg.chat` | No change. Stripe success, cancel, and portal stay on that origin |
-| `JOYSTICK_ALLOWED_ORIGINS` | empty default; exact origins are now in code | Do not set `https://*.gojoystick.com`. Leave unset unless a specific extra origin is required |
+| `JOYSTICK_ALLOWED_ORIGINS` | empty default; exact origins are now in code. Commented template in `.env.example` | Do not set `https://*.gojoystick.com`. Leave unset unless a specific extra origin is required |
 | `PUBLIC_APP_ORIGIN` | fallback `https://app.bldg.chat` | No change |
 | `RESIDENT_API_URL` | fallback `https://api.bldg.chat` | No change |
 | `VITE_RESIDENT_WEB_ORIGIN` | fallback `https://laundrybutler.bldg.chat` | No change |
@@ -201,9 +201,12 @@ Production values were not read.
 - `shared/productIdentity.test.ts`
 - `server/saas/saasContract.test.ts`
 - `client/src/pages/adminLiveModel.test.ts`
+- `server/claire/voice/conversationRelayTransport.test.ts`
 
 `node scripts/check-nomenclature.mjs` passed. No browser pass against production hosts with this branch, because the branch is not deployed. No mobile screenshot was regenerated.
 
 ## Rollback for this pass
 
 Close the pull request. Nothing was attached or changed in Vercel, Railway, DNS, TLS, or production env.
+
+The ordered human cutover, and the ordered rollback that removes only the new names and redeploys code without a database change, is `docs/launch/JOYSTICK_DOMAIN_CUTOVER.md`. Production cutover is not complete.

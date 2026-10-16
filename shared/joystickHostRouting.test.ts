@@ -5,6 +5,9 @@ import { getSessionCookieOptions } from "../server/_core/cookies";
 import { DEFAULT_ADMIN_BASE_URL } from "../server/_core/env";
 import { OAUTH_CALLBACK_REDIRECT_PATH } from "../server/_core/oauth";
 import { normalizeSessionRole } from "../server/_core/sdk";
+import { conversationRelayValidationUrl } from "../server/claire/voice/conversationRelaySignature";
+import { tenantForAuthenticatedUser } from "../server/platform/tenancy/tenantIdentity";
+import { resolveTenantIdFromHost } from "./tenantConfig";
 import { getLegacyDayforgeBillingStripe } from "../server/saas/saasBilling";
 import { isValidTwilioWebhook } from "../server/claire/conversation/twilioSignature";
 import {
@@ -19,6 +22,8 @@ import {
   RESIDENT_API_REWRITE,
   isCustomerHostView,
   isPlatformAdminPath,
+  isPublicDriverBypassHost,
+  oauthCallbackUrlForOrigin,
   resolveJoystickHostView,
   wwwGojoystickRedirectTarget,
 } from "./joystickHostRouting";
@@ -58,6 +63,31 @@ describe("JOYSTICK host front doors", () => {
     expect(resolveJoystickHostView("laundryfarm.bldg.chat", "/product")).toBe("laundry-farm");
     expect(resolveJoystickHostView("north.ops.bldg.chat", "/")).toBe("continue");
     expect(resolveJoystickHostView("boreslay.com", "/")).toBe("continue");
+  });
+
+  it("binds JOYSTICK hosts to the platform tenant and leaves laundry sites alone", () => {
+    for (const host of [
+      "app.gojoystick.com",
+      "admin.gojoystick.com",
+      "driver.gojoystick.com",
+      "api.gojoystick.com",
+      "gojoystick.com",
+      "www.gojoystick.com",
+    ]) {
+      const resolved = resolveTenantIdFromHost(host);
+      expect(resolved.tenantId).toBe("default");
+      expect(resolved.matched).toBe(true);
+      expect(resolved.tenantId).not.toBe("laundry_farm");
+    }
+    expect(resolveTenantIdFromHost("laundryfarm.bldg.chat").tenantId).toBe("laundry_farm");
+    expect(resolveTenantIdFromHost("laundrybutler.bldg.chat").tenantId).toBe("default");
+    expect(resolveTenantIdFromHost("admin.bldg.chat").tenantId).toBe("default");
+    const membership = tenantForAuthenticatedUser({
+      user: { openId: "dayforge:member", role: "user", tenantId: "tenant-a" },
+      hostTenantId: resolveTenantIdFromHost("app.gojoystick.com").tenantId,
+    });
+    expect(membership.tenantId).toBe("tenant-a");
+    expect(membership.authority).toBe("membership");
   });
 
   it("refuses platform-admin routes on the customer host", () => {
@@ -200,6 +230,15 @@ describe("JOYSTICK host auth and callback boundaries", () => {
       "res.redirect(302, OAUTH_CALLBACK_REDIRECT_PATH)"
     );
     expect(source("server/_core/sdk.ts")).not.toContain("gojoystick.com");
+    expect(oauthCallbackUrlForOrigin("https://app.gojoystick.com")).toBe(
+      "https://app.gojoystick.com/api/oauth/callback"
+    );
+    expect(oauthCallbackUrlForOrigin("https://admin.bldg.chat/")).toBe(
+      "https://admin.bldg.chat/api/oauth/callback"
+    );
+    expect(source("client/src/const.ts")).toContain(
+      "const redirectUri = `${window.location.origin}/api/oauth/callback`"
+    );
   });
 
   it("leaves Claire callbacks and ADMIN_BASE_URL on the legacy admin origin", () => {
@@ -208,8 +247,22 @@ describe("JOYSTICK host auth and callback boundaries", () => {
     const twilio = source("server/claire/claireTwilio.ts");
     expect(twilio).toContain("return ENV.adminBaseUrl.replace(/\\/$/, \"\");");
     expect(twilio).not.toContain("gojoystick.com");
-    expect(source("server/_core/index.ts")).toContain('req.hostname === "driver.bldg.chat"');
+    expect(
+      conversationRelayValidationUrl({
+        requestUrl: "/api/claire/twilio/conversation-relay?token=abc",
+        publicBaseUrl: DEFAULT_ADMIN_BASE_URL,
+      })
+    ).toBe("wss://admin.bldg.chat/api/claire/twilio/conversation-relay?token=abc");
+    const relay = source("server/claire/voice/conversationRelaySignature.ts");
+    expect(relay).toContain("void input.host");
+    expect(relay).toContain("void input.forwardedHost");
+    expect(relay).not.toContain("gojoystick.com");
+    expect(source("server/_core/index.ts")).toContain("isPublicDriverBypassHost(req.hostname)");
     expect(source("server/_core/index.ts")).not.toContain("driver.gojoystick.com");
+    expect(isPublicDriverBypassHost("driver.bldg.chat")).toBe(true);
+    expect(isPublicDriverBypassHost("bldg-admin-api-production.up.railway.app")).toBe(true);
+    expect(isPublicDriverBypassHost("driver.gojoystick.com")).toBe(false);
+    expect(isPublicDriverBypassHost("admin.gojoystick.com")).toBe(false);
     expect(
       isValidTwilioWebhook({
         authToken: "token",
