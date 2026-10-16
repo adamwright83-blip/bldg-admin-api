@@ -16,6 +16,65 @@ function dollarsFromCents(value: number | null | undefined) {
   }).format(value / 100);
 }
 
+type MoneyCoverage = {
+  snapshotRead?: boolean;
+  failedSources?: string[];
+  affectedSources?: string[];
+  cleanCloudStatus?: string | null;
+  incompleteForWindow?: boolean;
+} | null;
+
+/** Names the first source that cannot prove today's collected money. */
+export function nextMoneyDiagnostic(input: {
+  queryError: string | null;
+  dbAvailable: boolean;
+  clearentKnown: boolean;
+  coverage: MoneyCoverage;
+}): { source: string; next: string } | null {
+  if (input.queryError) {
+    return {
+      source: "collected-today",
+      next: `Collected today could not be read. Next diagnostic: getCollectedToday. ${input.queryError}`,
+    };
+  }
+  if (!input.dbAvailable) {
+    return {
+      source: "payment-database",
+      next: "Canonical payment events were not read. Next diagnostic: the payment database. Stripe, CleanCloud, and Clearent amounts stay unknown.",
+    };
+  }
+  if (input.coverage && input.coverage.snapshotRead === false) {
+    return {
+      source: "source-coverage",
+      next: "The business source-coverage snapshot was not read. Next diagnostic: source coverage for this tenant. Do not treat a blank total as zero.",
+    };
+  }
+  const failed = input.coverage?.failedSources?.find(Boolean);
+  if (failed) {
+    return {
+      source: failed,
+      next: `${failed} failed to load. Next diagnostic: ${failed}.`,
+    };
+  }
+  const affected = input.coverage?.affectedSources?.find(Boolean);
+  if (affected && input.coverage?.incompleteForWindow) {
+    const status = affected === "cleancloud" && input.coverage.cleanCloudStatus
+      ? ` (${input.coverage.cleanCloudStatus})`
+      : "";
+    return {
+      source: affected,
+      next: `${affected}${status} is not current for this window. Next diagnostic: ${affected}.`,
+    };
+  }
+  if (!input.clearentKnown) {
+    return {
+      source: "clearent",
+      next: "Clearent collected cents were not read. Next diagnostic: Clearent daily summaries. An order total is not captured money.",
+    };
+  }
+  return null;
+}
+
 function SectionIntro({
   eyebrow,
   title,
@@ -112,9 +171,31 @@ export function GrowthControlRoom({
 }
 
 export function MoneyControlRoom() {
-  const collected = trpc.admin.getCollectedToday.useQuery();
-  const awaiting = trpc.admin.getAwaitingPayment.useQuery();
-  const dashboard = trpc.admin.dashboardSummary.useQuery();
+  const collected = trpc.admin.getCollectedToday.useQuery(undefined, { retry: false });
+  const awaiting = trpc.admin.getAwaitingPayment.useQuery(undefined, { retry: false });
+  const dashboard = trpc.admin.dashboardSummary.useQuery(undefined, { retry: false });
+  const freshness = trpc.system.customerTruthFreshness.diagnostic.useQuery(undefined, { retry: false });
+  const outage = collected.isLoading
+    ? null
+    : nextMoneyDiagnostic({
+        queryError: collected.error?.message ?? null,
+        dbAvailable: collected.data?.dbAvailable === true,
+        clearentKnown: typeof collected.data?.clearentCents === "number",
+        coverage: collected.data?.coverage ?? null,
+      });
+  const failedSources = new Set(collected.data?.coverage?.failedSources ?? []);
+  const darkSources = new Set(
+    collected.data?.coverage?.incompleteForWindow ? collected.data.coverage.affectedSources ?? [] : []
+  );
+  const sourceState = (sourceId: string, known: boolean, cents: number | null | undefined, dark: string) => {
+    if (collected.isLoading) return "reading…";
+    if (failedSources.has(sourceId)) return `unknown — ${sourceId} failed to load`;
+    if (darkSources.has(sourceId)) {
+      const status = sourceId === "cleancloud" ? collected.data?.coverage?.cleanCloudStatus : null;
+      return `unknown — ${sourceId} is ${status && status !== "fresh" ? status : "not current"}`;
+    }
+    return known && typeof cents === "number" ? dollarsFromCents(cents) : dark;
+  };
   return (
     <main className="cr-section-page">
       <SectionIntro
@@ -123,7 +204,7 @@ export function MoneyControlRoom() {
         copy="Collected funds, receivables, reconciliation, and advanced P&L stay distinct so confidence never outruns the source."
       />
       <section className="cr-finance-grid">
-        <article>
+        <article data-testid="money-collected-today">
           <img src={`${ASSET_ROOT}/status/success.svg`} alt="" />
           <span>Collected today</span>
           <strong>
@@ -133,7 +214,12 @@ export function MoneyControlRoom() {
           </strong>
           <small>
             {collected.data?.processorLabel ?? "Payment source unavailable"}
+            {collected.data?.precision ? ` · ${collected.data.precision}` : ""}
           </small>
+          <p data-testid="money-source-stripe">Stripe {sourceState("laundry_butler", collected.data?.dbAvailable === true, collected.data?.stripeCents, "unknown — native payment events were not read")}</p>
+          <p data-testid="money-source-cleancloud">CleanCloud {sourceState("cleancloud", collected.data?.dbAvailable === true, collected.data?.cleanCloudCents, collected.data?.coverage?.cleanCloudStatus ? `unknown — cleancloud is ${collected.data.coverage.cleanCloudStatus}` : "unknown — cleancloud was not read")}</p>
+          <p data-testid="money-source-clearent">Clearent {sourceState("clearent", typeof collected.data?.clearentCents === "number", collected.data?.clearentCents, "unknown — Clearent daily summaries were not read")}</p>
+          {collected.isLoading ? <p data-testid="money-next-diagnostic">Reading collected sources…</p> : outage ? <p data-testid="money-next-diagnostic">{outage.next}</p> : <p data-testid="money-next-diagnostic">No dark source in today's collected read.</p>}
         </article>
         <article>
           <img src={`${ASSET_ROOT}/status/action-required.svg`} alt="" />
@@ -143,7 +229,13 @@ export function MoneyControlRoom() {
               ? dollarsFromCents(awaiting.data.cents)
               : "Unavailable"}
           </strong>
-          <small>Open receivable pipeline</small>
+          <small>
+            {awaiting.error
+              ? `Unavailable — receivable read failed. Next diagnostic: getAwaitingPayment. ${awaiting.error.message}`
+              : awaiting.data?.dbAvailable === false
+                ? "Unavailable — the receivable database was not read."
+                : "Open receivable pipeline"}
+          </small>
         </article>
         <article>
           <img src={`${ASSET_ROOT}/status/info.svg`} alt="" />
@@ -162,6 +254,25 @@ export function MoneyControlRoom() {
               ? `Basis: ${dashboard.data.revenueTimestampBasis}`
               : "Timestamp basis unavailable"}
           </small>
+        </article>
+      </section>
+      <section className="cr-finance-grid" aria-label="Customer truth freshness" data-testid="customer-truth-freshness">
+        <article>
+          <img src={`${ASSET_ROOT}/status/info.svg`} alt="" />
+          <span>Customer truth freshness</span>
+          <strong>{freshness.data?.disposition ?? (freshness.isLoading ? "Reading…" : "Unavailable")}</strong>
+          <small>Source coverage only. No customer names, phones, or rows.</small>
+          {freshness.error ? (
+            <p>Customer truth freshness could not be read. Next diagnostic: customerTruthFreshness.diagnostic. {freshness.error.message}</p>
+          ) : freshness.data ? (
+            <>
+              <p>Coverage gap: {freshness.data.coverageGap}</p>
+              <p>CleanCloud: {freshness.data.cleancloudPresence} · {freshness.data.cleancloudDisposition}</p>
+              <p>Coverage watermark: {freshness.data.coverageWatermark ?? "Unknown"}</p>
+              <p>Last successful sync: {freshness.data.lastSuccessfulSyncAt ?? "Unknown"}</p>
+              {freshness.data.withholdingSentence ? <p>{freshness.data.withholdingSentence}</p> : null}
+            </>
+          ) : null}
         </article>
       </section>
       <section className="cr-destination-grid" aria-label="Money workspaces">

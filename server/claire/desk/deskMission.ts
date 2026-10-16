@@ -104,7 +104,13 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
           approach: diagnosis.selectedApproach,
           evidence: diagnosis.evidence
             .filter(e => diagnosis.supportingEvidence.includes(e.id))
-            .map(e => ({ description: e.description, classification: e.classification }))
+            .map(e => ({
+              id: e.id,
+              source: e.source,
+              description: e.description,
+              classification: e.classification,
+              value: e.value,
+            }))
             .slice(0, 4),
           completionCondition: action?.completionCondition ?? null,
         }

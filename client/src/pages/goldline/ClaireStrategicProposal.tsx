@@ -122,17 +122,6 @@ export function ClaireStrategicProposal() {
                   : "Pending items require operator approval"}{" "}
             · Prepared {new Date(proposal.preparedAt).toLocaleString()}
           </p>
-          {proposal.diagnosis.evidence
-            .filter(item => item.source === "analyzeBusinessData")
-            .map(item => (
-              <p
-                key={item.id}
-                data-testid="claire-source-backed-receipt"
-                data-evidence-source="analyzeBusinessData"
-              >
-                analyzeBusinessData: {String(item.value ?? "")} Receipt {item.id}.
-              </p>
-            ))}
           {proposal.diagnosis.evidence.some(
             item => item.source === "analyzeBusinessData"
           ) &&
@@ -258,6 +247,21 @@ export function ClaireStrategicProposal() {
               are confirmed only by a successful save and readback.
             </p>
           ) : null}
+          <div data-testid="claire-approval-control" style={{ marginTop: 12 }}>
+            {proposal.diagnosis.evidence
+              .filter(item => item.source === "analyzeBusinessData")
+              .map(item => (
+                <p
+                  key={item.id}
+                  data-testid="claire-source-backed-receipt"
+                  data-evidence-source="analyzeBusinessData"
+                >
+                  analyzeBusinessData: {String(item.value ?? "")} Receipt {item.id}.
+                </p>
+              ))}
+            {proposal.diagnosis.evidence.some(item => item.source === "analyzeBusinessData") ? null : (
+              <p data-testid="claire-approval-evidence-absent">No analyzeBusinessData receipt is attached. Approval will not invent one.</p>
+            )}
           <div
             style={{
               display: "flex",
@@ -296,6 +300,7 @@ export function ClaireStrategicProposal() {
             >
               Defer
             </button>
+          </div>
           </div>
         </>
       )}
