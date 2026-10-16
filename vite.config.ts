@@ -45,7 +45,17 @@ export default defineConfig({
   },
   server: {
     host: true,
-    allowedHosts: [".bldg.chat", "localhost", "127.0.0.1"],
+    allowedHosts: [
+      ".bldg.chat",
+      "gojoystick.com",
+      "www.gojoystick.com",
+      "app.gojoystick.com",
+      "admin.gojoystick.com",
+      "driver.gojoystick.com",
+      "api.gojoystick.com",
+      "localhost",
+      "127.0.0.1",
+    ],
     fs: {
       strict: true,
       deny: ["**/.*"],

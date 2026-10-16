@@ -15,6 +15,28 @@ describe("resolveApiBase", () => {
     expect(resolveApiBase("ADMIN.BLDG.CHAT", "https://api.example.com")).toBe("");
   });
 
+  it("keeps the new JOYSTICK front doors on the same-origin main API proxy", () => {
+    for (const host of [
+      "app.gojoystick.com",
+      "admin.gojoystick.com",
+      "driver.gojoystick.com",
+      "gojoystick.com",
+    ]) {
+      expect(
+        resolveApiBase(host, "https://bldg-admin-api-production.up.railway.app")
+      ).toBe("");
+    }
+  });
+
+  it("does not send the resident API host through the main same-origin proxy", () => {
+    expect(
+      resolveApiBase(
+        "api.bldg.chat",
+        "https://bldg-admin-api-production.up.railway.app"
+      )
+    ).toBe("https://bldg-admin-api-production.up.railway.app");
+  });
+
   it("uses the configured API for other deployments and trims one trailing slash", () => {
     expect(resolveApiBase("preview.example.com", "https://api.example.com/")).toBe(
       "https://api.example.com"
