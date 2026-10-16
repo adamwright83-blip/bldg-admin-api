@@ -42,19 +42,80 @@ import {
 const ROOT = resolve(__dirname, "../../..");
 
 /**
- * President missions check out `president/<missionId>`. Those branches may not
- * edit the composition root, package.json, or these protected trees. A feature
- * branch may. The forbidden set stays intact; only a President ref is rejected.
+ * Unconditional on every branch. presidentIsolated does not apply here.
+ * server/routers.ts is forbidden unless the diff only adds the operator
+ * paymentReconciliation.manualMatch and ignore procedures.
  */
-const PRESIDENT_DOMAIN_PROTECTED_RE =
+const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
 
-function presidentProtectedDomainViolations(
-  headRef: string,
-  files: readonly string[]
-): string[] {
-  if (!/president/i.test(headRef)) return [];
-  return files.filter(file => PRESIDENT_DOMAIN_PROTECTED_RE.test(file));
+const PAYMENT_RECONCILIATION_ROUTER_ADDITIONS = [
+  "  ignoreReconciliationRow,",
+  "  recordManualReconciliationMatch,",
+  "      manualMatch: protectedProcedure",
+  "        .input(",
+  "          z.object({",
+  "            confirmed: z.literal(true),",
+  "            requestId: z.string().uuid(),",
+  "            clearentTransactionId: z.number().int().positive(),",
+  "            cleancloudPaidOrderId: z.number().int().positive(),",
+  "          })",
+  "        )",
+  "        .mutation(async ({ ctx, input }) => {",
+  "          const result = await recordManualReconciliationMatch({",
+  "            tenantId: ctx.tenantId,",
+  "            actorUserId: ctx.user.openId,",
+  "            confirmed: input.confirmed,",
+  "            requestId: input.requestId,",
+  "            clearentTransactionId: input.clearentTransactionId,",
+  "            cleancloudPaidOrderId: input.cleancloudPaidOrderId,",
+  "          });",
+  "          if (!result.ok) throw new TRPCError({ code: \"BAD_REQUEST\", message: result.reason });",
+  "          return result;",
+  "        }),",
+  "      ignore: protectedProcedure",
+  "        .input(",
+  "          z.object({",
+  "            confirmed: z.literal(true),",
+  "            requestId: z.string().uuid(),",
+  "            matchId: z.number().int().positive(),",
+  "            reason: z.string().trim().min(1).max(500),",
+  "          })",
+  "        )",
+  "        .mutation(async ({ ctx, input }) => {",
+  "          const result = await ignoreReconciliationRow({",
+  "            tenantId: ctx.tenantId,",
+  "            actorUserId: ctx.user.openId,",
+  "            confirmed: input.confirmed,",
+  "            requestId: input.requestId,",
+  "            matchId: input.matchId,",
+  "            reason: input.reason,",
+  "          });",
+  "          if (!result.ok) throw new TRPCError({ code: \"BAD_REQUEST\", message: result.reason });",
+  "          return result;",
+  "        }),",
+].join("\n");
+
+function diffBodyLines(diffText: string, marker: "+" | "-"): string[] {
+  return diffText
+    .split("\n")
+    .filter(line => line.startsWith(marker) && !line.startsWith(`${marker}${marker}${marker}`))
+    .map(line => line.slice(1));
+}
+
+function routersDiffIsManualMatchAndIgnoreOnly(diffText: string): boolean {
+  const removed = diffBodyLines(diffText, "-");
+  const added = diffBodyLines(diffText, "+");
+  if (removed.length > 0 || added.length === 0) return false;
+  return added.join("\n") === PAYMENT_RECONCILIATION_ROUTER_ADDITIONS;
+}
+
+function invariant28ForbiddenHits(files: readonly string[], routersDiff: string): string[] {
+  return files.filter(file => {
+    if (!DOMAIN_PROTECTED_RE.test(file)) return false;
+    if (file !== "server/routers.ts") return true;
+    return !routersDiffIsManualMatchAndIgnoreOnly(routersDiff);
+  });
 }
 
 const IDENT = { identity: "adam@test", mechanism: "test-session", sessionRef: "sess-1" };
@@ -727,36 +788,36 @@ describe("static safety (10, 28)", () => {
       .toString()
       .split("\n")
       .filter(Boolean);
+    const routersDiff = execSync(
+      "git diff origin/main...HEAD -- server/routers.ts; git diff HEAD -- server/routers.ts",
+      { cwd: ROOT }
+    ).toString();
     const headRef = (
       process.env.GITHUB_HEAD_REF ||
       process.env.GITHUB_REF_NAME ||
       execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT }).toString()
     ).trim();
     const presidentIsolated = /president/i.test(headRef);
-    const domainProtected = diff.filter(file => PRESIDENT_DOMAIN_PROTECTED_RE.test(file));
 
-    // The forbidden set still includes the composition root. A President ref
-    // is rejected for it. This feature branch is not a President mission, so
-    // an operator payment route in server/routers.ts is not that violation.
-    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/routers.ts")).toBe(true);
-    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("package.json")).toBe(true);
-    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/commercialPipeline/offer.ts")).toBe(true);
-    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/paymentReconciliation.ts")).toBe(false);
+    // Runs on every branch. A non-president ref does not skip this assertion.
+    expect(PAYMENT_RECONCILIATION_ROUTER_ADDITIONS).toContain("manualMatch: protectedProcedure");
+    expect(PAYMENT_RECONCILIATION_ROUTER_ADDITIONS).toContain("ignore: protectedProcedure");
+    expect(PAYMENT_RECONCILIATION_ROUTER_ADDITIONS).not.toContain("publicProcedure");
+    expect(invariant28ForbiddenHits(["package.json"], routersDiff)).toEqual(["package.json"]);
     expect(
-      presidentProtectedDomainViolations("president/mission-28", [
-        "server/routers.ts",
-        "server/paymentReconciliation.ts",
-      ])
+      invariant28ForbiddenHits(
+        ["server/commercialPipeline/offer.ts", "server/mitch/seat.ts", "server/claire/turn/claireTurn.ts"],
+        routersDiff
+      )
+    ).toEqual(["server/commercialPipeline/offer.ts", "server/mitch/seat.ts"]);
+    expect(
+      invariant28ForbiddenHits(["server/routers.ts"], `${routersDiff}\n+      otherRoute: protectedProcedure`)
     ).toEqual(["server/routers.ts"]);
     expect(
-      presidentProtectedDomainViolations("president/mission-28", [
-        "package.json",
-        "server/mitch/seat.ts",
-        "server/claire/turn/claireTurn.ts",
-      ])
-    ).toEqual(["package.json", "server/mitch/seat.ts"]);
-    expect(presidentProtectedDomainViolations("president/mission-28", diff)).toEqual(domainProtected);
-    expect(presidentProtectedDomainViolations(headRef, diff)).toEqual([]);
+      invariant28ForbiddenHits(["server/routers.ts"], "--- a/server/routers.ts\n+++ b/server/routers.ts\n@@\n-      summary: protectedProcedure\n")
+    ).toEqual(["server/routers.ts"]);
+    expect(invariant28ForbiddenHits(["server/paymentReconciliation.ts"], routersDiff)).toEqual([]);
+    expect(invariant28ForbiddenHits(diff, routersDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.
     const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
