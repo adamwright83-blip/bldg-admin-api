@@ -61,6 +61,7 @@ import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { ingestDaphneConversation } from "../agents/daphne/conversationIngestion";
 import { captureExplicitDaphnePreferenceCorrections } from "../agents/daphne/explicitPreferenceCorrection";
 import {
+  conversationHistoryForModel,
   runClaireTurn,
   looksUnfinished,
   observationUtteranceForBrain,
@@ -89,6 +90,10 @@ import {
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
 import { executePersistentOperatorAction } from "../agents/persistentOperator/actionExecution";
+import { isClaireWorkLedgerEnabled } from "./workLedger/workLedgerPlanner";
+import { runWorkLedgerTurn } from "./workLedger/workLedgerTurn";
+import { loadPriorCallFacts } from "./workLedger/callContinuity";
+import { prefetchBrainV3 } from "./workLedger/brainV3Prefetch";
 
 import { runWithLlmObservability } from "../_core/llmObservability";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -808,7 +813,106 @@ export function runAuthoritativeClaireVoiceTurn(input: {
 
       let result: ClaireTurnResult;
       let brainV2LiveHandled = false;
-      if (
+      /**
+       * Claire's work ledger owns Day Line work for the whole conversation: one
+       * understanding of every item, revision and save, read back before it is
+       * spoken. Turns it does not claim continue below with the legacy Day Line
+       * writers stood down (state.workLedgerOwnsDayLine).
+       */
+      let ledgerResult: ClaireTurnResult | null = null;
+      let brainV3Prefetch: ReturnType<typeof prefetchBrainV3> | null = null;
+      const ledgerEligible =
+        isClaireWorkLedgerEnabled() &&
+        !preparedControl &&
+        !conversation.strategicProposalId &&
+        (missionClass.kind === "passthrough" || missionClass.kind === "flush") &&
+        Boolean(input.utterance.trim()) &&
+        !(input.allowFragmentWait && looksUnfinished(input.utterance));
+      if (ledgerEligible) {
+        conversation.workLedgerOwnsDayLine = true;
+        if (!conversation.workLedgerCallFacts) {
+          conversation.workLedgerCallFacts = await loadPriorCallFacts({
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            claireConversationId: conversationId,
+          }).catch(error => {
+            console.warn("[ClaireWorkLedger] prior-call facts unavailable", error instanceof Error ? error.message : error);
+            return [];
+          });
+        }
+        // Start the conversational pipeline's interpretation alongside the
+        // planner, so a turn the ledger hands back costs no extra round-trip.
+        if (!conversation.pendingFragment && missionClass.kind === "passthrough") {
+          const scheduled = (conversation.sessionKind === "morning_readiness" || conversation.sessionKind === "evening_debrief") && conversation.showrunner;
+          const recent = conversationHistoryForModel(conversation.history ?? []);
+          brainV3Prefetch = prefetchBrainV3({
+            tenantId: conversation.tenantId,
+            operatorId: conversation.actorId,
+            utterance: input.utterance.trim(),
+            recentTurns: scheduled ? recent : recent.slice(-12),
+            ...(scheduled ? {} : { preparedStrategicProposal: Boolean(conversation.strategicProposalId) }),
+            pending: scheduled
+              ? {
+                  briefing: Boolean(conversation.pendingBriefing),
+                  accountFollowUp: Boolean(conversation.pendingAccountFollowUp),
+                  action: Boolean(conversation.pendingProposal || conversation.pendingUpdate),
+                  weeklyPlanning: Boolean(conversation.weeklyPlanningWeekStart),
+                }
+              : {
+                  briefing: Boolean(conversation.pendingBriefing),
+                  accountFollowUp: Boolean(conversation.pendingAccountFollowUp),
+                  action: Boolean(
+                    conversation.pendingProposal ||
+                      conversation.pendingUpdate ||
+                      conversation.pendingFieldCapture ||
+                      conversation.pendingEngineeringOffer ||
+                      conversation.pendingDayLineChoice ||
+                      conversation.clarifyingUtterance
+                  ),
+                  weeklyPlanning: Boolean(conversation.weeklyPlanningWeekStart),
+                },
+            dayLineSuppressed: Boolean(conversation.dayLineSuppressed),
+          });
+        }
+        const ledgerUtterance = (missionClass.kind === "flush"
+          ? missionClass.assembled
+          : [conversation.pendingFragment, input.utterance].filter(Boolean).join(" ")
+        ).trim();
+        const outcome = await runWithLlmObservability(
+          {
+            tenantId: conversation.tenantId,
+            operatorOpenId: conversation.actorId,
+            conversationId: callStateKey(conversationId),
+            callId: conversationId,
+            surface: "voice",
+          },
+          () =>
+            runWorkLedgerTurn({
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              conversationKey: callStateKey(conversationId),
+              surface: "voice",
+              utterance: ledgerUtterance,
+              state: conversation,
+              timeZone: conversation.appointmentTimeZone || getDashboardTimeZone(),
+              sessionKind: conversation.sessionKind ?? "pre_drive",
+              callFacts: conversation.workLedgerCallFacts ?? [],
+              sourceEventId: daphneSourceId,
+            })
+        );
+        if (outcome.handled) {
+          ledgerResult = outcome.result;
+          conversation.pendingFragment = null;
+          conversation.fragmentHolds = 0;
+          if (input.utterance.trim()) {
+            conversation.providerFragments = [...(conversation.providerFragments ?? []), input.utterance.trim()];
+          }
+        }
+      }
+      if (ledgerResult) {
+        result = ledgerResult;
+      } else if (
         (conversation.sessionKind === "morning_readiness" || conversation.sessionKind === "evening_debrief") &&
         conversation.showrunner &&
         input.utterance.trim()
@@ -827,6 +931,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         }, { turn: {
           timeZone: () => conversation.appointmentTimeZone || getDashboardTimeZone(),
           encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: conversation.dayDirectorActorId }),
+          ...(brainV3Prefetch ? { brainV3: brainV3Prefetch.override } : {}),
         } });
       } else if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
         if (input.utterance.trim()) {
@@ -1014,6 +1119,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               encyclopedia: claireEncyclopediaFor({
                 dayDirectorActorId: conversation.dayDirectorActorId,
               }),
+              ...(brainV3Prefetch ? { brainV3: brainV3Prefetch.override } : {}),
             }
           );
 
@@ -1026,6 +1132,9 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             surface: "voice",
           },
           async () => {
+        // Brain V2's live lanes are Day Line work and call control; the work
+        // ledger owns both in a conversation it is running.
+        if (conversation.workLedgerOwnsDayLine) return await runLegacyAdapter();
         const liveAssembledUtterance = conversation.pendingFragment
           ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
           : turnUtterance;
@@ -1491,6 +1600,48 @@ export async function startClairePreDriveCall(input: {
   }
 }
 
+/**
+ * Opens an inbound conversation for an operator who is already authorized,
+ * exactly as a Twilio pickup does. Shared by the webhook and by transport-free
+ * verification, so a replay exercises the same state, ledger and context path.
+ */
+export async function openAuthorizedInboundClaireConversation(operator: {
+  operatorUserId: string;
+  dayDirectorActorId: string;
+  tenantId: string;
+  callSid?: string | null;
+}): Promise<{ conversationId: string; token: string; hints: string }> {
+  const opened = await persistClaireVoiceConversation({
+    tenantId: operator.tenantId,
+    actorId: operator.operatorUserId,
+    dayDirectorActorId: operator.dayDirectorActorId,
+    brief: null,
+    context: inboundClaireCallBootstrapContext(operator.operatorUserId),
+    spokenOpening: CLAIRE_INBOUND_GREETING,
+    loadVocabulary: false,
+    inboundContextReady: false,
+  });
+  beginInboundContextPrefetch({
+    conversationId: opened.conversationId,
+    tenantId: operator.tenantId,
+    actorId: operator.operatorUserId,
+    dayDirectorActorId: operator.dayDirectorActorId,
+  });
+  await safeClaireLedger(async () => {
+    if (operator.callSid) {
+      await attachCallSid({ claireConversationId: opened.conversationId, callSid: operator.callSid });
+    }
+    await persistSpokenTurn({
+      claireConversationId: opened.conversationId,
+      callSid: operator.callSid ?? undefined,
+      speaker: "CLAIRE",
+      text: CLAIRE_INBOUND_GREETING,
+      turnKey: 0,
+    });
+  });
+  return opened;
+}
+
 async function answerInboundClaireCall(req: Request): Promise<{ status: number; twiml: string }> {
   const body = (req.body ?? {}) as Record<string, string>;
   const callSid = String(body.CallSid ?? "").trim();
@@ -1508,35 +1659,7 @@ async function answerInboundClaireCall(req: Request): Promise<{ status: number; 
   } catch {
     return { status: 403, twiml: speakAndHangUp("This call can't be connected.") };
   }
-  const { conversationId, token, hints } = await persistClaireVoiceConversation({
-    tenantId: operator.tenantId,
-    actorId: operator.operatorUserId,
-    dayDirectorActorId: operator.dayDirectorActorId,
-    brief: null,
-    context: inboundClaireCallBootstrapContext(operator.operatorUserId),
-    spokenOpening: CLAIRE_INBOUND_GREETING,
-    loadVocabulary: false,
-    inboundContextReady: false,
-  });
-  beginInboundContextPrefetch({
-    conversationId,
-    tenantId: operator.tenantId,
-    actorId: operator.operatorUserId,
-    dayDirectorActorId: operator.dayDirectorActorId,
-  });
-  await safeClaireLedger(async () => {
-    await attachCallSid({
-      claireConversationId: conversationId,
-      callSid,
-    });
-    await persistSpokenTurn({
-      claireConversationId: conversationId,
-      callSid,
-      speaker: "CLAIRE",
-      text: CLAIRE_INBOUND_GREETING,
-      turnKey: 0,
-    });
-  });
+  const { conversationId, token, hints } = await openAuthorizedInboundClaireConversation({ ...operator, callSid });
   return {
     status: 200,
     twiml: openingVoiceTwiml({

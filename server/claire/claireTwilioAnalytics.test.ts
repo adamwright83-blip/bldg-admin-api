@@ -24,8 +24,17 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
+// A provider is configured but every model call fails: the realistic degraded production
+// condition. Governed fast paths must still answer; work must be refused honestly.
+vi.mock("../_core/llm", async importOriginal => ({
+  ...(await importOriginal<typeof import("../_core/llm")>()),
+  invokeLLM: async () => {
+    throw new Error("model provider unavailable in this fixture");
+  },
+}));
 vi.mock("../_core/env", () => ({
   ENV: {
+    anthropicApiKey: "fixture-key-provider-fails",
     adminBaseUrl: "https://api.example.test",
     cookieSecret: "test-secret",
     xaiApiKey: "",
@@ -222,7 +231,7 @@ describe("live Claire call answers business questions in the call (U)", () => {
   it("does not use keyword work execution after extraction fails, and still answers the next business question", async () => {
     const handlers = routes();
     const token = await startCall();
-    // No provider key is configured in this transport fixture.
+    // The provider fails in this fixture, so neither the work ledger nor the extractor can run.
     const proposed = await say(handlers, token, "Add reviewing last month's revenue.");
     expect(proposed).toContain("Nothing new was saved");
     expect(hoisted.commitment).not.toHaveBeenCalled();

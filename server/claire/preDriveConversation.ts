@@ -321,6 +321,8 @@ export async function answerClairePreDriveFollowUp(
      * never business truth, Narrative OS authority, or Claire disclosure permission.
      */
     daphnePromptSection?: string | null;
+    /** Claire's work ledger: verified work saved this conversation, held work, call facts. */
+    workLedgerPromptSection?: string | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -492,6 +494,9 @@ export async function answerClairePreDriveFollowUp(
       ...(input.daphnePromptSection
         ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]
         : []),
+      ...(input.workLedgerPromptSection
+        ? [{ label: "work_ledger", text: input.workLedgerPromptSection }]
+        : []),
       ...(input.narratorPromptSection
         ? [{ label: "authored_narrative", text: input.narratorPromptSection }]
         : []),
@@ -512,7 +517,7 @@ export async function answerClairePreDriveFollowUp(
   let failureStage = "inference";
   const personalOnlyTurn = conversationalMode === "personal";
   const conversationMessages = [
-    ...(personalOnlyTurn ? [] : input.recentTurns ?? []).slice(-8).map(turn => ({
+    ...(personalOnlyTurn ? [] : input.recentTurns ?? []).slice(-14).map(turn => ({
       role: (turn.speaker === "claire" ? "assistant" : "user") as "assistant" | "user",
       content: turn.text,
     })),

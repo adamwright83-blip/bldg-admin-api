@@ -3,9 +3,11 @@ import { buildDaphneV2OperatorCard } from "./engine";
 import type { DaphneOperatorCard } from "./operatorCard";
 import {
   assignDaphneMrtMissionFraming,
-  type DaphneMrtAssignmentResult,
-  type DaphneMrtExperimentInput,
+  type DaphneMrtFramingResult,
 } from "./missionFramingExperiment";
+
+type DaphneMrtAssignmentResult = DaphneMrtFramingResult;
+type DaphneMrtExperimentInput = Parameters<typeof assignDaphneMrtMissionFraming>[0];
 
 export type DaphneClaireGuidance = {
   cardGeneratedAt: string;
@@ -125,6 +127,8 @@ export async function loadDaphneClaireGuidance(input: {
       operatorUserId: input.operatorUserId,
       preferences: {
         adaptationEnabled: card.metaPreferences.adaptation_enabled !== false,
+        // Experimentation needs its own explicit consent; adaptation alone is not enough.
+        safeExperimentation: card.metaPreferences.safe_experimentation === true,
         consentRevoked: card.metaPreferences.adaptation_enabled === false,
       },
       ...input.mrtExperiment,

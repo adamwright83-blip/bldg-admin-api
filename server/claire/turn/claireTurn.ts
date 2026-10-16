@@ -34,6 +34,7 @@ import {
   refersToPriorWork,
 } from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
+import { workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
 import { reviseBriefing } from "../briefing/reviseBriefing";
@@ -238,6 +239,16 @@ export type ClaireTurnState = PendingProposalState &
     dayLineSuppressed?: boolean;
     /** Growth challenge proposal held for operator confirmation. */
     pendingGrowthChallenge?: { artifact: SalesInsightArtifact; createdAt: number } | null;
+    /** Claire's work ledger for this conversation (server/claire/workLedger). */
+    workLedger?: import("../workLedger/workLedgerPlanner").WorkLedgerState;
+    /** Facts about this call the ledger and the conversational model should both know. */
+    workLedgerCallFacts?: string[];
+    /**
+     * The work ledger owns Day Line writes in this conversation. The legacy
+     * writers (commitment loop, briefing commit, history sweep) stand down so
+     * there is exactly one writer, and the conversational path only talks.
+     */
+    workLedgerOwnsDayLine?: boolean;
   };
 
 export type ClaireTurnInput = {
@@ -1671,6 +1682,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // "Do you want me to add something, change something, or are you just catching me up?" —
   // reopening a question the operator had already closed.
   if (
+    !state.workLedgerOwnsDayLine &&
     brainV3.act === "rejection" &&
     brainV3.workDisposition === "none" &&
     conversationTarget !== "pending_action" &&
@@ -2054,7 +2066,25 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     });
   }
 
+  // The work ledger owns Day Line writes here but could not process this turn.
+  // Work-shaped speech gets an honest line, never a conversational reply that sounds like a save.
+  if (
+    state.workLedgerOwnsDayLine &&
+    state.workLedger?.degradedAt &&
+    (brainV3.workDisposition === "propose" ||
+      brainV3.workDisposition === "commit" ||
+      brainV3.act === "action_request" ||
+      brainV3.act === "work_commitment" ||
+      brainV3.act === "correction")
+  ) {
+    mark("fallback", { fallbackReason: "work_ledger_unavailable" });
+    return finish({
+      speak: "I have what you said, but I couldn't record that work just now. Nothing new was saved. Say it again in a moment?",
+      kind: "answered",
+    });
+  }
   const brainAllowsWork =
+    !state.workLedgerOwnsDayLine &&
     !state.dayLineSuppressed &&
     (brainV3.workDisposition === "propose" || brainV3.workDisposition === "commit" ||
       (brainV3.act === "correction" && conversationTarget === "pending_briefing" && Boolean(state.pendingBriefing)));
@@ -2475,6 +2505,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       narratorPromptSection,
       rookContactResidueSection,
       daphnePromptSection: daphneV2Guidance?.promptSection ?? null,
+      workLedgerPromptSection: workLedgerPromptSection(state, today),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -2688,6 +2719,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       narratorPromptSection,
       rookContactResidueSection,
       daphnePromptSection: daphneV2Guidance?.promptSection ?? null,
+      workLedgerPromptSection: workLedgerPromptSection(state, today),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
