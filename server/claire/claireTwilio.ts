@@ -434,7 +434,9 @@ function validTwilioRequest(req: Request): boolean {
 }
 
 export function spokenClaireText(text: string, opening = false): string {
-  return opening ? `Claire here. ${text}` : text;
+  // An opening that already introduces Claire ("Hi, it's Claire for today's wrap.") is not prefixed twice.
+  if (!opening || /\b(?:it's|it is|this is)\s+claire\b|^claire here\b/i.test(text.trim())) return text;
+  return `Claire here. ${text}`;
 }
 
 /**
@@ -1495,6 +1497,45 @@ async function persistClaireVoiceConversation(input: {
     })
   );
   return { conversationId, token, hints };
+}
+
+/**
+ * Prepares a scheduled or outbound conversation exactly as startClairePreDriveCall
+ * does before it dials: same generated context, opening, showrunner state and
+ * conversation ledger session. Nothing is dialed. Used to verify scheduled calls
+ * end to end without telephone credit.
+ */
+export async function openPreparedClaireConversationWithoutDialing(input: {
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId: string;
+  timeZone: string;
+  openingOverride: string;
+  sessionKindOverride: "morning_readiness" | "evening_debrief";
+  showrunner: ShowrunnerCallState;
+}): Promise<{ conversationId: string; token: string; brief: string }> {
+  const generated = await generateClairePreDriveOutput({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    timeZone: input.timeZone,
+    dayDirectorActorId: input.dayDirectorActorId,
+  });
+  const brief = input.openingOverride.trim();
+  const opened = await persistClaireVoiceConversation({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    brief,
+    context: generated.context,
+    spokenOpening: spokenClaireText(brief, true),
+    sessionKindOverride: input.sessionKindOverride,
+    showrunner: input.showrunner,
+    appointmentTimeZone: input.timeZone,
+  });
+  await safeClaireLedger(() =>
+    persistSpokenTurn({ claireConversationId: opened.conversationId, speaker: "CLAIRE", text: spokenClaireText(brief, true), turnKey: 0 })
+  );
+  return { conversationId: opened.conversationId, token: opened.token, brief };
 }
 
 export async function startClairePreDriveCall(input: {

@@ -230,22 +230,22 @@ describe("driver Day Line on the Claire call", () => {
       expect(spoken).toContain("Win the harbor");
       expect(spoken).toContain("Call Harbor Laundry");
       expect(spoken).toContain("Deposit the cash");
-      expect(spoken).toContain("Completed with execution evidence:");
+      expect(spoken).toContain("Done and verified:");
       expect(spoken).toContain("Return the towels");
       expect(spoken).toContain("Carol Ng");
-      expect(spoken).toContain("Marked completed without execution evidence: Fold the napkins.");
+      expect(spoken).toContain("Marked done, not yet verified: Fold the napkins.");
       expect(spoken).toContain("Blocked or deferred: Greystar walk and Payment blocks Carol's delivery.");
-      expect(spoken).toContain("Still needs your approval:");
+      expect(spoken).toContain("Waiting on your approval:");
       expect(spoken).toContain("Recovery · Ada");
       expect(spoken).toContain("Postcard draft");
       expect(spoken).toContain("Review the morning sheet");
     }
     expect(morning).toMatch(/^Good morning, it's Claire\./);
     expect(morning).toMatch(/Are you ready to get going\?$/);
-    expect(morning).toContain("Today's designated mission is Win the harbor.");
+    expect(morning).toContain("Today's mission is Win the harbor.");
     expect(evening).toMatch(/^Hi, it's Claire for today's wrap\./);
     expect(evening).toMatch(/How did it go\?$/);
-    expect(evening).toContain("Today's designated mission was Win the harbor.");
+    expect(evening).toContain("Today's mission was Win the harbor.");
   });
 
   it("does not invent the line when the field read fails", async () => {
@@ -476,15 +476,15 @@ describe("driver Day Line on the Claire call", () => {
       const opening = showrunnerOpening(briefing);
       spoken[purpose] = opening;
       expect(opening).toContain("Call Harbor Laundry");
-      expect(opening).toContain("Today's designated mission");
+      expect(opening).toContain("Today's mission");
       expect(opening).toContain("Win the harbor");
-      expect(opening).toContain("Completed with execution evidence:");
+      expect(opening).toContain("Done and verified:");
       expect(opening).toContain("Return the towels");
-      expect(opening).toContain("Marked completed without execution evidence: Fold the napkins.");
+      expect(opening).toContain("Marked done, not yet verified: Fold the napkins.");
       expect(opening).toContain("Blocked or deferred:");
       expect(opening).toContain("Greystar walk");
       expect(opening).toContain("Payment blocks Carol's delivery");
-      expect(opening).toContain("Still needs your approval:");
+      expect(opening).toContain("Waiting on your approval:");
       expect(opening).toContain("Recovery · Ada");
       let prompt = "";
       await runShowrunnerTurn({

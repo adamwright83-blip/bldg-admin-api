@@ -149,4 +149,82 @@ describe.skipIf(!enabled)("Claire voice path, real models, disposable MySQL — 
     },
     600_000
   );
+
+  it(
+    "runs the scheduled evening debrief through the same path: completes, moves, adds, reads back, and ends",
+    async () => {
+      const tenantId = "default";
+      const operatorUserId = "adam-admin";
+      const { resolveCanonicalOperatorIdentity } = await import("../../agents/persistentOperator/identity");
+      const resolved = await resolveCanonicalOperatorIdentity({ tenantId, source: { type: "open_id", value: operatorUserId }, subsystem: "claire_work_ledger_replay" });
+      if (!resolved.ok) throw new Error("operator fixture did not resolve");
+      const identity = resolved.identity;
+      await sql.query("DELETE FROM day_director_commitments WHERE tenantId = ? AND actorId = ?", [tenantId, identity.dayDirectorActorId]);
+      const now = new Date();
+      const clock = briefingClock(now, ZONE);
+      const today = clock.today;
+      const tomorrow = addDaysYmd(today, 1);
+      const { acceptProposalWithReceipt } = await import("../../planning/dayDirector/dayDirectorService");
+      const seed = async (title: string, businessDate: string, executionType?: "challenge") =>
+        acceptProposalWithReceipt({
+          tenantId, actorId: identity.dayDirectorActorId, businessDate,
+          proposal: {
+            promptKey: `seed:${randomUUID()}`, title, kind: "operations", quantity: null, sourceText: title, prerequisites: [], question: null,
+            intelligence: "manual_fallback", detailState: "COMPLETE", missingDetails: [], detailNote: null, references: [], targetBusinessDate: businessDate,
+            ...(executionType ? { executionType } : {}),
+          } as never,
+        });
+      await seed("Check whether 3 dry-cleaning orders were charged and charge any that weren't", today);
+      await seed("Deliver 2 dry-cleaning orders tonight", today);
+      await seed("Build Laundry Farm landing page to match Instagram ad", today, "challenge");
+      await seed("Deliver third dry-cleaning order tomorrow morning", tomorrow);
+
+      const { buildShowrunnerBriefing, showrunnerOpening } = await import("../showrunner/showrunnerBriefing");
+      const briefing = await buildShowrunnerBriefing({ identity, purpose: "evening_debrief", timeZone: ZONE, now });
+      const { openPreparedClaireConversationWithoutDialing, runRelayAuthoritativeTurn } = await import("../claireTwilio");
+      const opened = await openPreparedClaireConversationWithoutDialing({
+        tenantId, actorId: identity.communicationOperatorUserId, dayDirectorActorId: identity.dayDirectorActorId, timeZone: ZONE,
+        openingOverride: showrunnerOpening(briefing), sessionKindOverride: "evening_debrief",
+        showrunner: {
+          purpose: "evening_debrief", tenantId, canonicalOperatorId: identity.canonicalOperatorId, operatorUserId: identity.canonicalOpenId,
+          dayDirectorActorId: identity.dayDirectorActorId, dayDirectorActorIds: identity.dayDirectorActorIds, timeZone: ZONE,
+          businessDate: today, briefing, captured: { missionUpdates: [], developments: [], readinessNeeds: [] }, replan: null, turns: 0,
+          clockOffsetMs: 0,
+        },
+      });
+      const transcript = [`CLAIRE: ${opened.brief}`];
+      const turns = [
+        "Charged all three and delivered both tonight. The landing page didn't happen, I ran out of time, push it to tomorrow.",
+        "And I need to call Louise tomorrow at 10 about the contract renewal.",
+        "What's on tomorrow?",
+        "Perfect. That's it, thanks.",
+      ];
+      let ended = false;
+      for (const utterance of turns) {
+        const started = Date.now();
+        const turn = await runRelayAuthoritativeTurn({ conversationId: opened.conversationId, utterance, token: opened.token });
+        transcript.push(`OPERATOR: ${utterance}`, `CLAIRE (${Date.now() - started} ms${turn.endCall ? ", ends call" : ""}): ${turn.speak}`);
+        ended = ended || turn.endCall;
+      }
+      const { getDayDirectorState } = await import("../../planning/dayDirector/dayDirectorService");
+      const [todayState, tomorrowState] = await Promise.all([
+        getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, businessDate: today }),
+        getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, businessDate: tomorrow }),
+      ]);
+      console.log(
+        `\n${transcript.join("\n")}\n\nTODAY: ${todayState.commitments.map(row => `${row.title} [${row.status}]`).join(" · ")}` +
+          `\nTOMORROW: ${tomorrowState.commitments.map(row => `${row.title} [${row.status}${row.executionType ? `/${row.executionType}` : ""}]`).join(" · ")}`
+      );
+      expect(todayState.commitments.find(row => /charged/i.test(row.title))?.status).toBe("completed");
+      expect(todayState.commitments.find(row => /deliver 2/i.test(row.title))?.status).toBe("completed");
+      expect(todayState.commitments.filter(row => /landing page/i.test(row.title))).toEqual([]);
+      const landing = tomorrowState.commitments.filter(row => /landing page/i.test(row.title));
+      expect(landing).toHaveLength(1);
+      expect(landing[0]!.executionType).toBe("challenge");
+      expect(tomorrowState.commitments.some(row => /louise/i.test(row.title))).toBe(true);
+      expect(transcript.join("\n")).toMatch(/louise/i);
+      expect(ended).toBe(true);
+    },
+    600_000
+  );
 });

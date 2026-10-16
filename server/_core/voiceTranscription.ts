@@ -194,6 +194,15 @@ export async function transcribeAudio(
 
 type TranscriptionService = { kind: "whisper" | "gemini"; url: string; key: string };
 
+/** Which provider transcribeAudio will use right now, for honest transcript provenance. */
+export function activeTranscriptionProvider(): { provider: "whisper" | "gemini"; providerVersion: string } | null {
+  const service = transcriptionService();
+  if (!service) return null;
+  return service.kind === "gemini"
+    ? { provider: "gemini", providerVersion: process.env.CLAIRE_TRANSCRIPTION_GEMINI_MODEL?.trim() || "gemini-flash-latest" }
+    : { provider: "whisper", providerVersion: "whisper-1" };
+}
+
 /** Forge Whisper proxy when validly configured, else Gemini, else OpenAI Whisper. */
 function transcriptionService(): TranscriptionService | null {
   if (ENV.forgeApiUrl && ENV.forgeApiKey) {

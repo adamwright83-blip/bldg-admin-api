@@ -2,6 +2,16 @@ import { parseStrategicProposalControl } from "../../../shared/strategicProposal
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
+import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../claireModel";
+
+/**
+ * Brain V3's model. It runs before every conversational answer, so it sits on
+ * the critical path of each spoken reply; ANTHROPIC_MODEL_CLAIRE_BRAIN_V3 lets
+ * it be tuned separately from Claire's speaking model. Unset: unchanged.
+ */
+export function brainV3ModelId(): string {
+  return process.env.ANTHROPIC_MODEL_CLAIRE_BRAIN_V3?.trim() || ENV.anthropicModelClaire || ENV.anthropicModel;
+}
 import { interpretTurn } from "./interpretTurn";
 import { detectConfirmation } from "../voiceCommitmentLoop";
 import {
@@ -126,11 +136,13 @@ export async function interpretClaireBrainV3(
   if (!ENV.anthropicApiKey?.trim()) return null;
 
   try {
+    const model = brainV3ModelId();
     const result = await invokeLLM({
       tenantId: input.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      model,
       maxTokens: 1_000,
-      temperature: 0,
+      ...(claireModelAcceptsSampling(model) ? { temperature: 0 } : { omitTemperature: true }),
+      ...(claireModelDefaultsToThinking(model) ? { disableThinking: true } : {}),
       outputSchema: {
         name: "claire_brain_v3_turn",
         strict: true,
