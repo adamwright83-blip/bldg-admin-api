@@ -369,6 +369,7 @@ jobs:
               e2e/goldline/pickupDeliveryWorldObjective.spec.ts
               e2e/goldline/realityProgression.spec.ts
           - name: mobile-route-wayward
+            timeout: 8
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/today-route-persistence.spec.ts
