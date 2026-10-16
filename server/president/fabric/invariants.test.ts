@@ -40,6 +40,23 @@ import {
 } from "./externalTransport";
 
 const ROOT = resolve(__dirname, "../../..");
+
+/**
+ * President missions check out `president/<missionId>`. Those branches may not
+ * edit the composition root, package.json, or these protected trees. A feature
+ * branch may. The forbidden set stays intact; only a President ref is rejected.
+ */
+const PRESIDENT_DOMAIN_PROTECTED_RE =
+  /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
+
+function presidentProtectedDomainViolations(
+  headRef: string,
+  files: readonly string[]
+): string[] {
+  if (!/president/i.test(headRef)) return [];
+  return files.filter(file => PRESIDENT_DOMAIN_PROTECTED_RE.test(file));
+}
+
 const IDENT = { identity: "adam@test", mechanism: "test-session", sessionRef: "sess-1" };
 const EV: EvidenceItem[] = [
   { id: "ev_a", source: "git", kind: "recent-commit", observedAt: "2026-01-01", summary: "s", ref: "commit:abc", basis: "EVIDENCE" },
@@ -710,21 +727,42 @@ describe("static safety (10, 28)", () => {
       .toString()
       .split("\n")
       .filter(Boolean);
-    const domainProtectedRe =
-      /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
-    expect(diff.filter(file => domainProtectedRe.test(file))).toEqual([]);
-
-    // President's durable table stays registered on every branch.
-    const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
-    expect(migrationSource).toContain("../drizzle/0120_president_autonomous_cycles.sql");
-    expect(migrationSource).toContain("President autonomous cycle store");
-
     const headRef = (
       process.env.GITHUB_HEAD_REF ||
       process.env.GITHUB_REF_NAME ||
       execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT }).toString()
     ).trim();
     const presidentIsolated = /president/i.test(headRef);
+    const domainProtected = diff.filter(file => PRESIDENT_DOMAIN_PROTECTED_RE.test(file));
+
+    // The forbidden set still includes the composition root. A President ref
+    // is rejected for it. This feature branch is not a President mission, so
+    // an operator payment route in server/routers.ts is not that violation.
+    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/routers.ts")).toBe(true);
+    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("package.json")).toBe(true);
+    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/commercialPipeline/offer.ts")).toBe(true);
+    expect(PRESIDENT_DOMAIN_PROTECTED_RE.test("server/paymentReconciliation.ts")).toBe(false);
+    expect(
+      presidentProtectedDomainViolations("president/mission-28", [
+        "server/routers.ts",
+        "server/paymentReconciliation.ts",
+      ])
+    ).toEqual(["server/routers.ts"]);
+    expect(
+      presidentProtectedDomainViolations("president/mission-28", [
+        "package.json",
+        "server/mitch/seat.ts",
+        "server/claire/turn/claireTurn.ts",
+      ])
+    ).toEqual(["package.json", "server/mitch/seat.ts"]);
+    expect(presidentProtectedDomainViolations("president/mission-28", diff)).toEqual(domainProtected);
+    expect(presidentProtectedDomainViolations(headRef, diff)).toEqual([]);
+
+    // President's durable table stays registered on every branch.
+    const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
+    expect(migrationSource).toContain("../drizzle/0120_president_autonomous_cycles.sql");
+    expect(migrationSource).toContain("President autonomous cycle store");
+
     const schemaChanged = diff.includes("drizzle/schema.ts");
     const addedMigrations = diff.filter(file => /^drizzle\/\d{4}_.+\.sql$/.test(file));
 
