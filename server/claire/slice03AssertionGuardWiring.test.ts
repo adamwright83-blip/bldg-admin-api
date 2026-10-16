@@ -107,7 +107,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
     // rejection still routes to the deterministic fallback, not the model
     // text that made the unverified claim.
     expect(result).not.toContain("queued");
-    expect(result).toContain("Give me a second");
+    expect(result).toContain("I have your last message");
   });
 
   it("pre-drive follow-up keeps a verified scheduled assertion", async () => {

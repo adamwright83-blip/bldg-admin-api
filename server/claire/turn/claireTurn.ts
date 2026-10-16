@@ -8,6 +8,7 @@ import type { DayDirectorProposal } from "../../../shared/dayDirector";
 import { classifyIntentHeuristics, detectAvoidanceDisclosure, extractConversationalFieldOutcome, looksLikeKnowledgeSeeking } from "../../../shared/claireRuntime";
 import { confirmTomorrowUtterance, speakMorningReconciliationAsk } from "../../../shared/claireWorkday";
 import { looksLikeCancelRequest, looksLikeEditRequest } from "../../../shared/goldlineDayLine";
+import { explicitOperatorExecutionType } from "../../../shared/objectiveExecution";
 import { ENV } from "../../_core/env";
 import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsState, type ClaireBusinessTurnDeps } from "../businessConversation";
 import { parseBusinessGoal } from "../businessGoals/parseBusinessGoal";
@@ -416,7 +417,7 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     business: {},
     commitment: handleVoiceCommitmentTurn,
     followUp: answerClairePreDriveFollowUp,
-    extractModel: extractBriefingWithModel,
+    extractModel: ENV.anthropicApiKey?.trim() ? extractBriefingWithModel : null,
     loadExisting: loadExistingWork,
     commit: commitBriefing,
     campaign: getClaireCampaignSummary,
@@ -662,7 +663,7 @@ export { MEMORY_QUESTION } from "../answerRouter";
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
   // Barge-in and reconnects are not evidence of complete playback.
   const previousClaire = input.state.history?.findLast(entry => entry.speaker === "claire");
-  if (isClaireProgressionEnabled(input.tenantId) && (input.surface === "text" || previousClaire?.delivery === "confirmed_heard")) {
+  if (isClaireProgressionEnabled(input.tenantId) && (input.surface === "text" || previousClaire?.delivery !== "interrupted")) {
     await commitPendingDisclosuresForConversation(getProgressionStore(), { tenantId: input.tenantId, conversationId: input.conversationKey });
   }
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
@@ -2063,6 +2064,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const structuredRecovery = brainAllowsWork && state.surfacedRecoveryAccounts?.length && referencesStructuredRecoveryGroup(utterance)
     ? assembleReferencedDayLineWork({ utterance, priorOperatorUtterances: [], clock, unfinished: looksUnfinished, surfacedAccounts: state.surfacedRecoveryAccounts })
     : [];
+  const assembleFromHistory = () => {
+    const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
+    return assembleReferencedDayLineWork({
+      utterance, priorOperatorUtterances: prior.at(-1) === utterance ? prior.slice(0, -1) : prior,
+      clock, unfinished: looksUnfinished, history: state.history,
+      surfacedAccounts: state.surfacedRecoveryAccounts,
+    });
+  };
   if (structuredRecovery.length) {
     // Preserve already-resolved customer IDs; a model must not replace these with names.
     parsed = { ...parsed, items: structuredRecovery };
@@ -2076,31 +2085,64 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       heldItems: state.heldBriefingItems,
       revisePending: modelRevisedPending,
     }).catch(() => null);
-    if (!model || (brainV3.workDisposition === "commit" && model.items.length === 0)) {
+    if (!model) {
       // Never silently substitute a keyword parser for a failed semantic extraction.
       // The operator turn is already in durable conversation state; held work remains intact.
       mark("fallback", { fallbackReason: "work_interpretation_unavailable" });
       return finish({ speak: "I have what you said, but I couldn't safely organize that work yet. Nothing new was saved.", kind: "answered" });
     }
-    parsed = model;
-    if (modelRevisedPending && !model.items.length) {
+    if (model.items.length > 0) {
+      parsed = model;
+    } else if (modelRevisedPending && state.pendingBriefing) {
+      const revision = reviseBriefing(state.pendingBriefing.parsed, brainV3.canonicalWork ?? utterance, clock);
+      if (revision.changes.length) {
+        state.pendingBriefing = { parsed: revision.parsed, createdAt: nowMs };
+        state.pendingReminded = false;
+        const remaining = briefingAdditions(revision.parsed).length;
+        mark("briefing");
+        return finish({
+          speak: `${revision.changes.join(" ")} ${remaining ? "Want me to put the list on the Day Line now?" : "That leaves nothing to add."}`.trim(),
+          kind: "briefing_proposed",
+        });
+      }
       state.pendingBriefing = null;
       mark("briefing");
       return finish({ speak: "That leaves nothing in the pending list to add. Nothing new was saved.", kind: "briefing_proposed" });
+    } else {
+      if (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance)) {
+        const assembled = assembleFromHistory();
+        if (
+          assembled.length &&
+          (brainV3.canonicalWork || !interpretTurn(utterance).hasBusinessQuestion) &&
+          (refersToPriorWork(utterance) ||
+            referencesStructuredRecoveryGroup(utterance) ||
+            assembled.length >= parsed.items.length ||
+            Boolean(explicitOperatorExecutionType(utterance)))
+        ) {
+          parsed = { ...parsed, items: assembled };
+        }
+      }
+      if (brainV3.workDisposition === "commit" && parsed.items.length === 0) {
+        mark("fallback", { fallbackReason: "work_interpretation_unavailable" });
+        return finish({ speak: "I have what you said, but I couldn't safely organize that work yet. Nothing new was saved.", kind: "answered" });
+      }
     }
   } else if (
     brainAllowsWork &&
     (explicitTrackingRequest(utterance) || refersToPriorWork(utterance) || /\bbatch\b/i.test(utterance))
   ) {
-    // Explicitly injected offline compatibility path. Production always uses
-    // semantic extraction and fails closed if it cannot return a grounded result.
-    const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
-    const assembled = assembleReferencedDayLineWork({
-      utterance, priorOperatorUtterances: prior.at(-1) === utterance ? prior.slice(0, -1) : prior,
-      clock, unfinished: looksUnfinished, history: state.history,
-      surfacedAccounts: state.surfacedRecoveryAccounts,
-    });
-    if (assembled.length && (brainV3.canonicalWork || !interpretTurn(utterance).hasBusinessQuestion)) parsed = { ...parsed, items: assembled };
+    // Explicitly injected offline compatibility path.
+    const assembled = assembleFromHistory();
+    if (
+      assembled.length &&
+      (brainV3.canonicalWork || !interpretTurn(utterance).hasBusinessQuestion) &&
+      (refersToPriorWork(utterance) ||
+        referencesStructuredRecoveryGroup(utterance) ||
+        assembled.length >= parsed.items.length ||
+        Boolean(explicitOperatorExecutionType(utterance)))
+    ) {
+      parsed = { ...parsed, items: assembled };
+    }
   }
   /** Brain V3 is the only authority for whether task-shaped language is actually work. */
   const skipBriefing =

@@ -59,7 +59,7 @@ import {
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { ingestDaphneConversation } from "../agents/daphne/conversationIngestion";
-
+import { captureExplicitDaphnePreferenceCorrections } from "../agents/daphne/explicitPreferenceCorrection";
 import {
   runClaireTurn,
   looksUnfinished,
@@ -78,7 +78,16 @@ import {
 } from "./operatorMissionCommand";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
-
+import {
+  brainV2CallControlResult,
+  executeGrantBoundLegacyAdapter,
+} from "./brain/live/grantBoundLegacyAdapter";
+import {
+  brainV2ExecutionFailureResult,
+  isClaireBrainV2LiveEnabled,
+  runClaireBrainV2LiveTurn,
+  shouldFallbackToClaireLegacy,
+} from "./brain/live/runClaireBrainV2LiveTurn";
 import { executePersistentOperatorAction } from "../agents/persistentOperator/actionExecution";
 
 import { runWithLlmObservability } from "../_core/llmObservability";
@@ -798,6 +807,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       });
 
       let result: ClaireTurnResult;
+      let brainV2LiveHandled = false;
       if (
         (conversation.sessionKind === "morning_readiness" || conversation.sessionKind === "evening_debrief") &&
         conversation.showrunner &&
@@ -852,7 +862,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               actionIds: [],
             };
           } else {
-            if (isClaireProgressionEnabled(conversation.tenantId) && conversation.history?.findLast(entry => entry.speaker === "claire")?.delivery === "confirmed_heard") {
+            if (isClaireProgressionEnabled(conversation.tenantId) && conversation.history?.findLast(entry => entry.speaker === "claire")?.delivery !== "interrupted") {
               await commitPendingDisclosuresForConversation(getProgressionStore(), {
                 tenantId: conversation.tenantId,
                 conversationId: callStateKey(conversationId),
@@ -921,7 +931,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         conversation.fragmentHolds = 0;
 
         // Require playback evidence before consuming a pending disclosure.
-        if (isClaireProgressionEnabled(conversation.tenantId) && conversation.history?.findLast(entry => entry.speaker === "claire")?.delivery === "confirmed_heard") {
+        if (isClaireProgressionEnabled(conversation.tenantId) && conversation.history?.findLast(entry => entry.speaker === "claire")?.delivery !== "interrupted") {
           await commitPendingDisclosuresForConversation(getProgressionStore(), {
             tenantId: conversation.tenantId,
             conversationId: callStateKey(conversationId),
@@ -1016,9 +1026,81 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             surface: "voice",
           },
           async () => {
-        // One live conversation owner: it records history, resolves pending work,
-        // interprets meaning and executes the same structured briefing. The V2
-        // title-only adapter used to reparse speech and omit history on this path.
+        const liveAssembledUtterance = conversation.pendingFragment
+          ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
+          : turnUtterance;
+        const liveV2 = await runClaireBrainV2LiveTurn({
+          rawText: turnUtterance,
+          preparedStrategicConversation: Boolean(conversation.strategicProposalId),
+          assembledText: liveAssembledUtterance,
+          state: readOnlyWorkingMemorySource(
+            conversation as unknown as Parameters<
+              typeof readOnlyWorkingMemorySource
+            >[0]
+          ),
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+          surface: "voice",
+          conversationKey: callStateKey(conversationId),
+          live: {
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            conversationId,
+            dayDirectorActorId: conversation.dayDirectorActorId,
+            timeZone: getDashboardTimeZone(),
+            businessDate:
+              conversation.context.businessDate ??
+              new Date().toISOString().slice(0, 10),
+            surface: "voice",
+            priorClaimReceipts: conversation.claimReceipts ?? [],
+          },
+          executeLegacyAdapter: async grant =>
+            executeGrantBoundLegacyAdapter({
+              grant,
+              state: conversation,
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              conversationKey: callStateKey(conversationId),
+              timeZone:
+                conversation.appointmentTimeZone || getDashboardTimeZone(),
+              surface: "voice",
+            }),
+        });
+
+        if (liveV2.active) {
+          brainV2LiveHandled = true;
+          const turnResult = liveV2.adapterResult
+            ? liveV2.adapterResult
+            : liveV2.result.candidateEndCall
+              ? brainV2CallControlResult({
+                  candidateSpeak: liveV2.result.candidateSpeak,
+                  assembledUtterance: liveAssembledUtterance,
+                })
+              : (() => {
+                  throw new Error(
+                    "Brain V2 live action returned without a grant-bound adapter result"
+                  );
+                })();
+          console.info("[ClaireBrainV2]", {
+            event: "claire_brain_v2_live",
+            surface: "voice",
+            conversationKey: callStateKey(conversationId),
+            actionClasses: liveV2.actionClasses,
+            endCall: liveV2.result.candidateEndCall,
+            adapterKind: liveV2.adapterResult?.kind ?? null,
+            actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
+            mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
+            receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
+          });
+          return turnResult;
+        }
+        if (!shouldFallbackToClaireLegacy(liveV2)) {
+          brainV2LiveHandled = true;
+          return brainV2ExecutionFailureResult({
+            assembledUtterance: liveAssembledUtterance,
+          });
+        }
         return await runLegacyAdapter();
           }
         );
@@ -1042,11 +1124,25 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
           conversationId:callStateKey(conversationId),turnId:daphneSourceId,
           utterance:observation.assembledText,completed:true}).catch(()=>({status:"persistence_failed" as const}));
-        // The observation is durable. The gated background worker will
-        // consolidate it without delaying Twilio speech or the 11s turn budget.
-
+        if(brainV2LiveHandled){
+          const preference=await captureExplicitDaphnePreferenceCorrections({tenantId:conversation.tenantId,
+            operatorUserId:conversation.actorId,conversationId:callStateKey(conversationId),turnId:daphneSourceId,
+            utterance:observation.assembledText});
+          if(preference.corrections.length && preference.status!=="disabled"){
+            result={...result,speak:preference.readbackVerified
+              ? "That preference is saved for future calls."
+              : "I understand, but I couldn't save that preference for future calls."};
+          }
+        }
       }
-      if (observation.observe) {
+      if (
+        observation.observe &&
+        !brainV2LiveHandled &&
+        !isClaireBrainV2LiveEnabled({
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+        })
+      ) {
         observeShadowTurnDetached({
           rawText: observation.assembledText,
           assembledText: observation.assembledText,

@@ -430,9 +430,15 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
     const details = named.map(({ item, verb }) =>
       `${verb} ${item.title}${item.executionType ? ` as a ${item.executionType.replace(/_/g, " ")}` : ""} for ${spokenDay(item.businessDate, today)}.`
     );
-    // A receipt's count is not a description of what the operator authorized.
-    if (!result.failed.length) sentences[0] = details.join(" ");
-    else sentences.unshift(details.join(" "));
+    if (!result.failed.length) {
+      if (result.added.length === 0 && result.completed.length === 0) {
+        sentences[0] = details.join(" ");
+      } else {
+        sentences.push(details.join(" "));
+      }
+    } else {
+      sentences.unshift(details.join(" "));
+    }
   }
   return sentences.join(" ");
 }

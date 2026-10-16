@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. */
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

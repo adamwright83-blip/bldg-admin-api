@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { commitBriefing } from "./briefingCommit";
 import { validateModelBriefing } from "./llmBriefing";
 import { briefingClock } from "./briefingTiming";
+import { reviseBriefing } from "./reviseBriefing";
 import { createDatabaseConversationStateStore, ConversationStateConflictError } from "../turn/conversationStateStore";
 import type { ClaireTurnState } from "../turn/claireTurn";
 
@@ -75,5 +76,68 @@ suite("Claire conversation and verified work on disposable MySQL", () => {
     expect(retry.alreadyPresent).toHaveLength(1);
     const [rows] = await sql.execute<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ?", [tenantId]);
     expect(rows).toHaveLength(2); // one per separate authorized conversation, never one per retry
+  });
+
+  it("persists 3 distinct rows for multi-item single-turn Day Line commit", async () => {
+    const multiScope = { ...scope, conversationKey: `repair:multi:${tenantId}` };
+    const multiBriefing = validateModelBriefing(
+      {
+        items: [
+          { kind: "new_work", title: "Call Todd", quote: "Call Todd", day: "tomorrow", date: "2026-10-16", timingWords: "", quantity: 0, people: ["Todd"], place: "", needs: "", intent: "commitment", executionType: "call" },
+          { kind: "new_work", title: "Pick up the dry cleaning", quote: "pick up the dry cleaning", day: "tomorrow", date: "2026-10-16", timingWords: "", quantity: 0, people: [], place: "", needs: "", intent: "commitment", executionType: "field" },
+          { kind: "new_work", title: "Drop off the OPUS towels", quote: "drop off the OPUS towels", day: "tomorrow", date: "2026-10-16", timingWords: "", quantity: 0, people: [], place: "OPUS", needs: "", intent: "commitment", executionType: "field" },
+        ],
+        context: [],
+        questions: [],
+      },
+      { tenantId, utterance: "Add call Todd, pick up the dry cleaning, and drop off the OPUS towels to the day line for tomorrow", clock, vocabulary: [] }
+    );
+    const result = await commitBriefing(multiBriefing, multiScope);
+    expect(result.failed).toEqual([]);
+    expect(result.added).toHaveLength(3);
+    const [rows] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM day_director_commitments WHERE tenantId = ? AND businessDate = '2026-10-16' AND actorId = ?",
+      [tenantId, "1"]
+    );
+    expect(rows).toHaveLength(3);
+    const titles = rows.map(r => r.title);
+    expect(titles.some(t => /Todd/i.test(t))).toBe(true);
+    expect(titles.some(t => /dry cleaning/i.test(t))).toBe(true);
+    expect(titles.some(t => /OPUS/i.test(t))).toBe(true);
+  });
+
+  it("handles content replacement revision and commits only the replaced item", async () => {
+    const replaceScope = { ...scope, conversationKey: `repair:replace:${tenantId}` };
+    const initialBriefing = validateModelBriefing(
+      {
+        items: [
+          { kind: "new_work", title: "Pick up the laundry from Coast", quote: "picking up the laundry from Coast", day: "tomorrow", date: "2026-10-16", timingWords: "", quantity: 0, people: [], place: "Coast", needs: "", intent: "commitment", executionType: "field" },
+        ],
+        context: [],
+        questions: [],
+      },
+      { tenantId, utterance: "Put picking up the laundry from Coast on the day line for tomorrow", clock, vocabulary: [] }
+    );
+    const revised = reviseBriefing(
+      initialBriefing,
+      "Actually change the Coast pickup to picking up the KITH TREATS aprons on Rodeo Drive",
+      clock
+    );
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.title).toMatch(/KITH TREATS.*aprons/i);
+    expect(revised.items[0]!.title).not.toMatch(/Coast/i);
+    const result = await commitBriefing(revised, replaceScope);
+    expect(result.failed).toEqual([]);
+    expect(result.added).toHaveLength(1);
+    const [rows] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM day_director_commitments WHERE tenantId = ? AND title LIKE '%KITH TREATS%'",
+      [tenantId]
+    );
+    expect(rows).toHaveLength(1);
+    const [coastRows] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM day_director_commitments WHERE tenantId = ? AND title LIKE '%Coast%'",
+      [tenantId]
+    );
+    expect(coastRows).toHaveLength(0);
   });
 });

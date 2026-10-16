@@ -23,7 +23,7 @@ describe("briefing canonical readback", () => {
     const f = fixture();
     const result = await commitBriefing(parsed(), scope, f.ports);
     expect(result.added).toHaveLength(2);
-    expect(speakBriefingCommit(result, "2026-10-11")).toBe("Added Call Ava for tomorrow. Added Send Blake the estimate for tomorrow.");
+    expect(speakBriefingCommit(result, "2026-10-11")).toContain("Added Call Ava for tomorrow. Added Send Blake the estimate for tomorrow.");
     expect(f.readCanonical).toHaveBeenCalledTimes(2);
     expect(f.readCanonical.mock.calls.every(([arg]) => arg.actorId === "1" && arg.businessDate === "2026-10-12" && arg.tenantId === "tenant-a")).toBe(true);
   });

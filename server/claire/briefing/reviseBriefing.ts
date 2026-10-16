@@ -1,5 +1,6 @@
 import { dayMention, parseTiming, spokenDay } from "./briefingTiming";
 import type { BriefingClock, ParsedBriefing } from "./briefingTypes";
+import { parseBriefingDeterministically } from "./deterministicBriefing";
 
 /**
  * Changes to a list Claire is holding, said the way people say them:
@@ -45,6 +46,36 @@ export function reviseBriefing(
     if (targets.length === 1) {
       items = items.filter(item => item !== targets[0]);
       changes.push(`Took "${targets[0]!.title}" off the list.`);
+    }
+  }
+
+  const replacementMatch =
+    /^(?:(?:actually|no|sorry|wait|scratch that)[,\s]+)*(?:change|replace|swap|switch|update|make)\s+(?:that|the|this|my)?\s*(.+?)\s+(?:to|with|into)\s+(.+)$/i.exec(
+      utterance.trim()
+    );
+  if (!removal && replacementMatch) {
+    const targetPhrase = replacementMatch[1]!.toLowerCase();
+    const newPhrase = replacementMatch[2]!.trim();
+    const targets = mentioned(targetPhrase);
+    if (targets.length === 1) {
+      const target = targets[0]!;
+      const replacementParsed = parseBriefingDeterministically(newPhrase, clock);
+      if (replacementParsed.items.length >= 1) {
+        const hasExplicitDay = Boolean(dayMention(newPhrase, clock.today));
+        const replacements = replacementParsed.items.map(rep => ({
+          ...rep,
+          businessDate: hasExplicitDay ? rep.businessDate : target.businessDate,
+          timing: rep.timing.kind !== "none" ? rep.timing : target.timing,
+        }));
+        const idx = items.indexOf(target);
+        if (idx !== -1) {
+          items.splice(idx, 1, ...replacements);
+          changes.push(
+            `Changed "${target.title}" to "${replacements.map(r => r.title).join(", ")}".`
+          );
+          return { parsed: { ...parsed, items }, changes };
+        }
+      }
     }
   }
 

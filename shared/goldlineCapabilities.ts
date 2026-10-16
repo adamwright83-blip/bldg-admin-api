@@ -122,8 +122,7 @@ export function formatCapabilityBriefing(
     unsupported.length
       ? `Not yet supported: ${unsupported.join(", ")}. If asked, say so and offer engineering; never pretend.`
       : "",
-    "Claire can place authorized scheduled calls to the operator, including morning readiness and evening debrief. Never deny that capability. A particular call or disconnect cause is unknown unless a call event is supplied. This does not authorize customer outreach.",
-    "The registry describes platform capabilities; absence from it is not evidence that a specific call did not happen.",
+    "The registry is authoritative.",
   ]
     .filter(Boolean)
     .join(" ");

@@ -19,7 +19,7 @@ const ACTION = `(?:${ACTION_WORDS})`;
 
 const LEAD_IN = new RegExp(
   "^(?:(?:and|so|also|plus|oh|um|uh|okay|ok|alright|well|yes|yeah|then|and then|next|after that|first|second|third|finally|lastly|morning|good morning|hey|hi|claire|hey claire)[,.\\s]+)*" +
-    "(?:(?:i|we) (?:still )?(?:need|have|has|got|gotta|'ve got|should|must|want) (?:to )?|(?:still )?(?:need|have|got|gotta) to |i need |we need |i'?ll |i will |let'?s |remember to |don'?t forget to |remind me to |make sure (?:i |to )?|gotta |also )?",
+    "(?:(?:i|we) (?:still )?(?:need|have|has|got|gotta|'ve got|should|must|want) (?:to )?|(?:still )?(?:need|have|got|gotta) to |i need |we need |i'?ll |i will |let'?s |remember to |don'?t forget to |remind me to |make sure (?:i |to )?|gotta |also |(?:just\\s+)?(?:add|put|place|log|save|track)\\s+(?=(?:pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|text|email|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press)\\b))?",
   "i"
 );
 
@@ -345,7 +345,13 @@ export function parseBriefingDeterministically(utterance: string, clock: Briefin
       }
       const clauseDay = dayMention(bare, clock.today);
       const businessDate = clauseDay ? clauseDay.ymd : sectionDay;
-      const withoutDay = stripLeadIn(tidy(bare.replace(DAY_WORDS, " ")));
+      const withoutDay = stripLeadIn(
+        tidy(
+          bare
+            .replace(/\s+(?:on|onto|to|in)\s+(?:the\s+|my\s+)?day\s*line(?:\s+as\s+a\s+(?:challenge|mission))?\.?$/i, "")
+            .replace(DAY_WORDS, " ")
+        )
+      );
       const leading = LEADING_TIMING.test(withoutDay);
       const parsedTiming = completed
         ? { timing: { kind: "none" } as BriefingTiming, remainder: withoutDay }
@@ -356,6 +362,7 @@ export function parseBriefingDeterministically(utterance: string, clock: Briefin
       const title = capitalizeFirst(
         tidy(
           stripLeadIn(parsedTiming.remainder)
+            .replace(/\s+(?:on|onto|to|in)\s+(?:the\s+|my\s+)?day\s*line(?:\s+as\s+a\s+(?:challenge|mission))?$/i, "")
             .replace(/\b(?:any ?time|sometime|some time)\b\s*$/i, "")
             .replace(/\s*,\s*(?=for\b)/i, " ")
             .replace(/\bwindow\b\s*$/i, "")

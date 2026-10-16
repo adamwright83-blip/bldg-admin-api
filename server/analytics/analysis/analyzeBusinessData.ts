@@ -383,6 +383,9 @@ function coverageFact(dataset: ApprovedDataset, fact: string): string {
 function sourcePopulationUnobserved(dataset: ApprovedDataset): boolean {
   if ((dataset.tables.orders?.length ?? 0) > 0) return false;
   if ((dataset.tables.customers?.length ?? 0) > 0) return false;
+  if ((dataset.tables.commercial_accounts?.length ?? 0) > 0) return false;
+  if ((dataset.tables.outreach_interventions?.length ?? 0) > 0) return false;
+  if ((dataset.tables.day_line_commitments?.length ?? 0) > 0) return false;
   if (dataset.completeness !== "complete") return true;
   if (coverageFact(dataset, "exact_sales_allowed") === "false") return true;
   const failed = coverageFact(dataset, "sources_failed");
@@ -444,7 +447,16 @@ function renderEvidence(
     .slice(0, 5)
     .map(row => {
       const fields = result.columns.slice(0, 10).flatMap((column, i) => {
-        if (["customer_id", "order_ref"].includes(column) || row[i] === null)
+        if (
+          [
+            "customer_id",
+            "order_ref",
+            "account_ref",
+            "intervention_ref",
+            "commitment_ref",
+          ].includes(column) ||
+          row[i] === null
+        )
           return [];
         const unit =
           result.monetaryUnits?.[column.toLowerCase()] ??
