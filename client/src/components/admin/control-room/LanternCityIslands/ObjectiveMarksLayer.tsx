@@ -3,9 +3,10 @@ import { trpc } from "@/lib/trpc";
 import type { IslandBoard } from "./islandBoard";
 import {
   LEVEL_LABEL,
-  TODAY_STATUS_LINE,
   buildObjectiveMarkers,
   driverLinkForRun,
+  heroTodayNotice,
+  type DriverCurrentStop,
   type ObjectiveMarker,
 } from "./objectiveMarksView";
 import styles from "./lantern-city-islands.module.css";
@@ -27,10 +28,13 @@ export default function ObjectiveMarksLayer({
   board,
   ready,
   onNavigate,
+  driverCurrentStop = null,
 }: {
   board: RefObject<IslandBoard | null>;
   ready: boolean;
   onNavigate?: (path: string) => void;
+  /** Home's current executable stop. Does not add a click or a map marker. */
+  driverCurrentStop?: DriverCurrentStop | null;
 }) {
   const marks = trpc.system.lanternCity.objectiveMarks.useQuery(undefined, {
     staleTime: 15_000,
@@ -76,11 +80,15 @@ export default function ObjectiveMarksLayer({
   }, [markers, open]);
 
   const today = marks.data?.today ?? null;
-  const statusLine = marks.isError
-    ? "Today's targets could not load. Nothing is lit until they do."
+  const notice = marks.isError
+    ? { kind: "status" as const, line: "Today's targets could not load. Nothing is lit until they do." }
     : marks.data
-      ? TODAY_STATUS_LINE[marks.data.todayStatus]
-      : null;
+      ? heroTodayNotice({
+          todayStatus: marks.data.todayStatus,
+          driverStop: driverCurrentStop,
+        })
+      : { kind: "status" as const, line: null };
+  const statusLine = notice.kind === "status" ? notice.line : null;
 
   return (
     <>
@@ -124,6 +132,16 @@ export default function ObjectiveMarksLayer({
               Open in Driver
             </button>
           ) : null}
+        </div>
+      ) : notice.kind === "current-stop" ? (
+        <div
+          className={styles.todayBar}
+          data-lantern-today="driver-stop"
+          data-driver-stop-id={notice.id}
+        >
+          <span className={styles.todayKicker}>Today</span>
+          <b>{notice.title}</b>
+          <span>{notice.line}</span>
         </div>
       ) : statusLine ? (
         <div className={styles.todayBar} data-lantern-today="empty">
