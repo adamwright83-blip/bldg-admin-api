@@ -364,8 +364,8 @@ function ActivateRoutine({ calls, onChanged }: { calls: unknown; onChanged: () =
   const data = calls as DailyCalls | null;
   const zone = data?.timeZone ?? null;
   const plans = [
-    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–9:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "09:00" },
-    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "Monday–Saturday, 5:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6], start: "17:30", end: "19:00" },
+    { purpose: "morning_readiness" as const, label: "Morning readiness", when: "every day, 7:30–8:00 AM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "07:30", end: "08:00" },
+    { purpose: "evening_debrief" as const, label: "Evening debrief", when: "every day, 6:30–7:00 PM", weekdays: [1, 2, 3, 4, 5, 6, 7], start: "18:30", end: "19:00" },
   ];
   // Rows stay visible while they show this session's verified result.
   const off = plans.filter(p => !(data?.[p.purpose] as { enabled?: boolean } | undefined)?.enabled || result[p.purpose]);

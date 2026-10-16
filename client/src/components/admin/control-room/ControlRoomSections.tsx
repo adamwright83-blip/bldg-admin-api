@@ -183,8 +183,8 @@ export function MoneyControlRoom() {
         clearentKnown: typeof collected.data?.clearentCents === "number",
         coverage: collected.data?.coverage ?? null,
       });
-  const failedSources = new Set(collected.data?.coverage?.failedSources ?? []);
-  const darkSources = new Set(
+  const failedSources = new Set<string>(collected.data?.coverage?.failedSources ?? []);
+  const darkSources = new Set<string>(
     collected.data?.coverage?.incompleteForWindow ? collected.data.coverage.affectedSources ?? [] : []
   );
   const sourceState = (sourceId: string, known: boolean, cents: number | null | undefined, dark: string) => {
