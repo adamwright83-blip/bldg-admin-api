@@ -559,12 +559,12 @@ async function missionProjection(input: {
   };
 }
 
-export async function getCurrentOpenChannelMission(input: {
+/** Read the current mission. Does not create tables. */
+export async function readCurrentOpenChannelMission(input: {
   tenantId: string;
   driverId: string;
   businessDate: string;
 }): Promise<OpenChannelMission | null> {
-  await ensureOpenChannelTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [mission] = await db
@@ -583,6 +583,15 @@ export async function getCurrentOpenChannelMission(input: {
   return mission
     ? missionProjection({ tenantId: input.tenantId, missionId: mission.id })
     : null;
+}
+
+export async function getCurrentOpenChannelMission(input: {
+  tenantId: string;
+  driverId: string;
+  businessDate: string;
+}): Promise<OpenChannelMission | null> {
+  await ensureOpenChannelTables();
+  return readCurrentOpenChannelMission(input);
 }
 
 export async function getGoldlineProgress(input: {

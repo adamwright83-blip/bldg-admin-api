@@ -401,6 +401,18 @@ function commercialStop(
   };
 }
 
+/** Stops the driver can start. The Day Plan's next stop is the first of these. */
+export function executableDayLineStops(
+  stops: readonly DayPlanStop[]
+): DayPlanStop[] {
+  return stops.filter(
+    stop =>
+      stop.status !== "completed" &&
+      stop.status !== "cancelled" &&
+      stop.status !== "blocked"
+  );
+}
+
 export function buildDayPlanProjection(input: {
   businessDate: string;
   pickups?: Order[];

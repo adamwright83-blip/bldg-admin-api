@@ -111,6 +111,26 @@ function rankingStatusFor(
   return "ranked";
 }
 
+/** The operator-designated primary for this date. Same rule the driver day line uses. */
+export function operatorDesignatedMission(
+  commitments: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    sourceText?: string | null;
+    command?: { role?: string | null; designatedAt?: string | null } | null;
+    operatorMission?: { completionCondition: string } | null;
+  }>,
+  outcome?: MissionPlanOutcome
+): { id: string; title: string } | null {
+  const picked = operatorDesignation(
+    { commitments: commitments as DayState["commitments"] } as DayState,
+    outcome,
+    []
+  );
+  return picked ? { id: picked.id, title: picked.title } : null;
+}
+
 function operatorDesignation(
   state: DayState | null,
   outcome?: MissionPlanOutcome,

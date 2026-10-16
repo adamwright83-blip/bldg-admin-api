@@ -39,6 +39,7 @@ import {
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
+  executableDayLineStops,
   type DayPlanStop,
   type LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
@@ -889,13 +890,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     stop => stop.status === "completed"
   ).length;
   const progress = plan.stops.length ? completedCount / plan.stops.length : 0;
-  const nextStop =
-    plan.stops.find(
-      stop =>
-        stop.status !== "completed" &&
-        stop.status !== "cancelled" &&
-        stop.status !== "blocked"
-    ) ?? null;
+  const nextStop = executableDayLineStops(plan.stops)[0] ?? null;
   const startNext = () => {
     if (!nextStop) return props.onOpenImport();
     selectStop(nextStop);
