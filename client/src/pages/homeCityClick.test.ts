@@ -17,6 +17,9 @@ const MEI: HomeCityCustomer = {
   location: {
     latitude: 34.098,
     longitude: -118.267,
+    x: 0,
+    y: 0,
+    outOfBounds: false,
     canonicalAddress: "2418 Silver Lake Blvd, Los Angeles, CA 90039",
   },
 };
