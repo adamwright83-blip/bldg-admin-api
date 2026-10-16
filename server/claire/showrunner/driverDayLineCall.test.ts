@@ -10,6 +10,7 @@ import {
   liveObjectivesFromFieldToday,
 } from "../../../client/src/pages/driver/goldlineDayPlanModel";
 import type { FieldTodayItem, FieldTodayProjection } from "../../field/types";
+import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
 import { buildShowrunnerBriefing, showrunnerOpening } from "./showrunnerBriefing";
 import { runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
 import {
@@ -440,6 +441,12 @@ describe("driver Day Line on the Claire call", () => {
         readOpenChannel: async () => draftBriefing,
       });
     const spoken: Record<string, string> = {};
+    const readDayDirector = vi.fn<typeof getDayDirectorState>(async () => ({
+      processingLocation: null,
+      commitments: [],
+      dismissedPromptKeys: [],
+      intelligenceAvailable: false,
+    }));
     for (const [purpose, now] of [
       ["morning_readiness", morningNow],
       ["evening_debrief", eveningNow],
@@ -450,6 +457,7 @@ describe("driver Day Line on the Claire call", () => {
         timeZone: "America/Los_Angeles",
         now,
         loadDriverDayLine,
+        getDay: readDayDirector,
       });
       expect(briefing.businessDate).toBe("2026-10-16");
       expect(briefing.driverDayLine?.read).toBe("read");
@@ -529,6 +537,13 @@ describe("driver Day Line on the Claire call", () => {
     expect(spoken.evening_debrief).toMatch(/^Hi, it's Claire for today's wrap\./);
     expect(spoken.evening_debrief).toMatch(/How did it go\?$/);
     expect(getField).toHaveBeenCalledTimes(2);
+    expect(readDayDirector).toHaveBeenCalledTimes(4);
+    expect(readDayDirector).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-a", businessDate: "2026-10-16" })
+    );
+    expect(readDayDirector).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-a", businessDate: "2026-10-17" })
+    );
   });
 
   it("the scheduled call passes that opening into the dialer", () => {

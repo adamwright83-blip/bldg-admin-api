@@ -116,6 +116,8 @@ export async function buildShowrunnerBriefing(input: {
   timeZone: string;
   now: Date;
   loadDriverDayLine?: typeof loadDriverDayLineForCall;
+  /** Test seam. Production callers keep the live day-director read. */
+  getDay?: typeof getDayDirectorState;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -126,9 +128,10 @@ export async function buildShowrunnerBriefing(input: {
     actorIds: identity.dayDirectorActorIds,
     canonicalOperatorId: identity.canonicalOperatorId,
   };
+  const getDay = input.getDay ?? getDayDirectorState;
   const [todayState, tomorrowState] = await Promise.all([
-    getDayDirectorState({ ...stateArgs, businessDate }),
-    getDayDirectorState({ ...stateArgs, businessDate: tomorrowDate }),
+    getDay({ ...stateArgs, businessDate }),
+    getDay({ ...stateArgs, businessDate: tomorrowDate }),
   ]);
   const weekStart = weekStartMonday(input.purpose !== "morning_readiness" ? tomorrowDate : businessDate);
   const proposal =
