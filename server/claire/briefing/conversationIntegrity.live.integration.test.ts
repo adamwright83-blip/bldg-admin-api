@@ -4,14 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runClaireTurn, type ClaireTurnState } from "../turn/claireTurn";
 import { interpretClaireBrainV3 } from "../turn/brainV3";
 import { extractBriefingWithModel } from "./llmBriefing";
+import { runScheduledClaireTurn } from "../showrunner/scheduledConversation";
+import type { ShowrunnerCallState } from "../showrunner/showrunnerTurn";
+import type { ClaireTurnDeps, ClaireTurnInput } from "../turn/claireTurn";
 import { createDatabaseConversationStateStore } from "../turn/conversationStateStore";
 
 const suite = process.env.CLAIRE_REPAIR_LIVE_MODEL === "1" ? describe : describe.skip;
 suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
   let sql: mysql.Connection;
-  const tenantId = `claire-live-${randomUUID().slice(0, 8)}`;
-  const key = `claire-repair-live:${tenantId}`;
-  const owner = { tenantId, operatorUserId: "repair-operator", surface: "voice" as const };
   const now = new Date("2026-10-16T00:30:00Z");
   beforeAll(async () => {
     const url = process.env.DATABASE_URL;
@@ -23,7 +23,19 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
   });
   afterAll(async () => { await sql?.end(); });
 
-  it("retains the day, distinguishes ad copy, saves only the requested campaign, and survives every reload", async () => {
+  it.each(["ordinary", "morning_readiness", "evening_debrief"] as const)("%s: retains the day, distinguishes ad copy, saves only the requested campaign, and survives every reload", async mode => {
+    const tenantId = `claire-live-${randomUUID().slice(0, 8)}`;
+    const key = `claire-repair-live:${tenantId}`;
+    const owner = { tenantId, operatorUserId: "repair-operator", surface: "voice" as const };
+    const initial: ClaireTurnState & { showrunner?: ShowrunnerCallState } = {};
+    if (mode !== "ordinary") initial.showrunner = {
+      purpose: mode, tenantId, canonicalOperatorId: owner.operatorUserId, operatorUserId: owner.operatorUserId,
+      dayDirectorActorId: "1", dayDirectorActorIds: ["1"], timeZone: "America/Los_Angeles", businessDate: "2026-10-15",
+      turns: 0, replan: null, captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
+      briefing: { purpose: mode, businessDate: "2026-10-15", weekday: "Thursday", objective: "Conversation repair acceptance",
+        weekPlan: null, today: [], tomorrow: [], developments: [], pendingDecision: null, adaptations: [], uncertain: [],
+        weekToDate: { reportedOutcomes: [], planChanges: [] } },
+    };
     const transcript: Array<{ operator: string; claire: string }> = [];
     const turns = [
       "I have 3 dry cleaning orders. I need to see if those have been charged yet. If not, I need to charge them. I need to deliver 2 of them tonight.",
@@ -35,16 +47,19 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
     for (const utterance of turns) {
       // Fresh adapter instance each turn: success cannot depend on a process-local Map.
       const store = createDatabaseConversationStateStore();
-      const previous = await store.load<ClaireTurnState>(key);
-      const state = previous?.state ?? {};
-      const result = await runClaireTurn({ tenantId, operatorUserId: owner.operatorUserId, dayDirectorActorId: "1", surface: "voice",
-        utterance, state, conversationKey: key, allowFragmentWait: false }, {
+      const previous = await store.load<typeof initial>(key);
+      const state = previous?.state ?? initial;
+      const input: ClaireTurnInput & { state: typeof initial } = { tenantId, operatorUserId: owner.operatorUserId, dayDirectorActorId: "1", surface: "voice",
+        utterance, state, conversationKey: key, allowFragmentWait: false };
+      const deps: Partial<ClaireTurnDeps> = {
         now: () => now, timeZone: () => "America/Los_Angeles",
         brainV3: interpretClaireBrainV3, extractModel: extractBriefingWithModel,
         // Empty isolated business fixture, not a substituted interpretation or write path.
         business: { plan: async () => null }, vocabulary: async () => [], accounts: async () => [], campaign: async () => null,
         searchMemory: async () => [], memoryBetween: async () => [], encyclopedia: null, watchBoard: undefined, doctrineTurn: undefined,
-      });
+      };
+      const result = mode === "ordinary" ? await runClaireTurn(input, deps)
+        : await runScheduledClaireTurn(input, { turn: deps, showrunner: { now } });
       transcript.push({ operator: utterance, claire: result.speak });
       await store.save(key, owner, state, 600_000);
       if (utterance !== turns.at(-1)) {
@@ -64,6 +79,6 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
     expect(restored?.persistence).toBe("durable");
     expect(restored?.state.history?.filter(h => h.speaker === "operator")).toHaveLength(5);
     expect(JSON.stringify(restored?.state.heldBriefingItems)).toMatch(/dry cleaning/i);
-    console.info("CLAIRE_LIVE_REPLAY", JSON.stringify({ transcript, rows: rows.map(r => ({ id: r.id, title: r.title, date: r.businessDate, metadata: r.metadataJson })) }));
+    console.info("CLAIRE_LIVE_REPLAY", JSON.stringify({ mode, transcript, rows: rows.map(r => ({ id: r.id, title: r.title, date: r.businessDate, metadata: r.metadataJson })) }));
   }, 180_000);
 });
