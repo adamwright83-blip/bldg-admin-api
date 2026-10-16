@@ -297,7 +297,7 @@ async function applySchema() {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_tenant_provider_usage (tenantId, month, provider, category)
     )`,
-    `CREATE TABLE dayforge_saas_subscriptions (
+    `CREATE TABLE dayforge_saas_subscriptions ( -- legacy compatibility: exact historical table the usage reader still queries
       id INT AUTO_INCREMENT PRIMARY KEY,
       tenantId VARCHAR(64) NOT NULL,
       planKey VARCHAR(96) NOT NULL
