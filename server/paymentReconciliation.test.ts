@@ -3,6 +3,8 @@ import {
   buildSourceCoverageRows,
   chooseCleanCloudCandidatesForDate,
   dedupeCleanCloudCandidates,
+  evaluateIgnore,
+  evaluateManualMatch,
   reconcileClearentDailySummaryWithCleanCloudCandidates,
   reconciledCustomerRevenueCents,
   type CleanCloudCandidateOrder,
@@ -216,5 +218,70 @@ describe("Clearent / CleanCloud reconciliation", () => {
       .filter((row) => row.comparable && row.status === "needs_review")
       .reduce((sum, row) => sum + row.unresolvedDeltaCents, 0);
     expect(unresolvedDelta).toBe(-2115);
+  });
+});
+
+describe("operator reconciliation decisions", () => {
+  const order = candidate({ id: 9, totalCents: 4200, paymentDateUtc: new Date("2026-05-12T20:00:00.000Z") });
+  const transaction = { id: 3, grossAmountCents: 4200, enteredDateUtc: new Date("2026-05-12T20:00:00.000Z") };
+
+  it("refuses a match that is not confirmed or that uses an order total as captured money", () => {
+    expect(evaluateManualMatch({
+      tenantId: "default",
+      confirmed: false,
+      requestId: "11111111-1111-4111-8111-111111111111",
+      candidate: order,
+      transaction,
+      existing: [],
+    })).toMatchObject({ ok: false });
+    expect(evaluateManualMatch({
+      tenantId: "default",
+      confirmed: true,
+      requestId: "11111111-1111-4111-8111-111111111111",
+      candidate: order,
+      transaction: { ...transaction, grossAmountCents: 1000 },
+      existing: [],
+    }).ok).toBe(false);
+    expect(evaluateManualMatch({
+      tenantId: "laundry_farm",
+      confirmed: true,
+      requestId: "11111111-1111-4111-8111-111111111111",
+      candidate: { ...order, tenantId: "laundry_farm" },
+      transaction,
+      existing: [],
+    })).toMatchObject({ ok: false, reason: "Clearent transactions are not authorized for this tenant." });
+  });
+
+  it("records the Clearent gross amount when it agrees with the stored order total", () => {
+    expect(evaluateManualMatch({
+      tenantId: "default",
+      confirmed: true,
+      requestId: "11111111-1111-4111-8111-111111111111",
+      candidate: order,
+      transaction,
+      existing: [],
+    })).toMatchObject({
+      ok: true,
+      outcome: "record",
+      matchedAmountCents: 4200,
+      amountSource: "clearent_transaction_gross",
+    });
+  });
+
+  it("blocks ignoring a row that is already counted as reconciled revenue", () => {
+    expect(evaluateIgnore({
+      tenantId: "default",
+      confirmed: true,
+      requestId: "22222222-2222-4222-8222-222222222222",
+      reason: "operator review",
+      match: { id: 1, tenantId: "default", matchStatus: "manual_match", matchedAmountCents: 4200, requestId: null },
+    })).toMatchObject({ ok: false });
+    expect(evaluateIgnore({
+      tenantId: "default",
+      confirmed: true,
+      requestId: "22222222-2222-4222-8222-222222222222",
+      reason: "daily total is not one order",
+      match: { id: 4, tenantId: "default", matchStatus: "needs_review", matchedAmountCents: 0, requestId: null },
+    })).toMatchObject({ ok: true, outcome: "record", matchedAmountCents: 0 });
   });
 });
