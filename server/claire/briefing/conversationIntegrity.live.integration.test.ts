@@ -7,6 +7,7 @@ import { extractBriefingWithModel } from "./llmBriefing";
 import { runScheduledClaireTurn } from "../showrunner/scheduledConversation";
 import type { ShowrunnerCallState } from "../showrunner/showrunnerTurn";
 import type { ClaireTurnDeps, ClaireTurnInput } from "../turn/claireTurn";
+import { assembleClaireDriveContext } from "../contextAssembler";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { createDatabaseConversationStateStore } from "../turn/conversationStateStore";
 
@@ -59,7 +60,8 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
       const previous = await store.load<typeof initial>(key);
       const state = previous?.state ?? initial;
       const input: ClaireTurnInput & { state: typeof initial } = { tenantId, operatorUserId: owner.operatorUserId, dayDirectorActorId: identity.dayDirectorActorId, surface: "voice",
-        utterance, state, conversationKey: key, allowFragmentWait: false };
+        utterance, state, conversationKey: key, allowFragmentWait: false,
+        context: await assembleClaireDriveContext({ tenantId, actorId: identity.dayDirectorActorId, phase: "pre_drive", now, timeZone: "America/Los_Angeles" }) };
       const deps: Partial<ClaireTurnDeps> = {
         now: () => now, timeZone: () => "America/Los_Angeles",
         brainV3: async input => {

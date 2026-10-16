@@ -28,7 +28,7 @@ function spokenTitle(item: BriefingItem): string {
 }
 
 function spokenItem(item: BriefingItem): string {
-  const timing = item.timing.kind === "none" ? "" : ` ${item.timing.label}`;
+  const timing = item.timing.kind === "none" || item.title.toLowerCase().endsWith(item.timing.label.toLowerCase()) ? "" : ` ${item.timing.label}`;
   return `${spokenTitle(item)}${timing}`;
 }
 
