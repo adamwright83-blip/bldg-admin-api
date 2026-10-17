@@ -10,6 +10,8 @@ import {
   previousBusinessDay,
   proactiveWeeklyLine,
   remainingWeekHorizon,
+  strategicPlanningHorizon,
+  actionableDates,
   weeklySessionKey,
 } from "./weeklyMissionReadiness";
 
@@ -97,5 +99,21 @@ describe("bind and revise language", () => {
     expect(proactiveWeeklyLine(remainingWeekHorizon({ businessDate: "2026-09-21", localTime: "08:05" }))).toMatch(
       /still open/
     );
+  });
+});
+
+
+describe("strategic preparation and readers share a horizon", () => {
+  it.each([
+    ["2026-10-16", "16:59", "2026-10-12", "2026-10-16"],
+    ["2026-10-16", "17:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-17", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-18", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-19", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-15", "18:00", "2026-10-12", "2026-10-16"],
+  ])("%s at %s prepares and reads week %s", (businessDate, localTime, weekStart, firstDate) => {
+    const horizon = strategicPlanningHorizon({ businessDate, localTime });
+    expect(horizon.weekStart).toBe(weekStart);
+    expect(actionableDates(horizon)[0]).toBe(firstDate);
   });
 });

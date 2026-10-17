@@ -1,3 +1,7 @@
+import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
+import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
+import type { ClaireTurnState } from "../turn/claireTurn";
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -226,7 +230,7 @@ export const weeklyMissionRouter = router({
       if (!zone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure the business timezone before planning" });
       const key = `claire-desk-comms:${identity.tenantId}:${identity.canonicalOperatorId}:${input.sessionId}`;
       const owner = { tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, surface: "voice" as const };
-      type Session = { showrunner: ShowrunnerCallState; history: Array<{ speaker: string; text: string }> };
+      type Session = { ledgerState?: ClaireTurnState; showrunner: ShowrunnerCallState; history: Array<{ speaker: string; text: string }> };
       const store = claireConversationStateStore();
       const stored = await store.load<Session>(key);
       const now = new Date();
@@ -285,14 +289,39 @@ export const weeklyMissionRouter = router({
         await store.save(key, owner, session, 2 * 3600_000);
         return voiced({ speak, heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: false });
       }
+      const ledgerEnabled = isClaireWorkLedgerEnabled();
+      if (ledgerEnabled) {
+        const ledgerState = session.ledgerState ??= {};
+        ledgerState.workLedgerOwnsDayLine = true;
+        ledgerState.history = session.history.map((turn, index) => ({
+          speaker: turn.speaker === "operator" ? "operator" as const : "claire" as const,
+          text: turn.text, at: now.getTime() - session.history.length + index,
+        }));
+        const ledger = await runWorkLedgerTurn({
+          tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId,
+          dayDirectorActorId: identity.dayDirectorActorId, conversationKey: key,
+          surface: "text", utterance, state: ledgerState, timeZone: zone, sessionKind: "desk_planning",
+          sourceEventId: `desk_comms:${input.sessionId}:${session.showrunner.turns + 1}`,
+        });
+        if (ledger.handled) {
+          session.showrunner.turns += 1;
+          session.history = (ledgerState.history ?? []).map(({ speaker, text }) => ({ speaker, text }));
+          await store.save(key, owner, session, 2 * 3600_000);
+          return voiced({ speak: ledger.result.speak, heard: utterance,
+            saved: ledger.result.actionIds?.length ? [ledger.result.speak] : [], awaitingApproval: null,
+            end: Boolean(ledger.result.endCall), transcriptionFailed: false });
+        }
+      }
       const turn = await runShowrunnerTurn({
         state: session.showrunner,
+        ...(ledgerEnabled ? { workLedger: { section: workLedgerPromptSection(session.ledgerState!, session.showrunner.businessDate) } } : {}),
         history: session.history,
         utterance,
         sourceEventId: `desk_comms:${input.sessionId}:${session.showrunner.turns + 1}`,
         conversationKey: key,
       });
       session = {
+        ledgerState: session.ledgerState,
         showrunner: turn.state,
         history: [...session.history, { speaker: "operator", text: utterance }, { speaker: "claire", text: turn.speak }].slice(-30),
       };
@@ -322,9 +351,7 @@ export const weeklyMissionRouter = router({
         });
       const now = new Date();
       const date = formatInTimeZone(now, zone, "yyyy-MM-dd");
-      const weekday = Number(formatInTimeZone(now, zone, "i"));
-      const start =
-        weekday >= 6 ? addDaysYmd(date, 8 - weekday) : weekStartMonday(date);
+      const start = strategicPlanningHorizon({ businessDate: date, localTime: formatInTimeZone(now, zone, "HH:mm") }).weekStart;
       const proposal = await latestStrategicProposal(identity, start);
       const responses = proposal
         ? await strategicResponses(identity, proposal.id)

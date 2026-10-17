@@ -6,7 +6,7 @@ import { canonicalJsonStringify } from "./snapshotBuilder";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   actionableDates,
-  remainingWeekHorizon,
+  strategicPlanningHorizon,
   targetWeekHorizon,
   addDaysYmd,
 } from "../../shared/weeklyMissionReadiness";
@@ -113,18 +113,9 @@ export async function prepareStrategicProposal(input: {
   await invalidateUnresolvedTemplateGeography(identity.tenantId);
   const businessDate = formatInTimeZone(now, input.timeZone, "yyyy-MM-dd");
   const localTime = formatInTimeZone(now, input.timeZone, "HH:mm");
-  const isoWeekday = Number(formatInTimeZone(now, input.timeZone, "i"));
-  const thisWeek = remainingWeekHorizon({ businessDate, localTime });
-  // Weekends, and a Friday whose execution window has closed, plan next week.
   const horizon = input.weekStart
     ? targetWeekHorizon({ businessDate, localTime, weekStart: input.weekStart })
-    : isoWeekday >= 6 || actionableDates(thisWeek).length === 0
-      ? targetWeekHorizon({
-          businessDate,
-          localTime,
-          weekStart: addDaysYmd(businessDate, 8 - isoWeekday),
-        })
-      : thisWeek;
+    : strategicPlanningHorizon({ businessDate, localTime });
   // New work is never dated to a business day whose useful window has closed.
   const planDates = actionableDates(horizon);
   const diagnosis = await refreshStrategicDiagnosis({

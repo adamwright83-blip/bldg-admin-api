@@ -1,3 +1,4 @@
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -133,7 +134,7 @@ export async function buildShowrunnerBriefing(input: {
     getDay({ ...stateArgs, businessDate }),
     getDay({ ...stateArgs, businessDate: tomorrowDate }),
   ]);
-  const weekStart = weekStartMonday(input.purpose !== "morning_readiness" ? tomorrowDate : businessDate);
+  const weekStart = strategicPlanningHorizon({ businessDate, localTime: formatInTimeZone(now, timeZone, "HH:mm") }).weekStart;
   const proposal =
     (await latestStrategicProposal(identity, weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));

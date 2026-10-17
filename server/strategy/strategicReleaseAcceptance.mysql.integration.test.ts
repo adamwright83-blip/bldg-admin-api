@@ -68,7 +68,7 @@ import {
 } from "../claire/weeklyMission/session";
 import {
   emptyDraft,
-  remainingWeekHorizon,
+  targetWeekHorizon,
 } from "../../shared/weeklyMissionReadiness";
 import { buildStrategySnapshot } from "./snapshotBuilder";
 import {
@@ -293,7 +293,8 @@ describeMysql(
       for (const utterance of controls) {
         const proposal = await fresh(utterance);
         const draft = emptyDraft(
-          remainingWeekHorizon({
+          targetWeekHorizon({
+            weekStart: base.weekStart,
             businessDate: base.businessDate,
             localTime: formatInTimeZone(new Date(), zone, "HH:mm"),
           }),
@@ -490,7 +491,8 @@ describeMysql(
       }
       async function voiceFixture(p: typeof base) {
         const draft = emptyDraft(
-          remainingWeekHorizon({
+          targetWeekHorizon({
+            weekStart: base.weekStart,
             businessDate: base.businessDate,
             localTime: "08:00",
           }),
@@ -713,7 +715,8 @@ describeMysql(
         const p = await fresh(`queued-${action}`);
         const step = await queued(p);
         const draft = emptyDraft(
-          remainingWeekHorizon({
+          targetWeekHorizon({
+            weekStart: base.weekStart,
             businessDate: base.businessDate,
             localTime: "08:00",
           }),

@@ -1,3 +1,4 @@
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -33,7 +34,7 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
   const tomorrow = addDaysYmd(businessDate, 1);
   const briefing = await buildShowrunnerBriefing({ identity, purpose: "desk_planning", timeZone, now });
   const proposal =
-    (await latestStrategicProposal(identity, weekStartMonday(tomorrow)).catch(() => null)) ??
+    (await latestStrategicProposal(identity, strategicPlanningHorizon({ businessDate, localTime: formatInTimeZone(now, timeZone, "HH:mm") }).weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));
   const pending = briefing.pendingDecision?.items ?? [];
   const proposalItem = (id: string) => proposal?.items.find(i => i.id === id);
