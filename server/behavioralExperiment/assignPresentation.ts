@@ -83,8 +83,14 @@ export type AssignExperimentalPresentationInput = {
    * Daphne's consent, declared-preference and fatigue gate. The production
    * runtime always supplies it; Daphne then makes the draw over the frozen set.
    */
-  /** Called only when a fresh decision is needed; null means the gate cannot be evaluated. */
+  /**
+   * Called when a fresh decision is needed. Also consulted before replaying a
+   * story assignment when the caller did not already supply a plain preference.
+   * Null means the gate cannot be evaluated.
+   */
   daphne?: () => Promise<DaphnePresentationGate | null>;
+  /** The operator's declared plain preference, when the caller has already loaded it. */
+  declaredPlainPresentation?: { sourceRef: string } | null;
 };
 
 export type DaphnePresentationGate = {
@@ -96,6 +102,72 @@ export type DaphnePresentationGate = {
 export type AssignExperimentalPresentationResult =
   | { usedExperiment: true; assignment: ExperimentalAssignmentRecord }
   | { usedExperiment: false; skipReason: string; assignment: null };
+
+function isPlainBaseline(assignment: ExperimentalAssignmentRecord): boolean {
+  return assignment.assignedOption === STANDARD_PRESENTATION && assignment.preferredTemplateId == null;
+}
+
+/** Records the operator's plain request as the baseline. Does not draw an arm. */
+async function recordDeclaredPlainBaseline(input: {
+  tenantId: string;
+  operatorUserId: string;
+  correlationId: string;
+  decisionPointId: string;
+  sourceRef: string;
+  policy: BehavioralExperimentPolicy;
+  grammar: ActionGrammar;
+  registry: readonly FictionTemplate[];
+  emergency?: boolean;
+  now?: Date;
+  store?: BehavioralLedgerStore;
+  overrideExistingStory: boolean;
+}): Promise<AssignExperimentalPresentationResult> {
+  const now = new Date(Math.floor((input.now ?? new Date()).getTime() / 1000) * 1000);
+  const frozen = input.policy.enabled
+    ? freezeExperimentalOptionSet({
+        grammar: input.grammar,
+        registry: input.registry,
+        policy: input.policy,
+        emergency: input.emergency,
+      })
+    : { distribution: null };
+  const decisionPoint: DecisionPointFields = {
+    decisionPointId: input.decisionPointId,
+    availability: false,
+    eligibleOptions: [...(frozen.distribution?.options ?? [STANDARD_PRESENTATION])],
+    assignedOption: STANDARD_PRESENTATION,
+    assignmentProbability: null,
+    interventionPolicyVersion: input.policy.numericVersion,
+    interventionDefinitionVersion: input.policy.interventionDefinitionVersion,
+    proximalOutcomeWindowMinutes: input.policy.proximalOutcomeWindowMinutes,
+  };
+  const row = await recordBehavioralLedgerEvent(
+    {
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      correlationId: input.correlationId,
+      sourceSystem: sourceSystemForCorrelation(input.correlationId),
+      sourceEntityType: "mrt_decision_point",
+      sourceEntityId: input.decisionPointId,
+      eventType: "ASSIGNED",
+      occurredAt: now,
+      verificationClass: null,
+      provenance: `daphne_fatigue_throttle:explicit_dislike_reported:${input.policy.id}:${input.policy.version}`.slice(0, 191),
+      evidenceSource: `daphne_evidence:${input.sourceRef}`.slice(0, 191),
+      idempotencyKey: (input.overrideExistingStory
+        ? `mrt_plain:${input.decisionPointId}`
+        : `mrt_assignment:${input.decisionPointId}`).slice(0, 191),
+      decisionPoint,
+    },
+    input.store
+  );
+  if (!row) return { usedExperiment: false, skipReason: "unavailable", assignment: null };
+  const assignment = rowToAssignment(row);
+  if (!assignment || !isPlainBaseline(assignment)) {
+    return { usedExperiment: false, skipReason: "unavailable", assignment: null };
+  }
+  return { usedExperiment: true, assignment };
+}
 
 export async function assignExperimentalPresentation(
   input: AssignExperimentalPresentationInput
@@ -111,18 +183,63 @@ export async function assignExperimentalPresentation(
   void input.clientAssignmentProbability;
 
   const decisionPointId = presentationDecisionPointId({ correlationId, occasionId });
-  if (!input.policy.enabled) return { usedExperiment: false, skipReason: "policy_disabled", assignment: null };
+  const plainWasSupplied = input.declaredPlainPresentation !== undefined;
+  let declaredPlainRef = input.declaredPlainPresentation?.sourceRef.trim() ?? "";
+  // Experiments off (policy disabled) still honor a declared plain preference.
+  // They do not draw, and they do not replay a story assignment.
+  if (!input.policy.enabled && !declaredPlainRef && !plainWasSupplied && input.daphne) {
+    const gate = await input.daphne();
+    declaredPlainRef = gate?.declaredPlainPresentation?.sourceRef.trim() ?? "";
+  }
+  if (!input.policy.enabled && !declaredPlainRef) {
+    return { usedExperiment: false, skipReason: "policy_disabled", assignment: null };
+  }
+
   const currentlyEligible = new Set(eligibleTemplates(input.registry, input.grammar).map(t => t.id));
   const existing = await listBehavioralLedgerEventsForDecisionPoint(
     tenantId,
     decisionPointId,
     input.store
   );
-  const existingAssignment = existing
+  const existingAssignments = existing
     .filter(row => row.operatorUserId === operatorUserId)
     .map(rowToAssignment)
-    .find(Boolean);
-  if (existingAssignment && (existingAssignment.preferredTemplateId === null || currentlyEligible.has(existingAssignment.preferredTemplateId))) {
+    .filter((row): row is ExperimentalAssignmentRecord => row != null);
+  const plainBaseline = () => existingAssignments.find(isPlainBaseline);
+  const recordPlain = (sourceRef: string) => recordDeclaredPlainBaseline({
+    tenantId,
+    operatorUserId,
+    correlationId,
+    decisionPointId,
+    sourceRef,
+    policy: input.policy,
+    grammar: input.grammar,
+    registry: input.registry,
+    emergency: input.emergency,
+    now: input.now,
+    store: input.store,
+    overrideExistingStory: existingAssignments.some(row => row.preferredTemplateId != null),
+  });
+  if (declaredPlainRef) {
+    const alreadyPlain = plainBaseline();
+    if (alreadyPlain) return { usedExperiment: true, assignment: alreadyPlain };
+    return recordPlain(declaredPlainRef);
+  }
+
+  const existingAssignment = existingAssignments.find(row =>
+    row.preferredTemplateId === null || currentlyEligible.has(row.preferredTemplateId));
+  // A morning story must not replay over a plain preference declared after it.
+  if (existingAssignment?.preferredTemplateId && input.daphne && !plainWasSupplied) {
+    const gate = await input.daphne();
+    const latePlain = gate?.declaredPlainPresentation?.sourceRef.trim() ?? "";
+    if (latePlain) {
+      const alreadyPlain = plainBaseline();
+      if (alreadyPlain) return { usedExperiment: true, assignment: alreadyPlain };
+      return recordPlain(latePlain);
+    }
+    if (gate) return { usedExperiment: true, assignment: existingAssignment };
+  }
+  if (existingAssignment) {
     return { usedExperiment: true, assignment: existingAssignment };
   }
 

@@ -1,6 +1,7 @@
 import type { ActionGrammar } from "../../shared/actionGrammar";
 import { behavioralSubjectFromGrammar } from "../../shared/behavioralSubject";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
+import { STANDARD_PRESENTATION } from "../../shared/behavioralInterventionMapping";
 import { eligibleTemplates } from "../../shared/fictionTemplate";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { resolveCanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
@@ -60,30 +61,40 @@ const defaults: PresentationRuntimePorts = {
  * The Goldline presentation decision point: chooses `preferredTemplateId` for
  * one mission occasion. Daphne gates it (safe_experimentation consent, a
  * declared plain preference, fatigue from joined outcomes) and makes the draw;
- * every decision is recorded before it is returned. Without consent nothing is
- * assigned or recorded. Client grammar, template, outcome and consent claims
- * never supply authority.
+ * every decision is recorded before it is returned. A declared plain preference
+ * is the baseline even when experimentation is off. Without that preference,
+ * and without experimentation consent, nothing is assigned or recorded.
+ * Client grammar, template, outcome and consent claims never supply authority.
  */
 export async function assignAuthorizedPresentation(input: PresentationScope & { correlationId: string; occasionId: string; emergency?: boolean; now?: Date }, ports: PresentationRuntimePorts = defaults) {
   const consent = await ports.loadConsent(input);
   const unavailable = (skipReason: string) => ({ usedExperiment: false as const, skipReason, assignment: null, consent });
-  if (!consent.experimentationAllowed) return unavailable("fresh_operator_experimentation_consent_required");
+  let declaredPlain: { sourceRef: string } | null = null;
+  let plainUnreadable = false;
+  try {
+    declaredPlain = await ports.loadDeclaredPlainPresentation(input);
+  } catch {
+    plainUnreadable = true;
+  }
+  // "Keep it plain" is loaded before the experimentation gate so it cannot fall through to fiction.
+  if (!declaredPlain && !consent.experimentationAllowed) return unavailable("fresh_operator_experimentation_consent_required");
   const grammar = await ports.loadGrammar(input);
   if (!grammar || behavioralSubjectFromGrammar(grammar) !== input.correlationId) return unavailable("canonical_mission_grammar_unavailable");
   const result = await assignExperimentalPresentation({ ...input, grammar, registry: FICTION_ELIGIBILITY_CATALOG,
     policy: ports.policy ?? resolveProductionExperimentPolicy(), store: ports.store, randomInt: ports.randomInt,
+    declaredPlainPresentation: declaredPlain,
     daphne: async () => {
-      const history = await Promise.all([
-        loadPresentationAssignmentOutcomes({ tenantId: input.tenantId, operatorUserId: input.operatorUserId }, ports.store),
-        ports.loadDeclaredPlainPresentation(input),
-      ]).catch(() => null);
-      if (!history) return null;
-      const [outcomes, declaredPlainPresentation] = history;
+      if (plainUnreadable) return null;
+      const outcomes = await loadPresentationAssignmentOutcomes(
+        { tenantId: input.tenantId, operatorUserId: input.operatorUserId },
+        ports.store
+      ).catch(() => null);
+      if (!outcomes) return null;
       return {
         preferences: { adaptationEnabled: consent.adaptationAllowed, safeExperimentation: consent.experimentationAllowed,
           consentRevoked: !consent.adaptationAllowed },
         evidence: presentationOutcomesAsDaphneEvidence(outcomes),
-        declaredPlainPresentation,
+        declaredPlainPresentation: declaredPlain,
       };
     } });
   return { ...result, consent };
@@ -95,16 +106,17 @@ export async function acknowledgePresentationViewable(input: PresentationScope &
   const grammar = await ports.loadGrammar(input);
   if (!grammar || behavioralSubjectFromGrammar(grammar) !== input.correlationId) throw new Error("Canonical presentation work unavailable");
   const rows = await listBehavioralLedgerEventsForDecisionPoint(input.tenantId, input.decisionPointId, ports.store);
-  const assignment = rows.find(row => row.operatorUserId === input.operatorUserId && row.correlationId === input.correlationId && row.eventType === "ASSIGNED");
-  if (!assignment || assignment.assignedOption !== input.templateId ||
-      !eligibleTemplates(FICTION_ELIGIBILITY_CATALOG, grammar).some(t => t.id === input.templateId))
+  const assignment = rows.find(row => row.operatorUserId === input.operatorUserId && row.correlationId === input.correlationId
+    && row.eventType === "ASSIGNED" && row.assignedOption === input.templateId);
+  const plainBaseline = input.templateId === STANDARD_PRESENTATION;
+  if (!assignment || (!plainBaseline && !eligibleTemplates(FICTION_ELIGIBILITY_CATALOG, grammar).some(t => t.id === input.templateId)))
     throw new Error("Viewable report lacks a durable approved assignment");
   const row = await recordBehavioralLedgerEvent({ ...input, sourceSystem: "campaign_run", sourceEntityType: "presentation_viewable",
     sourceEntityId: input.decisionPointId, eventType: "VIEWABLE", occurredAt: new Date(), verificationClass: "CLAIMED",
     provenance: "authenticated_client_render_acknowledgment", evidenceSource: `assignment:${assignment.id}`,
     idempotencyKey: `presentation-viewable:${assignment.id}`, decisionPoint: {
-      decisionPointId: input.decisionPointId, availability: true, eligibleOptions: assignment.eligibleOptionsJson as string[],
-      assignedOption: assignment.assignedOption!, assignmentProbability: Number(assignment.assignmentProbability),
+      decisionPointId: input.decisionPointId, availability: assignment.availability !== false, eligibleOptions: assignment.eligibleOptionsJson as string[],
+      assignedOption: assignment.assignedOption!, assignmentProbability: assignment.assignmentProbability == null ? null : Number(assignment.assignmentProbability),
       interventionPolicyVersion: assignment.interventionPolicyVersion!, interventionDefinitionVersion: assignment.interventionDefinitionVersion,
       proximalOutcomeWindowMinutes: assignment.proximalOutcomeWindowMinutes!,
     } }, ports.store);

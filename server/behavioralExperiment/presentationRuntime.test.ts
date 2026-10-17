@@ -103,6 +103,32 @@ describe("authorized production presentation runtime", () => {
     const chosen = await assignAuthorizedPresentation(input, { ...ports, loadDeclaredPlainPresentation: async () => ({ sourceRef: "daphne_observations:plain-1" }) });
     expect(chosen).toMatchObject({ usedExperiment: true, assignment: { availability: false, preferredTemplateId: null } });
     expect(rows[0]).toMatchObject({ availability: false, assignedOption: "STANDARD_PRESENTATION", evidenceSource: "daphne_evidence:daphne_observations:plain-1" });
+    if (!chosen.usedExperiment) throw new Error("missing assignment");
+    const viewable = await acknowledgePresentationViewable({ ...input, decisionPointId: chosen.assignment.decisionPointId, templateId: "STANDARD_PRESENTATION" }, ports);
+    expect(viewable.recorded).toBe(true);
+    expect(rows.some(row => row.eventType === "VIEWABLE" && row.assignedOption === "STANDARD_PRESENTATION")).toBe(true);
+  });
+  it("keeps a declared plain preference when experimentation is off, including a disabled experiment policy", async () => {
+    const { rows, ports, revoke } = setup();
+    revoke();
+    const withoutConsent = await assignAuthorizedPresentation(input, { ...ports, loadDeclaredPlainPresentation: async () => ({ sourceRef: "daphne_observations:plain-1" }) });
+    expect(withoutConsent).toMatchObject({ usedExperiment: true, assignment: { assignedOption: "STANDARD_PRESENTATION", preferredTemplateId: null, availability: false } });
+    const policyOff = await assignAuthorizedPresentation(
+      { ...input, occasionId: "chapter-b" },
+      { ...ports, policy: { ...BEHAVIORAL_EXPERIMENT_POLICY_V1, enabled: false }, loadDeclaredPlainPresentation: async () => ({ sourceRef: "daphne_observations:plain-1" }), randomInt: () => { throw new Error("drew an arm"); } }
+    );
+    expect(policyOff).toMatchObject({ usedExperiment: true, assignment: { assignedOption: "STANDARD_PRESENTATION", preferredTemplateId: null } });
+    expect(rows.every(row => row.assignedOption === "STANDARD_PRESENTATION")).toBe(true);
+  });
+  it("a newly declared plain preference wins over a replayed morning story", async () => {
+    const { ports } = setup();
+    const story = await assignAuthorizedPresentation(input, ports);
+    expect(story.assignment?.preferredTemplateId).toBeTruthy();
+    const plain = await assignAuthorizedPresentation(input, { ...ports, loadDeclaredPlainPresentation: async () => ({ sourceRef: "daphne_observations:plain-2" }) });
+    expect(plain.assignment?.assignedOption).toBe("STANDARD_PRESENTATION");
+    expect(plain.assignment?.preferredTemplateId).toBeNull();
+    expect(plain.assignment?.decisionPointId).toBe(story.assignment?.decisionPointId);
+    expect(plain.assignment).not.toEqual(story.assignment);
   });
   it("abstains and writes nothing for an operator without experimentation consent, or when history cannot be read", async () => {
     const { rows, ports, revoke } = setup();

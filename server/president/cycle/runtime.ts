@@ -337,9 +337,10 @@ export async function runPresidentCycleWorkerTick() {
     };
 
   if (!presidentWorkerModelCallsEnabled()) {
-    const waiting = (await getPresidentCycleStore().list()).filter(
-      cycle => !["COMPLETE", "NO_APPROVAL"].includes(cycle.status)
-    ).length;
+    const waiting = await getPresidentCycleStore().countExcludingStatuses([
+      "COMPLETE",
+      "NO_APPROVAL",
+    ]);
     return {
       attempted: 0,
       results: [] as Array<{ cycleId: string; status: string }>,

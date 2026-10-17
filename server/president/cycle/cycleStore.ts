@@ -18,6 +18,8 @@ export interface CycleStore {
   /** Serialized read-modify-write. fn must be pure w.r.t. outside state. */
   update<T>(cycleId: string, fn: (cycle: Cycle) => T): Promise<T>;
   list(tenantId?: string): Promise<Cycle[]>;
+  /** Count rows whose status is outside `statuses`. Must not read payloadJson. */
+  countExcludingStatuses(statuses: readonly string[]): Promise<number>;
 }
 
 /**
@@ -99,6 +101,11 @@ export class FileCycleStore implements CycleStore {
       .filter(n => n.endsWith(".json"))
       .map(n => JSON.parse(readFileSync(join(this.dir, n), "utf8")) as Cycle)
       .filter(c => !tenantId || c.tenantId === tenantId);
+  }
+
+  async countExcludingStatuses(statuses: readonly string[]) {
+    const excluded = new Set(statuses);
+    return (await this.list()).filter(cycle => !excluded.has(cycle.status)).length;
   }
 }
 
@@ -213,6 +220,20 @@ export class MysqlCycleStore implements CycleStore {
       .map(id => byId.get(id))
       .filter((row): row is RowDataPacket => Boolean(row) && (!tenantId || row!.tenantId === tenantId))
       .map(cycleFromRow);
+  }
+
+  /** Status count only. A paused worker tick must not load payloadJson to learn how many cycles are open. */
+  async countExcludingStatuses(statuses: readonly string[]): Promise<number> {
+    const excluded = [...new Set(statuses.map(status => status.trim()).filter(Boolean))];
+    const [rows] = excluded.length
+      ? await this.pool.execute<RowDataPacket[]>(
+          `SELECT COUNT(*) AS waiting FROM president_autonomous_cycles WHERE status NOT IN (${excluded.map(() => "?").join(",")})`,
+          excluded
+        )
+      : await this.pool.query<RowDataPacket[]>(
+          "SELECT COUNT(*) AS waiting FROM president_autonomous_cycles"
+        );
+    return Number(rows[0]?.waiting ?? 0);
   }
 }
 

@@ -82,4 +82,12 @@ describe("resolveHomeCityClick", () => {
     expect(home).toContain("item.destinationPath");
     expect(home).not.toContain("lanternClickResolver");
   });
+
+  it("shows Opus LA and Century Park East on Home only when this business has customers there", () => {
+    const home = readFileSync(new URL("./JoystickHome.tsx", import.meta.url), "utf8");
+    expect(home).toContain("buildingsWithResidents");
+    expect(home).toContain('building.id === "opus_la"');
+    expect(home).toContain('building.id === "century_park_east"');
+    expect(home).toContain("home-click-silver-lake");
+  });
 });

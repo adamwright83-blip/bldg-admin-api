@@ -14,7 +14,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { isLiveLanternCustomer } from "@/components/admin/control-room/customerGeography";
+import { isLiveLanternCustomer, type GeographicCustomer } from "@/components/admin/control-room/customerGeography";
+import { buildingsWithResidents } from "@/components/admin/control-room/LanternCityIslands/towerStack";
 import {
   buildDayPlanProjection,
   executableDayLineStops,
@@ -191,7 +192,15 @@ export default function JoystickHome({
     [questions]
   );
 
-  const locatedCustomers = (atlas.data?.customers ?? []).filter(isLiveLanternCustomer) as HomeCityCustomer[];
+  const ownTowerBuildings = useMemo(
+    () => buildingsWithResidents(
+      ((atlas.data?.customers ?? []) as GeographicCustomer[])
+        .map(customer => customer.address ?? customer.location?.canonicalAddress ?? "")
+        .filter(Boolean)
+    ),
+    [atlas.data]
+  );
+  const locatedCustomers = ((atlas.data?.customers ?? []) as GeographicCustomer[]).filter(isLiveLanternCustomer) as HomeCityCustomer[];
   const recoveryCustomers = locatedCustomers.filter(isSilverLakeRecoveryCustomer);
   const inspectionCustomer =
     locatedCustomers.find(customer => !isSilverLakeRecoveryCustomer(customer)) ?? null;
@@ -294,26 +303,30 @@ export default function JoystickHome({
             </Link>
           </div>
           <nav className="jh-city-clicks" aria-label="City clicks" data-testid="home-city-clicks">
-            <button
-              type="button"
-              data-testid="home-click-building-inspection"
-              onClick={() => {
-                const click = resolveHomeCityClick({ kind: "building", buildingId: "opus_la" });
-                if (click.action === "navigate") onNavigate(click.path);
-              }}
-            >
-              OPUS LA inspection
-            </button>
-            <button
-              type="button"
-              data-testid="home-click-tower-wars"
-              onClick={() => {
-                const click = resolveHomeCityClick({ kind: "building", buildingId: "century_park_east" });
-                if (click.action === "navigate") onNavigate(click.path);
-              }}
-            >
-              Century Park East
-            </button>
+            {ownTowerBuildings.some(building => building.id === "opus_la") ? (
+              <button
+                type="button"
+                data-testid="home-click-building-inspection"
+                onClick={() => {
+                  const click = resolveHomeCityClick({ kind: "building", buildingId: "opus_la" });
+                  if (click.action === "navigate") onNavigate(click.path);
+                }}
+              >
+                OPUS LA inspection
+              </button>
+            ) : null}
+            {ownTowerBuildings.some(building => building.id === "century_park_east") ? (
+              <button
+                type="button"
+                data-testid="home-click-tower-wars"
+                onClick={() => {
+                  const click = resolveHomeCityClick({ kind: "building", buildingId: "century_park_east" });
+                  if (click.action === "navigate") onNavigate(click.path);
+                }}
+              >
+                Century Park East
+              </button>
+            ) : null}
             {inspectionCustomer ? (
               <button
                 type="button"
