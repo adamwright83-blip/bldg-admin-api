@@ -11,19 +11,62 @@ import { resolveCanonicalOperatorIdentity } from "../../server/agents/persistent
 
 const COMMS = "**/api/trpc/system.weeklyMission.deskComms**";
 
-// Deterministic microphone and browser voice: the test decides when each one finishes.
+// Deterministic microphone, recorder and browser voice: the test decides when each one
+// finishes. The microphone is a real audio signal whose loudness the test sets.
 const stubs = () => {
   const w = window as any;
-  w.__mic = { mode: "deny", streams: [] as MediaStream[], release: null as null | (() => void) };
+  w.__mic = { mode: "deny", streams: [] as MediaStream[], release: null as null | (() => void), gain: null as GainNode | null };
+  const signal = () => {
+    const ctx = new AudioContext();
+    const tone = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const out = ctx.createMediaStreamDestination();
+    tone.connect(gain).connect(out);
+    tone.start();
+    w.__mic.gain = gain;
+    w.__mic.streams.push(out.stream);
+    return out.stream;
+  };
+  w.__mic.loud = (on: boolean) => (w.__mic.gain!.gain.value = on ? 0.8 : 0);
   navigator.mediaDevices.getUserMedia = () =>
     new Promise<MediaStream>((resolve, reject) => {
       if (w.__mic.mode === "deny") return reject(new DOMException("Denied by the test", "NotAllowedError"));
-      w.__mic.release = () => {
-        const stream = new AudioContext().createMediaStreamDestination().stream;
-        w.__mic.streams.push(stream);
-        resolve(stream);
-      };
+      if (w.__mic.mode === "grant") return resolve(signal());
+      w.__mic.release = () => resolve(signal());
     });
+  // A recorder whose stop event the test can hold back, as a slow real encoder would.
+  w.__rec = {
+    all: [] as any[],
+    held: [] as Array<() => void>,
+    hold: false,
+    recording: () => w.__rec.all.filter((r: any) => r.state === "recording").length,
+    flush: () => w.__rec.held.splice(0).forEach((fire: () => void) => fire()),
+  };
+  class TestRecorder {
+    static isTypeSupported = () => true;
+    state = "inactive";
+    mimeType = "audio/webm";
+    onstop: ((e: Event) => void) | null = null;
+    ondataavailable: ((e: { data: Blob }) => void) | null = null;
+    constructor() {
+      w.__rec.all.push(this);
+    }
+    start() {
+      this.state = "recording";
+    }
+    stop() {
+      if (this.state === "inactive") return;
+      this.state = "inactive";
+      const fire = () => {
+        this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+        this.onstop?.(new Event("stop"));
+      };
+      if (w.__rec.hold) w.__rec.held.push(fire);
+      else setTimeout(fire, 0);
+    }
+  }
+  w.MediaRecorder = TestRecorder;
   w.__speech = { spoken: [] as SpeechSynthesisUtterance[], pending: [] as SpeechSynthesisUtterance[] };
   const end = (u: SpeechSynthesisUtterance) => u.onend?.(new Event("end") as SpeechSynthesisEvent);
   window.speechSynthesis.speak = (u: SpeechSynthesisUtterance) => {
@@ -48,6 +91,12 @@ async function gateComms(page: Page, hold: (n: number, body: string) => boolean)
   });
   return gate;
 }
+
+const recording = (page: Page) => page.evaluate(() => (window as any).__rec.recording() as number);
+const micMode = (page: Page, mode: "deny" | "hold" | "grant") => page.addInitScript(m => ((window as any).__mic.mode = m), mode);
+const phase = (page: Page) => page.getByTestId("open-comms-phase");
+
+test.use({ launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] } });
 
 const claireLines = (page: Page) => page.getByTestId("open-comms-log").locator(".cd-line-claire");
 const spokenCount = (page: Page) => page.evaluate(() => (window as any).__speech.spoken.length as number);
@@ -124,7 +173,7 @@ test.describe("OPEN COMMS cancellation", () => {
 
   test("ending while the microphone starts releases it and opens nothing", async ({ page }) => {
     await page.addInitScript(stubs);
-    await page.addInitScript(() => ((window as any).__mic.mode = "hold"));
+    await micMode(page, "hold");
     const gate = await gateComms(page, () => false);
     await openDesk(owner, page);
     await page.getByTestId("open-comms-button").click();
@@ -160,5 +209,59 @@ test.describe("OPEN COMMS cancellation", () => {
     await page.waitForTimeout(500);
     await expect(page.getByTestId("open-comms-button")).toBeVisible();
     await expect(page.getByTestId("open-comms-phase")).toHaveCount(0);
+  });
+
+  test("an ended session's late recorder stop cannot cancel the new session's microphone", async ({ page }) => {
+    await page.addInitScript(stubs);
+    await micMode(page, "grant");
+    await openDesk(owner, page);
+    await page.getByTestId("open-comms-button").click();
+    await expect(claireLines(page)).toHaveCount(1);
+    await page.evaluate(() => (window as any).__speech.finish());
+    await expect(phase(page)).toHaveAttribute("data-phase", "listening");
+    expect(await recording(page)).toBe(1);
+
+    // End while recording; the old recorder's stop event arrives only after the new session listens.
+    await page.evaluate(() => ((window as any).__rec.hold = true));
+    await page.getByTestId("open-comms-end").click();
+    await expect(page.getByTestId("open-comms-button")).toBeVisible();
+    await page.evaluate(() => ((window as any).__rec.hold = false));
+    await page.getByTestId("open-comms-button").click();
+    await expect(claireLines(page)).toHaveCount(1);
+    await page.evaluate(() => (window as any).__speech.finish());
+    await expect(phase(page)).toHaveAttribute("data-phase", "listening");
+    await page.evaluate(() => (window as any).__rec.flush());
+
+    // The new session still hears the operator.
+    await page.evaluate(() => (window as any).__mic.loud(true));
+    await expect(phase(page)).toHaveAttribute("data-phase", "hearing");
+    expect(await recording(page)).toBe(1);
+  });
+
+  test("Interrupt starts exactly one listener", async ({ page }) => {
+    await page.addInitScript(stubs);
+    await micMode(page, "grant");
+    await openDesk(owner, page);
+    await page.getByTestId("open-comms-button").click();
+    await expect(phase(page)).toHaveAttribute("data-phase", "speaking");
+    await page.getByTestId("open-comms-interrupt").click();
+    await expect(phase(page)).toHaveAttribute("data-phase", "listening");
+    await page.waitForTimeout(300);
+    expect(await recording(page)).toBe(1);
+    await page.evaluate(() => (window as any).__mic.loud(true));
+    await expect(phase(page)).toHaveAttribute("data-phase", "hearing");
+    expect(await recording(page)).toBe(1);
+  });
+
+  test("speaking over Claire (barge-in) starts exactly one listener", async ({ page }) => {
+    await page.addInitScript(stubs);
+    await micMode(page, "grant");
+    await openDesk(owner, page);
+    await page.getByTestId("open-comms-button").click();
+    await expect(phase(page)).toHaveAttribute("data-phase", "speaking");
+    await page.evaluate(() => (window as any).__mic.loud(true));
+    await expect(phase(page)).toHaveAttribute("data-phase", "hearing");
+    await page.waitForTimeout(300);
+    expect(await recording(page)).toBe(1);
   });
 });

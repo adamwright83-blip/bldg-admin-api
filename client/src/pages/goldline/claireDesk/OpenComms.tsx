@@ -76,6 +76,12 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
    * so a late result can never revive an ended session or leak into a newer one.
    */
   const epoch = useRef(0);
+  /**
+   * The one reply of Claire's that may still hand the line back. Stopping her voice (End,
+   * Interrupt, barge-in, typing over her) advances it first, so the cancelled utterance's
+   * onend/onerror cannot start a second listener next to the one the interrupt starts.
+   */
+  const reply = useRef(0);
   const setP = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
@@ -98,6 +104,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   };
 
   const stopAudio = () => {
+    reply.current += 1;
     player.current?.pause();
     player.current = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -151,6 +158,14 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   /** Records one operator turn: waits for speech, stops after a pause, sends the audio. */
   const listen = useCallback(() => {
     const mine = epoch.current;
+    // Exactly one listener: a recording still running is discarded, never doubled.
+    stopLoop();
+    const previous = recorder.current;
+    if (previous?.state === "recording") {
+      previous.onstop = null;
+      previous.stop();
+    }
+    recorder.current = null;
     if (!micOn.current || !stream.current) {
       setP("listening");
       return;
@@ -163,8 +178,11 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     const started = performance.now();
     rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     rec.onstop = () => {
+      // A recorder from an ended session, or one a newer listener replaced, must not touch
+      // the current listener's loop: check ownership before anything else.
+      if (recorder.current !== rec || epoch.current !== mine) return;
       stopLoop();
-      if (!spoke || epoch.current !== mine || phaseRef.current === "ended" || phaseRef.current === "idle") return;
+      if (!spoke || phaseRef.current === "ended" || phaseRef.current === "idle") return;
       const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
       void blobToDataUrl(blob).then(audioDataUrl => {
         if (epoch.current === mine) void send({ audioDataUrl });
@@ -197,9 +215,12 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const speak = useCallback(
     (r: Turn) => {
       const mine = epoch.current;
+      const turn = ++reply.current;
+      const current = () => epoch.current === mine && reply.current === turn;
       const after = () => {
-        // Ending comms cancels Claire's voice, which fires onend/onerror; the line stays closed.
-        if (epoch.current !== mine) return;
+        // Ending or interrupting cancels Claire's voice, which fires onend/onerror; whoever
+        // stopped her already decided what happens next.
+        if (!current()) return;
         stopLoop();
         if (phaseRef.current === "ended" || phaseRef.current === "idle") return;
         if (r.end) setP("ended");
@@ -209,7 +230,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         if (!micOn.current) return;
         let loud = 0;
         const tick = () => {
-          if (epoch.current !== mine || phaseRef.current !== "speaking") return;
+          if (!current() || phaseRef.current !== "speaking") return;
           if (rms() > BARGE_IN_LEVEL) loud += 1;
           else loud = 0;
           if (loud > 8) {
@@ -222,7 +243,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         loop.current = requestAnimationFrame(tick);
       };
       const browserVoice = (why: string) => {
-        if (epoch.current !== mine) return;
+        if (!current()) return;
         if (!("speechSynthesis" in window)) {
           setVoiceNote(`${why} Read Claire's reply below.`);
           return after();
