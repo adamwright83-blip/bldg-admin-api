@@ -293,9 +293,10 @@ export const weeklyMissionRouter = router({
       if (ledgerEnabled) {
         const ledgerState = session.ledgerState ??= {};
         ledgerState.workLedgerOwnsDayLine = true;
-        ledgerState.history = session.history.map((turn, index) => ({
+        const history = session.history;
+        ledgerState.history = history.map((turn, index) => ({
           speaker: turn.speaker === "operator" ? "operator" as const : "claire" as const,
-          text: turn.text, at: now.getTime() - session.history.length + index,
+          text: turn.text, at: now.getTime() - history.length + index,
         }));
         const ledger = await runWorkLedgerTurn({
           tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId,

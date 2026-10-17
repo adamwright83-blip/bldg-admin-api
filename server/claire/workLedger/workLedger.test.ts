@@ -317,6 +317,23 @@ describe("one turn through the ledger", () => {
     expect(dayLine.open()).toHaveLength(1);
   });
 
+  it("reloads work moved beyond tomorrow before accepting a later correction", async () => {
+    const dayLine = createFakeDayLine([{ id: "louise", title: "Call Louise", businessDate: "2026-10-19" }]);
+    const state: ClaireTurnState = JSON.parse(JSON.stringify({ workLedger: {
+      version: 1, held: [], savedIds: ["louise"], nextRef: 2,
+      lastSaved: [{ id: "louise", title: "Call Louise", businessDate: "2026-10-19", executionType: null }],
+    } }));
+    const { invoke, calls } = scriptedInvoke([{ ...EMPTY_RAW, completeIds: ["louise"] }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "I finished the Louise call early.", state },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(calls[0]).toContain("id=louise day=2026-10-19");
+    expect(outcome.handled).toBe(true);
+    expect(dayLine.rows.get("louise")?.status).toBe("completed");
+    expect(dayLine.writes).toEqual(["complete Call Louise"]);
+  });
+
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {
     const dayLine = createFakeDayLine();
     const invoke = (async () => { throw new Error("overloaded"); }) as never;

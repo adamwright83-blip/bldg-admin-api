@@ -57,7 +57,7 @@ jobs:
         env:
           DATABASE_URL: ''
           ANTHROPIC_API_KEY: ''
-        run: pnpm vitest run server/claire/showrunner/scheduledConversation.test.ts server/claire/showrunner/showrunnerTurnSafety.test.ts server/claire/voice server/claire/briefing --minWorkers=1 --maxWorkers=2
+        run: pnpm vitest run server/claire/showrunner/scheduledConversation.test.ts server/claire/showrunner/showrunnerTurnSafety.test.ts server/claire/workLedger/workLedger.test.ts server/claire/weeklyMission/deskCommsLedger.test.ts shared/weeklyMissionReadiness.test.ts server/claire/voice server/claire/briefing --minWorkers=1 --maxWorkers=2
       - name: Actual model conversation replay against disposable MySQL
         if: matrix.mode == 'live-model'
         env:

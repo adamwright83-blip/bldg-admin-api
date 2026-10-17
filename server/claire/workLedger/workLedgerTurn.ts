@@ -183,7 +183,8 @@ export async function runWorkLedgerTurn(
 
   let dayLine: LedgerDayLineItem[];
   try {
-    dayLine = await loadDayLine(deps, input, [clock.today, tomorrow], new Set(ledger.savedIds));
+    const dates = [...new Set([clock.today, tomorrow, ...(ledger.lastSaved ?? []).map(item => item.businessDate)])];
+    dayLine = await loadDayLine(deps, input, dates, new Set(ledger.savedIds));
   } catch (error) {
     console.warn("[ClaireWorkLedger] Day Line read failed", error instanceof Error ? error.message : error);
     ledger.degradedAt = now.getTime();
