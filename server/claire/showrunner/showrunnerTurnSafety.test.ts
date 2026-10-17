@@ -74,7 +74,7 @@ describe("work ledger is the only work interpreter", () => {
       const out = await runShowrunnerTurn({
         state: s, history: [], utterance: "That is advertising copy, not another task.",
         sourceEventId: "e", conversationKey: "k", workLedger: { section: null },
-        invoke: model({ ...quiet, operatorIsDone: true,
+        invoke: model({ ...quiet, speak: "I saved the pickup for tomorrow.", operatorIsDone: true,
           missionUpdates: [{ itemId: "existing", outcome: "done" }],
           developments: [{ kind: "commitment", who: "operator", what: "Pick up tomorrow", date: "2026-10-21", time: "", window: "", place: "", operatorWords: "advertising copy" }],
           readinessNeeds: ["Prepare invented pickup"],
@@ -86,6 +86,8 @@ describe("work ledger is the only work interpreter", () => {
         updates: [], developments: [], preparation: [],
       }));
       expect(out.state.captured).toEqual({ missionUpdates: [], developments: [], readinessNeeds: [] });
+      expect(out.speak).not.toContain("I saved");
+      expect(out.speak).toContain("Nothing new is confirmed saved");
       expect(replan).not.toHaveBeenCalled();
       expect(deskReplan).not.toHaveBeenCalled();
     }
