@@ -108,6 +108,8 @@ export type InvokeParams = {
    * 5/5.1) returns a 400, so callers must gate this themselves.
    */
   disableThinking?: boolean;
+  /** Cost attribution label. Defaults to the output schema name. */
+  feature?: string;
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -171,6 +173,8 @@ export type InvokeTextParams = Pick<
    * non-streaming `messages.create` path byte-for-byte.
    */
   onFirstToken?: () => void;
+  /** Cost attribution label (e.g. "claire_follow_up"). Defaults to "text_generation". */
+  feature?: string;
 };
 
 export class TextLLMInvocationError extends Error {
@@ -607,6 +611,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       modelUsed: result.model,
       inputTokens: result.usage.prompt_tokens,
       outputTokens: result.usage.completion_tokens,
+      feature: params.feature ?? toolName,
     });
   }
   return result;
@@ -752,6 +757,7 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
         modelUsed: response.model,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        feature: params.feature ?? "text_generation",
       });
     }
     return text;

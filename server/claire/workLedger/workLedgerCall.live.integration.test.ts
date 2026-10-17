@@ -24,8 +24,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { briefingClock } from "../briefing/briefingTiming";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { OCTOBER_15_CALL } from "./october15CallFixture";
+import { paidModelReplayAuthorized } from "./paidReplayGate";
 
-const enabled = process.env.CLAIRE_WORK_LEDGER_LIVE === "1";
+const enabled = paidModelReplayAuthorized(process.env.CLAIRE_WORK_LEDGER_LIVE);
 const ZONE = "America/Los_Angeles";
 
 describe.skipIf(!enabled)("Claire voice path, real models, disposable MySQL — the 2026-10-15 call", () => {

@@ -543,6 +543,7 @@ export async function answerClairePreDriveFollowUp(
       await invokeText({
         tenantId: input.tenantId,
         ...claireModelRequest(0.6),
+        feature: "claire_follow_up",
         maxTokens: FOLLOW_UP_MAX_TOKENS,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },

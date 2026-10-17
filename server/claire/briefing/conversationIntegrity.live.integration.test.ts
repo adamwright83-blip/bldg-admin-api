@@ -12,8 +12,9 @@ import { assembleClaireDriveContext } from "../contextAssembler";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { createDatabaseConversationStateStore } from "../turn/conversationStateStore";
 import { dayLineDisplayTitle, readDayLineOverlay } from "../../../shared/goldlineDayLine";
+import { paidModelReplayAuthorized } from "../workLedger/paidReplayGate";
 
-const suite = process.env.CLAIRE_REPAIR_LIVE_MODEL === "1" ? describe : describe.skip;
+const suite = paidModelReplayAuthorized(process.env.CLAIRE_REPAIR_LIVE_MODEL) ? describe : describe.skip;
 suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
   let sql: mysql.Connection;
   const now = new Date("2026-10-16T00:30:00Z");

@@ -13,14 +13,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { runWorkLedgerTurn } from "./workLedgerTurn";
+import { paidModelReplayAuthorized } from "./paidReplayGate";
 import { createFakeDayLine } from "./workLedgerTestDayLine";
 import { OCTOBER_15_CALL } from "./october15CallFixture";
 import type { ClaireTurnState } from "../turn/claireTurn";
 
-const live =
-  process.env.CLAIRE_WORK_LEDGER_LIVE === "1" &&
-  Boolean(process.env.ANTHROPIC_API_KEY?.trim()) &&
-  process.env.ANTHROPIC_API_KEY !== "verification-transport-stub";
+const live = paidModelReplayAuthorized(process.env.CLAIRE_WORK_LEDGER_LIVE);
 
 const ZONE = "America/Los_Angeles";
 const TODAY = "2026-10-15";
