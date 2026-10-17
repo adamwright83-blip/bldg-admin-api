@@ -254,6 +254,24 @@ export class ProofAudio {
         tone(2640, 0.5, 0.06, "sine");
         tone(3960, 0.35, 0.03, "sine");
         break;
+      case "leap":
+        // a hop and a rush of air
+        tone(180, 0.18, 0.18, "sine", 0, 1.8);
+        hit(900, 0.5, 0.6, 0.18, 0.05);
+        break;
+      case "zip":
+        // the strap on the rope: a rising metallic whine over a hiss, fading as he goes
+        tone(420, 4.5, 0.05, "sawtooth", 0, 2.2);
+        tone(630, 4.5, 0.025, "sawtooth", 0.05, 2.2);
+        hit(4200, 1.5, 4.5, 0.09);
+        break;
+      case "endcard":
+        // a low sting under the title
+        tone(55, 4.0, 0.2, "sine", 0, 0.98);
+        tone(82.5, 4.0, 0.12, "sine", 0.02);
+        tone(110, 3.0, 0.07, "triangle", 0.04);
+        hit(300, 0.8, 1.2, 0.12);
+        break;
       case "reveal":
         tone(110, 3.5, 0.06, "sine");
         tone(165, 3.5, 0.04, "sine", 0.3);
