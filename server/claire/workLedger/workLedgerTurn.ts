@@ -186,6 +186,7 @@ export async function runWorkLedgerTurn(
     dayLine = await loadDayLine(deps, input, [clock.today, tomorrow], new Set(ledger.savedIds));
   } catch (error) {
     console.warn("[ClaireWorkLedger] Day Line read failed", error instanceof Error ? error.message : error);
+    ledger.degradedAt = now.getTime();
     return { handled: false, reason: "planner_unavailable" };
   }
 
@@ -237,6 +238,27 @@ export async function runWorkLedgerTurn(
     await Promise.race([write, new Promise(resolve => setTimeout(resolve, 900))]);
   }
 
+  // A "work" turn that changes nothing, holds nothing new and reads nothing back would only
+  // produce an empty "Got it." that sounds like a promise (live replay: "charge the Opus order
+  // when it comes in"). Hand it to the conversational pipeline, which can say what it can do.
+  const heldBefore = JSON.stringify(ledger.held.map(item => [item.title, item.businessDate, item.executionType]));
+  const heldAfter = JSON.stringify(planned.held.map(item => [item.title, item.businessDate, item.executionType]));
+  const changesNothing =
+    planned.workChanged &&
+    !planned.endCall &&
+    !planned.saveRefs.length &&
+    !planned.edits.length &&
+    !planned.completeIds.length &&
+    !planned.removeIds.length &&
+    !planned.confirmIds.length &&
+    heldBefore === heldAfter;
+  if (changesNothing) {
+    console.info("[ClaireWorkLedger]", {
+      event: "claire_work_ledger_turn", handled: false, reason: "no_operations", conversationKey: input.conversationKey,
+      refused: planned.refused, heldTitles: planned.held.map(item => item.title), saveRefs: planned.saveRefs,
+    });
+    return { handled: false, reason: "not_work", plan: planned };
+  }
   if (!planned.workChanged && !planned.endCall) {
     console.info("[ClaireWorkLedger]", {
       event: "claire_work_ledger_turn",
@@ -283,7 +305,7 @@ export async function runWorkLedgerTurn(
 
   const confirmation = speakVerifiedLedgerChanges(applied, clock.today);
   const reply = cleanLedgerReply(planned.reply);
-  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || (planned.endCall ? "Talk soon." : "Got it.");
+  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || (planned.endCall ? "Talk soon." : "I haven't saved or carried out anything from that instruction.");
 
   const at = now.getTime();
   remember(input.state, "operator", utterance, at);

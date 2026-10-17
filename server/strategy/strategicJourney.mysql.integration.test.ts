@@ -40,7 +40,7 @@ import {
 } from "./strategicApproval";
 import { prepareStrategicProposal } from "./strategicPreparation";
 import { refreshStrategicDiagnosis } from "./strategicPreparation";
-import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
+import { strategicPlanningHorizon } from "../../shared/weeklyMissionReadiness";
 import { PERSISTENT_OPERATOR_ENTITLEMENT } from "../../shared/saasTenant";
 import { recordGoalCycleOutcome } from "../agents/persistentOperator/outcomeStore";
 import { latestStrategicDiagnosis } from "./strategicStore";
@@ -228,7 +228,7 @@ describeMysql(
         const date = formatInTimeZone(new Date(), zone, "yyyy-MM-dd");
         const p = await latestStrategicProposal(
           identity,
-          weekStartMonday(date)
+          strategicPlanningHorizon({ businessDate: date, localTime: formatInTimeZone(new Date(), zone, "HH:mm") }).weekStart
         );
         expect(p).not.toBeNull();
         expect(p!.items.length).toBeGreaterThan(0);

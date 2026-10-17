@@ -246,6 +246,13 @@ export function actionableDates(
   );
 }
 
+/** The default proposal horizon, shared by preparation and its read surfaces. */
+export function strategicPlanningHorizon(input: { businessDate: string; localTime: string }): RemainingWeekHorizon {
+  const current = remainingWeekHorizon(input);
+  if (actionableDates(current).length) return current;
+  return targetWeekHorizon({ ...input, weekStart: addDaysYmd(current.weekStart, 7) });
+}
+
 export function targetWeekHorizon(input: {
   businessDate: string;
   localTime: string;

@@ -118,11 +118,12 @@ suite("Claire conversation and verified work on disposable MySQL", () => {
       },
       { tenantId, utterance: "Put picking up the laundry from Coast on the day line for tomorrow", clock, vocabulary: [] }
     );
+    // reviseBriefing returns { parsed, changes }; the revised briefing is `parsed`.
     const revised = reviseBriefing(
       initialBriefing,
       "Actually change the Coast pickup to picking up the KITH TREATS aprons on Rodeo Drive",
       clock
-    );
+    ).parsed;
     expect(revised.items).toHaveLength(1);
     expect(revised.items[0]!.title).toMatch(/KITH TREATS.*aprons/i);
     expect(revised.items[0]!.title).not.toMatch(/Coast/i);

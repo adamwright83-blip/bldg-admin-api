@@ -29,7 +29,6 @@ const EMPTY_RAW = {
   workChanged: true,
   endCall: false,
   held: [],
-  saveRefs: [],
   edits: [],
   completeIds: [],
   confirmIds: [],
@@ -38,7 +37,7 @@ const EMPTY_RAW = {
   operatorSignal: { kind: "none" as const, about: "", quote: "" },
 };
 
-function heldItem(overrides: Record<string, string> = {}) {
+function heldItem(overrides: Record<string, string | boolean> = {}) {
   return {
     ref: "new-1",
     title: "Deliver 2 dry cleaning orders tonight",
@@ -48,6 +47,7 @@ function heldItem(overrides: Record<string, string> = {}) {
     executionType: "none" as const,
     detail: "",
     quote: "I need to deliver 2 of them tonight.",
+    save: false,
     ...overrides,
   };
 }
@@ -67,7 +67,7 @@ function scriptedInvoke(plans: unknown[]) {
 
 describe("work ledger validation — the server's half of the contract", () => {
   it("keeps grounded work and gives held items stable server refs", () => {
-    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem()], saveRefs: ["new-1"] }, planInput(), 1);
+    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem({ save: true })] }, planInput(), 1);
     expect(plan.held).toHaveLength(1);
     expect(plan.held[0]!.ref).toBe("w1");
     expect(plan.saveRefs).toEqual(["w1"]);
@@ -158,10 +158,9 @@ describe("work ledger execution — readback before speech", () => {
       {
         ...EMPTY_RAW,
         held: [
-          heldItem({ ref: "new-1", title: "Check whether 3 dry cleaning orders were charged and charge any that weren't", quote: "I have 3 dry cleaning orders. I need to see if those have been charged yet. If not, I need to charge them.", timing: "" }),
-          heldItem({ ref: "new-2" }),
+          heldItem({ ref: "new-1", title: "Check whether 3 dry cleaning orders were charged and charge any that weren't", quote: "I have 3 dry cleaning orders. I need to see if those have been charged yet. If not, I need to charge them.", timing: "", save: true }),
+          heldItem({ ref: "new-2", save: true }),
         ],
-        saveRefs: ["new-1", "new-2"],
       },
       planInput(),
       1
@@ -183,7 +182,7 @@ describe("work ledger execution — readback before speech", () => {
 
   it("never claims a save the store did not confirm", async () => {
     const dayLine = createFakeDayLine();
-    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem()], saveRefs: ["new-1"] }, planInput(), 1);
+    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem({ save: true })] }, planInput(), 1);
     const applied = await applyWorkLedgerPlan({
       plan,
       dayLine: [],
@@ -277,8 +276,7 @@ describe("one turn through the ledger", () => {
     const { invoke, calls } = scriptedInvoke([
       {
         ...EMPTY_RAW,
-        held: [heldItem(), heldItem({ ref: "new-2", title: "Maybe swing by Sunset Towers", quote: "maybe swing by Sunset Towers" })],
-        saveRefs: ["new-1"],
+        held: [heldItem({ save: true }), heldItem({ ref: "new-2", title: "Maybe swing by Sunset Towers", quote: "maybe swing by Sunset Towers" })],
         reply: "I've added that to your line. Want the Sunset stop on there too?",
       },
     ]);
@@ -294,6 +292,29 @@ describe("one turn through the ledger", () => {
     expect(state.workLedger?.held.map(item => item.title)).toEqual(["Maybe swing by Sunset Towers"]);
     expect(state.history?.map(entry => entry.speaker)).toEqual(["operator", "claire"]);
     expect(calls[0]).toContain("NEWEST OPERATOR UTTERANCE");
+  });
+
+  it("hands back a 'work' turn that changes nothing instead of saying an empty 'Got it.'", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, workChanged: true, reply: "Got it." }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "And charge the Opus order when it comes in.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(outcome.handled).toBe(false);
+    expect(dayLine.writes).toEqual([]);
+  });
+
+  it("asks the planner once more when it returns an empty work plan", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke, calls } = scriptedInvoke([{ ...EMPTY_RAW, workChanged: true }, { ...EMPTY_RAW, held: [heldItem({ save: true })] }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "I need to deliver 2 of them tonight.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(calls).toHaveLength(2);
+    expect(outcome.handled).toBe(true);
+    expect(dayLine.open()).toHaveLength(1);
   });
 
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {

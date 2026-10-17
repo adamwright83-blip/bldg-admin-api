@@ -266,4 +266,59 @@ describe.skipIf(!live)("work ledger — real-model replay of the 2026-10-15 prod
     },
     240_000
   );
+
+  it(
+    "captures a whole-day rundown in one breath, never turns a request for Claire to act into a task, and keeps a mid-sentence correction",
+    async () => {
+      const dayLine = createFakeDayLine();
+      const state: ClaireTurnState = { history: [{ speaker: "claire", text: "Good morning, it's Claire. Today's line is empty so far. Are you ready to get going?", at: Date.parse("2026-10-15T14:30:00Z") }] };
+      const turns = [
+        "Yeah so here's my day. I've got the Opus pickup at 10, no wait, 11. Then I have to drop off Jim's towels at Century Park East before 2. I need to follow up with Louise about the contract, and I want that as a sales mission. Tonight I've got to finish the landing page for the Instagram ad, that's a marketing challenge. And tomorrow morning I need to deliver the third dry cleaning order. Oh and I'm grabbing coffee with my brother at noon, that's not work.",
+        "Text Louise for me and tell her I'll call this afternoon.",
+        "And charge the Opus order when it comes in.",
+      ];
+      let clockMs = Date.parse("2026-10-15T14:31:00Z");
+      const log: string[] = [];
+      const outcomes: Awaited<ReturnType<typeof runWorkLedgerTurn>>[] = [];
+      for (const operator of turns) {
+        clockMs += 25_000;
+        const now = new Date(clockMs);
+        const outcome = await runWorkLedgerTurn(
+          {
+            tenantId: "default", operatorUserId: "adam-admin", dayDirectorActorId: "1",
+            conversationKey: "claire-call:replay-rundown", surface: "voice", utterance: operator, state,
+            timeZone: ZONE, sessionKind: "morning_readiness",
+          },
+          { now: () => now, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+        );
+        outcomes.push(outcome);
+        log.push(`OPERATOR: ${operator}`);
+        log.push(outcome.handled ? `CLAIRE [ledger ${outcome.latencyMs}ms]: ${outcome.result.speak}` : `   (ledger: ${outcome.reason})`);
+        if (!outcome.handled) state.history = [...(state.history ?? []), { speaker: "operator", text: operator, at: clockMs }, { speaker: "claire", text: "I can draft that text for your approval.", at: clockMs + 1 }];
+        log.push(`   Day Line: ${dayLine.open().map(row => `[${row.businessDate}${row.executionType ? `/${row.executionType}` : ""}${row.scheduleLabel ? ` @${row.scheduleLabel}` : ""}] ${row.title}`).join(" · ")}`);
+      }
+      console.log(`\n${log.join("\n")}\nwrites:\n${dayLine.writes.join("\n")}`);
+      const open = dayLine.open();
+      const today = open.filter(row => row.businessDate === TODAY);
+      const words = (row: (typeof open)[number]) => `${row.title} ${row.scheduleLabel ?? ""} ${row.sourceText}`;
+      const opus = today.filter(row => /opus/i.test(row.title) && /pick/i.test(row.title));
+      expect(opus).toHaveLength(1);
+      expect(words(opus[0]!)).toMatch(/\b11\b/);
+      expect(`${opus[0]!.title} ${opus[0]!.scheduleLabel ?? ""}`).not.toMatch(/\b10\b/);
+      expect(today.some(row => /jim/i.test(row.title) && /towel/i.test(row.title))).toBe(true);
+      expect(today.find(row => /louise/i.test(row.title))?.executionType).toBe("mission");
+      expect(today.find(row => /landing page/i.test(row.title))?.executionType).toBe("challenge");
+      expect(open.some(row => row.businessDate === TOMORROW && /deliver/i.test(row.title))).toBe(true);
+      expect(open.filter(row => /coffee|brother/i.test(row.title))).toEqual([]);
+      // "Text Louise for me" is an action for Claire's approval-gated path, not a Day Line task.
+      expect(outcomes[1]!.handled).toBe(false);
+      expect(open.filter(row => /\btext\b/i.test(row.title))).toEqual([]);
+      // Never an empty "Got it." that sounds like Claire will charge the order.
+      const charge = outcomes[2]!;
+      expect(charge.handled && /^got it\.?$/i.test(charge.result.speak.trim())).toBe(false);
+      // Nothing was charged; at most the operator's own charge task was recorded.
+      expect(dayLine.writes.filter(write => /^(?:charge|send|call)\b/i.test(write))).toEqual([]);
+    },
+    240_000
+  );
 });

@@ -73,4 +73,6 @@ jobs:
         if: ${{ !cancelled() && matrix.mode == 'live-model' }}
         env:
           CLAIRE_WORK_LEDGER_LIVE: '1'
+          # Claire call tokens are signed; a disposable value for this job only.
+          JWT_SECRET: claire-work-ledger-ci-disposable-000000000000000000000
         run: pnpm vitest run --config vitest.integration.config.ts server/claire/workLedger/workLedgerCall.live.integration.test.ts --minWorkers=1 --maxWorkers=1

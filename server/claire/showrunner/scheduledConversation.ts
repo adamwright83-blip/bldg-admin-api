@@ -1,6 +1,7 @@
 import { conversationHistoryForModel, defaultClaireTurnDeps, runClaireTurn, type ClaireTurnDeps, type ClaireTurnInput, type ClaireTurnResult, type ClaireTurnState } from "../turn/claireTurn";
 import { safeClaireBrainV3Fallback } from "../turn/brainV3";
 import { runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
+import { workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 
 type ScheduledState = ClaireTurnState & { showrunner?: ShowrunnerCallState | null };
 type ShowrunnerOverrides = Pick<Parameters<typeof runShowrunnerTurn>[0], "invoke" | "record" | "approve" | "replan" | "deskReplan" | "business" | "now">;
@@ -38,6 +39,9 @@ export async function runScheduledClaireTurn(
   try {
     turn = await runShowrunnerTurn({ state: state.showrunner, history: conversationHistoryForModel(history), utterance: input.utterance,
       sourceEventId: input.sourceEventId ?? `${input.conversationKey}:${at}`, conversationKey: input.conversationKey,
+      ...(state.workLedgerOwnsDayLine
+        ? { workLedger: { section: workLedgerPromptSection(state, state.showrunner.businessDate) } }
+        : {}),
       ...overrides.showrunner });
   } catch (error) {
     console.error("[Claire] scheduled conversation failed", { errorName: error instanceof Error ? error.name : "UnknownError" });

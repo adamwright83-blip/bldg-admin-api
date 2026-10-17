@@ -144,9 +144,9 @@ const planSchema = z.object({
       executionType: z.enum(EXECUTION_TYPES),
       detail: z.string(),
       quote: z.string(),
+      save: z.boolean(),
     })
   ),
-  saveRefs: z.array(z.string()),
   edits: z.array(
     z.object({
       id: z.string(),
@@ -178,7 +178,7 @@ const JSON_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["workChanged", "endCall", "held", "saveRefs", "edits", "completeIds", "confirmIds", "removeIds", "reply", "operatorSignal"],
+    required: ["workChanged", "endCall", "held", "edits", "completeIds", "confirmIds", "removeIds", "reply", "operatorSignal"],
     properties: {
       workChanged: { type: "boolean" },
       endCall: { type: "boolean" },
@@ -187,7 +187,7 @@ const JSON_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["ref", "title", "day", "date", "timing", "executionType", "detail", "quote"],
+          required: ["ref", "title", "day", "date", "timing", "executionType", "detail", "quote", "save"],
           properties: {
             ref: str,
             title: str,
@@ -197,10 +197,10 @@ const JSON_SCHEMA = {
             executionType: { type: "string", enum: [...EXECUTION_TYPES] },
             detail: str,
             quote: str,
+            save: { type: "boolean" },
           },
         },
       },
-      saveRefs: { type: "array", items: str },
       edits: {
         type: "array",
         items: {
@@ -262,10 +262,18 @@ export const WORK_LEDGER_SYSTEM_PROMPT = [
   "- quote: the operator's own words that this item comes from, copied verbatim from the conversation (combine their sentences with a space if it spans turns).",
   "- timing: the operator's words for when (\"tonight\", \"tomorrow morning\", \"before I leave work\", \"by 3\"), or \"\".",
   "",
+  "YOU RECORD WORK; YOU NEVER DO IT",
+  "- You only keep the Day Line. Nothing you return charges a customer, sends a message, places a call or changes an order. \"I need to charge them\" is the operator's own task: record it (with its condition). It is never an instruction to charge anyone.",
+  "- When the operator asks CLAIRE to carry out an external action now (\"text Louise\", \"charge the Opus order\", \"call them for me\", \"send me that list\"), that is not Day Line work: set workChanged false and return no operations, so Claire's action path handles it with its own authorization. If the same utterance also states work for the operator, record only that work.",
+  "",
+  "A FULL RUNDOWN",
+  "- Record what the operator says they have to do even if the time they give looks already past or the call type seems unusual for the hour; never drop or question stated work because of the clock.",
+  "- The operator may give their whole day in one breath. Capture every distinct obligation, each on its own day with its own timing, keep related parts together, and drop nothing. Ignore filler, context and asides. If they correct themselves mid-sentence (\"at 10 — no, 11\"), keep only the corrected version.",
+  "",
   "WHAT TO SAVE",
-  "- Put an item in saveRefs (save it to the Day Line now) when the operator states it as their own concrete obligation for today or tomorrow (\"I need to\", \"I have to\", \"I've got to\", \"before I leave I have to\"), or asks you to add, track, record or put it on the Day Line, or says yes to your offer. The operator should never have to negotiate to get work recorded.",
-  "- Keep it held (in held, not in saveRefs) when it is tentative (\"maybe\", \"thinking about\"), hypothetical, still missing what it even is, or the operator says not to save it yet. If they say not to record it at all, drop it.",
-  "- held must list EVERY unsaved item after this turn, including the ones in saveRefs, each with a stable ref. Reuse the ref of an item you already hold; new items get refs \"new-1\", \"new-2\", and so on. An item you omit from held is dropped.",
+  "- Set save true (save it to the Day Line now) when the operator states it as their own concrete obligation for today or tomorrow (\"I need to\", \"I have to\", \"I've got to\", \"before I leave I have to\"), or asks you to add, track, record or put it on the Day Line, or says yes to your offer. The operator should never have to negotiate to get work recorded.",
+  "- Set save false (keep holding it) when it is tentative (\"maybe\", \"thinking about\"), hypothetical, still missing what it even is, or the operator says not to save it yet. If they say not to record it at all, drop it.",
+  "- held must list EVERY unsaved work item after this turn, including the ones you are saving now (save true), each with a stable ref. Reuse the ref of an item you already hold; new items get refs \"new-1\", \"new-2\", and so on. An item you omit from held is dropped.",
   "",
   "CHANGING SAVED WORK",
   "- If the operator changes, renames, re-dates, reclassifies or adds detail to something already on the Day Line, emit an edit with that item's id. Never create a second copy of an item that is on the Day Line.",
@@ -352,7 +360,9 @@ export function buildWorkLedgerUserMessage(input: WorkLedgerPlanInput): string {
  * silence the operator hears. claude-sonnet-5-5 cannot be used here: it rejects
  * the forced tool choice structured output depends on.
  */
-export const DEFAULT_WORK_LEDGER_MODEL = "claude-haiku-5-5";
+// The a2e19574 CI replay lost explicit multi-item instructions on Haiku.
+// Prefer the measured Sonnet fallback until the faster model passes these gates.
+export const DEFAULT_WORK_LEDGER_MODEL = "claude-sonnet-4-6";
 
 export function workLedgerModelId(): string {
   return process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER?.trim() || DEFAULT_WORK_LEDGER_MODEL;
@@ -442,6 +452,7 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
   const held: LedgerHeldItem[] = [];
   const refMap = new Map<string, string>();
   const heldRefsSoFar = new Set<string>();
+  const savedByRef = new Map<string, boolean>();
   for (const candidate of raw.held) {
     const title = cleanTitle(candidate.title);
     const quote = candidate.quote.trim();
@@ -471,6 +482,7 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
       refMap.set(ref, ref);
     }
     heldRefsSoFar.add(ref);
+    savedByRef.set(ref, candidate.save);
     held.push({
       ref,
       title,
@@ -482,18 +494,7 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
     });
   }
 
-  const heldRefs = new Set(held.map(item => item.ref));
-  const saveRefs = Array.from(
-    new Set(
-      raw.saveRefs
-        .map(ref => refMap.get(ref.trim()) ?? ref.trim())
-        .filter(ref => {
-          if (heldRefs.has(ref)) return true;
-          refused.push(`save of unknown ref ${ref}`);
-          return false;
-        })
-    )
-  );
+  const saveRefs = held.filter(item => savedByRef.get(item.ref)).map(item => item.ref);
 
   const edits: LedgerEdit[] = [];
   for (const edit of raw.edits) {
@@ -586,6 +587,23 @@ export type WorkLedgerPlannerDeps = {
   timeoutMs?: number;
 };
 
+/**
+ * A plan that says work changed but contains nothing at all. Seen live from
+ * claude-haiku-5-5 (which cannot run at temperature 0) on a whole-day rundown:
+ * the same input planned correctly on the next attempt.
+ */
+function isEmptyWorkPlan(raw: RawPlan): boolean {
+  return (
+    raw.workChanged &&
+    !raw.endCall &&
+    !raw.held.length &&
+    !raw.edits.length &&
+    !raw.completeIds.length &&
+    !raw.confirmIds.length &&
+    !raw.removeIds.length
+  );
+}
+
 export async function planWorkLedgerTurn(
   input: WorkLedgerPlanInput,
   nextRef: number,
@@ -595,49 +613,65 @@ export async function planWorkLedgerTurn(
   const model = deps.model ?? workLedgerModelId();
   const timeoutMs = deps.timeoutMs ?? 9_000;
   const startedAt = Date.now();
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const call = invoke({
-      signal: controller.signal,
-      timeoutMs,
-      tenantId: input.tenantId,
-      model,
-      ...(claireModelAcceptsSampling(model) ? { temperature: 0 } : { omitTemperature: true }),
-      ...(claireModelDefaultsToThinking(model) ? { disableThinking: true } : {}),
-      maxTokens: 2_000,
-      outputSchema: JSON_SCHEMA,
-      messages: [
-        { role: "system", content: WORK_LEDGER_SYSTEM_PROMPT },
-        { role: "user", content: buildWorkLedgerUserMessage(input) },
-      ],
-    });
-    const result = await Promise.race([
-      call,
-      new Promise<null>(resolve => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve(null);
-        }, timeoutMs);
-      }),
-    ]);
-    if (!result) {
-      console.warn("[ClaireWorkLedger] planner timed out", { timeoutMs, model });
+  const userMessage = buildWorkLedgerUserMessage(input);
+
+  const attempt = async (): Promise<RawPlan | null> => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const call = invoke({
+        signal: controller.signal,
+        timeoutMs,
+        tenantId: input.tenantId,
+        model,
+        ...(claireModelAcceptsSampling(model) ? { temperature: 0 } : { omitTemperature: true }),
+        ...(claireModelDefaultsToThinking(model) ? { disableThinking: true } : {}),
+        maxTokens: 2_000,
+        outputSchema: JSON_SCHEMA,
+        messages: [
+          { role: "system", content: WORK_LEDGER_SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
+      });
+      const result = await Promise.race([
+        call,
+        new Promise<null>(resolve => {
+          timer = setTimeout(() => {
+            controller.abort();
+            resolve(null);
+          }, timeoutMs);
+        }),
+      ]);
+      if (!result) {
+        console.warn("[ClaireWorkLedger] planner timed out", { timeoutMs, model });
+        return null;
+      }
+      const content = result.choices[0]?.message?.content;
+      if (process.env.CLAIRE_WORK_LEDGER_DEBUG === "1") {
+        console.info("[ClaireWorkLedger] debug", { input: userMessage, output: content });
+      }
+      const parsed = planSchema.safeParse(JSON.parse(typeof content === "string" ? content : ""));
+      if (!parsed.success) {
+        console.warn("[ClaireWorkLedger] planner returned an invalid plan", { issues: parsed.error.issues.slice(0, 3) });
+        return null;
+      }
+      return parsed.data;
+    } catch (error) {
+      console.warn("[ClaireWorkLedger] planner failed", { model, error: error instanceof Error ? error.message : String(error) });
       return null;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    const content = result.choices[0]?.message?.content;
-    const parsed = planSchema.safeParse(JSON.parse(typeof content === "string" ? content : ""));
-    if (!parsed.success) {
-      console.warn("[ClaireWorkLedger] planner returned an invalid plan", { issues: parsed.error.issues.slice(0, 3) });
-      return null;
-    }
-    return { ...validateWorkLedgerPlan(parsed.data, input, nextRef), latencyMs: Date.now() - startedAt, model };
-  } catch (error) {
-    console.warn("[ClaireWorkLedger] planner failed", { model, error: error instanceof Error ? error.message : String(error) });
-    return null;
-  } finally {
-    if (timer) clearTimeout(timer);
+  };
+
+  let raw = await attempt();
+  if (raw && isEmptyWorkPlan(raw)) {
+    console.warn("[ClaireWorkLedger] planner returned an empty work plan; asking once more", { model });
+    const second = await attempt();
+    if (second && !isEmptyWorkPlan(second)) raw = second;
   }
+  if (!raw) return null;
+  return { ...validateWorkLedgerPlan(raw, input, nextRef), latencyMs: Date.now() - startedAt, model };
 }
 
 export function isClaireWorkLedgerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
