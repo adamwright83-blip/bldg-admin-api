@@ -42,6 +42,22 @@ jobs:
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The PR head, not the synthetic merge commit. Invariant 28 diffs
+          # origin/<base>...HEAD, and president evidence reads a historical blob
+          # with `git show <sha>:<path>`. A depth-1 checkout has neither.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Publish the base ref and the historical launch-ops blob
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          set +H
+          git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          git rev-parse --verify "refs/remotes/origin/${BASE_REF}"
+          git cat-file -e 38b20810be8575ef85fed60ba25e6c229bc10170
+          git cat-file -e "38b20810be8575ef85fed60ba25e6c229bc10170:docs/JOYSTICK-SAAS-LAUNCH-OPS.md"
       - uses: pnpm/action-setup@v6
         with:
           version: 10.4.1
@@ -51,4 +67,79 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Applicable unit shard
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
+        # intake-stripe.test.ts stays in the unit include and still asserts the
+        # live HTTP contract. It runs in the required intake-http job, where a
+        # server is actually listening. CLI --exclude is additive, so the
+        # config's integration-test exclude remains in force on these shards.
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4 --exclude "**/intake-stripe.test.ts"
+
+  intake-http:
+    name: intake HTTP
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: intake_http
+        ports:
+          - 3398:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      TZ: UTC
+      # test keeps production schedulers off. getDb() refuses a database in
+      # test unless ALLOW_TEST_DB is set; this job's schema is disposable.
+      NODE_ENV: test
+      ALLOW_TEST_DB: "1"
+      PORT: "3000"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3398/intake_http
+      APP_SHARED_API_SECRET: laundry-app-shared-secret-2026
+      # Startup refuses a missing Stripe key. Verification failures are caught
+      # and the order is stored without card refs; this key is not a live account.
+      STRIPE_SECRET_KEY: sk_test_hermetic_intake_not_a_live_key
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migrate disposable intake schema
+        run: node scripts/migrate.mjs
+      - name: Boot the API and run the intake HTTP contract
+        # Same process step so Actions does not reap the server before vitest.
+        run: |
+          set -euo pipefail
+          pnpm exec tsx server/_core/index.ts > /tmp/intake-server.log 2>&1 &
+          echo $! > /tmp/intake-server.pid
+          ready=0
+          for attempt in $(seq 1 90); do
+            if grep -q "Server running on http://localhost:3000/" /tmp/intake-server.log; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/intake-server.pid)" 2>/dev/null; then
+              echo "intake server exited before listening on port 3000"
+              cat /tmp/intake-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            echo "intake server did not bind port 3000"
+            cat /tmp/intake-server.log
+            exit 1
+          fi
+          pnpm exec vitest run server/intake-stripe.test.ts --testTimeout=120000
+          status=$?
+          kill "$(cat /tmp/intake-server.pid)" 2>/dev/null || true
+          exit "$status"
