@@ -49,6 +49,25 @@ export type GoalCycleStoreOptions = {
   perTenantConcurrency?: number;
 };
 
+/** Live scheduled ticks are the ones that will run again. */
+const LIVE_TICK_STATUSES = ["queued", "retry_scheduled", "leased", "running"] as const;
+
+/** Whether another live scheduled tick for this run has a lower id (and so is the survivor). */
+async function hasEarlierLiveScheduledTick(
+  connection: PoolConnection,
+  step: Pick<ClaimedGoalCycle, "id" | "tenantId" | "goalRunId">
+): Promise<boolean> {
+  const [rows] = await connection.execute<RowDataPacket[]>(
+    `SELECT id FROM goal_cycle_requests
+      WHERE tenantId = ? AND goalRunId = ? AND triggerType = 'scheduled_tick'
+        AND status IN (${LIVE_TICK_STATUSES.map(() => "?").join(",")})
+        AND id < ?
+      LIMIT 1`,
+    [step.tenantId, step.goalRunId, ...LIVE_TICK_STATUSES, step.id]
+  );
+  return rows.length > 0;
+}
+
 async function insertHistory(
   connection: PoolConnection,
   input: {
@@ -392,7 +411,16 @@ export class GoalCycleStore
     try {
       await connection.beginTransaction();
 
-      if (nextEvaluationAt && step.triggerType === "scheduled_tick") {
+      // A scheduled tick re-queues itself, so every extra tick ever enqueued for a run
+      // would recur forever (production carried six for one run). Only the tick with
+      // the lowest id among a run's live scheduled ticks survives; the rest retire.
+      // The rule is order-independent, so two finishing at once still keep exactly one.
+      const supersededTick =
+        Boolean(nextEvaluationAt) &&
+        step.triggerType === "scheduled_tick" &&
+        (await hasEarlierLiveScheduledTick(connection, step));
+
+      if (nextEvaluationAt && step.triggerType === "scheduled_tick" && !supersededTick) {
         const [rescheduled] = await connection.execute<ResultSetHeader>(
           `UPDATE goal_cycle_requests
               SET status = 'queued',
@@ -467,7 +495,7 @@ export class GoalCycleStore
         attemptNumber: step.attemptCount,
       });
 
-      if (nextEvaluationAt) {
+      if (nextEvaluationAt && !supersededTick) {
         const idempotencyKey = `scheduled_tick:${step.goalRunId}`;
         const [scheduledRows] = await connection.execute<RowDataPacket[]>(
           `SELECT id, goalRunId, status, availableAt
