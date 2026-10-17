@@ -29,7 +29,7 @@ function harness(initial: { adaptation?: boolean; experimentation?: boolean } = 
   };
   return { ports, prefs, observations, writes, failReadback: () => (failReadback = true) };
 }
-const scope = { tenantId: "t", operatorUserId: "dayforge:t" };
+const scope = { tenantId: "t", operatorUserId: "operator:t" };
 
 describe("operator consent for Daphne's presentation experiments", () => {
   it("records each choice as the operator's attested statement with the exact versioned text, then reads it back", async () => {
