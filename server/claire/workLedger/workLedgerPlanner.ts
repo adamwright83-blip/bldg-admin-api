@@ -145,6 +145,7 @@ const planSchema = z.object({
       detail: z.string(),
       quote: z.string(),
       save: z.boolean(),
+      unchanged: z.boolean(),
     })
   ),
   edits: z.array(
@@ -187,7 +188,7 @@ const JSON_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["ref", "title", "day", "date", "timing", "executionType", "detail", "quote", "save"],
+          required: ["ref", "unchanged", "title", "day", "date", "timing", "executionType", "detail", "quote", "save"],
           properties: {
             ref: str,
             title: str,
@@ -198,6 +199,7 @@ const JSON_SCHEMA = {
             detail: str,
             quote: str,
             save: { type: "boolean" },
+            unchanged: { type: "boolean" },
           },
         },
       },
@@ -274,7 +276,9 @@ export const WORK_LEDGER_SYSTEM_PROMPT = [
   "",
   "WHAT TO SAVE",
   "- Set save true (save it to the Day Line now) when the operator states it as their own concrete obligation for today or tomorrow (\"I need to\", \"I have to\", \"I've got to\", \"before I leave I have to\"), or asks you to add, track, record or put it on the Day Line, or says yes to your offer. The operator should never have to negotiate to get work recorded.",
+  "- A hold applies ONLY to the items it was said about, at the time it was said. Example: turn 1 \"I have 3 dry-cleaning orders… hold those for now\" holds the orders; turn 3 \"before I leave work, I have to create a new page for our landing page\" is a NEW clear commitment and saves (save true) even though the orders are still held. Never extend an earlier hold to later work unless the operator says so again (\"hold that one too\").",
   "- Set save false (keep holding it) when it is tentative (\"maybe\", \"thinking about\"), hypothetical, still missing what it even is, or the operator says not to save it yet. If they say not to record it at all, drop it.",
+  "- An item you already hold that this turn does not change: return only its ref with unchanged true (and its save flag); leave title, quote, detail, timing and date as \"\", day \"today\", executionType \"none\". The server keeps the stored version. Never rewrite unchanged items.",
   "- held must list EVERY unsaved work item after this turn, including the ones you are saving now (save true), each with a stable ref. Reuse the ref of an item you already hold; new items get refs \"new-1\", \"new-2\", and so on. An item you omit from held is dropped.",
   "",
   "CHANGING SAVED WORK",
@@ -366,6 +370,12 @@ export function buildWorkLedgerUserMessage(input: WorkLedgerPlanInput): string {
 // Prefer the measured Sonnet fallback until the faster model passes these gates.
 export const DEFAULT_WORK_LEDGER_MODEL = "claude-sonnet-4-6";
 
+/** Used once, only when the primary planner times out or fails. Empty string disables it. */
+export function workLedgerFallbackModelId(): string {
+  const configured = process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER_FALLBACK;
+  return configured === undefined ? "claude-haiku-5-5" : configured.trim();
+}
+
 export function workLedgerModelId(): string {
   return process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER?.trim() || DEFAULT_WORK_LEDGER_MODEL;
 }
@@ -426,6 +436,11 @@ function resolveDay(
     : { ymd: null, reason: `date ${date} the operator did not name` };
 }
 
+/** "I need to…", "I have to…", "I've got to…", "I gotta…", "I must…" — the operator's own obligation. */
+const OPERATOR_OBLIGATION = /\b(?:i|we)(?:'ve| have)?\s+(?:still\s+)?(?:need to|have to|got to|gotta|must)\b|\bi'?m (?:supposed|going) to\b/i;
+/** Any sign the operator is not committing yet. */
+const HOLD_OR_HEDGE = /\b(?:hold|don'?t (?:save|put|add)|do not (?:save|put|add)|not yet|maybe|might|thinking about|if i have time|wait on|not sure)\b/i;
+
 function executionTypeOf(value: string): LedgerExecutionType {
   return value === "challenge" || value === "mission" || value === "hybrid_objective" ? value : null;
 }
@@ -457,6 +472,15 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
   const heldRefsSoFar = new Set<string>();
   const savedByRef = new Map<string, boolean>();
   for (const candidate of raw.held) {
+    const stored = candidate.unchanged ? input.held.find(item => item.ref === candidate.ref.trim()) : undefined;
+    if (stored) {
+      if (!heldRefsSoFar.has(stored.ref)) {
+        heldRefsSoFar.add(stored.ref);
+        savedByRef.set(stored.ref, candidate.save);
+        held.push(stored);
+      }
+      continue;
+    }
     const title = cleanTitle(candidate.title);
     const quote = candidate.quote.trim();
     if (!title || !quote) {
@@ -496,6 +520,18 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
       detail: candidate.detail.trim().slice(0, 600),
       quote: quote.slice(0, 1_200),
     });
+  }
+
+  // Policy backstop (Adam, 2026-10-16: clear commitments save without negotiation). New work
+  // stated as the operator's own obligation is saved unless this utterance asks to hold or
+  // hedges. Live replay: the model held "I need to deliver 2 of them tonight" with no reason.
+  const holdLanguage = HOLD_OR_HEDGE.test(input.utterance);
+  for (const item of held) {
+    if (savedByRef.get(item.ref) || holdLanguage) continue;
+    if (input.held.some(previous => previous.ref === item.ref)) continue;
+    if (!OPERATOR_OBLIGATION.test(item.quote) || HOLD_OR_HEDGE.test(item.quote)) continue;
+    savedByRef.set(item.ref, true);
+    refused.push(`obligation guard: saving "${item.title}" the plan held without the operator asking`);
   }
 
   // A refused revision of work Claire already holds keeps the previous version: refusing a
@@ -632,7 +668,7 @@ export async function planWorkLedgerTurn(
   const startedAt = Date.now();
   const userMessage = buildWorkLedgerUserMessage(input);
 
-  const attempt = async (): Promise<RawPlan | null> => {
+  const attempt = async (model: string, timeoutMs: number): Promise<RawPlan | null> => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -681,14 +717,25 @@ export async function planWorkLedgerTurn(
     }
   };
 
-  let raw = await attempt();
+  let served = model;
+  let raw = await attempt(model, timeoutMs);
+  if (!raw && !deps.model) {
+    // About 1 in 200 Sonnet calls ran past the budget in the 2026-10-16 replays (p99 8.4 s, one
+    // at >15 s). One fast attempt on a smaller model beats telling the operator nothing saved.
+    const fallback = workLedgerFallbackModelId();
+    if (fallback && fallback !== model) {
+      console.warn("[ClaireWorkLedger] planner unavailable; one attempt on the fallback model", { model, fallback });
+      raw = await attempt(fallback, 8_000);
+      if (raw) served = fallback;
+    }
+  }
   if (raw && isEmptyWorkPlan(raw)) {
-    console.warn("[ClaireWorkLedger] planner returned an empty work plan; asking once more", { model });
-    const second = await attempt();
+    console.warn("[ClaireWorkLedger] planner returned an empty work plan; asking once more", { model: served });
+    const second = await attempt(served, timeoutMs);
     if (second && !isEmptyWorkPlan(second)) raw = second;
   }
   if (!raw) return null;
-  return { ...validateWorkLedgerPlan(raw, input, nextRef), latencyMs: Date.now() - startedAt, model };
+  return { ...validateWorkLedgerPlan(raw, input, nextRef), latencyMs: Date.now() - startedAt, model: served };
 }
 
 export function isClaireWorkLedgerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {

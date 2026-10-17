@@ -129,3 +129,20 @@ These checks fail. Root cause of each:
   - Ledger latency on Sonnet is roughly what production has today: a correctness fix, not a speed fix.
   - The Daphne MRT is consent-gated and off, and there is no consent UI.
   - The local-only `server/strategy/sourceBackedAction.test.ts` expects a MySQL on 3399 and errors in the full run. That is pre-existing.
+
+## Status 2026-10-16 late (after ChatGPT's CI review)
+
+- #604 head is `613e0290`. #605 head is `a611eebe`, which merges #604 in.
+- **Root cause of the CI failure:** `runClaireTurn` and `runScheduledClaireTurn` only stood the legacy writers down when the phone webhook had already marked the turn.
+  - Direct callers reached the legacy route, and so did a first turn that was a held fragment or a mission command.
+  - Consequences: "don't save those yet" still saved four items, and Showrunner invented "Follow up: operator".
+- **Fix:** the shared turn functions now take ownership and run the ledger themselves (`workLedgerHandledUpstream` prevents a second run). The legacy route remains only behind `CLAIRE_WORK_LEDGER=0`, and `claireReliabilityVerification` pins it there.
+- **Other changes in this round:**
+  - Held work that changes is read back.
+  - A refused rewrite keeps the previous held item.
+  - Showrunner never makes the operator their own follow-up target.
+  - The analytics Day Line view now honors renames and removals.
+- **Blocker:** the production Anthropic API key (Railway `bldg-admin-api`) returned "credit balance is too low" at about 19:45 PT on 2026-10-16.
+  - Live Claire model calls in production fail until credits are added.
+  - The real-model replays stopped at that point. ordinary and morning_readiness had already passed; evening_debrief was cut off.
+  - If CI's `ANTHROPIC_API_KEY` secret is on the same account, CI's live-model steps fail for the same reason.
