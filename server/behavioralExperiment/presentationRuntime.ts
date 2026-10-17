@@ -12,7 +12,13 @@ import { loadMissionPresentations } from "../agents/daphne/missionFollowUp";
 import { loadPresentationAssignmentOutcomes, presentationOutcomesAsDaphneEvidence } from "./presentationOutcomes";
 
 export type PresentationScope = { tenantId: string; operatorUserId: string };
-export type PresentationConsent = { adaptationAllowed: boolean; experimentationAllowed: boolean; evidenceRefs: string[] };
+export type PresentationConsent = {
+  adaptationAllowed: boolean;
+  experimentationAllowed: boolean;
+  evidenceRefs: string[];
+  /** The stored experimentation choice alone, even while adaptation is off. Absent means not on. */
+  experimentationChoiceStored?: boolean;
+};
 export async function loadPresentationConsent(scope: PresentationScope): Promise<PresentationConsent> {
   const identity = await resolveCanonicalOperatorIdentity({ tenantId: scope.tenantId,
     source: { type: "open_id", value: scope.operatorUserId }, subsystem: "daphne.presentation" });
@@ -22,6 +28,7 @@ export async function loadPresentationConsent(scope: PresentationScope): Promise
   const recall = preferences.memory_recall;
   const adaptationAllowed = enabled("adaptation_enabled") && recall?.status !== "revoked" && recall?.value !== false;
   return { adaptationAllowed, experimentationAllowed: adaptationAllowed && enabled("safe_experimentation"),
+    experimentationChoiceStored: enabled("safe_experimentation"),
     evidenceRefs: [preferences.adaptation_enabled?.id, preferences.safe_experimentation?.id].filter((id): id is string => Boolean(id)) };
 }
 /** The operator's own "plain, no story" request, recorded by Daphne from their explanation of unfinished work. */

@@ -22,7 +22,8 @@ function harness(initial: { adaptation?: boolean; experimentation?: boolean } = 
     }) as never,
     loadConsent: async () => {
       const adaptationAllowed = prefs.get("adaptation_enabled") === true;
-      return { adaptationAllowed, experimentationAllowed: adaptationAllowed && prefs.get("safe_experimentation") === true, evidenceRefs: [] };
+      const stored = prefs.get("safe_experimentation") === true;
+      return { adaptationAllowed, experimentationAllowed: adaptationAllowed && stored, evidenceRefs: [], experimentationChoiceStored: stored };
     },
     experimentsRunning: () => true,
     now: () => new Date("2026-10-17T16:00:00Z"),
@@ -60,9 +61,38 @@ describe("operator consent for Daphne's presentation experiments", () => {
     const h = harness({ adaptation: true, experimentation: true });
     const off = await setPresentationConsent({ ...scope, choice: "adaptation", granted: false }, h.ports);
     expect(off).toMatchObject({ adaptationAllowed: false, experimentationAllowed: false });
-    expect(h.writes.map(([key, value]) => [key, value])).toEqual([["adaptation_enabled", false], ["safe_experimentation", false]]);
+    expect(h.writes.map(([key, value]) => [key, value])).toEqual([["safe_experimentation", false], ["adaptation_enabled", false]]);
     const back = await setPresentationConsent({ ...scope, choice: "adaptation", granted: true }, h.ports);
     expect(back).toMatchObject({ adaptationAllowed: true, experimentationAllowed: false });
+  });
+
+  it("a failure part-way through stopping adaptation never leaves experiments to resume later", async () => {
+    const h = harness({ adaptation: true, experimentation: true });
+    const failing: PresentationConsentPorts = {
+      ...h.ports,
+      setPreference: (async (input: any) => {
+        if (input.preferenceKey === "adaptation_enabled") throw new Error("write failed");
+        return h.ports.setPreference(input);
+      }) as never,
+    };
+    await expect(setPresentationConsent({ ...scope, choice: "adaptation", granted: false }, failing)).rejects.toThrow(/write failed/);
+    expect(h.prefs.get("safe_experimentation")).toBe(false);
+    const view = await setPresentationConsent({ ...scope, choice: "adaptation", granted: true }, h.ports);
+    expect(view).toMatchObject({ adaptationAllowed: true, experimentationAllowed: false });
+  });
+
+  it("re-allowing adaptation clears an experimentation value left behind while adaptation was off", async () => {
+    const h = harness({ adaptation: false, experimentation: true });
+    const view = await setPresentationConsent({ ...scope, choice: "adaptation", granted: true }, h.ports);
+    expect(view).toMatchObject({ adaptationAllowed: true, experimentationAllowed: false });
+    expect(h.prefs.get("safe_experimentation")).toBe(false);
+  });
+
+  it("re-confirming adaptation while it is on leaves an existing experiment choice alone", async () => {
+    const h = harness({ adaptation: true, experimentation: true });
+    const view = await setPresentationConsent({ ...scope, choice: "adaptation", granted: true }, h.ports);
+    expect(view).toMatchObject({ adaptationAllowed: true, experimentationAllowed: true });
+    expect(h.writes.map(([key]) => key)).toEqual(["adaptation_enabled"]);
   });
 
   it("stopping experimentation leaves adaptation as it was", async () => {
