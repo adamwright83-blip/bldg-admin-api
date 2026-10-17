@@ -1,0 +1,52 @@
+name: Mission Director cost regression
+# No Anthropic key is used: the explanation call is replaced by a counting stub.
+# Proves on a disposable MySQL that unchanged and no_plan re-plans make zero
+# explanation calls, changed plans still get one, and stale or concurrent reads
+# never reuse the wrong stored plan (PR #606).
+on:
+  pull_request:
+    paths:
+      - "server/planning/missionDirector/**"
+      - ".github/workflows/mission-director-cost.yml"
+  push:
+    branches: [claude/mission-director-explain-cost]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only
+          MYSQL_DATABASE: md_cost
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-only"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:test-only@127.0.0.1:3306/md_cost
+      ALLOW_TEST_DB: '1'
+      ANTHROPIC_API_KEY: ''
+      NODE_ENV: ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Bootstrap the disposable database using the production schema authority
+        run: node scripts/migrate.mjs
+      - name: Mission Director unit regressions (no database)
+        env:
+          DATABASE_URL: ''
+        run: pnpm vitest run server/planning/missionDirector
+      - name: Mission Director explanation spend on disposable MySQL
+        run: pnpm vitest run --config vitest.integration.config.ts server/planning/missionDirector/explanationCost.mysql.integration.test.ts --minWorkers=1 --maxWorkers=1
