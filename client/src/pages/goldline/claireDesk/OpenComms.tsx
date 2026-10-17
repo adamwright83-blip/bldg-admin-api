@@ -180,6 +180,8 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     (r: Turn) => {
       const after = () => {
         stopLoop();
+        // Ending comms cancels Claire's voice, which fires onend/onerror; the line stays closed.
+        if (phaseRef.current === "ended" || phaseRef.current === "idle") return;
         if (r.end) setP("ended");
         else listen();
       };
