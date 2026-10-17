@@ -74,6 +74,7 @@ import {
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
+import { acquireDeskTurnLock, saveDeskConversationState } from "./deskTurnState";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import {
   getClaireCallAnalysis,
@@ -307,212 +308,219 @@ export const claireRouter = router({
       // Same Claire brain as the phone: one durable state per desk conversation.
       const key = `claire-desk:${scope.tenantId}:${actorId}:${input.conversationId ?? "desk"}`;
       const store = claireConversationStateStore();
-      const stored = await store.load<ClaireTurnState>(key);
-      const state: ClaireTurnState =
-        stored && stored.tenantId === scope.tenantId && stored.operatorUserId === scope.operatorUserId ? stored.state : {};
-      const rookContactResidues = await loadClaireRookContactResidues({
-        tenantId: scope.tenantId,
-        operatorUserId: scope.operatorUserId,
-      });
-      const runLegacyAdapter = async () =>
-        await runClaireTurn(
-          {
-            tenantId: scope.tenantId,
-            operatorUserId: scope.operatorUserId,
-            dayDirectorActorId: actorId,
-            surface: "text",
-            utterance: input.utterance,
-            state,
-            conversationKey: key,
-            workLedgerHandledUpstream: true,
-            brief: preview.brief,
-            context,
-            rookContactResidues,
-          },
-          {
-            confirmPlan: () =>
-              confirmWorkdayPlan({
-                tenantId: scope.tenantId,
-                actorId,
-                businessDate:
-                  context.clock?.tomorrowBusinessDate ?? context.businessDate,
-                items: assembleTomorrowCandidates(context),
-              }).then(() => undefined),
-            encyclopedia: claireEncyclopediaFor({
-              dayDirectorActorId: actorId,
-            }),
-          }
-        );
-
-      const { brainV2LiveHandled, result } = await runWithLlmObservability(
-        {
+      // One Desk turn at a time per conversation: overlapping turns each loaded the same
+      // state and the later save silently overwrote the earlier turn's held work.
+      const releaseDeskTurn = await acquireDeskTurnLock(key);
+      try {
+        const stored = await store.load<ClaireTurnState>(key);
+        const state: ClaireTurnState =
+          stored && stored.tenantId === scope.tenantId && stored.operatorUserId === scope.operatorUserId ? stored.state : {};
+        const rookContactResidues = await loadClaireRookContactResidues({
           tenantId: scope.tenantId,
-          operatorOpenId: scope.operatorUserId,
-          conversationId: key,
-          surface: "desktop",
-        },
-        async () => {
-          // Same work owner as the phone: the ledger claims work turns, and the
-          // legacy Day Line writers stand down for the rest of this conversation.
-          if (isClaireWorkLedgerEnabled()) {
-            state.workLedgerOwnsDayLine = true;
-            const ledger = await runWorkLedgerTurn({
+          operatorUserId: scope.operatorUserId,
+        });
+        const runLegacyAdapter = async () =>
+          await runClaireTurn(
+            {
               tenantId: scope.tenantId,
               operatorUserId: scope.operatorUserId,
               dayDirectorActorId: actorId,
-              conversationKey: key,
               surface: "text",
               utterance: input.utterance,
               state,
-              timeZone: input.timeZone ?? (await resolveOperatorTimeZone(scope.tenantId).catch(() => null)) ?? "America/Los_Angeles",
-              sessionKind: "desk",
+              conversationKey: key,
+              workLedgerHandledUpstream: true,
+              brief: preview.brief,
+              context,
+              rookContactResidues,
+            },
+            {
+              confirmPlan: () =>
+                confirmWorkdayPlan({
+                  tenantId: scope.tenantId,
+                  actorId,
+                  businessDate:
+                    context.clock?.tomorrowBusinessDate ?? context.businessDate,
+                  items: assembleTomorrowCandidates(context),
+                }).then(() => undefined),
+              encyclopedia: claireEncyclopediaFor({
+                dayDirectorActorId: actorId,
+              }),
+            }
+          );
+
+        const { brainV2LiveHandled, result } = await runWithLlmObservability(
+          {
+            tenantId: scope.tenantId,
+            operatorOpenId: scope.operatorUserId,
+            conversationId: key,
+            surface: "desktop",
+          },
+          async () => {
+            // Same work owner as the phone: the ledger claims work turns, and the
+            // legacy Day Line writers stand down for the rest of this conversation.
+            if (isClaireWorkLedgerEnabled()) {
+              state.workLedgerOwnsDayLine = true;
+              const ledger = await runWorkLedgerTurn({
+                tenantId: scope.tenantId,
+                operatorUserId: scope.operatorUserId,
+                dayDirectorActorId: actorId,
+                conversationKey: key,
+                surface: "text",
+                utterance: input.utterance,
+                state,
+                timeZone: input.timeZone ?? (await resolveOperatorTimeZone(scope.tenantId).catch(() => null)) ?? "America/Los_Angeles",
+                sessionKind: "desk",
+              });
+              if (ledger.handled) return { brainV2LiveHandled: false, result: ledger.result };
+              return { brainV2LiveHandled: false, result: await runLegacyAdapter() };
+            }
+            const liveV2 = await runClaireBrainV2LiveTurn({
+              rawText: input.utterance,
+              assembledText: input.utterance,
+              state: readOnlyWorkingMemorySource(state),
+              tenantId: scope.tenantId,
+              operatorUserId: scope.operatorUserId,
+              surface: "text",
+              conversationKey: key,
+              live: {
+                tenantId: scope.tenantId,
+                operatorUserId: scope.operatorUserId,
+                conversationId: input.conversationId ?? "desk",
+                dayDirectorActorId: actorId,
+                timeZone: input.timeZone ?? "America/Los_Angeles",
+                businessDate:
+                  context.businessDate ?? new Date().toISOString().slice(0, 10),
+                surface: "text",
+                priorClaimReceipts: state.claimReceipts ?? [],
+              },
+              executeLegacyAdapter: async grant =>
+                executeGrantBoundLegacyAdapter({
+                  grant,
+                  state,
+                  tenantId: scope.tenantId,
+                  operatorUserId: scope.operatorUserId,
+                  dayDirectorActorId: actorId,
+                  conversationKey: key,
+                  timeZone: input.timeZone ?? "America/Los_Angeles",
+                  surface: "text",
+                }),
             });
-            if (ledger.handled) return { brainV2LiveHandled: false, result: ledger.result };
-            return { brainV2LiveHandled: false, result: await runLegacyAdapter() };
+            if (liveV2.active) {
+              const turnResult = liveV2.adapterResult
+                ? liveV2.adapterResult
+                : liveV2.result.candidateEndCall
+                  ? brainV2CallControlResult({
+                      candidateSpeak: liveV2.result.candidateSpeak,
+                      assembledUtterance: input.utterance,
+                    })
+                  : (() => {
+                      throw new Error(
+                        "Brain V2 live action returned without a grant-bound adapter result"
+                      );
+                    })();
+              console.info("[ClaireBrainV2]", {
+                event: "claire_brain_v2_live",
+                surface: "desktop",
+                conversationKey: key,
+                actionClasses: liveV2.actionClasses,
+                endCall: liveV2.result.candidateEndCall,
+                adapterKind: liveV2.adapterResult?.kind ?? null,
+                actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
+                mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
+                receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
+              });
+              return {
+                brainV2LiveHandled: true,
+                result: turnResult,
+              };
+            }
+
+            if (!shouldFallbackToClaireLegacy(liveV2)) {
+              console.warn("[ClaireBrainV2]", {
+                event: "claire_brain_v2_live_execution_failed",
+                surface: "desktop",
+                conversationKey: key,
+                reason: liveV2.reason,
+              });
+              return {
+                brainV2LiveHandled: true,
+                result: brainV2ExecutionFailureResult({
+                  assembledUtterance: input.utterance,
+                }),
+              };
+            }
+
+            // Phone and desk share the same live conversation/work owner.
+            return {
+              brainV2LiveHandled: false,
+              result: await runLegacyAdapter(),
+            };
           }
-          const liveV2 = await runClaireBrainV2LiveTurn({
-            rawText: input.utterance,
-            assembledText: input.utterance,
+        );
+        await saveDeskConversationState(store, key, { tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, surface: "text" }, state, stored?.version ?? null, DESK_CONVERSATION_TTL_MS);
+
+        /**
+         * Brain V2 shadow observation. V1's authoritative result already exists and is
+         * saved above; this is a ONE-WAY emission with no return path. Fire-and-forget,
+         * default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives a frozen
+         * copy of state rather than the live object. The reply below is V1's alone.
+         */
+        const observation = observationUtteranceForBrain(result);
+        if (
+          observation.observe &&
+          !brainV2LiveHandled &&
+          !isClaireBrainV2LiveEnabled({
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
+          })
+        ) {
+          observeShadowTurnDetached({
+            rawText: observation.assembledText,
+            assembledText: observation.assembledText,
+            completeness: observation.completeness,
             state: readOnlyWorkingMemorySource(state),
             tenantId: scope.tenantId,
             operatorUserId: scope.operatorUserId,
             surface: "text",
             conversationKey: key,
+            // Read-only readers, constructed only when the flag is ON.
             live: {
               tenantId: scope.tenantId,
               operatorUserId: scope.operatorUserId,
               conversationId: input.conversationId ?? "desk",
               dayDirectorActorId: actorId,
               timeZone: input.timeZone ?? "America/Los_Angeles",
-              businessDate:
-                context.businessDate ?? new Date().toISOString().slice(0, 10),
+              businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
               surface: "text",
               priorClaimReceipts: state.claimReceipts ?? [],
             },
-            executeLegacyAdapter: async grant =>
-              executeGrantBoundLegacyAdapter({
-                grant,
-                state,
-                tenantId: scope.tenantId,
-                operatorUserId: scope.operatorUserId,
-                dayDirectorActorId: actorId,
-                conversationKey: key,
-                timeZone: input.timeZone ?? "America/Los_Angeles",
-                surface: "text",
-              }),
+            v1: {
+              endedCall: false,
+              // commitmentTurn is on the shared turn result, so desk can record work too.
+              mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+              spokeSomething: Boolean(result.speak),
+            },
           });
-          if (liveV2.active) {
-            const turnResult = liveV2.adapterResult
-              ? liveV2.adapterResult
-              : liveV2.result.candidateEndCall
-                ? brainV2CallControlResult({
-                    candidateSpeak: liveV2.result.candidateSpeak,
-                    assembledUtterance: input.utterance,
-                  })
-                : (() => {
-                    throw new Error(
-                      "Brain V2 live action returned without a grant-bound adapter result"
-                    );
-                  })();
-            console.info("[ClaireBrainV2]", {
-              event: "claire_brain_v2_live",
-              surface: "desktop",
-              conversationKey: key,
-              actionClasses: liveV2.actionClasses,
-              endCall: liveV2.result.candidateEndCall,
-              adapterKind: liveV2.adapterResult?.kind ?? null,
-              actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
-              mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
-              receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
-            });
-            return {
-              brainV2LiveHandled: true,
-              result: turnResult,
-            };
-          }
-
-          if (!shouldFallbackToClaireLegacy(liveV2)) {
-            console.warn("[ClaireBrainV2]", {
-              event: "claire_brain_v2_live_execution_failed",
-              surface: "desktop",
-              conversationKey: key,
-              reason: liveV2.reason,
-            });
-            return {
-              brainV2LiveHandled: true,
-              result: brainV2ExecutionFailureResult({
-                assembledUtterance: input.utterance,
-              }),
-            };
-          }
-
-          // Phone and desk share the same live conversation/work owner.
-          return {
-            brainV2LiveHandled: false,
-            result: await runLegacyAdapter(),
-          };
         }
-      );
-      await store.save(key, { tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
 
-      /**
-       * Brain V2 shadow observation. V1's authoritative result already exists and is
-       * saved above; this is a ONE-WAY emission with no return path. Fire-and-forget,
-       * default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives a frozen
-       * copy of state rather than the live object. The reply below is V1's alone.
-       */
-      const observation = observationUtteranceForBrain(result);
-      if (
-        observation.observe &&
-        !brainV2LiveHandled &&
-        !isClaireBrainV2LiveEnabled({
-          tenantId: scope.tenantId,
-          operatorUserId: scope.operatorUserId,
-        })
-      ) {
-        observeShadowTurnDetached({
-          rawText: observation.assembledText,
-          assembledText: observation.assembledText,
-          completeness: observation.completeness,
-          state: readOnlyWorkingMemorySource(state),
-          tenantId: scope.tenantId,
-          operatorUserId: scope.operatorUserId,
-          surface: "text",
-          conversationKey: key,
-          // Read-only readers, constructed only when the flag is ON.
-          live: {
-            tenantId: scope.tenantId,
-            operatorUserId: scope.operatorUserId,
-            conversationId: input.conversationId ?? "desk",
-            dayDirectorActorId: actorId,
-            timeZone: input.timeZone ?? "America/Los_Angeles",
-            businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
-            surface: "text",
-            priorClaimReceipts: state.claimReceipts ?? [],
-          },
-          v1: {
-            endedCall: false,
-            // commitmentTurn is on the shared turn result, so desk can record work too.
-            mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
-            spokeSomething: Boolean(result.speak),
-          },
-        });
+        return {
+          reply: result.speak || preview.brief,
+          salesArtifacts: result.salesArtifacts ?? [],
+          brief: preview.brief,
+          workday: preview.workday,
+          relationshipDimensions: preview.relationshipDimensions,
+          disclosureTier: preview.disclosureTier,
+          // Stage 3B structural proof. This is bounded interaction metadata only;
+          // it is never business truth or Action / Execution authority.
+          operatorAdaptation: result.operatorAdaptation ?? null,
+          brainV2LiveHandled,
+          actionIds: result.actionIds ?? [],
+          receiptBackedCommit: result.receiptBackedCommit,
+        };
+      } finally {
+        releaseDeskTurn();
       }
-
-      return {
-        reply: result.speak || preview.brief,
-        salesArtifacts: result.salesArtifacts ?? [],
-        brief: preview.brief,
-        workday: preview.workday,
-        relationshipDimensions: preview.relationshipDimensions,
-        disclosureTier: preview.disclosureTier,
-        // Stage 3B structural proof. This is bounded interaction metadata only;
-        // it is never business truth or Action / Execution authority.
-        operatorAdaptation: result.operatorAdaptation ?? null,
-        brainV2LiveHandled,
-        actionIds: result.actionIds ?? [],
-        receiptBackedCommit: result.receiptBackedCommit,
-      };
     }),
 
   driveContext: legacyDayforgeMissionFieldProcedure

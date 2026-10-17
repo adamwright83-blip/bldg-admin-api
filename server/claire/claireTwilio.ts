@@ -903,6 +903,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               sessionKind: conversation.sessionKind ?? "pre_drive",
               callFacts: conversation.workLedgerCallFacts ?? [],
               sourceEventId: daphneSourceId,
+              // Same rule as the observation step after the turn: unconfirmed speech is never a durable preference.
+              inputComplete: input.sourceConfirmed !== false,
             })
         );
         if (outcome.handled) {

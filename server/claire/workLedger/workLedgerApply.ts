@@ -11,6 +11,7 @@ import type { MutationReceipt } from "../assertionGuard";
 import {
   completeDayDirectorCommitment,
   getDayDirectorState,
+  moveDayDirectorCommitment,
   updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
 import { cancelDayLineItem, editDayLineItem } from "../../planning/dayline/dayLineMutationService";
@@ -36,6 +37,7 @@ export type WorkLedgerApplyDeps = {
   complete: typeof completeDayDirectorCommitment;
   edit: typeof editDayLineItem;
   cancel: typeof cancelDayLineItem;
+  move: typeof moveDayDirectorCommitment;
   readState: typeof getDayDirectorState;
 };
 
@@ -46,6 +48,7 @@ export function defaultWorkLedgerApplyDeps(): WorkLedgerApplyDeps {
     complete: completeDayDirectorCommitment,
     edit: editDayLineItem,
     cancel: cancelDayLineItem,
+    move: moveDayDirectorCommitment,
     readState: getDayDirectorState,
   };
 }
@@ -193,34 +196,34 @@ export async function applyWorkLedgerPlan(input: {
     if (!previous) continue;
     try {
       if (edit.moveTo) {
-        const moved = await deps.commit(
-          {
-            items: [
-              briefingItemFor(
-                {
-                  title: edit.title ?? previous.title,
-                  quote: previous.sourceText || previous.title,
-                  businessDate: edit.moveTo,
-                  timing: edit.timing ?? previous.scheduleLabel ?? "",
-                  executionType: edit.executionType === "unchanged" ? previous.executionType : edit.executionType,
-                },
-                clock.today,
-                clock.minutesNow
-              ),
-            ],
-            context: [],
-            questions: [],
-            unparsed: [],
-            source: "model",
-          },
-          { tenantId: target.tenantId, dayDirectorActorId: target.dayDirectorActorId, conversationKey: `${target.conversationKey}:ledger-move:${previous.id}`, vehicleId: target.operatorUserId }
-        );
-        const newId = moved.commitmentIds[0];
-        if (!newId || moved.failed.length) throw new Error(moved.failed[0]?.error ?? "moved item did not save");
-        await deps.cancel({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, item: dayLineRef(previous), reason: `Moved to ${edit.moveTo}` });
-        expected.push({ kind: "moved", id: previous.id, previous, toDate: edit.moveTo, newId });
+        // Move in place: one conditional write keeps the same item, id and details.
+        // Creating a new item and cancelling the old one could leave the work on both
+        // days if the second write failed, and dropped the detail note.
+        const moved = await deps.move({
+          tenantId: target.tenantId,
+          actorId: target.dayDirectorActorId,
+          commitmentId: previous.id,
+          fromBusinessDate: previous.businessDate,
+          toBusinessDate: edit.moveTo,
+        });
+        if (!moved) throw new Error("the item changed before it could be moved");
+        expected.push({ kind: "moved", id: previous.id, previous, toDate: edit.moveTo, newId: previous.id });
         touchedDates.add(previous.businessDate);
         touchedDates.add(edit.moveTo);
+        const movedItem = { ...previous, businessDate: edit.moveTo };
+        if (edit.title) {
+          await deps
+            .edit({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, item: dayLineRef(movedItem), actionTitle: edit.title })
+            .catch(error => failures.push({ title: previous.title, error: `moved, but the new title did not save: ${error instanceof Error ? error.message : String(error)}` }));
+        }
+        const patch: Parameters<typeof updateDayDirectorCommitment>[0]["patch"] = {};
+        if (edit.executionType !== "unchanged") patch.executionType = edit.executionType;
+        if (edit.timing) patch.scheduleLabel = edit.timing;
+        if (Object.keys(patch).length) {
+          await deps
+            .update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: previous.id, patch })
+            .catch(error => failures.push({ title: previous.title, error: `moved, but the timing did not save: ${error instanceof Error ? error.message : String(error)}` }));
+        }
         continue;
       }
       if (edit.title) {
@@ -327,8 +330,9 @@ export async function applyWorkLedgerPlan(input: {
       }
       if (entry.kind === "moved") {
         const fresh = rows.get(entry.newId);
-        const stale = rows.get(entry.id);
-        if (!fresh || stale) {
+        // An in-place move keeps its id, so the proof is the new date, not the old id's absence.
+        const stale = entry.newId !== entry.id && rows.get(entry.id);
+        if (!fresh || stale || fresh.businessDate !== entry.toDate) {
           failures.push({ title: entry.previous.title, error: "Day Line readback did not show the move" });
           continue;
         }

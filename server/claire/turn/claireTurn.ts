@@ -808,6 +808,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           sessionKind: state.sessionKind ?? (input.surface === "voice" ? "pre_drive" : "desk"),
           callFacts: state.workLedgerCallFacts ?? [],
           sourceEventId: input.sourceEventId,
+          inputComplete: durableInputComplete,
         },
         { now: deps.now, ...(deps.workLedger ?? {}) }
       );
