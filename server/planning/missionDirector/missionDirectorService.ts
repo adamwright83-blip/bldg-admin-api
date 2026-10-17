@@ -267,7 +267,15 @@ export async function computeMissionPlan(input: {
   operatorUserIds?: readonly string[];
   businessDate: string;
   timeZone?: string;
-}): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string }> {
+}, options: {
+  /**
+   * Called with the input fingerprint before any paid explanation. Returning
+   * false means the caller already has this exact plan stored, so no model is
+   * called (production 2026-10-16: the goal-cycle worker re-planned every few
+   * minutes and paid for an explanation each time, then discarded it).
+   */
+  needsExplanation?: (inputFingerprint: string) => Promise<boolean>;
+} = {}): Promise<{ outcome: MissionPlanOutcome; inputFingerprint: string; unchanged?: boolean }> {
   const timeZone = input.timeZone?.trim() || getDashboardTimeZone();
   const operatorUserId = input.operatorUserId?.trim() || input.operatorId;
   const operatorUserIds = [...new Set(
@@ -430,17 +438,6 @@ export async function computeMissionPlan(input: {
                 campaignPriorityById,
               },
             });
-  const { explanation, intelligence } = await explainMissionPlan({
-    tenantId: input.tenantId,
-    outcome: bare,
-  });
-  const outcome: MissionPlanOutcome =
-    bare.status === "no_plan"
-      ? { ...bare, workPlan }
-      : bare.status === "fallback_only"
-        ? { ...bare, explanation, workPlan }
-        : { ...bare, explanation, intelligence, workPlan };
-
   const inputFingerprint = computePlanningFingerprint({
     businessDate: input.businessDate,
     fieldItemIds: fieldToday.timeline.map(item => item.id),
@@ -452,6 +449,20 @@ export async function computeMissionPlan(input: {
     candidateFingerprint: candidateFeed?.fingerprint ?? null,
     executionConstraint: weeklyExecution,
   });
+  if (options.needsExplanation && !(await options.needsExplanation(inputFingerprint))) {
+    return { outcome: { ...bare, workPlan } as MissionPlanOutcome, inputFingerprint, unchanged: true };
+  }
+  // A no_plan outcome carries no explanation, so it never pays for one.
+  const { explanation, intelligence } =
+    bare.status === "no_plan"
+      ? { explanation: "", intelligence: "deterministic_fallback" as const }
+      : await explainMissionPlan({ tenantId: input.tenantId, outcome: bare });
+  const outcome: MissionPlanOutcome =
+    bare.status === "no_plan"
+      ? { ...bare, workPlan }
+      : bare.status === "fallback_only"
+        ? { ...bare, explanation, workPlan }
+        : { ...bare, explanation, intelligence, workPlan };
   return { outcome, inputFingerprint };
 }
 
@@ -529,7 +540,23 @@ async function planForDateInner(input: {
       }).catch(() => ({ projectedIds: [], created: 0 }))
     )
   );
-  const { outcome, inputFingerprint } = await computeMissionPlan(input);
+  const latestStored = async () => {
+    const [row] = await db.select().from(missionDirectorPlans).where(and(
+      eq(missionDirectorPlans.tenantId, input.tenantId),
+      inArray(missionDirectorPlans.operatorId, missionOperatorIds(input)),
+      eq(missionDirectorPlans.businessDate, input.businessDate)
+    )).orderBy(desc(missionDirectorPlans.createdAt), desc(missionDirectorPlans.revision)).limit(1);
+    return row;
+  };
+  let { outcome, inputFingerprint, unchanged } = await computeMissionPlan(input, {
+    needsExplanation: async fp => (await latestStored())?.inputFingerprint !== fp,
+  });
+  if (unchanged) {
+    const latest = await latestStored();
+    if (latest?.inputFingerprint === inputFingerprint) return toRecord(latest);
+    // The stored plan changed underneath us: compute once more, explanation included.
+    ({ outcome, inputFingerprint } = await computeMissionPlan(input));
+  }
   // Serialize persistence across API replicas using the authoritative tenant
   // row. Expensive reads/model work above do not hold the lock.
   return db.transaction(async tx => {
