@@ -448,6 +448,7 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
     ...input.dayLine.map(item => item.sourceText ?? ""),
     input.utterance,
   ].join(" ");
+  const titleCorpus = [operatorCorpus, ...input.held.map(item => item.title), ...input.dayLine.map(item => item.title)].join(" ");
   const knownIds = new Map(input.dayLine.map(item => [item.id, item]));
   const knownRefs = new Set(input.held.map(item => item.ref));
 
@@ -466,7 +467,8 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
       refused.push(`held item quote not in the operator's words: ${quote.slice(0, 80)}`);
       continue;
     }
-    if (!groundedInOperatorWords(title, operatorCorpus, 0.5)) {
+    // A title may reuse words of work already held or on the line (a revision keeps its name).
+    if (!groundedInOperatorWords(title, titleCorpus, 0.5)) {
       refused.push(`held item title not grounded: ${title}`);
       continue;
     }
@@ -496,6 +498,17 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
     });
   }
 
+  // A refused revision of work Claire already holds keeps the previous version: refusing a
+  // bad rewrite must never silently drop the operator's held work.
+  const keptRefs = new Set(held.map(item => item.ref));
+  for (const candidate of raw.held) {
+    const previous = input.held.find(item => item.ref === candidate.ref.trim());
+    if (previous && !keptRefs.has(previous.ref)) {
+      held.push(previous);
+      keptRefs.add(previous.ref);
+      savedByRef.set(previous.ref, false);
+    }
+  }
   const saveRefs = held.filter(item => savedByRef.get(item.ref)).map(item => item.ref);
 
   const edits: LedgerEdit[] = [];

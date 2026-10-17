@@ -97,6 +97,9 @@ function createCanonicalHarness(nowIso = "2026-09-22T15:00:00.000Z") {
   return {
     rows,
     deps: {
+      // These scenarios verify the legacy V1 route, which is what runs with CLAIRE_WORK_LEDGER=0.
+      // The same PR #599 scenarios through the work ledger: server/claire/workLedger/workLedger.live.test.ts.
+      workLedger: null,
       now: () => new Date(nowIso),
       timeZone: () => "America/Los_Angeles",
       loadExisting,

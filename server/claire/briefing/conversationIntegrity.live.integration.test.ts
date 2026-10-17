@@ -11,6 +11,7 @@ import type { ClaireTurnDeps, ClaireTurnInput } from "../turn/claireTurn";
 import { assembleClaireDriveContext } from "../contextAssembler";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { createDatabaseConversationStateStore } from "../turn/conversationStateStore";
+import { dayLineDisplayTitle, readDayLineOverlay } from "../../../shared/goldlineDayLine";
 
 const suite = process.env.CLAIRE_REPAIR_LIVE_MODEL === "1" ? describe : describe.skip;
 suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
@@ -48,13 +49,19 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
         weekToDate: { reportedOutcomes: [], planChanges: [] } },
     };
     const transcript: Array<{ operator: string; claire: string }> = [];
+    // Product policy (Adam, 2026-10-16): clear commitments save automatically; work the operator
+    // says to hold is held until they say otherwise. So the orders are explicitly held here, and
+    // the landing page, a clear "I have to", saves on its own turn. Every safety property of the
+    // original replay is kept: holds are honored, ad copy never becomes work, one campaign item
+    // carries the challenge classification, corrections revise held work, approval saves it.
     const turns = [
-      "I have 3 dry cleaning orders. I need to see if those have been charged yet. If not, I need to charge them. I need to deliver 2 of them tonight.",
+      "I have 3 dry cleaning orders. I need to see if those have been charged yet. If not, I need to charge them. I need to deliver 2 of them tonight. Hold those for now, don't put them on the Day Line yet.",
       "And 1 of them tomorrow morning.",
       "And before I leave work, I have to create a new page for our Laundry Farm landing page website.",
       "To align with the Instagram ad that I am creating also that says, skip laundry this week on us. We will pick up tomorrow, 20 pounds free. No charge today. Keep the monthly service only if you love it.",
       "The marketing challenge I'm doing, the website and the Instagram ad, needs to be added to the Day Line for today. Keep the orders separate; don't save those yet.",
     ];
+    const HELD_TURNS = 2;
     const send = async (utterance: string) => {
       // Fresh adapter instance each turn: success cannot depend on a process-local Map.
       const store = createDatabaseConversationStateStore();
@@ -83,25 +90,26 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
       transcript.push({ operator: utterance, claire: result.speak });
       await store.save(key, owner, state, 600_000);
     };
-    for (const utterance of turns) {
+    for (const [index, utterance] of turns.entries()) {
       await send(utterance);
-      if (utterance !== turns.at(-1)) {
-        const [rows] = await sql.execute<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ?", [tenantId]);
-        expect(rows, JSON.stringify(transcript)).toHaveLength(0);
-      }
+      const [rows] = await sql.execute<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ?", [tenantId]);
+      // Held orders are never written; from the landing-page turn on, exactly that one item exists.
+      expect(rows, JSON.stringify(transcript)).toHaveLength(index < HELD_TURNS ? 0 : 1);
     }
     const [rows] = await sql.execute<mysql.RowDataPacket[]>("SELECT * FROM day_director_commitments WHERE tenantId = ?", [tenantId]);
     expect(rows, JSON.stringify(transcript)).toHaveLength(1);
     expect(rows[0].businessDate).toBe("2026-10-15");
     const metadata = typeof rows[0].metadataJson === "string" ? JSON.parse(rows[0].metadataJson) : rows[0].metadataJson;
     expect(metadata.executionType).toBe("challenge");
-    expect(`${rows[0].title} ${rows[0].sourceText}`).toMatch(/Instagram/i);
-    expect(`${rows[0].title} ${rows[0].sourceText}`).toMatch(/page|website/i);
+    // What the operator sees: the displayed title (operator renames are an overlay) and its detail.
+    const shown = `${dayLineDisplayTitle(readDayLineOverlay(metadata), rows[0].title)} ${rows[0].sourceText} ${metadata.detailNote ?? ""}`;
+    expect(shown).toMatch(/Instagram/i);
+    expect(shown).toMatch(/page|website/i);
     expect(transcript.at(-1)?.claire).toMatch(/challenge/i);
     const restored = await createDatabaseConversationStateStore().load<ClaireTurnState>(key);
     expect(restored?.persistence).toBe("durable");
     expect(restored?.state.history?.filter(h => h.speaker === "operator")).toHaveLength(5);
-    expect(JSON.stringify(restored?.state.heldBriefingItems)).toMatch(/dry cleaning/i);
+    expect(JSON.stringify(restored?.state.workLedger?.held ?? restored?.state.heldBriefingItems)).toMatch(/dry[- ]cleaning/i);
     await send("Before you save the dry-cleaning work, change the one delivery tomorrow to tomorrow afternoon. Keep two deliveries tonight and charge only orders that have not already been charged. Show me the corrected plan; do not save it yet.");
     const [beforeApproval] = await sql.execute<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ?", [tenantId]);
     expect(beforeApproval, JSON.stringify(transcript)).toHaveLength(1);

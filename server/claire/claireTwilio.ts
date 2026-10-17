@@ -830,8 +830,10 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         (missionClass.kind === "passthrough" || missionClass.kind === "flush") &&
         Boolean(input.utterance.trim()) &&
         !(input.allowFragmentWait && looksUnfinished(input.utterance));
+      // Ownership does not depend on this turn's eligibility: a held fragment or a mission
+      // command still must not let Brain V2's grant or V1's writers save Day Line work.
+      if (isClaireWorkLedgerEnabled()) conversation.workLedgerOwnsDayLine = true;
       if (ledgerEligible) {
-        conversation.workLedgerOwnsDayLine = true;
         if (!conversation.workLedgerCallFacts) {
           conversation.workLedgerCallFacts = await loadPriorCallFacts({
             tenantId: conversation.tenantId,
@@ -925,6 +927,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           dayDirectorActorId: conversation.dayDirectorActorId,
           surface: "voice", utterance: input.utterance.trim(), state: conversation,
           sourceEventId: daphneSourceId, sourceConfirmed: input.sourceConfirmed,
+          // This adapter decided ledger eligibility for the turn (and ran it when eligible).
+          workLedgerHandledUpstream: true,
           conversationKey: callStateKey(conversationId),
           brief: conversation.brief, context: conversation.context,
           allowFragmentWait: input.allowFragmentWait,
@@ -1099,6 +1103,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               conversationKey: callStateKey(conversationId),
               sourceEventId:daphneSourceId,
               sourceConfirmed:input.sourceConfirmed,
+              workLedgerHandledUpstream: true,
               brief: conversation.brief,
               context: conversation.context,
               allowFragmentWait: input.allowFragmentWait,

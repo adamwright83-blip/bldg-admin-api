@@ -324,6 +324,7 @@ export const claireRouter = router({
             utterance: input.utterance,
             state,
             conversationKey: key,
+            workLedgerHandledUpstream: true,
             brief: preview.brief,
             context,
             rookContactResidues,

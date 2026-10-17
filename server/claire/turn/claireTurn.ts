@@ -34,7 +34,8 @@ import {
   refersToPriorWork,
 } from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
-import { workLedgerPromptSection } from "../workLedger/workLedgerTurn";
+import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
+import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
 import { reviseBriefing } from "../briefing/reviseBriefing";
@@ -263,6 +264,8 @@ export type ClaireTurnInput = {
   conversationKey: string;
   /** Stable transport event identity, when supplied by an authoritative adapter. */
   sourceEventId?: string;
+  /** The caller already ran the work ledger for this exact turn; do not run it twice. */
+  workLedgerHandledUpstream?: boolean;
   sourceConfirmed?: boolean;
   brief?: string | null;
   context?: ClaireDriveContext | null;
@@ -419,6 +422,8 @@ export type ClaireTurnDeps = {
   decisionStore: ClaireDecisionStore;
   /** Brain V3 remains the classifier; tests may replace only this closed-output projection. */
   decisionProvider?: ClaireClosedDecisionProvider;
+  /** Work-ledger seams (planner, Day Line readers/writers). null switches the ledger off for this call. */
+  workLedger?: Partial<import("../workLedger/workLedgerTurn").WorkLedgerTurnDeps> | null;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -777,6 +782,37 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     thoughtCompleteness = !allowWait || budgetSpent ? "forced_flush" : "complete";
     state.pendingFragment = null;
     state.fragmentHolds = 0;
+  }
+
+  /**
+   * The work ledger is the only Day Line writer whenever it is enabled — for
+   * every caller of this function, not only the phone webhook. CI replay
+   * (2026-10-16) drove this function directly and the legacy writers saved
+   * four items after "don't save those yet". Ownership is set here, and the
+   * ledger runs here unless the caller already ran it for this turn.
+   */
+  if (deps.workLedger !== null && isClaireWorkLedgerEnabled()) {
+    state.workLedgerOwnsDayLine = true;
+    const strategicControl = Boolean(state.strategicProposalId);
+    if (!input.workLedgerHandledUpstream && !strategicControl && utterance) {
+      const ledger = await runWorkLedgerTurn(
+        {
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          dayDirectorActorId: input.dayDirectorActorId,
+          conversationKey: input.conversationKey,
+          surface: input.surface,
+          utterance,
+          state,
+          timeZone,
+          sessionKind: state.sessionKind ?? (input.surface === "voice" ? "pre_drive" : "desk"),
+          callFacts: state.workLedgerCallFacts ?? [],
+          sourceEventId: input.sourceEventId,
+        },
+        { now: deps.now, ...(deps.workLedger ?? {}) }
+      );
+      if (ledger.handled) return { ...ledger.result, thoughtCompleteness };
+    }
   }
 
   // Explicit user-authored style corrections are persisted only after the
@@ -1876,7 +1912,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // confirmation parsing can leave "to the Day Line" as a remainder; replaying
       // that fragment after the save can route back through Day Line logic and write twice.
       if (reply.remainder && !explicitPendingCommit && !weeklySpeech) {
-        const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
+        const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false, workLedgerHandledUpstream: true }, overrides);
         return finish({
           speak: more.speak || (writeSucceeded ? "" : commitSpeak),
           receiptBackedCommit: writeSucceeded ? commitSpeak : undefined,
@@ -1901,7 +1937,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       mark("briefing");
       const remainder = reply.decision === "no" ? reply.remainder : "";
       if (remainder) {
-        const more = await runClaireTurn({ ...input, utterance: remainder, state, allowFragmentWait: false }, overrides);
+        const more = await runClaireTurn({ ...input, utterance: remainder, state, allowFragmentWait: false, workLedgerHandledUpstream: true }, overrides);
         return finish({
           speak: `Okay, I won't add any of that. ${more.speak}`.trim(),
           kind: more.kind === "listening" ? "briefing_declined" : more.kind,

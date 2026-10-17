@@ -1,3 +1,4 @@
+import { dayLineDisplayTitle, isDayLineCancelled, readDayLineOverlay } from "../../shared/goldlineDayLine";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
@@ -554,7 +555,8 @@ export async function listDayLineCommitmentsForAnalysis(
     .limit(maxRows + 1);
   if (rows.length > maxRows)
     throw new Error("Day-Line commitment materialization limit exceeded");
-  return rows.map(r => {
+  // Same truth as the Day Line itself: an operator's rename shows, a removed item is gone.
+  return rows.filter(r => !isDayLineCancelled(readDayLineOverlay(r.metadataJson))).map(r => {
     const meta =
       r.metadataJson && typeof r.metadataJson === "object"
         ? (r.metadataJson as Record<string, unknown>)
@@ -566,7 +568,7 @@ export async function listDayLineCommitmentsForAnalysis(
     return {
       id: r.id,
       businessDate: r.businessDate,
-      title: r.title,
+      title: dayLineDisplayTitle(readDayLineOverlay(meta), r.title),
       kind: r.kind,
       executionType:
         typeof meta.executionType === "string" ? meta.executionType : null,

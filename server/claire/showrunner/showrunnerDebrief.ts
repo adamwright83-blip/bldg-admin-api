@@ -214,7 +214,9 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
       const window: Slot =
         d.window !== "none" ? (d.window as Slot) : d.time ? (d.time < "12:00" ? "morning" : d.time < "17:00" ? "afternoon" : "evening") : (preferred ?? "morning");
       const key = `development:${short(JSON.stringify([d.who, d.what, d.date, d.time]))}`;
-      const title = d.kind === "meeting" ? `Meet ${d.who || "the contact"}${d.place ? ` at ${d.place}` : ""}` : `Follow up: ${d.who || d.what}`;
+      // The operator is never their own follow-up target ("Follow up: operator", 2026-10-16 replay).
+      const who = /^(?:the\s+)?(?:operator|me|myself|i|you|owner|self)$/i.test(d.who.trim()) ? "" : d.who.trim();
+      const title = d.kind === "meeting" ? `Meet ${who || "the contact"}${d.place ? ` at ${d.place}` : ""}` : `Follow up: ${who || d.what}`;
       return {
         key,
         date,
