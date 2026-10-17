@@ -12,8 +12,10 @@ import {
   listScheduledOutreachMessages,
 } from "../scheduledOutreachService";
 import {
+  createTrustedMessagingConnectorProofForTest,
   listPersonalOutreachReplies,
   recordMessagingEvidenceEvent,
+  recordPersonalOutreachReply,
   resetPersonalOutreachReplyMemoryForTest,
 } from "./personalOutreachReplyService";
 
@@ -63,7 +65,14 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
     }
   });
 
-  it("persists outbound and inbound message events in MySQL, survives memory reset, and transitions an awaiting draft to dispatched only after an outbound event is observed", async () => {
+  it("persists outbound and inbound message events in MySQL, rejects spoofed/mismatched outbound events, and transitions an awaiting draft to dispatched only after a verified outbound event", async () => {
+    const trustedDevice = createTrustedMessagingConnectorProofForTest({
+      adapterId: "android_handset_bridge_verified",
+    });
+    const trustedWebhook = createTrustedMessagingConnectorProofForTest({
+      adapterId: "twilio_webhook_verified",
+    });
+
     const draft = await createScheduledOutreachDraft({
       tenantId,
       operatorId,
@@ -81,7 +90,58 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
       now,
     });
 
-    // 1. Observe outbound send from device connector
+    // 0a. Spoofed outbound without connector proof is rejected and leaves outbox untouched
+    await expect(
+      recordMessagingEvidenceEvent({
+        tenantId,
+        operatorId,
+        source: "device_observed",
+        direction: "outbound",
+        customerId,
+        rawPhone: "+12135550141",
+        providerMessageId: `gmsg_spoof_${suffix}`,
+        messageId: draft.id,
+        body: "Hey Mei, checking in from Laundry Farm.",
+        observedAt: new Date("2026-10-17T18:02:00.000Z"),
+      })
+    ).rejects.toThrow(/Authority violation/i);
+
+    // 0b. Mismatched body on trusted connector is rejected and leaves outbox untouched
+    await expect(
+      recordMessagingEvidenceEvent({
+        tenantId,
+        operatorId,
+        source: "device_observed",
+        direction: "outbound",
+        customerId,
+        rawPhone: "+12135550141",
+        providerMessageId: `gmsg_badbody_${suffix}`,
+        messageId: draft.id,
+        body: "Edited text that was never approved in the outbox",
+        observedAt: new Date("2026-10-17T18:03:00.000Z"),
+        trustedConnector: trustedDevice,
+      })
+    ).rejects.toThrow(/body_mismatch/i);
+
+    // 0c. Operator-reported inbound reply never transitions outbox to dispatched
+    await recordPersonalOutreachReply({
+      tenantId,
+      operatorId,
+      customerId,
+      customerName: "Mei Lin",
+      replyText: "Just checking if you got my message",
+      messageId: draft.id,
+      now: new Date("2026-10-17T18:04:00.000Z"),
+    });
+
+    const [beforeDispatchRows] = await sql.execute<mysql.RowDataPacket[]>(
+      "SELECT status, external_message_id, dispatched_at FROM scheduled_outreach_messages WHERE id = ?",
+      [draft.id]
+    );
+    expect(beforeDispatchRows[0]?.status).toBe("awaiting_sender_setup");
+    expect(beforeDispatchRows[0]?.external_message_id).toBeNull();
+
+    // 1. Observe verified outbound send from device connector matching exact messageId, phone, and approved body
     const outboundSaved = await recordMessagingEvidenceEvent({
       tenantId,
       operatorId,
@@ -95,6 +155,7 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
       territoryId: "silver-lake",
       body: "Hey Mei, checking in from Laundry Farm.",
       observedAt: new Date("2026-10-17T18:05:00.000Z"),
+      trustedConnector: trustedDevice,
     });
 
     expect(outboundSaved.source).toBe("device_observed");
@@ -122,6 +183,7 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
       territoryId: "silver-lake",
       body: "Can you pick up 2 bags Thursday morning?",
       observedAt: new Date("2026-10-17T18:10:00.000Z"),
+      trustedConnector: trustedWebhook,
     });
 
     expect(inboundSaved.source).toBe("provider_webhook");
@@ -135,7 +197,7 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
       tenantId,
       operatorId,
     });
-    expect(persisted).toHaveLength(2);
+    expect(persisted).toHaveLength(3);
 
     const otherTenantPersisted = await listPersonalOutreachReplies({
       tenantId: otherTenantId,
@@ -198,6 +260,9 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
   });
 
   it("persists STOP opt-outs in MySQL and blocks communication permissions", async () => {
+    const trustedDevice = createTrustedMessagingConnectorProofForTest({
+      adapterId: "android_handset_bridge_verified",
+    });
     const optOutCustomerId = `cust_stop_${suffix}`;
     const stopEvent = await recordMessagingEvidenceEvent({
       tenantId,
@@ -209,6 +274,7 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
       rawPhone: "+12135550177",
       body: "STOP",
       observedAt: new Date("2026-10-17T18:20:00.000Z"),
+      trustedConnector: trustedDevice,
     });
     expect(stopEvent.classification).toBe("opt_out");
     expect(stopEvent.permissionEffect).toBe("opted_out");

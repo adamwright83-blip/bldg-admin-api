@@ -54,9 +54,9 @@ export function CozyMessageComposer({
   } | null>(null);
   const [showReplyRecorder, setShowReplyRecorder] = useState(false);
   const [replyText, setReplyText] = useState("");
-  const [replyClassification, setReplyClassification] = useState<CozyReplyClassification | "auto">(
-    "auto"
-  );
+  const [replyClassification, setReplyClassification] = useState<
+    Exclude<CozyReplyClassification, "outbound_sent"> | "auto"
+  >("auto");
   const [replyError, setReplyError] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
@@ -652,7 +652,9 @@ export function CozyMessageComposer({
                 className={styles.scheduleInput}
                 value={replyClassification}
                 onChange={(e) =>
-                  setReplyClassification(e.target.value as CozyReplyClassification | "auto")
+                  setReplyClassification(
+                    e.target.value as Exclude<CozyReplyClassification, "outbound_sent"> | "auto"
+                  )
                 }
                 data-testid="personal-reply-classification"
               >

@@ -1,14 +1,29 @@
 /**
  * Transport-agnostic messaging-evidence engine for Lantern City outreach.
  *
- * Epistemic & durability rules:
+ * Epistemic, authority & durability rules:
  * - Every message event carries `source` (`provider_webhook`, `device_observed`,
  *   or `operator_reported`), `direction` (`inbound` or `outbound`), `tenantId`,
- *   `operatorId`, matched `customerId` (or `rawPhone` if unmatched),
- *   `providerMessageId`, `observedAt`, and `body`.
+ *   `operatorId`, matched `customerId`, `providerMessageId`, `observedAt`, and `body`.
  * - Each source's level of evidence stays strictly separate.
- * - An outbound draft becomes "sent" (`send_observed`) only when a matching
- *   outbound event is observed; opening a compose window never counts.
+ * - Source authority (fail-closed):
+ *   1. Public operator UI calls (`recordPersonalOutreachReply`) are strictly
+ *      forced to `source = "operator_reported"`, `direction = "inbound"`, require
+ *      a known `customerId`, never accept arbitrary unmatched personal numbers,
+ *      and NEVER transition `scheduled_outreach_messages` to `dispatched`.
+ *   2. Only trusted internal adapters with cryptographic/connector authority
+ *      (`TRUSTED_MESSAGING_CONNECTOR_AUTHORITY`, verified signature/connector
+ *      identity, and authorized sender number) may mint `provider_webhook` or
+ *      `device_observed`. Because no live provider/device connector is active in
+ *      production yet, trusted ingestion is refused in production unless an
+ *      authenticated adapter is explicitly enabled.
+ * - Outbound send observation (`dispatched`):
+ *   Transitioning an outbox row to `status = "dispatched"` requires a verified
+ *   trusted outbound event (`provider_webhook` or `device_observed`) matched to
+ *   the exact outbox row (`messageId`), destination phone (`recipientPhone`),
+ *   approved message content (`currentMessageBody` / `approvedBodyDigest`), and
+ *   non-empty `providerMessageId`, with idempotent conflict-safe updates that
+ *   reject stale or duplicate events.
  * - Fail-closed durable persistence: when a database connection is configured,
  *   every write must insert into `personal_outreach_replies` AND read the saved
  *   row back from MySQL before acknowledging success. Errors are never swallowed,
@@ -21,16 +36,18 @@
  *   status in `communicationPermissionService`.
  */
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   personalOutreachReplies,
   scheduledOutreachMessages,
   type PersonalOutreachReplyRow,
+  type ScheduledOutreachMessageRow,
 } from "../../../../drizzle/schema";
 import {
   COZY_MESSAGE_EVIDENCE_SOURCES,
   COZY_MESSAGE_EVIDENCE_SOURCE_LABELS,
   COZY_REPLY_CLASSIFICATIONS,
+  isTrustedMessageEvidenceSource,
   type CozyMessageDirection,
   type CozyMessageEvidenceSource,
   type CozyPersonalReplyEvidence,
@@ -40,6 +57,41 @@ import {
 import { normalizeSmsPhone } from "../../../_core/sms";
 import { getDb } from "../../../db";
 import { recordCommunicationPermission } from "../../../strategy/communicationPermissionService";
+import { approvedBodyDigest } from "./smsComposeHandoff";
+
+/**
+ * Unforgeable internal authority symbol required to mint `provider_webhook` or
+ * `device_observed` events. JSON/tRPC callers cannot construct or pass this symbol.
+ */
+export const TRUSTED_MESSAGING_CONNECTOR_AUTHORITY = Symbol(
+  "TRUSTED_MESSAGING_CONNECTOR_AUTHORITY"
+);
+
+export type TrustedMessagingConnectorProof = {
+  readonly authority: typeof TRUSTED_MESSAGING_CONNECTOR_AUTHORITY;
+  readonly adapterId: "twilio_webhook_verified" | "android_handset_bridge_verified";
+  readonly verifiedSignatureOrSessionId: string;
+  readonly authorizedSenderPhone: string;
+};
+
+export function createTrustedMessagingConnectorProofForTest(input?: {
+  adapterId?: "twilio_webhook_verified" | "android_handset_bridge_verified";
+  verifiedSignatureOrSessionId?: string;
+  authorizedSenderPhone?: string;
+}): TrustedMessagingConnectorProof {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Test connector proof cannot be minted in production."
+    );
+  }
+  return {
+    authority: TRUSTED_MESSAGING_CONNECTOR_AUTHORITY,
+    adapterId: input?.adapterId ?? "twilio_webhook_verified",
+    verifiedSignatureOrSessionId:
+      input?.verifiedSignatureOrSessionId ?? "sig_verified_test_adapter",
+    authorizedSenderPhone: input?.authorizedSenderPhone ?? "+13105553785",
+  };
+}
 
 const testMemoryEvents = new Map<string, CozyPersonalReplyEvidence[]>();
 let forceFailNextPersistenceForTest = false;
@@ -262,6 +314,140 @@ function mapRowToEvidence(row: PersonalOutreachReplyRow): CozyPersonalReplyEvide
   };
 }
 
+function assertTrustedConnectorAuthority(input: {
+  source: CozyMessageEvidenceSource;
+  direction: CozyMessageDirection;
+  trustedConnector?: TrustedMessagingConnectorProof;
+}): void {
+  if (input.direction === "outbound" && !isTrustedMessageEvidenceSource(input.source)) {
+    throw new Error(
+      "Authority violation: outbound send evidence cannot be recorded from operator_reported input; only verified provider_webhook or device_observed connectors may record outbound sends."
+    );
+  }
+  if (!isTrustedMessageEvidenceSource(input.source)) {
+    return;
+  }
+  if (
+    !input.trustedConnector ||
+    input.trustedConnector.authority !== TRUSTED_MESSAGING_CONNECTOR_AUTHORITY
+  ) {
+    throw new Error(
+      `Authority violation: source "${input.source}" requires a verified internal connector proof and cannot be submitted by an unverified client.`
+    );
+  }
+  if (!input.trustedConnector.verifiedSignatureOrSessionId?.trim()) {
+    throw new Error(
+      `Authority violation: source "${input.source}" requires a non-empty verifiedSignatureOrSessionId.`
+    );
+  }
+  const normalizedSender = normalizeSmsPhone(input.trustedConnector.authorizedSenderPhone);
+  if (!normalizedSender) {
+    throw new Error(
+      `Authority violation: source "${input.source}" requires a valid E.164 authorizedSenderPhone.`
+    );
+  }
+  // No live provider webhook or handset bridge is enabled in production yet
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.JOYSTICK_ENABLE_TRUSTED_MESSAGING_CONNECTOR !== "true"
+  ) {
+    throw new Error(
+      `Trusted messaging connector ingestion (${input.source}) is inert in production until a verified connector is enabled.`
+    );
+  }
+}
+
+export type VerifiedOutboundDispatchMatch =
+  | {
+      matched: true;
+      outboxRow: ScheduledOutreachMessageRow;
+      alreadyDispatchedIdempotent: boolean;
+    }
+  | {
+      matched: false;
+      reason:
+        | "missing_message_id"
+        | "missing_provider_message_id"
+        | "missing_recipient_phone"
+        | "outbox_not_found"
+        | "customer_mismatch"
+        | "phone_mismatch"
+        | "body_mismatch"
+        | "stale_event_before_draft"
+        | "invalid_outbox_status"
+        | "conflicting_external_message_id";
+    };
+
+/**
+ * Verifies whether a trusted outbound event (`provider_webhook` or `device_observed`)
+ * is authorized to transition a `scheduled_outreach_messages` row to `dispatched`.
+ *
+ * Requires:
+ * 1. Exact `messageId` match in the same `(tenantId, operatorId)` scope
+ * 2. Non-empty `providerMessageId`
+ * 3. Exact normalized destination phone match (`rawPhone === outboxRow.recipientPhone`)
+ * 4. Exact approved message body digest match (`approvedBodyDigest(body) === approvedBodyDigest(outboxRow.currentMessageBody)`)
+ * 5. Non-stale timestamp (`observedDate >= outboxRow.createdAt`)
+ * 6. Idempotent conflict-safe status check (`pending`, `awaiting_sender_setup`, `claimed`, or already `dispatched` with the same `externalMessageId`)
+ */
+export function verifyOutboundOutboxMatch(input: {
+  outboxRow: ScheduledOutreachMessageRow | null | undefined;
+  messageId: string | null;
+  customerId: string | null;
+  normalizedRecipientPhone: string | null;
+  trimmedBody: string;
+  providerMessageId: string | null;
+  observedDate: Date;
+}): VerifiedOutboundDispatchMatch {
+  if (!input.messageId) {
+    return { matched: false, reason: "missing_message_id" };
+  }
+  if (!input.providerMessageId) {
+    return { matched: false, reason: "missing_provider_message_id" };
+  }
+  if (!input.normalizedRecipientPhone) {
+    return { matched: false, reason: "missing_recipient_phone" };
+  }
+  const row = input.outboxRow;
+  if (!row || row.id !== input.messageId) {
+    return { matched: false, reason: "outbox_not_found" };
+  }
+  if (input.customerId && row.customerId !== input.customerId) {
+    return { matched: false, reason: "customer_mismatch" };
+  }
+  const outboxPhone = normalizeSmsPhone(row.recipientPhone) ?? row.recipientPhone.trim();
+  if (!outboxPhone || outboxPhone !== input.normalizedRecipientPhone) {
+    return { matched: false, reason: "phone_mismatch" };
+  }
+  if (approvedBodyDigest(input.trimmedBody) !== approvedBodyDigest(row.currentMessageBody)) {
+    return { matched: false, reason: "body_mismatch" };
+  }
+  const draftCreatedAtMs =
+    row.createdAt instanceof Date
+      ? row.createdAt.getTime()
+      : new Date(String(row.createdAt)).getTime();
+  if (
+    Number.isFinite(draftCreatedAtMs) &&
+    input.observedDate.getTime() + 1000 < draftCreatedAtMs
+  ) {
+    return { matched: false, reason: "stale_event_before_draft" };
+  }
+  if (row.status === "dispatched") {
+    if (row.externalMessageId === input.providerMessageId) {
+      return { matched: true, outboxRow: row, alreadyDispatchedIdempotent: true };
+    }
+    return { matched: false, reason: "conflicting_external_message_id" };
+  }
+  if (
+    row.status !== "pending" &&
+    row.status !== "awaiting_sender_setup" &&
+    row.status !== "claimed"
+  ) {
+    return { matched: false, reason: "invalid_outbox_status" };
+  }
+  return { matched: true, outboxRow: row, alreadyDispatchedIdempotent: false };
+}
+
 export async function recordMessagingEvidenceEvent(input: {
   tenantId: string;
   operatorId: string;
@@ -277,21 +463,67 @@ export async function recordMessagingEvidenceEvent(input: {
   classification?: CozyReplyClassification;
   surface?: "cozy_composer" | "day_line" | "device_connector" | "provider_webhook";
   observedAt?: Date | string;
+  trustedConnector?: TrustedMessagingConnectorProof;
 }): Promise<CozyPersonalReplyEvidence> {
   if (!input.tenantId?.trim() || !input.operatorId?.trim()) {
     throw new Error("tenantId and operatorId are required to record messaging evidence.");
   }
+  assertTrustedConnectorAuthority({
+    source: input.source,
+    direction: input.direction,
+    trustedConnector: input.trustedConnector,
+  });
+
   const trimmedBody = input.body.trim();
   if (!trimmedBody) {
     throw new Error("Message body is required to record messaging evidence.");
   }
   const normalizedPhone = input.rawPhone
-    ? normalizeSmsPhone(input.rawPhone) ?? input.rawPhone.trim()
+    ? normalizeSmsPhone(input.rawPhone) ?? null
     : null;
+  if (input.rawPhone && !normalizedPhone) {
+    throw new Error("Invalid phone number format for messaging evidence event.");
+  }
+
   let resolvedCustomerId = input.customerId?.trim() || null;
   let resolvedCustomerName = input.customerName?.trim() || "";
   let resolvedMessageId = input.messageId?.trim() || null;
   let resolvedTerritoryId = input.territoryId?.trim() || null;
+  const trimmedProviderMessageId = input.providerMessageId?.trim() || null;
+
+  // Data minimization & scoping: operator_reported UI fallback requires an explicit customerId
+  // and must never persist arbitrary raw phone numbers.
+  if (input.source === "operator_reported") {
+    if (!resolvedCustomerId) {
+      throw new Error(
+        "Operator-reported fallback requires a known customerId; arbitrary unmatched phone numbers cannot be logged."
+      );
+    }
+    if (input.rawPhone) {
+      throw new Error(
+        "Operator-reported fallback does not accept rawPhone input; customer identity is scoped by customerId."
+      );
+    }
+  }
+
+  // Outbound send observations require explicit messageId, providerMessageId, and recipient phone
+  if (input.direction === "outbound") {
+    if (!resolvedMessageId) {
+      throw new Error(
+        "Outbound send observation requires an explicit outbox messageId."
+      );
+    }
+    if (!trimmedProviderMessageId) {
+      throw new Error(
+        "Outbound send observation requires a non-empty providerMessageId."
+      );
+    }
+    if (!normalizedPhone) {
+      throw new Error(
+        "Outbound send observation requires the destination phone number (rawPhone) for verification."
+      );
+    }
+  }
 
   const observedDate =
     input.observedAt instanceof Date
@@ -311,7 +543,7 @@ export async function recordMessagingEvidenceEvent(input: {
 
   const db = await getDb();
 
-  // If customerId or messageId is not explicitly supplied, attempt to match against the tenant+operator's outbox by phone
+  // For trusted connectors, correlate phone against existing tenant+operator outbox records
   if (db && (!resolvedCustomerId || !resolvedMessageId) && normalizedPhone) {
     const outboxMatches = await db
       .select()
@@ -337,11 +569,48 @@ export async function recordMessagingEvidenceEvent(input: {
 
   if (!resolvedCustomerId && !normalizedPhone) {
     throw new Error(
-      "Messaging evidence requires either a matched customerId or a rawPhone."
+      "Messaging evidence requires a scoped customerId or a verified connector phone number."
     );
   }
   if (!resolvedCustomerName) {
     resolvedCustomerName = normalizedPhone ? `Unmatched (${normalizedPhone})` : "Customer";
+  }
+
+  // If this is a trusted outbound event and DB is active, verify outbox match BEFORE persisting dispatch
+  let verifiedOutboundRow: ScheduledOutreachMessageRow | null = null;
+  let outboundAlreadyDispatched = false;
+  if (db && input.direction === "outbound") {
+    const [outboxCandidate] = await db
+      .select()
+      .from(scheduledOutreachMessages)
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, resolvedMessageId!),
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId)
+        )
+      )
+      .limit(1);
+
+    const verification = verifyOutboundOutboxMatch({
+      outboxRow: outboxCandidate,
+      messageId: resolvedMessageId,
+      customerId: resolvedCustomerId,
+      normalizedRecipientPhone: normalizedPhone,
+      trimmedBody,
+      providerMessageId: trimmedProviderMessageId,
+      observedDate,
+    });
+    if (!verification.matched) {
+      throw new Error(
+        `Outbound send verification failed (${verification.reason}): refusing to mark outbox draft as dispatched.`
+      );
+    }
+    verifiedOutboundRow = verification.outboxRow;
+    outboundAlreadyDispatched = verification.alreadyDispatchedIdempotent;
+    resolvedCustomerId = verifiedOutboundRow.customerId;
+    resolvedCustomerName = verifiedOutboundRow.customerName;
+    resolvedTerritoryId = resolvedTerritoryId ?? verifiedOutboundRow.territoryId ?? null;
   }
 
   const classification: CozyReplyClassification =
@@ -363,13 +632,10 @@ export async function recordMessagingEvidenceEvent(input: {
     source: input.source,
     customerId: resolvedCustomerId,
     rawPhone: normalizedPhone,
-    providerMessageId: input.providerMessageId?.trim() || null,
+    providerMessageId: trimmedProviderMessageId,
     body: trimmedBody,
     observedAtIso,
   });
-
-  const externalRef =
-    input.providerMessageId?.trim() || `${input.source}:${eventId}`;
 
   if (db) {
     await db
@@ -383,7 +649,7 @@ export async function recordMessagingEvidenceEvent(input: {
         rawPhone: normalizedPhone,
         direction: input.direction,
         source: input.source,
-        providerMessageId: input.providerMessageId?.trim() || null,
+        providerMessageId: trimmedProviderMessageId,
         messageId: resolvedMessageId,
         territoryId: resolvedTerritoryId,
         replyText: trimmedBody,
@@ -429,55 +695,37 @@ export async function recordMessagingEvidenceEvent(input: {
       );
     }
 
-    // When an outbound send is observed, transition the matching outbox draft to dispatched
-    if (input.direction === "outbound" && (resolvedMessageId || resolvedCustomerId)) {
-      const targetOutboxRows = resolvedMessageId
-        ? await db
-            .select()
-            .from(scheduledOutreachMessages)
-            .where(
-              and(
-                eq(scheduledOutreachMessages.id, resolvedMessageId),
-                eq(scheduledOutreachMessages.tenantId, input.tenantId),
-                eq(scheduledOutreachMessages.operatorId, input.operatorId)
-              )
-            )
-            .limit(1)
-        : await db
-            .select()
-            .from(scheduledOutreachMessages)
-            .where(
-              and(
-                eq(scheduledOutreachMessages.tenantId, input.tenantId),
-                eq(scheduledOutreachMessages.operatorId, input.operatorId),
-                eq(scheduledOutreachMessages.customerId, resolvedCustomerId!)
-              )
-            )
-            .orderBy(desc(scheduledOutreachMessages.createdAt))
-            .limit(5);
-
-      const candidateDraft = targetOutboxRows.find(
-        row =>
-          row.status === "pending" ||
-          row.status === "awaiting_sender_setup" ||
-          row.status === "claimed"
-      );
-      if (candidateDraft) {
-        await db
-          .update(scheduledOutreachMessages)
-          .set({
-            status: "dispatched",
-            dispatchedAt: observedDate,
-            externalMessageId: externalRef,
-          })
-          .where(
-            and(
-              eq(scheduledOutreachMessages.id, candidateDraft.id),
-              eq(scheduledOutreachMessages.tenantId, input.tenantId),
-              eq(scheduledOutreachMessages.operatorId, input.operatorId)
-            )
-          );
-      }
+    // Conflict-safe idempotent transition to `dispatched` only when verifiedOutboundRow is present
+    if (
+      input.direction === "outbound" &&
+      verifiedOutboundRow &&
+      !outboundAlreadyDispatched &&
+      trimmedProviderMessageId
+    ) {
+      await db
+        .update(scheduledOutreachMessages)
+        .set({
+          status: "dispatched",
+          dispatchedAt: observedDate,
+          externalMessageId: trimmedProviderMessageId,
+        })
+        .where(
+          and(
+            eq(scheduledOutreachMessages.id, verifiedOutboundRow.id),
+            eq(scheduledOutreachMessages.tenantId, input.tenantId),
+            eq(scheduledOutreachMessages.operatorId, input.operatorId),
+            eq(scheduledOutreachMessages.recipientPhone, verifiedOutboundRow.recipientPhone),
+            eq(
+              scheduledOutreachMessages.currentMessageBody,
+              verifiedOutboundRow.currentMessageBody
+            ),
+            inArray(scheduledOutreachMessages.status, [
+              "pending",
+              "awaiting_sender_setup",
+              "claimed",
+            ])
+          )
+        );
     }
 
     if (prepared.permissionEffect === "opted_out") {
@@ -549,7 +797,7 @@ export async function recordMessagingEvidenceEvent(input: {
     rawPhone: normalizedPhone,
     direction: input.direction,
     source: input.source,
-    providerMessageId: input.providerMessageId?.trim() || null,
+    providerMessageId: trimmedProviderMessageId,
     messageId: resolvedMessageId,
     territoryId: resolvedTerritoryId,
     replyText: trimmedBody,
@@ -576,32 +824,40 @@ export async function recordMessagingEvidenceEvent(input: {
   return readBackMem;
 }
 
+/**
+ * Operator fallback procedure for recording an inbound customer reply when
+ * automatic observation is unavailable.
+ *
+ * Security & Authority Invariant:
+ * - Always forces `source = "operator_reported"` and `direction = "inbound"`.
+ * - Requires a known `customerId` (does not accept arbitrary unmatched numbers).
+ * - Never transitions `scheduled_outreach_messages` to `dispatched`.
+ */
 export async function recordPersonalOutreachReply(input: {
   tenantId: string;
   operatorId: string;
-  customerId?: string | null;
+  customerId: string;
   customerName?: string;
-  rawPhone?: string | null;
   replyText: string;
-  direction?: CozyMessageDirection;
-  source?: CozyMessageEvidenceSource;
-  providerMessageId?: string | null;
-  classification?: CozyReplyClassification;
+  classification?: Exclude<CozyReplyClassification, "outbound_sent">;
   messageId?: string | null;
   territoryId?: string | null;
-  surface?: "cozy_composer" | "day_line" | "device_connector" | "provider_webhook";
+  surface?: "cozy_composer" | "day_line";
   now?: Date;
 }): Promise<CozyPersonalReplyEvidence> {
+  if (!input.customerId?.trim()) {
+    throw new Error("customerId is required to record an operator-reported customer reply.");
+  }
   return recordMessagingEvidenceEvent({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
-    source: input.source ?? "operator_reported",
-    direction: input.direction ?? "inbound",
+    source: "operator_reported",
+    direction: "inbound",
     body: input.replyText,
-    customerId: input.customerId ?? null,
+    customerId: input.customerId.trim(),
     customerName: input.customerName ?? null,
-    rawPhone: input.rawPhone ?? null,
-    providerMessageId: input.providerMessageId ?? null,
+    rawPhone: null,
+    providerMessageId: null,
     messageId: input.messageId ?? null,
     territoryId: input.territoryId ?? null,
     classification: input.classification,

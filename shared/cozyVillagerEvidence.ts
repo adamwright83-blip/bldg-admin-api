@@ -547,10 +547,46 @@ export function chooseReplyEvidence(
   return [...inbound].sort(byLatestEvent)[0]!;
 }
 
+export const COZY_TRUSTED_EVIDENCE_SOURCES: readonly CozyMessageEvidenceSource[] = [
+  "provider_webhook",
+  "device_observed",
+] as const;
+
+export function isTrustedMessageEvidenceSource(
+  source: CozyMessageEvidenceSource | string | null | undefined
+): source is "provider_webhook" | "device_observed" {
+  return source === "provider_webhook" || source === "device_observed";
+}
+
+function normalizeBodyForMatch(body: string | null | undefined): string {
+  return (body ?? "").trim().replace(/\s+/g, " ");
+}
+
 export function chooseOutboundEventEvidence(
-  events: readonly CozyPersonalReplyEvidence[]
+  events: readonly CozyPersonalReplyEvidence[],
+  options?: {
+    outboxRow?: CozyOutreachEvidenceRow | null;
+    recipientPhone?: string | null;
+  }
 ): CozyPersonalReplyEvidence | null {
-  const outbound = events.filter(event => eventDirectionOf(event) === "outbound");
+  const outbound = events.filter(event => {
+    if (eventDirectionOf(event) !== "outbound") return false;
+    // Operator-reported events can never transition a draft to send_observed
+    if (!isTrustedMessageEvidenceSource(eventSourceOf(event))) return false;
+    // Outbound send observation requires an existing approved outbox row
+    const row = options?.outboxRow;
+    if (!row || row.status === "cancelled") return false;
+    if (event.messageId && event.messageId !== row.id) return false;
+    // Exact approved body match (normalized whitespace)
+    const eventBody = normalizeBodyForMatch(eventBodyOf(event));
+    const approvedBody = normalizeBodyForMatch(row.currentMessageBody);
+    if (!eventBody || !approvedBody || eventBody !== approvedBody) return false;
+    // Recipient phone match when both are present
+    const targetDigits = normalizeDigits(options?.recipientPhone);
+    const eventDigits = normalizeDigits(event.rawPhone);
+    if (targetDigits && eventDigits && targetDigits !== eventDigits) return false;
+    return true;
+  });
   if (!outbound.length) return null;
   return [...outbound].sort(byLatestEvent)[0]!;
 }
@@ -615,7 +651,11 @@ function projectOne(
 ): CozyProjectedTarget {
   const row = chooseOutreachEvidence(rows.filter(item => item.customerId === target.customerId));
   const outboundEvent = chooseOutboundEventEvidence(
-    events.filter(item => eventMatchesTarget(item, target))
+    events.filter(item => eventMatchesTarget(item, target)),
+    {
+      outboxRow: row,
+      recipientPhone: target.phone ?? null,
+    }
   );
   const reply = replyForTarget(target, events);
   const replyOptedOut =

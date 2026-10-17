@@ -489,6 +489,76 @@ describe("cozy villager evidence contract", () => {
     expect(villager.outreachActionComplete).toBe(true);
     expect(villager.objectiveComplete).toBe(false);
     expect(villager.paidOrder.status).toBe("unavailable");
+
+    // Operator-reported or mismatched-body outbound events never mark send_observed
+    const spoofedOrMismatched = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [
+        row({
+          status: "awaiting_sender_setup",
+          deliveryIntent: "immediate",
+          dispatchedAt: null,
+          externalMessageId: null,
+          slotId: "slot_01",
+        }),
+      ],
+      messageEvents: [
+        {
+          id: "por_out_operator_spoof",
+          tenantId: TENANT,
+          operatorId: OPERATOR,
+          customerId: "cust_stable_1",
+          customerName: "Mei Lin",
+          rawPhone: "+12135550141",
+          direction: "outbound",
+          source: "operator_reported",
+          providerMessageId: "op_1",
+          messageId: "msg_1",
+          territoryId: "silver-lake",
+          replyText: "Hey Mei, checking in.",
+          body: "Hey Mei, checking in.",
+          classification: "outbound_sent",
+          nextStepKind: "outbound_send_observed",
+          nextAction: "Operator claim",
+          preparedFollowUpDraft: null,
+          permissionEffect: "none",
+          provenance: "operator_reported",
+          surface: "cozy_composer",
+          reportedAt: "2026-10-15T17:15:00.000Z",
+          observedAt: "2026-10-15T17:15:00.000Z",
+        },
+        {
+          id: "por_out_mismatched_body",
+          tenantId: TENANT,
+          operatorId: OPERATOR,
+          customerId: "cust_stable_1",
+          customerName: "Mei Lin",
+          rawPhone: "+12135550141",
+          direction: "outbound",
+          source: "device_observed",
+          providerMessageId: "gmsg_out_bad",
+          messageId: "msg_1",
+          territoryId: "silver-lake",
+          replyText: "Unapproved text body",
+          body: "Unapproved text body",
+          classification: "outbound_sent",
+          nextStepKind: "outbound_send_observed",
+          nextAction: "Mismatched body",
+          preparedFollowUpDraft: null,
+          permissionEffect: "none",
+          provenance: "device_observed",
+          surface: "device_connector",
+          reportedAt: "2026-10-15T17:16:00.000Z",
+          observedAt: "2026-10-15T17:16:00.000Z",
+        },
+      ],
+      objective,
+      now: NOW,
+    });
+    expect(spoofedOrMismatched.mission.targets[0]!.communicationState).toBe("awaiting_sender");
+    expect(spoofedOrMismatched.mission.targets[0]!.outreachActionComplete).toBe(false);
   });
 
   it("blocks consent when an observed reply is an opt-out", () => {
