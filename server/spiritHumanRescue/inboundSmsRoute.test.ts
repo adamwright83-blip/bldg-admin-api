@@ -312,4 +312,34 @@ describe("Spirit Human inbound SMS webhook", () => {
     expect(optOutKeywordFor("Can you stop by tomorrow?")).toBeNull();
     expect(optOutKeywordFor("yes please pick up")).toBeNull();
   });
+
+  it("a STOP is recorded by phone even when customer lookup fails", async () => {
+    const inbox = new MemoryBusinessLineInbox();
+    const { body, signature } = signedBody({ MessageSid: "SMstop3", From: FROM, To: TO, Body: "STOP" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      {
+        authToken: AUTH,
+        tenantId: "default",
+        expectedTo: TO,
+        nodeEnv: "production",
+        store: new MemoryRescueMissionStore(),
+        inbox,
+        loadAggregates: async () => {
+          throw new Error("aggregate read outage");
+        },
+        now: () => new Date("2026-10-17T21:00:00.000Z"),
+      }
+    );
+    expect(result).toEqual({ status: 200, recorded: true, optedOut: true });
+    expect([...inbox.optOuts.values()]).toEqual([
+      {
+        tenantId: "default",
+        customerKeyHash: customerKeyHashForPhone("default", FROM),
+        snapshotCustomerIds: [],
+        providerMessageSid: "SMstop3",
+        capturedAt: new Date("2026-10-17T21:00:00.000Z"),
+      },
+    ]);
+  });
 });

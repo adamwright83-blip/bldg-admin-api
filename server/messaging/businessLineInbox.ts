@@ -68,7 +68,9 @@ export interface BusinessLineInboxStore {
   recordOptOut(optOut: BusinessLineOptOut): Promise<boolean>;
 }
 
-const inboundId = (tenantId: string, sid: string) => `twilio:${tenantId}:${sid}`.slice(0, 80);
+/** Fixed-length digest of the full tenant and MessageSid, so no valid id pair can collide. */
+export const inboundId = (tenantId: string, sid: string) =>
+  `bli_${createHash("sha256").update(`${tenantId}\u0000${sid}`).digest("hex")}`;
 const OPT_OUT_RECORDER = "business_line_inbound_stop";
 
 export class MemoryBusinessLineInbox implements BusinessLineInboxStore {
@@ -199,14 +201,18 @@ export type RecipientOptOutState = "opted_out" | "clear" | "unavailable";
  */
 export async function businessLineRecipientOptOutState(
   lineNumber: string,
-  recipient: string
+  recipient: string,
+  deps: { getDb?: () => Promise<InboxDb | null> } = {}
 ): Promise<RecipientOptOutState> {
   const line = normalizeIdentityPhone(lineNumber);
   const to = normalizeIdentityPhone(recipient);
+  // No line number means no provider to send through; an unparseable recipient
+  // cannot match any recorded STOP. Neither is a send we could wrongly allow.
   if (!line || !to) return "clear";
-  const db = await getDb().catch(() => null);
-  if (!db) return "clear"; // No durable store, so no STOP can have been recorded.
   try {
+    // A missing or unreachable database does not prove the recipient never texted STOP.
+    const db = await (deps.getDb ?? getDb)();
+    if (!db) return "unavailable";
     const rows = await db
       .select({ keyword: businessLineInboundMessages.optOutKeyword })
       .from(businessLineInboundMessages)

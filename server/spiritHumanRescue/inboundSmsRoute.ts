@@ -96,26 +96,38 @@ export async function handleSpiritHumanInboundSms(
   });
   if (!recorded) return { status: 500, recorded: false, optedOut: false };
 
-  const aggregates = await (deps.loadAggregates ?? listAdminCustomerAggregates)(tenantId);
-  const matchingCustomers = aggregates.filter(row => digits(row.phone) === from);
-  const snapshotIds = new Set(
-    matchingCustomers.map(row => strategyCustomerSnapshotId(tenantId, row))
-  );
-  let optedOut = false;
+  const loadAggregates = deps.loadAggregates ?? listAdminCustomerAggregates;
+  const snapshotIdsFor = (aggregates: AdminCustomerAggregateDbRow[]) =>
+    new Set(
+      aggregates
+        .filter(row => digits(row.phone) === from)
+        .map(row => strategyCustomerSnapshotId(tenantId, row))
+    );
   if (keyword === "stop") {
-    optedOut = await inbox.recordOptOut({
-      tenantId,
-      customerKeyHash,
-      snapshotCustomerIds: [...snapshotIds],
-      providerMessageSid: messageSid,
-      capturedAt: now,
-    });
-    if (!optedOut) return { status: 500, recorded: true, optedOut: false };
+    // The phone-keyed opt-out does not depend on customer lookup, so it is written
+    // and read back first; a lookup outage cannot drop a STOP.
+    const optOut = { tenantId, customerKeyHash, providerMessageSid: messageSid, capturedAt: now };
+    if (!(await inbox.recordOptOut({ ...optOut, snapshotCustomerIds: [] }))) {
+      return { status: 500, recorded: true, optedOut: false };
+    }
+    let snapshotIds: string[] = [];
+    try {
+      snapshotIds = [...snapshotIdsFor(await loadAggregates(tenantId))];
+    } catch (error) {
+      console.warn(
+        "[BusinessLine] STOP recorded by phone; customer lookup failed, so per-customer consent rows were not added",
+        error instanceof Error ? error.name : "unknown"
+      );
+    }
+    if (snapshotIds.length && !(await inbox.recordOptOut({ ...optOut, snapshotCustomerIds: snapshotIds }))) {
+      return { status: 500, recorded: true, optedOut: false };
+    }
     return { status: 200, recorded: true, optedOut: true };
   }
+  const snapshotIds = snapshotIdsFor(await loadAggregates(tenantId));
   if (snapshotIds.size !== 1) {
     console.warn("[SpiritHumanRescue] inbound SMS identity was not uniquely resolvable");
-    return { status: 204, recorded: true, optedOut };
+    return { status: 204, recorded: true, optedOut: false };
   }
   const [snapshotCustomerId] = [...snapshotIds];
   const store = deps.store ?? (await requireDurableRescueStore());
@@ -130,7 +142,7 @@ export async function handleSpiritHumanInboundSms(
       (a, b) => Date.parse(b.send.acceptedAt ?? "") - Date.parse(a.send.acceptedAt ?? "")
     );
   const mission = candidates[0];
-  if (!mission) return { status: 204, recorded: true, optedOut };
+  if (!mission) return { status: 204, recorded: true, optedOut: false };
 
   await recordRescueConsequence(
     {
@@ -142,7 +154,7 @@ export async function handleSpiritHumanInboundSms(
     },
     { store }
   );
-  return { status: 200, recorded: true, optedOut };
+  return { status: 200, recorded: true, optedOut: false };
 }
 
 export function registerSpiritHumanInboundSmsRoutes(app: Express): void {

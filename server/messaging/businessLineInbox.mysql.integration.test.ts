@@ -159,4 +159,27 @@ describe("business line inbox on MySQL", () => {
     });
     expect((await sendSMSWithReceipt("+13235550142", "Your laundry is ready")).evidenceName).toBe("recipient_opted_out");
   }, 20_000);
+
+  it("two messages for a 64-character tenant id never collide", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const tenantId = `t${randomUUID().replace(/-/g, "")}`.padEnd(64, "x");
+    const inbox = new DrizzleBusinessLineInbox(db);
+    const base = {
+      tenantId,
+      toDigits: "8885550199",
+      fromDigits: "3235550101",
+      customerKeyHash: customerKeyHashForPhone(tenantId, "3235550101")!,
+      numMedia: 0,
+      optOutKeyword: null,
+      receivedAt: new Date("2026-10-17T21:00:00.000Z"),
+    };
+    expect(await inbox.recordInbound({ ...base, providerMessageSid: "SMabcdef0000000000000000000000001", body: "first" })).toBe(true);
+    expect(await inbox.recordInbound({ ...base, providerMessageSid: "SMabcdef0000000000000000000000002", body: "STOP", optOutKeyword: "stop" })).toBe(true);
+    const rows = await db
+      .select()
+      .from(businessLineInboundMessages)
+      .where(eq(businessLineInboundMessages.tenantId, tenantId));
+    expect(rows.map(row => row.body).sort()).toEqual(["STOP", "first"]);
+  }, 20_000);
 });
