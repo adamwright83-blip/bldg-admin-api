@@ -1,9 +1,18 @@
 # LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture.
 name: Claire conversation integrity (isolated verification)
+# Pushes run only the deterministic, no-cost checks. Real-model replays spend Anthropic credit
+# (one full set of three suites is roughly 120 Sonnet calls), so they run only when someone
+# starts this workflow by hand with run_paid_model_replays=true. 2026-10-16: an automatic run on
+# every push, plus repeated local replays, spent about $10 in one session.
 on:
   push:
     branches: [codex/claire-repair-verification, claude/claire-work-ledger]
   workflow_dispatch:
+    inputs:
+      run_paid_model_replays:
+        description: "Run the real-model replays (spends Anthropic credit). Type true to authorize."
+        required: true
+        default: "false"
 permissions:
   contents: read
 jobs:
@@ -13,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [database, live-model]
+        mode: ${{ fromJSON(github.event_name == 'workflow_dispatch' && github.event.inputs.run_paid_model_replays == 'true' && '["database","live-model"]' || '["database"]') }}
     services:
       mysql:
         image: mysql:8.0
@@ -31,6 +40,7 @@ jobs:
       CLAIRE_REPAIR_DB_TEST: '1'
       NODE_ENV: ci
       ANTHROPIC_API_KEY: ${{ matrix.mode == 'live-model' && secrets.ANTHROPIC_API_KEY || '' }}
+      CLAIRE_PAID_REPLAY_AUTHORIZED: ${{ matrix.mode == 'live-model' && '1' || '' }}
     steps:
       - name: Require actual model access for the live replay
         if: matrix.mode == 'live-model'
