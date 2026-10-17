@@ -1,7 +1,6 @@
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
-import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -47,10 +46,7 @@ import {
 } from "../../strategy/strategicApproval";
 import { createDefaultOperatorAppointmentStore, resolveOperatorTimeZone } from "../../agents/persistentOperator/operatorAppointmentPolicy";
 import { formatInTimeZone } from "date-fns-tz";
-import {
-  weekStartMonday,
-  addDaysYmd,
-} from "../../../shared/weeklyMissionReadiness";
+import { actionableDates, proposalItemExecutionWindow, strategicPlanningHorizon, targetWeekHorizon } from "../../../shared/weeklyMissionReadiness";
 import { loadDailyCommandWithWeeklyIntent } from "./dailyCommandIntent";
 import {
   adjustWeeklyMission,
@@ -352,7 +348,10 @@ export const weeklyMissionRouter = router({
         });
       const now = new Date();
       const date = formatInTimeZone(now, zone, "yyyy-MM-dd");
-      const start = strategicPlanningHorizon({ businessDate: date, localTime: formatInTimeZone(now, zone, "HH:mm") }).weekStart;
+      // Read the week the preparer actually prepared: after Friday's window closes (not only
+      // on weekends) that is next week.
+      const localTime = formatInTimeZone(now, zone, "HH:mm");
+      const start = strategicPlanningHorizon({ businessDate: date, localTime }).weekStart;
       const proposal = await latestStrategicProposal(identity, start);
       const responses = proposal
         ? await strategicResponses(identity, proposal.id)
@@ -360,9 +359,19 @@ export const weeklyMissionRouter = router({
       const approvedItemIds = proposal
         ? await readVerifiedStrategicApprovalItemIds(identity, proposal)
         : [];
+      // Unapproved work whose time has passed is shown for rescheduling, never approval.
+      const clock = { businessDate: date, localTime };
+      const expiredItemIds = proposal
+        ? proposal.items.filter(i => !approvedItemIds.includes(i.id) && proposalItemExecutionWindow(i, clock) === "expired").map(i => i.id)
+        : [];
+      const rescheduleDates = proposal
+        ? actionableDates(targetWeekHorizon({ businessDate: date, localTime, weekStart: proposal.weekStart })).filter(d => d >= proposal.businessDate)
+        : [];
       return {
         proposal,
         approvedItemIds,
+        expiredItemIds,
+        rescheduleDates,
         verticalKey: await resolveTenantVerticalKey(ctx.tenantId),
         responses,
         stale: proposal
@@ -416,6 +425,8 @@ export const weeklyMissionRouter = router({
         revision: z.string().length(64),
         itemId: z.string().min(1),
         title: z.string().trim().min(1).max(255),
+        /** Reschedule: the item's new day, within the proposal's remaining week. */
+        businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
