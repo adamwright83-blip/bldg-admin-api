@@ -305,7 +305,7 @@ export async function runWorkLedgerTurn(
 
   const confirmation = speakVerifiedLedgerChanges(applied, clock.today);
   const reply = cleanLedgerReply(planned.reply);
-  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || (planned.endCall ? "Talk soon." : "Got it.");
+  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || (planned.endCall ? "Talk soon." : "I haven't saved or carried out anything from that instruction.");
 
   const at = now.getTime();
   remember(input.state, "operator", utterance, at);

@@ -360,7 +360,9 @@ export function buildWorkLedgerUserMessage(input: WorkLedgerPlanInput): string {
  * silence the operator hears. claude-sonnet-5-5 cannot be used here: it rejects
  * the forced tool choice structured output depends on.
  */
-export const DEFAULT_WORK_LEDGER_MODEL = "claude-haiku-5-5";
+// The a2e19574 CI replay lost explicit multi-item instructions on Haiku.
+// Prefer the measured Sonnet fallback until the faster model passes these gates.
+export const DEFAULT_WORK_LEDGER_MODEL = "claude-sonnet-4-6";
 
 export function workLedgerModelId(): string {
   return process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER?.trim() || DEFAULT_WORK_LEDGER_MODEL;

@@ -207,7 +207,7 @@ export async function runShowrunnerTurn(input: {
   const unambiguous = isUnambiguousAgreement(input.utterance);
   const affirmed =
     state.replan && !state.replan.approved && (state.replan.askedTurn ?? 0) === state.turns - 1 && unambiguous;
-  if (state.replan && ((control?.kind === "approve" && unambiguous) || affirmed)) {
+  if (!input.workLedger && state.replan && ((control?.kind === "approve" && unambiguous) || affirmed)) {
     const approved = await (input.approve ?? approveShowrunnerReplan)(state).catch(() => null);
     if (approved) {
       state.replan.approved = true;
@@ -218,7 +218,7 @@ export async function runShowrunnerTurn(input: {
   }
 
   const contactEdits =
-    state.purpose === "desk_planning"
+    !input.workLedger && state.purpose === "desk_planning"
       ? contactEditsForAnalysisSelection(state, input.utterance, now): null;
   if (contactEdits) {
     const edit = await (input.deskReplan ?? replanFromDeskEdits)(state,
@@ -307,18 +307,20 @@ export async function runShowrunnerTurn(input: {
     ...state.briefing.tomorrow.map(i => i.id),
     ...driverDayLineStopIds(state.briefing.driverDayLine),
   ]);
-  const updates: DebriefMissionUpdate[] = model.missionUpdates
+  const updates: DebriefMissionUpdate[] = (input.workLedger ? [] : model.missionUpdates)
     .filter(u => validIds.has(u.itemId) && u.outcome !== "unknown")
     .map(u => ({ ...u, outcome: u.outcome as DebriefMissionUpdate["outcome"], reportedAt: now.toISOString() }));
   const pendingIds = new Set(state.briefing.pendingDecision?.items.map(i => i.id) ?? []);
   const planEdits: DeskPlanEdit[] =
-    state.purpose === "desk_planning"
+    !input.workLedger && state.purpose === "desk_planning"
       ? (model.planEdits ?? []).filter(
           e => (validIds.has(e.itemId) || pendingIds.has(e.itemId)) && (e.action === "hold" || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time))
         )
       : [];
-  const preparation = state.purpose === "desk_planning" ? (model.readinessNeeds ?? []).map(n => n.trim()).filter(Boolean).slice(0, 5) : [];
-  const developments: DebriefDevelopment[] = model.developments
+  const preparation = !input.workLedger && state.purpose === "desk_planning" ? (model.readinessNeeds ?? []).map(n => n.trim()).filter(Boolean).slice(0, 5) : [];
+  // Keep the original statement for Daphne, but do not let a second interpreter
+  // create durable work facts that can leak into later briefings or revisions.
+  const developments: DebriefDevelopment[] = (input.workLedger ? [] : model.developments)
     .filter(d => d.what.trim() || d.who.trim())
     .map(d => ({ ...d, reportedAt: now.toISOString() }));
   // Persist first: Claire only remembers what was durably saved.
@@ -343,7 +345,7 @@ export async function runShowrunnerTurn(input: {
   }
   state.captured.missionUpdates.push(...updates);
   state.captured.developments.push(...developments);
-  state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
+  if (!input.workLedger) state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
 
   let speak = model.speak.trim();
   const savedNotes = preparation.map(p => `Reminder saved: ${p}`);
