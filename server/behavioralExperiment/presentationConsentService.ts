@@ -62,9 +62,20 @@ export async function setPresentationConsent(
   if (input.choice === "experimentation" && input.granted && !before.adaptationAllowed)
     throw new Error("Allow Daphne to adapt how missions are shown first; nothing was changed.");
 
+  // The writes are separate, so their order is the safety property: experimentation
+  // is revoked before adaptation changes. A failure part-way can leave experiments
+  // off with adaptation unchanged, never experiments latent behind a later re-allow.
+  // Re-allowing adaptation from off also clears an experimentation choice left
+  // behind (a partial write or a racing grant), so experiments need a fresh choice.
+  const resetExperimentation =
+    input.choice === "adaptation" &&
+    (!input.granted || (!before.adaptationAllowed && before.experimentationChoiceStored === true));
   const changes: Array<{ preferenceKey: "adaptation_enabled" | "safe_experimentation"; value: boolean }> =
     input.choice === "adaptation"
-      ? [{ preferenceKey: "adaptation_enabled", value: input.granted }, ...(input.granted ? [] : [{ preferenceKey: "safe_experimentation" as const, value: false }])]
+      ? [
+          ...(resetExperimentation ? [{ preferenceKey: "safe_experimentation" as const, value: false }] : []),
+          { preferenceKey: "adaptation_enabled", value: input.granted },
+        ]
       : [{ preferenceKey: "safe_experimentation", value: input.granted }];
   const at = ports.now();
   for (const change of changes) {
