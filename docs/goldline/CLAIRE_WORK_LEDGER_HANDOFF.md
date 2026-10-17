@@ -99,3 +99,33 @@ These checks fail. Root cause of each:
 - It records decisions, joins ops-task and campaign-chapter outcomes back to them, lets the fatigue gate change the next occasion, and adds a per-arm report.
 - Not live yet: there is no consent UI and the MRT flag is off.
 - When this note was written, its CI was still running.
+
+
+## Status 2026-10-16 evening (after the Astra commits, Claude continuing)
+
+- #604 head is `8b2a72d6`. #605 head is `fbf47bff`, which merges #604 in, so the two branches are in sync.
+- Astra's changes, reviewed and kept:
+  - The Showrunner is silent on work when the ledger owns the conversation.
+  - Unverified save claims are rejected.
+  - Desk OPEN COMMS goes through the ledger.
+  - Later-dated work is reloaded on each turn.
+  - Proposal readers share `strategicPlanningHorizon`.
+  - The default ledger model is now `claude-sonnet-4-6`.
+- Fixed since the Astra commits:
+  - **Strategic preparation (root cause found):** `scheduleAuthorizedStrategicCall` stamped the appointment with the calendar week, while the proposal planned next week (after Friday's window closes, or on a weekend). The call then failed with "Prepared proposal unavailable".
+    - The appointment now carries `proposal.weekStart`.
+    - The three strategy mysql suites pass locally on Friday evening.
+  - **Ledger planner timeout:** Sonnet hit the 9 s timeout on a five-item rundown in CI. Raised to 15 s and tightened the output.
+  - **Replies:** a reply that promises Claire will charge, text, send or call is dropped. Detail-only edits now say "Got it, noted on the line." instead of "I haven't saved anything".
+  - **Timing labels:** a time said without am/pm ("at 11") keeps the operator's own words as the label.
+- **Real-model replays on Sonnet 4.6 (local):**
+  - All 5 in-memory scenarios pass. The rundown scenario passed 4 of 4 runs after the fix.
+  - All 3 production-path disposable-MySQL scenarios pass: the Oct 15 call, the evening debrief and the morning call.
+  - Ledger turns take 4.5–8 s. Non-work turns take 5–9 s.
+- **Daphne #605:** after the merge, the typecheck, 318 unit tests and the `presentationDecision` mysql integration (4 tests) pass.
+- **Open:**
+  - CI on `8b2a72d6` and `fbf47bff` has not been confirmed.
+  - No live phone call has been made.
+  - Ledger latency on Sonnet is roughly what production has today: a correctness fix, not a speed fix.
+  - The Daphne MRT is consent-gated and off, and there is no consent UI.
+  - The local-only `server/strategy/sourceBackedAction.test.ts` expects a MySQL on 3399 and errors in the full run. That is pre-existing.

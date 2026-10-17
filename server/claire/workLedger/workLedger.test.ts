@@ -126,6 +126,17 @@ describe("work ledger validation — the server's half of the contract", () => {
     expect(plan.refused).toHaveLength(4);
   });
 
+  it("keeps the previous version of held work when its rewrite is refused", () => {
+    const held = [{ ref: "w1", title: "Deliver 2 dry cleaning orders tonight", businessDate: TODAY, timing: "tonight", executionType: null, detail: "", quote: "I need to deliver 2 of them tonight." }];
+    const plan = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ ref: "w1", title: "Call Greystar", quote: "Call Greystar about the renewal" })] },
+      planInput({ held }),
+      2
+    );
+    expect(plan.held).toEqual(held);
+    expect(plan.saveRefs).toEqual([]);
+  });
+
   it("drops the reply on non-work turns so the conversational pipeline answers", () => {
     const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, workChanged: false, reply: "We did 41 orders." }, planInput(), 1);
     expect(plan.reply).toBe("");
@@ -359,6 +370,20 @@ describe("one turn through the ledger", () => {
     );
     expect(outcome.handled && outcome.result.speak).toBe("Got it, noted on the line.");
     expect(dayLine.rows.get("landing")?.detailNote).toBe("Offer: skip laundry this week on us");
+  });
+
+  it("reads back held work when the operator corrects it before saving", async () => {
+    const dayLine = createFakeDayLine();
+    const state: ClaireTurnState = { history: [], workLedger: { version: 1, savedIds: [], nextRef: 2, held: [
+      { ref: "w1", title: "Deliver third dry cleaning order", businessDate: TOMORROW, timing: "tomorrow morning", executionType: null, detail: "", quote: "And 1 of them tomorrow morning." },
+    ] } };
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, held: [heldItem({ ref: "w1", title: "Deliver third dry cleaning order", day: "tomorrow", timing: "tomorrow afternoon", quote: "change the one delivery tomorrow to tomorrow afternoon" })] }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "Change the one delivery tomorrow to tomorrow afternoon. Show me the corrected plan; do not save it yet.", state },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(outcome.handled && outcome.result.speak).toBe("Holding, not on the line yet. Tomorrow: deliver third dry cleaning order tomorrow afternoon.");
+    expect(dayLine.writes).toEqual([]);
   });
 
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {

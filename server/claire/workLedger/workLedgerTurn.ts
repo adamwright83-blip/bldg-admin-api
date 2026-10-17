@@ -8,7 +8,7 @@
  */
 import { formatInTimeZone } from "date-fns-tz";
 import { addDaysYmd } from "../../analytics/businessPeriods";
-import { briefingClock } from "../briefing/briefingTiming";
+import { briefingClock, spokenDay } from "../briefing/briefingTiming";
 import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
 import { VerifiedFactInventory, lintPostGenerationStateVerbs } from "../assertionGuard";
 import type { ClaireTurnResult, ClaireTurnState } from "../turn/claireTurn";
@@ -156,6 +156,19 @@ export function cleanLedgerReply(reply: string): string {
   return kept;
 }
 
+/** "Holding, not on the line yet: …" — what Claire is keeping for the operator, by day. */
+export function speakHeldWork(held: WorkLedgerState["held"], today: string): string {
+  const byDay = new Map<string, string[]>();
+  for (const item of held) {
+    const phrase = `${item.title.charAt(0).toLowerCase()}${item.title.slice(1)}${item.timing && !item.title.toLowerCase().includes(item.timing.toLowerCase()) ? ` ${item.timing}` : ""}`;
+    byDay.set(item.businessDate, [...(byDay.get(item.businessDate) ?? []), phrase]);
+  }
+  const parts = Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, phrases]) => `${date === today ? "today" : spokenDay(date, today)}: ${phrases.join("; ")}`);
+  return parts.length ? `Holding, not on the line yet. ${parts.map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(". ")}.` : "";
+}
+
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
   if (!text.trim()) return;
   state.history = [
@@ -246,8 +259,9 @@ export async function runWorkLedgerTurn(
   // A "work" turn that changes nothing, holds nothing new and reads nothing back would only
   // produce an empty "Got it." that sounds like a promise (live replay: "charge the Opus order
   // when it comes in"). Hand it to the conversational pipeline, which can say what it can do.
-  const heldBefore = JSON.stringify(ledger.held.map(item => [item.title, item.businessDate, item.executionType]));
-  const heldAfter = JSON.stringify(planned.held.map(item => [item.title, item.businessDate, item.executionType]));
+  const heldShape = (items: typeof ledger.held) => JSON.stringify(items.map(item => [item.title, item.businessDate, item.executionType, item.timing]));
+  const heldBefore = heldShape(ledger.held);
+  const heldAfter = heldShape(planned.held);
   const changesNothing =
     planned.workChanged &&
     !planned.endCall &&
@@ -309,6 +323,11 @@ export async function runWorkLedgerTurn(
   ledger.lastSaved = Array.from(nextSaved.values()).slice(-20);
 
   const confirmation = speakVerifiedLedgerChanges(applied, clock.today);
+  // Held work that changed but is not saved is read back too, so a correction to it is
+  // never answered with silence or "nothing saved" (CI replay 2026-10-16).
+  const heldReadback = !applied.changes.length && heldBefore !== heldAfter && ledger.held.length
+    ? speakHeldWork(ledger.held, clock.today)
+    : "";
   const reply = cleanLedgerReply(planned.reply);
   // A detail-only edit is verified but not read aloud, so an empty confirmation is not "nothing saved".
   const fallback = planned.endCall
@@ -318,7 +337,7 @@ export async function runWorkLedgerTurn(
       : applied.failures.length
         ? "I couldn't save that just now. Want me to try again?"
         : "I haven't saved or carried out anything from that instruction.";
-  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || fallback;
+  const speak = [confirmation, heldReadback, reply].filter(Boolean).join(" ").trim() || fallback;
 
   const at = now.getTime();
   remember(input.state, "operator", utterance, at);

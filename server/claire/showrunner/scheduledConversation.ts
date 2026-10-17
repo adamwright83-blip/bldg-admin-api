@@ -1,7 +1,8 @@
 import { conversationHistoryForModel, defaultClaireTurnDeps, runClaireTurn, type ClaireTurnDeps, type ClaireTurnInput, type ClaireTurnResult, type ClaireTurnState } from "../turn/claireTurn";
 import { safeClaireBrainV3Fallback } from "../turn/brainV3";
 import { runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
-import { workLedgerPromptSection } from "../workLedger/workLedgerTurn";
+import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
+import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 
 type ScheduledState = ClaireTurnState & { showrunner?: ShowrunnerCallState | null };
 type ShowrunnerOverrides = Pick<Parameters<typeof runShowrunnerTurn>[0], "invoke" | "record" | "approve" | "replan" | "deskReplan" | "business" | "now">;
@@ -16,6 +17,35 @@ export async function runScheduledClaireTurn(
   const state = input.state;
   if (!state.showrunner) return runClaireTurn(input, overrides.turn);
   const deps = { ...defaultClaireTurnDeps(), ...overrides.turn };
+  // Scheduled calls have one work owner too: the ledger runs first (unless the
+  // caller already ran it), and neither Showrunner nor V1 writes work after it.
+  if (deps.workLedger !== null && isClaireWorkLedgerEnabled()) {
+    state.workLedgerOwnsDayLine = true;
+    if (!input.workLedgerHandledUpstream && !state.strategicProposalId && input.utterance.trim()) {
+      const ledger = await runWorkLedgerTurn(
+        {
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          dayDirectorActorId: input.dayDirectorActorId,
+          conversationKey: input.conversationKey,
+          surface: input.surface,
+          utterance: input.utterance.trim(),
+          state,
+          timeZone: deps.timeZone(),
+          sessionKind: state.showrunner.purpose,
+          callFacts: state.workLedgerCallFacts ?? [],
+          sourceEventId: input.sourceEventId,
+        },
+        { now: deps.now, ...(deps.workLedger ?? {}) }
+      );
+      if (ledger.handled) {
+        // Keeps Showrunner's "yes to the immediately prior proposal" shortcut honest.
+        state.showrunner.turns += 1;
+        return ledger.result;
+      }
+    }
+  }
+  const upstream = { ...input, workLedgerHandledUpstream: true };
   const history = state.history ?? [];
   const pending = { briefing: Boolean(state.pendingBriefing), accountFollowUp: Boolean(state.pendingAccountFollowUp),
     action: Boolean(state.pendingProposal || state.pendingUpdate), weeklyPlanning: Boolean(state.weeklyPlanningWeekStart) };
@@ -29,7 +59,7 @@ export async function runScheduledClaireTurn(
   if (workTurn) {
     // This intervening turn invalidates Showrunner's "yes to the immediately prior proposal" shortcut.
     state.showrunner.turns += 1;
-    return runClaireTurn(input, { ...overrides.turn, brainV3: async () => brain });
+    return runClaireTurn(upstream, { ...overrides.turn, brainV3: async () => brain });
   }
 
   // Store accepted input even if inference or the business recorder fails.
