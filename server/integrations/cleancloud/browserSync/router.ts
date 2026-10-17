@@ -644,7 +644,7 @@ export const cleancloudBrowserSyncRouter = router({
     const { getJawbreakerGmailStatus } = await import("./gmailVerification");
     const { isDirectAutoSyncEnabled } = await import("./cleancloudDirectScheduler");
     return {
-      configured: isCleanCloudDirectConfigured(),
+      configured: isCleanCloudDirectConfigured(undefined, ctx.tenantId),
       gmail: await getJawbreakerGmailStatus(ctx.tenantId),
       autoSyncEnabled: isDirectAutoSyncEnabled(),
       paired: !!binding,

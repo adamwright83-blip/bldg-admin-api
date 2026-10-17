@@ -164,6 +164,11 @@ export async function triggerScheduledCleanCloudDirectSync(input?: {
     if (input?.tenantId && binding.tenantId !== input.tenantId) {
       continue;
     }
+    // The environment login belongs to the owner business. Another tenant's binding
+    // is skipped before any login, so CleanCloud never emails a code for it.
+    if (!isCleanCloudDirectConfigured(undefined, binding.tenantId)) {
+      continue;
+    }
 
     const [latest] = await db
       .select({ outcome: browserSyncAttempts.outcome, createdAt: browserSyncAttempts.createdAt })
