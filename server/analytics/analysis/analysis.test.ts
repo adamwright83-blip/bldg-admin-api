@@ -246,6 +246,86 @@ describe("approved materialization", () => {
     ).rejects.toThrow(/tenant/);
     expect(ledger).not.toHaveBeenCalled();
   });
+  it("materializes commercial_accounts, outreach_interventions, and day_line_commitments with PII redaction and WASM SQL execution", async () => {
+    const dataset = await buildApprovedDataset({
+      tenantId: "tenant-a",
+      now: FIXTURE_NOW,
+      timeZone: FIXTURE_TZ,
+      loaders: {
+        ledger: async input => loadPaidOrderLedger(input, fixtureLoaders()),
+        openOrders: async () => [],
+        coverage: async () => provenBusinessCoverageSnapshot(),
+        commercialAccounts: async () => [
+          {
+            id: 101,
+            name: "KITH TREATS Rodeo (contact manager@kith.com)",
+            segment: "hospitality",
+            stage: "proposal_sent",
+            estimatedMonthlyCents: 185000,
+            visitCount: 2,
+            lastVisitAt: new Date("2026-10-10T18:00:00Z"),
+            lastVisitOutcome: "proposal_sent",
+          },
+        ],
+        outreachInterventions: async () => [
+          {
+            id: "int-1",
+            customerKeyHash: "hash-cust-1",
+            channel: "sms",
+            status: "recovered",
+            createdAt: new Date("2026-10-08T18:00:00Z"),
+            contactedAt: new Date("2026-10-09T18:00:00Z"),
+            recoveredOrderId: 501,
+            recoveredRevenueCents: 9500,
+          },
+        ],
+        dayLineCommitments: async () => [
+          {
+            id: "dl-1",
+            businessDate: "2026-10-14",
+            title: "Call Todd at (310) 555-0199 about KITH TREATS aprons",
+            kind: "growth",
+            executionType: "call",
+            status: "completed",
+            scheduleKind: "window",
+            completedAt: new Date("2026-10-14T19:00:00Z"),
+          },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(dataset.tables);
+    expect(serialized).not.toContain("manager@kith.com");
+    expect(serialized).not.toContain("310) 555-0199");
+    expect(serialized).toContain("[redacted email]");
+    expect(serialized).toContain("[redacted phone]");
+
+    const commQuery = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset,
+      sql: "SELECT account_name, stage, SUM(estimated_monthly_cents) AS pipeline_cents FROM commercial_accounts GROUP BY account_name, stage",
+    });
+    expect(commQuery.receipt.status).toBe("ok");
+    expect(commQuery.rows[0]?.[1]).toBe("proposal_sent");
+    expect(commQuery.rows[0]?.[2]).toBe(185000);
+    expect(commQuery.monetaryUnits?.pipeline_cents).toBe("cents");
+
+    const outreachQuery = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset,
+      sql: "SELECT SUM(recovered_order) AS recovered_count, SUM(recovered_revenue_cents) AS recovered_cents FROM outreach_interventions WHERE status = 'recovered'",
+    });
+    expect(outreachQuery.receipt.status).toBe("ok");
+    expect(outreachQuery.rows).toEqual([[1, 9500]]);
+    expect(outreachQuery.monetaryUnits?.recovered_cents).toBe("cents");
+
+    const dayLineQuery = await executeAnalysisQuery({
+      tenantId: "tenant-a",
+      dataset,
+      sql: "SELECT kind, execution_type, status, COUNT(*) AS total FROM day_line_commitments GROUP BY kind, execution_type, status",
+    });
+    expect(dayLineQuery.receipt.status).toBe("ok");
+    expect(dayLineQuery.rows).toEqual([["growth", "call", "completed", 1]]);
+  });
 });
 
 describe("SQL structural policy", () => {

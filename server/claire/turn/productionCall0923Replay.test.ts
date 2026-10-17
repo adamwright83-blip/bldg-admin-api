@@ -247,6 +247,7 @@ describe("2026-09-23 replay", () => {
     expect(t2.speak).not.toMatch(/should i add|say yes or no/i);
     expect(store.rows.some(row => /dana/i.test(row.title))).toBe(false);
     expect(store.rows.some(row => /laundromat/i.test(row.title))).toBe(true);
+    expect(state.heldBriefingItems?.map(item => item.title)).toEqual(["Call Dana"]);
     expect(state.pendingBriefing).toBeNull();
     note(t2);
 
@@ -267,7 +268,7 @@ describe("2026-09-23 replay", () => {
     const before = store.rows.length;
     const t5 = await say(state, T5, deps);
     expect(t5.kind).toBe("briefing_saved");
-    expect(t5.speak).toMatch(/Done\./);
+    expect(t5.speak).toMatch(/Added .*Instagram/i);
     expect(t5.speak).not.toMatch(/should i add|say yes or no/i);
     expect(store.rows).toHaveLength(3);
     expect(store.rows.length).toBeGreaterThan(before);
@@ -524,7 +525,7 @@ describe("prior-claim truth still holds when the turn is actually a challenge", 
     expect(mixed.priorClaimRan).toBe(true);
     expect(mixed.speak).toMatch(/checks out|CleanCloud|came from/i);
     expect(h.store.rows.some(row => /instagram/i.test(row.title))).toBe(true);
-    expect(mixed.speak).toMatch(/Done\./);
+    expect(mixed.speak).toMatch(/Added .*Instagram/i);
   });
 });
 

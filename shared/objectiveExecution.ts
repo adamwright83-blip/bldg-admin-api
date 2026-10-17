@@ -50,8 +50,8 @@ export function isObjectiveExecutionType(value: unknown): value is ObjectiveExec
  * "ad" are not a type. "today's mission" is a designation, not this classifier.
  */
 export function explicitOperatorExecutionType(text: string): ObjectiveExecutionType | null {
-  const challenge = /\b(?:as|is)\s+a\s+challenge\b/i.test(text);
-  const mission = /\b(?:as|is)\s+a\s+mission\b/i.test(text) && !/\btoday'?s\s+mission\b/i.test(text);
+  const challenge = /\b(?:as|is)\s+a\s+(?:marketing\s+)?challenge\b/i.test(text);
+  const mission = /\b(?:as|is)\s+a\s+(?:sales\s+)?mission\b/i.test(text) && !/\btoday'?s\s+mission\b/i.test(text);
   const hybrid = /\bhybrid\s+objective\b/i.test(text);
   if (hybrid || (challenge && mission)) return "hybrid_objective";
   if (challenge) return "challenge";

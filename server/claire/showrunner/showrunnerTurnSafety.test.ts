@@ -61,3 +61,44 @@ describe("persistence before memory", () => {
     expect(out.state.captured.developments).toHaveLength(1);
   });
 });
+
+
+describe("work ledger is the only work interpreter", () => {
+  it.each(["morning_readiness", "evening_debrief", "desk_planning"] as const)(
+    "%s preserves the original statement without saving inferred work", async purpose => {
+      const record = vi.fn(async () => undefined);
+      const replan = vi.fn();
+      const deskReplan = vi.fn();
+      const s = state({ purpose });
+      s.briefing.today = [{ id: "existing", title: "Existing work" } as never];
+      const out = await runShowrunnerTurn({
+        state: s, history: [], utterance: "That is advertising copy, not another task.",
+        sourceEventId: "e", conversationKey: "k", workLedger: { section: null },
+        invoke: model({ ...quiet, speak: "I saved the pickup for tomorrow.", operatorIsDone: true,
+          missionUpdates: [{ itemId: "existing", outcome: "done" }],
+          developments: [{ kind: "commitment", who: "operator", what: "Pick up tomorrow", date: "2026-10-21", time: "", window: "", place: "", operatorWords: "advertising copy" }],
+          readinessNeeds: ["Prepare invented pickup"],
+          planEdits: [{ itemId: "existing", action: "hold", time: "" }],
+        }), record, replan, deskReplan,
+      });
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({
+        utterance: "That is advertising copy, not another task.",
+        updates: [], developments: [], preparation: [],
+      }));
+      expect(out.state.captured).toEqual({ missionUpdates: [], developments: [], readinessNeeds: [] });
+      expect(out.speak).not.toContain("I saved");
+      expect(out.speak).toContain("Nothing new is confirmed saved");
+      expect(replan).not.toHaveBeenCalled();
+      expect(deskReplan).not.toHaveBeenCalled();
+    }
+  );
+
+  it("does not approve a leftover Showrunner revision while the ledger owns work", async () => {
+    const approve = vi.fn();
+    const s = state({ replan: { proposalId: "p", revision: "r", summary: "stale work", approved: false, askedTurn: 1 }, turns: 1 });
+    await runShowrunnerTurn({ state: s, history: [], utterance: "Yes, lock it in.",
+      sourceEventId: "e", conversationKey: "k", workLedger: { section: null },
+      invoke: model(quiet), record: async () => undefined, approve });
+    expect(approve).not.toHaveBeenCalled();
+  });
+});

@@ -15,6 +15,7 @@ export const CLAIRE_DYNAMIC_PROMPT_LABELS = new Set([
   "fact_inventory",
   "identity_authority",
   "brain_v3_semantics",
+  "work_ledger",
 ]);
 
 export function claireStaticInstructionChars(

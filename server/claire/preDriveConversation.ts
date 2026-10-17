@@ -201,12 +201,12 @@ export function conservativeClaireFollowUp(input: {
     return "I'm here.";
   }
   if (openingBrief) {
-    return `Give me a second—ask me that once more. In the meantime, the brief is: ${openingBrief}`.slice(
+    return `I have your last message. I couldn’t finish my response just now. The brief is: ${openingBrief}`.slice(
       0,
       MAX_SPOKEN_ANSWER_CHARS
     );
   }
-  return "Give me a second—ask me that once more.";
+  return "I have your last message. I couldn’t finish my response just now.";
 }
 
 function compactConversationContext(context: ClaireDriveContext): string {
@@ -321,6 +321,8 @@ export async function answerClairePreDriveFollowUp(
      * never business truth, Narrative OS authority, or Claire disclosure permission.
      */
     daphnePromptSection?: string | null;
+    /** Claire's work ledger: verified work saved this conversation, held work, call facts. */
+    workLedgerPromptSection?: string | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -333,8 +335,18 @@ export async function answerClairePreDriveFollowUp(
   const fallback = conservativeClaireFollowUp(input);
   const startedAt = Date.now();
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
-  const recordGeneration =
-    dependencies.recordGeneration ?? recordClaireGeneration;
+  const generationRecorder = dependencies.recordGeneration ?? recordClaireGeneration;
+  const recordGeneration: typeof recordClaireGeneration = async (...args) => {
+    try {
+      return await generationRecorder(...args);
+    } catch (error) {
+      // Observability must not discard a valid answer or break the fallback itself.
+      console.error("[Claire] generation recording failed", {
+        failureStage: "generation_recording",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+  };
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
   const progressionOn = isClaireProgressionEnabled(input.tenantId);
   const referent = input.semanticFrame?.referent;
@@ -431,7 +443,7 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "brain_v3_semantics",
         text: input.semanticFrame
-          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Treat this as settled conversational meaning. Do not reinterpret the raw operator words into a different action, referent, workflow, Day Line request, prior-claim challenge, or work item. Your job is to respond intelligently and in character to this meaning.`
+          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Use this interpretation to maintain continuity. If it conflicts with the operator words, acknowledge the ambiguity rather than defending the interpretation. Do not claim or initiate writes: execution and receipts are owned by the server.`
           : null,
       },
       {
@@ -482,6 +494,9 @@ export async function answerClairePreDriveFollowUp(
       ...(input.daphnePromptSection
         ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]
         : []),
+      ...(input.workLedgerPromptSection
+        ? [{ label: "work_ledger", text: input.workLedgerPromptSection }]
+        : []),
       ...(input.narratorPromptSection
         ? [{ label: "authored_narrative", text: input.narratorPromptSection }]
         : []),
@@ -499,9 +514,10 @@ export async function answerClairePreDriveFollowUp(
       .join(" ");
   }
 
+  let failureStage = "inference";
   const personalOnlyTurn = conversationalMode === "personal";
   const conversationMessages = [
-    ...(personalOnlyTurn ? [] : input.recentTurns ?? []).slice(-8).map(turn => ({
+    ...(personalOnlyTurn ? [] : input.recentTurns ?? []).slice(-14).map(turn => ({
       role: (turn.speaker === "claire" ? "assistant" : "user") as "assistant" | "user",
       content: turn.text,
     })),
@@ -527,6 +543,7 @@ export async function answerClairePreDriveFollowUp(
       await invokeText({
         tenantId: input.tenantId,
         ...claireModelRequest(0.6),
+        feature: "claire_follow_up",
         maxTokens: FOLLOW_UP_MAX_TOKENS,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },
@@ -537,10 +554,13 @@ export async function answerClairePreDriveFollowUp(
         ],
       })
     ).trim();
+    failureStage = "output_validation";
     if (!text) throw new Error("Claire follow-up produced empty output");
     const trimmed = trimToSentenceBoundary(text, FOLLOW_UP_TRIM_CHARS);
     const trimmedToSentenceBoundary = trimmed !== text;
+    failureStage = "state_claim_guard";
     assertPostGenerationStateVerbs(trimmed, inventory);
+    failureStage = "identity_guard";
     const identityViolation = claireIdentityClaimViolation(
       trimmed,
       input.context.identityTruth
@@ -549,6 +569,7 @@ export async function answerClairePreDriveFollowUp(
       throw new Error(`Claire identity truth contradiction: ${identityViolation}`);
     }
 
+    failureStage = "character_guards";
     // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
     let answer = trimmed;
     let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
@@ -666,6 +687,7 @@ export async function answerClairePreDriveFollowUp(
       }
     }
 
+    failureStage = "generation_recording";
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
       source: recoveredVia === null && guardReason === null ? "model" : "fallback",
@@ -707,12 +729,14 @@ export async function answerClairePreDriveFollowUp(
     const failureReason = safeClaireFailureReason(error);
     console.error("[Claire] follow-up generation failed", {
       failureReason,
+      failureStage,
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
       source: "fallback",
       failureReason,
+      failureStage,
       modelRequested: claireModelId(),
       modelServed,
       promptSize: promptSize ?? undefined,

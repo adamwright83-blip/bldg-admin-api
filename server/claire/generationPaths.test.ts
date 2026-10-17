@@ -258,3 +258,22 @@ describe("Claire natural-language generation", () => {
     );
   });
 });
+
+describe("generation telemetry cannot discard conversation", () => {
+  it("returns the generated answer even when recording it fails", async () => {
+    const recordGeneration = vi.fn(async () => { throw new Error("diagnostic store down"); });
+    const result = await answerClairePreDriveFollowUp({ tenantId: "tenant-1", utterance: "What would help a landing page convert?", brief: null, context }, {
+      invokeText: vi.fn(async () => "Use one clear offer and one signup button."), biographyVerifier: async () => true, recordGeneration,
+    });
+    expect(result).toBe("Use one clear offer and one signup button.");
+    expect(recordGeneration).toHaveBeenCalledOnce();
+  });
+  it("still returns a truthful fallback if both generation and diagnostic recording fail", async () => {
+    const result = await answerClairePreDriveFollowUp({ tenantId: "tenant-1", utterance: "What would help a landing page convert?", brief: null, context }, {
+      invokeText: vi.fn(async () => { throw new Error("provider down"); }), biographyVerifier: async () => true,
+      recordGeneration: async () => { throw new Error("diagnostic store down"); },
+    });
+    expect(result).toContain("I have your last message");
+    expect(result).not.toMatch(/ask me.*again|once more/);
+  });
+});

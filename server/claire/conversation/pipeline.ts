@@ -1,5 +1,5 @@
 import { storageGet, storagePut } from "../../storage";
-import { transcribeAudio } from "../../_core/voiceTranscription";
+import { activeTranscriptionProvider, transcribeAudio } from "../../_core/voiceTranscription";
 import { fetchTwilioRecordingMp3 } from "../../twilioPlatform/recordingProvider";
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
 import {
@@ -80,6 +80,18 @@ export async function handleRecordingStatus(input: {
         audioStorageProvider: "private_storage_objects",
         audioStorageKey: archived.key,
       });
+      // A short call in which the operator never said anything has nothing to transcribe but
+      // silence, and transcription models invent sentences for silence (2026-10-15: a 9-second
+      // dropped debrief came back as "The girl kicked the ball."). Record that, not a transcript.
+      const liveTurns = await store.listTurns(session.id).catch(() => []);
+      const operatorSpoke = liveTurns.some(turn => String(turn.speaker).toUpperCase() === "OPERATOR");
+      const seconds = Number(input.recordingDuration ?? "");
+      if (!operatorSpoke && Number.isFinite(seconds) && seconds > 0 && seconds < 20) {
+        await store.updateSession(session.id, { transcriptionStatus: "skipped" });
+        if (session.status === "complete") await runConversationAnalysis(session.id);
+        return;
+      }
+      const provenance = activeTranscriptionProvider() ?? { provider: "whisper" as const, providerVersion: "whisper-1" };
       const stored = await storageGet(archived.key);
       const transcription = await transcribeAudio({
         audioUrl: stored.url,
@@ -91,10 +103,10 @@ export async function handleRecordingStatus(input: {
         await store.insertTranscript({
           sessionId: session.id,
           source: POST_CALL_TRANSCRIPT_SOURCE,
-          provider: "whisper",
-          providerVersion: "whisper-1",
+          provider: provenance.provider,
+          providerVersion: provenance.providerVersion,
           text: transcription.text,
-          payload: { recordingSid: input.recordingSid },
+          payload: { recordingSid: input.recordingSid, liveOperatorTurns: liveTurns.filter(turn => String(turn.speaker).toUpperCase() === "OPERATOR").length },
         });
         await store.updateSession(session.id, { transcriptionStatus: "complete" });
         await emitClaireTranscriptLog(session.id, {

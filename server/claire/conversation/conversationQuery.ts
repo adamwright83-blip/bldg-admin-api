@@ -9,6 +9,7 @@ import { TRPCError } from "@trpc/server";
 import {
   claireConversationAnalyses,
   claireConversationSessions,
+  claireConversationTurns,
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { storageGet } from "../../storage";
@@ -232,4 +233,67 @@ export async function markClaireCallAnalysisWrong(input: {
     analysis: await store.getAnalysis(session.id),
     transcriptUnchanged: JSON.stringify(turns) === JSON.stringify(after),
   };
+}
+
+/**
+ * This conversation's session and the operator's sessions that started just
+ * before it, with their spoken turns. Used so Claire knows about her own
+ * scheduled call that dropped seconds earlier. Timestamps are only compared
+ * with each other (they share the stored offset).
+ */
+export async function loadRecentClaireSessionsAround(input: {
+  tenantId: string;
+  operatorUserId: string;
+  claireConversationId: string;
+}): Promise<{
+  current: { id: string; startedAt: Date } | null;
+  prior: Array<{
+    id: string;
+    conversationKind: string;
+    completionReason: string | null;
+    startedAt: Date;
+    endedAt: Date | null;
+    turns: Array<{ speaker: string; text: string; source: string }>;
+  }>;
+}> {
+  const db = await getDb();
+  if (!db) return { current: null, prior: [] };
+  const sessions = await db
+    .select({
+      id: claireConversationSessions.id,
+      claireConversationId: claireConversationSessions.claireConversationId,
+      conversationKind: claireConversationSessions.conversationKind,
+      completionReason: claireConversationSessions.completionReason,
+      startedAt: claireConversationSessions.startedAt,
+      endedAt: claireConversationSessions.endedAt,
+    })
+    .from(claireConversationSessions)
+    .where(
+      and(
+        eq(claireConversationSessions.tenantId, input.tenantId),
+        eq(claireConversationSessions.operatorUserId, input.operatorUserId)
+      )
+    )
+    .orderBy(desc(claireConversationSessions.startedAt))
+    .limit(6);
+  const current = sessions.find(session => session.claireConversationId === input.claireConversationId) ?? null;
+  if (!current) return { current: null, prior: [] };
+  const earlier = sessions.filter(session => session.id !== current.id && session.startedAt.getTime() <= current.startedAt.getTime());
+  const prior = [];
+  for (const session of earlier.slice(0, 2)) {
+    const turns = await db
+      .select({ speaker: claireConversationTurns.speaker, text: claireConversationTurns.text, source: claireConversationTurns.source })
+      .from(claireConversationTurns)
+      .where(eq(claireConversationTurns.sessionId, session.id))
+      .limit(40);
+    prior.push({
+      id: session.id,
+      conversationKind: session.conversationKind,
+      completionReason: session.completionReason,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      turns,
+    });
+  }
+  return { current: { id: current.id, startedAt: current.startedAt }, prior };
 }

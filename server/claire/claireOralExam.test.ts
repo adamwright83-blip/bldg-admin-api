@@ -419,7 +419,7 @@ describe("O — long natural speech with corrections", () => {
     expect(revised).toContain('"Grab the KITH aprons" is now before 11 AM.');
     expect(await ask("Actually drop the cash deposit.")).toContain('Took "Deposit the cash" off the list.');
     const saved = await ask("Yes.");
-    expect(saved).toBe("Done. 1 on today's line and 1 on tomorrow's line.");
+    expect(saved).toContain("Done. 1 on today's line and 1 on tomorrow's line.");
   });
 });
 

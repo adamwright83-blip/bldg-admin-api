@@ -95,7 +95,7 @@ export function matchExistingWork(item: BriefingItem, existing: ExistingWork[]):
     const shared = wanted.filter(token => have.includes(token)).length;
     // One shared word ("OPUS") is not the same task; two distinct shared words, or identical one-word subjects, are.
     const needed = wanted.length === 1 && have.length === 1 ? 1 : 2;
-    if (shared >= needed && shared > 0 && (!best || shared > best.score)) best = { work, score: shared };
+    if (shared >= needed && (!best || shared > best.score)) best = { work, score: shared };
   }
   return best?.work ?? null;
 }
@@ -233,12 +233,13 @@ export async function commitBriefing(
     : readDayDirectorCanonicalCommitment);
 
   const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], commitmentIds: [], receipts: [] };
-  const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string) => {
+  const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string, checkType = true) => {
     const row = await readCanonical({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
       businessDate: item.businessDate, commitmentId: id });
     if (!row || row.id !== id || row.tenantId !== input.tenantId || row.actorId !== input.dayDirectorActorId ||
       row.businessDate !== item.businessDate || !row.title.trim() ||
       (expectedTitle !== null && row.title !== enforceTitleContract(expectedTitle).slice(0, 255)) ||
+      (checkType && item.executionType && (row.metadataJson as Record<string, unknown> | null)?.executionType !== item.executionType) ||
       (status && row.status !== status)) throw new Error("Day Line canonical readback did not confirm this item");
     return row;
   };
@@ -257,7 +258,7 @@ export async function commitBriefing(
             metadataJson: { executionType: item.existing.executionType },
           });
         }
-        let row = await verified(item, item.existing.id, item.existing.title);
+        let row = await verified(item, item.existing.id, item.existing.title, undefined, false);
         if (item.executionType && item.existing.executionType !== item.executionType) {
           await update({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
             commitmentId: item.existing.id, patch: { executionType: item.executionType } });
@@ -420,6 +421,25 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
     sentences.push(saved ? "Want me to try those again?" : "Want me to try again?");
   }
   if (result.warnings?.length) sentences.push(`The items are on the line, but I couldn't verify the timing for ${joinList(result.warnings.map(w => w.item.title))}.`);
+  const named = [
+    ...result.added.map(item => ({ item, verb: "Added" })),
+    ...result.completed.map(item => ({ item, verb: "Marked done" })),
+    ...(result.alreadyPresent ?? []).map(item => ({ item, verb: "Already saved" })),
+  ];
+  if (named.length) {
+    const details = named.map(({ item, verb }) =>
+      `${verb} ${item.title}${item.executionType ? ` as a ${item.executionType.replace(/_/g, " ")}` : ""} for ${spokenDay(item.businessDate, today)}.`
+    );
+    if (!result.failed.length) {
+      if (result.added.length === 0 && result.completed.length === 0) {
+        sentences[0] = details.join(" ");
+      } else {
+        sentences.push(details.join(" "));
+      }
+    } else {
+      sentences.unshift(details.join(" "));
+    }
+  }
   return sentences.join(" ");
 }
 

@@ -362,29 +362,27 @@ export function speakDriverDayLineCall(
     ...titles(line.stops.filter(stop => stop.needsApproval)),
     ...line.pendingApproval.map(item => item.title),
   ];
+  // Spoken to a person: say what is true and useful, and leave out the empty
+  // categories ("Nothing is waiting for your approval.") a report would list.
   const mission = line.designatedMission
     ? purpose === "evening_debrief"
-      ? `Today's designated mission was ${line.designatedMission.title}.`
-      : `Today's designated mission is ${line.designatedMission.title}.`
-    : purpose === "evening_debrief"
-      ? "No designated mission was stored for today."
-      : "No designated mission is stored for today.";
+      ? `Today's mission was ${line.designatedMission.title}.`
+      : `Today's mission is ${line.designatedMission.title}.`
+    : "";
   const omitted = [...new Set(line.omissions.map(label => OMISSION_LABELS[label] ?? label))];
   return [
     mission,
     executable.length
-      ? `Unfinished on the Day Line: ${join(executable)}.`
-      : "Nothing unfinished is on the Day Line.",
-    evidenced.length
-      ? `Completed with execution evidence: ${join(evidenced)}.`
-      : "No stop has execution evidence of completion.",
-    unmarked.length ? `Marked completed without execution evidence: ${join(unmarked)}.` : "",
-    blocked.length
-      ? `Blocked or deferred: ${join([...new Set(blocked)])}.`
-      : "Nothing on the line is blocked or deferred.",
-    approval.length
-      ? `Still needs your approval: ${join([...new Set(approval)])}.`
-      : "Nothing is waiting for your approval.",
+      ? purpose === "evening_debrief"
+        ? `Still open: ${join(executable)}.`
+        : `On today's line: ${join(executable)}.`
+      : purpose === "evening_debrief"
+        ? "Nothing was left open on today's line."
+        : "Today's line is empty so far.",
+    evidenced.length ? `Done and verified: ${join(evidenced)}.` : "",
+    unmarked.length ? `Marked done, not yet verified: ${join(unmarked)}.` : "",
+    blocked.length ? `Blocked or deferred: ${join([...new Set(blocked)])}.` : "",
+    approval.length ? `Waiting on your approval: ${join([...new Set(approval)])}.` : "",
     omitted.length
       ? `I could not read ${join(omitted)}, so this is not the full Day Line.`
       : "",

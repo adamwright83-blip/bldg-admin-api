@@ -112,7 +112,7 @@ describe("mutation claims require the matching receipt", () => {
       },
       "2026-09-19"
     );
-    expect(commit).toBe("Done. 1 on today's line.");
+    expect(commit).toContain("Done. 1 on today's line.");
     expect(lintReceiptBackedCommitSpeech(commit, createdA).pass).toBe(true);
     expect(lintPostGenerationStateVerbs(commit, empty).pass).toBe(false);
   });

@@ -1,9 +1,18 @@
+import { dayLineDisplayTitle, isDayLineCancelled, readDayLineOverlay } from "../../shared/goldlineDayLine";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
 import { hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import { readNativePaidCandidates } from "../domains/orders/orderHistoryReadService";
-import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
+import {
+  orders,
+  cleancloudPaidOrders,
+  clearentTransactions,
+  commercialAccounts,
+  commercialPipelineRecords,
+  customerRecoveryInterventions,
+  dayDirectorCommitments,
+} from "../../drizzle/schema";
 import {
   activeCustomerPopulation,
   bucketSeries,
@@ -386,6 +395,189 @@ export async function listOpenOrderIdentities(
     paid: Boolean(r.paid),
     createdAt: new Date(r.createdAt),
   }));
+}
+
+export async function listCommercialAccountsForAnalysis(
+  tenantId: string,
+  maxRows = 20000
+): Promise<
+  Array<{
+    id: number;
+    name: string;
+    segment: string;
+    stage: string;
+    estimatedMonthlyCents: number | null;
+    visitCount: number;
+    lastVisitAt: Date | null;
+    lastVisitOutcome: string | null;
+  }>
+> {
+  if (!tenantId.trim()) throw new Error("Established tenant required");
+  const db = await requireDb();
+  const [accounts, pipelines] = await Promise.all([
+    db
+      .select({
+        id: commercialAccounts.id,
+        name: commercialAccounts.name,
+        accountType: commercialAccounts.accountType,
+        updatedAt: commercialAccounts.updatedAt,
+      })
+      .from(commercialAccounts)
+      .where(eq(commercialAccounts.tenantId, tenantId))
+      .limit(maxRows + 1),
+    db
+      .select({
+        accountId: commercialPipelineRecords.accountId,
+        stage: commercialPipelineRecords.stage,
+        estimatedContractValueCents:
+          commercialPipelineRecords.estimatedContractValueCents,
+        approvedContractValueCents:
+          commercialPipelineRecords.approvedContractValueCents,
+        updatedAt: commercialPipelineRecords.updatedAt,
+      })
+      .from(commercialPipelineRecords)
+      .where(eq(commercialPipelineRecords.tenantId, tenantId))
+      .limit(maxRows + 1),
+  ]);
+  if (accounts.length > maxRows)
+    throw new Error("Commercial-account materialization limit exceeded");
+  const pipelineByAccount = new Map<
+    number,
+    (typeof pipelines)[number]
+  >();
+  for (const p of pipelines) {
+    const existing = pipelineByAccount.get(p.accountId);
+    if (!existing || p.updatedAt.getTime() >= existing.updatedAt.getTime()) {
+      pipelineByAccount.set(p.accountId, p);
+    }
+  }
+  return accounts.map(a => {
+    const p = pipelineByAccount.get(a.id);
+    const contractCents =
+      p?.approvedContractValueCents ?? p?.estimatedContractValueCents ?? null;
+    const stage = p?.stage ?? "discovered";
+    const visitedStages = new Set([
+      "visited",
+      "follow_up",
+      "proposal_sent",
+      "pilot_requested",
+      "verbal_yes",
+      "won",
+      "lost",
+    ]);
+    return {
+      id: a.id,
+      name: a.name,
+      segment: a.accountType,
+      stage,
+      estimatedMonthlyCents: contractCents,
+      visitCount: visitedStages.has(stage) ? 1 : 0,
+      lastVisitAt: visitedStages.has(stage) && p ? new Date(p.updatedAt) : null,
+      lastVisitOutcome: visitedStages.has(stage) ? stage : null,
+    };
+  });
+}
+
+export async function listOutreachInterventionsForAnalysis(
+  tenantId: string,
+  maxRows = 20000
+): Promise<
+  Array<{
+    id: string;
+    customerKeyHash: string;
+    channel: string;
+    status: string;
+    createdAt: Date;
+    contactedAt: Date | null;
+    recoveredOrderId: number | null;
+    recoveredRevenueCents: number;
+  }>
+> {
+  if (!tenantId.trim()) throw new Error("Established tenant required");
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      id: customerRecoveryInterventions.id,
+      customerKeyHash: customerRecoveryInterventions.customerKeyHash,
+      status: customerRecoveryInterventions.status,
+      createdAt: customerRecoveryInterventions.createdAt,
+      contactedAt: customerRecoveryInterventions.contactedAt,
+      recoveredOrderId: customerRecoveryInterventions.recoveredOrderId,
+      recoveredRevenueCents:
+        customerRecoveryInterventions.recoveredRevenueCents,
+    })
+    .from(customerRecoveryInterventions)
+    .where(eq(customerRecoveryInterventions.tenantId, tenantId))
+    .limit(maxRows + 1);
+  if (rows.length > maxRows)
+    throw new Error("Outreach-intervention materialization limit exceeded");
+  return rows.map(r => ({
+    id: r.id,
+    customerKeyHash: r.customerKeyHash,
+    channel: "sms",
+    status: r.status,
+    createdAt: new Date(r.createdAt),
+    contactedAt: r.contactedAt ? new Date(r.contactedAt) : null,
+    recoveredOrderId: r.recoveredOrderId ?? null,
+    recoveredRevenueCents: Number(r.recoveredRevenueCents ?? 0),
+  }));
+}
+
+export async function listDayLineCommitmentsForAnalysis(
+  tenantId: string,
+  maxRows = 20000
+): Promise<
+  Array<{
+    id: string;
+    businessDate: string;
+    title: string;
+    kind: string;
+    executionType: string | null;
+    status: string;
+    scheduleKind: string | null;
+    completedAt: Date | null;
+  }>
+> {
+  if (!tenantId.trim()) throw new Error("Established tenant required");
+  const db = await requireDb();
+  const rows = await db
+    .select({
+      id: dayDirectorCommitments.id,
+      businessDate: dayDirectorCommitments.businessDate,
+      title: dayDirectorCommitments.title,
+      kind: dayDirectorCommitments.kind,
+      status: dayDirectorCommitments.status,
+      metadataJson: dayDirectorCommitments.metadataJson,
+      completedAt: dayDirectorCommitments.completedAt,
+    })
+    .from(dayDirectorCommitments)
+    .where(eq(dayDirectorCommitments.tenantId, tenantId))
+    .limit(maxRows + 1);
+  if (rows.length > maxRows)
+    throw new Error("Day-Line commitment materialization limit exceeded");
+  // Same truth as the Day Line itself: an operator's rename shows, a removed item is gone.
+  return rows.filter(r => !isDayLineCancelled(readDayLineOverlay(r.metadataJson))).map(r => {
+    const meta =
+      r.metadataJson && typeof r.metadataJson === "object"
+        ? (r.metadataJson as Record<string, unknown>)
+        : {};
+    const schedule =
+      meta.schedule && typeof meta.schedule === "object"
+        ? (meta.schedule as Record<string, unknown>)
+        : {};
+    return {
+      id: r.id,
+      businessDate: r.businessDate,
+      title: dayLineDisplayTitle(readDayLineOverlay(meta), r.title),
+      kind: r.kind,
+      executionType:
+        typeof meta.executionType === "string" ? meta.executionType : null,
+      status: r.status,
+      scheduleKind:
+        typeof schedule.kind === "string" ? schedule.kind : null,
+      completedAt: r.completedAt ? new Date(r.completedAt) : null,
+    };
+  });
 }
 
 /** Customer identities with paid orders in the range: repeat (≥2) vs one-time. */

@@ -10,7 +10,12 @@ import {
 import { groupCustomers } from "../businessMetrics";
 import { identityKeysFor } from "../customerIdentityResolution";
 import { LA_NEIGHBORHOODS } from "../laNeighborhoods";
-import { listOpenOrderIdentities } from "../analyticsQueries";
+import {
+  listOpenOrderIdentities,
+  listCommercialAccountsForAnalysis,
+  listOutreachInterventionsForAnalysis,
+  listDayLineCommitmentsForAnalysis,
+} from "../analyticsQueries";
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import type { BusinessSourceCoverageSnapshot } from "../sourceCoverage";
 
@@ -207,6 +212,155 @@ export const APPROVED_VIEWS: readonly ApprovedView[] = [
     ],
   },
   {
+    name: "commercial_accounts",
+    description:
+      "Commercial B2B prospects and accounts with pipeline stage, estimated contract value, and field visit progress. Contact details and street addresses are not exposed.",
+    columns: [
+      {
+        name: "account_ref",
+        type: "TEXT",
+        definition: "Opaque commercial account reference.",
+      },
+      {
+        name: "account_name",
+        type: "TEXT",
+        definition: "Commercial prospect or account name (untrusted text).",
+      },
+      {
+        name: "segment",
+        type: "TEXT",
+        definition: "Business segment or account type.",
+      },
+      {
+        name: "stage",
+        type: "TEXT",
+        definition:
+          "Pipeline stage (discovered | qualified | visit_planned | visited | follow_up | proposal_sent | pilot_requested | verbal_yes | won | lost).",
+      },
+      {
+        name: "estimated_monthly_cents",
+        type: "INTEGER",
+        definition:
+          "Estimated or approved contract value in cents when recorded, else NULL (pipeline estimate, not captured revenue).",
+      },
+      {
+        name: "visit_count",
+        type: "INTEGER",
+        definition: "Recorded field visit count.",
+      },
+      {
+        name: "last_visit_date",
+        type: "TEXT",
+        definition:
+          "Business-local date of the most recent recorded visit (YYYY-MM-DD), else NULL.",
+      },
+      {
+        name: "last_visit_outcome",
+        type: "TEXT",
+        definition: "Most recent recorded visit or stage outcome, else NULL.",
+      },
+    ],
+  },
+  {
+    name: "outreach_interventions",
+    description:
+      "Customer recovery and outreach interventions tracking contact execution and attributed order recovery. Message text and contact details are not exposed.",
+    columns: [
+      {
+        name: "intervention_ref",
+        type: "TEXT",
+        definition: "Opaque customer recovery intervention reference.",
+      },
+      {
+        name: "customer_id",
+        type: "TEXT",
+        definition:
+          "Opaque customer identity reference for the targeted customer.",
+      },
+      {
+        name: "channel",
+        type: "TEXT",
+        definition: "Outreach channel (e.g. sms).",
+      },
+      {
+        name: "status",
+        type: "TEXT",
+        definition:
+          "Intervention lifecycle status (draft_pending_review | approved | contacted | dismissed | recovered | unsuccessful).",
+      },
+      {
+        name: "created_date",
+        type: "TEXT",
+        definition: "Business-local creation date (YYYY-MM-DD).",
+      },
+      {
+        name: "contacted_date",
+        type: "TEXT",
+        definition:
+          "Business-local date the customer was contacted (YYYY-MM-DD), else NULL.",
+      },
+      {
+        name: "recovered_order",
+        type: "INTEGER",
+        definition: "1 if an order was attributed to the outreach, else 0.",
+      },
+      {
+        name: "recovered_revenue_cents",
+        type: "INTEGER",
+        definition:
+          "Attributed recovered order amount in cents (0 when none).",
+      },
+    ],
+  },
+  {
+    name: "day_line_commitments",
+    description:
+      "Day Line commitments and scheduled operator execution items across business dates.",
+    columns: [
+      {
+        name: "commitment_ref",
+        type: "TEXT",
+        definition: "Opaque Day Line commitment reference.",
+      },
+      {
+        name: "business_date",
+        type: "TEXT",
+        definition: "Scheduled business-local date on the Day Line (YYYY-MM-DD).",
+      },
+      {
+        name: "title",
+        type: "TEXT",
+        definition: "Commitment title (untrusted text; contact details scrubbed).",
+      },
+      {
+        name: "kind",
+        type: "TEXT",
+        definition: "Commitment category (growth | prep | operations).",
+      },
+      {
+        name: "execution_type",
+        type: "TEXT",
+        definition: "Execution mode (field | desk | call | NULL).",
+      },
+      {
+        name: "status",
+        type: "TEXT",
+        definition: "Execution status (open | completed).",
+      },
+      {
+        name: "schedule_kind",
+        type: "TEXT",
+        definition: "Timing specificity (unscheduled | window | exact | NULL).",
+      },
+      {
+        name: "completed_date",
+        type: "TEXT",
+        definition:
+          "Business-local completion date (YYYY-MM-DD) when completed, else NULL.",
+      },
+    ],
+  },
+  {
     name: "excluded_sales",
     description:
       "Records deliberately NOT counted as recorded sales, and why. Never add these to orders totals.",
@@ -294,6 +448,9 @@ export async function buildApprovedDataset(input: {
     ledger?: typeof loadPaidOrderLedger;
     openOrders?: typeof listOpenOrderIdentities;
     coverage?: typeof loadRevenueSourceCoverage;
+    commercialAccounts?: typeof listCommercialAccountsForAnalysis;
+    outreachInterventions?: typeof listOutreachInterventionsForAnalysis;
+    dayLineCommitments?: typeof listDayLineCommitmentsForAnalysis;
   };
   lookbackDays?: number;
   signal?: AbortSignal;
@@ -439,6 +596,73 @@ export async function buildApprovedDataset(input: {
     openCoverage =
       "unavailable: the open-order read failed (unknown, not zero)";
   }
+  let commercialAccounts: Row[] = [];
+  try {
+    const rows = await (
+      input.loaders?.commercialAccounts ?? listCommercialAccountsForAnalysis
+    )(tenantId, MATERIALIZATION_ROW_LIMIT);
+    if (rows.length > MATERIALIZATION_ROW_LIMIT)
+      throw new Error("Commercial-account limit exceeded");
+    commercialAccounts = rows.map(a => [
+      opaque("acct", `${tenantId}:${a.id}`),
+      clean(a.name, 80),
+      clean(a.segment, 60),
+      clean(a.stage, 40),
+      a.estimatedMonthlyCents ?? null,
+      a.visitCount,
+      a.lastVisitAt
+        ? formatInTimeZone(a.lastVisitAt, timeZone, "yyyy-MM-dd")
+        : null,
+      clean(a.lastVisitOutcome, 40),
+    ]);
+  } catch {
+    commercialAccounts = [];
+  }
+  let outreachInterventions: Row[] = [];
+  try {
+    const rows = await (
+      input.loaders?.outreachInterventions ??
+      listOutreachInterventionsForAnalysis
+    )(tenantId, MATERIALIZATION_ROW_LIMIT);
+    if (rows.length > MATERIALIZATION_ROW_LIMIT)
+      throw new Error("Outreach-intervention limit exceeded");
+    outreachInterventions = rows.map(i => [
+      opaque("outreach", `${tenantId}:${i.id}`),
+      opaque("cust", `${tenantId}:${i.customerKeyHash}`),
+      clean(i.channel, 32),
+      clean(i.status, 40),
+      formatInTimeZone(i.createdAt, timeZone, "yyyy-MM-dd"),
+      i.contactedAt
+        ? formatInTimeZone(i.contactedAt, timeZone, "yyyy-MM-dd")
+        : null,
+      i.recoveredOrderId != null ? 1 : 0,
+      i.recoveredRevenueCents ?? 0,
+    ]);
+  } catch {
+    outreachInterventions = [];
+  }
+  let dayLineCommitments: Row[] = [];
+  try {
+    const rows = await (
+      input.loaders?.dayLineCommitments ?? listDayLineCommitmentsForAnalysis
+    )(tenantId, MATERIALIZATION_ROW_LIMIT);
+    if (rows.length > MATERIALIZATION_ROW_LIMIT)
+      throw new Error("Day-Line commitment limit exceeded");
+    dayLineCommitments = rows.map(c => [
+      opaque("dl", `${tenantId}:${c.id}`),
+      c.businessDate,
+      clean(c.title, 80),
+      clean(c.kind, 32),
+      clean(c.executionType, 32),
+      clean(c.status, 32),
+      clean(c.scheduleKind, 32),
+      c.completedAt
+        ? formatInTimeZone(c.completedAt, timeZone, "yyyy-MM-dd")
+        : null,
+    ]);
+  } catch {
+    dayLineCommitments = [];
+  }
   const excluded: Row[] = [
     ...book.definiteDuplicateExclusions.items.map(
       i =>
@@ -522,6 +746,9 @@ export async function buildApprovedDataset(input: {
       orders,
       customers,
       open_orders: openOrders,
+      commercial_accounts: commercialAccounts,
+      outreach_interventions: outreachInterventions,
+      day_line_commitments: dayLineCommitments,
       excluded_sales: excluded,
       coverage,
     },

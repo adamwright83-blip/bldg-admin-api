@@ -2,6 +2,16 @@ import { parseStrategicProposalControl } from "../../../shared/strategicProposal
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
+import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../claireModel";
+
+/**
+ * Brain V3's model. It runs before every conversational answer, so it sits on
+ * the critical path of each spoken reply; ANTHROPIC_MODEL_CLAIRE_BRAIN_V3 lets
+ * it be tuned separately from Claire's speaking model. Unset: unchanged.
+ */
+export function brainV3ModelId(): string {
+  return process.env.ANTHROPIC_MODEL_CLAIRE_BRAIN_V3?.trim() || ENV.anthropicModelClaire || ENV.anthropicModel;
+}
 import { interpretTurn } from "./interpretTurn";
 import { detectConfirmation } from "../voiceCommitmentLoop";
 import {
@@ -126,11 +136,13 @@ export async function interpretClaireBrainV3(
   if (!ENV.anthropicApiKey?.trim()) return null;
 
   try {
+    const model = brainV3ModelId();
     const result = await invokeLLM({
       tenantId: input.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
-      maxTokens: 320,
-      temperature: 0,
+      model,
+      maxTokens: 1_000,
+      ...(claireModelAcceptsSampling(model) ? { temperature: 0 } : { omitTemperature: true }),
+      ...(claireModelDefaultsToThinking(model) ? { disableThinking: true } : {}),
       outputSchema: {
         name: "claire_brain_v3_turn",
         strict: true,
@@ -216,7 +228,7 @@ export async function interpretClaireBrainV3(
             "NON-NEGOTIABLE AUTHORITY RULES:",
             "1. Persistent workflows are background state, never conversational authority. A stale Weekly Mission, pending Day Line bundle, or old proposal cannot claim a turn merely because it can parse the words.",
             "2. The most recent unresolved conversational question/proposal owns ambiguous replies such as yes, no, sure, do it, that works, I can commit to that.",
-            "3. Distinguish discussion from action. Narration, explanation, context, frustration, preferences, hypotheticals, strategic discussion, and observations are NOT work items.",
+            "3. Distinguish discussion from action. Narration, explanation, context, frustration, preferences, hypotheticals, strategic discussion, and observations are NOT work items. A concrete obligation stated as I need to / I have to / I must do specific work is work_commitment with workDisposition=propose, even without a request to save it. A continuation specifying its quantity or deadline also refines that work. Propose does not authorize a write.",
             "4. canonicalWork is non-null ONLY when the operator is genuinely asking Claire to create/track/schedule work, stating a concrete work commitment that Claire should propose tracking, explicitly confirming a concrete action from recent dialogue, or revising concrete held work. For a revision, canonicalWork is the normalized revised work, not the conversational filler around it.",
             "5. Never literalize conversational phrasing into work. Example: 'I will mentally prepare to visit those places' after agreeing to a three-stop Friday route refers to the THREE-STOP ROUTE, not a task named 'mentally prepare'.",
             "6. If the operator says they do not want to discuss/use the Day Line, dayLineDisposition=decline. While dayLineSuppressed=true, do not propose Day Line work unless the operator explicitly reopens it or explicitly commands a tracking/scheduling action.",
@@ -230,6 +242,8 @@ export async function interpretClaireBrainV3(
             "14. rationale must be a concise plain-English semantic summary of what the operator means in this turn and what it refers to, not a policy explanation or classifier commentary. This summary is passed to Claire's speaking model so it can respond to the same meaning.",
             "15. If uncertain, choose open_conversation, workDisposition=none, priorClaim=none, weeklyDisposition=none. Ambiguity must never create work or trigger verification.",
             "16. referent: If the current utterance is an elliptical fragment, temporal qualification, or follow-up question (e.g. 'On Saturday evening?', 'how about later?', 'are they open?'), resolve referent to the specific antecedent question, proposal, topic, or invitation from recent dialogue that the operator is qualifying or referring to. Otherwise null.",
+            "18. Quoted material (advertising copy, scripts, promises made to customers) describes content, NOT a new operator task or authorization. 'The ad says pickup tomorrow' does not schedule a pickup. Elaborating a pending task is propose, not commit. 'I do not want to talk about that' rejects the named topic, not Day Line tracking in general.",
+            "19. Preserve the complete linked work and its timing in canonicalWork: a campaign can contain an ad AND a landing page due today while the ad advertises pickup tomorrow. Resolve 'one of them tomorrow' to the preceding delivery, retaining quantity and condition. Never convert conditional charging into an unconditional action.",
             "17. identityTopic is about immutable/server-owned identity, not ordinary facts. Use platform for what JOYSTICK is, goldline for what Goldline is, claire_role for Claire's job/role in the product, business_name for the operator/account business name or an attempted conversational rename of it. Use none when those names are merely incidental to another topic.",
             "",
             "TARGET meanings:",
@@ -326,7 +340,8 @@ export async function interpretClaireBrainV3(
           : null,
       rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
     };
-  } catch {
+  } catch (error) {
+    console.warn("[Claire] semantic interpretation failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
     return null;
   }
 }

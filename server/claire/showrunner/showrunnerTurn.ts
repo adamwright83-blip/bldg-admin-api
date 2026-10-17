@@ -1,3 +1,4 @@
+import { cleanLedgerReply } from "../workLedger/workLedgerTurn";
 import {
   answerClaireBusinessTurn,
   looksLikeWorkRequest,
@@ -191,6 +192,12 @@ export async function runShowrunnerTurn(input: {
   replan?: typeof replanFromShowrunnerCall;
   deskReplan?: typeof replanFromDeskEdits;
   now?: Date;
+  /**
+   * Claire's work ledger owns work in this conversation (server/claire/workLedger):
+   * this turn only talks. It proposes no plan revision from captured developments
+   * (the ledger already recorded that work) and is told what the ledger holds.
+   */
+  workLedger?: { section: string | null };
 }): Promise<{ speak: string; end: boolean; state: ShowrunnerCallState; saved?: string[] }> {
   const state: ShowrunnerCallState = JSON.parse(JSON.stringify(input.state));
   state.turns += 1;
@@ -202,7 +209,7 @@ export async function runShowrunnerTurn(input: {
   const unambiguous = isUnambiguousAgreement(input.utterance);
   const affirmed =
     state.replan && !state.replan.approved && (state.replan.askedTurn ?? 0) === state.turns - 1 && unambiguous;
-  if (state.replan && ((control?.kind === "approve" && unambiguous) || affirmed)) {
+  if (!input.workLedger && state.replan && ((control?.kind === "approve" && unambiguous) || affirmed)) {
     const approved = await (input.approve ?? approveShowrunnerReplan)(state).catch(() => null);
     if (approved) {
       state.replan.approved = true;
@@ -213,7 +220,7 @@ export async function runShowrunnerTurn(input: {
   }
 
   const contactEdits =
-    state.purpose === "desk_planning"
+    !input.workLedger && state.purpose === "desk_planning"
       ? contactEditsForAnalysisSelection(state, input.utterance, now): null;
   if (contactEdits) {
     const edit = await (input.deskReplan ?? replanFromDeskEdits)(state,
@@ -267,7 +274,12 @@ export async function runShowrunnerTurn(input: {
       maxTokens: 700,
       outputSchema: SCHEMA,
       messages: [
-        { role: "system", content: systemPrompt(state) },
+        {
+          role: "system",
+          content: input.workLedger
+            ? `${systemPrompt(state)} WORK RECORDING: the server's work ledger records, changes and reads back Day Line work on its own turns. Never offer to add, save, put on the line or lock in work, and never claim you did. ${input.workLedger.section ?? ""}`.trim()
+            : systemPrompt(state),
+        },
         {
           role: "user",
           content: JSON.stringify({
@@ -297,7 +309,7 @@ export async function runShowrunnerTurn(input: {
     ...state.briefing.tomorrow.map(i => i.id),
     ...driverDayLineStopIds(state.briefing.driverDayLine),
   ]);
-  const updates: DebriefMissionUpdate[] = model.missionUpdates
+  const updates: DebriefMissionUpdate[] = (input.workLedger ? [] : model.missionUpdates)
     .filter(u => validIds.has(u.itemId) && u.outcome !== "unknown")
     .map(u => ({ ...u, outcome: u.outcome as DebriefMissionUpdate["outcome"], reportedAt: now.toISOString() }));
   const pendingIds = new Set([
@@ -305,13 +317,15 @@ export async function runShowrunnerTurn(input: {
     ...(state.briefing.needsReschedule?.map(i => i.id) ?? []),
   ]);
   const planEdits: DeskPlanEdit[] =
-    state.purpose === "desk_planning"
+    !input.workLedger && state.purpose === "desk_planning"
       ? (model.planEdits ?? []).filter(
           e => (validIds.has(e.itemId) || pendingIds.has(e.itemId)) && (e.action === "hold" || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time))
         )
       : [];
-  const preparation = state.purpose === "desk_planning" ? (model.readinessNeeds ?? []).map(n => n.trim()).filter(Boolean).slice(0, 5) : [];
-  const developments: DebriefDevelopment[] = model.developments
+  const preparation = !input.workLedger && state.purpose === "desk_planning" ? (model.readinessNeeds ?? []).map(n => n.trim()).filter(Boolean).slice(0, 5) : [];
+  // Keep the original statement for Daphne, but do not let a second interpreter
+  // create durable work facts that can leak into later briefings or revisions.
+  const developments: DebriefDevelopment[] = (input.workLedger ? [] : model.developments)
     .filter(d => d.what.trim() || d.who.trim())
     .map(d => ({ ...d, reportedAt: now.toISOString() }));
   // Persist first: Claire only remembers what was durably saved.
@@ -336,9 +350,11 @@ export async function runShowrunnerTurn(input: {
   }
   state.captured.missionUpdates.push(...updates);
   state.captured.developments.push(...developments);
-  state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
+  if (!input.workLedger) state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
 
-  let speak = model.speak.trim();
+  let speak = input.workLedger
+    ? cleanLedgerReply(model.speak) || "Nothing new is confirmed saved."
+    : model.speak.trim();
   const savedNotes = preparation.map(p => `Reminder saved: ${p}`);
   if (planEdits.length) {
     // Desk edits: exact items, pending until an unambiguous yes; holds of draft items need no approval.
@@ -361,7 +377,7 @@ export async function runShowrunnerTurn(input: {
     // Any schedulable development captured during this call, not just this turn.
     (state.captured.developments.some(d => ["meeting", "opportunity", "commitment"].includes(d.kind)) ||
       (state.purpose === "evening_debrief" && model.operatorIsDone && state.captured.missionUpdates.some(u => u.outcome !== "done")));
-  if (needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness" || correctingPending)) {
+  if (!input.workLedger && needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness" || correctingPending)) {
     const replan = await (input.replan ?? replanFromShowrunnerCall)(state, now).catch(error => {
       console.warn("[Showrunner] replan failed", error instanceof Error ? error.message : error);
       return null;

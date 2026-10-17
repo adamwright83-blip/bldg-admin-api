@@ -6,9 +6,22 @@ import {
   resolveTenantUsagePolicy,
 } from "../saas/tenantCogs";
 
-export function estimateModelCostCents(inputTokens: number, outputTokens: number): number {
-  const inputPerMillionCents = Number(process.env.AI_INPUT_CENTS_PER_MILLION ?? 300);
-  const outputPerMillionCents = Number(process.env.AI_OUTPUT_CENTS_PER_MILLION ?? 1500);
+/**
+ * Estimated list price in cents per million tokens, by model family. Haiku-class models were
+ * priced as Sonnet before, which overstated their cost about threefold. AI_*_CENTS_PER_MILLION
+ * still override everything.
+ */
+function modelPriceCentsPerMillion(model: string | null | undefined): { input: number; output: number } {
+  const id = (model ?? "").toLowerCase();
+  if (id.includes("haiku")) return { input: 100, output: 500 };
+  if (id.includes("opus")) return { input: 1500, output: 7500 };
+  return { input: 300, output: 1500 };
+}
+
+export function estimateModelCostCents(inputTokens: number, outputTokens: number, model?: string | null): number {
+  const price = modelPriceCentsPerMillion(model);
+  const inputPerMillionCents = Number(process.env.AI_INPUT_CENTS_PER_MILLION ?? price.input);
+  const outputPerMillionCents = Number(process.env.AI_OUTPUT_CENTS_PER_MILLION ?? price.output);
   return Math.ceil((inputTokens * inputPerMillionCents + outputTokens * outputPerMillionCents) / 1_000_000);
 }
 
@@ -43,9 +56,12 @@ export async function trackModelUsage(input: {
   modelUsed?: string | null;
   inputTokens: number;
   outputTokens: number;
+  /** Which product feature made the call; becomes the provider-usage category ("llm:<feature>"). */
+  feature?: string | null;
 }) {
   const tenantId = input.tenantId ?? input.agentContext?.tenantId ?? "default";
-  const estimatedCostCents = estimateModelCostCents(input.inputTokens, input.outputTokens);
+  const estimatedCostCents = estimateModelCostCents(input.inputTokens, input.outputTokens, input.modelUsed);
+  const feature = (input.feature ?? "").replace(/[^a-z0-9_:-]+/gi, "_").slice(0, 56);
   const policy = await resolveTenantUsagePolicy(tenantId);
   const warningLimitCents = policy.ai.warningCents ?? 0;
   const hardLimitCents = policy.ai.hardCents ?? Number.MAX_SAFE_INTEGER;
@@ -61,7 +77,8 @@ export async function trackModelUsage(input: {
     recordTenantProviderCost({
       tenantId,
       provider: "anthropic",
-      category: "llm",
+      // Per-feature rows; monthly totals still sum across categories.
+      category: feature ? `llm:${feature}` : "llm",
       usageUnit: "tokens",
       usageQuantity: input.inputTokens + input.outputTokens,
       estimatedCostCents,

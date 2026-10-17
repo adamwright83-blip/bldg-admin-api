@@ -61,6 +61,8 @@ import {
 } from "./workdayPlanService";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { isClaireWorkLedgerEnabled } from "./workLedger/workLedgerPlanner";
+import { runWorkLedgerTurn } from "./workLedger/workLedgerTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import {
@@ -322,6 +324,7 @@ export const claireRouter = router({
             utterance: input.utterance,
             state,
             conversationKey: key,
+            workLedgerHandledUpstream: true,
             brief: preview.brief,
             context,
             rookContactResidues,
@@ -349,6 +352,24 @@ export const claireRouter = router({
           surface: "desktop",
         },
         async () => {
+          // Same work owner as the phone: the ledger claims work turns, and the
+          // legacy Day Line writers stand down for the rest of this conversation.
+          if (isClaireWorkLedgerEnabled()) {
+            state.workLedgerOwnsDayLine = true;
+            const ledger = await runWorkLedgerTurn({
+              tenantId: scope.tenantId,
+              operatorUserId: scope.operatorUserId,
+              dayDirectorActorId: actorId,
+              conversationKey: key,
+              surface: "text",
+              utterance: input.utterance,
+              state,
+              timeZone: input.timeZone ?? (await resolveOperatorTimeZone(scope.tenantId).catch(() => null)) ?? "America/Los_Angeles",
+              sessionKind: "desk",
+            });
+            if (ledger.handled) return { brainV2LiveHandled: false, result: ledger.result };
+            return { brainV2LiveHandled: false, result: await runLegacyAdapter() };
+          }
           const liveV2 = await runClaireBrainV2LiveTurn({
             rawText: input.utterance,
             assembledText: input.utterance,
@@ -425,6 +446,7 @@ export const claireRouter = router({
             };
           }
 
+          // Phone and desk share the same live conversation/work owner.
           return {
             brainV2LiveHandled: false,
             result: await runLegacyAdapter(),

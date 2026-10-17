@@ -64,6 +64,8 @@ const SAMPLING_REJECTING_MODEL_PREFIXES = [
   "claude-opus-4-8",
   "claude-opus-4-7",
   "claude-sonnet-5",
+  // Verified 2026-10-16 against the production key: "`temperature` is deprecated for this model."
+  "claude-haiku-5",
 ] as const;
 
 export function claireModelAcceptsSampling(model: string): boolean {

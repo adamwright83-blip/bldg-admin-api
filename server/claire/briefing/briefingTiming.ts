@@ -156,7 +156,7 @@ export function parseTiming(clause: string, input: { isToday: boolean; minutesNo
     }
   }
 
-  const daypart = /\b(first thing(?: in the morning)?|(?:some ?time |sometime )?(?:this|in the|later this) (?:morning|afternoon|evening)|tonight|later today|end of (?:the )?day|eod|over lunch|at lunch)\b/i.exec(text);
+  const daypart = /\b(first thing(?: in the morning)?|(?:some ?time |sometime )?(?:this|in the|later this|tomorrow) (?:morning|afternoon|evening)|tonight|later today|end of (?:the )?day|eod|over lunch|at lunch)\b/i.exec(text);
   if (daypart) {
     const label = daypart[1]!.toLowerCase().replace(/^some ?time /, "").replace(/^in the /, "this ");
     strip(daypart);

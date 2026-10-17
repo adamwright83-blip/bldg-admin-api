@@ -118,6 +118,7 @@ describe("E — shared Anthropic LLM behavior", () => {
       modelUsed: "claude-test",
       inputTokens: 7,
       outputTokens: 5,
+      feature: "text_generation",
     });
     expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("tools");
     for (const key of Object.keys(mocks.create.mock.calls[0][0] as object)) {

@@ -27,6 +27,15 @@ export type GoldlineCapability = {
 
 export const GOLDLINE_CAPABILITY_REGISTRY: GoldlineCapability[] = [
   {
+    id: "claire.authorized_operator_calls",
+    domain: "claire",
+    description: "Claire places authorized scheduled calls to the operator, including morning readiness and evening debrief. This does not authorize calls to customers.",
+    status: "CONDITIONALLY_SUPPORTED",
+    allowedSurfaces: ["phone"],
+    permissionLevel: "human_approval",
+    implementation: "placePreDriveCall",
+  },
+  {
     id: "dayline.create",
     domain: "dayline",
     description: "Add a Day Director commitment to the Daily Line",

@@ -24,8 +24,17 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
+// A provider is configured but every model call fails: the realistic degraded production
+// condition. Governed fast paths must still answer; work must be refused honestly.
+vi.mock("../_core/llm", async importOriginal => ({
+  ...(await importOriginal<typeof import("../_core/llm")>()),
+  invokeLLM: async () => {
+    throw new Error("model provider unavailable in this fixture");
+  },
+}));
 vi.mock("../_core/env", () => ({
   ENV: {
+    anthropicApiKey: "fixture-key-provider-fails",
     adminBaseUrl: "https://api.example.test",
     cookieSecret: "test-secret",
     xaiApiKey: "",
@@ -219,38 +228,16 @@ describe("live Claire call answers business questions in the call (U)", () => {
     expect(await say(handlers, callA, "Who are they?")).toContain("Ava Stone");
   });
 
-  it("single work goes to the work loop; a question while it waits is answered and the proposal is kept", async () => {
+  it("does not use keyword work execution after extraction fails, and still answers the next business question", async () => {
     const handlers = routes();
     const token = await startCall();
-    hoisted.commitment.mockImplementationOnce(async input => {
-      input.state.pendingProposal = { title: "Review revenue", sourceText: "Add reviewing last month's revenue." };
-      return { kind: "proposed", speak: "I heard: Review revenue. Should I add that to today's plan? Say yes or no." };
-    });
+    // The provider fails in this fixture, so neither the work ledger nor the extractor can run.
     const proposed = await say(handlers, token, "Add reviewing last month's revenue.");
-    expect(proposed).toContain("Should I add that");
-    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
-
+    expect(proposed).toContain("Nothing new was saved");
+    expect(hoisted.commitment).not.toHaveBeenCalled();
     const answered = await say(handlers, token, "What was revenue last month?");
     expect(answered).toContain("Paid revenue last month was");
-    expect(answered).toContain('I\'m still holding "Review revenue"');
-    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
-
-    hoisted.commitment.mockImplementationOnce(async input => {
-      input.state.pendingProposal = null;
-      return {
-        kind: "accepted",
-        speak: "Added: Review revenue. What else?",
-        proposal: input.state.pendingProposal ?? { title: "Review revenue", sourceText: "Add reviewing last month's revenue." },
-        commitmentId: "review-revenue-1",
-        mutationReceipt: {
-          claimedState: "created",
-          entityId: "review-revenue-1",
-          statement: "Added Review revenue to the Day Line",
-        },
-      };
-    });
-    expect(await say(handlers, token, "Yes.")).toContain("Added: Review revenue.");
-    expect(hoisted.commitment).toHaveBeenCalledTimes(2);
+    expect(hoisted.commitment).not.toHaveBeenCalled();
   });
 
   it("fails closed on dated-work intake before the durable decision store has been migrated", async () => {
