@@ -99,6 +99,46 @@ export async function refreshStrategicDiagnosis(input: {
   return persistStrategicDiagnosis(diagnosis);
 }
 
+/** Per-day limitation lines, as prepareStrategicProposal adds them to `uncertainty`. */
+const LIMITATION_LINE = /^\d{4}-\d{2}-\d{2}: /;
+
+/**
+ * Pure: whether a newly prepared proposal would ask the operator to decide the same
+ * thing as the open one. Ids derived from a diagnosis are ignored (every re-diagnosis
+ * mints new ones); dates, titles, objectives, types, timing and constraints are not.
+ */
+export function proposalDecisionUnchanged(
+  current: Pick<StrategicPlanningProposal, "businessDate" | "expiresAt" | "items" | "constraints" | "uncertainty">,
+  next: {
+    businessDate: string;
+    items: StrategicPlanningProposal["items"];
+    constraints: string[];
+    limitations: string[];
+  },
+  now: Date
+): boolean {
+  if (current.businessDate !== next.businessDate) return false;
+  if (Date.parse(current.expiresAt) <= now.getTime()) return false;
+  const decision = (items: StrategicPlanningProposal["items"]) =>
+    canonicalJsonStringify(
+      items.map(i => ({
+        businessDate: i.businessDate,
+        title: i.title,
+        objective: i.objective,
+        executionType: i.executionType,
+        missionType: i.missionType ?? null,
+        window: i.timeWindow?.window ?? null,
+        source: i.planId.startsWith("strategic_diagnosis:") ? "strategy" : i.candidateId,
+      }))
+    );
+  const limitations = (current.uncertainty ?? []).filter(line => LIMITATION_LINE.test(line));
+  return (
+    decision(current.items) === decision(next.items) &&
+    canonicalJsonStringify(current.constraints) === canonicalJsonStringify(next.constraints) &&
+    canonicalJsonStringify(limitations) === canonicalJsonStringify(next.limitations)
+  );
+}
+
 /** Existing autonomous evaluator and appointment executor share this preparation.
  * The proposal is immutable. Neither preparing nor presenting it approves work. */
 export async function prepareStrategicProposal(input: {
@@ -243,6 +283,15 @@ export async function prepareStrategicProposal(input: {
   const decisions = current ? await strategicResponses(identity, current.id) : [];
   const closedGeneration = decisions.some(r => ["reject", "defer", "revise"].includes(r.action))
     ? [current!.id, ...decisions.map(r => r.id).sort()] : null;
+  // The hourly re-diagnosis mints a new diagnosis id even when the recommendation is
+  // the same, and approval requires the exact revision. Keep the open proposal while
+  // what the operator would decide on is unchanged, so an approval never races it.
+  if (
+    current &&
+    !closedGeneration &&
+    proposalDecisionUnchanged(current, { businessDate, items, constraints, limitations }, now)
+  )
+    return current;
   const revision = createHash("sha256")
     .update(
       JSON.stringify({
