@@ -1,3 +1,4 @@
+import { cleanLedgerReply } from "../workLedger/workLedgerTurn";
 import {
   answerClaireBusinessTurn,
   looksLikeWorkRequest,
@@ -347,7 +348,9 @@ export async function runShowrunnerTurn(input: {
   state.captured.developments.push(...developments);
   if (!input.workLedger) state.captured.readinessNeeds.push(...model.readinessNeeds.filter(Boolean));
 
-  let speak = model.speak.trim();
+  let speak = input.workLedger
+    ? cleanLedgerReply(model.speak) || "Nothing new is confirmed saved."
+    : model.speak.trim();
   const savedNotes = preparation.map(p => `Reminder saved: ${p}`);
   if (planEdits.length) {
     // Desk edits: exact items, pending until an unambiguous yes; holds of draft items need no approval.

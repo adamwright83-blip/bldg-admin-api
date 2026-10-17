@@ -180,6 +180,22 @@ describe("work ledger execution — readback before speech", () => {
     );
   });
 
+  it("keeps the operator's own words for a time said without am/pm", async () => {
+    const dayLine = createFakeDayLine();
+    const plan = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ title: "Opus pickup", quote: "I've got the Opus pickup at 11", timing: "at 11", save: true })] },
+      planInput({ utterance: "I've got the Opus pickup at 11" }),
+      1
+    );
+    await applyWorkLedgerPlan({
+      plan, dayLine: [],
+      target: { tenantId: "default", dayDirectorActorId: "1", operatorUserId: "adam-admin", conversationKey: "k" },
+      clock: { today: TODAY, minutesNow: 18 * 60 },
+      deps: dayLine.deps.apply,
+    });
+    expect(dayLine.open()[0]!.scheduleLabel).toBe("at 11");
+  });
+
   it("never claims a save the store did not confirm", async () => {
     const dayLine = createFakeDayLine();
     const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem({ save: true })] }, planInput(), 1);
@@ -332,6 +348,17 @@ describe("one turn through the ledger", () => {
     expect(outcome.handled).toBe(true);
     expect(dayLine.rows.get("louise")?.status).toBe("completed");
     expect(dayLine.writes).toEqual(["complete Call Louise"]);
+  });
+
+  it("does not tell the operator nothing was saved when only details were added", async () => {
+    const dayLine = createFakeDayLine([{ id: "landing", title: "Build Laundry Farm landing page", businessDate: "2026-10-15" }]);
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, edits: [{ id: "landing", title: "", executionType: "unchanged", detail: "Offer: skip laundry this week on us", timing: "", moveTo: "", date: "" }] }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "The ad says skip laundry this week on us, the landing page has to match it.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(outcome.handled && outcome.result.speak).toBe("Got it, noted on the line.");
+    expect(dayLine.rows.get("landing")?.detailNote).toBe("Offer: skip laundry this week on us");
   });
 
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {

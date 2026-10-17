@@ -88,7 +88,13 @@ function briefingItemFor(held: { title: string; quote: string; businessDate: str
     title: held.title,
     quote: held.quote,
     businessDate: held.businessDate,
-    timing: timing.kind === "none" && held.timing ? { kind: "daypart", label: held.timing } : timing,
+    timing: timing.kind === "none" && held.timing
+      ? { kind: "daypart", label: held.timing }
+      : timing.kind !== "none" && !/\b(?:a\.?m\.?|p\.?m\.?|morning|afternoon|evening|tonight|noon|midnight)\b/i.test(held.timing)
+        // "at 11" said without am/pm: the clock guess ("11 PM" after 11 AM) is not the operator's
+        // meaning. Keep their words as the label; the inferred start stays for ordering only.
+        ? { ...timing, label: held.timing }
+        : timing,
     quantity: null,
     people: [],
     place: null,

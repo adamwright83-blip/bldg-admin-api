@@ -212,7 +212,9 @@ export async function scheduleAuthorizedStrategicCall(input: {
       canonicalOperatorId: input.identity.canonicalOperatorId,
       operatorUserId: input.identity.canonicalOpenId,
       appointmentKind: "weekday_strategic_planning",
-      weekStart: weekStartMonday(date),
+      // The call discusses this exact proposal, so it plans the proposal's week. After a
+      // Friday's window closes (or on a weekend) that is next week, not the calendar week.
+      weekStart: proposal.weekStart,
       scheduledFor: now,
       timeZone: a.timeZone,
       source: "standing_weekly_authorization",

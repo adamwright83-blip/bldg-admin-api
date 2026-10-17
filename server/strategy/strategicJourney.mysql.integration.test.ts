@@ -56,6 +56,7 @@ import {
 import {
   emptyDraft,
   remainingWeekHorizon,
+  targetWeekHorizon,
 } from "../../shared/weeklyMissionReadiness";
 import { buildStrategySnapshot } from "./snapshotBuilder";
 import {
@@ -590,10 +591,12 @@ describeMysql(
                 title: "Compare a reversible next experiment",
               }),
           });
+          // The draft plans the proposal's own week (next week after Friday's window closes).
           const draft = emptyDraft(
-            remainingWeekHorizon({
+            targetWeekHorizon({
               businessDate: date,
               localTime: formatInTimeZone(new Date(), zone, "HH:mm"),
+              weekStart: proposal.weekStart,
             }),
             []
           );
