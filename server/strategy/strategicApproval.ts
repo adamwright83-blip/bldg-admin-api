@@ -13,6 +13,8 @@ import {
   getDayDirectorState,
 } from "../planning/dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
+import { proposalItemExecutionWindow } from "../../shared/weeklyMissionReadiness";
+import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import type { StrategicPlanningProposal } from "../../shared/strategicIntelligence";
 import {
@@ -32,6 +34,11 @@ export type StrategicApprovalInput = {
   source: "authenticated_app" | "authenticated_voice";
   now?: Date;
 };
+/** The operator's business-local date and time, the frame every execution window is judged in. */
+function businessClock(timeZone: string, now: Date) {
+  return { businessDate: formatInTimeZone(now, timeZone, "yyyy-MM-dd"), localTime: formatInTimeZone(now, timeZone, "HH:mm") };
+}
+
 export async function respondToStrategicProposal(
   input: StrategicApprovalInput
 ) {
@@ -56,6 +63,14 @@ export async function respondToStrategicProposal(
     (!itemIds.length || itemIds.some(id => !p.items.some(i => i.id === id)))
   )
     throw new Error("Approval requires the exact nonempty proposed item scope");
+  if (input.action === "approve") {
+    const clock = businessClock(p.timeZone, now);
+    const expired = p.items.filter(i => itemIds.includes(i.id) && proposalItemExecutionWindow(i, clock) === "expired");
+    if (expired.length)
+      throw new Error(
+        `The time for ${expired.map(i => `"${i.title}"`).join(", ")} has passed. Reschedule it to a new day before approving; nothing was approved.`
+      );
+  }
   const response = {
     id: `response_${createHash("sha256")
       .update(
@@ -277,6 +292,12 @@ export async function reviseStrategicProposal(input: {
     throw new Error(
       "Revision must remain in the proposal's remaining weekday horizon"
     );
+  const target = p.items.find(i => i.id === input.itemId)!;
+  if (
+    input.businessDate &&
+    proposalItemExecutionWindow({ ...target, businessDate: input.businessDate }, businessClock(p.timeZone, now)) === "expired"
+  )
+    throw new Error("That day's time has already passed. Choose a later day.");
   const items = p.items.map(i =>
     i.id === input.itemId
       ? {

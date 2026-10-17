@@ -13,6 +13,7 @@ const dayLabel = (date: string, today: string, tomorrow: string) =>
   date === today ? "Today" : date === tomorrow ? "Tomorrow" : new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
 const STATUS: Record<string, string> = {
   awaiting_approval: "Needs your approval",
+  needs_reschedule: "Time passed — reschedule",
   committed: "On your Day Line",
   completed: "Done",
 };
@@ -67,7 +68,11 @@ export default function ClaireDesk() {
   }, [utils]);
 
   const m = mission.data;
-  const primary = m?.items.find(i => i.status !== "completed") ?? null;
+  // Lead with work that can still happen; expired work stays visible but never leads unless it is all there is.
+  const primary =
+    m?.items.find(i => i.status !== "completed" && i.status !== "needs_reschedule") ??
+    m?.items.find(i => i.status === "needs_reschedule") ??
+    null;
   const secondary = m?.items.filter(i => i.status !== "completed" && i.id !== primary?.id)[0] ?? null;
   const pendingTomorrow = m?.items.filter(i => i.status === "awaiting_approval" && i.date === m.tomorrow) ?? [];
   const withheldSheet = m?.winBack ? callSheetWithheldCopy(m.winBack) : null;
@@ -116,6 +121,8 @@ export default function ClaireDesk() {
     ? null
     : primary?.status === "awaiting_approval"
       ? `I've prepared "${primary.title}". It needs your OK before it goes on the Day Line.`
+      : primary?.status === "needs_reschedule"
+        ? `"${primary.title}" didn't happen in time. Tell me which day it should move to.`
       : primary
         ? `${primary.title} is on your Day Line ${dayLabel(primary.date, m.businessDate, m.tomorrow).toLowerCase()}${primary.when ? ` (${primary.when})` : ""}.`
         : "Nothing is prepared for the next two days yet.";
@@ -171,6 +178,11 @@ export default function ClaireDesk() {
                       </button>
                       <p className="cd-fine">Approves only this mission. It adds it to your Day Line; it contacts no one.</p>
                     </div>
+                  ) : null}
+                  {primary.status === "needs_reschedule" ? (
+                    <p className="cd-note" data-testid="claire-desk-needs-reschedule">
+                      Its time has passed, so it can't be approved as planned. Move it to a new day in the full week plan below, or tell Claire on comms when it should happen.
+                    </p>
                   ) : null}
                   {approval.state === "ok" || approval.state === "error" ? (
                     <p role={approval.state === "error" ? "alert" : "status"} className={approval.state === "error" ? "cd-error" : "cd-ok"} data-testid="approve-result">

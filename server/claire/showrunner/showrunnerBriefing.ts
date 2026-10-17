@@ -1,4 +1,5 @@
-import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
+import { proposalItemExecutionWindow, strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
+import type { StrategicPlanningProposal } from "../../../shared/strategicIntelligence";
 import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -40,6 +41,8 @@ export type ShowrunnerBriefing = {
   /** Operator-reported developments from recent calls. Reported, not verified. */
   developments: Array<{ summary: string; date: string | null; reportedOn: string }>;
   pendingDecision: null | { proposalId: string; revision: string; summary: string; items: Array<{ id: string; date: string; title: string; window: string | null }> };
+  /** Unapproved proposal work whose execution window has passed: shown, never offered for approval, to be rescheduled. */
+  needsReschedule?: Array<{ id: string; date: string; title: string; window: string | null }>;
   adaptations: string[];
   uncertain: string[];
   /** This week so far: operator-reported outcomes and plan changes, for the week review. */
@@ -111,6 +114,23 @@ function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): Briefing
   }));
 }
 
+/**
+ * Splits a proposal's unapproved work for the operator. Work dated before today is not
+ * shown. Work whose execution window is open may be offered for approval; today's work
+ * after the cutoff (without an explicit later time) stays visible but must be rescheduled.
+ * This also covers a fallback to the calendar week after Friday's window closes: its
+ * Friday work is shown for rescheduling, never as awaiting approval.
+ */
+export function proposalItemsForApproval(input: {
+  proposal: Pick<StrategicPlanningProposal, "items">;
+  businessDate: string;
+  localTime: string;
+}): { approvable: StrategicPlanningProposal["items"]; needsReschedule: StrategicPlanningProposal["items"] } {
+  const visible = input.proposal.items.filter(i => i.businessDate >= input.businessDate);
+  const open = (i: (typeof visible)[number]) => proposalItemExecutionWindow(i, input) === "open";
+  return { approvable: visible.filter(open), needsReschedule: visible.filter(i => !open(i)) };
+}
+
 export async function buildShowrunnerBriefing(input: {
   identity: CanonicalOperatorIdentity;
   purpose: ShowrunnerPurpose;
@@ -134,16 +154,24 @@ export async function buildShowrunnerBriefing(input: {
     getDay({ ...stateArgs, businessDate }),
     getDay({ ...stateArgs, businessDate: tomorrowDate }),
   ]);
-  const weekStart = strategicPlanningHorizon({ businessDate, localTime: formatInTimeZone(now, timeZone, "HH:mm") }).weekStart;
+  const localTime = formatInTimeZone(now, timeZone, "HH:mm");
+  const weekStart = strategicPlanningHorizon({ businessDate, localTime }).weekStart;
   const proposal =
     (await latestStrategicProposal(identity, weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));
   let pendingDecision: ShowrunnerBriefing["pendingDecision"] = null;
+  let needsReschedule: NonNullable<ShowrunnerBriefing["needsReschedule"]> = [];
   if (proposal && Date.parse(proposal.expiresAt) > now.getTime()) {
     const responses = await strategicResponses(identity, proposal.id).catch(() => []);
     const decided = new Set(responses.flatMap(r => (r.action === "approve" ? r.itemIds : [])));
     const closed = responses.some(r => ["reject", "defer"].includes(r.action));
-    const open = closed ? [] : proposal.items.filter(i => !decided.has(i.id) && i.businessDate >= businessDate);
+    const split = proposalItemsForApproval({ proposal, businessDate, localTime });
+    const open = closed ? [] : split.approvable.filter(i => !decided.has(i.id));
+    needsReschedule = closed
+      ? []
+      : split.needsReschedule
+          .filter(i => !decided.has(i.id))
+          .map(i => ({ id: i.id, date: i.businessDate, title: i.title, window: i.timeWindow?.window ?? null }));
     if (open.length)
       pendingDecision = {
         proposalId: proposal.id,
@@ -277,6 +305,7 @@ export async function buildShowrunnerBriefing(input: {
     tomorrow,
     developments,
     pendingDecision,
+    needsReschedule,
     adaptations,
     uncertain,
     weekToDate: { reportedOutcomes, planChanges: (proposal?.weeklyPlan?.changes ?? []).map(c => c.summary) },

@@ -139,7 +139,8 @@ function systemPrompt(state: ShowrunnerCallState): string {
           "Never invent an offer or discount; if the plan mentions an offer, say the operator decides whether to make one. Distinguish recorded revenue from profit; profit is not known.",
           "When the operator reports calling or reaching a customer, record it as a missionUpdate on the matching item and capture any order/promise as a development.",
           "Ask at most the one question that matters most for execution.",
-          "When the operator asks to move an item to a time, add a planEdit {action:'retime', itemId, date YYYY-MM-DD from the calendar list (or '' to keep the item's day), time HH:mm, window}; operatorWords must quote the operator's words including the day. itemId must be an id from BRIEFING.tomorrow, BRIEFING.today or BRIEFING.pendingDecision.items.",
+          "When the operator asks to move an item to a time, add a planEdit {action:'retime', itemId, date YYYY-MM-DD from the calendar list (or '' to keep the item's day), time HH:mm, window}; operatorWords must quote the operator's words including the day. itemId must be an id from BRIEFING.tomorrow, BRIEFING.today, BRIEFING.pendingDecision.items or BRIEFING.needsReschedule.",
+          "BRIEFING.needsReschedule is unapproved work whose time has passed. Never ask the operator to approve it; ask when it should happen instead, and retime it to that day.",
           "When the operator is unsure about an item or wants it held, add a planEdit {action:'hold'}. Holding is not cancelling.",
           "readinessNeeds is ONLY for something the operator explicitly asks to be reminded to bring or do (e.g. 'remind me to bring the customer list'), in their words. Never put your own preparation or offers there.",
           "If it is unclear which item they mean, ask; do not guess an itemId. Never say a change is done: the system confirms separately.",
@@ -311,7 +312,10 @@ export async function runShowrunnerTurn(input: {
   const updates: DebriefMissionUpdate[] = (input.workLedger ? [] : model.missionUpdates)
     .filter(u => validIds.has(u.itemId) && u.outcome !== "unknown")
     .map(u => ({ ...u, outcome: u.outcome as DebriefMissionUpdate["outcome"], reportedAt: now.toISOString() }));
-  const pendingIds = new Set(state.briefing.pendingDecision?.items.map(i => i.id) ?? []);
+  const pendingIds = new Set([
+    ...(state.briefing.pendingDecision?.items.map(i => i.id) ?? []),
+    ...(state.briefing.needsReschedule?.map(i => i.id) ?? []),
+  ]);
   const planEdits: DeskPlanEdit[] =
     !input.workLedger && state.purpose === "desk_planning"
       ? (model.planEdits ?? []).filter(

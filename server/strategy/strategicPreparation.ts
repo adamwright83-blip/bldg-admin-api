@@ -8,7 +8,6 @@ import {
   actionableDates,
   strategicPlanningHorizon,
   targetWeekHorizon,
-  addDaysYmd,
 } from "../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal } from "../../shared/strategicIntelligence";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";

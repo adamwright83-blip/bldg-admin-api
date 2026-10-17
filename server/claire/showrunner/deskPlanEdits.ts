@@ -4,7 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { latestStrategicProposal, persistStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { addDaysYmd } from "../../analytics/businessPeriods";
-import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal, StrategicProposalItem } from "../../../shared/strategicIntelligence";
 import { dateFromOperatorWords, identityForShowrunner } from "./showrunnerDebrief";
 import type { ShowrunnerCallState } from "./showrunnerTurn";
@@ -48,9 +48,11 @@ export async function replanFromDeskEdits(
   const identity = await identityForShowrunner(state);
   const tz = state.timeZone;
   const tomorrow = addDaysYmd(state.businessDate, 1);
+  // Edit the week Claire is planning, never an expired calendar week: after Friday's window
+  // closes (and at weekends) that is next week, which is also what preparation creates.
+  const planningWeek = strategicPlanningHorizon({ businessDate: formatInTimeZone(now, tz, "yyyy-MM-dd"), localTime: formatInTimeZone(now, tz, "HH:mm") }).weekStart;
   const base: StrategicPlanningProposal =
-    (await latestStrategicProposal(identity, weekStartMonday(tomorrow))) ??
-    (await latestStrategicProposal(identity, weekStartMonday(state.businessDate))) ??
+    (await latestStrategicProposal(identity, planningWeek)) ??
     (await prepareStrategicProposal({ identity, timeZone: tz, now }));
   const decisions = await strategicResponses(identity, base.id).catch(() => []);
   const approvedIds = new Set(decisions.flatMap(r => (r.action === "approve" ? r.itemIds : [])));
