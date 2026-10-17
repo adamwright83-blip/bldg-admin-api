@@ -320,12 +320,33 @@ async function sendPendingMorningReports(
   }
 }
 
+/**
+ * The worker shares the production model keys. Until Adam turns this on, a tick
+ * only reads cycles and reports how many are waiting; it starts no cycle,
+ * deliberation, execution or notification, so fixing the worker cannot restart spend.
+ */
+export function presidentWorkerModelCallsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.PRESIDENT_WORKER_MODEL_CALLS_ENABLED === "1";
+}
+
 export async function runPresidentCycleWorkerTick() {
   if (process.env.PRESIDENT_EXECUTION_ENABLED !== "1")
     return {
       attempted: 0,
       results: [] as Array<{ cycleId: string; status: string }>,
     };
+
+  if (!presidentWorkerModelCallsEnabled()) {
+    const waiting = (await getPresidentCycleStore().list()).filter(
+      cycle => !["COMPLETE", "NO_APPROVAL"].includes(cycle.status)
+    ).length;
+    return {
+      attempted: 0,
+      results: [] as Array<{ cycleId: string; status: string }>,
+      paused: "model_calls_disabled" as const,
+      waitingCycles: waiting,
+    };
+  }
 
   await ensureScheduledPresidentCycle();
   const store = getPresidentCycleStore();
