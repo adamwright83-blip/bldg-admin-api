@@ -33,6 +33,11 @@ describe("resolveApiBase", () => {
     expect(resolveApiBase("www.gojoystick.com", "https://api.bldg.chat")).toBe("");
   });
 
+  it("uses the main first-party booking API on Laundry Butler without changing the resident API host", () => {
+    expect(resolveApiBase("laundrybutler.bldg.chat", "https://api.bldg.chat")).toBe("");
+    expect(resolveApiBase("laundryfarm.bldg.chat", "https://api.bldg.chat")).toBe("https://api.bldg.chat");
+  });
+
   it("does not send the resident API host through the main same-origin proxy", () => {
     expect(
       resolveApiBase(
