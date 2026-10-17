@@ -156,6 +156,22 @@ export function cleanLedgerReply(reply: string): string {
   return kept;
 }
 
+const SAVE_STOP = new Set(["yes", "yeah", "save", "that", "this", "those", "them", "the", "to", "on", "day", "line", "now", "please", "put", "add", "it", "all", "of", "my", "and", "go", "ahead", "corrected", "work"]);
+
+/** "Save that to the Day Line now", "put them on the line" — and not "don't save those yet". */
+export function isExplicitSaveRequest(utterance: string): boolean {
+  const text = utterance.toLowerCase();
+  if (/\b(?:don'?t|do not|not yet|hold (?:off|on|those|them|it)|wait)\b/.test(text)) return false;
+  return /\b(?:save|put|add|log|record)\b[^.?!]{0,80}\b(?:day ?line|the line|on the line|now)\b/.test(text) ||
+    /^\s*(?:yes|yeah|yep|ok(?:ay)?)[,.!]?\s+(?:save|put|add)\b/.test(text);
+}
+
+function sharesContentWords(item: { title: string; quote: string }, utterance: string): boolean {
+  const words = utterance.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(word => word.length > 3 && !SAVE_STOP.has(word));
+  const target = `${item.title} ${item.quote}`.toLowerCase().replace(/[^a-z0-9 ]+/g, " ");
+  return words.some(word => target.includes(word));
+}
+
 /** "Holding, not on the line yet: …" — what Claire is keeping for the operator, by day. */
 export function speakHeldWork(held: WorkLedgerState["held"], today: string): string {
   const byDay = new Map<string, string[]>();
@@ -235,6 +251,21 @@ export async function runWorkLedgerTurn(
   ledger.degradedAt = null;
   ledger.nextRef = planned.nextRef;
 
+  // The operator's explicit authority wins over a plan that forgot it: "Yes, save that
+  // corrected dry-cleaning work to the Day Line now" must save the held work it names
+  // (live replay 2026-10-16: the plan saved nothing about one run in three).
+  if (isExplicitSaveRequest(utterance) && !planned.saveRefs.length && !planned.edits.length && !planned.completeIds.length) {
+    const candidates = planned.held.length ? planned.held : ledger.held;
+    const named = candidates.filter(item => sharesContentWords(item, utterance));
+    const toSave = named.length ? named : candidates;
+    if (toSave.length) {
+      for (const item of toSave) if (!planned.held.some(kept => kept.ref === item.ref)) planned.held.push(item);
+      planned.saveRefs = toSave.map(item => item.ref);
+      planned.workChanged = true;
+      planned.refused.push(`explicit save guard: saving ${toSave.length} held item(s) the plan left unsaved`);
+    }
+  }
+
   if (planned.operatorSignal.kind !== "none") {
     ledger.signals = [...(ledger.signals ?? []), { ...planned.operatorSignal, at: now.getTime() }].slice(-8);
     // Awaited (briefly) so Daphne's card on this same turn already carries it.
@@ -260,6 +291,7 @@ export async function runWorkLedgerTurn(
   // produce an empty "Got it." that sounds like a promise (live replay: "charge the Opus order
   // when it comes in"). Hand it to the conversational pipeline, which can say what it can do.
   const heldShape = (items: typeof ledger.held) => JSON.stringify(items.map(item => [item.title, item.businessDate, item.executionType, item.timing]));
+  const heldBeforeItems = [...ledger.held];
   const heldBefore = heldShape(ledger.held);
   const heldAfter = heldShape(planned.held);
   const changesNothing =
@@ -325,9 +357,10 @@ export async function runWorkLedgerTurn(
   const confirmation = speakVerifiedLedgerChanges(applied, clock.today);
   // Held work that changed but is not saved is read back too, so a correction to it is
   // never answered with silence or "nothing saved" (CI replay 2026-10-16).
-  const heldReadback = !applied.changes.length && heldBefore !== heldAfter && ledger.held.length
-    ? speakHeldWork(ledger.held, clock.today)
-    : "";
+  // Only what is new or changed this turn: re-reading the whole held list every turn is noise.
+  const previousShape = new Map(heldBeforeItems.map(item => [item.ref, heldShape([item])]));
+  const changedHeld = ledger.held.filter(item => previousShape.get(item.ref) !== heldShape([item]));
+  const heldReadback = !applied.changes.length && changedHeld.length ? speakHeldWork(changedHeld, clock.today) : "";
   const reply = cleanLedgerReply(planned.reply);
   // A detail-only edit is verified but not read aloud, so an empty confirmation is not "nothing saved".
   const fallback = planned.endCall

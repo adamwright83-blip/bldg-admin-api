@@ -100,7 +100,7 @@ suite("actual Claire models plus disposable MySQL (no telephone calls)", () => {
     expect(rows, JSON.stringify(transcript)).toHaveLength(1);
     expect(rows[0].businessDate).toBe("2026-10-15");
     const metadata = typeof rows[0].metadataJson === "string" ? JSON.parse(rows[0].metadataJson) : rows[0].metadataJson;
-    expect(metadata.executionType).toBe("challenge");
+    expect(metadata.executionType, JSON.stringify(transcript)).toBe("challenge");
     // What the operator sees: the displayed title (operator renames are an overlay) and its detail.
     const shown = `${dayLineDisplayTitle(readDayLineOverlay(metadata), rows[0].title)} ${rows[0].sourceText} ${metadata.detailNote ?? ""}`;
     expect(shown).toMatch(/Instagram/i);

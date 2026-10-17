@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateWorkLedgerPlan, groundedInOperatorWords, type WorkLedgerPlanInput } from "./workLedgerPlanner";
 import { applyWorkLedgerPlan, speakVerifiedLedgerChanges } from "./workLedgerApply";
-import { cleanLedgerReply, runWorkLedgerTurn, workLedgerPromptSection } from "./workLedgerTurn";
+import { cleanLedgerReply, isExplicitSaveRequest, runWorkLedgerTurn, workLedgerPromptSection } from "./workLedgerTurn";
 import { createFakeDayLine } from "./workLedgerTestDayLine";
 import { daphneRelationshipEventFor } from "./workLedgerSignals";
 import { describePriorCalls } from "./callContinuity";
@@ -48,6 +48,7 @@ function heldItem(overrides: Record<string, string | boolean> = {}) {
     detail: "",
     quote: "I need to deliver 2 of them tonight.",
     save: false,
+    unchanged: false,
     ...overrides,
   };
 }
@@ -124,6 +125,35 @@ describe("work ledger validation — the server's half of the contract", () => {
     expect(plan.removeIds).toEqual([]);
     expect(plan.confirmIds).toEqual([]);
     expect(plan.refused).toHaveLength(4);
+  });
+
+  it("saves a new stated obligation the model held without the operator asking", () => {
+    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem({ save: false })] }, planInput(), 1);
+    expect(plan.saveRefs).toEqual(["w1"]);
+    const held = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ save: false })] },
+      planInput({ utterance: "I need to deliver 2 of them tonight. Hold those for now." }),
+      1
+    );
+    expect(held.saveRefs).toEqual([]);
+    const tentative = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ title: "Swing by Sunset Towers", quote: "I might swing by Sunset Towers", save: false })] },
+      planInput({ utterance: "I might swing by Sunset Towers later." }),
+      1
+    );
+    expect(tentative.saveRefs).toEqual([]);
+  });
+
+  it("keeps held work the model marks unchanged without it being rewritten", () => {
+    const held = [{ ref: "w1", title: "Deliver 2 dry cleaning orders tonight", businessDate: TODAY, timing: "tonight", executionType: null, detail: "", quote: "I need to deliver 2 of them tonight." }];
+    const plan = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ ref: "w1", unchanged: true, title: "", quote: "", timing: "", save: true })] },
+      planInput({ held, utterance: "Put the deliveries on the line now." }),
+      2
+    );
+    expect(plan.held).toEqual(held);
+    expect(plan.saveRefs).toEqual(["w1"]);
+    expect(plan.refused).toEqual([]);
   });
 
   it("keeps the previous version of held work when its rewrite is refused", () => {
@@ -384,6 +414,48 @@ describe("one turn through the ledger", () => {
     );
     expect(outcome.handled && outcome.result.speak).toBe("Holding, not on the line yet. Tomorrow: deliver third dry cleaning order tomorrow afternoon.");
     expect(dayLine.writes).toEqual([]);
+  });
+
+  it("saves held work when the operator explicitly says to, even if the plan forgot", async () => {
+    const dayLine = createFakeDayLine();
+    const held = [
+      { ref: "w1", title: "Deliver 2 dry cleaning orders tonight", businessDate: TODAY, timing: "tonight", executionType: null, detail: "", quote: "I need to deliver 2 of them tonight." },
+      { ref: "w2", title: "Maybe swing by Sunset Towers", businessDate: TODAY, timing: "", executionType: null, detail: "", quote: "maybe swing by Sunset Towers" },
+    ];
+    const state: ClaireTurnState = { history: [], workLedger: { version: 1, savedIds: [], nextRef: 3, held } };
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, held: held.map(item => heldItem({ ref: item.ref, title: item.title, quote: item.quote, timing: item.timing })), reply: "They're yours to action." }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "Yes, save that corrected dry-cleaning work to the Day Line now.", state },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(outcome.handled).toBe(true);
+    expect(dayLine.open().map(row => row.title)).toEqual(["Deliver 2 dry cleaning orders tonight"]);
+    expect(state.workLedger?.held.map(item => item.ref)).toEqual(["w2"]);
+  });
+
+  it("recognizes an explicit save and never a hold as one", () => {
+    expect(isExplicitSaveRequest("Yes, save that corrected dry-cleaning work to the Day Line now.")).toBe(true);
+    expect(isExplicitSaveRequest("Okay now put the Opus pickups on for tomorrow afternoon.")).toBe(false);
+    expect(isExplicitSaveRequest("Put them on the line.")).toBe(true);
+    expect(isExplicitSaveRequest("Keep the orders separate; don't save those yet.")).toBe(false);
+    expect(isExplicitSaveRequest("Show me the corrected plan; do not save it yet.")).toBe(false);
+  });
+
+  it("makes one attempt on the fallback model when the primary planner fails", async () => {
+    const dayLine = createFakeDayLine();
+    const models: string[] = [];
+    const invoke = (async (params: { model: string }) => {
+      models.push(params.model);
+      if (models.length === 1) throw new Error("timed out");
+      return { id: "x", created: 0, model: "stub", choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify({ ...EMPTY_RAW, held: [heldItem({ save: true })] }) }, finish_reason: "tool_use" }] };
+    }) as never;
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "I need to deliver 2 of them tonight.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(models).toEqual(["claude-sonnet-4-6", "claude-haiku-5-5"]);
+    expect(outcome.handled).toBe(true);
+    expect(dayLine.open()).toHaveLength(1);
   });
 
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {
