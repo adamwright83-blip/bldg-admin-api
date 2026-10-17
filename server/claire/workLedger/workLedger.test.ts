@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { validateWorkLedgerPlan, groundedInOperatorWords, type WorkLedgerPlanInput } from "./workLedgerPlanner";
+import { validateWorkLedgerPlan, groundedInOperatorWords, isClaireWorkLedgerEnabled, type WorkLedgerPlanInput } from "./workLedgerPlanner";
 import { applyWorkLedgerPlan, speakVerifiedLedgerChanges } from "./workLedgerApply";
-import { cleanLedgerReply, isExplicitSaveRequest, runWorkLedgerTurn, workLedgerPromptSection } from "./workLedgerTurn";
+import { cleanLedgerReply, isExplicitClosureAuthorization, isExplicitSaveRequest, isPlainClosureDecline, runWorkLedgerTurn, workLedgerPromptSection } from "./workLedgerTurn";
 import { createFakeDayLine } from "./workLedgerTestDayLine";
 import { daphneRelationshipEventFor } from "./workLedgerSignals";
 import { describePriorCalls } from "./callContinuity";
@@ -381,14 +381,100 @@ describe("one turn through the ledger", () => {
       lastSaved: [{ id: "louise", title: "Call Louise", businessDate: "2026-10-19", executionType: null }],
     } }));
     const { invoke, calls } = scriptedInvoke([{ ...EMPTY_RAW, completeIds: ["louise"] }]);
-    const outcome = await runWorkLedgerTurn(
-      { ...target, utterance: "I finished the Louise call early.", state },
-      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
-    );
+    const deps = { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" as const }) };
+    const outcome = await runWorkLedgerTurn({ ...target, utterance: "I finished the Louise call early.", state }, deps);
     expect(calls[0]).toContain("id=louise day=2026-10-19");
     expect(outcome.handled).toBe(true);
+    // Completion waits for the operator's explicit yes (release review 2026-10-17).
+    expect(dayLine.writes).toEqual([]);
+    const confirmed = await runWorkLedgerTurn({ ...target, utterance: "Yes.", state }, deps);
+    expect(confirmed.handled).toBe(true);
     expect(dayLine.rows.get("louise")?.status).toBe("completed");
     expect(dayLine.writes).toEqual(["complete Call Louise"]);
+  });
+
+  it("never completes or removes Day Line work on the model's reading alone: Claire asks, and only an explicit yes applies it", async () => {
+    const dayLine = createFakeDayLine([
+      { id: "van", title: "Van inspection", businessDate: TODAY },
+      { id: "flyers", title: "Print flyers", businessDate: TODAY },
+    ]);
+    const state: ClaireTurnState = { history: [] };
+    const { invoke, calls } = scriptedInvoke([
+      { ...EMPTY_RAW, completeIds: ["van"], removeIds: [{ id: "flyers", reason: "operator dropped it" }], reply: "Done, I marked the van inspection complete and removed the flyers." },
+    ]);
+    const deps = { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" as const }) };
+    const asked = await runWorkLedgerTurn({ ...target, utterance: "The van thing is sorted and forget the flyers.", state }, deps);
+    expect(asked.handled && asked.result.speak).toBe(
+      'Before I change your Day Line: should I mark "Van inspection" done and take "Print flyers" off your Day Line? Say yes to confirm.'
+    );
+    expect(dayLine.writes).toEqual([]);
+    expect(dayLine.open().map(row => row.title).sort()).toEqual(["Print flyers", "Van inspection"]);
+
+    const confirmed = await runWorkLedgerTurn({ ...target, utterance: "Yes, go ahead.", state }, deps);
+    expect(calls).toHaveLength(1); // the yes applies what was asked; it is not re-planned
+    expect(dayLine.writes.sort()).toEqual(["complete Van inspection", "remove Print flyers"]);
+    expect(confirmed.handled && confirmed.result.kind).toBe("briefing_saved");
+    expect(state.workLedger?.pendingClosure ?? null).toBeNull();
+  });
+
+  it("a plain no leaves the Day Line untouched", async () => {
+    const dayLine = createFakeDayLine([{ id: "van", title: "Van inspection", businessDate: TODAY }]);
+    const state: ClaireTurnState = { history: [] };
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, completeIds: ["van"] }]);
+    const deps = { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" as const }) };
+    await runWorkLedgerTurn({ ...target, utterance: "Van's handled I think.", state }, deps);
+    const declined = await runWorkLedgerTurn({ ...target, utterance: "No.", state }, deps);
+    expect(declined.handled && declined.result.speak).toBe("Okay, I left your Day Line as it was.");
+    expect(dayLine.writes).toEqual([]);
+    expect(dayLine.rows.get("van")?.status).toBe("open");
+  });
+
+  it("a qualified answer is not authorization: the pending change is dropped and the turn is planned normally", async () => {
+    const dayLine = createFakeDayLine([{ id: "van", title: "Van inspection", businessDate: TODAY }]);
+    const state: ClaireTurnState = { history: [] };
+    const { invoke, calls } = scriptedInvoke([{ ...EMPTY_RAW, completeIds: ["van"] }, { ...EMPTY_RAW, workChanged: false }]);
+    const deps = { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" as const }) };
+    await runWorkLedgerTurn({ ...target, utterance: "Van's handled I think.", state }, deps);
+    await runWorkLedgerTurn({ ...target, utterance: "Yes but not the van, the oil change.", state }, deps);
+    expect(calls).toHaveLength(2);
+    expect(dayLine.writes).toEqual([]);
+    expect(state.workLedger?.pendingClosure ?? null).toBeNull();
+  });
+
+  it("a stated obligation still saves at once while a closure in the same turn waits for a yes", async () => {
+    const dayLine = createFakeDayLine([{ id: "van", title: "Van inspection", businessDate: TODAY }]);
+    const state: ClaireTurnState = { history: [] };
+    const { invoke } = scriptedInvoke([
+      { ...EMPTY_RAW, completeIds: ["van"], held: [heldItem({ save: true, quote: "I need to deliver 2 of them tonight." })] },
+    ]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "Van inspection's done. I need to deliver 2 of them tonight.", state },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(dayLine.writes).toEqual([`create ${TODAY} Deliver 2 dry cleaning orders tonight`]);
+    expect(dayLine.rows.get("van")?.status).toBe("open");
+    expect(outcome.handled && outcome.result.speak).toContain('should I mark "Van inspection" done?');
+  });
+
+  it("recognizes only a short unqualified yes as closure authorization", () => {
+    for (const yes of ["Yes.", "yeah", "Yep, do it", "Correct.", "Go ahead", "Yes please", "That's right", "Sure, confirm it"]) {
+      expect(isExplicitClosureAuthorization(yes), yes).toBe(true);
+    }
+    for (const not of ["ok", "I guess", "yes but not the van", "Yes, actually wait", "no", "Yes I'll tell you which ones are finished after lunch today okay", "maybe"]) {
+      expect(isExplicitClosureAuthorization(not), not).toBe(false);
+    }
+    expect(isPlainClosureDecline("No.")).toBe(true);
+    expect(isPlainClosureDecline("Leave it")).toBe(true);
+    expect(isPlainClosureDecline("No, the oil change is done")).toBe(false);
+  });
+
+  it("the ledger is opt-in: a model key alone never turns it on", () => {
+    const key = process.env.ANTHROPIC_API_KEY;
+    expect(isClaireWorkLedgerEnabled({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(isClaireWorkLedgerEnabled({ CLAIRE_WORK_LEDGER: "0" } as NodeJS.ProcessEnv)).toBe(false);
+    expect(isClaireWorkLedgerEnabled({ CLAIRE_WORK_LEDGER: "yes" } as NodeJS.ProcessEnv)).toBe(false);
+    // With the flag, it still needs a key (ENV is read at import; the test env has none unless set).
+    expect(isClaireWorkLedgerEnabled({ CLAIRE_WORK_LEDGER: "1" } as NodeJS.ProcessEnv)).toBe(Boolean(key?.trim()));
   });
 
   it("does not tell the operator nothing was saved when only details were added", async () => {

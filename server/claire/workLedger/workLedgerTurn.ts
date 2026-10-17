@@ -55,7 +55,8 @@ export type WorkLedgerTurnDeps = {
 };
 
 export type WorkLedgerTurnOutcome =
-  | { handled: true; result: ClaireTurnResult; plan: WorkLedgerPlan; applied: WorkLedgerApplyResult; latencyMs: number }
+  // A confirmation turn applies the closure Claire already asked about: no new plan is made.
+  | { handled: true; result: ClaireTurnResult; plan?: WorkLedgerPlan; applied?: WorkLedgerApplyResult; latencyMs: number }
   | { handled: false; reason: "not_work" | "planner_unavailable" | "empty"; plan?: WorkLedgerPlan };
 
 export function workLedgerStateOf(state: ClaireTurnState): WorkLedgerState {
@@ -193,6 +194,32 @@ function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: 
   ].slice(-HISTORY_LIMIT);
 }
 
+const AFFIRMATIVE = /^(?:yes|yeah|yep|yup|correct|confirm(?:ed)?|sure|do it|go ahead|please do|that'?s right)\b/;
+const QUALIFIER = /\b(?:no|not|don'?t|wait|but|except|actually|instead|only|hold)\b/;
+const PLAIN_DECLINE = /^(?:no|nope|nah|don'?t|not yet|leave it|keep it|leave them|keep them)(?: thanks| thank you)?$/;
+const words = (utterance: string) =>
+  utterance.toLowerCase().replace(/[“”"’]/g, "'").replace(/[.,!?;:]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** A short, unqualified yes to Claire's own question: the only authorization that closes or removes work. */
+export function isExplicitClosureAuthorization(utterance: string): boolean {
+  const said = words(utterance);
+  return AFFIRMATIVE.test(said) && !QUALIFIER.test(said) && said.split(" ").length <= 8;
+}
+
+export function isPlainClosureDecline(utterance: string): boolean {
+  return PLAIN_DECLINE.test(words(utterance));
+}
+
+/** Claire's question before any completion or removal; it names every item exactly. */
+export function closureQuestion(pending: NonNullable<WorkLedgerState["pendingClosure"]>): string {
+  const quoted = (items: Array<{ title: string }>) => items.map(item => `"${item.title}"`).join(", ");
+  const parts = [
+    pending.complete.length ? `mark ${quoted(pending.complete)} done` : "",
+    pending.remove.length ? `take ${quoted(pending.remove)} off your Day Line` : "",
+  ].filter(Boolean);
+  return `Before I change your Day Line: should I ${parts.join(" and ")}? Say yes to confirm.`;
+}
+
 export async function runWorkLedgerTurn(
   input: WorkLedgerTurnInput,
   overrides: Partial<WorkLedgerTurnDeps> = {}
@@ -222,6 +249,64 @@ export async function runWorkLedgerTurn(
     console.warn("[ClaireWorkLedger] Day Line read failed", error instanceof Error ? error.message : error);
     ledger.degradedAt = now.getTime();
     return { handled: false, reason: "planner_unavailable" };
+  }
+
+  // A completion or removal Claire asked about is applied only on the operator's explicit yes.
+  const pending = ledger.pendingClosure ?? null;
+  ledger.pendingClosure = null;
+  if (pending && (isExplicitClosureAuthorization(utterance) || isPlainClosureDecline(utterance))) {
+    const open = new Set(dayLine.filter(item => item.status === "open").map(item => item.id));
+    const authorized = isExplicitClosureAuthorization(utterance);
+    const applied = authorized
+      ? await applyWorkLedgerPlan({
+          plan: {
+            workChanged: true,
+            endCall: false,
+            held: ledger.held,
+            saveRefs: [],
+            edits: [],
+            completeIds: pending.complete.map(item => item.id).filter(id => open.has(id)),
+            confirmIds: [],
+            removeIds: pending.remove.filter(item => open.has(item.id)).map(item => ({ id: item.id, reason: item.reason })),
+            reply: "",
+            operatorSignal: { kind: "none", about: "", quote: "" },
+            refused: [],
+          },
+          dayLine,
+          target: {
+            tenantId: input.tenantId,
+            dayDirectorActorId: input.dayDirectorActorId,
+            operatorUserId: input.operatorUserId,
+            conversationKey: input.conversationKey,
+          },
+          clock: { today: clock.today, minutesNow: clock.minutesNow },
+          deps: deps.apply,
+        })
+      : null;
+    const speak = !applied
+      ? "Okay, I left your Day Line as it was."
+      : speakVerifiedLedgerChanges(applied, clock.today) ||
+        (applied.failures.length ? "I couldn't change that just now. Want me to try again?" : "Those were already closed, so nothing changed.");
+    remember(input.state, "operator", utterance, now.getTime());
+    remember(input.state, "claire", speak, now.getTime() + 1);
+    console.info("[ClaireWorkLedger]", {
+      event: "claire_work_ledger_closure",
+      authorized,
+      conversationKey: input.conversationKey,
+      completed: applied?.changes.filter(change => change.kind === "completed").length ?? 0,
+      removed: applied?.changes.filter(change => change.kind === "removed").length ?? 0,
+      failures: applied?.failures.length ?? 0,
+    });
+    const result: ClaireTurnResult = {
+      speak,
+      kind: applied?.changes.length ? "briefing_saved" : "answered",
+      assembledUtterance: utterance,
+      thoughtCompleteness: "complete",
+      actionIds: applied?.changes.map(change => change.id) ?? [],
+      ...(applied?.receipts.length ? { mutationReceipts: applied.receipts } : {}),
+      answerPath: "work_ledger",
+    };
+    return { handled: true, result, ...(applied ? { applied } : {}), latencyMs: Date.now() - startedAt };
   }
 
   const planned = await planWorkLedgerTurn(
@@ -287,6 +372,23 @@ export async function runWorkLedgerTurn(
     await Promise.race([write, new Promise(resolve => setTimeout(resolve, 900))]);
   }
 
+  // The plan's completions and removals are a model's reading of the conversation, so they
+  // wait for the operator's explicit yes (release review 2026-10-17). Saves and edits proceed.
+  const titleOf = new Map(dayLine.map(item => [item.id, item.title]));
+  const closure: NonNullable<WorkLedgerState["pendingClosure"]> = {
+    complete: planned.completeIds.map(id => ({ id, title: titleOf.get(id) ?? id })),
+    remove: planned.removeIds.map(entry => ({ id: entry.id, title: titleOf.get(entry.id) ?? entry.id, reason: entry.reason })),
+  };
+  const asksClosure = closure.complete.length + closure.remove.length > 0;
+  if (asksClosure) {
+    planned.refused.push(`closure awaits operator confirmation: ${closure.complete.length} complete, ${closure.remove.length} remove`);
+    planned.completeIds = [];
+    planned.removeIds = [];
+    planned.workChanged = true;
+    // Whatever the model meant to say may describe the closure as done; Claire asks instead.
+    planned.reply = "";
+  }
+
   // A "work" turn that changes nothing, holds nothing new and reads nothing back would only
   // produce an empty "Got it." that sounds like a promise (live replay: "charge the Opus order
   // when it comes in"). Hand it to the conversational pipeline, which can say what it can do.
@@ -302,6 +404,7 @@ export async function runWorkLedgerTurn(
     !planned.completeIds.length &&
     !planned.removeIds.length &&
     !planned.confirmIds.length &&
+    !asksClosure &&
     heldBefore === heldAfter;
   if (changesNothing) {
     console.info("[ClaireWorkLedger]", {
@@ -370,7 +473,9 @@ export async function runWorkLedgerTurn(
       : applied.failures.length
         ? "I couldn't save that just now. Want me to try again?"
         : "I haven't saved or carried out anything from that instruction.";
-  const speak = [confirmation, heldReadback, reply].filter(Boolean).join(" ").trim() || fallback;
+  if (asksClosure) ledger.pendingClosure = closure;
+  const speak =
+    [confirmation, heldReadback, reply, asksClosure ? closureQuestion(closure) : ""].filter(Boolean).join(" ").trim() || fallback;
 
   const at = now.getTime();
   remember(input.state, "operator", utterance, at);

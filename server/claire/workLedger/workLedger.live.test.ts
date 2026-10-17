@@ -61,7 +61,7 @@ describe.skipIf(!live)("work ledger — real-model replay of the 2026-10-15 prod
         if (outcome.handled) {
           latencies.push(outcome.latencyMs);
           transcript.push(`CLAIRE [ledger ${outcome.latencyMs}ms]: ${outcome.result.speak}`);
-          if (outcome.plan.refused.length) transcript.push(`   refused: ${outcome.plan.refused.join(" | ")}`);
+          if (outcome.plan?.refused.length) transcript.push(`   refused: ${outcome.plan.refused.join(" | ")}`);
         } else {
           transcript.push(`   (ledger: ${outcome.reason}${outcome.plan?.operatorSignal.kind && outcome.plan.operatorSignal.kind !== "none" ? `, signal ${outcome.plan.operatorSignal.kind}: ${outcome.plan.operatorSignal.about}` : ""})`);
           const standIn = step.standIn ?? "Okay.";

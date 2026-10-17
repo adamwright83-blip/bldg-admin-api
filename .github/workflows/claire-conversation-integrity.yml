@@ -79,11 +79,13 @@ jobs:
         if: ${{ !cancelled() && matrix.mode == 'live-model' }}
         env:
           DATABASE_URL: ''
+          CLAIRE_WORK_LEDGER: '1'
           CLAIRE_WORK_LEDGER_LIVE: '1'
         run: pnpm vitest run server/claire/workLedger/workLedger.live.test.ts --minWorkers=1 --maxWorkers=1
       - name: Work ledger — production Relay turn path, real models, disposable MySQL
         if: ${{ !cancelled() && matrix.mode == 'live-model' }}
         env:
+          CLAIRE_WORK_LEDGER: '1'
           CLAIRE_WORK_LEDGER_LIVE: '1'
           # Claire call tokens are signed; a disposable value for this job only.
           JWT_SECRET: claire-work-ledger-ci-disposable-000000000000000000000
