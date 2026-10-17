@@ -105,6 +105,10 @@
 .jh-sales-grid>div{padding:8px 18px 7px 0}.jh-sales-grid>div+div{border-left:1px solid #ece7dd;padding-left:24px}
 .jh-sales-grid span{display:block;font:15px Georgia,serif}.jh-sales-grid strong{display:block;font:500 38px/1.1 Georgia,serif;margin:6px 0 4px;letter-spacing:-.04em}
 .jh-sales-grid small{font-size:10px;color:#77736a}
+.jh-prepared{display:grid;gap:8px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:#f7f0df}
+.jh-prepared h2{font-size:22px;line-height:1.15;margin:0}
+.jh-prepared p{margin:0;font-size:13px;line-height:1.35;color:#3c3832}
+.jh-prepared button{justify-self:start;min-height:36px;padding:0 14px;border:0;border-radius:999px;background:#151515;color:#fff;font-size:12px}
 .jh-claire-noticed{grid-column:2;grid-row:3/5}
 .jh-claire-noticed blockquote{margin:4px 0 10px;padding:13px 14px;border-radius:14px;background:#f6f8f0;font:500 15px/1.35 Georgia,serif}
 .jh-claire-noticed ul{list-style:none;padding:0;margin:0;display:grid;gap:0}
