@@ -10415,8 +10415,10 @@ export type HiddenGameChapterUnlockRow = typeof hiddenGameChapterUnlocks.$inferS
 export type InsertHiddenGameChapterUnlock = typeof hiddenGameChapterUnlocks.$inferInsert;
 
 /**
- * Operator-reported customer reply from the operator's personal SMS thread.
- * Provenance is always `operator_reported` (never a carrier webhook receipt).
+ * Messaging evidence events for personal-number and provider-connected outreach.
+ * Every event carries a distinct source (`provider_webhook`, `device_observed`, `operator_reported`),
+ * direction (`outbound`, `inbound`), tenant, operator, matched customer (or raw phone if unmatched),
+ * provider message id, observedAt, and body.
  * A row does not verify a paid order or complete the recovery objective.
  */
 export const personalOutreachReplies = mysqlTable(
@@ -10425,9 +10427,13 @@ export const personalOutreachReplies = mysqlTable(
     id: varchar("id", { length: 64 }).primaryKey(),
     tenantId: varchar("tenant_id", { length: 64 }).notNull(),
     operatorId: varchar("operator_id", { length: 64 }).notNull(),
-    customerId: varchar("customer_id", { length: 128 }).notNull(),
+    customerId: varchar("customer_id", { length: 128 }),
     customerName: varchar("customer_name", { length: 255 }).notNull(),
-    messageId: varchar("message_id", { length: 64 }),
+    rawPhone: varchar("raw_phone", { length: 32 }),
+    direction: varchar("direction", { length: 16 }).notNull().default("inbound"),
+    source: varchar("source", { length: 40 }).notNull().default("operator_reported"),
+    providerMessageId: varchar("provider_message_id", { length: 128 }),
+    messageId: varchar("message_id", { length: 128 }),
     territoryId: varchar("territory_id", { length: 64 }),
     replyText: text("reply_text").notNull(),
     classification: varchar("classification", { length: 40 }).notNull(),
@@ -10445,6 +10451,13 @@ export const personalOutreachReplies = mysqlTable(
       table.tenantId,
       table.operatorId,
       table.customerId,
+      table.reportedAt
+    ),
+    directionSourceIdx: index("idx_por_direction_source").on(
+      table.tenantId,
+      table.operatorId,
+      table.direction,
+      table.source,
       table.reportedAt
     ),
   })

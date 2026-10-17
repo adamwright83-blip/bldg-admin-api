@@ -8,8 +8,11 @@ import {
 import {
   classifyPersonalOutreachReply,
   listPersonalOutreachReplies,
+  prepareNextStepFromPersonalReply,
+  recordMessagingEvidenceEvent,
   recordPersonalOutreachReply,
   resetPersonalOutreachReplyMemoryForTest,
+  setForceFailNextReplyPersistenceForTest,
 } from "./personalOutreachReplyService";
 
 const TENANT = "tenant_reply_test";
@@ -17,7 +20,7 @@ const OTHER_TENANT = "tenant_other_isolated";
 const OPERATOR = "op_reply_test";
 const OTHER_OPERATOR = "op_other_test";
 
-describe("personalOutreachReplyService", () => {
+describe("personalOutreachReplyService — transport-agnostic messaging evidence engine", () => {
   beforeEach(() => {
     resetPersonalOutreachReplyMemoryForTest();
   });
@@ -36,30 +39,117 @@ describe("personalOutreachReplyService", () => {
       "not_now"
     );
     expect(classifyPersonalOutreachReply("STOP")).toBe("opt_out");
-    // Explicit STOP overrides an accidental positive classification selection
     expect(classifyPersonalOutreachReply("Please stop texting me", "pickup_interest")).toBe(
       "opt_out"
     );
   });
 
-  it("prepares a draft only on a pickup reply without sending, ordering, or completing the objective", async () => {
-    const saved = await recordPersonalOutreachReply({
+  it("prepares grounded follow-up drafts with zero unverified turnaround or pricing promises", () => {
+    const questionStep = prepareNextStepFromPersonalReply({
+      customerName: "Mei Lin",
+      replyText: "How fast is your turnaround and how much per pound?",
+      classification: "question",
+      source: "device_observed",
+    });
+    expect(questionStep.preparedFollowUpDraft).toBeTruthy();
+    expect(questionStep.preparedFollowUpDraft).not.toMatch(/next-day|24\s*hour|\$/i);
+
+    const pickupStep = prepareNextStepFromPersonalReply({
+      customerName: "Mei Lin",
+      replyText: "Can you pick up Thursday?",
+      classification: "pickup_interest",
+      source: "provider_webhook",
+    });
+    expect(pickupStep.preparedFollowUpDraft).toBeTruthy();
+    expect(pickupStep.preparedFollowUpDraft).not.toMatch(/next-day|24\s*hour|\$/i);
+  });
+
+  it("keeps provider_webhook, device_observed, and operator_reported evidence levels strictly separate and supports unmatched raw numbers", async () => {
+    const webhookIn = await recordMessagingEvidenceEvent({
       tenantId: TENANT,
       operatorId: OPERATOR,
-      customerId: "cust_mei_1",
+      source: "provider_webhook",
+      direction: "inbound",
+      customerId: "cust_1",
       customerName: "Mei Lin",
-      replyText: "Yes please! Can we do a pickup tomorrow morning?",
-      messageId: "som_1",
-      territoryId: "silver-lake",
-      now: new Date("2026-10-17T18:00:00.000Z"),
+      rawPhone: "+12135550141",
+      providerMessageId: "SM_webhook_1",
+      body: "Can you pick up tomorrow morning?",
+      observedAt: "2026-10-17T18:00:00.000Z",
+    });
+    const deviceOut = await recordMessagingEvidenceEvent({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      source: "device_observed",
+      direction: "outbound",
+      customerId: null,
+      rawPhone: "(213) 555-0199",
+      providerMessageId: "gmsg_out_1",
+      body: "Hey! Just checking in.",
+      observedAt: "2026-10-17T18:01:00.000Z",
+    });
+    const operatorFallback = await recordMessagingEvidenceEvent({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      source: "operator_reported",
+      direction: "inbound",
+      customerId: "cust_2",
+      customerName: "Barnaby Hayes",
+      body: "Not right now, out of town",
+      observedAt: "2026-10-17T18:02:00.000Z",
     });
 
-    expect(saved.provenance).toBe("operator_reported");
+    expect(webhookIn.source).toBe("provider_webhook");
+    expect(webhookIn.provenance).toBe("provider_webhook");
+    expect(webhookIn.direction).toBe("inbound");
+
+    expect(deviceOut.source).toBe("device_observed");
+    expect(deviceOut.provenance).toBe("device_observed");
+    expect(deviceOut.direction).toBe("outbound");
+    expect(deviceOut.customerId).toBeNull();
+    expect(deviceOut.rawPhone).toBe("+12135550199");
+
+    expect(operatorFallback.source).toBe("operator_reported");
+    expect(operatorFallback.provenance).toBe("operator_reported");
+
+    const webhookOnly = await listPersonalOutreachReplies({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      source: "provider_webhook",
+    });
+    expect(webhookOnly).toHaveLength(1);
+    expect(webhookOnly[0]?.id).toBe(webhookIn.id);
+
+    const outboundOnly = await listPersonalOutreachReplies({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      direction: "outbound",
+    });
+    expect(outboundOnly).toHaveLength(1);
+    expect(outboundOnly[0]?.id).toBe(deviceOut.id);
+  });
+
+  it("prepares a draft only on a pickup reply without sending, ordering, or completing the objective", async () => {
+    const saved = await recordMessagingEvidenceEvent({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      source: "device_observed",
+      direction: "inbound",
+      customerId: "cust_mei_1",
+      customerName: "Mei Lin",
+      rawPhone: "+12135550141",
+      providerMessageId: "gmsg_in_42",
+      body: "Yes please! Can we do a pickup tomorrow morning?",
+      messageId: "som_1",
+      territoryId: "silver-lake",
+      observedAt: new Date("2026-10-17T18:00:00.000Z"),
+    });
+
+    expect(saved.provenance).toBe("device_observed");
     expect(saved.classification).toBe("pickup_interest");
     expect(saved.nextStepKind).toBe("prepare_pickup_follow_up");
     expect(saved.permissionEffect).toBe("none");
-    expect(saved.preparedFollowUpDraft).toContain("Awesome Mei!");
-    expect(saved.nextAction).toContain("before opening Google Messages");
+    expect(saved.preparedFollowUpDraft).toContain("Thanks Mei!");
 
     const projected = projectCozyRecoverySurfaces({
       tenantId: TENANT,
@@ -106,7 +196,6 @@ describe("personalOutreachReplyService", () => {
     });
 
     const villager = projected.mission.targets[0]!;
-    // Prepares draft only; nothing is sent or ordered, and objectiveComplete / paidOrder stay false/unavailable
     expect(villager.communicationState).toBe("draft_prepared");
     expect(villager.preparedMessage).toBe(saved.preparedFollowUpDraft);
     expect(villager.outreachActionComplete).toBe(false);
@@ -115,6 +204,28 @@ describe("personalOutreachReplyService", () => {
     expect(projected.dayLineCard?.objectiveComplete).toBe(false);
     expect(projected.dayLineCard?.outreachActionComplete).toBe(false);
     expect(projected.dayLineCard?.paidOrder.status).toBe("unavailable");
+  });
+
+  it("fails closed when persistence fails and never leaves a phantom row in memory", async () => {
+    setForceFailNextReplyPersistenceForTest(true);
+    await expect(
+      recordMessagingEvidenceEvent({
+        tenantId: TENANT,
+        operatorId: OPERATOR,
+        source: "device_observed",
+        direction: "inbound",
+        customerId: "cust_fail_closed",
+        customerName: "Mei Lin",
+        body: "STOP",
+        observedAt: new Date("2026-10-17T18:00:00.000Z"),
+      })
+    ).rejects.toThrow(/persistence failure/i);
+
+    const listAfterFailure = await listPersonalOutreachReplies({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+    });
+    expect(listAfterFailure).toHaveLength(0);
   });
 
   it("enforces strict tenant and operator isolation so another tenant cannot read or project replies", async () => {
@@ -127,21 +238,18 @@ describe("personalOutreachReplyService", () => {
       now: new Date("2026-10-17T18:02:00.000Z"),
     });
 
-    // Another tenant with the same operatorId cannot read the reply
     const otherTenantList = await listPersonalOutreachReplies({
       tenantId: OTHER_TENANT,
       operatorId: OPERATOR,
     });
     expect(otherTenantList).toHaveLength(0);
 
-    // Another operator in the same tenant cannot read the reply
     const otherOperatorList = await listPersonalOutreachReplies({
       tenantId: TENANT,
       operatorId: OTHER_OPERATOR,
     });
     expect(otherOperatorList).toHaveLength(0);
 
-    // Writing a reply in OTHER_TENANT does not leak into TENANT
     await recordPersonalOutreachReply({
       tenantId: OTHER_TENANT,
       operatorId: OPERATOR,
@@ -159,7 +267,6 @@ describe("personalOutreachReplyService", () => {
     expect(tenantList[0]?.id).toBe(saved.id);
     expect(tenantList[0]?.classification).toBe("pickup_interest");
 
-    // Communication permission in TENANT remains allowed even though OTHER_TENANT recorded STOP for the same customerId
     const tenantPerm = await checkCommunicationPermission({
       tenantId: TENANT,
       subjectType: "customer",
@@ -182,7 +289,7 @@ describe("personalOutreachReplyService", () => {
     expect(saved.classification).toBe("complaint");
     expect(saved.nextStepKind).toBe("operator_service_recovery");
     expect(saved.nextAction).toContain("Do not pitch a win-back offer");
-    expect(saved.preparedFollowUpDraft).toContain("make it right");
+    expect(saved.preparedFollowUpDraft).toContain("sorry about that experience");
   });
 
   it("immediately blocks future SMS and any-channel drafts when an opt-out reply is recorded", async () => {

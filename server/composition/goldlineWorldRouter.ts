@@ -338,18 +338,68 @@ export const goldlineWorldRouter = router({
       operatorId: ctx.user.openId,
     });
   }),
+  recordMessagingEvidenceEvent: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        source: z.enum(["provider_webhook", "device_observed", "operator_reported"]),
+        direction: z.enum(["inbound", "outbound"]),
+        body: z.string().min(1).max(1000),
+        customerId: z.string().min(1).max(128).nullable().optional(),
+        customerName: z.string().min(1).max(255).nullable().optional(),
+        rawPhone: z.string().min(7).max(32).nullable().optional(),
+        providerMessageId: z.string().max(128).nullable().optional(),
+        messageId: z.string().max(128).nullable().optional(),
+        territoryId: z.string().max(64).nullable().optional(),
+        classification: z
+          .enum(["pickup_interest", "question", "not_now", "complaint", "opt_out", "outbound_sent"])
+          .optional(),
+        surface: z
+          .enum(["cozy_composer", "day_line", "device_connector", "provider_webhook"])
+          .default("device_connector"),
+        observedAt: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordMessagingEvidenceEvent } = await import(
+        "../experience/lanternCity/personalNumber/personalOutreachReplyService"
+      );
+      return await recordMessagingEvidenceEvent({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        source: input.source,
+        direction: input.direction,
+        body: input.body,
+        customerId: input.customerId ?? null,
+        customerName: input.customerName ?? null,
+        rawPhone: input.rawPhone ?? null,
+        providerMessageId: input.providerMessageId ?? null,
+        messageId: input.messageId ?? null,
+        territoryId: input.territoryId ?? null,
+        classification: input.classification,
+        surface: input.surface,
+        observedAt: input.observedAt,
+      });
+    }),
   recordPersonalOutreachReply: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
-        customerId: z.string().min(1).max(128),
-        customerName: z.string().min(1).max(255),
+        customerId: z.string().min(1).max(128).nullable().optional(),
+        customerName: z.string().min(1).max(255).optional(),
+        rawPhone: z.string().min(7).max(32).nullable().optional(),
         replyText: z.string().min(1).max(1000),
+        direction: z.enum(["inbound", "outbound"]).optional(),
+        source: z
+          .enum(["provider_webhook", "device_observed", "operator_reported"])
+          .optional(),
+        providerMessageId: z.string().max(128).nullable().optional(),
         classification: z
-          .enum(["pickup_interest", "question", "not_now", "complaint", "opt_out"])
+          .enum(["pickup_interest", "question", "not_now", "complaint", "opt_out", "outbound_sent"])
           .optional(),
         messageId: z.string().max(128).nullable().optional(),
         territoryId: z.string().max(64).nullable().optional(),
-        surface: z.enum(["cozy_composer", "day_line"]).default("cozy_composer"),
+        surface: z
+          .enum(["cozy_composer", "day_line", "device_connector", "provider_webhook"])
+          .default("cozy_composer"),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -359,9 +409,13 @@ export const goldlineWorldRouter = router({
       return await recordPersonalOutreachReply({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        customerId: input.customerId,
+        customerId: input.customerId ?? null,
         customerName: input.customerName,
+        rawPhone: input.rawPhone ?? null,
         replyText: input.replyText,
+        direction: input.direction,
+        source: input.source,
+        providerMessageId: input.providerMessageId ?? null,
         classification: input.classification,
         messageId: input.messageId ?? null,
         territoryId: input.territoryId ?? null,
@@ -373,6 +427,10 @@ export const goldlineWorldRouter = router({
       z
         .object({
           customerId: z.string().max(128).optional(),
+          direction: z.enum(["inbound", "outbound"]).optional(),
+          source: z
+            .enum(["provider_webhook", "device_observed", "operator_reported"])
+            .optional(),
         })
         .optional()
     )
@@ -384,6 +442,8 @@ export const goldlineWorldRouter = router({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         customerId: input?.customerId,
+        direction: input?.direction,
+        source: input?.source,
       });
     }),
   getScheduledOutreachRevisions: legacyDayforgeTenantOperatorProcedure

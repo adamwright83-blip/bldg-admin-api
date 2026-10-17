@@ -354,7 +354,7 @@ describe("cozy villager evidence contract", () => {
     expect(sprite.src).toContain("villager-02");
   });
 
-  it("projects an operator-reported reply and prepares the follow-up on the villager and Day Line card without marking a paid order", () => {
+  it("projects an observed reply across sources (device_observed, provider_webhook, operator_reported) without marking a paid order", () => {
     const surfaces = projectCozyRecoverySurfaces({
       tenantId: TENANT,
       operatorId: OPERATOR,
@@ -375,19 +375,24 @@ describe("cozy villager evidence contract", () => {
           operatorId: OPERATOR,
           customerId: "cust_stable_1",
           customerName: "Mei Lin",
+          rawPhone: "+12135550141",
+          direction: "inbound",
+          source: "device_observed",
+          providerMessageId: "gmsg_in_1",
           messageId: "msg_1",
           territoryId: "silver-lake",
           replyText: "Can you pick up 2 bags Thursday morning?",
           classification: "pickup_interest",
           nextStepKind: "prepare_pickup_follow_up",
           nextAction:
-            "Mei Lin replied with pickup interest (operator-reported). Review and approve the pickup confirmation draft before opening Google Messages.",
+            "Mei Lin replied with pickup interest (device observed). Review and approve the follow-up draft before sending.",
           preparedFollowUpDraft:
-            "Awesome Mei! I can lock in that pickup window for you—just let me know roughly how many bags and if there are any gate or porch notes.",
+            "Thanks Mei! I'd be glad to coordinate a pickup—what day and time window works best for you, and are there any gate or pickup notes I should have ready?",
           permissionEffect: "none",
-          provenance: "operator_reported",
-          surface: "cozy_composer",
+          provenance: "device_observed",
+          surface: "device_connector",
           reportedAt: "2026-10-15T17:30:00.000Z",
+          observedAt: "2026-10-15T17:30:00.000Z",
         },
       ],
       objective,
@@ -395,25 +400,98 @@ describe("cozy villager evidence contract", () => {
     });
 
     const villager = surfaces.mission.targets[0]!;
-    expect(villager.reply.status).toBe("operator_reported");
-    if (villager.reply.status === "operator_reported") {
+    expect(villager.reply.status).toBe("device_observed");
+    if (villager.reply.status !== "unavailable") {
+      expect(villager.reply.source).toBe("device_observed");
       expect(villager.reply.classification).toBe("pickup_interest");
-      expect(villager.reply.provenance).toBe("operator_reported");
+      expect(villager.reply.provenance).toBe("device_observed");
       expect(villager.reply.replyText).toContain("Thursday morning");
     }
-    expect(villager.preparedMessage).toContain("Awesome Mei!");
+    expect(villager.preparedMessage).toContain("Thanks Mei!");
     expect(villager.paidOrder.status).toBe("unavailable");
     expect(villager.outreachActionComplete).toBe(false);
     expect(villager.objectiveComplete).toBe(false);
     expect(surfaces.dayLineCard?.customerId).toBe("cust_stable_1");
-    expect(surfaces.dayLineCard?.reply.status).toBe("operator_reported");
-    expect(surfaces.dayLineCard?.nextAction).toContain("pickup interest (operator-reported)");
-    expect(surfaces.dayLineCard?.messageBody).toContain("Awesome Mei!");
+    expect(surfaces.dayLineCard?.reply.status).toBe("device_observed");
+    expect(surfaces.dayLineCard?.nextAction).toContain("pickup interest (device observed)");
+    expect(surfaces.dayLineCard?.messageBody).toContain("Thanks Mei!");
     expect(surfaces.dayLineCard?.openHref).toContain("customer=cust_stable_1");
     expect(surfaces.dayLineCard?.objectiveComplete).toBe(false);
   });
 
-  it("blocks consent when an operator-reported reply is an opt-out", () => {
+  it("marks an outbound draft as send_observed only when a matching outbound event is observed, not from compose handoff alone", () => {
+    const composeOnly = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [
+        row({
+          status: "awaiting_sender_setup",
+          deliveryIntent: "immediate",
+          dispatchedAt: null,
+          externalMessageId: null,
+          slotId: "slot_01",
+        }),
+      ],
+      replies: [],
+      objective,
+      now: NOW,
+    });
+    expect(composeOnly.mission.targets[0]!.communicationState).toBe("awaiting_sender");
+    expect(composeOnly.mission.targets[0]!.outreachActionComplete).toBe(false);
+
+    const afterOutboundEvent = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [
+        row({
+          status: "awaiting_sender_setup",
+          deliveryIntent: "immediate",
+          dispatchedAt: null,
+          externalMessageId: null,
+          slotId: "slot_01",
+        }),
+      ],
+      messageEvents: [
+        {
+          id: "por_out_1",
+          tenantId: TENANT,
+          operatorId: OPERATOR,
+          customerId: "cust_stable_1",
+          customerName: "Mei Lin",
+          rawPhone: "+12135550141",
+          direction: "outbound",
+          source: "device_observed",
+          providerMessageId: "gmsg_out_99",
+          messageId: "msg_1",
+          territoryId: "silver-lake",
+          replyText: "Hey Mei, checking in.",
+          body: "Hey Mei, checking in.",
+          classification: "outbound_sent",
+          nextStepKind: "outbound_send_observed",
+          nextAction:
+            "Outbound send observed (device observed). The recovery objective stays open until a paid order is admitted.",
+          preparedFollowUpDraft: null,
+          permissionEffect: "none",
+          provenance: "device_observed",
+          surface: "device_connector",
+          reportedAt: "2026-10-15T17:15:00.000Z",
+          observedAt: "2026-10-15T17:15:00.000Z",
+        },
+      ],
+      objective,
+      now: NOW,
+    });
+    const villager = afterOutboundEvent.mission.targets[0]!;
+    expect(villager.communicationState).toBe("send_observed");
+    expect(villager.pose).toBe("acknowledged");
+    expect(villager.outreachActionComplete).toBe(true);
+    expect(villager.objectiveComplete).toBe(false);
+    expect(villager.paidOrder.status).toBe("unavailable");
+  });
+
+  it("blocks consent when an observed reply is an opt-out", () => {
     const surfaces = projectCozyRecoverySurfaces({
       tenantId: TENANT,
       operatorId: OPERATOR,
@@ -432,11 +510,13 @@ describe("cozy villager evidence contract", () => {
           classification: "opt_out",
           nextStepKind: "opt_out_recorded",
           nextAction:
-            "Mei Lin opted out (operator-reported). Communication permission is now blocked; do not send further outreach.",
+            "Mei Lin opted out (provider webhook). Communication permission is now blocked; do not send further outreach.",
           preparedFollowUpDraft: null,
           permissionEffect: "opted_out",
-          provenance: "operator_reported",
-          surface: "cozy_composer",
+          provenance: "provider_webhook",
+          source: "provider_webhook",
+          direction: "inbound",
+          surface: "provider_webhook",
           reportedAt: "2026-10-15T17:45:00.000Z",
         },
       ],
@@ -448,7 +528,7 @@ describe("cozy villager evidence contract", () => {
     expect(villager.communicationState).toBe("consent_blocked");
     expect(villager.hasConsent).toBe(false);
     expect(villager.consentStatus).toBe("blocked_opt_out");
-    expect(villager.reply.status).toBe("operator_reported");
+    expect(villager.reply.status).toBe("provider_webhook");
     expect(villager.paidOrder.status).toBe("unavailable");
     expect(villager.objectiveComplete).toBe(false);
   });

@@ -5465,12 +5465,40 @@ await assertRequiredColumns("hidden_game_chapter_unlocks", [
   "evidenceJson",
   "createdAt",
 ]);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "raw_phone",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `raw_phone` varchar(32) NULL"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "direction",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `direction` varchar(16) NOT NULL DEFAULT 'inbound'"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "source",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `source` varchar(40) NOT NULL DEFAULT 'operator_reported'"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "provider_message_id",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `provider_message_id` varchar(128) NULL"
+);
+await runRequired(
+  "ALTER TABLE `personal_outreach_replies` MODIFY COLUMN `customer_id` varchar(128) NULL, MODIFY COLUMN `message_id` varchar(128) NULL",
+  "personal_outreach_replies nullable customer_id and varchar(128) message_id"
+);
 await assertRequiredColumns("personal_outreach_replies", [
   "id",
   "tenant_id",
   "operator_id",
   "customer_id",
   "customer_name",
+  "raw_phone",
+  "direction",
+  "source",
+  "provider_message_id",
   "message_id",
   "territory_id",
   "reply_text",

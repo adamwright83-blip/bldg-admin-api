@@ -267,7 +267,7 @@ export function CozyNeighborhoodEncounter({
               {/* Floating Name Tag */}
               <div className={styles.villagerTag}>
                 <span>{target.displayName.split(" ")[0]}</span>
-                {target.reply?.status === "operator_reported" ? (
+                {target.reply && target.reply.status !== "unavailable" ? (
                   <span className={styles.statusIconSent} data-reply-badge={target.reply.classification}>
                     💬 {target.reply.classificationLabel}
                   </span>
