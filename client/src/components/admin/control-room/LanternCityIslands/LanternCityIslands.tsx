@@ -8,6 +8,7 @@ import {
 } from "../customerGeography";
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
+import { buildingsWithResidents } from "./towerStack";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import type { DriverCurrentStop } from "./objectiveMarksView";
 import { devSampleCustomers } from "./devSample";
@@ -82,6 +83,11 @@ export default function LanternCityIslands({
     [atlas.data, usingSample],
   );
   const customers = useMemo(() => allCustomers.filter(isLiveLanternCustomer), [allCustomers]);
+  // Floor buttons only for buildings this business has customers in, not the owner's towers for everyone.
+  const ownBuildings = useMemo(
+    () => buildingsWithResidents(allCustomers.map(c => c.address ?? c.location?.canonicalAddress ?? "").filter(Boolean)),
+    [allCustomers],
+  );
   const byKey = useMemo(() => new Map(customers.map(c => [c.identityKey, c])), [customers]);
 
   useEffect(() => {
@@ -152,10 +158,13 @@ export default function LanternCityIslands({
               </div>
             ) : null}
           </header>
-          <div className={styles.towers}>
-            <button type="button" onClick={() => setTower("opus_la")}>OPUS LA floors</button>
-            <button type="button" onClick={() => setTower("century_park_east")}>Century Park East floors</button>
-          </div>
+          {ownBuildings.length ? (
+            <div className={styles.towers}>
+              {ownBuildings.map(building => (
+                <button key={building.id} type="button" onClick={() => setTower(building.id)}>{building.name} floors</button>
+              ))}
+            </div>
+          ) : null}
         </>
       ) : null}
       <ObjectiveMarksLayer

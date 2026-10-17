@@ -123,6 +123,11 @@ export function buildTowerModel(spec: BuildingSpec, residents: Resident[]): Buil
   return { spec, towers, unmatched };
 }
 
+/** the towers this business actually has customers in; a building with none of them stays off its HUD */
+export function buildingsWithResidents(addresses: readonly string[]): BuildingSpec[] {
+  return TOWER_BUILDINGS.filter(b => addresses.some(address => b.towers.some(t => t.address.test(address))));
+}
+
 /** floors with no customer at all (the ones to knock on) */
 export function darkFloors(t: TowerModel) {
   const out: number[] = [];

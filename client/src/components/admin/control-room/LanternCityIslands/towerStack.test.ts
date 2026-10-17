@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildTowerModel, darkFloors, parseUnit, TOWER_BUILDINGS, unitOf } from "./towerStack";
+import { buildingsWithResidents, buildTowerModel, darkFloors, parseUnit, TOWER_BUILDINGS, unitOf } from "./towerStack";
+
+describe("which floor buttons a business sees", () => {
+  it("shows a building only when one of this business's customers lives there", () => {
+    expect(buildingsWithResidents(["3545 Wilshire Blvd #1507, Los Angeles"]).map(b => b.id)).toEqual(["opus_la"]);
+    expect(buildingsWithResidents(["2170 Century Park E, Los Angeles", "3650 W 6th St"]).map(b => b.id)).toEqual(["opus_la", "century_park_east"]);
+  });
+
+  it("shows none to a business with no customers in those towers", () => {
+    expect(buildingsWithResidents(["120 Main St, Austin TX"])).toEqual([]);
+    expect(buildingsWithResidents([])).toEqual([]);
+  });
+});
 
 const south = { floors: 22, unitsPerFloor: 18 };
 
