@@ -133,12 +133,16 @@ export function workLedgerPromptSection(state: ClaireTurnState, today: string): 
 const SELF_REPORTED_WRITE =
   /\b(?:added|adding|saved|saving|updated|changed|reclassif\w*|tagged|logged|recorded|moved|removed|deleted|dropped|scratched|cleared|cancell?ed|scheduled|marked|took (?:it|that|them|those) off|put (?:it|that|them|those)|on (?:the|your|today'?s|tomorrow'?s) (?:day ?)?line|done\.)/i;
 
+/** Claire never promises an external action from the ledger: those need their own authorization. */
+const PROMISED_EXTERNAL_ACTION =
+  /\b(?:I'?ll|I will|I'm going to|let me|I can)\s+(?:go ahead and\s+)?(?:charge|text|message|send|email|call|ring|bill|refund|contact)\b|^\s*got it\s*[—–-]\s*(?:charge|text|send|call)\b/i;
+
 export function cleanLedgerReply(reply: string): string {
   if (!reply.trim()) return "";
   const kept = reply
     .replace(/\s*\bsay yes or no\b\.?/gi, "")
     .split(/(?<=[.!?])\s+/)
-    .filter(sentence => sentence.trim() && !SELF_REPORTED_WRITE.test(sentence))
+    .filter(sentence => sentence.trim() && !SELF_REPORTED_WRITE.test(sentence) && !PROMISED_EXTERNAL_ACTION.test(sentence))
     .join(" ")
     .replace(/^(?:[-—,;:]\s*)+/, "")
     .replace(/\s+/g, " ")
