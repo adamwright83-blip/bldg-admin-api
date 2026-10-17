@@ -59,6 +59,7 @@
 .cd-status-awaiting_approval { background: var(--cd-gold-soft); color: #7a4d06; }
 .cd-status-committed { background: #e3efe7; color: var(--cd-ok); }
 .cd-status-completed { background: #e8ecf2; color: var(--cd-muted); }
+.cd-status-needs_reschedule { background: #f6e3e0; color: #8a2f22; }
 .cd-approve { display: grid; gap: 8px; margin-top: 12px; }
 .cd-gold { min-height: 48px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--cd-gold); color: var(--cd-navy); font-weight: 800; }
 .cd-navy { min-height: 52px; padding: 0 22px; border: 0; border-radius: 14px; background: var(--cd-navy); color: #fff6dc; font-weight: 800; letter-spacing: 0.06em; }
@@ -72,6 +73,7 @@
 .cd-runway { list-style: none; margin: 0; padding: 0; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
 .cd-runway li { flex: 0 0 200px; display: grid; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--cd-line); background: #fff; border-top: 4px solid var(--cd-navy); }
 .cd-runway li.cd-runway-awaiting_approval { border-top-color: var(--cd-gold); }
+.cd-runway li.cd-runway-needs_reschedule { border-top-color: #c0503f; }
 .cd-runway small { color: var(--cd-muted); }
 .cd-when { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: #9b6410; text-transform: uppercase; }
 .cd-ready { margin: 0; padding-left: 18px; display: grid; gap: 6px; }

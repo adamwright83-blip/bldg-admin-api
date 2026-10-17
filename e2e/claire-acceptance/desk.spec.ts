@@ -45,7 +45,9 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
       revision,
       expiresAt: new Date(Date.now() + 3600_000).toISOString(),
       items: [
-        { ...prepared.items[0]!, id: `${today}:desk-winback-${revision.slice(0, 8)}`, businessDate: today, title: "Win back lapsed customers (desk fixture)", objective: "Call your five highest-spending lapsed customers; record replies and orders." },
+        // An explicit later time keeps today's mission inside its execution window whenever the
+        // suite runs; without one it correctly needs rescheduling after 5 PM.
+        { ...prepared.items[0]!, id: `${today}:desk-winback-${revision.slice(0, 8)}`, businessDate: today, title: "Win back lapsed customers (desk fixture)", objective: "Call your five highest-spending lapsed customers; record replies and orders.", timeWindow: { window: "evening", time: "23:59", reason: "Desk acceptance fixture: an explicit time tonight.", sourceObservationId: "acceptance_fixture" } },
         { ...prepared.items[0]!, id: `${tomorrow}:desk-second-${revision.slice(0, 8)}`, businessDate: tomorrow, title: "Desk fixture second mission", objective: "Bounded test fixture" },
       ],
     });

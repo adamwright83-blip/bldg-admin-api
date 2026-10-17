@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  proposalItemExecutionWindow,
   capReadiness,
   defaultReadiness,
   deriveWeekStatus,
@@ -10,6 +11,8 @@ import {
   previousBusinessDay,
   proactiveWeeklyLine,
   remainingWeekHorizon,
+  strategicPlanningHorizon,
+  actionableDates,
   weeklySessionKey,
 } from "./weeklyMissionReadiness";
 
@@ -97,5 +100,44 @@ describe("bind and revise language", () => {
     expect(proactiveWeeklyLine(remainingWeekHorizon({ businessDate: "2026-09-21", localTime: "08:05" }))).toMatch(
       /still open/
     );
+  });
+});
+
+
+describe("strategic preparation and readers share a horizon", () => {
+  it.each([
+    ["2026-10-16", "16:59", "2026-10-12", "2026-10-16"],
+    ["2026-10-16", "17:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-17", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-18", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-19", "09:00", "2026-10-19", "2026-10-19"],
+    ["2026-10-15", "18:00", "2026-10-12", "2026-10-16"],
+  ])("%s at %s prepares and reads week %s", (businessDate, localTime, weekStart, firstDate) => {
+    const horizon = strategicPlanningHorizon({ businessDate, localTime });
+    expect(horizon.weekStart).toBe(weekStart);
+    expect(actionableDates(horizon)[0]).toBe(firstDate);
+  });
+});
+
+describe("proposal item execution window (after the 5 PM cutoff)", () => {
+  const today = "2026-10-14";
+  const at = (localTime: string) => ({ businessDate: today, localTime });
+  it("today's work is approvable until the cutoff and expired after it", () => {
+    expect(proposalItemExecutionWindow({ businessDate: today }, at("16:59"))).toBe("open");
+    expect(proposalItemExecutionWindow({ businessDate: today }, at("17:00"))).toBe("expired");
+    expect(proposalItemExecutionWindow({ businessDate: today, timeWindow: { window: "evening" } as any }, at("18:00"))).toBe("expired");
+  });
+  it("an explicit later time keeps today's work approvable after the cutoff until it passes", () => {
+    const meeting = { businessDate: today, timeWindow: { time: "19:00" } };
+    expect(proposalItemExecutionWindow(meeting, at("18:30"))).toBe("open");
+    expect(proposalItemExecutionWindow(meeting, at("19:00"))).toBe("open");
+    expect(proposalItemExecutionWindow(meeting, at("19:01"))).toBe("expired");
+  });
+  it("an explicit time does not shorten the normal day", () => {
+    expect(proposalItemExecutionWindow({ businessDate: today, timeWindow: { time: "09:00" } }, at("12:00"))).toBe("open");
+  });
+  it("later days are open and earlier days expired regardless of time", () => {
+    expect(proposalItemExecutionWindow({ businessDate: "2026-10-15" }, at("23:00"))).toBe("open");
+    expect(proposalItemExecutionWindow({ businessDate: "2026-10-13", timeWindow: { time: "23:00" } }, at("08:00"))).toBe("expired");
   });
 });
