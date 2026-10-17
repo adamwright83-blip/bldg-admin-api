@@ -76,6 +76,7 @@ const lazyStore: CycleStore = {
   create: cycle => getPresidentCycleStore().create(cycle),
   update: (id, fn) => getPresidentCycleStore().update(id, fn),
   list: tenantId => getPresidentCycleStore().list(tenantId),
+  countExcludingStatuses: statuses => getPresidentCycleStore().countExcludingStatuses(statuses),
 };
 
 export function registerPresidentCycleHttpRoutes(app: Express) {

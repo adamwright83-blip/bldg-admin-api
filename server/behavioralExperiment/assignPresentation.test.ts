@@ -416,6 +416,59 @@ describe("proximal outcomes and reporting", () => {
     expect(outcome.startedAt).toBeNull();
     expect(outcome.startedWithinWindow).toBe("unknown");
   });
+
+  it("a newly declared plain preference wins over an existing story assignment", async () => {
+    const store = createFakeStore();
+    const story = await assignExperimentalPresentation({
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      correlationId: "ops_task:42",
+      occasionId: "offer-1",
+      grammar: GRAMMAR,
+      registry: [WALK, SEALED],
+      policy: ENABLED,
+      store,
+      randomInt: () => 1,
+    });
+    expect(story.assignment?.preferredTemplateId).toBe("beacon-walk-v1");
+    const plain = await assignExperimentalPresentation({
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      correlationId: "ops_task:42",
+      occasionId: "offer-1",
+      grammar: GRAMMAR,
+      registry: [WALK, SEALED],
+      policy: ENABLED,
+      store,
+      randomInt: () => { throw new Error("drew an arm"); },
+      daphne: async () => ({
+        preferences: { adaptationEnabled: true, safeExperimentation: true, consentRevoked: false },
+        evidence: [],
+        declaredPlainPresentation: { sourceRef: "daphne_observations:plain-9" },
+      }),
+    });
+    expect(plain.assignment?.assignedOption).toBe(STANDARD_PRESENTATION);
+    expect(plain.assignment?.preferredTemplateId).toBeNull();
+    expect(store.rows.filter(row => row.eventType === "ASSIGNED")).toHaveLength(2);
+  });
+
+  it("policy off records a declared plain preference and does not draw", async () => {
+    const store = createFakeStore();
+    const plain = await assignExperimentalPresentation({
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      correlationId: "ops_task:42",
+      occasionId: "offer-1",
+      grammar: GRAMMAR,
+      registry: [WALK, SEALED],
+      policy: { ...ENABLED, enabled: false },
+      store,
+      randomInt: () => { throw new Error("drew an arm"); },
+      declaredPlainPresentation: { sourceRef: "daphne_observations:plain-1" },
+    });
+    expect(plain).toMatchObject({ usedExperiment: true, assignment: { assignedOption: STANDARD_PRESENTATION, preferredTemplateId: null } });
+    expect(store.rows).toHaveLength(1);
+  });
 });
 
 describe("decision point identity", () => {
