@@ -65,6 +65,11 @@ export type WorkLedgerState = {
   degradedAt?: number | null;
   /** Observable operator signals this conversation, for in-call adaptation. */
   signals?: Array<LedgerOperatorSignal & { at: number }>;
+  /**
+   * Completions and removals the planner inferred, awaiting the operator's explicit yes.
+   * The model's reading of the conversation alone never closes or deletes Day Line work.
+   */
+  pendingClosure?: { complete: Array<{ id: string; title: string }>; remove: Array<{ id: string; title: string; reason: string }> } | null;
 };
 
 export function emptyWorkLedgerState(): WorkLedgerState {
@@ -738,8 +743,12 @@ export async function planWorkLedgerTurn(
   return { ...validateWorkLedgerPlan(raw, input, nextRef), latencyMs: Date.now() - startedAt, model: served };
 }
 
+/**
+ * The ledger is opt-in: it runs only when CLAIRE_WORK_LEDGER is explicitly "1"/"true"/"on"
+ * and a model key exists. A key alone never switches it on (2026-10-17 release review).
+ */
 export function isClaireWorkLedgerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const flag = env.CLAIRE_WORK_LEDGER?.trim().toLowerCase();
-  if (flag === "0" || flag === "false" || flag === "off") return false;
+  if (flag !== "1" && flag !== "true" && flag !== "on") return false;
   return Boolean(ENV.anthropicApiKey?.trim());
 }

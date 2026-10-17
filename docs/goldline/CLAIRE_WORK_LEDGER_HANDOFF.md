@@ -26,7 +26,7 @@ The dry-cleaning orders were never saved. The existing tests drove `runClaireTur
   - Non-work turns go to V1 with `state.workLedgerOwnsDayLine` set, so the legacy writers are off.
   - V2 is bypassed.
   - The showrunner gets the ledger prompt section and makes no replans.
-- Kill switch: `CLAIRE_WORK_LEDGER=0`.
+- **Opt-in (2026-10-17):** the ledger runs only with `CLAIRE_WORK_LEDGER=1` (or `true`/`on`) and a model key. A key alone never enables it. With the flag unset, production keeps the legacy route.
 - Product decision (Adam, 2026-10-16):
   - Clear commitments auto-save.
   - Ambiguous or hypothetical work is held.
@@ -146,3 +146,16 @@ These checks fail. Root cause of each:
   - Live Claire model calls in production fail until credits are added.
   - The real-model replays stopped at that point. ordinary and morning_readiness had already passed; evening_debrief was cut off.
   - If CI's `ANTHROPIC_API_KEY` secret is on the same account, CI's live-model steps fail for the same reason.
+
+## Release review 2026-10-17 (Cursor's two risks)
+
+1. **Opt-in.** `isClaireWorkLedgerEnabled` now requires `CLAIRE_WORK_LEDGER=1`. Previously any Anthropic key turned the ledger on.
+   - The manual paid replay job sets the flag explicitly.
+   - **Releasing #604 changes nothing in production until Adam sets `CLAIRE_WORK_LEDGER=1` on Railway.**
+2. **Completing or removing existing Day Line work needs the operator's explicit yes.**
+   - The planner's `completeIds` and `removeIds` are held as `pendingClosure`.
+   - Claire names each item ("should I mark "X" done and take "Y" off your Day Line? Say yes to confirm.") and drops the model's own reply for that turn.
+   - The closure is applied on the next turn only for a short, unqualified yes.
+   - A plain no leaves the line untouched. Anything else drops the request and plans the turn normally.
+   - Saves and edits in the same turn proceed: "I need to…" obligations still save immediately.
+
