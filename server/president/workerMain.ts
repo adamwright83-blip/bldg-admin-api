@@ -2,7 +2,7 @@ import "dotenv/config";
 import http from "node:http";
 import { AppPresidentJudgmentProvider } from "./appProvider";
 import { getPresidentRuntime, presidentRuntimeStatus } from "./runtime";
-import { runPresidentCycleWorkerTick } from "./cycle/runtime";
+import { presidentWorkerModelCallsEnabled, runPresidentCycleWorkerTick } from "./cycle/runtime";
 
 function numberEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -25,6 +25,8 @@ let lastCycleTick: Awaited<ReturnType<typeof runPresidentCycleWorkerTick>> | nul
 
 async function runLegacyTick() {
   if (process.env.PRESIDENT_LEGACY_RUNTIME_ENABLED !== "1") return false;
+  // Same spend switch as the cycle tick: the legacy runtime also calls models.
+  if (!presidentWorkerModelCallsEnabled()) return false;
   const status = presidentRuntimeStatus();
   if (status.executionState !== "CONFIGURED") return false;
   const runtime = getPresidentRuntime();
@@ -90,6 +92,7 @@ const server = http.createServer((request, response) => {
       legacyRuntimeError,
       autonomousCycleExecutionEnabled:
         process.env.PRESIDENT_EXECUTION_ENABLED === "1",
+      workerModelCallsEnabled: presidentWorkerModelCallsEnabled(),
       autonomousExecutionMode:
         process.env.PRESIDENT_EXECUTION_MODE || "github_actions",
       legacyRuntimeEnabled,

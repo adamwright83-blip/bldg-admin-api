@@ -187,16 +187,32 @@ export class MysqlCycleStore implements CycleStore {
     }
   }
 
+  /**
+   * Newest first. Only the small key columns are sorted in SQL; payloads are read
+   * by id afterwards. Sorting rows that carry payloadJson made MySQL fail the whole
+   * query with ER_OUT_OF_SORTMEMORY once one payload outgrew sort_buffer_size,
+   * and an index on updatedAt alone does not stop that filesort.
+   */
   async list(tenantId?: string): Promise<Cycle[]> {
-    const [rows] = tenantId
+    const [keys] = tenantId
       ? await this.pool.execute<RowDataPacket[]>(
-          "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles WHERE tenantId=? ORDER BY updatedAt DESC",
+          "SELECT cycleId FROM president_autonomous_cycles WHERE tenantId=? ORDER BY updatedAt DESC",
           [tenantId]
         )
       : await this.pool.query<RowDataPacket[]>(
-          "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles ORDER BY updatedAt DESC"
+          "SELECT cycleId FROM president_autonomous_cycles ORDER BY updatedAt DESC"
         );
-    return rows.map(cycleFromRow);
+    const ids = keys.map(row => String(row.cycleId));
+    if (!ids.length) return [];
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      "SELECT cycleId,tenantId,version,status,payloadJson FROM president_autonomous_cycles WHERE cycleId IN (?)",
+      [ids]
+    );
+    const byId = new Map(rows.map(row => [String(row.cycleId), row]));
+    return ids
+      .map(id => byId.get(id))
+      .filter((row): row is RowDataPacket => Boolean(row) && (!tenantId || row!.tenantId === tenantId))
+      .map(cycleFromRow);
   }
 }
 
