@@ -33,10 +33,11 @@ Notes:
 
 1. Create two workspaces with separate keys:
    - **production**: only `bldg-admin-api` and `bldg-resident`.
-   - **testing**: the GitHub `ANTHROPIC_API_KEY` secret and any local replay.
+   - **testing**: the GitHub `CLAIRE_TEST_ANTHROPIC_API_KEY` secret and any local replay.
 2. Set a monthly spend limit on each workspace. For example, testing at $5, so a runaway test stops on its own.
-3. Never use `railway run` for a paid replay, because that injects the production key. Use the testing key explicitly:
-   `ANTHROPIC_API_KEY=<testing key> CLAIRE_PAID_REPLAY_AUTHORIZED=1 CLAIRE_WORK_LEDGER_LIVE=1 pnpm vitest run …`
+3. Store the testing key as the GitHub secret `CLAIRE_TEST_ANTHROPIC_API_KEY`. The paid CI job reads only that secret.
+4. Locally, never use `railway run` for a paid replay; the gate refuses to run when Railway variables are present. Use the testing key explicitly:
+   `ANTHROPIC_API_KEY=<testing key> CLAIRE_REPLAY_KEY_IS_TESTING=1 CLAIRE_PAID_REPLAY_AUTHORIZED=1 CLAIRE_WORK_LEDGER_LIVE=1 pnpm vitest run …`
 
 ## Per-feature attribution (new)
 
