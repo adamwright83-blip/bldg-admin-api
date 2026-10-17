@@ -39,14 +39,16 @@ jobs:
       DAYFORGE_RELEASE_TEST_MODE: '1'
       CLAIRE_REPAIR_DB_TEST: '1'
       NODE_ENV: ci
-      ANTHROPIC_API_KEY: ${{ matrix.mode == 'live-model' && secrets.ANTHROPIC_API_KEY || '' }}
+      # Separate, spend-capped testing workspace key; never the production key.
+      ANTHROPIC_API_KEY: ${{ matrix.mode == 'live-model' && secrets.CLAIRE_TEST_ANTHROPIC_API_KEY || '' }}
       CLAIRE_PAID_REPLAY_AUTHORIZED: ${{ matrix.mode == 'live-model' && '1' || '' }}
+      CLAIRE_REPLAY_KEY_IS_TESTING: ${{ matrix.mode == 'live-model' && '1' || '' }}
     steps:
       - name: Require actual model access for the live replay
         if: matrix.mode == 'live-model'
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo '::error::BLOCKED: add ANTHROPIC_API_KEY as a repository Actions secret for actual model verification. No mock was substituted.'
+            echo '::error::BLOCKED: add CLAIRE_TEST_ANTHROPIC_API_KEY (capped testing workspace key) as a repository Actions secret. No mock was substituted.'
             exit 1
           fi
       - uses: actions/checkout@v7
