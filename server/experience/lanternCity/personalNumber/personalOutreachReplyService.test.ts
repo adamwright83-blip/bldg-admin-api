@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { projectCozyRecoverySurfaces } from "../../../../shared/cozyVillagerEvidence";
 import { checkCommunicationPermission } from "../../../strategy/communicationPermissionService";
 import {
+  commitPersonalOutreachDraft,
+  sendCozyOutreachNow,
+} from "../cozyVillagerOutreachService";
+import {
   classifyPersonalOutreachReply,
   listPersonalOutreachReplies,
   recordPersonalOutreachReply,
@@ -221,5 +225,26 @@ describe("personalOutreachReplyService", () => {
     });
     expect(afterAny.allowed).toBe(false);
     expect(afterAny.permissionStatus).toBe("opted_out");
+
+    await expect(
+      commitPersonalOutreachDraft({
+        tenantId: TENANT,
+        operatorId: OPERATOR,
+        customerId,
+        messageBody: "Trying to schedule another draft after STOP",
+        scheduledFor: "2026-10-18T17:00:00.000Z",
+        now: new Date("2026-10-17T18:11:00.000Z"),
+      })
+    ).rejects.toThrow(/opted out/i);
+
+    await expect(
+      sendCozyOutreachNow({
+        tenantId: TENANT,
+        operatorId: OPERATOR,
+        customerId,
+        messageBody: "Trying to send now after STOP",
+        now: new Date("2026-10-17T18:11:00.000Z"),
+      })
+    ).rejects.toThrow(/opted out/i);
   });
 });

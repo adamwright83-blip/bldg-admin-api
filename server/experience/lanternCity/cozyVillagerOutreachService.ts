@@ -370,6 +370,22 @@ export async function commitPersonalOutreachDraft(input: {
   const timezone = input.timezone ?? "America/Los_Angeles";
   const messageBody = input.messageBody.trim();
   if (!messageBody) throw new Error("Message body cannot be empty");
+  const permCheck = await checkCommunicationPermission({
+    tenantId: input.tenantId,
+    subjectType: "customer",
+    subjectId: input.customerId,
+    channel: "sms",
+    now,
+  });
+  if (
+    !permCheck.allowed ||
+    permCheck.permissionStatus === "opted_out" ||
+    permCheck.permissionStatus === "refused"
+  ) {
+    throw new Error(
+      `Recipient has opted out or lacks communication permission: ${permCheck.reason ?? "Opted out under G14"}`
+    );
+  }
   const allowed = await assertPersonalOutreachHandoff({
     tenantId: input.tenantId,
     canonicalOperatorId: input.operatorId,
