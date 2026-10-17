@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Hermetic: the release job exports a DATABASE_URL whose schema is not migrated yet.
+// These scenarios bring their own canonical harness, so they never use a shared database.
+vi.hoisted(() => {
+  delete process.env.DATABASE_URL;
+});
 import { ENV } from "../../_core/env";
 import { commitBriefing, type ExistingWork } from "../briefing/briefingCommit";
 import { runClaireTurn, type ClaireTurnState } from "../turn/claireTurn";

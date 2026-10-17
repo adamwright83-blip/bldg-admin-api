@@ -190,6 +190,12 @@ export async function runShowrunnerTurn(input: {
   replan?: typeof replanFromShowrunnerCall;
   deskReplan?: typeof replanFromDeskEdits;
   now?: Date;
+  /**
+   * Claire's work ledger owns work in this conversation (server/claire/workLedger):
+   * this turn only talks. It proposes no plan revision from captured developments
+   * (the ledger already recorded that work) and is told what the ledger holds.
+   */
+  workLedger?: { section: string | null };
 }): Promise<{ speak: string; end: boolean; state: ShowrunnerCallState; saved?: string[] }> {
   const state: ShowrunnerCallState = JSON.parse(JSON.stringify(input.state));
   state.turns += 1;
@@ -266,7 +272,12 @@ export async function runShowrunnerTurn(input: {
       maxTokens: 700,
       outputSchema: SCHEMA,
       messages: [
-        { role: "system", content: systemPrompt(state) },
+        {
+          role: "system",
+          content: input.workLedger
+            ? `${systemPrompt(state)} WORK RECORDING: the server's work ledger records, changes and reads back Day Line work on its own turns. Never offer to add, save, put on the line or lock in work, and never claim you did. ${input.workLedger.section ?? ""}`.trim()
+            : systemPrompt(state),
+        },
         {
           role: "user",
           content: JSON.stringify({
@@ -357,7 +368,7 @@ export async function runShowrunnerTurn(input: {
     // Any schedulable development captured during this call, not just this turn.
     (state.captured.developments.some(d => ["meeting", "opportunity", "commitment"].includes(d.kind)) ||
       (state.purpose === "evening_debrief" && model.operatorIsDone && state.captured.missionUpdates.some(u => u.outcome !== "done")));
-  if (needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness" || correctingPending)) {
+  if (!input.workLedger && needsReplan && (model.operatorIsDone || state.purpose === "morning_readiness" || correctingPending)) {
     const replan = await (input.replan ?? replanFromShowrunnerCall)(state, now).catch(error => {
       console.warn("[Showrunner] replan failed", error instanceof Error ? error.message : error);
       return null;

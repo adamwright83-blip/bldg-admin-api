@@ -227,4 +227,63 @@ describe.skipIf(!enabled)("Claire voice path, real models, disposable MySQL — 
     },
     600_000
   );
+
+  it(
+    "runs the scheduled morning call: a whole-day rundown lands on the right days, a correction updates instead of duplicating",
+    async () => {
+      const tenantId = "default";
+      const operatorUserId = "adam-admin";
+      const { resolveCanonicalOperatorIdentity } = await import("../../agents/persistentOperator/identity");
+      const resolved = await resolveCanonicalOperatorIdentity({ tenantId, source: { type: "open_id", value: operatorUserId }, subsystem: "claire_work_ledger_replay" });
+      if (!resolved.ok) throw new Error("operator fixture did not resolve");
+      const identity = resolved.identity;
+      await sql.query("DELETE FROM day_director_commitments WHERE tenantId = ? AND actorId = ?", [tenantId, identity.dayDirectorActorId]);
+      const now = new Date();
+      const clock = briefingClock(now, ZONE);
+      const today = clock.today;
+      const tomorrow = addDaysYmd(today, 1);
+      const { buildShowrunnerBriefing, showrunnerOpening } = await import("../showrunner/showrunnerBriefing");
+      const briefing = await buildShowrunnerBriefing({ identity, purpose: "morning_readiness", timeZone: ZONE, now });
+      const { openPreparedClaireConversationWithoutDialing, runRelayAuthoritativeTurn } = await import("../claireTwilio");
+      const opened = await openPreparedClaireConversationWithoutDialing({
+        tenantId, actorId: identity.communicationOperatorUserId, dayDirectorActorId: identity.dayDirectorActorId, timeZone: ZONE,
+        openingOverride: showrunnerOpening(briefing), sessionKindOverride: "morning_readiness",
+        showrunner: {
+          purpose: "morning_readiness", tenantId, canonicalOperatorId: identity.canonicalOperatorId, operatorUserId: identity.canonicalOpenId,
+          dayDirectorActorId: identity.dayDirectorActorId, dayDirectorActorIds: identity.dayDirectorActorIds, timeZone: ZONE,
+          businessDate: today, briefing, captured: { missionUpdates: [], developments: [], readinessNeeds: [] }, replan: null, turns: 0,
+          clockOffsetMs: 0,
+        },
+      });
+      const transcript = [`CLAIRE: ${opened.brief}`];
+      const turns = [
+        "Yeah. I've got the Opus pickup at 10, then Jim's towels to Century Park East before 2, and I need to follow up with Louise about the contract as a sales mission. Tomorrow morning I deliver the third dry cleaning order.",
+        "Actually the Opus pickup is at 11, not 10.",
+        "Text Louise for me that I'll call this afternoon.",
+        "Okay, that's the day. Talk later.",
+      ];
+      for (const utterance of turns) {
+        const started = Date.now();
+        const turn = await runRelayAuthoritativeTurn({ conversationId: opened.conversationId, utterance, token: opened.token });
+        transcript.push(`OPERATOR: ${utterance}`, `CLAIRE (${Date.now() - started} ms${turn.endCall ? ", ends call" : ""}): ${turn.speak}`);
+      }
+      const { getDayDirectorState } = await import("../../planning/dayDirector/dayDirectorService");
+      const [todayState, tomorrowState] = await Promise.all([
+        getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, businessDate: today }),
+        getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, businessDate: tomorrow }),
+      ]);
+      console.log(
+        `\n${transcript.join("\n")}\n\nTODAY: ${todayState.commitments.map(row => `${row.title}${row.scheduleLabel ? ` @${row.scheduleLabel}` : ""}${row.executionType ? ` /${row.executionType}` : ""}`).join(" · ")}` +
+          `\nTOMORROW: ${tomorrowState.commitments.map(row => row.title).join(" · ")}`
+      );
+      const opus = todayState.commitments.filter(row => /opus/i.test(row.title));
+      expect(opus).toHaveLength(1);
+      expect(`${opus[0]!.title} ${opus[0]!.scheduleLabel ?? ""}`).toMatch(/\b11\b/);
+      expect(todayState.commitments.some(row => /jim/i.test(row.title))).toBe(true);
+      expect(todayState.commitments.find(row => /louise/i.test(row.title))?.executionType).toBe("mission");
+      expect(tomorrowState.commitments.some(row => /deliver/i.test(row.title))).toBe(true);
+      expect(todayState.commitments.filter(row => /^text\b/i.test(row.title))).toEqual([]);
+    },
+    600_000
+  );
 });
