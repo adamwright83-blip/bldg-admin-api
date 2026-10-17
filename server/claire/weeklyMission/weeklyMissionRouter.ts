@@ -43,10 +43,7 @@ import {
 } from "../../strategy/strategicApproval";
 import { createDefaultOperatorAppointmentStore, resolveOperatorTimeZone } from "../../agents/persistentOperator/operatorAppointmentPolicy";
 import { formatInTimeZone } from "date-fns-tz";
-import {
-  weekStartMonday,
-  addDaysYmd,
-} from "../../../shared/weeklyMissionReadiness";
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import { loadDailyCommandWithWeeklyIntent } from "./dailyCommandIntent";
 import {
   adjustWeeklyMission,
@@ -322,9 +319,9 @@ export const weeklyMissionRouter = router({
         });
       const now = new Date();
       const date = formatInTimeZone(now, zone, "yyyy-MM-dd");
-      const weekday = Number(formatInTimeZone(now, zone, "i"));
-      const start =
-        weekday >= 6 ? addDaysYmd(date, 8 - weekday) : weekStartMonday(date);
+      // Read the week the preparer actually prepared: after Friday's window closes (not only
+      // on weekends) that is next week.
+      const start = strategicPlanningHorizon({ businessDate: date, localTime: formatInTimeZone(now, zone, "HH:mm") }).weekStart;
       const proposal = await latestStrategicProposal(identity, start);
       const responses = proposal
         ? await strategicResponses(identity, proposal.id)
