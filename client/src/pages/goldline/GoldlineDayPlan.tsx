@@ -53,6 +53,7 @@ import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
+import { PreparedOpportunityCard } from "@/pages/home/PreparedOpportunityCard";
 import "./goldline-day-plan.css";
 import { DaylineWorldCompositor } from "./DaylineWorldCompositor";
 import {
@@ -901,6 +902,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}${artPreview ? " gdp-shell--v2" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
+      <PreparedOpportunityCard className="gdp-prepared" />
       <MissionFollowUpCard
         followUp={props.missionFollowUp ?? null}
         onAnswer={props.onAnswerMissionFollowUp}

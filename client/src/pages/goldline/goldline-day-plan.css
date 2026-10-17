@@ -1,4 +1,8 @@
 /* Daily Line is a single readable trail. Vehicle space is revealed on demand. */
+.gdp-prepared{position:relative;z-index:2;display:grid;gap:8px;margin:12px 12px 0;padding:14px;border:1px solid #e3d3b0;border-radius:16px;background:#fffaf0;color:#241c12}
+.gdp-prepared h2{margin:0;font:500 22px/1.15 Georgia,"Times New Roman",serif}
+.gdp-prepared p{margin:0;font-size:13px;line-height:1.35}
+.gdp-prepared button{justify-self:start;min-height:40px;padding:0 14px;border:0;border-radius:999px;background:#153c35;color:#fff5d6;font-size:12px;font-weight:700}
 .gdp-shell {
   --ink: #30291c;
   --gold: #cba25b;

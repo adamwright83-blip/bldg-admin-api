@@ -27,6 +27,7 @@ import {
   resolveHomeCityClick,
   type HomeCityCustomer,
 } from "./homeCityClick";
+import { PreparedOpportunityCard, usePreparedOpportunity } from "./home/PreparedOpportunityCard";
 import "./JoystickHome.css";
 
 function localBusinessDate(date = new Date()): string {
@@ -164,6 +165,7 @@ export default function JoystickHome({
   const current = dayLineLoading ? null : executableStops[0] ?? null;
   const upcoming = dayLineLoading ? [] : executableStops.slice(1, 4);
   const questions = president.data?.brief.questions ?? [];
+  const prepared = usePreparedOpportunity();
 
   const presidentRows = useMemo(
     () =>
@@ -267,10 +269,12 @@ export default function JoystickHome({
               : "JOYSTICK is ready."}
           </h2>
           <p>
-            {questions.length
-              ? `President has ${questions.length} decision${questions.length === 1 ? "" : "s"} waiting.`
-              : "President is preparing tonight's decisions."}{" "}
-            Mitch's build receipts will appear here as overnight work lands.
+            {prepared
+              ? `Claire prepared “${prepared.title}”. It is not on the Day Line until you approve it.`
+              : questions.length
+                ? `President has ${questions.length} decision${questions.length === 1 ? "" : "s"} waiting.`
+                : "President is preparing tonight's decisions."}{" "}
+            {prepared ? "The reason and the approval are with Claire’s recommendation." : "Mitch's build receipts will appear here as overnight work lands."}
           </p>
         </div>
         <time>{dateLabel}</time>
@@ -471,6 +475,7 @@ export default function JoystickHome({
             <span className="jh-kicker"><Sparkles /> CLAIRE NOTICED</span>
             <Link href="/claire">Open Claire <ArrowRight /></Link>
           </header>
+          <PreparedOpportunityCard className="jh-prepared" />
           <blockquote>“{firstInsight}”</blockquote>
           <ul>
             <li>{summary?.distinctCustomerPhones ?? "—"} customer phones in the connected order history</li>
