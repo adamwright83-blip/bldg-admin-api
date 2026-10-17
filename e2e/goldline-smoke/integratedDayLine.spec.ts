@@ -57,7 +57,7 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
   await expect(drawer).toBeVisible({ timeout: 15_000 });
   await expect(drawer).toHaveAttribute("data-customer-id", "phone:3105550141");
 
-  const textarea = drawer.locator("textarea").first();
+  const textarea = drawer.getByTestId("cozy-message-draft-textarea");
   const suggested = await textarea.inputValue();
   expect(suggested).toMatch(/Reply STOP/i);
   const approved = suggested.includes("this week")

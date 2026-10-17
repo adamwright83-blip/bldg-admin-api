@@ -85,7 +85,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(drawer.getByRole("heading", { name: customerName })).toBeVisible();
 
     const uniqueText = `Playwright outreach acceptance text ${Date.now()}. Reply STOP if you don't want these texts.`;
-    const textarea = drawer.locator("textarea");
+    const textarea = drawer.getByTestId("cozy-message-draft-textarea");
     await expect(textarea).toBeVisible();
     await textarea.fill(uniqueText);
 
@@ -350,7 +350,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(drawer.getByText(/orders \(\$/)).toBeVisible();
     await expect(drawer.getByText(/days since last order/)).toBeVisible();
 
-    const textarea = drawer.locator("textarea").first();
+    const textarea = drawer.getByTestId("cozy-message-draft-textarea");
     const suggested = await textarea.inputValue();
     expect(suggested).toMatch(/Hey Mei/i);
     expect(suggested).toMatch(/Reply STOP/i);

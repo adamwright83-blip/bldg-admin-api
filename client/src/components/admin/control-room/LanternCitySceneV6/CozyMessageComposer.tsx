@@ -383,6 +383,7 @@ export function CozyMessageComposer({
           placeholder="Personalize Claire's outreach message..."
           disabled={isActionCommitted}
           rows={4}
+          data-testid="cozy-message-draft-textarea"
         />
       </div>
 
