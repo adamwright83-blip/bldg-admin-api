@@ -53,7 +53,7 @@ jobs:
       - name: Mitch unit and HTTP contracts
         run: pnpm vitest run server/mitch
       - name: Mitch typecheck
-        run: pnpm exec tsc --noEmit --incremental false
+        run: pnpm check
       - name: Mitch autonomous agent typecheck
         run: pnpm exec tsc --project tsconfig.mitch-agent.json --noEmit
       - name: Durable inbox against disposable MySQL
