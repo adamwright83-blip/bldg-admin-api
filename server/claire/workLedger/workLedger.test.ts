@@ -180,6 +180,22 @@ describe("work ledger execution — readback before speech", () => {
     );
   });
 
+  it("keeps the operator's own words for a time said without am/pm", async () => {
+    const dayLine = createFakeDayLine();
+    const plan = validateWorkLedgerPlan(
+      { ...EMPTY_RAW, held: [heldItem({ title: "Opus pickup", quote: "I've got the Opus pickup at 11", timing: "at 11", save: true })] },
+      planInput({ utterance: "I've got the Opus pickup at 11" }),
+      1
+    );
+    await applyWorkLedgerPlan({
+      plan, dayLine: [],
+      target: { tenantId: "default", dayDirectorActorId: "1", operatorUserId: "adam-admin", conversationKey: "k" },
+      clock: { today: TODAY, minutesNow: 18 * 60 },
+      deps: dayLine.deps.apply,
+    });
+    expect(dayLine.open()[0]!.scheduleLabel).toBe("at 11");
+  });
+
   it("never claims a save the store did not confirm", async () => {
     const dayLine = createFakeDayLine();
     const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, held: [heldItem({ save: true })] }, planInput(), 1);
