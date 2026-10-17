@@ -42,6 +42,8 @@ import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
+import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationConsent } from "../behavioralExperiment/presentationConsentService";
+import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
 import {
@@ -586,6 +588,25 @@ export const goldlineWorldRouter = router({
         })),
       };
     }),
+  /** The operator's own randomized presentation outcomes by arm. Descriptive only, never a causal claim. */
+  presentationExperimentReport: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+    loadPresentationExperimentReport({
+      tenantId: ctx.tenantId,
+      operatorUserId: ctx.user.openId,
+      minSamplePerArm: resolveProductionExperimentPolicy().minSamplePerArmForCausalClaim,
+    })
+  ),
+  /** The operator's own Daphne presentation consent, exactly as stored, with the text they agree to. */
+  presentationConsent: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
+    ...(await readPresentationConsent({ tenantId: ctx.tenantId, operatorUserId: ctx.user.openId })),
+    text: PRESENTATION_CONSENT_TEXT,
+  })),
+  setPresentationConsent: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ choice: z.enum(["adaptation", "experimentation"]), granted: z.boolean() }))
+    .mutation(async ({ ctx, input }) => ({
+      ...(await setPresentationConsent({ tenantId: ctx.tenantId, operatorUserId: ctx.user.openId, ...input })),
+      text: PRESENTATION_CONSENT_TEXT,
+    })),
   experimentalPresentationAssignment: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
@@ -634,6 +655,8 @@ export const goldlineWorldRouter = router({
         rulesVersion: result.assignment.preferredTemplateId ? FICTION_ELIGIBILITY_CATALOG.find(t => t.id === result.assignment.preferredTemplateId)?.rulesVersion ?? null : null,
         assignmentProbability: result.assignment.assignmentProbability,
         assignmentMechanism: result.assignment.assignmentMechanism,
+        /** False when Daphne throttled this occasion to the baseline (not randomized). */
+        availability: result.assignment.availability,
         decisionPointId: result.assignment.decisionPointId,
         eligibleOptions: result.assignment.eligibleOptions,
         proximalOutcomeWindowMinutes: result.assignment.proximalOutcomeWindowMinutes,

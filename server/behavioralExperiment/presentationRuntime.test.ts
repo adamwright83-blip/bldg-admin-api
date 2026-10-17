@@ -21,9 +21,11 @@ function setup() {
     },
     async listByCorrelation(tenant, subject) { return rows.filter(row => row.tenantId === tenant && row.correlationId === subject); },
     async listByDecisionPoint(tenant, point) { return rows.filter(row => row.tenantId === tenant && row.decisionPointId === point); },
+    async listByOperatorBounded(tenant, operators) { return rows.filter(row => row.tenantId === tenant && operators.includes(row.operatorUserId)).reverse(); },
   };
   const ports: PresentationRuntimePorts = { store, randomInt: () => 1, policy: { ...BEHAVIORAL_EXPERIMENT_POLICY_V1, enabled: true },
     loadConsent: async () => ({ adaptationAllowed: consent, experimentationAllowed: consent, evidenceRefs: consent ? ["pref:1", "experiment:1"] : ["revoked:2"] }),
+    loadDeclaredPlainPresentation: async () => null,
     loadGrammar: async () => canonical };
   return { rows, ports, revoke: () => { consent = false; }, loseWork: () => { canonical = null; } };
 }
@@ -65,5 +67,49 @@ describe("authorized production presentation runtime", () => {
     loseWork();
     expect((await assignAuthorizedPresentation(input, ports)).usedExperiment).toBe(false);
     expect(rows).toHaveLength(1);
+  });
+  it("closes the loop: joined skips of story arms throttle the next occasion to a recorded baseline", async () => {
+    const { rows, ports } = setup();
+    const subject = "ops_task:88";
+    const visit: ActionGrammar = { kind: "VISIT_LOCATION", businessActionId: "88", occurrenceId: 88, sourceType: "recovery", count: 1,
+      locations: ["100 Wilshire"], channel: "in_person", requiresTravel: true, requiresDriving: false, timerSafe: true, sensitiveConversation: false };
+    const runtime: PresentationRuntimePorts = { ...ports, loadGrammar: async () => visit };
+    const scope = { tenantId: "tenant-a", operatorUserId: "operator-a", correlationId: subject };
+    const dismiss = (minute: number) => ports.store!.insertIfAbsent({ tenantId: "tenant-a", operatorUserId: "operator-a", correlationId: subject,
+      sourceSystem: "ops_task", sourceEntityType: "ops_task_event", sourceEntityId: `e${minute}`, eventType: "DISMISSED",
+      occurredAt: new Date(Date.UTC(2026, 9, 12, 16, minute)), verificationClass: null, provenance: "ops_task_event",
+      evidenceSource: null, idempotencyKey: `dismiss:${minute}` } as never);
+    for (const [occasion, minute] of [["o1", 0], ["o2", 20]] as const) {
+      const chosen = await assignAuthorizedPresentation({ ...scope, occasionId: occasion, now: new Date(Date.UTC(2026, 9, 12, 16, minute)) }, runtime);
+      expect(chosen).toMatchObject({ usedExperiment: true, assignment: { availability: true, assignmentMechanism: "randomized_assignment" } });
+      expect(chosen.assignment?.assignedOption).not.toBe("STANDARD_PRESENTATION");
+      await dismiss(minute + 5);
+    }
+    const third = await assignAuthorizedPresentation({ ...scope, occasionId: "o3", now: new Date(Date.UTC(2026, 9, 12, 17, 0)) }, runtime);
+    expect(third).toMatchObject({ usedExperiment: true, assignment: { availability: false, assignmentMechanism: "fatigue_throttle",
+      assignedOption: "STANDARD_PRESENTATION", assignmentProbability: null, preferredTemplateId: null } });
+    const recorded = rows.filter(row => row.eventType === "ASSIGNED");
+    expect(recorded).toHaveLength(3);
+    expect(recorded[2]).toMatchObject({ availability: false, assignedOption: "STANDARD_PRESENTATION", assignmentProbability: null,
+      interventionPolicyVersion: 1, interventionDefinitionVersion: 1, proximalOutcomeWindowMinutes: 120 });
+    expect(recorded[2].provenance).toContain("daphne_fatigue_throttle:burden_skip_threshold_exceeded");
+    expect(recorded[2].eligibleOptionsJson).toContain("STANDARD_PRESENTATION");
+    // Replays of the throttled occasion return the same recorded baseline.
+    expect((await assignAuthorizedPresentation({ ...scope, occasionId: "o3" }, { ...runtime, randomInt: () => 0 })).assignment).toEqual(third.assignment);
+    expect(rows.filter(row => row.eventType === "ASSIGNED")).toHaveLength(3);
+  });
+  it("records a declared plain request as an unavailable baseline decision", async () => {
+    const { rows, ports } = setup();
+    const chosen = await assignAuthorizedPresentation(input, { ...ports, loadDeclaredPlainPresentation: async () => ({ sourceRef: "daphne_observations:plain-1" }) });
+    expect(chosen).toMatchObject({ usedExperiment: true, assignment: { availability: false, preferredTemplateId: null } });
+    expect(rows[0]).toMatchObject({ availability: false, assignedOption: "STANDARD_PRESENTATION", evidenceSource: "daphne_evidence:daphne_observations:plain-1" });
+  });
+  it("abstains and writes nothing for an operator without experimentation consent, or when history cannot be read", async () => {
+    const { rows, ports, revoke } = setup();
+    expect(await assignAuthorizedPresentation(input, { ...ports, loadDeclaredPlainPresentation: async () => { throw new Error("db down"); } }))
+      .toMatchObject({ usedExperiment: false, skipReason: "presentation_history_unavailable" });
+    revoke();
+    expect(await assignAuthorizedPresentation(input, ports)).toMatchObject({ usedExperiment: false, skipReason: "fresh_operator_experimentation_consent_required", assignment: null });
+    expect(rows).toHaveLength(0);
   });
 });

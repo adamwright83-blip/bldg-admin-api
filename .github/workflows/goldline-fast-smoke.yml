@@ -257,6 +257,9 @@ jobs:
           client/src/game/fiction/SpiritHumanRescueMission.test.ts
           shared/behavioralExperimentPolicy.test.ts
           server/behavioralExperiment/assignPresentation.test.ts
+          server/behavioralExperiment/presentationOutcomes.test.ts
+          server/behavioralExperiment/presentationRuntime.test.ts
+          server/behavioralExperiment/campaignChapterOutcomes.test.ts
       - name: Prove ops task completion concurrency against real MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
@@ -265,6 +268,7 @@ jobs:
           server/opsTasks.mysql.integration.test.ts
           server/strategy/snapshotLiveDerived.integration.test.ts
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
+          server/behavioralExperiment/presentationDecision.mysql.integration.test.ts
           server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
           server/integrations/cleancloud/browserSync/gumballCustomerTruth.mysql.integration.test.ts
           server/integrations/cleancloud/browserSync/worldOutbox.mysql.integration.test.ts

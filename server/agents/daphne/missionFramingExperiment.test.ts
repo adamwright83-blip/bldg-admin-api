@@ -199,3 +199,67 @@ describe("Daphne MRT randomization & burden/fatigue throttling", () => {
   });
 });
 
+
+describe("Daphne MRT over a policy-frozen option set (production decision point)", () => {
+  const frozen = (changes: Partial<Parameters<typeof assignDaphneMrtMissionFraming>[0]> = {}) =>
+    assignDaphneMrtMissionFraming({
+      tenantId: "t1", operatorUserId: "op1", missionId: "ops_task:42", correlationId: "ops_task:42",
+      occasionId: "chapter-7", missionType: "VISIT_LOCATION", trigger: "field_arrival",
+      activeVariantId: STANDARD_PRESENTATION,
+      preferences: { adaptationEnabled: true, safeExperimentation: true, consentRevoked: false },
+      variants: [], evidence: [], frozenOptions: [STANDARD_PRESENTATION, "beacon-walk-v1", "sealed-doors-v1"],
+      now: new Date("2026-10-12T20:00:00Z"), randomInt: () => 1, ...changes,
+    });
+  const ledgerSkip = (sourceRef: string, variantId = "beacon-walk-v1"): DaphneMissionPresentationEvidence => ({
+    tenantId: "t1", operatorUserId: "op1", missionId: "ops_task:1", variantId, outcome: "skipped",
+    verificationStatus: "verified", sourceRef, observedAt: "2026-10-12T18:00:00Z",
+  });
+
+  it("randomizes over exactly the frozen set with the baseline arm and an equal, logged probability", () => {
+    const result = frozen();
+    expect(result).toMatchObject({
+      status: "assigned", epistemicStatus: "causal_mrt_randomized",
+      decisionPointId: "ops_task:42:offer:chapter-7",
+      eligibleOptions: [STANDARD_PRESENTATION, "beacon-walk-v1", "sealed-doors-v1"],
+      assignedOption: "beacon-walk-v1", assignmentMechanism: "randomized_assignment",
+      baselineArmIncluded: true, proposedCandidateId: null,
+    });
+    if (result.status === "assigned") expect(result.assignmentProbability).toBeCloseTo(1 / 3, 9);
+  });
+
+  it("refuses to randomize without a baseline arm or a real choice", () => {
+    expect(frozen({ frozenOptions: ["beacon-walk-v1", "sealed-doors-v1"] })).toMatchObject({ status: "abstain", reason: "baseline_arm_missing" });
+    expect(frozen({ frozenOptions: [STANDARD_PRESENTATION] })).toMatchObject({ status: "abstain", reason: "too_few_options" });
+  });
+
+  it("requires safe_experimentation consent on top of adaptation consent", () => {
+    expect(frozen({ preferences: { adaptationEnabled: true, safeExperimentation: false, consentRevoked: false } }))
+      .toEqual({ status: "abstain", reason: "experimentation_not_consented", evidenceRefs: [] });
+    expect(frozen({ preferences: { adaptationEnabled: false, safeExperimentation: true, consentRevoked: true } }))
+      .toMatchObject({ status: "abstain", reason: "adaptation_not_consented" });
+  });
+
+  it("throttles to the baseline after repeated skips of story arms, but not of the baseline itself", () => {
+    expect(frozen({ evidence: [ledgerSkip("ledger:1"), ledgerSkip("ledger:2", "sealed-doors-v1")] })).toMatchObject({
+      status: "throttled_to_baseline", assignedOption: STANDARD_PRESENTATION,
+      fatigueReason: "burden_skip_threshold_exceeded", evidenceRefs: ["ledger:1", "ledger:2"],
+    });
+    expect(frozen({ evidence: [ledgerSkip("ledger:1", STANDARD_PRESENTATION), ledgerSkip("ledger:2", STANDARD_PRESENTATION)] }).status)
+      .toBe("assigned");
+  });
+
+  it("honours a declared plain-presentation request however old it is", () => {
+    expect(frozen({ declaredPlainPresentation: { sourceRef: "daphne_observations:plain-1" } })).toMatchObject({
+      status: "throttled_to_baseline", assignedOption: STANDARD_PRESENTATION,
+      fatigueReason: "explicit_dislike_reported", evidenceRefs: ["daphne_observations:plain-1"],
+    });
+  });
+
+  it("never turns ledger evidence, which carries no immersion level, into an immersion hypothesis", () => {
+    expect(proposeDaphneImmersionExperiment({
+      tenantId: "t1", operatorUserId: "op1", missionId: "ops_task:1", missionType: "cold_call", trigger: "outbound_call",
+      activeVariantId: "plain", preferences: { adaptationEnabled: true, consentRevoked: false }, variants,
+      evidence: [{ ...ledgerSkip("ledger:1", "plain") }], now: new Date("2026-10-12T20:00:00Z"),
+    })).toMatchObject({ status: "abstain", reason: "no_verified_skip_of_current_presentation" });
+  });
+});

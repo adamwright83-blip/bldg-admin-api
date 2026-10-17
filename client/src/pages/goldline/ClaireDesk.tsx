@@ -5,6 +5,7 @@ import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms } from "./claireDesk/OpenComms";
+import { DaphnePresentationConsent } from "./claireDesk/DaphnePresentationConsent";
 import { callSheetWithheldCopy } from "./claireDesk/callSheetFreshness";
 import "./claireDesk/claireDesk.css";
 
@@ -325,6 +326,8 @@ export default function ClaireDesk() {
               <ClaireDailyCallSettings />
               <ClaireStrategicCallConsent />
             </section>
+
+            <DaphnePresentationConsent />
 
             <section className="cd-card" aria-label="Full week plan">
               <p className="cd-kicker">FULL WEEK PLAN</p>

@@ -42,6 +42,10 @@ import { eligibleTemplates, stableMissionKey } from "../../../../shared/fictionT
 import { FICTION_ELIGIBILITY_CATALOG } from "../../../../shared/fictionEligibilityCatalog";
 import { getAuthoritativeVisitRoute } from "../../../field/authoritativeVisitRouteService";
 import { estimateCampaignTravel } from "../../../integrations/googleMaps/campaignTravelAdapter";
+import {
+  expireUnfinishedPresentedChapters,
+  recordPresentedChapterCompletions,
+} from "../../../behavioralExperiment/campaignChapterOutcomes";
 
 function previousBusinessDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
@@ -513,6 +517,41 @@ async function loadTodayCampaignDraft(input: {
   };
 }
 
+/**
+ * Behavioral-ledger outcomes for chapters whose presentation was experimentally
+ * assigned. Instrumentation: a failure here never fails the campaign.
+ */
+async function observePresentedChapterOutcomes(
+  label: string,
+  write: () => Promise<unknown>
+): Promise<void> {
+  try {
+    await write();
+  } catch (error) {
+    console.warn(`[BehavioralLedger] Failed to record campaign chapter ${label}`, error);
+  }
+}
+
+async function readPriorOperatorCampaigns(input: {
+  tenantId: string;
+  operatorId: string;
+  beforeBusinessDate: string;
+}): Promise<CampaignInstance[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(goldlineCampaignInstances)
+    .where(and(
+      eq(goldlineCampaignInstances.tenantId, input.tenantId),
+      eq(goldlineCampaignInstances.operatorId, input.operatorId),
+      sql`${goldlineCampaignInstances.businessDate} < ${input.beforeBusinessDate}`
+    ))
+    .orderBy(desc(goldlineCampaignInstances.businessDate))
+    .limit(7);
+  return rows.map(toInstance);
+}
+
 export async function getOrMaterializeTodayCampaign(input: {
   tenantId: string;
   operatorId: string;
@@ -532,6 +571,17 @@ export async function getOrMaterializeTodayCampaign(input: {
       startedAt: loaded.draft.status === "quiet" ? null : new Date().toISOString(),
       completedAt: null,
     });
+    // A new business day: earlier presented chapters left unfinished have expired.
+    await observePresentedChapterOutcomes("expiry", async () =>
+      expireUnfinishedPresentedChapters({
+        priorCampaigns: await readPriorOperatorCampaigns({
+          tenantId: input.tenantId,
+          operatorId: input.operatorId,
+          beforeBusinessDate: loaded.today.businessDate,
+        }),
+        today: loaded.today.businessDate,
+      })
+    );
     if (created.inputFingerprint === loaded.draft.inputFingerprint) {
       return present(created, null, loaded.travel.providerState);
     }
@@ -570,6 +620,10 @@ export async function getOrMaterializeTodayCampaign(input: {
     if (outcome === "conflict") {
       continue;
     }
+    const before = existing;
+    await observePresentedChapterOutcomes("completion", () =>
+      recordPresentedChapterCompletions({ before, after: next })
+    );
     if (next.status === "completed" && existing.status !== "completed") {
       await recordCampaignEvent({
         tenantId: next.tenantId,

@@ -98,11 +98,17 @@ export function preferredTemplateIdFromAssignedOption(assignedOption: string): s
 export type ExperimentalAssignmentRecord = {
   decisionPointId: string;
   correlationId: string;
+  /**
+   * False when the operator was not available for randomization at this
+   * decision point (fatigue throttle or a declared plain-presentation
+   * preference). STANDARD_PRESENTATION is then assigned deterministically.
+   */
   availability: boolean;
   eligibleOptions: readonly string[];
   assignedOption: string;
-  assignmentMechanism: "randomized_assignment";
-  assignmentProbability: number;
+  assignmentMechanism: "randomized_assignment" | "fatigue_throttle";
+  /** Null for a deterministic (unavailable) decision, per the ledger contract. */
+  assignmentProbability: number | null;
   interventionPolicyVersion: number;
   interventionDefinitionVersion: number;
   proximalOutcomeWindowMinutes: number;
