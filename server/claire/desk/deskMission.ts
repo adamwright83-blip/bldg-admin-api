@@ -1,3 +1,4 @@
+import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -16,11 +17,12 @@ export type DeskMissionItem = {
   objective: string | null;
   /** Exactly as stored: a schedule label or window. Null when no time is known. */
   when: string | null;
-  status: "committed" | "completed" | "awaiting_approval";
+  /** needs_reschedule: unapproved work whose execution window passed; it is shown, never offered for approval. */
+  status: "committed" | "completed" | "awaiting_approval" | "needs_reschedule";
   note: string | null;
 };
 
-const STATUS_ORDER: Record<DeskMissionItem["status"], number> = { committed: 0, awaiting_approval: 1, completed: 2 };
+const STATUS_ORDER: Record<DeskMissionItem["status"], number> = { committed: 0, awaiting_approval: 1, needs_reschedule: 2, completed: 3 };
 
 /**
  * Everything the Claire Desk shows, from stored truth only. Unknown values are
@@ -33,7 +35,7 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
   const tomorrow = addDaysYmd(businessDate, 1);
   const briefing = await buildShowrunnerBriefing({ identity, purpose: "desk_planning", timeZone, now });
   const proposal =
-    (await latestStrategicProposal(identity, weekStartMonday(tomorrow)).catch(() => null)) ??
+    (await latestStrategicProposal(identity, strategicPlanningHorizon({ businessDate, localTime: formatInTimeZone(now, timeZone, "HH:mm") }).weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));
   const pending = briefing.pendingDecision?.items ?? [];
   const proposalItem = (id: string) => proposal?.items.find(i => i.id === id);
@@ -58,6 +60,18 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
         when: p?.timeWindow ? `${p.timeWindow.window}${p.timeWindow.time ? ` · ${p.timeWindow.time}` : ""}` : null,
         status: "awaiting_approval" as const,
         note: null,
+      };
+    }),
+    ...(briefing.needsReschedule ?? []).map(i => {
+      const p = proposalItem(i.id);
+      return {
+        id: i.id,
+        date: i.date,
+        title: i.title,
+        objective: p?.objective ?? null,
+        when: p?.timeWindow ? `${p.timeWindow.window}${p.timeWindow.time ? ` · ${p.timeWindow.time}` : ""}` : null,
+        status: "needs_reschedule" as const,
+        note: "Its time has passed. Choose a new day before approving it.",
       };
     }),
     ...briefing.today.filter(i => i.status === "open").map(fromDayLine(businessDate)),
