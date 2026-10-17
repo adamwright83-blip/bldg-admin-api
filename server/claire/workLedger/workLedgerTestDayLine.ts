@@ -128,13 +128,21 @@ export function createFakeDayLine(seed: Array<Partial<FakeDayLineRow> & { title:
     };
   };
 
+  const move: WorkLedgerApplyDeps["move"] = async input => {
+    const row = rows.get(input.commitmentId);
+    if (!row || row.cancelled || row.status !== "open" || row.businessDate !== input.fromBusinessDate) return false;
+    row.businessDate = input.toBusinessDate;
+    writes.push(`move ${row.title} to ${input.toBusinessDate}`);
+    return true;
+  };
+
   return {
     rows,
     writes,
     open: () => Array.from(rows.values()).filter(row => !row.cancelled),
     deps: {
       readState,
-      apply: { commit, update, complete, edit, cancel, readState: readState as unknown as WorkLedgerApplyDeps["readState"] },
+      apply: { commit, update, complete, edit, cancel, move, readState: readState as unknown as WorkLedgerApplyDeps["readState"] },
     },
   };
 }

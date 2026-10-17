@@ -655,6 +655,37 @@ export async function updateDayDirectorCommitment(input: {
 }
 
 /**
+ * Move one open commitment to another business day in a single conditional write.
+ * The id, title and details stay; nothing is created or cancelled, so a failure
+ * part-way can never leave the work on both days. Returns false when the row is no
+ * longer open on `fromBusinessDate` (it changed underneath) and nothing moved.
+ */
+export async function moveDayDirectorCommitment(input: {
+  tenantId: string;
+  actorId: string;
+  commitmentId: string;
+  fromBusinessDate: string;
+  toBusinessDate: string;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(dayDirectorCommitments)
+    .set({ businessDate: input.toBusinessDate })
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        eq(dayDirectorCommitments.actorId, input.actorId),
+        eq(dayDirectorCommitments.id, input.commitmentId),
+        eq(dayDirectorCommitments.businessDate, input.fromBusinessDate),
+        eq(dayDirectorCommitments.status, "open")
+      )
+    );
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  return header?.affectedRows === 1;
+}
+
+/**
  * Mark one commitment as the day's discretionary primary.
  * Idempotent. Does not insert a second row. Other primaries that date are demoted.
  */

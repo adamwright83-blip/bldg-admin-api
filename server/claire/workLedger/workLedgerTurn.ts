@@ -29,8 +29,15 @@ import {
   type WorkLedgerApplyResult,
 } from "./workLedgerApply";
 import { recordWorkLedgerOperatorSignal } from "./workLedgerSignals";
+import { ingestDaphneConversation } from "../../agents/daphne/conversationIngestion";
+import {
+  captureExplicitDaphnePreferenceCorrections,
+  type DaphneExplicitPreferenceCaptureResult,
+} from "../../agents/daphne/explicitPreferenceCorrection";
 
 const HISTORY_LIMIT = 32;
+/** Days of Day Line the planner can see and act on, starting today. */
+export const LEDGER_HORIZON_DAYS = 14;
 
 export type WorkLedgerTurnInput = {
   tenantId: string;
@@ -44,6 +51,8 @@ export type WorkLedgerTurnInput = {
   sessionKind: string;
   callFacts?: string[];
   sourceEventId?: string;
+  /** False when the utterance is a forced flush of an unfinished thought; it is then never a durable preference. */
+  inputComplete?: boolean;
 };
 
 export type WorkLedgerTurnDeps = {
@@ -52,6 +61,7 @@ export type WorkLedgerTurnDeps = {
   apply: Partial<WorkLedgerApplyDeps>;
   readState: typeof getDayDirectorState;
   recordSignal: typeof recordWorkLedgerOperatorSignal;
+  recordDaphneTurn: typeof recordLedgerTurnForDaphne;
 };
 
 export type WorkLedgerTurnOutcome =
@@ -77,12 +87,18 @@ async function loadDayLine(
   deps: WorkLedgerTurnDeps,
   input: WorkLedgerTurnInput,
   dates: string[],
-  savedIds: Set<string>
+  savedIds: Set<string>,
+  openOnlyAfter?: string
 ): Promise<LedgerDayLineItem[]> {
   const items: LedgerDayLineItem[] = [];
-  for (const businessDate of dates) {
-    const state = await deps.readState({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate });
+  const states = await Promise.all(
+    dates.map(businessDate => deps.readState({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate }))
+  );
+  for (const [index, state] of states.entries()) {
+    const laterDay = openOnlyAfter != null && dates[index]! > openOnlyAfter;
     for (const row of state.commitments ?? []) {
+      // Later days only matter for work that can still be moved, edited or closed.
+      if (laterDay && row.status === "completed") continue;
       items.push({
         id: row.id,
         title: row.title,
@@ -220,7 +236,66 @@ export function closureQuestion(pending: NonNullable<WorkLedgerState["pendingClo
   return `Before I change your Day Line: should I ${parts.join(" and ")}? Say yes to confirm.`;
 }
 
+/**
+ * Daphne on a turn the ledger answered. Every surface (Claire turn, Desk, phone,
+ * scheduled calls) returns the ledger's answer without reaching Claire's own Daphne
+ * step, so "add the pickup, and stop calling me boss" saved the pickup and lost the
+ * correction. Both writes are idempotent on (conversation, turn), so a surface that
+ * also ingests after the turn (the phone adapter) records the turn once.
+ */
+export async function recordLedgerTurnForDaphne(input: {
+  tenantId: string;
+  operatorUserId: string;
+  utterance: string;
+  conversationKey: string;
+  turnId: string;
+  completed: boolean;
+}): Promise<DaphneExplicitPreferenceCaptureResult | null> {
+  await ingestDaphneConversation({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    utterance: input.utterance,
+    conversationId: input.conversationKey,
+    turnId: input.turnId,
+    completed: input.completed,
+  }).catch(() => null);
+  if (!input.completed) return null;
+  return captureExplicitDaphnePreferenceCorrections({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    utterance: input.utterance,
+    conversationId: input.conversationKey,
+    turnId: input.turnId,
+  }).catch(() => null);
+}
+
 export async function runWorkLedgerTurn(
+  input: WorkLedgerTurnInput,
+  overrides: Partial<WorkLedgerTurnDeps> = {}
+): Promise<WorkLedgerTurnOutcome> {
+  const outcome = await runWorkLedgerTurnCore(input, overrides);
+  if (!outcome.handled) return outcome;
+  const record = overrides.recordDaphneTurn ?? recordLedgerTurnForDaphne;
+  const captured = await record({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    utterance: input.utterance.trim(),
+    conversationKey: input.conversationKey,
+    // Same turn id Claire's own Daphne step uses, so the write is shared, not doubled.
+    turnId: input.sourceEventId ?? `${input.conversationKey}:${(input.state.claireTurnCount ?? 0) + 1}`,
+    completed: input.inputComplete !== false,
+  }).catch(() => null);
+  // Same read-back rule as the conversational path: only a verified save is spoken as saved.
+  if (captured?.corrections.length && captured.status !== "disabled") {
+    const readback = captured.readbackVerified
+      ? "I'll remember that preference."
+      : "I understood that preference, but I couldn't save it for next time.";
+    return { ...outcome, result: { ...outcome.result, speak: `${outcome.result.speak} ${readback}`.trim() } };
+  }
+  return outcome;
+}
+
+async function runWorkLedgerTurnCore(
   input: WorkLedgerTurnInput,
   overrides: Partial<WorkLedgerTurnDeps> = {}
 ): Promise<WorkLedgerTurnOutcome> {
@@ -230,6 +305,7 @@ export async function runWorkLedgerTurn(
     apply: {},
     readState: getDayDirectorState,
     recordSignal: recordWorkLedgerOperatorSignal,
+    recordDaphneTurn: recordLedgerTurnForDaphne,
     ...overrides,
   };
   const utterance = input.utterance.trim();
@@ -243,8 +319,11 @@ export async function runWorkLedgerTurn(
 
   let dayLine: LedgerDayLineItem[];
   try {
-    const dates = [...new Set([clock.today, tomorrow, ...(ledger.lastSaved ?? []).map(item => item.businessDate)])];
-    dayLine = await loadDayLine(deps, input, dates, new Set(ledger.savedIds));
+    // A fresh conversation must still see Friday's work to move or cancel it, not only
+    // today, tomorrow and what this conversation saved.
+    const horizon = Array.from({ length: LEDGER_HORIZON_DAYS }, (_, day) => addDaysYmd(clock.today, day));
+    const dates = [...new Set([...horizon, ...(ledger.lastSaved ?? []).map(item => item.businessDate)])];
+    dayLine = await loadDayLine(deps, input, dates, new Set(ledger.savedIds), tomorrow);
   } catch (error) {
     console.warn("[ClaireWorkLedger] Day Line read failed", error instanceof Error ? error.message : error);
     ledger.degradedAt = now.getTime();

@@ -297,8 +297,10 @@ describe("work ledger execution — readback before speech", () => {
     const rows = Array.from(dayLine.rows.values());
     expect(rows.find(row => row.id === "a")!.title).toBe("Pick up from KITH TREATS at 10");
     expect(rows.find(row => row.id === "b")!.status).toBe("completed");
-    expect(rows.find(row => row.id === "c")!.cancelled).toBe(true);
-    expect(rows.filter(row => /louise/i.test(row.title) && !row.cancelled).map(row => row.businessDate)).toEqual([TOMORROW]);
+    // Moved in place: same item, same id, now tomorrow; nothing cancelled, no copy left behind.
+    expect(rows.find(row => row.id === "c")).toMatchObject({ businessDate: TOMORROW });
+    expect(rows.find(row => row.id === "c")!.cancelled).toBeFalsy();
+    expect(rows.filter(row => /louise/i.test(row.title) && !row.cancelled).map(row => row.id)).toEqual(["c"]);
     expect(rows.find(row => row.id === "d")!.cancelled).toBe(true);
     expect(rows.find(row => row.id === "e")!.executionType).toBe("challenge");
     const speech = speakVerifiedLedgerChanges(applied, TODAY);
@@ -618,5 +620,102 @@ describe("prior-call facts", () => {
       { conversationKind: "morning_readiness", completionReason: "call_create_failed", secondsBeforeThisCall: 300, durationSeconds: 1, claireOpening: null, operatorSpoke: false, outbound: true },
     ]);
     expect(fact).toBe("About 5 minutes before this call, Claire tried to place the scheduled morning call but it could not be placed; the operator never heard it.");
+  });
+});
+
+describe("ledger safety before CLAIRE_WORK_LEDGER turns on", () => {
+  const target = { tenantId: "default", operatorUserId: "adam-admin", dayDirectorActorId: "1", conversationKey: "claire-desk:t", surface: "text" as const, timeZone: "America/Los_Angeles", sessionKind: "desk" };
+  const now = () => new Date("2026-10-16T00:31:30Z");
+  const capture = (overrides: Partial<{ corrections: unknown[]; readbackVerified: boolean; status: string }> = {}) => {
+    const calls: Array<Record<string, unknown>> = [];
+    const record = async (input: Record<string, unknown>) => {
+      calls.push(input);
+      return { status: "persisted", readbackVerified: true, corrections: [{ key: "address_as" }], observationIds: ["o1"], ...overrides } as never;
+    };
+    return { calls, record };
+  };
+
+  it("a work turn the ledger answers still reaches Daphne, once, and reads back a saved preference", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, held: [heldItem({ save: true })] }]);
+    const daphne = capture();
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "I need to deliver 2 of them tonight, and stop calling me boss.", state: { history: [], claireTurnCount: 4 } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }), recordDaphneTurn: daphne.record as never }
+    );
+    expect(outcome.handled).toBe(true);
+    if (!outcome.handled) return;
+    expect(dayLine.open()).toHaveLength(1);
+    expect(daphne.calls).toEqual([
+      expect.objectContaining({ utterance: "I need to deliver 2 of them tonight, and stop calling me boss.", conversationKey: "claire-desk:t", turnId: "claire-desk:t:5", completed: true }),
+    ]);
+    expect(outcome.result.speak).toMatch(/I'll remember that preference\.$/);
+  });
+
+  it("uses the caller's turn id, and never treats an unfinished thought as a durable preference", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, held: [heldItem({ save: true })] }]);
+    const daphne = capture({ corrections: [] });
+    await runWorkLedgerTurn(
+      { ...target, utterance: "I need to deliver 2 of them tonight.", state: { history: [] }, sourceEventId: "voice:call-1:7", inputComplete: false },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }), recordDaphneTurn: daphne.record as never }
+    );
+    expect(daphne.calls[0]).toMatchObject({ turnId: "voice:call-1:7", completed: false });
+  });
+
+  it("does not speak a preference as saved when the read-back failed", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, held: [heldItem({ save: true })] }]);
+    const daphne = capture({ readbackVerified: false, status: "readback_failed" });
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "I need to deliver 2 of them tonight, and keep it short.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }), recordDaphneTurn: daphne.record as never }
+    );
+    expect(outcome.handled && outcome.result.speak).toMatch(/couldn't save it for next time\.$/);
+  });
+
+  it("leaves ordinary conversation to Claire's own Daphne step", async () => {
+    const dayLine = createFakeDayLine();
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, workChanged: false }]);
+    const daphne = capture();
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "How many orders this week?", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }), recordDaphneTurn: daphne.record as never }
+    );
+    expect(outcome.handled).toBe(false);
+    expect(daphne.calls).toEqual([]);
+  });
+
+  it("a fresh conversation sees open work up to two weeks out, not just today and tomorrow", async () => {
+    const dayLine = createFakeDayLine([
+      { id: "friday", title: "Pitch The Louise", businessDate: "2026-10-23" },
+      { id: "done-later", title: "Old note", businessDate: "2026-10-22", status: "completed" },
+      { id: "far", title: "Too far out", businessDate: "2026-11-05" },
+    ]);
+    const { invoke, calls } = scriptedInvoke([{ ...EMPTY_RAW, workChanged: false }]);
+    await runWorkLedgerTurn(
+      { ...target, utterance: "Move Friday's Louise pitch to Monday.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }), recordDaphneTurn: capture().record as never }
+    );
+    expect(calls[0]).toContain("Pitch The Louise");
+    expect(calls[0]).not.toContain("Old note");
+    expect(calls[0]).not.toContain("Too far out");
+  });
+
+  it("a move keeps the same item and refuses when the item changed underneath", async () => {
+    const dayLine = createFakeDayLine([{ id: "c", title: "Call Louise about the contract", businessDate: TODAY, detailNote: "Ask about the 2nd floor" } as never]);
+    const items = [{ id: "c", title: "Call Louise about the contract", businessDate: TODAY, status: "open" as const, executionType: null, detail: "Ask about the 2nd floor", sourceText: null, scheduleLabel: null, savedThisConversation: false }];
+    const input = planInput({ utterance: "Move the Louise call to tomorrow.", dayLine: items });
+    const plan = validateWorkLedgerPlan({ ...EMPTY_RAW, edits: [{ id: "c", title: "", executionType: "unchanged", detail: "", timing: "", moveTo: "tomorrow", date: "" }] }, input, 1);
+    const applied = await applyWorkLedgerPlan({ plan, dayLine: items, target: { tenantId: "default", dayDirectorActorId: "1", operatorUserId: "adam-admin", conversationKey: "k" }, clock: { today: TODAY, minutesNow: 0 }, deps: dayLine.deps.apply });
+    expect(applied.failures).toEqual([]);
+    expect(Array.from(dayLine.rows.values())).toHaveLength(1);
+    expect(dayLine.rows.get("c")).toMatchObject({ businessDate: TOMORROW });
+    expect(dayLine.writes).toEqual([`move Call Louise about the contract to ${TOMORROW}`]);
+
+    dayLine.rows.get("c")!.businessDate = "2026-10-20";
+    const again = await applyWorkLedgerPlan({ plan, dayLine: items, target: { tenantId: "default", dayDirectorActorId: "1", operatorUserId: "adam-admin", conversationKey: "k" }, clock: { today: TODAY, minutesNow: 0 }, deps: dayLine.deps.apply });
+    expect(again.failures[0]?.error).toMatch(/changed before it could be moved/);
+    expect(again.changes).toEqual([]);
   });
 });
