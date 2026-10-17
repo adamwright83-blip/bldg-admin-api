@@ -58,6 +58,7 @@ import { normalizeSmsPhone } from "../../../_core/sms";
 import { getDb } from "../../../db";
 import { recordCommunicationPermission } from "../../../strategy/communicationPermissionService";
 import { enforceSmsOptOut } from "../../../messaging/businessLineInbox";
+import { readPersonalOutreachRoster } from "../../../strategy/personalOutreachWrite";
 import { approvedBodyDigest } from "./smsComposeHandoff";
 
 /**
@@ -449,6 +450,39 @@ export function verifyOutboundOutboxMatch(input: {
   return { matched: true, outboxRow: row, alreadyDispatchedIdempotent: false };
 }
 
+/**
+ * The customer's phone, from records this operator already owns: their own outreach
+ * drafts for the customer, then the tenant's recovery roster the village is built
+ * from. Never from client input. Null when neither knows the number.
+ */
+async function resolveCustomerPhoneServerSide(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  input: { tenantId: string; operatorId: string; customerId: string; territoryId: string | null; now: Date }
+): Promise<string | null> {
+  const [draft] = await db
+    .select({ phone: scheduledOutreachMessages.recipientPhone })
+    .from(scheduledOutreachMessages)
+    .where(
+      and(
+        eq(scheduledOutreachMessages.tenantId, input.tenantId),
+        eq(scheduledOutreachMessages.operatorId, input.operatorId),
+        eq(scheduledOutreachMessages.customerId, input.customerId)
+      )
+    )
+    .limit(1);
+  if (draft?.phone) return normalizeSmsPhone(draft.phone) ?? null;
+  const roster = await readPersonalOutreachRoster({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.operatorId,
+    timeZone: "America/Los_Angeles",
+    now: input.now,
+    territoryId: input.territoryId ?? undefined,
+    limit: 50,
+  }).catch(() => null);
+  const contact = roster?.contacts.find(c => c.identityId === input.customerId);
+  return contact?.phone ? normalizeSmsPhone(contact.phone) ?? null : null;
+}
+
 export async function recordMessagingEvidenceEvent(input: {
   tenantId: string;
   operatorId: string;
@@ -732,13 +766,26 @@ export async function recordMessagingEvidenceEvent(input: {
     if (prepared.permissionEffect === "opted_out") {
       // The reply is saved; the STOP is only acknowledged once every consent store an
       // outbound path reads says opted_out. Otherwise fail loudly so it is retried.
+      // Operator reports never carry a phone (anti-spoofing), so look up the customer's
+      // number server-side from this operator's own records; never from the client.
+      const enforcementPhone =
+        normalizedPhone ??
+        (resolvedCustomerId
+          ? await resolveCustomerPhoneServerSide(db, {
+              tenantId: input.tenantId,
+              operatorId: input.operatorId,
+              customerId: resolvedCustomerId,
+              territoryId: resolvedTerritoryId,
+              now: observedDate,
+            })
+          : null);
       const subjectIds = [
         resolvedCustomerId,
-        normalizedPhone ? `phone:${normalizedPhone.replace(/\D/g, "").slice(-10)}` : null,
+        enforcementPhone ? `phone:${enforcementPhone.replace(/\D/g, "").slice(-10)}` : null,
       ].filter((id): id is string => Boolean(id));
       const enforced = await enforceSmsOptOut(db, {
         tenantId: input.tenantId,
-        phone: normalizedPhone,
+        phone: enforcementPhone,
         customerSubjectIds: subjectIds,
         channels: ["sms", "any"],
         sourceReference: `${input.source}:${eventId}`,
@@ -748,6 +795,11 @@ export async function recordMessagingEvidenceEvent(input: {
       if (!enforced) {
         throw new Error(
           "The opt-out reply was saved, but the opt-out could not be verified. Outreach to this customer is not yet blocked; try again."
+        );
+      }
+      if (!enforcementPhone) {
+        throw new Error(
+          "The opt-out reply was saved and this customer is blocked by customer id, but their phone number could not be found, so the phone-level block was not written. Do not text them; check their contact record."
         );
       }
     }

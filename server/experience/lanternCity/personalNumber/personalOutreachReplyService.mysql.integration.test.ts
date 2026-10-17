@@ -6,7 +6,7 @@ import { withUtcTimezone } from "../../../db";
 import { projectCozyRecoverySurfaces } from "../../../../shared/cozyVillagerEvidence";
 import type { CozyCustomerTarget, CozyEncounterMission } from "../../../../shared/cozyVillagerOutreach";
 import { checkCommunicationPermission } from "../../../strategy/communicationPermissionService";
-import { loadDormantContactFacts, permissionForKeys } from "../../../strategy/dormantOutreachGate";
+import { hashIdentityKey, loadDormantContactFacts, permissionForKeys } from "../../../strategy/dormantOutreachGate";
 import { phoneOptOutState } from "../../../messaging/businessLineInbox";
 import { outreachEvidenceFromRow } from "../cozyRecoverySurfaces";
 import {
@@ -300,20 +300,73 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
     expect(await phoneOptOutState(tenantId, "+12135550177")).toBe("opted_out");
   });
 
-  it("an operator-reported STOP with only a customer id still blocks that customer", async () => {
+  it("an operator-reported STOP (no phone from the client) reaches Silver Lake's phone-keyed gate", async () => {
     const stopCustomerId = `cust_opstop_${suffix}`;
+    const phoneDigits = "2135550188";
+    // The customer had opted in before.
+    await sql.execute(
+      `INSERT INTO customer_contact_permissions
+        (tenantId, customerKeyHash, channel, purpose, status, sourceReference, capturedAt, recordedBy)
+       VALUES (?, ?, 'sms', 'win_back_marketing', 'opted_in', 'fixture:prior-consent', ?, 'fixture')`,
+      [tenantId, hashIdentityKey(tenantId, `phone:${phoneDigits}`), new Date("2026-09-01T00:00:00.000Z")]
+    );
+    // The operator's own outreach draft is the server-side record of this customer's phone.
+    await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: stopCustomerId,
+      customerName: "Jamie Lee",
+      recipientPhone: `+1${phoneDigits}`,
+      originalSuggestedDraft: "Hi Jamie, it's Adam from Laundry Farm.",
+      messageBody: "Hi Jamie, checking in from Laundry Farm.",
+      scheduledFor: "2026-10-17T19:00:00.000Z",
+      timezone: "America/Los_Angeles",
+      slotId: "slot_03",
+      territoryId: "silver-lake",
+      status: "awaiting_sender_setup",
+      deliveryIntent: "immediate",
+      now,
+    });
+    const before = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:39:00.000Z") });
+    expect(permissionForKeys(before, tenantId, [`phone:${phoneDigits}`]).state).toBe("opted_in");
+
     const saved = await recordPersonalOutreachReply({
       tenantId,
       operatorId,
       customerId: stopCustomerId,
       customerName: "Jamie Lee",
-      replyText: "Please stop texting me",
-      classification: "opt_out",
+      replyText: "STOP",
       now: new Date("2026-10-17T18:40:00.000Z"),
     });
     expect(saved.permissionEffect).toBe("opted_out");
+    expect(saved.rawPhone).toBeNull();
+
+    const after = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:41:00.000Z") });
+    expect(after.readable).toBe(true);
+    expect(permissionForKeys(after, tenantId, [`phone:${phoneDigits}`]).state).toBe("opted_out");
+    expect(await phoneOptOutState(tenantId, `+1${phoneDigits}`)).toBe("opted_out");
+    for (const subjectId of [stopCustomerId, `phone:${phoneDigits}`]) {
+      for (const channel of ["sms", "any"] as const) {
+        const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId, channel });
+        expect(perm.permissionStatus).toBe("opted_out");
+      }
+    }
+  });
+
+  it("an operator-reported STOP whose phone cannot be found blocks the customer id and says the phone block is missing", async () => {
+    const unknownCustomerId = `cust_nophone_${suffix}`;
+    await expect(
+      recordPersonalOutreachReply({
+        tenantId,
+        operatorId,
+        customerId: unknownCustomerId,
+        customerName: "Robin Park",
+        replyText: "STOP",
+        now: new Date("2026-10-17T18:50:00.000Z"),
+      })
+    ).rejects.toThrow("phone number could not be found");
     for (const channel of ["sms", "any"] as const) {
-      const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: stopCustomerId, channel });
+      const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: unknownCustomerId, channel });
       expect(perm.permissionStatus).toBe("opted_out");
     }
   });
