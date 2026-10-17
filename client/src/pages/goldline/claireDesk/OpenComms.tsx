@@ -70,6 +70,12 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const loop = useRef<number | null>(null);
   const phaseRef = useRef<Phase>("idle");
   const micOn = useRef(false);
+  /**
+   * Comms session generation. Opening and ending both advance it; every async continuation
+   * (server reply, microphone start, recorder stop, Claire's voice ending) checks it first,
+   * so a late result can never revive an ended session or leak into a newer one.
+   */
+  const epoch = useRef(0);
   const setP = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
@@ -112,6 +118,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
 
   const send = useCallback(
     async (input: { utterance?: string; audioDataUrl?: string }) => {
+      const mine = epoch.current;
       stopLoop();
       const text = input.utterance?.trim();
       if (text) setLines(l => [...l, { who: "you", text }]);
@@ -119,6 +126,12 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
       setError(null);
       try {
         const r = (await comms.mutateAsync({ sessionId: sessionId.current, ...input })) as Turn;
+        if (epoch.current !== mine) {
+          // Comms ended or reopened while Claire was answering. The server may still have
+          // persisted work, so the desk re-reads its truth, but this session stays closed.
+          onChanged();
+          return;
+        }
         if (input.audioDataUrl && r.heard) setLines(l => [...l, { who: "you", text: r.heard! }]);
         setLines(l => [...l, { who: "claire", text: r.speak }]);
         if (r.saved.length) setSaved(s => [...s, ...r.saved]);
@@ -126,6 +139,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         onChanged();
         speak(r);
       } catch (e) {
+        if (epoch.current !== mine) return;
         setError(`${e instanceof Error ? e.message : "Claire could not be reached."} Nothing from that turn was saved.`);
         setP("error");
       }
@@ -136,6 +150,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
 
   /** Records one operator turn: waits for speech, stops after a pause, sends the audio. */
   const listen = useCallback(() => {
+    const mine = epoch.current;
     if (!micOn.current || !stream.current) {
       setP("listening");
       return;
@@ -149,14 +164,17 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     rec.onstop = () => {
       stopLoop();
-      if (!spoke || phaseRef.current === "ended" || phaseRef.current === "idle") return;
+      if (!spoke || epoch.current !== mine || phaseRef.current === "ended" || phaseRef.current === "idle") return;
       const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
-      void blobToDataUrl(blob).then(audioDataUrl => send({ audioDataUrl }));
+      void blobToDataUrl(blob).then(audioDataUrl => {
+        if (epoch.current === mine) void send({ audioDataUrl });
+      });
     };
     recorder.current = rec;
     rec.start(250);
     setP("listening");
     const tick = () => {
+      if (epoch.current !== mine) return;
       const v = rms();
       setLevel(v);
       const now = performance.now();
@@ -178,9 +196,11 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   /** Plays Claire's reply; speaking over her interrupts (barge-in). */
   const speak = useCallback(
     (r: Turn) => {
+      const mine = epoch.current;
       const after = () => {
-        stopLoop();
         // Ending comms cancels Claire's voice, which fires onend/onerror; the line stays closed.
+        if (epoch.current !== mine) return;
+        stopLoop();
         if (phaseRef.current === "ended" || phaseRef.current === "idle") return;
         if (r.end) setP("ended");
         else listen();
@@ -189,7 +209,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         if (!micOn.current) return;
         let loud = 0;
         const tick = () => {
-          if (phaseRef.current !== "speaking") return;
+          if (epoch.current !== mine || phaseRef.current !== "speaking") return;
           if (rms() > BARGE_IN_LEVEL) loud += 1;
           else loud = 0;
           if (loud > 8) {
@@ -202,6 +222,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         loop.current = requestAnimationFrame(tick);
       };
       const browserVoice = (why: string) => {
+        if (epoch.current !== mine) return;
         if (!("speechSynthesis" in window)) {
           setVoiceNote(`${why} Read Claire's reply below.`);
           return after();
@@ -229,6 +250,8 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   );
 
   async function open() {
+    const mine = ++epoch.current;
+    teardown();
     sessionId.current = newSessionId();
     setLines([]);
     setSaved([]);
@@ -239,6 +262,11 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     setP("connecting");
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (epoch.current !== mine) {
+        // Comms ended while the microphone was starting: release it, open nothing.
+        s.getTracks().forEach(t => t.stop());
+        return;
+      }
       stream.current = s;
       const ctx = new AudioContext();
       audioCtx.current = ctx;
@@ -248,6 +276,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
       analyser.current = a;
       micOn.current = true;
     } catch (e) {
+      if (epoch.current !== mine) return;
       micOn.current = false;
       setMicNote(
         `Claire can't hear you: the microphone ${e instanceof DOMException && e.name === "NotAllowedError" ? "permission wasn't granted" : "isn't available"}. Type to her below, or allow the microphone and reopen comms.`
@@ -263,6 +292,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   }
 
   function end() {
+    epoch.current += 1;
     setP("ended");
     teardown();
   }
