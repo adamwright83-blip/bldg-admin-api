@@ -16,6 +16,7 @@ import {
   type BehavioralLedgerStore,
 } from "../behavioralLedger/behavioralLedger";
 import { characterizeProximalOutcome, type ProximalOutcomeCharacterization } from "./proximalOutcome";
+import { describeRandomizedOutcomes, type RandomizedExperimentReport } from "./experimentReport";
 
 export type JoinableLedgerRow = {
   id: number;
@@ -186,4 +187,25 @@ export async function loadPresentationAssignmentOutcomes(
     store
   );
   return joinPresentationOutcomes(rows);
+}
+
+/**
+ * Descriptive outcomes by arm for this operator's randomized decisions only.
+ * Throttled (unavailable) decisions are excluded: they were not randomized.
+ * Never a causal claim (foundation §2); the report says so itself.
+ */
+export async function loadPresentationExperimentReport(
+  input: { tenantId: string; operatorUserId: string; minSamplePerArm: number },
+  store?: BehavioralLedgerStore
+): Promise<RandomizedExperimentReport & { unavailableDecisionCount: number }> {
+  const outcomes = await loadPresentationAssignmentOutcomes(input, store);
+  const randomized = outcomes.filter(item => item.availability && item.assignmentProbability != null);
+  return {
+    ...describeRandomizedOutcomes({
+      outcomes: randomized.map(item => item.proximal),
+      minSamplePerArm: input.minSamplePerArm,
+      deferredProducerExists: false,
+    }),
+    unavailableDecisionCount: outcomes.length - randomized.length,
+  };
 }

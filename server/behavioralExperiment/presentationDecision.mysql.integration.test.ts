@@ -30,7 +30,11 @@ import {
   loadPresentationConsent,
   type PresentationRuntimePorts,
 } from "./presentationRuntime";
-import { loadPresentationAssignmentOutcomes } from "./presentationOutcomes";
+import { loadPresentationAssignmentOutcomes, loadPresentationExperimentReport } from "./presentationOutcomes";
+import { expireUnfinishedPresentedChapters, recordPresentedChapterCompletions } from "./campaignChapterOutcomes";
+import type { CampaignChapter, CampaignInstance } from "../../shared/goldlineCampaign";
+import { deriveCampaignChapterActionGrammar } from "../../shared/goldlineCampaignBindings";
+import { behavioralSubjectFromGrammar } from "../../shared/behavioralSubject";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeMysql = DATABASE_URL ? describe : describe.skip;
@@ -41,6 +45,7 @@ describeMysql("Daphne presentation MRT at the real decision point — disposable
   const consenting = `mrt-consent-${suffix}`;
   const unconsented = `mrt-no-consent-${suffix}`;
   const plainSpoken = `mrt-plain-${suffix}`;
+  const chapterOperator = `mrt-chapter-${suffix}`;
   let db: mysql.Connection;
   const grammars = new Map<string, ActionGrammar>();
   let arm = 1;
@@ -220,5 +225,43 @@ describeMysql("Daphne presentation MRT at the real decision point — disposable
     expect(row).toMatchObject({ availability: 0, assignedOption: STANDARD_PRESENTATION,
       evidenceSource: `daphne_evidence:daphne_observations:${explained.adjustmentObservationId}` });
     expect(String(row.provenance)).toContain("daphne_fatigue_throttle:explicit_dislike_reported");
+  }, 120_000);
+
+  it("joins real campaign chapter completion and expiry to chapter assignments, and reports by arm", async () => {
+    await operator(chapterOperator, { safeExperimentation: true });
+    const chapter = (id: string): CampaignChapter => ({ stableChapterId: `${suffix}-${id}`, chapterKind: "follow_up_branch",
+      objectiveIds: [`follow-up:${suffix}-${id}`], required: false, hardAnchor: false, campaignPhase: "opening",
+      eligibleGameplayBindings: [], selectedGameplayBinding: "overland", territoryId: null, fictionalTreatment: "",
+      fictionTemplateId: null, physicalAnchors: [] } as unknown as CampaignChapter);
+    const campaign = (businessDate: string, chapters: CampaignChapter[], completedChapterIds: string[] = []) =>
+      ({ id: `campaign-${suffix}-${businessDate}`, tenantId, operatorId: chapterOperator, businessDate, chapters,
+        completedChapterIds, currentChapterId: null } as unknown as CampaignInstance);
+    const completed = chapter("completed");
+    const unfinished = chapter("unfinished");
+    for (const item of [completed, unfinished]) {
+      grammars.set(chapterOperator, deriveCampaignChapterActionGrammar(item)!);
+      arm = 1;
+      const chosen = await assignAuthorizedPresentation({ tenantId, operatorUserId: chapterOperator,
+        correlationId: behavioralSubjectFromGrammar(grammars.get(chapterOperator)!), occasionId: item.stableChapterId }, ports);
+      expect(chosen).toMatchObject({ usedExperiment: true, assignment: { availability: true } });
+      expect(chosen.assignment?.eligibleOptions).toEqual([STANDARD_PRESENTATION, "held-breath-v1", "spirit-human-rescue-v1"]);
+    }
+    await settle();
+    await recordPresentedChapterCompletions({ before: campaign("2026-10-12", [completed, unfinished]),
+      after: campaign("2026-10-12", [completed, unfinished], [completed.stableChapterId]) });
+    await expireUnfinishedPresentedChapters({ today: "2026-10-13",
+      priorCampaigns: [campaign("2026-10-12", [completed, unfinished], [completed.stableChapterId])] });
+    const rows = await ledgerRows(chapterOperator);
+    expect(rows.map(row => row.eventType)).toEqual(["ASSIGNED", "ASSIGNED", "COMPLETED", "EXPIRED"]);
+    expect(rows[2]).toMatchObject({ sourceSystem: "campaign_run", correlationId: rows[0].correlationId, decisionPointId: rows[0].decisionPointId });
+    expect(rows[3]).toMatchObject({ correlationId: rows[1].correlationId, decisionPointId: rows[1].decisionPointId });
+
+    const outcomes = await loadPresentationAssignmentOutcomes({ tenantId, operatorUserId: chapterOperator });
+    expect(outcomes.map(o => [o.decisionPointId, o.outcome])).toEqual([
+      [rows[0].decisionPointId, "completed"], [rows[1].decisionPointId, "skipped"],
+    ]);
+    const report = await loadPresentationExperimentReport({ tenantId, operatorUserId: chapterOperator, minSamplePerArm: 20 });
+    expect(report).toMatchObject({ assignmentCount: 2, insufficientSample: true, unavailableDecisionCount: 0,
+      causalProductClaim: "insufficient_evidence_for_a_causal_product_claim" });
   }, 120_000);
 });

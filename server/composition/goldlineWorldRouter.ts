@@ -42,6 +42,7 @@ import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
+import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
 import {
@@ -586,6 +587,14 @@ export const goldlineWorldRouter = router({
         })),
       };
     }),
+  /** The operator's own randomized presentation outcomes by arm. Descriptive only, never a causal claim. */
+  presentationExperimentReport: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+    loadPresentationExperimentReport({
+      tenantId: ctx.tenantId,
+      operatorUserId: ctx.user.openId,
+      minSamplePerArm: resolveProductionExperimentPolicy().minSamplePerArmForCausalClaim,
+    })
+  ),
   experimentalPresentationAssignment: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
