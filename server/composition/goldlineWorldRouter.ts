@@ -42,6 +42,7 @@ import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
 import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
 import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
 import { assignAuthorizedPresentation, acknowledgePresentationViewable, loadPresentationConsent } from "../behavioralExperiment/presentationRuntime";
+import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationConsent } from "../behavioralExperiment/presentationConsentService";
 import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
@@ -595,6 +596,17 @@ export const goldlineWorldRouter = router({
       minSamplePerArm: resolveProductionExperimentPolicy().minSamplePerArmForCausalClaim,
     })
   ),
+  /** The operator's own Daphne presentation consent, exactly as stored, with the text they agree to. */
+  presentationConsent: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
+    ...(await readPresentationConsent({ tenantId: ctx.tenantId, operatorUserId: ctx.user.openId })),
+    text: PRESENTATION_CONSENT_TEXT,
+  })),
+  setPresentationConsent: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ choice: z.enum(["adaptation", "experimentation"]), granted: z.boolean() }))
+    .mutation(async ({ ctx, input }) => ({
+      ...(await setPresentationConsent({ tenantId: ctx.tenantId, operatorUserId: ctx.user.openId, ...input })),
+      text: PRESENTATION_CONSENT_TEXT,
+    })),
   experimentalPresentationAssignment: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({

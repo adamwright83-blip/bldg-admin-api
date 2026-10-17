@@ -35,6 +35,7 @@ import { expireUnfinishedPresentedChapters, recordPresentedChapterCompletions } 
 import type { CampaignChapter, CampaignInstance } from "../../shared/goldlineCampaign";
 import { deriveCampaignChapterActionGrammar } from "../../shared/goldlineCampaignBindings";
 import { behavioralSubjectFromGrammar } from "../../shared/behavioralSubject";
+import { setPresentationConsent } from "./presentationConsentService";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeMysql = DATABASE_URL ? describe : describe.skip;
@@ -46,6 +47,7 @@ describeMysql("Daphne presentation MRT at the real decision point — disposable
   const unconsented = `mrt-no-consent-${suffix}`;
   const plainSpoken = `mrt-plain-${suffix}`;
   const chapterOperator = `mrt-chapter-${suffix}`;
+  const appConsent = `mrt-app-consent-${suffix}`;
   let db: mysql.Connection;
   const grammars = new Map<string, ActionGrammar>();
   let arm = 1;
@@ -207,6 +209,39 @@ describeMysql("Daphne presentation MRT at the real decision point — disposable
       skipReason: "fresh_operator_experimentation_consent_required" });
     expect(result.consent).toMatchObject({ adaptationAllowed: true, experimentationAllowed: false });
     expect(await ledgerRows(unconsented)).toHaveLength(0);
+  }, 120_000);
+
+  it("consent given in the app is the only way in: nothing before it, an arm after both choices, nothing after stopping", async () => {
+    await db.execute("INSERT INTO users (tenantId,openId,name,email,role,loginMethod) VALUES (?,?,?,?, 'user','password')",
+      [tenantId, appConsent, appConsent, `${appConsent}@example.invalid`]);
+    await db.execute("INSERT INTO dayforge_saas_memberships (tenantId,userOpenId,role,active) VALUES (?,?,'owner',true)", [tenantId, appConsent]);
+    const scope = { tenantId, operatorUserId: appConsent };
+    const occasion = async (n: number) => {
+      const work = await mission(appConsent);
+      arm = 1;
+      return assignAuthorizedPresentation({ ...scope, correlationId: work.correlationId, occasionId: `chapter-${n}` }, ports);
+    };
+    expect((await occasion(1)).usedExperiment).toBe(false);
+    await expect(setPresentationConsent({ ...scope, choice: "experimentation", granted: true })).rejects.toThrow(/first/);
+
+    expect(await setPresentationConsent({ ...scope, choice: "adaptation", granted: true })).toMatchObject({ adaptationAllowed: true, experimentationAllowed: false });
+    expect((await occasion(2)).usedExperiment).toBe(false);
+    expect(await setPresentationConsent({ ...scope, choice: "experimentation", granted: true })).toMatchObject({ experimentationAllowed: true, experimentsRunning: true });
+    const assigned = await occasion(3);
+    expect(assigned.usedExperiment).toBe(true);
+    expect(await ledgerRows(appConsent)).toHaveLength(1);
+    const [stored] = await db.query<mysql.RowDataPacket[]>(
+      "SELECT preferenceKey, sourceObservationId FROM daphne_meta_preferences WHERE tenantId = ? AND preferenceKey IN ('adaptation_enabled','safe_experimentation') ORDER BY id",
+      [tenantId]);
+    const [observed] = await db.query<mysql.RowDataPacket[]>(
+      "SELECT id, sourceType, evidenceChannel, verificationStatus FROM daphne_observations WHERE tenantId = ? AND sourceType = 'authenticated_app_presentation_consent'", [tenantId]);
+    expect(observed.length).toBe(2);
+    expect(observed.every(row => row.evidenceChannel === "stated" && row.verificationStatus === "attested")).toBe(true);
+    expect(stored.filter(row => observed.some(o => o.id === row.sourceObservationId))).toHaveLength(2);
+
+    expect(await setPresentationConsent({ ...scope, choice: "adaptation", granted: false })).toMatchObject({ adaptationAllowed: false, experimentationAllowed: false });
+    expect((await occasion(4)).usedExperiment).toBe(false);
+    expect(await ledgerRows(appConsent)).toHaveLength(1);
   }, 120_000);
 
   it("honours the operator's own request for plain presentation as a recorded baseline", async () => {
