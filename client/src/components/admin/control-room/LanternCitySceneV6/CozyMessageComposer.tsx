@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import {
+  COZY_REPLY_CLASSIFICATION_LABELS,
+  type CozyProjectedTarget,
+  type CozyReplyClassification,
+} from "@shared/cozyVillagerEvidence";
 import { trpc } from "@/lib/trpc";
 import {
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -48,9 +52,17 @@ export function CozyMessageComposer({
     verifiedSent: false;
     pose: "idle" | "wave";
   } | null>(null);
+  const [showReplyRecorder, setShowReplyRecorder] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replyClassification, setReplyClassification] = useState<
+    Exclude<CozyReplyClassification, "outbound_sent"> | "auto"
+  >("auto");
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const utils = trpc.useUtils();
   const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
   const reportSent = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
   const ensureDraft = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
+  const recordReply = trpc.system.goldlineWorld.recordPersonalOutreachReply.useMutation();
 
   // Default schedule: tomorrow at 10:00 AM Pacific (America/Los_Angeles)
   const getDefaultScheduleIso = () => {
@@ -83,6 +95,10 @@ export function CozyMessageComposer({
     setApprovalRevision(1);
     setHandoffError(null);
     setHandoffReveal(null);
+    setShowReplyRecorder(false);
+    setReplyText("");
+    setReplyClassification("auto");
+    setReplyError(null);
   }, [target.customerId, target.preparedMessage, target.suggestedMessage]);
 
   const handleTalkToText = () => {
@@ -215,12 +231,47 @@ export function CozyMessageComposer({
     setShowSchedulePicker(false);
   };
 
+  const handleRecordReply = async () => {
+    const trimmed = replyText.trim();
+    if (!trimmed || recordReply.isPending) return;
+    setReplyError(null);
+    try {
+      const saved = await recordReply.mutateAsync({
+        customerId: target.customerId,
+        customerName: target.displayName,
+        replyText: trimmed,
+        classification: replyClassification === "auto" ? undefined : replyClassification,
+        messageId: target.messageId ?? null,
+        territoryId: target.territoryId,
+        surface: "cozy_composer",
+      });
+      if (saved.preparedFollowUpDraft) {
+        setMessage(saved.preparedFollowUpDraft);
+        setApprovedBody(null);
+      }
+      setReplyText("");
+      setShowReplyRecorder(false);
+      await Promise.all([
+        utils.system.goldlineWorld.cozyVillagerMission.invalidate(),
+        utils.system.goldlineWorld.cozyRecoveryDayLineCard.invalidate(),
+        utils.system.goldlineWorld.listPersonalOutreachReplies.invalidate(),
+      ]);
+    } catch (err: unknown) {
+      setReplyError(err instanceof Error ? err.message : "Could not record customer reply.");
+    }
+  };
+
   const state = target.communicationState;
+  const hasOpenReplyFollowUp =
+    target.reply &&
+    target.reply.status !== "unavailable" &&
+    Boolean(target.reply.preparedFollowUpDraft);
   const isDispatched = state === "send_observed";
   const isScheduled = state === "scheduled" || state === "claimed";
   const isAwaitingSender = state === "awaiting_sender" || state === "send_not_observed";
   const isFailed = state === "failed";
-  const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
+  const isActionCommitted =
+    (isDispatched || isScheduled || isAwaitingSender) && !hasOpenReplyFollowUp;
   const canSend = target.hasConsent && message.trim().length > 0 && !isSending && !isActionCommitted;
 
   return (
@@ -230,6 +281,7 @@ export function CozyMessageComposer({
       data-customer-id={target.customerId}
       data-communication-state={state ?? "draft_prepared"}
       data-message-id={target.messageId ?? ""}
+      data-reply-status={target.reply?.status ?? "unavailable"}
     >
       <div className={styles.composerHeader}>
         <div>
@@ -267,12 +319,60 @@ export function CozyMessageComposer({
 
       {/* Claire Draft Badge */}
       <div className={styles.claireBadge}>
-        <span>✨</span> {target.communicationLabel ?? "Draft Prepared"}
+        <span>✨</span>{" "}
+        {target.reply && target.reply.status !== "unavailable"
+          ? `${target.communicationLabel ?? "Draft Prepared"} · ${target.reply.classificationLabel}`
+          : (target.communicationLabel ?? "Draft Prepared")}
       </div>
       <div className={styles.recipientMeta}>
-        Reply: unavailable · Paid order after this message:{" "}
+        Reply:{" "}
+        {target.reply && target.reply.status !== "unavailable"
+          ? `${target.reply.sourceLabel.toLowerCase()} (${target.reply.classificationLabel})`
+          : "unavailable"}{" "}
+        · Paid order after this message:{" "}
         {target.paidOrder?.status === "verified" ? target.paidOrder.orderId : "not verified"}
       </div>
+
+      {target.reply && target.reply.status !== "unavailable" && (
+        <div
+          className={styles.scheduledBanner}
+          style={{
+            marginTop: "8px",
+            borderColor:
+              target.reply.classification === "opt_out" ||
+              target.reply.classification === "complaint"
+                ? "#fca5a5"
+                : "#93c5fd",
+            background:
+              target.reply.classification === "opt_out" ||
+              target.reply.classification === "complaint"
+                ? "#fef2f2"
+                : "#eff6ff",
+            color:
+              target.reply.classification === "opt_out" ||
+              target.reply.classification === "complaint"
+                ? "#991b1b"
+                : "#1e3a8a",
+          }}
+          data-testid="observed-reply-banner"
+          data-reply-source={target.reply.source}
+          data-reply-classification={target.reply.classification}
+          data-reply-provenance={target.reply.provenance}
+        >
+          <span>💬</span>
+          <div>
+            <strong>
+              {target.reply.sourceLabel} · {target.reply.classificationLabel}
+            </strong>
+            <div style={{ fontSize: "11px", marginTop: "2px" }}>
+              “{target.reply.replyText}”
+            </div>
+            <div style={{ fontSize: "10.5px", opacity: 0.9, marginTop: "3px" }}>
+              {target.reply.nextAction}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Message Editing */}
       <div className={styles.textAreaContainer}>
@@ -283,6 +383,7 @@ export function CozyMessageComposer({
           placeholder="Personalize Claire's outreach message..."
           disabled={isActionCommitted}
           rows={4}
+          data-testid="cozy-message-draft-textarea"
         />
       </div>
 
@@ -439,11 +540,6 @@ export function CozyMessageComposer({
             {handoffReveal.fallbackUri && handoffReveal.fallbackUri !== handoffReveal.uri ? (
               <a href={handoffReveal.fallbackUri}>Open the number only</a>
             ) : null}
-            {handoffReveal.state === "compose_opened" ? (
-              <button type="button" onClick={() => void handleReportSent()} disabled={reportSent.isPending}>
-                I sent this from my phone
-              </button>
-            ) : null}
           </div>
         )}
         {handoffError ? <div className={styles.handoffNote}>{handoffError}</div> : null}
@@ -527,6 +623,77 @@ export function CozyMessageComposer({
             Next ▶
           </button>
         </div>
+
+        {/* Hidden fallback only: manual reply correction when automatic observation is unavailable */}
+        <details
+          style={{ marginTop: "8px", fontSize: "10.5px", opacity: 0.78 }}
+          open={showReplyRecorder}
+          onToggle={(e) => setShowReplyRecorder((e.currentTarget as HTMLDetailsElement).open)}
+          data-testid="manual-reply-fallback-disclosure"
+        >
+          <summary style={{ cursor: "pointer", userSelect: "none" }}>
+            Manual reply fallback (offline / unlinked thread)
+          </summary>
+          <div
+            className={styles.schedulePickerBox}
+            style={{ marginTop: "6px" }}
+            data-testid="personal-reply-recorder"
+          >
+            <textarea
+              className={styles.messageTextArea}
+              style={{ marginTop: "4px", minHeight: "48px" }}
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Fallback only: enter customer reply text if automatic thread observation was offline..."
+              rows={2}
+              data-testid="personal-reply-input"
+            />
+            <div className={styles.scheduleInputRow} style={{ marginTop: "6px", gap: "6px" }}>
+              <select
+                className={styles.scheduleInput}
+                value={replyClassification}
+                onChange={(e) =>
+                  setReplyClassification(
+                    e.target.value as Exclude<CozyReplyClassification, "outbound_sent"> | "auto"
+                  )
+                }
+                data-testid="personal-reply-classification"
+              >
+                <option value="auto">Auto-classify reply</option>
+                {(
+                  Object.entries(COZY_REPLY_CLASSIFICATION_LABELS) as [
+                    CozyReplyClassification,
+                    string,
+                  ][]
+                )
+                  .filter(([key]) => key !== "outbound_sent")
+                  .map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                className={styles.sendButton}
+                style={{ flex: "none", padding: "6px 12px", fontSize: "11px" }}
+                onClick={() => void handleRecordReply()}
+                disabled={!replyText.trim() || recordReply.isPending}
+                data-testid="submit-personal-reply"
+              >
+                {recordReply.isPending ? "SAVING..." : "SAVE FALLBACK"}
+              </button>
+            </div>
+            <div style={{ fontSize: "10px", opacity: 0.8, marginTop: "4px" }}>
+              Recorded with operator_reported provenance. Opt-outs immediately block future outreach. Does not mark a paid order.
+            </div>
+            {replyError && (
+              <div className={styles.handoffNote} style={{ color: "#991b1b" }}>
+                {replyError}
+              </div>
+            )}
+          </div>
+        </details>
       </div>
     </aside>
   );

@@ -37,7 +37,7 @@ export function CozyNeighborhoodEncounter({
   const utils = trpc.useUtils();
 
   const missionQuery = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
-    { territoryId, limit: 8 },
+    { territoryId, requestedCustomerId: requestedId ?? undefined, limit: 8 },
     { staleTime: 0, refetchOnWindowFocus: true }
   );
 
@@ -267,7 +267,11 @@ export function CozyNeighborhoodEncounter({
               {/* Floating Name Tag */}
               <div className={styles.villagerTag}>
                 <span>{target.displayName.split(" ")[0]}</span>
-                {sendObserved ? (
+                {target.reply && target.reply.status !== "unavailable" ? (
+                  <span className={styles.statusIconSent} data-reply-badge={target.reply.classification}>
+                    💬 {target.reply.classificationLabel}
+                  </span>
+                ) : sendObserved ? (
                   <span className={styles.statusIconSent}>
                     {target.transport === "simulated" ? "Simulated send" : "Send observed"}
                   </span>
