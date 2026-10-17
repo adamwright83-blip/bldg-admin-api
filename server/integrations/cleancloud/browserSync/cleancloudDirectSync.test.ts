@@ -1,8 +1,11 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCleanCloudCredentials,
   isCleanCloudDirectConfigured,
+  loginCleanCloud,
+  runCleanCloudDirectSync,
+  tenantMayUseEnvCleanCloudCredentials,
 } from "./cleancloudDirectSync";
 import {
   isDirectSyncDue,
@@ -45,6 +48,60 @@ describe("cleancloud direct sync credentials & configuration", () => {
         password: "secretpassword123",
       })
     ).toBe(true);
+  });
+});
+
+describe("the owner's environment CleanCloud login stays with the owner's tenants", () => {
+  const saved = { ...process.env };
+  beforeEach(() => {
+    process.env.CLEANCLOUD_USERNAME = "owner@example.invalid";
+    process.env.CLEANCLOUD_PASSWORD = "not-a-real-password";
+    delete process.env.CLEANCLOUD_ENV_CREDENTIAL_TENANTS;
+    delete process.env.DAYFORGE_LEGACY_TENANT_IDS;
+  });
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  it("lets the owner's legacy tenants use the environment login", () => {
+    expect(getCleanCloudCredentials(undefined, "default")?.username).toBe("owner@example.invalid");
+    expect(isCleanCloudDirectConfigured(undefined, "laundry_farm")).toBe(true);
+  });
+
+  it("never gives another tenant the owner's login", () => {
+    expect(getCleanCloudCredentials(undefined, "joystick-trial-tenant")).toBeNull();
+    expect(isCleanCloudDirectConfigured(undefined, "joystick-trial-tenant")).toBe(false);
+    expect(getCleanCloudCredentials()).toBeNull();
+  });
+
+  it("honors an explicit allowlist instead of the legacy tenants", () => {
+    process.env.CLEANCLOUD_ENV_CREDENTIAL_TENANTS = "laundry_farm";
+    expect(tenantMayUseEnvCleanCloudCredentials("laundry_farm")).toBe(true);
+    expect(tenantMayUseEnvCleanCloudCredentials("default")).toBe(false);
+  });
+
+  it("still uses a tenant's own credentials", () => {
+    expect(
+      getCleanCloudCredentials({ username: "them@example.invalid", password: "theirs" }, "joystick-trial-tenant")
+    ).toMatchObject({ username: "them@example.invalid", password: "theirs" });
+  });
+
+  it("keeps the scheduler's global switch on while the owner login exists", () => {
+    expect(isCleanCloudDirectConfigured()).toBe(true);
+  });
+
+  it("refuses another tenant's login before any network call", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      loginCleanCloud({ tenantId: "joystick-trial-tenant", fetchImpl: fetchImpl as unknown as typeof fetch })
+    ).rejects.toThrow(/no CleanCloud credentials of its own/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("refuses another tenant's sync before reading anything", async () => {
+    await expect(runCleanCloudDirectSync({ tenantId: "joystick-trial-tenant" })).rejects.toThrow(
+      /no CleanCloud credentials of its own/
+    );
   });
 });
 

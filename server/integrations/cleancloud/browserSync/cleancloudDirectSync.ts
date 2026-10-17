@@ -11,6 +11,7 @@ import {
   type CleanCloudIngestionResult,
 } from "./ingestion";
 import { pacificToday, validateRange } from "../../../../extensions/gumballpals/core";
+import { isLegacyDayforgeTenant } from "../../../saas/tenantAccess";
 
 export const DIRECT_AUTH_FAILED = "direct_auth_failed";
 
@@ -39,30 +40,63 @@ export type DirectSyncResult = {
   revenueReceipt?: CleanCloudIngestionResult | null;
 };
 
+/**
+ * CLEANCLOUD_USERNAME / CLEANCLOUD_PASSWORD are the owner business's own CleanCloud
+ * login. Only the tenants listed in CLEANCLOUD_ENV_CREDENTIAL_TENANTS may fall back
+ * to them; when that list is unset, only the owner's legacy tenants may. Any other
+ * tenant must supply its own credentials, so a second business can never sync the
+ * owner's CleanCloud data into its own tenant.
+ */
+export function tenantMayUseEnvCleanCloudCredentials(tenantId: string): boolean {
+  const listed = process.env.CLEANCLOUD_ENV_CREDENTIAL_TENANTS?.trim();
+  if (listed) {
+    return listed
+      .split(",")
+      .map(value => value.trim())
+      .filter(Boolean)
+      .includes(tenantId);
+  }
+  return isLegacyDayforgeTenant(tenantId);
+}
+
+/**
+ * Explicit credentials always win. The environment login is used only when
+ * `tenantId` names a tenant allowed to use it; without a tenant there is no fallback.
+ */
 export function getCleanCloudCredentials(
-  override?: CleanCloudDirectCredentials
+  override?: CleanCloudDirectCredentials,
+  tenantId?: string
 ): { baseUrl: string; username: string; password: string } | null {
+  const envAllowed = tenantId !== undefined && tenantMayUseEnvCleanCloudCredentials(tenantId);
   const baseUrl =
     override?.baseUrl ||
     process.env.CLEANCLOUD_BASE_URL?.trim() ||
     "https://cleancloudapp.com/store";
   const username =
     override?.username ||
-    process.env.CLEANCLOUD_USERNAME?.trim() ||
+    (envAllowed ? process.env.CLEANCLOUD_USERNAME?.trim() : "") ||
     "";
   const password =
     override?.password ||
-    process.env.CLEANCLOUD_PASSWORD ||
+    (envAllowed ? process.env.CLEANCLOUD_PASSWORD : "") ||
     "";
 
   if (!username || !password) return null;
   return { baseUrl, username, password };
 }
 
+/**
+ * With a tenant: whether that tenant can log in. Without one: whether the
+ * owner's environment login exists at all (the scheduler's on/off switch).
+ */
 export function isCleanCloudDirectConfigured(
-  override?: CleanCloudDirectCredentials
+  override?: CleanCloudDirectCredentials,
+  tenantId?: string
 ): boolean {
-  return getCleanCloudCredentials(override) !== null;
+  if (tenantId === undefined && !override?.username && !override?.password) {
+    return Boolean(process.env.CLEANCLOUD_USERNAME?.trim() && process.env.CLEANCLOUD_PASSWORD);
+  }
+  return getCleanCloudCredentials(override, tenantId) !== null;
 }
 
 const BROWSER_HEADERS = {
@@ -115,12 +149,13 @@ export async function loginCleanCloud(input: {
   fetchImpl?: typeof fetch;
   waitForCode?: (args: { tenantId: string; notBefore: Date }) => Promise<string>;
 }): Promise<CleanCloudSession> {
-  const creds = getCleanCloudCredentials(input.credentials);
+  const creds = getCleanCloudCredentials(input.credentials, input.tenantId);
   if (!creds) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message:
-        "CleanCloud direct sync credentials are not configured in Railway (CLEANCLOUD_USERNAME, CLEANCLOUD_PASSWORD).",
+      message: tenantMayUseEnvCleanCloudCredentials(input.tenantId)
+        ? "CleanCloud direct sync credentials are not configured in Railway (CLEANCLOUD_USERNAME, CLEANCLOUD_PASSWORD)."
+        : "This business has no CleanCloud credentials of its own, so CleanCloud direct sync is off for it.",
     });
   }
   const doFetch = input.fetchImpl ?? fetch;
@@ -254,6 +289,12 @@ export async function runCleanCloudDirectSync(
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "tenantId is required for CleanCloud direct sync.",
+    });
+  }
+  if (!isCleanCloudDirectConfigured(options.credentials, tenantId)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "This business has no CleanCloud credentials of its own, so CleanCloud direct sync is off for it.",
     });
   }
   const actorId = options.actorId ?? "system:jawbreaker-direct";
