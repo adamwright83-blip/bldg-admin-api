@@ -259,11 +259,13 @@ export const WORK_LEDGER_SYSTEM_PROMPT = [
   "- businessDate: \"today\" unless the operator places the work on another day (tonight and \"before I leave work\" are today). Use \"date\" with YYYY-MM-DD only for a named later day.",
   "- executionType: \"challenge\" when the operator calls it a marketing challenge (or a challenge), \"mission\" for a sales mission, \"hybrid_objective\" only if they say hybrid. Otherwise keep what the item already has, or \"none\". Never invent a classification.",
   "- title: the action, 3 to 10 words, verb first, in the operator's words, specific enough to act on (\"Build Laundry Farm landing page to match Instagram ad\"). Never put reasons or feelings in a title; those go in detail. Fix obviously misheard business names only from the conversation.",
-  "- quote: the operator's own words that this item comes from, copied verbatim from the conversation (combine their sentences with a space if it spans turns).",
+  "- quote: only the operator's own words for THIS item (usually one clause), copied verbatim; never the whole utterance. Combine their sentences with a space only if the item spans turns.",
+  "- detail: at most 25 words, only what the title and quote do not already say (conditions, the offer, who it is for), or \"\". Do not restate the title.",
   "- timing: the operator's words for when (\"tonight\", \"tomorrow morning\", \"before I leave work\", \"by 3\"), or \"\".",
   "",
   "YOU RECORD WORK; YOU NEVER DO IT",
   "- You only keep the Day Line. Nothing you return charges a customer, sends a message, places a call or changes an order. \"I need to charge them\" is the operator's own task: record it (with its condition). It is never an instruction to charge anyone.",
+  "- Never imply Claire will carry out an external action. If you record a charge, message or call as the operator's own task, the reply (if any) must make clear it is on their list for them to do, e.g. \"That one's yours to charge when it comes in.\"",
   "- When the operator asks CLAIRE to carry out an external action now (\"text Louise\", \"charge the Opus order\", \"call them for me\", \"send me that list\"), that is not Day Line work: set workChanged false and return no operations, so Claire's action path handles it with its own authorization. If the same utterance also states work for the operator, record only that work.",
   "",
   "A FULL RUNDOWN",
@@ -611,7 +613,9 @@ export async function planWorkLedgerTurn(
 ): Promise<(WorkLedgerPlan & { nextRef: number; latencyMs: number; model: string }) | null> {
   const invoke = deps.invoke ?? invokeLLM;
   const model = deps.model ?? workLedgerModelId();
-  const timeoutMs = deps.timeoutMs ?? 9_000;
+  // CI on be225e2a: Sonnet 4.6 exceeded 9 s on a five-item rundown. A missed
+  // rundown costs far more than a few seconds of "still working".
+  const timeoutMs = deps.timeoutMs ?? 15_000;
   const startedAt = Date.now();
   const userMessage = buildWorkLedgerUserMessage(input);
 

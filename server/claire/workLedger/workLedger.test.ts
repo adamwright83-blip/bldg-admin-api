@@ -397,6 +397,9 @@ describe("speech hygiene", () => {
     expect(cleanLedgerReply("Sorry — got all of it now.")).toBe("Sorry — got all of it now.");
     expect(cleanLedgerReply("Okay, dropped the landing page.")).toBe("");
     expect(cleanLedgerReply("Got it, holding those.")).toBe("Got it, holding those.");
+    expect(cleanLedgerReply("Got it — charge on arrival.")).toBe("");
+    expect(cleanLedgerReply("I'll text Louise now.")).toBe("");
+    expect(cleanLedgerReply("That one's yours to charge when it comes in.")).toBe("That one's yours to charge when it comes in.");
     expect(cleanLedgerReply("Should I add it? Say yes or no.")).toBe("Should I add it?");
   });
 });
