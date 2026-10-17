@@ -57,6 +57,7 @@ import {
 import { normalizeSmsPhone } from "../../../_core/sms";
 import { getDb } from "../../../db";
 import { recordCommunicationPermission } from "../../../strategy/communicationPermissionService";
+import { enforceSmsOptOut } from "../../../messaging/businessLineInbox";
 import { approvedBodyDigest } from "./smsComposeHandoff";
 
 /**
@@ -729,27 +730,25 @@ export async function recordMessagingEvidenceEvent(input: {
     }
 
     if (prepared.permissionEffect === "opted_out") {
+      // The reply is saved; the STOP is only acknowledged once every consent store an
+      // outbound path reads says opted_out. Otherwise fail loudly so it is retried.
       const subjectIds = [
         resolvedCustomerId,
         normalizedPhone ? `phone:${normalizedPhone.replace(/\D/g, "").slice(-10)}` : null,
       ].filter((id): id is string => Boolean(id));
-      for (const subjectId of subjectIds) {
-        await recordCommunicationPermission({
-          tenantId: input.tenantId,
-          subjectType: "customer",
-          subjectId,
-          channel: "sms",
-          status: "opted_out",
-          reason: `Observed SMS opt-out (${input.source}): "${trimmedBody.slice(0, 120)}"`,
-        });
-        await recordCommunicationPermission({
-          tenantId: input.tenantId,
-          subjectType: "customer",
-          subjectId,
-          channel: "any",
-          status: "opted_out",
-          reason: `Observed SMS opt-out (${input.source}): "${trimmedBody.slice(0, 120)}"`,
-        });
+      const enforced = await enforceSmsOptOut(db, {
+        tenantId: input.tenantId,
+        phone: normalizedPhone,
+        customerSubjectIds: subjectIds,
+        channels: ["sms", "any"],
+        sourceReference: `${input.source}:${eventId}`,
+        capturedAt: observedDate,
+        recordedBy: `personal_outreach_${input.source}`,
+      });
+      if (!enforced) {
+        throw new Error(
+          "The opt-out reply was saved, but the opt-out could not be verified. Outreach to this customer is not yet blocked; try again."
+        );
       }
     }
 

@@ -23,6 +23,7 @@ import {
 import type { LedgerEventInput } from "../../shared/behavioralLedger";
 import type { DormantEligibleCustomer } from "../strategy/snapshotDormantCustomers";
 import { checkCommunicationPermission, recordOutreachAttempt } from "../strategy/communicationPermissionService";
+import { phoneOptOutState } from "../messaging/businessLineInbox";
 import { recordBehavioralLedgerEvent } from "../behavioralLedger/behavioralLedger";
 import { createOpsTask, updateOpsTaskStatus, type OpsTaskStore } from "../opsTasks";
 import { listDormantRescueCandidates } from "./listCandidates";
@@ -53,6 +54,8 @@ export type RescueServiceDeps = {
     now?: Date;
   }) => Promise<SendContactResolution>;
   permissionCheck?: typeof checkCommunicationPermission;
+  /** Phone-keyed opt-out (a STOP on any channel). Fails closed by default. */
+  phoneOptOutCheck?: (input: { tenantId: string; phone: string }) => Promise<"opted_out" | "clear" | "unavailable">;
   recordOutreach?: typeof recordOutreachAttempt;
   recordLedger?: (input: LedgerEventInput) => Promise<unknown>;
   opsTaskStore?: OpsTaskStore;
@@ -380,6 +383,20 @@ async function sendOnce(
   }
   if (contact.kind !== "ready" || !contact.contact.phone) {
     return persistFailure(store, mission, startedAt, "contact_unresolved", "Customer contact could not be resolved.");
+  }
+  const phoneOptOut = await (
+    deps.phoneOptOutCheck ?? (({ tenantId, phone }) => phoneOptOutState(tenantId, phone))
+  )({ tenantId: input.tenantId, phone: contact.contact.phone }).catch(() => "unavailable" as const);
+  if (phoneOptOut !== "clear") {
+    return persistFailure(
+      store,
+      mission,
+      startedAt,
+      "permission_denied",
+      phoneOptOut === "opted_out"
+        ? "The customer opted out. Nothing was sent."
+        : "Opt-out status could not be checked. Nothing was sent."
+    );
   }
 
   const sending = publicize({
@@ -725,6 +742,7 @@ export function defaultTestRescueDeps(overrides: RescueServiceDeps = {}): Rescue
     createFakeOutboundSendAdapter();
   return {
     permissionCheck: async () => ({ allowed: true, permissionStatus: "unspecified" as const }),
+    phoneOptOutCheck: async () => "clear" as const,
     recordOutreach: async () => undefined,
     ...overrides,
     store,

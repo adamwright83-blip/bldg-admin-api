@@ -6,6 +6,8 @@ import { withUtcTimezone } from "../../../db";
 import { projectCozyRecoverySurfaces } from "../../../../shared/cozyVillagerEvidence";
 import type { CozyCustomerTarget, CozyEncounterMission } from "../../../../shared/cozyVillagerOutreach";
 import { checkCommunicationPermission } from "../../../strategy/communicationPermissionService";
+import { loadDormantContactFacts, permissionForKeys } from "../../../strategy/dormantOutreachGate";
+import { phoneOptOutState } from "../../../messaging/businessLineInbox";
 import { outreachEvidenceFromRow } from "../cozyRecoverySurfaces";
 import {
   createScheduledOutreachDraft,
@@ -287,5 +289,32 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
     });
     expect(perm.allowed).toBe(false);
     expect(perm.permissionStatus).toBe("opted_out");
+    // Every gate an outbound path reads now says opted_out.
+    const anyChannel = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: optOutCustomerId, channel: "any" });
+    expect(anyChannel.permissionStatus).toBe("opted_out");
+    const byPhoneId = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: "phone:2135550177", channel: "sms" });
+    expect(byPhoneId.permissionStatus).toBe("opted_out");
+    const facts = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:30:00.000Z") });
+    expect(facts.readable).toBe(true);
+    expect(permissionForKeys(facts, tenantId, ["phone:2135550177"]).state).toBe("opted_out");
+    expect(await phoneOptOutState(tenantId, "+12135550177")).toBe("opted_out");
+  });
+
+  it("an operator-reported STOP with only a customer id still blocks that customer", async () => {
+    const stopCustomerId = `cust_opstop_${suffix}`;
+    const saved = await recordPersonalOutreachReply({
+      tenantId,
+      operatorId,
+      customerId: stopCustomerId,
+      customerName: "Jamie Lee",
+      replyText: "Please stop texting me",
+      classification: "opt_out",
+      now: new Date("2026-10-17T18:40:00.000Z"),
+    });
+    expect(saved.permissionEffect).toBe("opted_out");
+    for (const channel of ["sms", "any"] as const) {
+      const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: stopCustomerId, channel });
+      expect(perm.permissionStatus).toBe("opted_out");
+    }
   });
 });

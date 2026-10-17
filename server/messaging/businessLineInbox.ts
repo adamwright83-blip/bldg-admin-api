@@ -95,6 +95,137 @@ export class MemoryBusinessLineInbox implements BusinessLineInboxStore {
 
 type InboxDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
+export type SmsOptOutWrite = {
+  tenantId: string;
+  /** Phone the customer opted out from; drives the phone-keyed gate Silver Lake reads. */
+  phone: string | null;
+  /** Customer ids that consent checks use (rescue snapshot ids, dossier identity ids, `phone:` ids). */
+  customerSubjectIds: readonly string[];
+  channels: readonly ("sms" | "any")[];
+  sourceReference: string;
+  capturedAt: Date;
+  recordedBy: string;
+};
+
+const permissionRowId = (tenantId: string, subjectId: string, channel: string) =>
+  `perm_${createHash("sha256").update(`${tenantId}:customer:${subjectId}:${channel}`).digest("hex").slice(0, 40)}`;
+
+/**
+ * Writes opted_out to every consent store an outbound path reads, then reads each
+ * back. Returns true only if all of them now say opted_out. Throws only on driver errors.
+ */
+export async function enforceSmsOptOut(db: InboxDb, input: SmsOptOutWrite): Promise<boolean> {
+  const customerKeyHash = input.phone ? customerKeyHashForPhone(input.tenantId, input.phone) : null;
+  if (!customerKeyHash && input.customerSubjectIds.length === 0) return false;
+  if (customerKeyHash) {
+    await db
+      .insert(customerContactPermissions)
+      .values({
+        tenantId: input.tenantId,
+        customerKeyHash,
+        status: "opted_out",
+        sourceReference: input.sourceReference,
+        capturedAt: input.capturedAt,
+        expiresAt: null,
+        recordedBy: input.recordedBy,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          status: "opted_out",
+          sourceReference: input.sourceReference,
+          capturedAt: input.capturedAt,
+          expiresAt: null,
+          recordedBy: input.recordedBy,
+        },
+      });
+  }
+  const reason = `Customer opted out (${input.sourceReference})`;
+  for (const subjectId of input.customerSubjectIds) {
+    for (const channel of input.channels) {
+      await db
+        .insert(communicationPermissions)
+        .values({
+          id: permissionRowId(input.tenantId, subjectId, channel),
+          tenantId: input.tenantId,
+          subjectType: "customer",
+          subjectId,
+          channel,
+          status: "opted_out",
+          reason,
+          frequencyCapDays: 7,
+        })
+        .onDuplicateKeyUpdate({ set: { status: "opted_out", reason } });
+    }
+  }
+
+  if (customerKeyHash) {
+    const hashed = await db
+      .select({ status: customerContactPermissions.status })
+      .from(customerContactPermissions)
+      .where(
+        and(
+          eq(customerContactPermissions.tenantId, input.tenantId),
+          eq(customerContactPermissions.customerKeyHash, customerKeyHash),
+          eq(customerContactPermissions.channel, "sms"),
+          eq(customerContactPermissions.purpose, "win_back_marketing")
+        )
+      )
+      .limit(1);
+    if (hashed[0]?.status !== "opted_out") return false;
+  }
+  for (const subjectId of input.customerSubjectIds) {
+    for (const channel of input.channels) {
+      const rows = await db
+        .select({ status: communicationPermissions.status })
+        .from(communicationPermissions)
+        .where(
+          and(
+            eq(communicationPermissions.tenantId, input.tenantId),
+            eq(communicationPermissions.subjectType, "customer"),
+            eq(communicationPermissions.subjectId, subjectId),
+            eq(communicationPermissions.channel, channel)
+          )
+        )
+        .limit(1);
+      if (rows[0]?.status !== "opted_out") return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether this phone is opted out in the tenant's phone-keyed consent gate. Fails
+ * closed: a missing or unreadable store is "unavailable", never "clear".
+ */
+export async function phoneOptOutState(
+  tenantId: string,
+  phone: string,
+  deps: { getDb?: () => Promise<InboxDb | null> } = {}
+): Promise<RecipientOptOutState> {
+  const customerKeyHash = customerKeyHashForPhone(tenantId, phone);
+  if (!customerKeyHash) return "clear";
+  try {
+    const db = await (deps.getDb ?? getDb)();
+    if (!db) return "unavailable";
+    const rows = await db
+      .select({ status: customerContactPermissions.status })
+      .from(customerContactPermissions)
+      .where(
+        and(
+          eq(customerContactPermissions.tenantId, tenantId),
+          eq(customerContactPermissions.customerKeyHash, customerKeyHash),
+          eq(customerContactPermissions.channel, "sms"),
+          eq(customerContactPermissions.purpose, "win_back_marketing")
+        )
+      )
+      .limit(1);
+    return rows[0]?.status === "opted_out" ? "opted_out" : "clear";
+  } catch (error) {
+    console.error("[Messaging] phone opt-out check failed; refusing to send", error instanceof Error ? error.name : "unknown");
+    return "unavailable";
+  }
+}
+
 export class DrizzleBusinessLineInbox implements BusinessLineInboxStore {
   constructor(private readonly db: InboxDb) {}
 
@@ -118,67 +249,51 @@ export class DrizzleBusinessLineInbox implements BusinessLineInboxStore {
   }
 
   async recordOptOut(optOut: BusinessLineOptOut): Promise<boolean> {
-    const sourceReference = `twilio:${optOut.providerMessageSid}`;
-    await this.db
-      .insert(customerContactPermissions)
-      .values({
-        tenantId: optOut.tenantId,
-        customerKeyHash: optOut.customerKeyHash,
-        status: "opted_out",
-        sourceReference,
-        capturedAt: optOut.capturedAt,
-        expiresAt: null,
-        recordedBy: OPT_OUT_RECORDER,
-      })
-      .onDuplicateKeyUpdate({
-        set: { status: "opted_out", sourceReference, capturedAt: optOut.capturedAt, expiresAt: null, recordedBy: OPT_OUT_RECORDER },
-      });
-    for (const subjectId of optOut.snapshotCustomerIds) {
-      await this.db
-        .insert(communicationPermissions)
-        .values({
-          id: `perm_${createHash("sha256").update(`${optOut.tenantId}:customer:${subjectId}:sms`).digest("hex").slice(0, 40)}`,
-          tenantId: optOut.tenantId,
-          subjectType: "customer",
-          subjectId,
-          channel: "sms",
-          status: "opted_out",
-          reason: `Customer texted STOP (${sourceReference})`,
-          frequencyCapDays: 7,
-        })
-        .onDuplicateKeyUpdate({ set: { status: "opted_out", reason: `Customer texted STOP (${sourceReference})` } });
-    }
-
-    const hashed = await this.db
-      .select({ status: customerContactPermissions.status })
-      .from(customerContactPermissions)
-      .where(
-        and(
-          eq(customerContactPermissions.tenantId, optOut.tenantId),
-          eq(customerContactPermissions.customerKeyHash, optOut.customerKeyHash),
-          eq(customerContactPermissions.channel, "sms"),
-          eq(customerContactPermissions.purpose, "win_back_marketing")
-        )
-      )
-      .limit(1);
-    if (hashed[0]?.status !== "opted_out") return false;
-    for (const subjectId of optOut.snapshotCustomerIds) {
-      const rows = await this.db
-        .select({ status: communicationPermissions.status })
-        .from(communicationPermissions)
-        .where(
-          and(
-            eq(communicationPermissions.tenantId, optOut.tenantId),
-            eq(communicationPermissions.subjectType, "customer"),
-            eq(communicationPermissions.subjectId, subjectId),
-            eq(communicationPermissions.channel, "sms")
-          )
-        )
-        .limit(1);
-      if (rows[0]?.status !== "opted_out") return false;
-    }
-    return true;
+    // The hash was derived from the sender's number by the caller; write the same
+    // phone-keyed row directly, plus the rescue ids.
+    return enforceSmsOptOutByHash(this.db, optOut);
   }
+}
+
+async function enforceSmsOptOutByHash(db: InboxDb, optOut: BusinessLineOptOut): Promise<boolean> {
+  const sourceReference = `twilio:${optOut.providerMessageSid}`;
+  await db
+    .insert(customerContactPermissions)
+    .values({
+      tenantId: optOut.tenantId,
+      customerKeyHash: optOut.customerKeyHash,
+      status: "opted_out",
+      sourceReference,
+      capturedAt: optOut.capturedAt,
+      expiresAt: null,
+      recordedBy: OPT_OUT_RECORDER,
+    })
+    .onDuplicateKeyUpdate({
+      set: { status: "opted_out", sourceReference, capturedAt: optOut.capturedAt, expiresAt: null, recordedBy: OPT_OUT_RECORDER },
+    });
+  const hashed = await db
+    .select({ status: customerContactPermissions.status })
+    .from(customerContactPermissions)
+    .where(
+      and(
+        eq(customerContactPermissions.tenantId, optOut.tenantId),
+        eq(customerContactPermissions.customerKeyHash, optOut.customerKeyHash),
+        eq(customerContactPermissions.channel, "sms"),
+        eq(customerContactPermissions.purpose, "win_back_marketing")
+      )
+    )
+    .limit(1);
+  if (hashed[0]?.status !== "opted_out") return false;
+  if (!optOut.snapshotCustomerIds.length) return true;
+  return enforceSmsOptOut(db, {
+    tenantId: optOut.tenantId,
+    phone: null,
+    customerSubjectIds: optOut.snapshotCustomerIds,
+    channels: ["sms"],
+    sourceReference,
+    capturedAt: optOut.capturedAt,
+    recordedBy: OPT_OUT_RECORDER,
+  });
 }
 
 export async function requireDurableBusinessLineInbox(): Promise<BusinessLineInboxStore> {
