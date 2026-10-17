@@ -334,6 +334,17 @@ describe("one turn through the ledger", () => {
     expect(dayLine.writes).toEqual(["complete Call Louise"]);
   });
 
+  it("does not tell the operator nothing was saved when only details were added", async () => {
+    const dayLine = createFakeDayLine([{ id: "landing", title: "Build Laundry Farm landing page", businessDate: "2026-10-15" }]);
+    const { invoke } = scriptedInvoke([{ ...EMPTY_RAW, edits: [{ id: "landing", title: "", executionType: "unchanged", detail: "Offer: skip laundry this week on us", timing: "", moveTo: "", date: "" }] }]);
+    const outcome = await runWorkLedgerTurn(
+      { ...target, utterance: "The ad says skip laundry this week on us, the landing page has to match it.", state: { history: [] } },
+      { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
+    );
+    expect(outcome.handled && outcome.result.speak).toBe("Got it, noted on the line.");
+    expect(dayLine.rows.get("landing")?.detailNote).toBe("Offer: skip laundry this week on us");
+  });
+
   it("falls back to the conversational pipeline when the planner is unavailable", async () => {
     const dayLine = createFakeDayLine();
     const invoke = (async () => { throw new Error("overloaded"); }) as never;

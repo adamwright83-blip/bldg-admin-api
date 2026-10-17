@@ -306,7 +306,15 @@ export async function runWorkLedgerTurn(
 
   const confirmation = speakVerifiedLedgerChanges(applied, clock.today);
   const reply = cleanLedgerReply(planned.reply);
-  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || (planned.endCall ? "Talk soon." : "I haven't saved or carried out anything from that instruction.");
+  // A detail-only edit is verified but not read aloud, so an empty confirmation is not "nothing saved".
+  const fallback = planned.endCall
+    ? "Talk soon."
+    : applied.changes.length
+      ? "Got it, noted on the line."
+      : applied.failures.length
+        ? "I couldn't save that just now. Want me to try again?"
+        : "I haven't saved or carried out anything from that instruction.";
+  const speak = [confirmation, reply].filter(Boolean).join(" ").trim() || fallback;
 
   const at = now.getTime();
   remember(input.state, "operator", utterance, at);
