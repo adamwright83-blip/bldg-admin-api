@@ -16,11 +16,13 @@ export function ClaireStrategicProposal() {
     trpc.system.weeklyMission.configureStrategicIndustry.useMutation();
   const [selected, setSelected] = useState<string[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [moves, setMoves] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const proposal = query.data?.proposal;
   useEffect(() => {
     setSelected([]);
     setEdits({});
+    setMoves({});
   }, [proposal?.id]);
   const busy =
     respond.isPending ||
@@ -31,6 +33,10 @@ export function ClaireStrategicProposal() {
     r => r.action === "reject" || r.action === "revise" || r.action === "defer"
   );
   const approvedIds = query.data?.approvedItemIds ?? [];
+  /** Unapproved work whose time has passed: shown with a reschedule control, never approvable. */
+  const expiredIds = query.data?.expiredItemIds ?? [];
+  const rescheduleDates = query.data?.rescheduleDates ?? [];
+  const approvableIds = proposal?.items.map(i => i.id).filter(id => !expiredIds.includes(id)) ?? [];
   const allApproved = Boolean(
     proposal?.items.length && approvedIds.length === proposal.items.length
   );
@@ -44,7 +50,7 @@ export function ClaireStrategicProposal() {
         itemIds:
           action === "approve"
             ? all
-              ? proposal.items.map(i => i.id)
+              ? approvableIds
               : selected
             : [],
       });
@@ -149,7 +155,7 @@ export function ClaireStrategicProposal() {
                 <label>
                   <input
                     type="checkbox"
-                    disabled={busy || closed || approvedIds.includes(item.id)}
+                    disabled={busy || closed || approvedIds.includes(item.id) || expiredIds.includes(item.id)}
                     checked={selected.includes(item.id)}
                     onChange={e =>
                       setSelected(ids =>
@@ -162,9 +168,55 @@ export function ClaireStrategicProposal() {
                   {item.businessDate}: {item.title}
                   {approvedIds.includes(item.id)
                     ? " · verified in Day Line"
-                    : ""}
+                    : expiredIds.includes(item.id)
+                      ? " · time passed — reschedule"
+                      : ""}
                 </label>
                 <p>{item.objective}</p>
+                {expiredIds.includes(item.id) ? (
+                  <p data-testid="claire-proposal-reschedule">
+                    {rescheduleDates.length ? (
+                      <>
+                        <label>
+                          Move to{" "}
+                          <select
+                            value={moves[item.id] ?? rescheduleDates[0]}
+                            onChange={e => setMoves(values => ({ ...values, [item.id]: e.target.value }))}
+                          >
+                            {rescheduleDates.map(d => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        </label>{" "}
+                        <button
+                          disabled={busy || closed || approvedIds.length > 0}
+                          onClick={() =>
+                            void (async () => {
+                              try {
+                                const changed = await revise.mutateAsync({
+                                  proposalId: proposal.id,
+                                  revision: proposal.revision,
+                                  itemId: item.id,
+                                  title: item.title,
+                                  businessDate: moves[item.id] ?? rescheduleDates[0]!,
+                                });
+                                setMessage(changed.opening);
+                                setSelected([]);
+                                await query.refetch();
+                              } catch (error) {
+                                setMessage(error instanceof Error ? error.message : "Reschedule failed.");
+                              }
+                            })()
+                          }
+                        >
+                          Reschedule
+                        </button>
+                      </>
+                    ) : (
+                      "No day is left in this plan's week. Tell Claire on comms when it should happen."
+                    )}
+                  </p>
+                ) : null}
                 <label>
                   Revise this item{" "}
                   <input
@@ -276,7 +328,7 @@ export function ClaireStrategicProposal() {
                 closed ||
                 allApproved ||
                 query.data?.stale ||
-                !proposal.items.length
+                !approvableIds.length
               }
               onClick={() => void decide("approve", true)}
             >

@@ -246,6 +246,29 @@ export function actionableDates(
   );
 }
 
+const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Whether an unapproved proposal item can still be approved on its own date. An earlier
+ * day never can. Today can until the execution cutoff; after it, only an item with an
+ * explicit time (the operator's own "at 7 PM") that has not yet passed. An expired item
+ * stays visible but must be rescheduled before it can be approved.
+ */
+export function proposalItemExecutionWindow(
+  item: { businessDate: string; timeWindow?: { time?: string } },
+  now: { businessDate: string; localTime: string },
+  cutoffMinutes: number = DEFAULT_EXECUTION_CUTOFF_MINUTES
+): "open" | "expired" {
+  if (item.businessDate > now.businessDate) return "open";
+  if (item.businessDate < now.businessDate) return "expired";
+  const clock = HH_MM.exec(now.localTime);
+  if (!clock) throw new Error(`Invalid local time: ${now.localTime}`);
+  const minutes = Number(clock[1]) * 60 + Number(clock[2]);
+  if (minutes < cutoffMinutes) return "open";
+  const explicit = HH_MM.exec(item.timeWindow?.time ?? "");
+  return explicit && Number(explicit[1]) * 60 + Number(explicit[2]) >= minutes ? "open" : "expired";
+}
+
 /** The default proposal horizon, shared by preparation and its read surfaces. */
 export function strategicPlanningHorizon(input: { businessDate: string; localTime: string }): RemainingWeekHorizon {
   const current = remainingWeekHorizon(input);
