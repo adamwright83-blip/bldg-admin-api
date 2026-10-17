@@ -113,6 +113,61 @@ describe.skipIf(!DATABASE_URL)("goal cycle store — real MySQL", () => {
     expect(Number(count)).toBe(1);
   });
 
+  it("duplicate recurring scheduled ticks for one run collapse to a single survivor", async () => {
+    // Production held six live scheduled ticks for one run (restarts enqueued extras,
+    // and each re-queued itself every hour forever).
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool, { perTenantConcurrency: 10 });
+    for (let i = 0; i < 6; i++) {
+      await store.enqueue({
+        tenantId: "tenant-a",
+        goalRunId: runId,
+        triggerType: "scheduled_tick",
+        triggerSourceReference: `autonomous_supervisor:heartbeat:${i}`,
+        idempotencyKey: `auto_tick:${runId}:hour-${i}`,
+        availableAt: new Date(Date.now() - 1_000),
+      });
+    }
+    const nextEvaluationAt = new Date(Date.now() + 3_600_000).toISOString();
+    for (let i = 0; i < 6; i++) {
+      const step = await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 });
+      expect(step).not.toBeNull();
+      await store.markRunning(step!);
+      expect(await store.completeStep(step!, { nextEvaluationAt })).toBe(true);
+    }
+    const live = await rows<RowDataPacket>(
+      "SELECT id, availableAt FROM goal_cycle_requests WHERE goalRunId = ? AND triggerType = 'scheduled_tick' AND status IN ('queued','retry_scheduled','leased','running')",
+      [runId]
+    );
+    expect(live).toHaveLength(1);
+    const [{ completed }] = await rows<RowDataPacket>(
+      "SELECT COUNT(*) AS completed FROM goal_cycle_requests WHERE goalRunId = ? AND status = 'completed'",
+      [runId]
+    );
+    expect(Number(completed)).toBe(5);
+    expect(await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 })).toBeNull();
+  });
+
+  it("a single scheduled tick still re-queues itself for the next evaluation", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool);
+    const queued = await store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: runId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: "autonomous_supervisor:heartbeat",
+      idempotencyKey: `auto_tick:${runId}:once`,
+      availableAt: new Date(Date.now() - 1_000),
+    });
+    const step = await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 });
+    await store.markRunning(step!);
+    const nextEvaluationAt = new Date(Date.now() + 3_600_000);
+    expect(await store.completeStep(step!, { nextEvaluationAt: nextEvaluationAt.toISOString() })).toBe(true);
+    const [row] = await rows<RowDataPacket>("SELECT status, availableAt FROM goal_cycle_requests WHERE id = ?", [queued.id]);
+    expect(row.status).toBe("queued");
+    expect(new Date(row.availableAt).getTime()).toBeGreaterThan(Date.now() + 3_000_000);
+  });
+
   it("rejects an idempotency key that is already bound to a different goal run", async () => {
     const firstRunId = await insertRun({ tenantId: "tenant-a" });
     const secondRunId = await insertRun({ tenantId: "tenant-a" });

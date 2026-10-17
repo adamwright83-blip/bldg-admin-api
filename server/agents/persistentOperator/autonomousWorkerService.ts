@@ -138,7 +138,8 @@ export async function ensureAutonomousGoalBootstrap(input: {
             and(
               eq(goalCycleRequests.tenantId, goal.tenantId),
               eq(goalCycleRequests.goalRunId, targetRunId),
-              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leased"])
+              // A running cycle is live too; missing it here enqueued a duplicate tick on every restart mid-cycle.
+              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leased", "running"])
             )
           )
           .limit(1);
