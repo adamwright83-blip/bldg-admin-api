@@ -377,19 +377,82 @@ describe("communications evidence", () => {
   });
 });
 
-describe("this slice does not add an autonomous Claire dialer", () => {
-  it("does not place calls, send messages, or schedule retries", () => {
-    const directory = "server/twilioPlatform";
-    const source = readdirSync(directory)
+describe("Claire outbound calls stay behind operator authorization", () => {
+  function productionSources(directory: string): string[] {
+    const found: string[] = [];
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        found.push(...productionSources(full));
+        continue;
+      }
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+      found.push(full);
+    }
+    return found;
+  }
+
+  it("places calls only through the authorized pre-drive and post-stop paths", () => {
+    const callers = productionSources("server")
+      .filter(file => readFileSync(file, "utf8").includes("placeClaireOutboundCall("))
+      .map(file => file.replaceAll("\\", "/"));
+    expect(callers.sort()).toEqual([
+      "server/claire/claireTwilio.ts",
+      "server/twilioPlatform/claireCallProvider.ts",
+    ]);
+
+    const provider = readFileSync("server/twilioPlatform/claireCallProvider.ts", "utf8");
+    expect(provider).toContain("export async function placeClaireOutboundCall");
+    expect(provider.split("client.calls.create(")).toHaveLength(2);
+    const platform = readdirSync("server/twilioPlatform")
       .filter(name => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-      .map(name => readFileSync(join(directory, name), "utf8"))
+      .map(name => readFileSync(join("server/twilioPlatform", name), "utf8"))
       .join("\n");
-    expect(source).not.toMatch(/calls\.create/);
-    expect(source).not.toMatch(/messages\.create/);
-    expect(source).not.toMatch(/setInterval/);
-    expect(source).not.toMatch(/setTimeout/);
-    expect(source).not.toMatch(/\bwhile\s*\(/);
-    expect(source).not.toMatch(/redial|auto-?dial|repeat(?:ed)? dial/i);
+    expect(platform).not.toMatch(/messages\.create/);
+    expect(platform).not.toMatch(/setInterval|setTimeout|\bwhile\s*\(/);
+    expect(platform).not.toMatch(/redial|auto-?dial|repeat(?:ed)? dial/i);
+
+    const voice = readFileSync("server/claire/claireTwilio.ts", "utf8");
+    const preDrive = voice.slice(
+      voice.indexOf("export async function startClairePreDriveCall"),
+      voice.indexOf("export async function openAuthorizedInboundClaireConversation")
+    );
+    const postStop = voice.slice(
+      voice.indexOf("export async function startClairePostStopCall"),
+      voice.indexOf("export async function loadClaireVoiceConversation")
+    );
+    expect(preDrive.indexOf("authorizedOperatorPhone")).toBeGreaterThan(-1);
+    expect(preDrive.indexOf("authorizedOperatorPhone")).toBeLessThan(preDrive.indexOf("placeClaireOutboundCall("));
+    expect(postStop.indexOf("authorizedOperatorPhone")).toBeGreaterThan(-1);
+    expect(postStop.indexOf("assertMissionAccess")).toBeGreaterThan(-1);
+    expect(postStop.indexOf("authorizedOperatorPhone")).toBeLessThan(postStop.indexOf("placeClaireOutboundCall("));
+    expect(postStop.indexOf("assertMissionAccess")).toBeLessThan(postStop.indexOf("placeClaireOutboundCall("));
+    expect(voice.split("placeClaireOutboundCall(")).toHaveLength(3);
+
+    const router = readFileSync("server/claire/claireRouter.ts", "utf8");
+    const before = router.slice(router.indexOf("callBeforeDrive:"), router.indexOf("callAfterStop:"));
+    const after = router.slice(router.indexOf("callAfterStop:"), router.indexOf("scanReactivation:"));
+    expect(before).toContain("legacyDayforgeClaireVoiceProcedure");
+    expect(before).toContain("tenantId: ctx.tenantId");
+    expect(before).toContain("actorId: ctx.user.openId");
+    expect(before.indexOf("startClairePreDriveCall")).toBeGreaterThan(before.indexOf("legacyDayforgeClaireVoiceProcedure"));
+    expect(after).toContain("legacyDayforgeClaireVoiceProcedure");
+    expect(after).toContain("actorId: ctx.user.openId");
+    expect(after.indexOf("assertClaireMissionAccess")).toBeGreaterThan(-1);
+    expect(after.indexOf("assertClaireMissionAccess")).toBeLessThan(after.indexOf("startClairePostStopCall"));
+
+    const appointments = readFileSync(
+      "server/agents/persistentOperator/operatorAppointmentExecution.ts",
+      "utf8"
+    );
+    const scheduled = [...appointments.matchAll(/startClairePreDriveCall\(/g)];
+    expect(scheduled).toHaveLength(2);
+    for (const call of scheduled) {
+      const prior = appointments.slice(Math.max(0, call.index! - 4000), call.index);
+      expect(prior).toContain("executePersistentOperatorAction");
+      expect(prior).toContain("standingAuthorizationId");
+    }
   });
 });
 
@@ -422,7 +485,9 @@ describe("webhook validation stays on the existing Claire host", () => {
     const signature = readFileSync("server/claire/conversation/twilioSignature.ts", "utf8");
     expect(voice).toContain('export const CLAIRE_INBOUND_VOICE_PATH = "/api/claire/twilio/inbound"');
     expect(voice).toContain("isValidTwilioWebhook");
-    expect(voice).not.toContain("twilioPlatform");
+    expect(voice).toContain(
+      'import { placeClaireOutboundCall } from "../twilioPlatform/claireCallProvider"'
+    );
     expect(signature).toContain("twilio.validateRequest");
     const platform = readdirSync("server/twilioPlatform")
       .filter(name => name.endsWith(".ts") && !name.endsWith(".test.ts"))

@@ -1,0 +1,54 @@
+name: Full unit suite
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: unit ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      # sourceBackedAction.test.ts opens a disposable schema on 127.0.0.1:3399.
+      # Vitest assigns files to shards by name, so every shard can reach that port.
+      # DATABASE_URL stays unset so the rest of the unit suite does not attach to it.
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: source_backed_disposable
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      TZ: UTC
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Applicable unit shard
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
