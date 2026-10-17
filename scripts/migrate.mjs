@@ -119,6 +119,16 @@ for (const statement of hiddenGameChapterUnlockDdl
   await runRequired(statement, "Lost Property chapter unlocks");
 }
 
+const personalOutreachReplyDdl = await readFile(new URL("../drizzle/0136_personal_outreach_replies.sql", import.meta.url), "utf8");
+for (const statement of personalOutreachReplyDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "Personal outreach replies");
+}
+
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5454,6 +5464,53 @@ await assertRequiredColumns("hidden_game_chapter_unlocks", [
   "openedAt",
   "evidenceJson",
   "createdAt",
+]);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "raw_phone",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `raw_phone` varchar(32) NULL"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "direction",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `direction` varchar(16) NOT NULL DEFAULT 'inbound'"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "source",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `source` varchar(40) NOT NULL DEFAULT 'operator_reported'"
+);
+await ensureRequiredColumn(
+  "personal_outreach_replies",
+  "provider_message_id",
+  "ALTER TABLE `personal_outreach_replies` ADD COLUMN `provider_message_id` varchar(128) NULL"
+);
+await runRequired(
+  "ALTER TABLE `personal_outreach_replies` MODIFY COLUMN `customer_id` varchar(128) NULL, MODIFY COLUMN `message_id` varchar(128) NULL",
+  "personal_outreach_replies nullable customer_id and varchar(128) message_id"
+);
+await assertRequiredColumns("personal_outreach_replies", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "customer_id",
+  "customer_name",
+  "raw_phone",
+  "direction",
+  "source",
+  "provider_message_id",
+  "message_id",
+  "territory_id",
+  "reply_text",
+  "classification",
+  "next_step_kind",
+  "next_action",
+  "prepared_follow_up_draft",
+  "permission_effect",
+  "provenance",
+  "surface",
+  "reported_at",
+  "created_at",
 ]);
 console.log("\nMigration complete.");
 await conn.end();

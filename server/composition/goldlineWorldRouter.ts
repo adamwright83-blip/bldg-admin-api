@@ -63,6 +63,7 @@ export const goldlineWorldRouter = router({
       z
         .object({
           territoryId: z.string().optional(),
+          requestedCustomerId: z.string().optional(),
           limit: z.number().int().min(1).max(8).optional(),
         })
         .optional()
@@ -72,6 +73,7 @@ export const goldlineWorldRouter = router({
         tenantId: ctx.tenantId,
         canonicalOperatorId: ctx.user.openId,
         territoryId: input?.territoryId,
+        requestedCustomerId: input?.requestedCustomerId,
         limit: input?.limit,
       }).then(surfaces => surfaces.mission)
     ),
@@ -336,6 +338,62 @@ export const goldlineWorldRouter = router({
       operatorId: ctx.user.openId,
     });
   }),
+  recordPersonalOutreachReply: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        customerId: z.string().min(1).max(128),
+        customerName: z.string().min(1).max(255).optional(),
+        replyText: z.string().min(1).max(1000),
+        classification: z
+          .enum(["pickup_interest", "question", "not_now", "complaint", "opt_out"])
+          .optional(),
+        messageId: z.string().max(128).nullable().optional(),
+        territoryId: z.string().max(64).nullable().optional(),
+        surface: z
+          .enum(["cozy_composer", "day_line"])
+          .default("cozy_composer"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordPersonalOutreachReply } = await import(
+        "../experience/lanternCity/personalNumber/personalOutreachReplyService"
+      );
+      return await recordPersonalOutreachReply({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        replyText: input.replyText,
+        classification: input.classification,
+        messageId: input.messageId ?? null,
+        territoryId: input.territoryId ?? null,
+        surface: input.surface,
+      });
+    }),
+  listPersonalOutreachReplies: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          customerId: z.string().max(128).optional(),
+          direction: z.enum(["inbound", "outbound"]).optional(),
+          source: z
+            .enum(["provider_webhook", "device_observed", "operator_reported"])
+            .optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const { listPersonalOutreachReplies } = await import(
+        "../experience/lanternCity/personalNumber/personalOutreachReplyService"
+      );
+      return await listPersonalOutreachReplies({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        customerId: input?.customerId,
+        direction: input?.direction,
+        source: input?.source,
+      });
+    }),
   getScheduledOutreachRevisions: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({

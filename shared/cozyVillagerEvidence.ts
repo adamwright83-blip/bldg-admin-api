@@ -111,10 +111,109 @@ export type CozyObjectiveRef = {
   areaLabel: string;
 };
 
-export type CozyReplyProjection = {
-  status: "unavailable";
-  reason: string;
+export const COZY_MESSAGE_EVIDENCE_SOURCES = [
+  "provider_webhook",
+  "device_observed",
+  "operator_reported",
+] as const;
+
+export type CozyMessageEvidenceSource = (typeof COZY_MESSAGE_EVIDENCE_SOURCES)[number];
+
+export const COZY_MESSAGE_EVIDENCE_SOURCE_LABELS: Record<CozyMessageEvidenceSource, string> = {
+  provider_webhook: "Provider webhook",
+  device_observed: "Device observed",
+  operator_reported: "Operator fallback",
 };
+
+export const COZY_MESSAGE_DIRECTIONS = ["inbound", "outbound"] as const;
+
+export type CozyMessageDirection = (typeof COZY_MESSAGE_DIRECTIONS)[number];
+
+export const COZY_REPLY_CLASSIFICATIONS = [
+  "pickup_interest",
+  "question",
+  "not_now",
+  "complaint",
+  "opt_out",
+  "outbound_sent",
+] as const;
+
+export type CozyReplyClassification = (typeof COZY_REPLY_CLASSIFICATIONS)[number];
+
+export const COZY_REPLY_CLASSIFICATION_LABELS: Record<CozyReplyClassification, string> = {
+  pickup_interest: "Pickup / Booking Interest",
+  question: "Customer Question",
+  not_now: "Not Right Now",
+  complaint: "Service Issue / Complaint",
+  opt_out: "Opt-Out / Stop",
+  outbound_sent: "Outbound Send Observed",
+};
+
+export const COZY_REPLY_NEXT_STEP_KINDS = [
+  "prepare_pickup_follow_up",
+  "draft_answer_reply",
+  "respect_deferral",
+  "operator_service_recovery",
+  "opt_out_recorded",
+  "outbound_send_observed",
+] as const;
+
+export type CozyReplyNextStepKind = (typeof COZY_REPLY_NEXT_STEP_KINDS)[number];
+
+export type CozyPersonalReplyEvidence = {
+  id: string;
+  tenantId: string;
+  operatorId: string;
+  customerId: string | null;
+  customerName: string;
+  rawPhone?: string | null;
+  direction?: CozyMessageDirection;
+  source?: CozyMessageEvidenceSource;
+  providerMessageId?: string | null;
+  messageId: string | null;
+  territoryId: string | null;
+  replyText: string;
+  body?: string;
+  classification: CozyReplyClassification;
+  nextStepKind: CozyReplyNextStepKind;
+  nextAction: string;
+  preparedFollowUpDraft: string | null;
+  permissionEffect: "none" | "opted_out";
+  provenance: CozyMessageEvidenceSource;
+  surface: string;
+  reportedAt: string;
+  observedAt?: string;
+};
+
+export type CozyMessageEventEvidence = CozyPersonalReplyEvidence;
+
+export type CozyReplyProjection =
+  | {
+      status: "unavailable";
+      reason: string;
+    }
+  | {
+      status: CozyMessageEvidenceSource;
+      source: CozyMessageEvidenceSource;
+      sourceLabel: string;
+      direction: "inbound";
+      replyId: string;
+      customerId: string;
+      rawPhone: string | null;
+      providerMessageId: string | null;
+      messageId: string | null;
+      replyText: string;
+      classification: CozyReplyClassification;
+      classificationLabel: string;
+      nextStepKind: CozyReplyNextStepKind;
+      nextAction: string;
+      preparedFollowUpDraft: string | null;
+      permissionEffect: "none" | "opted_out";
+      provenance: CozyMessageEvidenceSource;
+      observedAt: string;
+      reportedAt: string;
+      reason: string;
+    };
 
 export type CozyPaidOrderProjection =
   | { status: "unavailable"; reason: string }
@@ -376,24 +475,223 @@ function scopedRows(
   return rows.filter(row => row.tenantId === tenantId && row.operatorId === operatorId);
 }
 
+function normalizeDigits(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return digits.length >= 10 ? digits : null;
+}
+
+function eventSourceOf(event: CozyPersonalReplyEvidence): CozyMessageEvidenceSource {
+  const candidate = event.source ?? event.provenance;
+  if (
+    candidate === "provider_webhook" ||
+    candidate === "device_observed" ||
+    candidate === "operator_reported"
+  ) {
+    return candidate;
+  }
+  return "operator_reported";
+}
+
+function eventDirectionOf(event: CozyPersonalReplyEvidence): CozyMessageDirection {
+  return event.direction === "outbound" ? "outbound" : "inbound";
+}
+
+function eventBodyOf(event: CozyPersonalReplyEvidence): string {
+  return (event.body ?? event.replyText ?? "").trim();
+}
+
+function eventObservedAtOf(event: CozyPersonalReplyEvidence): string {
+  return event.observedAt ?? event.reportedAt;
+}
+
+function eventMatchesTarget(
+  event: CozyPersonalReplyEvidence,
+  target: CozyCustomerTarget
+): boolean {
+  if (event.customerId && event.customerId === target.customerId) {
+    return true;
+  }
+  if (!event.customerId && event.rawPhone && target.phone) {
+    const a = normalizeDigits(event.rawPhone);
+    const b = normalizeDigits(target.phone);
+    return Boolean(a && b && a === b);
+  }
+  return false;
+}
+
+function scopedMessageEvents(
+  events: readonly CozyPersonalReplyEvidence[],
+  tenantId: string,
+  operatorId: string
+): CozyPersonalReplyEvidence[] {
+  return events.filter(
+    event =>
+      event.tenantId === tenantId &&
+      event.operatorId === operatorId &&
+      COZY_MESSAGE_EVIDENCE_SOURCES.includes(eventSourceOf(event)) &&
+      Boolean(eventBodyOf(event))
+  );
+}
+
+function byLatestEvent(a: CozyPersonalReplyEvidence, b: CozyPersonalReplyEvidence): number {
+  return eventObservedAtOf(b).localeCompare(eventObservedAtOf(a)) || b.id.localeCompare(a.id);
+}
+
+export function chooseReplyEvidence(
+  events: readonly CozyPersonalReplyEvidence[]
+): CozyPersonalReplyEvidence | null {
+  const inbound = events.filter(event => eventDirectionOf(event) === "inbound");
+  if (!inbound.length) return null;
+  return [...inbound].sort(byLatestEvent)[0]!;
+}
+
+export const COZY_TRUSTED_EVIDENCE_SOURCES: readonly CozyMessageEvidenceSource[] = [
+  "provider_webhook",
+  "device_observed",
+] as const;
+
+export function isTrustedMessageEvidenceSource(
+  source: CozyMessageEvidenceSource | string | null | undefined
+): source is "provider_webhook" | "device_observed" {
+  return source === "provider_webhook" || source === "device_observed";
+}
+
+function normalizeBodyForMatch(body: string | null | undefined): string {
+  return (body ?? "").trim().replace(/\s+/g, " ");
+}
+
+export function chooseOutboundEventEvidence(
+  events: readonly CozyPersonalReplyEvidence[],
+  options?: {
+    outboxRow?: CozyOutreachEvidenceRow | null;
+    recipientPhone?: string | null;
+  }
+): CozyPersonalReplyEvidence | null {
+  const outbound = events.filter(event => {
+    if (eventDirectionOf(event) !== "outbound") return false;
+    // Operator-reported events can never transition a draft to send_observed
+    if (!isTrustedMessageEvidenceSource(eventSourceOf(event))) return false;
+    // Outbound send observation requires an existing approved outbox row
+    const row = options?.outboxRow;
+    if (!row || row.status === "cancelled") return false;
+    if (event.messageId && event.messageId !== row.id) return false;
+    // Exact approved body match (normalized whitespace)
+    const eventBody = normalizeBodyForMatch(eventBodyOf(event));
+    const approvedBody = normalizeBodyForMatch(row.currentMessageBody);
+    if (!eventBody || !approvedBody || eventBody !== approvedBody) return false;
+    // Recipient phone match when both are present
+    const targetDigits = normalizeDigits(options?.recipientPhone);
+    const eventDigits = normalizeDigits(event.rawPhone);
+    if (targetDigits && eventDigits && targetDigits !== eventDigits) return false;
+    return true;
+  });
+  if (!outbound.length) return null;
+  return [...outbound].sort(byLatestEvent)[0]!;
+}
+
+function replyReasonForSource(source: CozyMessageEvidenceSource): string {
+  switch (source) {
+    case "provider_webhook":
+      return "Inbound reply observed via provider webhook. Not a verified paid order.";
+    case "device_observed":
+      return "Inbound reply observed from the connected device thread. Not a carrier webhook receipt and not a verified paid order.";
+    case "operator_reported":
+      return "Fallback operator-recorded reply. Not an automated device/provider observation and not a verified paid order.";
+  }
+}
+
+function replyForTarget(
+  target: CozyCustomerTarget,
+  events: readonly CozyPersonalReplyEvidence[]
+): CozyReplyProjection {
+  const match = chooseReplyEvidence(events.filter(item => eventMatchesTarget(item, target)));
+  if (!match) return REPLY_UNAVAILABLE;
+  const source = eventSourceOf(match);
+  const observedAt = eventObservedAtOf(match);
+  return {
+    status: source,
+    source,
+    sourceLabel: COZY_MESSAGE_EVIDENCE_SOURCE_LABELS[source],
+    direction: "inbound",
+    replyId: match.id,
+    customerId: match.customerId ?? target.customerId,
+    rawPhone: match.rawPhone ?? null,
+    providerMessageId: match.providerMessageId ?? null,
+    messageId: match.messageId,
+    replyText: eventBodyOf(match),
+    classification: match.classification,
+    classificationLabel: COZY_REPLY_CLASSIFICATION_LABELS[match.classification],
+    nextStepKind: match.nextStepKind,
+    nextAction: match.nextAction,
+    preparedFollowUpDraft: match.preparedFollowUpDraft,
+    permissionEffect: match.permissionEffect,
+    provenance: source,
+    observedAt,
+    reportedAt: observedAt,
+    reason: replyReasonForSource(source),
+  };
+}
+
+function replyHasOpenFollowUp(reply: CozyReplyProjection): boolean {
+  if (reply.status === "unavailable") return false;
+  return (
+    reply.nextStepKind === "prepare_pickup_follow_up" ||
+    reply.nextStepKind === "draft_answer_reply" ||
+    reply.nextStepKind === "operator_service_recovery"
+  );
+}
+
 function projectOne(
   target: CozyCustomerTarget,
   rows: readonly CozyOutreachEvidenceRow[],
-  paidOrders: readonly CozyPaidOrderEvidence[]
+  paidOrders: readonly CozyPaidOrderEvidence[],
+  events: readonly CozyPersonalReplyEvidence[]
 ): CozyProjectedTarget {
   const row = chooseOutreachEvidence(rows.filter(item => item.customerId === target.customerId));
+  const outboundEvent = chooseOutboundEventEvidence(
+    events.filter(item => eventMatchesTarget(item, target)),
+    {
+      outboxRow: row,
+      recipientPhone: target.phone ?? null,
+    }
+  );
+  const reply = replyForTarget(target, events);
+  const replyOptedOut =
+    reply.status !== "unavailable" &&
+    (reply.classification === "opt_out" || reply.permissionEffect === "opted_out");
   const consentBlocked =
+    replyOptedOut ||
     target.status === "consent_blocked" ||
     target.consentStatus === "blocked_opt_out" ||
     target.consentStatus === "missing_phone";
-  const communicationState = communicationStateForRow(row, consentBlocked);
+  const baseCommunicationState = communicationStateForRow(row, consentBlocked);
+  const communicationState: CozyCommunicationState = replyOptedOut
+    ? "consent_blocked"
+    : outboundEvent
+      ? "send_observed"
+      : baseCommunicationState;
   const pose = poseForCommunicationState(communicationState);
   const frame = POSE_FRAMES[target.villagerVariant][pose];
   const paidOrder = paidOrderFor(target.customerId, paidOrders);
-  const preparedMessage = row?.currentMessageBody || target.suggestedMessage;
-  const transport = row ? transportLabelFromExternalId(row.externalMessageId) : null;
+  const preparedMessage =
+    reply.status !== "unavailable" && reply.preparedFollowUpDraft
+      ? reply.preparedFollowUpDraft
+      : outboundEvent
+        ? eventBodyOf(outboundEvent)
+        : row?.currentMessageBody || target.suggestedMessage;
+  const externalRef =
+    row?.externalMessageId ??
+    outboundEvent?.providerMessageId ??
+    (outboundEvent ? `${eventSourceOf(outboundEvent)}:${outboundEvent.id}` : null);
+  const transport = transportLabelFromExternalId(externalRef);
+  const outreachActionComplete =
+    communicationState === "send_observed" && !replyHasOpenFollowUp(reply);
   return {
     ...target,
+    hasConsent: replyOptedOut ? false : target.hasConsent,
+    consentStatus: replyOptedOut ? "blocked_opt_out" : target.consentStatus,
     address: target.territoryName,
     verifiedAddress: null,
     preparedMessage,
@@ -401,11 +699,11 @@ function projectOne(
     communicationLabel: COZY_COMMUNICATION_LABELS[communicationState],
     pose,
     poseFrameAvailable: Boolean(frame),
-    messageId: row?.id ?? null,
+    messageId: row?.id ?? outboundEvent?.messageId ?? null,
     transport,
-    reply: REPLY_UNAVAILABLE,
+    reply,
     paidOrder,
-    outreachActionComplete: communicationState === "send_observed",
+    outreachActionComplete,
     objectiveComplete: false,
     status:
       communicationState === "send_observed"
@@ -420,12 +718,19 @@ function projectOne(
                 ? "failed"
                 : "draft_ready",
     providerReceipt:
-      communicationState === "send_observed" && row
+      communicationState === "send_observed" && (row || outboundEvent)
         ? {
-            messageSid: row.externalMessageId ?? row.id,
+            messageSid: externalRef ?? row?.id ?? outboundEvent!.id,
             status: "dispatched",
-            sentAt: row.dispatchedAt ?? row.scheduledFor,
-            evidenceName: transport === "simulated" ? "simulated_transport" : "provider_reference",
+            sentAt:
+              row?.dispatchedAt ??
+              (outboundEvent ? eventObservedAtOf(outboundEvent) : row!.scheduledFor),
+            evidenceName:
+              transport === "simulated"
+                ? "simulated_transport"
+                : outboundEvent
+                  ? eventSourceOf(outboundEvent)
+                  : "provider_reference",
           }
         : undefined,
     scheduledDraft:
@@ -500,12 +805,19 @@ export function projectCozyRecoverySurfaces(input: {
   objective: CozyObjectiveRef | null;
   presentation?: { adjustment: DaphneMissionAdjustment; note: string } | null;
   paidOrderEvidence?: readonly CozyPaidOrderEvidence[];
+  replies?: readonly CozyPersonalReplyEvidence[];
+  messageEvents?: readonly CozyPersonalReplyEvidence[];
   now?: Date;
   timeZone?: string;
 }): CozyRecoverySurfaces {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const rows = scopedRows(input.messages, input.tenantId, input.operatorId);
+  const events = scopedMessageEvents(
+    input.messageEvents ?? input.replies ?? [],
+    input.tenantId,
+    input.operatorId
+  );
   const paid = input.paidOrderEvidence ?? [];
   const slotted = assignHouseSlots(input.mission.targets, rows);
   const targets = slotted.map(target => {
@@ -513,13 +825,21 @@ export function projectCozyRecoverySurfaces(input: {
     return projectOne(
       { ...target, villagerVariant: anchor?.defaultVariant ?? target.villagerVariant },
       rows,
-      paid
+      paid,
+      events
     );
   });
+  const repliedWithOpenFollowUp = [...targets]
+    .filter(target => replyHasOpenFollowUp(target.reply))
+    .sort((a, b) => {
+      const aAt = a.reply.status !== "unavailable" ? a.reply.observedAt : "";
+      const bAt = b.reply.status !== "unavailable" ? b.reply.observedAt : "";
+      return bAt.localeCompare(aAt);
+    });
   const unfinished = [...targets]
     .filter(target => target.communicationState !== "send_observed")
     .sort((a, b) => UNFINISHED_PRIORITY[a.communicationState] - UNFINISHED_PRIORITY[b.communicationState]);
-  const focus = unfinished[0] ?? null;
+  const focus = repliedWithOpenFollowUp[0] ?? unfinished[0] ?? null;
   const focusRow = focus
     ? chooseOutreachEvidence(rows.filter(row => row.customerId === focus.customerId))
     : null;
@@ -542,6 +862,9 @@ export function projectCozyRecoverySurfaces(input: {
       ? `${presented.timeWindow} · window passed — still open`
       : presented.timeWindow
     : null;
+  const focusReply = focus?.reply ?? REPLY_UNAVAILABLE;
+  const territoryParam = encodeURIComponent(territorySlug(input.objective?.areaLabel ?? input.mission.territoryName));
+  const customerParam = focus?.customerId ? `&customer=${encodeURIComponent(focus.customerId)}` : "";
   const dayLineCard: CozyRecoveryDayLineCard | null = input.objective
     ? {
         objectiveId: input.objective.id,
@@ -550,12 +873,18 @@ export function projectCozyRecoverySurfaces(input: {
         missionType: "customer_recovery",
         customerId: focus?.customerId ?? null,
         customerDisplayName: focus?.displayName ?? null,
-        nextAction: focus
-          ? nextActionCopy(focus.communicationState, windowPassed)
-          : "No unfinished outreach action. The recovery objective stays open until a paid order is admitted.",
-        nextActionId: focus
-          ? focus.messageId ?? `draft:${input.objective.id}:${focus.customerId}`
-          : null,
+        nextAction:
+          focusReply.status !== "unavailable"
+            ? focusReply.nextAction
+            : focus
+              ? nextActionCopy(focus.communicationState, windowPassed)
+              : "No unfinished outreach action. The recovery objective stays open until a paid order is admitted.",
+        nextActionId:
+          focusReply.status !== "unavailable" && focus
+            ? `reply:${focusReply.replyId}:${focus.customerId}`
+            : focus
+              ? focus.messageId ?? `draft:${input.objective.id}:${focus.customerId}`
+              : null,
         messageId: focus?.messageId ?? null,
         messageBody: focus?.preparedMessage ?? null,
         timeWindow,
@@ -566,14 +895,17 @@ export function projectCozyRecoverySurfaces(input: {
             ? COZY_COMMUNICATION_LABELS.send_observed
             : null,
         transport: focus?.transport ?? null,
-        evidenceToComplete: focus
-          ? "A dispatched row with dispatchedAt and a provider reference completes this outreach action only. Reply evidence is unavailable. A paid order is separate and is not verified here."
-          : "The recovery objective is still open. Send observations do not admit payment or complete the goal.",
+        evidenceToComplete:
+          focusReply.status !== "unavailable"
+            ? `${focusReply.reason} A paid order is separate and is not verified here.`
+            : focus
+              ? "A dispatched row with dispatchedAt and a provider reference completes this outreach action only. Reply evidence is unavailable. A paid order is separate and is not verified here."
+              : "The recovery objective is still open. Send observations do not admit payment or complete the goal.",
         outreachActionComplete: focus ? focus.outreachActionComplete : false,
         objectiveComplete: false,
         presentationNote: presented.presentationNote,
-        openHref: `/growth/lantern-city?cozy=1&territory=${encodeURIComponent(territorySlug(input.objective.areaLabel))}`,
-        reply: REPLY_UNAVAILABLE,
+        openHref: `/growth/lantern-city?cozy=1&territory=${territoryParam}${customerParam}`,
+        reply: focusReply,
         paidOrder: focus ? focus.paidOrder : PAID_ORDER_UNAVAILABLE,
         world: WORLD_NONE,
       }
