@@ -1,4 +1,5 @@
-import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
+import { actionableDates, strategicPlanningHorizon, targetWeekHorizon } from "../../../shared/weeklyMissionReadiness";
+import type { StrategicPlanningProposal } from "../../../shared/strategicIntelligence";
 import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -111,6 +112,26 @@ function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): Briefing
   }));
 }
 
+/**
+ * Proposal items that may still be offered for approval. Work dated before today never is.
+ * A proposal read only as the fallback (its week is not the week being planned) contributes
+ * nothing whose date can no longer be acted on: after Friday's window closes the calendar
+ * week's Friday work has expired and must not be presented as awaiting approval.
+ */
+export function proposalItemsAwaitingApproval(input: {
+  proposal: Pick<StrategicPlanningProposal, "weekStart" | "items">;
+  planningWeekStart: string;
+  businessDate: string;
+  localTime: string;
+}): StrategicPlanningProposal["items"] {
+  const current = input.proposal.items.filter(i => i.businessDate >= input.businessDate);
+  if (input.proposal.weekStart === input.planningWeekStart) return current;
+  const stillActionable = new Set(
+    actionableDates(targetWeekHorizon({ businessDate: input.businessDate, localTime: input.localTime, weekStart: input.proposal.weekStart }))
+  );
+  return current.filter(i => stillActionable.has(i.businessDate));
+}
+
 export async function buildShowrunnerBriefing(input: {
   identity: CanonicalOperatorIdentity;
   purpose: ShowrunnerPurpose;
@@ -134,7 +155,8 @@ export async function buildShowrunnerBriefing(input: {
     getDay({ ...stateArgs, businessDate }),
     getDay({ ...stateArgs, businessDate: tomorrowDate }),
   ]);
-  const weekStart = strategicPlanningHorizon({ businessDate, localTime: formatInTimeZone(now, timeZone, "HH:mm") }).weekStart;
+  const localTime = formatInTimeZone(now, timeZone, "HH:mm");
+  const weekStart = strategicPlanningHorizon({ businessDate, localTime }).weekStart;
   const proposal =
     (await latestStrategicProposal(identity, weekStart).catch(() => null)) ??
     (await latestStrategicProposal(identity, weekStartMonday(businessDate)).catch(() => null));
@@ -143,7 +165,9 @@ export async function buildShowrunnerBriefing(input: {
     const responses = await strategicResponses(identity, proposal.id).catch(() => []);
     const decided = new Set(responses.flatMap(r => (r.action === "approve" ? r.itemIds : [])));
     const closed = responses.some(r => ["reject", "defer"].includes(r.action));
-    const open = closed ? [] : proposal.items.filter(i => !decided.has(i.id) && i.businessDate >= businessDate);
+    const open = closed
+      ? []
+      : proposalItemsAwaitingApproval({ proposal, planningWeekStart: weekStart, businessDate, localTime }).filter(i => !decided.has(i.id));
     if (open.length)
       pendingDecision = {
         proposalId: proposal.id,
