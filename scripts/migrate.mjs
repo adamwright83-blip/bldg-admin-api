@@ -2897,6 +2897,30 @@ await assertRequiredColumns("spirit_human_rescue_missions", [
   "dormancyEpisodeKey", "villagerId", "lifecycle", "sendStatus", "missionJson",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS business_line_inbound_messages (
+    id VARCHAR(80) NOT NULL,
+    tenantId VARCHAR(64) NOT NULL,
+    providerMessageSid VARCHAR(64) NOT NULL,
+    toDigits VARCHAR(20) NOT NULL,
+    fromDigits VARCHAR(20) NOT NULL,
+    customerKeyHash VARCHAR(64) NOT NULL,
+    body TEXT NOT NULL,
+    numMedia INT NOT NULL DEFAULT 0,
+    optOutKeyword VARCHAR(16) NULL,
+    receivedAt TIMESTAMP(3) NOT NULL,
+    createdAt TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_business_line_inbound_sid (tenantId, providerMessageSid),
+    KEY idx_business_line_inbound_customer (tenantId, customerKeyHash, receivedAt)
+  )`,
+  "CREATE TABLE business_line_inbound_messages"
+);
+await assertRequiredColumns("business_line_inbound_messages", [
+  "id", "tenantId", "providerMessageSid", "toDigits", "fromDigits",
+  "customerKeyHash", "body", "numMedia", "optOutKeyword", "receivedAt",
+]);
+
 // ── Narrator OS slices A–D ──────────────────────────────────────
 // Mirrors drizzle/0090_narrator_os.sql. New tables (existing
 // goldline_world_events / claire_personal_ledger / Brain WM cannot hold

@@ -9461,6 +9461,36 @@ export const spiritHumanRescueMissions = mysqlTable(
 export type SpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$inferSelect;
 export type InsertSpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$inferInsert;
 
+/**
+ * Every signed inbound text to the tenant's business line, saved before anything
+ * else runs so a customer reply is never lost. Keyed by Twilio's MessageSid so a
+ * retried webhook is a no-op. Source is always provider_webhook.
+ */
+export const businessLineInboundMessages = mysqlTable(
+  "business_line_inbound_messages",
+  {
+    id: varchar("id", { length: 80 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    providerMessageSid: varchar("providerMessageSid", { length: 64 }).notNull(),
+    toDigits: varchar("toDigits", { length: 20 }).notNull(),
+    fromDigits: varchar("fromDigits", { length: 20 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    body: text("body").notNull(),
+    numMedia: int("numMedia").notNull().default(0),
+    optOutKeyword: varchar("optOutKeyword", { length: 16 }),
+    receivedAt: timestamp("receivedAt", { fsp: 3 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    tenantSidUnique: uniqueIndex("uq_business_line_inbound_sid").on(table.tenantId, table.providerMessageSid),
+    tenantCustomerIdx: index("idx_business_line_inbound_customer").on(
+      table.tenantId,
+      table.customerKeyHash,
+      table.receivedAt
+    ),
+  })
+);
+
 
 
 
