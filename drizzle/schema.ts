@@ -9488,6 +9488,12 @@ export const businessLineInboundMessages = mysqlTable(
       table.customerKeyHash,
       table.receivedAt
     ),
+    /** The STOP check on every outbound SMS reads by line and recipient. */
+    linePairIdx: index("idx_business_line_inbound_pair").on(
+      table.toDigits,
+      table.fromDigits,
+      table.receivedAt
+    ),
   })
 );
 

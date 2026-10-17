@@ -2922,7 +2922,8 @@ await runRequired(
     createdAt TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id),
     UNIQUE KEY uq_business_line_inbound_sid (tenantId, providerMessageSid),
-    KEY idx_business_line_inbound_customer (tenantId, customerKeyHash, receivedAt)
+    KEY idx_business_line_inbound_customer (tenantId, customerKeyHash, receivedAt),
+    KEY idx_business_line_inbound_pair (toDigits, fromDigits, receivedAt)
   )`,
   "CREATE TABLE business_line_inbound_messages"
 );
