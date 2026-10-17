@@ -353,4 +353,103 @@ describe("cozy villager evidence contract", () => {
     expect(sprite.poseFrameAvailable).toBe(false);
     expect(sprite.src).toContain("villager-02");
   });
+
+  it("projects an operator-reported reply and prepares the follow-up on the villager and Day Line card without marking a paid order", () => {
+    const surfaces = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [
+        row({
+          status: "dispatched",
+          deliveryIntent: "immediate",
+          dispatchedAt: "2026-10-15T17:05:00.000Z",
+          externalMessageId: "simulated:android_msg_1",
+          slotId: "slot_01",
+        }),
+      ],
+      replies: [
+        {
+          id: "por_reply_1",
+          tenantId: TENANT,
+          operatorId: OPERATOR,
+          customerId: "cust_stable_1",
+          customerName: "Mei Lin",
+          messageId: "msg_1",
+          territoryId: "silver-lake",
+          replyText: "Can you pick up 2 bags Thursday morning?",
+          classification: "pickup_interest",
+          nextStepKind: "prepare_pickup_follow_up",
+          nextAction:
+            "Mei Lin replied with pickup interest (operator-reported). Review and approve the pickup confirmation draft before opening Google Messages.",
+          preparedFollowUpDraft:
+            "Awesome Mei! I can lock in that pickup window for you—just let me know roughly how many bags and if there are any gate or porch notes.",
+          permissionEffect: "none",
+          provenance: "operator_reported",
+          surface: "cozy_composer",
+          reportedAt: "2026-10-15T17:30:00.000Z",
+        },
+      ],
+      objective,
+      now: NOW,
+    });
+
+    const villager = surfaces.mission.targets[0]!;
+    expect(villager.reply.status).toBe("operator_reported");
+    if (villager.reply.status === "operator_reported") {
+      expect(villager.reply.classification).toBe("pickup_interest");
+      expect(villager.reply.provenance).toBe("operator_reported");
+      expect(villager.reply.replyText).toContain("Thursday morning");
+    }
+    expect(villager.preparedMessage).toContain("Awesome Mei!");
+    expect(villager.paidOrder.status).toBe("unavailable");
+    expect(villager.outreachActionComplete).toBe(false);
+    expect(villager.objectiveComplete).toBe(false);
+    expect(surfaces.dayLineCard?.customerId).toBe("cust_stable_1");
+    expect(surfaces.dayLineCard?.reply.status).toBe("operator_reported");
+    expect(surfaces.dayLineCard?.nextAction).toContain("pickup interest (operator-reported)");
+    expect(surfaces.dayLineCard?.messageBody).toContain("Awesome Mei!");
+    expect(surfaces.dayLineCard?.openHref).toContain("customer=cust_stable_1");
+    expect(surfaces.dayLineCard?.objectiveComplete).toBe(false);
+  });
+
+  it("blocks consent when an operator-reported reply is an opt-out", () => {
+    const surfaces = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [],
+      replies: [
+        {
+          id: "por_reply_stop",
+          tenantId: TENANT,
+          operatorId: OPERATOR,
+          customerId: "cust_stable_1",
+          customerName: "Mei Lin",
+          messageId: null,
+          territoryId: "silver-lake",
+          replyText: "STOP",
+          classification: "opt_out",
+          nextStepKind: "opt_out_recorded",
+          nextAction:
+            "Mei Lin opted out (operator-reported). Communication permission is now blocked; do not send further outreach.",
+          preparedFollowUpDraft: null,
+          permissionEffect: "opted_out",
+          provenance: "operator_reported",
+          surface: "cozy_composer",
+          reportedAt: "2026-10-15T17:45:00.000Z",
+        },
+      ],
+      objective,
+      now: NOW,
+    });
+
+    const villager = surfaces.mission.targets[0]!;
+    expect(villager.communicationState).toBe("consent_blocked");
+    expect(villager.hasConsent).toBe(false);
+    expect(villager.consentStatus).toBe("blocked_opt_out");
+    expect(villager.reply.status).toBe("operator_reported");
+    expect(villager.paidOrder.status).toBe("unavailable");
+    expect(villager.objectiveComplete).toBe(false);
+  });
 });

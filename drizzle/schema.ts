@@ -10414,3 +10414,43 @@ export const hiddenGameChapterUnlocks = mysqlTable(
 export type HiddenGameChapterUnlockRow = typeof hiddenGameChapterUnlocks.$inferSelect;
 export type InsertHiddenGameChapterUnlock = typeof hiddenGameChapterUnlocks.$inferInsert;
 
+/**
+ * Operator-reported customer reply from the operator's personal SMS thread.
+ * Provenance is always `operator_reported` (never a carrier webhook receipt).
+ * A row does not verify a paid order or complete the recovery objective.
+ */
+export const personalOutreachReplies = mysqlTable(
+  "personal_outreach_replies",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 64 }).notNull(),
+    customerId: varchar("customer_id", { length: 128 }).notNull(),
+    customerName: varchar("customer_name", { length: 255 }).notNull(),
+    messageId: varchar("message_id", { length: 64 }),
+    territoryId: varchar("territory_id", { length: 64 }),
+    replyText: text("reply_text").notNull(),
+    classification: varchar("classification", { length: 40 }).notNull(),
+    nextStepKind: varchar("next_step_kind", { length: 64 }).notNull(),
+    nextAction: text("next_action").notNull(),
+    preparedFollowUpDraft: text("prepared_follow_up_draft"),
+    permissionEffect: varchar("permission_effect", { length: 40 }).notNull().default("none"),
+    provenance: varchar("provenance", { length: 40 }).notNull().default("operator_reported"),
+    surface: varchar("surface", { length: 32 }).notNull().default("cozy_composer"),
+    reportedAt: timestamp("reported_at").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeIdx: index("idx_por_scope").on(
+      table.tenantId,
+      table.operatorId,
+      table.customerId,
+      table.reportedAt
+    ),
+  })
+);
+
+export type PersonalOutreachReplyRow = typeof personalOutreachReplies.$inferSelect;
+export type InsertPersonalOutreachReply = typeof personalOutreachReplies.$inferInsert;
+
+

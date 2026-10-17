@@ -119,6 +119,16 @@ for (const statement of hiddenGameChapterUnlockDdl
   await runRequired(statement, "Lost Property chapter unlocks");
 }
 
+const personalOutreachReplyDdl = await readFile(new URL("../drizzle/0136_personal_outreach_replies.sql", import.meta.url), "utf8");
+for (const statement of personalOutreachReplyDdl
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean)) {
+  await runRequired(statement, "Personal outreach replies");
+}
+
+
 const assertRequiredColumns = async (tableName, columns) => {
   const [rows] = await conn.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
@@ -5454,6 +5464,25 @@ await assertRequiredColumns("hidden_game_chapter_unlocks", [
   "openedAt",
   "evidenceJson",
   "createdAt",
+]);
+await assertRequiredColumns("personal_outreach_replies", [
+  "id",
+  "tenant_id",
+  "operator_id",
+  "customer_id",
+  "customer_name",
+  "message_id",
+  "territory_id",
+  "reply_text",
+  "classification",
+  "next_step_kind",
+  "next_action",
+  "prepared_follow_up_draft",
+  "permission_effect",
+  "provenance",
+  "surface",
+  "reported_at",
+  "created_at",
 ]);
 console.log("\nMigration complete.");
 await conn.end();

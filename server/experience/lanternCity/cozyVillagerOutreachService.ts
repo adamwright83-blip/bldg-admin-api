@@ -161,6 +161,7 @@ export async function getCozyEncounterMission(input: {
   canonicalOperatorId: string;
   timeZone?: string;
   territoryId?: string;
+  requestedCustomerId?: string;
   limit?: number;
   now?: Date;
 }): Promise<CozyEncounterMission> {
@@ -172,13 +173,14 @@ export async function getCozyEncounterMission(input: {
       ? "Silver Lake"
       : territoryId.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
+  const targetLimit = Math.min(Math.max(input.limit ?? 8, 1), 8);
   const roster = await readPersonalOutreachRoster({
     tenantId: input.tenantId,
     canonicalOperatorId: input.canonicalOperatorId,
     timeZone,
     now,
     territoryId,
-    limit: input.limit ?? 8,
+    limit: input.requestedCustomerId ? Math.max(targetLimit, 50) : targetLimit,
   }).catch((err) => {
     console.error("[cozyVillagerOutreach] Failed to read personal outreach roster:", err);
     return null;
@@ -192,7 +194,19 @@ export async function getCozyEncounterMission(input: {
 
   let rawContacts: PersonalOutreachContact[] | null = null;
   if (roster && !withheldReason && roster.contacts.length > 0) {
-    rawContacts = roster.contacts;
+    if (input.requestedCustomerId) {
+      const requested = roster.contacts.find(
+        c => c.identityId === input.requestedCustomerId
+      );
+      const rest = roster.contacts.filter(
+        c => c.identityId !== input.requestedCustomerId
+      );
+      rawContacts = requested
+        ? [requested, ...rest].slice(0, targetLimit)
+        : roster.contacts.slice(0, targetLimit);
+    } else {
+      rawContacts = roster.contacts.slice(0, targetLimit);
+    }
   }
 
   // Retrieve existing scheduled messages for the tenant

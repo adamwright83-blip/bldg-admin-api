@@ -13,6 +13,7 @@ import {
 import { loadMissionPresentations } from "../../agents/daphne/missionFollowUp";
 import { readObjectiveArea } from "../../strategy/strategicEvidenceReaders";
 import { getCozyEncounterMission } from "./cozyVillagerOutreachService";
+import { listPersonalOutreachReplies } from "./personalNumber/personalOutreachReplyService";
 import { listScheduledOutreachMessages } from "./scheduledOutreachService";
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -44,17 +45,19 @@ export async function loadCozyRecoverySurfaces(input: {
   tenantId: string;
   canonicalOperatorId: string;
   territoryId?: string;
+  requestedCustomerId?: string;
   limit?: number;
   now?: Date;
   timeZone?: string;
 }): Promise<CozyRecoverySurfaces> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
-  const [mission, messages, area, presentations] = await Promise.all([
+  const [mission, messages, replies, area, presentations] = await Promise.all([
     getCozyEncounterMission({
       tenantId: input.tenantId,
       canonicalOperatorId: input.canonicalOperatorId,
       territoryId: input.territoryId,
+      requestedCustomerId: input.requestedCustomerId,
       limit: input.limit,
       now,
       timeZone,
@@ -63,6 +66,10 @@ export async function loadCozyRecoverySurfaces(input: {
       tenantId: input.tenantId,
       operatorId: input.canonicalOperatorId,
       limit: 100,
+    }).catch(() => []),
+    listPersonalOutreachReplies({
+      tenantId: input.tenantId,
+      operatorId: input.canonicalOperatorId,
     }).catch(() => []),
     readObjectiveArea({
       tenantId: input.tenantId,
@@ -86,6 +93,7 @@ export async function loadCozyRecoverySurfaces(input: {
     operatorId: input.canonicalOperatorId,
     mission,
     messages: messages.map(outreachEvidenceFromRow),
+    replies,
     objective: area
       ? { id: area.goal.g.id, statement: area.goal.g.statement, areaLabel: area.label }
       : null,
