@@ -1,7 +1,8 @@
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { classifyObjectiveExecution } from "../../../shared/objectiveExecution";
 import {
-  motionAlignsWithMacroGoal,
+  GOAL_CONTRIBUTION_POLICY_VERSION,
+  goalContribution,
   type WeeklyGrowthCandidate,
 } from "../../../shared/weeklyGrowthCandidates";
 import type {
@@ -270,20 +271,18 @@ function rankOne(input: {
     );
   }
 
-  const aligned =
-    input.context.macroGoal != null &&
-    motionAlignsWithMacroGoal(
-      input.context.macroGoal.metricKey,
-      candidate.motion
-    );
+  // How directly this work moves the goal metric, and how soon. A policy judgment, not a forecast.
+  const contribution = input.context.macroGoal
+    ? goalContribution(input.context.macroGoal.metricKey, candidate.motion)
+    : null;
   factors.push(
     factor(
       "macro_goal_alignment",
-      aligned,
-      input.context.macroGoal
-        ? "operator_macro_goals.metricKey + candidate.motion"
+      contribution ? `${input.context.macroGoal!.metricKey}:${candidate.motion}:${contribution.tier}` : false,
+      contribution
+        ? `${GOAL_CONTRIBUTION_POLICY_VERSION}: ${contribution.reason}`
         : "no active macro goal",
-      aligned ? 150 : 0,
+      contribution?.effect ?? 0,
       input.context.macroGoal ? "high" : "unknown"
     )
   );
