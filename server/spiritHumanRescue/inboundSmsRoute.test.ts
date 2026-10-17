@@ -10,7 +10,7 @@ import {
   SPIRIT_HUMAN_INBOUND_SMS_PATH,
 } from "./inboundSmsRoute";
 import { MemoryRescueMissionStore } from "./rescueMissionStore";
-import { customerKeyHashForPhone, MemoryBusinessLineInbox, optOutKeywordFor } from "./businessLineInbox";
+import { customerKeyHashForPhone, MemoryBusinessLineInbox, optOutKeywordFor } from "../messaging/businessLineInbox";
 
 const AUTH = "test-twilio-token";
 const URL = "https://api.example.test/api/spirit-human/twilio/inbound-sms";

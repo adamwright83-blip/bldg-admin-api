@@ -5,7 +5,8 @@ import { businessLineInboundMessages, customerContactPermissions } from "../../d
 import { getDb } from "../db";
 import { checkCommunicationPermission } from "../strategy/communicationPermissionService";
 import { loadDormantContactFacts, permissionForKeys } from "../strategy/dormantOutreachGate";
-import { customerKeyHashForPhone, DrizzleBusinessLineInbox } from "./businessLineInbox";
+import { sendSMSWithReceipt } from "../_core/sms";
+import { businessLineRecipientOptOutState, customerKeyHashForPhone, DrizzleBusinessLineInbox } from "./businessLineInbox";
 
 /**
  * Real-MySQL coverage for the business line inbox. Excluded from default
@@ -103,5 +104,59 @@ describe("business line inbox on MySQL", () => {
         capturedAt: now,
       })
     ).toBe(true);
+  }, 20_000);
+
+  it("STOP blocks every send from the line to that number until the customer texts START", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const tenantId = `inbox_${randomUUID().slice(0, 8)}`;
+    const line = "8885550199";
+    const customer = `323555${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    const inbox = new DrizzleBusinessLineInbox(db);
+    const inbound = (sid: string, body: string, keyword: "stop" | "start" | null, at: string) =>
+      inbox.recordInbound({
+        tenantId,
+        providerMessageSid: sid,
+        toDigits: line,
+        fromDigits: customer,
+        customerKeyHash: customerKeyHashForPhone(tenantId, customer)!,
+        body,
+        numMedia: 0,
+        optOutKeyword: keyword,
+        receivedAt: new Date(at),
+      });
+
+    expect(await businessLineRecipientOptOutState(`+1${line}`, customer)).toBe("clear");
+    await inbound(`SM${randomUUID().slice(0, 8)}a`, "hello", null, "2026-10-17T20:00:00.000Z");
+    await inbound(`SM${randomUUID().slice(0, 8)}b`, "STOP", "stop", "2026-10-17T20:05:00.000Z");
+    expect(await businessLineRecipientOptOutState(`+1${line}`, `+1${customer}`)).toBe("opted_out");
+    // A different business number is not blocked by this STOP.
+    expect(await businessLineRecipientOptOutState("+18885550100", customer)).toBe("clear");
+    await inbound(`SM${randomUUID().slice(0, 8)}c`, "START", "start", "2026-10-17T20:10:00.000Z");
+    expect(await businessLineRecipientOptOutState(`+1${line}`, customer)).toBe("clear");
+  }, 20_000);
+
+  it("the real send function refuses an opted-out recipient before any provider call", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const line = String(process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER ?? "").replace(/\D/g, "").slice(-10);
+    if (!line) {
+      // Without a configured line number there is no line to block; the gate passes through.
+      expect((await sendSMSWithReceipt("3235550142", "hi")).evidenceName).not.toBe("recipient_opted_out");
+      return;
+    }
+    const tenantId = `inbox_${randomUUID().slice(0, 8)}`;
+    await new DrizzleBusinessLineInbox(db).recordInbound({
+      tenantId,
+      providerMessageSid: `SM${randomUUID().slice(0, 12)}`,
+      toDigits: line,
+      fromDigits: "3235550142",
+      customerKeyHash: customerKeyHashForPhone(tenantId, "3235550142")!,
+      body: "stop",
+      numMedia: 0,
+      optOutKeyword: "stop",
+      receivedAt: new Date(),
+    });
+    expect((await sendSMSWithReceipt("+13235550142", "Your laundry is ready")).evidenceName).toBe("recipient_opted_out");
   }, 20_000);
 });

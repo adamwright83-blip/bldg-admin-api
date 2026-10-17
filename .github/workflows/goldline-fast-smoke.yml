@@ -270,7 +270,7 @@ jobs:
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
           server/behavioralExperiment/presentationDecision.mysql.integration.test.ts
           server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
-          server/spiritHumanRescue/businessLineInbox.mysql.integration.test.ts
+          server/messaging/businessLineInbox.mysql.integration.test.ts
           server/integrations/cleancloud/browserSync/gumballCustomerTruth.mysql.integration.test.ts
           server/integrations/cleancloud/browserSync/worldOutbox.mysql.integration.test.ts
       - name: Prove StrategyEngine live snapshot sections

@@ -17,3 +17,48 @@ describe("Twilio send failure classification", () => {
     expect(classifyTwilioSendFailure(new Error("socket hang up"))).toBe("send_outcome_unknown");
   });
 });
+
+describe("STOP gate on every outbound SMS", () => {
+  it("never sends to a recipient who texted STOP, and says so", async () => {
+    const { sendSMSWithReceipt, setSmsOptOutCheckForTests } = await import("./sms");
+    const seen: Array<{ from: string; to: string }> = [];
+    setSmsOptOutCheckForTests(async input => {
+      seen.push(input);
+      return "opted_out";
+    });
+    try {
+      expect(await sendSMSWithReceipt("(323) 555-0101", "Your laundry is ready")).toEqual({
+        accepted: false,
+        providerMessageId: null,
+        providerStatus: null,
+        evidenceName: "recipient_opted_out",
+      });
+      expect(seen[0]?.to).toBe("(323) 555-0101");
+    } finally {
+      setSmsOptOutCheckForTests(null);
+    }
+  });
+
+  it("refuses to send when the opt-out record cannot be read", async () => {
+    const { sendSMSWithReceipt, setSmsOptOutCheckForTests } = await import("./sms");
+    for (const check of [async () => "unavailable" as const, async () => { throw new Error("db down"); }]) {
+      setSmsOptOutCheckForTests(check);
+      try {
+        expect((await sendSMSWithReceipt("3235550101", "hi")).evidenceName).toBe("opt_out_check_unavailable");
+      } finally {
+        setSmsOptOutCheckForTests(null);
+      }
+    }
+  });
+
+  it("a clear recipient continues to the provider", async () => {
+    const { sendSMSWithReceipt, setSmsOptOutCheckForTests } = await import("./sms");
+    setSmsOptOutCheckForTests(async () => "clear");
+    try {
+      // No Twilio credentials in unit tests, so the provider step reports unconfigured.
+      expect((await sendSMSWithReceipt("3235550101", "hi")).evidenceName).toBe("provider_unconfigured");
+    } finally {
+      setSmsOptOutCheckForTests(null);
+    }
+  });
+});

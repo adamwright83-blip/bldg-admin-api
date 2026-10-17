@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   businessLineInboundMessages,
   communicationPermissions,
@@ -187,4 +187,41 @@ export async function requireDurableBusinessLineInbox(): Promise<BusinessLineInb
     });
   }
   return new DrizzleBusinessLineInbox(db);
+}
+
+export type RecipientOptOutState = "opted_out" | "clear" | "unavailable";
+
+/**
+ * Whether a recipient's latest STOP/START to this business number was a STOP.
+ * This mirrors the carrier rule (STOP blocks the number pair; START lifts it), so
+ * it applies to every SMS sent from the line, transactional or not. Marketing
+ * consent is separate: STOP also writes opted_out there, and START does not undo it.
+ */
+export async function businessLineRecipientOptOutState(
+  lineNumber: string,
+  recipient: string
+): Promise<RecipientOptOutState> {
+  const line = normalizeIdentityPhone(lineNumber);
+  const to = normalizeIdentityPhone(recipient);
+  if (!line || !to) return "clear";
+  const db = await getDb().catch(() => null);
+  if (!db) return "clear"; // No durable store, so no STOP can have been recorded.
+  try {
+    const rows = await db
+      .select({ keyword: businessLineInboundMessages.optOutKeyword })
+      .from(businessLineInboundMessages)
+      .where(
+        and(
+          eq(businessLineInboundMessages.toDigits, line),
+          eq(businessLineInboundMessages.fromDigits, to),
+          inArray(businessLineInboundMessages.optOutKeyword, ["stop", "start"])
+        )
+      )
+      .orderBy(desc(businessLineInboundMessages.receivedAt), desc(businessLineInboundMessages.createdAt))
+      .limit(1);
+    return rows[0]?.keyword === "stop" ? "opted_out" : "clear";
+  } catch (error) {
+    console.error("[BusinessLine] opt-out check failed; refusing to send", error instanceof Error ? error.name : "unknown");
+    return "unavailable";
+  }
 }

@@ -431,12 +431,21 @@ async function sendOnce(
   }
 
   if (!receipt.accepted || !receipt.providerMessageId) {
-    const evidence: RescueSendEvidenceName =
-      receipt.evidenceName === "provider_unconfigured" ? "provider_unconfigured" : "provider_rejected";
+    const optedOut =
+      receipt.evidenceName === "recipient_opted_out" || receipt.evidenceName === "opt_out_check_unavailable";
+    const evidence: RescueSendEvidenceName = optedOut
+      ? "permission_denied"
+      : receipt.evidenceName === "provider_unconfigured"
+        ? "provider_unconfigured"
+        : "provider_rejected";
     const reason =
-      evidence === "provider_unconfigured"
-        ? "Outbound SMS is not configured."
-        : "Provider rejected the outbound request.";
+      receipt.evidenceName === "recipient_opted_out"
+        ? "The customer texted STOP. Nothing was sent."
+        : receipt.evidenceName === "opt_out_check_unavailable"
+          ? "Opt-out status could not be checked. Nothing was sent."
+          : evidence === "provider_unconfigured"
+            ? "Outbound SMS is not configured."
+            : "Provider rejected the outbound request.";
     return persistFailure(store, sending, acceptedAt, evidence, reason, ["sending"]);
   }
 

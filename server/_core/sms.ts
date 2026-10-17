@@ -19,8 +19,25 @@ export type SmsSendReceipt = {
     | "provider_accepted"
     | "provider_rejected"
     | "provider_unconfigured"
-    | "send_outcome_unknown";
+    | "send_outcome_unknown"
+    /** The recipient texted STOP to this number and has not texted START since. Nothing was sent. */
+    | "recipient_opted_out"
+    /** The opt-out record could not be read, so nothing was sent. */
+    | "opt_out_check_unavailable";
 };
+
+export type SmsOptOutCheck = (input: { from: string; to: string }) => Promise<"opted_out" | "clear" | "unavailable">;
+
+const defaultOptOutCheck: SmsOptOutCheck = async ({ from, to }) => {
+  const { businessLineRecipientOptOutState } = await import("../messaging/businessLineInbox");
+  return businessLineRecipientOptOutState(from, to);
+};
+let optOutCheck: SmsOptOutCheck = defaultOptOutCheck;
+
+/** Test seam. Pass null to restore the durable check. */
+export function setSmsOptOutCheckForTests(check: SmsOptOutCheck | null): void {
+  optOutCheck = check ?? defaultOptOutCheck;
+}
 
 function readHttpStatus(error: unknown): number | null {
   let candidate: unknown = error;
@@ -64,6 +81,17 @@ export async function sendSMSWithReceipt(
   message: string,
   options?: { idempotencyKey?: string }
 ): Promise<SmsSendReceipt> {
+  // Every customer text leaves through here, so a STOP blocks every send path.
+  const optOut = await optOutCheck({ from: fromPhone ?? "", to }).catch(() => "unavailable" as const);
+  if (optOut !== "clear") {
+    console.warn(optOut === "opted_out" ? "[SMS] Recipient opted out; not sending" : "[SMS] Opt-out check unavailable; not sending");
+    return {
+      accepted: false,
+      providerMessageId: null,
+      providerStatus: null,
+      evidenceName: optOut === "opted_out" ? "recipient_opted_out" : "opt_out_check_unavailable",
+    };
+  }
   if (!client || !fromPhone) {
     console.warn("[SMS] Twilio not configured, skipping SMS");
     return {

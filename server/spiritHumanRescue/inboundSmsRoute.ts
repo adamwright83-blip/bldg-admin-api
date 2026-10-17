@@ -12,7 +12,7 @@ import {
   optOutKeywordFor,
   requireDurableBusinessLineInbox,
   type BusinessLineInboxStore,
-} from "./businessLineInbox";
+} from "../messaging/businessLineInbox";
 
 export const SPIRIT_HUMAN_INBOUND_SMS_PATH = "/api/spirit-human/twilio/inbound-sms";
 
