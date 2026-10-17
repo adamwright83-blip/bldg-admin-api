@@ -217,6 +217,61 @@ export function motionAlignsWithMacroGoal(metricKey: string, motion: WeeklyGrowt
   }
 }
 
+/** Bump when the contribution table changes, so stored Mission Director plans recompute. */
+export const GOAL_CONTRIBUTION_POLICY_VERSION = "goal-contribution-v1";
+
+export type GoalContributionTier = "direct_fast" | "direct_slow" | "protects" | "indirect" | "none";
+
+const GOAL_CONTRIBUTION_EFFECT: Record<GoalContributionTier, number> = {
+  direct_fast: 180,
+  direct_slow: 140,
+  protects: 90,
+  indirect: 50,
+  none: 0,
+};
+
+/**
+ * How directly a kind of work moves the operator's goal metric, and how soon.
+ * A ranking policy judgment that never forecasts revenue or customers. Replaces
+ * the flat bonus every "aligned" motion used to get, so that for an
+ * active-customers goal, winning back a lapsed regular outranks a referral ask.
+ */
+export function goalContribution(
+  metricKey: string,
+  motion: WeeklyGrowthMotion
+): { tier: GoalContributionTier; effect: number; reason: string } {
+  const pick = (tier: GoalContributionTier, reason: string) => ({ tier, effect: GOAL_CONTRIBUTION_EFFECT[tier], reason });
+  if (!motionAlignsWithMacroGoal(metricKey, motion)) return pick("none", "does not move this goal metric");
+  if (metricKey === "active_customers") {
+    switch (motion) {
+      case "customer_recovery": return pick("direct_fast", "a lapsed customer who orders again counts as active right away");
+      case "account_acquisition":
+      case "territory_expansion":
+      case "commercial_follow_up": return pick("direct_slow", "adds active customers, after a longer sales cycle");
+      case "retention": return pick("protects", "keeps current customers from dropping out of the count");
+      default: return pick("indirect", "can lead to new customers through other people");
+    }
+  }
+  if (metricKey === "new_paying_customers") {
+    switch (motion) {
+      case "account_acquisition":
+      case "territory_expansion": return pick("direct_slow", "brings in customers who have never paid");
+      case "commercial_follow_up": return pick("direct_fast", "advances an account already in conversation");
+      case "relationship_capital": return pick("indirect", "can lead to new customers through referrals");
+      default: return pick("indirect", "returning customers are not new customers");
+    }
+  }
+  // Volume goals (paid orders, net sales).
+  switch (motion) {
+    case "customer_recovery":
+    case "retention": return pick("direct_fast", "known customers order again soonest");
+    case "commercial_follow_up":
+    case "account_acquisition":
+    case "territory_expansion": return pick("direct_slow", "new accounts add volume after a longer cycle");
+    default: return pick("indirect", "can lead to more orders through other people");
+  }
+}
+
 export function addCalendarDays(ymd: string, days: number): string {
   const [year, month, day] = ymd.split("-").map(Number);
   const date = new Date(Date.UTC(year!, (month ?? 1) - 1, (day ?? 1) + days));

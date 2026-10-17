@@ -12,6 +12,7 @@ import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoalForOperators } from "../../claire/macroGoalService";
 import { loadDailyCommand } from "../../claire/dailyCommandContract";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
+import { GOAL_CONTRIBUTION_POLICY_VERSION } from "../../../shared/weeklyGrowthCandidates";
 import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
@@ -171,6 +172,8 @@ export function computePlanningFingerprint(input: {
     campaigns: input.campaigns.map(planningCampaignFingerprint),
     prepReady: input.prepReady,
     ranking: {
+      // A changed ranking policy must recompute stored plans, not reuse them.
+      policyVersion: GOAL_CONTRIBUTION_POLICY_VERSION,
       businessDate: input.rankingContext.businessDate,
       macroGoal: input.rankingContext.macroGoal,
       openTasks: input.rankingContext.openTasks.map(task => ({

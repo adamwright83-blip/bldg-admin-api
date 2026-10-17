@@ -312,3 +312,46 @@ describe("stale overdue urgency", () => {
     expect(plan.ranking.find(r => r.workId === "stale")!.eligible).toBe(true);
   });
 });
+
+describe("ranking by contribution to the operator's goal", () => {
+  const goalContext = (metricKey: string) => ({
+    businessDate: "2026-10-17",
+    macroGoal: { metricKey, targetValue: 50, objective: `${metricKey} goal` },
+    openTasks: [],
+  });
+  const desk = "Text the customer from the operator's phone";
+  const recovery = candidate("recovery", "Win back a lapsed regular", desk, { sourceKind: "customer_recovery", motion: "customer_recovery" });
+  const referral = candidate("referral", "Ask a regular for a referral", desk, { sourceKind: "campaign_library", motion: "relationship_capital" });
+  const retention = candidate("retention", "Check in with a cooling regular", desk, { sourceKind: "customer_recovery", motion: "retention" });
+  const followUp = candidate("followup", "Follow up the property manager", "Cold call the property manager", { motion: "commercial_follow_up" });
+  const rank = (metricKey: string, candidates: WeeklyGrowthCandidate[]) => {
+    const plan = rankMissionDirectorWork({ candidates, campaigns: [], campaignPrepReady: {}, context: goalContext(metricKey), pockets: [] });
+    if (plan.status !== "ranked") throw new Error(plan.status);
+    return plan;
+  };
+  const goalEffect = (plan: ReturnType<typeof rank>, id: string) =>
+    plan.ranking.find(item => item.workId === id)?.factors.find(f => f.name === "macro_goal_alignment");
+
+  it("puts winning back a lapsed customer ahead of a referral ask for an active-customers goal", () => {
+    const plan = rank("active_customers", [referral, retention, recovery]);
+    expect(plan.primary.workId).toBe("recovery");
+    expect(goalEffect(plan, "recovery")).toMatchObject({ effect: 180, value: "active_customers:customer_recovery:direct_fast" });
+    expect(goalEffect(plan, "retention")?.effect).toBe(90);
+    expect(goalEffect(plan, "referral")?.effect).toBe(50);
+    expect(goalEffect(plan, "recovery")?.source).toMatch(/^goal-contribution-v1: /);
+  });
+
+  it("puts an account already in conversation ahead of a lapsed customer for a new-customers goal", () => {
+    const plan = rank("new_paying_customers", [recovery, followUp]);
+    expect(plan.primary.workId).toBe("followup");
+    expect(goalEffect(plan, "recovery")?.effect).toBe(50);
+  });
+
+  it("gives no goal weight without an active goal or for work that does not move the metric", () => {
+    const noGoal = rankMissionDirectorWork({ candidates: [recovery], campaigns: [], campaignPrepReady: {}, context, pockets: [] });
+    if (noGoal.status !== "ranked") throw new Error(noGoal.status);
+    expect(noGoal.ranking[0].factors.find(f => f.name === "macro_goal_alignment")).toMatchObject({ effect: 0, value: false });
+    const reputation = candidate("reviews", "Ask for reviews", desk, { motion: "reputation" });
+    expect(goalEffect(rank("active_customers", [reputation]), "reviews")?.effect).toBe(0);
+  });
+});
