@@ -94,3 +94,8 @@ These checks fail. Root cause of each:
   - Follow `docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` §§4–7, and never weaken §2.
 - **Done in #604 for Daphne:** ledger operator signals become `daphne_observations` (relationship_event, sourceType `claire_work_ledger`).
   - Verified: they appear in the next call's Daphne guidance (corrections, boundaries, ruptures).
+
+**Update:** the MRT follow-up is now draft PR #605 (https://github.com/adamwright83-blip/bldg-admin-api/pull/605).
+- It records decisions, joins ops-task and campaign-chapter outcomes back to them, lets the fatigue gate change the next occasion, and adds a per-arm report.
+- Not live yet: there is no consent UI and the MRT flag is off.
+- When this note was written, its CI was still running.
