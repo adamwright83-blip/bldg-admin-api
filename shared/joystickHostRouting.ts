@@ -33,9 +33,12 @@ export const JOYSTICK_EXACT_BROWSER_ORIGINS = [
  * the main Railway API, and a configured VITE_API_URL cannot send them to
  * the resident service. api.gojoystick.com is included so a mis-attached
  * SPA on that name still cannot follow VITE_API_URL to api.bldg.chat.
- * It is not a customer, admin, or driver surface. Laundry hosts stay out.
+ * It is not a customer, admin, or driver surface. Laundry Farm remains out;
+ * Laundry Butler's public booking flow uses /api/trpc on the main API proxy,
+ * while its resident account endpoints explicitly use /resident-api.
  */
 export const JOYSTICK_SAME_ORIGIN_API_HOSTS = [
+  LAUNDRY_BUTLER_HOST,
   "admin.bldg.chat",
   "gojoystick.com",
   "www.gojoystick.com",
