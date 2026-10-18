@@ -29,8 +29,7 @@ import {
 import { getDb } from "../../db";
 import { getDefaultGoalCyclePool, GoalCycleStore } from "./goalCycleStore";
 import { GoalCycleWorker } from "./goalCycleWorker";
-import { evaluateMacroGoalRunAndScheduleNext } from "./goalCycleService";
-import { decideGoalCycle } from "./decisionEngine";
+import { defaultGoalCycleOccurrenceDeps, runGoalCycleOccurrence } from "./goalCycleOccurrence";
 import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
@@ -446,8 +445,14 @@ export function startAutonomousPersistentOperatorWorkers(
     return async () => undefined;
   }
 
+  const operatorAppointmentStore = new OperatorAppointmentStore(pool);
+
   // 1. Goal Cycle Worker (Macro Goal Evaluation & Replanning)
   const goalCycleStore = new GoalCycleStore(pool, { perTenantConcurrency: 2 });
+  const occurrenceDeps = defaultGoalCycleOccurrenceDeps({
+    registry: defaultVerticalRegistry,
+    appointmentStore: operatorAppointmentStore,
+  });
   const goalCycleWorker = new GoalCycleWorker(
     goalCycleStore,
     {
@@ -457,45 +462,10 @@ export function startAutonomousPersistentOperatorWorkers(
       concurrency: 2,
       retryBaseMs: 5_000,
     },
-    async input => {
-      const evaluation = await evaluateMacroGoalRunAndScheduleNext({
-        tenantId: input.tenantId,
-        runId: input.runId,
-        registry: defaultVerticalRegistry,
-      });
-      if (evaluation.run.status === "active") {
-        const resolved = await resolveCanonicalOperatorIdentity({ tenantId: input.tenantId, source: { type: "open_id", value: evaluation.run.operatorUserId }, subsystem: "autonomous_strategy_preparation" });
-        const timeZone = await resolveOperatorTimeZone(input.tenantId);
-        if (!resolved.ok || !timeZone) throw new Error("Autonomous strategy identity/timezone unavailable");
-        const proposal = await prepareStrategicProposal({ identity: resolved.identity, timeZone });
-        await scheduleAuthorizedStrategicCall({ identity: resolved.identity, timeZone, proposalId: proposal.id, store: operatorAppointmentStore }).catch(error => {
-          console.warn("[AutonomousWorkers] Prepared proposal remains available; call scheduling unavailable", error instanceof Error ? error.message : String(error));
-        });
-      }
-      const decision = await decideGoalCycle({
-        tenantId: input.tenantId,
-        runId: input.runId,
-        cycleId: input.cycleId,
-        registry: defaultVerticalRegistry,
-      });
-      return {
-        runId: evaluation.run.id,
-        status: evaluation.run.status,
-        completed: evaluation.completed,
-        observation: evaluation.observation,
-        decisionId: decision.decision.id,
-        decisionCreated: decision.created,
-        objectiveId: decision.objective?.id ?? null,
-        selectionKind: decision.decision.selectionKind,
-        selectedRef: decision.decision.selectedRef,
-        selectedReasonCode: decision.decision.selectedReasonCode,
-        nextEvaluationAt: evaluation.run.nextEvaluationAt?.toISOString() ?? null,
-      };
-    }
+    input => runGoalCycleOccurrence(input, occurrenceDeps)
   );
 
   // 2. Operator Appointment Worker (Sunday Planning & Callbacks)
-  const operatorAppointmentStore = new OperatorAppointmentStore(pool);
   const operatorAppointmentWorker = new OperatorAppointmentWorker(
     operatorAppointmentStore,
     {

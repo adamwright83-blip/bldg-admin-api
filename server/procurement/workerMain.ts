@@ -8,8 +8,10 @@ import { ProcurementWorker, type ProcurementStepHandler } from "./worker";
 import { ProcurementWorkflowStore } from "./workflowStore";
 import { GoalCycleStore } from "../agents/persistentOperator/goalCycleStore";
 import { GoalCycleWorker } from "../agents/persistentOperator/goalCycleWorker";
-import { evaluateMacroGoalRunAndScheduleNext } from "../agents/persistentOperator/goalCycleService";
-import { decideGoalCycle } from "../agents/persistentOperator/decisionEngine";
+import {
+  defaultGoalCycleOccurrenceDeps,
+  runGoalCycleOccurrence,
+} from "../agents/persistentOperator/goalCycleOccurrence";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "../agents/persistentOperator/operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "../agents/persistentOperator/operatorAppointmentWorker";
@@ -47,6 +49,11 @@ const worker = new ProcurementWorker(store, handlers, {
   concurrency: numberFromEnv("PROCUREMENT_WORKER_CONCURRENCY", 4),
   retryBaseMs: numberFromEnv("PROCUREMENT_WORKER_RETRY_BASE_MS", 5_000),
 });
+const operatorAppointmentStore = new OperatorAppointmentStore(pool);
+const goalCycleOccurrenceDeps = defaultGoalCycleOccurrenceDeps({
+  registry: defaultVerticalRegistry,
+  appointmentStore: operatorAppointmentStore,
+});
 const goalCycleStore = new GoalCycleStore(pool, {
   perTenantConcurrency: numberFromEnv("GOAL_CYCLE_PER_TENANT_CONCURRENCY", 2),
 });
@@ -59,35 +66,9 @@ const goalCycleWorker = new GoalCycleWorker(
     concurrency: numberFromEnv("GOAL_CYCLE_WORKER_CONCURRENCY", 4),
     retryBaseMs: numberFromEnv("GOAL_CYCLE_WORKER_RETRY_BASE_MS", 5_000),
   },
-  async input => {
-    const evaluation = await evaluateMacroGoalRunAndScheduleNext({
-      tenantId: input.tenantId,
-      runId: input.runId,
-      registry: defaultVerticalRegistry,
-    });
-    const decision = await decideGoalCycle({
-      tenantId: input.tenantId,
-      runId: input.runId,
-      cycleId: input.cycleId,
-      registry: defaultVerticalRegistry,
-    });
-    return {
-      runId: evaluation.run.id,
-      status: evaluation.run.status,
-      completed: evaluation.completed,
-      observation: evaluation.observation,
-      decisionId: decision.decision.id,
-      decisionCreated: decision.created,
-      objectiveId: decision.objective?.id ?? null,
-      selectionKind: decision.decision.selectionKind,
-      selectedRef: decision.decision.selectedRef,
-      selectedReasonCode: decision.decision.selectedReasonCode,
-      nextEvaluationAt: evaluation.run.nextEvaluationAt?.toISOString() ?? null,
-    };
-  }
+  // Same leased, policy-gated occurrence as the web process's worker.
+  input => runGoalCycleOccurrence(input, goalCycleOccurrenceDeps)
 );
-
-const operatorAppointmentStore = new OperatorAppointmentStore(pool);
 const operatorAppointmentWorker = new OperatorAppointmentWorker(
   operatorAppointmentStore,
   {
