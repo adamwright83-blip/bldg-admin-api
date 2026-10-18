@@ -3,7 +3,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { cleancloudPaidOrders, goalCycleOutcomes } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { cleanCloudPaidObservationReceiptMatches } from "../../integrations/cleancloud/cleancloudPaidEvidence";
-import { getAuthorityReceiptById } from "../../platform/authority/authorityReceipt";
+import {
+  getAuthorityReceiptById,
+  findAuthoritativeExternalReceipt,
+} from "../../platform/authority/authorityReceipt";
 import { isMysqlDuplicateKeyError } from "../../mysqlErrors";
 import {
   assertBusinessTruthEvidence,
@@ -540,12 +543,24 @@ export async function verifyObjectiveExecution(
   objective: PersistentGrowthObjective;
   created: boolean;
 }> {
+  if (input.evidenceClass === "authoritative_external") {
+    const external = await findAuthoritativeExternalReceipt({
+      tenantId: input.tenantId,
+      evidenceReference: input.evidenceReference,
+    });
+    if (!external) {
+      throw new Error(
+        `Authoritative external evidence requires a validated persisted external event (${input.evidenceReference})`
+      );
+    }
+  }
+
   const outcomeResult = await recordGoalCycleOutcome({
     tenantId: input.tenantId,
     objectiveId: input.objectiveId,
     outcomeKind: input.outcomeKind ?? "action_verification",
     impactClass: "action_verification",
-    evidenceClass: input.evidenceClass ?? "authoritative_external",
+    evidenceClass: input.evidenceClass ?? "operator_attested",
     evidenceReference: input.evidenceReference,
     sourceSystem: input.sourceSystem,
     epistemicStatus: "verified",

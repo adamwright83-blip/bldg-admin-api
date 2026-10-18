@@ -60,7 +60,7 @@ function integrate(
   nativeRows: NativeOrderRow[],
   cleancloudRows: CleanCloudOrderRow[],
   fail = false,
-  proof: "admitted" | "missing" | "unavailable" = "admitted"
+  proof: "admitted" | "missing" | "cleancloud-missing" | "unavailable" = "admitted"
 ) {
   const loaders: LedgerLoaders = {
     laundry_butler: async () => {
@@ -73,6 +73,9 @@ function integrate(
     },
   };
   const admitted = withFixturePaymentAuthority(loaders);
+  if (proof === "missing" || proof === "cleancloud-missing") {
+    admitted.cleancloudAuthority = async () => [];
+  }
   if (proof === "missing") admitted.paymentAuthority = async () => [];
   if (proof === "unavailable") admitted.paymentAuthority = async () => { throw new Error("authority unavailable"); };
   // Only source loading is substituted: real canonical mapping, deduplication,
@@ -183,10 +186,16 @@ describe("Money Authority Receipt availability", () => {
   expect(money.collectedRevenue).toMatchObject({value:null,provenance:"UNKNOWN"});
   expect(money.trust.warnings.join(" ")).toContain("unavailable");
  });
- it("holds missing proof out with recorded-only qualification, not an exact cumulative zero",async()=>{
+ it("holds missing proof out of recorded revenue",async()=>{
   integrate([native(701,"85.80")],[cleancloud("orders_sales")],false,"missing");
   const money=await getMoneyProjection({tenantId:"default"});
   expect(money.collectedRevenue).toMatchObject({value:0,confidence:"medium"});
+  expect(money.collectedRevenue.sourceReference).toContain(":recorded_only");
+ });
+ it("leaves CleanCloud revenue out when its payment evidence is not admissible",async()=>{
+  integrate([native(701,"85.80")],[cleancloud("orders_sales")],false,"cleancloud-missing");
+  const money=await getMoneyProjection({tenantId:"default"});
+  expect(money.collectedRevenue.value).toBe(8580);
   expect(money.collectedRevenue.sourceReference).toContain(":recorded_only");
  });
 });
