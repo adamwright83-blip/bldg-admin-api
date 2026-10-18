@@ -354,4 +354,29 @@ describe("ranking by contribution to the operator's goal", () => {
     const reputation = candidate("reviews", "Ask for reviews", desk, { motion: "reputation" });
     expect(goalEffect(rank("active_customers", [reputation]), "reviews")?.effect).toBe(0);
   });
+
+  it("an operator's sales hold blocks sales work for that day, not recovery", () => {
+    const desk = "Call the customer and record the answer";
+    const followUp = candidate("follow", "Follow up with the office manager", "Cold call the office manager", { observedDueDate: "2026-10-05" });
+    const pitch = candidate("pitch", "Pitch the building", "Cold call the property manager", { motion: "account_acquisition" });
+    const hangers = candidate("hangers", "Door hangers on Sunset", "Cold call the property manager", { motion: "territory_expansion" });
+    const recovery = candidate("winback", "Win back Ines", desk, { sourceKind: "customer_recovery", motion: "customer_recovery" });
+    const all = [followUp, pitch, hangers, recovery];
+    const plan = (salesHold: { until: string; reason: string | null } | null) =>
+      rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context: { ...context, salesHold }, pockets: [] });
+
+    const held = plan({ until: "2026-10-05", reason: "Just today, no sales until payroll is finished." });
+    for (const id of ["follow", "pitch", "hangers"]) {
+      const item = held.ranking.find(r => r.workId === id)!;
+      expect(item.eligible).toBe(false);
+      expect(item.blockedReasons).toContain("SALES_HELD_BY_OPERATOR");
+      expect(item.warnings.join(" ")).toContain("hold sales work through 2026-10-05");
+    }
+    expect(held.ranking.find(r => r.workId === "winback")!.blockedReasons).not.toContain("SALES_HELD_BY_OPERATOR");
+    expect(held.primary?.workId).toBe("winback");
+
+    // No hold: ranking is exactly as before.
+    expect(plan(null)).toEqual(rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context, pockets: [] }));
+    expect(plan(null).primary?.workId).toBe("follow");
+  });
 });

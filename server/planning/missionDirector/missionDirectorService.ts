@@ -12,6 +12,8 @@ import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoalForOperators } from "../../claire/macroGoalService";
 import { loadDailyCommand } from "../../claire/dailyCommandContract";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
+import { salesHeldOn } from "../../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../../agents/persistentOperator/operatorDoctrineStore";
 import { GOAL_CONTRIBUTION_POLICY_VERSION } from "../../../shared/weeklyGrowthCandidates";
 import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
 import {
@@ -54,7 +56,7 @@ function missionOperatorIds(input: {
   return [...new Set([input.operatorId, ...(input.operatorIds ?? [])].map(id => id.trim()).filter(Boolean))];
 }
 
-async function loadRankingContext(input: {
+export async function loadRankingContext(input: {
   tenantId: string;
   operatorUserIds: readonly string[];
   businessDate: string;
@@ -113,7 +115,11 @@ async function loadRankingContext(input: {
       });
     }
   }
-  return { businessDate: input.businessDate, macroGoal, openTasks };
+  // The operator's "no sales today": held prospect and account work is not
+  // ranked for that date, whichever planner asks.
+  const hold = await loadOperatorSalesHold({ tenantId: input.tenantId, operatorUserIds: input.operatorUserIds });
+  const salesHold = hold && salesHeldOn({ skipSalesUntil: hold.until }, input.businessDate) ? hold : null;
+  return { businessDate: input.businessDate, macroGoal, openTasks, ...(salesHold ? { salesHold } : {}) };
 }
 
 export function legacyCampaignCompatibilityCandidates<T extends { campaignId: string }>(
@@ -184,6 +190,9 @@ export function computePlanningFingerprint(input: {
         dueAt: task.dueAt,
       })),
       campaignPriorityById: input.rankingContext.campaignPriorityById ?? {},
+      // Only a hold changes ranking, so a stored pre-hold plan is never reused;
+      // without one the fingerprint is exactly as before.
+      ...(input.rankingContext.salesHold ? { salesHold: input.rankingContext.salesHold } : {}),
     },
     travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
     unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,

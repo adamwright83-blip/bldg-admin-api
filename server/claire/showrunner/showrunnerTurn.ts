@@ -7,6 +7,13 @@ import {
 import { invokeLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
 import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
+import {
+  applyDoctrineUtterance,
+  classifyDoctrineUtterance,
+  DEFAULT_DOCTRINE,
+  type DoctrineRules,
+} from "../../../shared/claireProactive";
+import { loadOperatorDoctrine, saveOperatorDoctrine } from "../../agents/persistentOperator/operatorDoctrineStore";
 import type { ShowrunnerBriefing } from "./showrunnerBriefing";
 import { driverDayLineStopIds } from "./driverDayLineCall";
 import { contactEditsForAnalysisSelection,
@@ -18,6 +25,36 @@ import {
   type DebriefDevelopment,
   type DebriefMissionUpdate,
 } from "./showrunnerDebrief";
+
+/**
+ * The operator's "no sales today" on this call, saved to their doctrine, or
+ * null when the utterance is not that hold. Only the sales hold is taken here:
+ * any other doctrine-like phrase ("skip the pickup today") falls through to the
+ * normal turn. Saved under the call's operator open id for the call's business
+ * date, which every planner reads.
+ */
+export async function captureShowrunnerSalesHold(
+  state: Pick<ShowrunnerCallState, "tenantId" | "operatorUserId" | "businessDate">,
+  utterance: string
+): Promise<string | null> {
+  if (classifyDoctrineUtterance(utterance) !== "temporary") return null;
+  const holds = (rules: DoctrineRules) => {
+    const applied = applyDoctrineUtterance(rules, utterance, state.businessDate);
+    return applied && "rules" in applied &&
+      applied.rules.skipSalesUntil === state.businessDate && applied.rules.skipSalesReason === utterance.trim()
+      ? applied
+      : null;
+  };
+  if (!holds(DEFAULT_DOCTRINE)) return null;
+  try {
+    const applied = holds(await loadOperatorDoctrine({ tenantId: state.tenantId, operatorUserId: state.operatorUserId }));
+    if (!applied) return null;
+    await saveOperatorDoctrine({ tenantId: state.tenantId, operatorUserId: state.operatorUserId, rules: applied.rules });
+    return applied.speak;
+  } catch {
+    return "I couldn't save that just now, so sales work is not on hold. Tell me again in a moment.";
+  }
+}
 
 /**
  * Daily showrunner conversation: morning readiness and evening debrief. Every
@@ -191,6 +228,8 @@ export async function runShowrunnerTurn(input: {
   approve?: typeof approveShowrunnerReplan;
   replan?: typeof replanFromShowrunnerCall;
   deskReplan?: typeof replanFromDeskEdits;
+  /** Saves an operator's "no sales today"; injectable for tests. */
+  salesHold?: typeof captureShowrunnerSalesHold;
   now?: Date;
   /**
    * Claire's work ledger owns work in this conversation (server/claire/workLedger):
@@ -241,6 +280,10 @@ export async function runShowrunnerTurn(input: {
       state,
     };
   }
+  // "No sales today" said on a scheduled call or in Desk Comms is saved, as it is in open conversation.
+  const salesHold = await (input.salesHold ?? captureShowrunnerSalesHold)(state, input.utterance);
+  if (salesHold) return { speak: salesHold, end: false, state, saved: [salesHold] };
+
   // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.
   // A pending proposal approval above retains priority; analytical turns cannot record outcomes or plan edits.
   if (

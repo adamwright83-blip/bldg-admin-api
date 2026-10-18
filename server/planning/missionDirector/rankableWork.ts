@@ -1,5 +1,6 @@
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { classifyObjectiveExecution } from "../../../shared/objectiveExecution";
+import { isSalesHoldMotion } from "../../../shared/claireProactive";
 import {
   GOAL_CONTRIBUTION_POLICY_VERSION,
   goalContribution,
@@ -176,6 +177,15 @@ function rankOne(input: {
     !protectedPrimaryMatches(candidate, input.protectedSourceIds)
   ) {
     blockedReasons.push("DISCRETIONARY_TIME_PROTECTED");
+  }
+
+  // The operator held sales through this date. Recovery is not sales work.
+  const salesHold = input.context.salesHold;
+  if (salesHold && isSalesHoldMotion(candidate.motion)) {
+    blockedReasons.push("SALES_HELD_BY_OPERATOR");
+    warnings.push(
+      `You asked to hold sales work through ${salesHold.until}${salesHold.reason ? ` ("${salesHold.reason}")` : ""}; this is not ranked for that day.`
+    );
   }
 
   const knownPocket = bestKnownPocket(candidate, input.pockets);

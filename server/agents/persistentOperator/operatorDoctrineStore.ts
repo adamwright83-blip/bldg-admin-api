@@ -59,6 +59,27 @@ export async function loadOperatorDoctrine(input: {
   }
 }
 
+export type OperatorSalesHold = { until: string; reason: string | null };
+
+/**
+ * The operator's "no sales today" hold, or null. Claire saves doctrine under
+ * the open id the operator spoke from (an alias, or the canonical id on a
+ * scheduled call), so every open id of the operator is read; the latest hold
+ * wins. Day Director actor ids are another identity space and never match.
+ */
+export async function loadOperatorSalesHold(input: {
+  tenantId: string;
+  operatorUserIds: readonly string[];
+}): Promise<OperatorSalesHold | null> {
+  let hold: OperatorSalesHold | null = null;
+  for (const operatorUserId of [...new Set(input.operatorUserIds.map(id => id.trim()).filter(Boolean))]) {
+    const rules = await loadOperatorDoctrine({ tenantId: input.tenantId, operatorUserId });
+    if (rules.skipSalesUntil && (!hold || rules.skipSalesUntil > hold.until))
+      hold = { until: rules.skipSalesUntil, reason: rules.skipSalesReason ?? null };
+  }
+  return hold;
+}
+
 export async function saveOperatorDoctrine(input: {
   tenantId: string;
   operatorUserId: string;

@@ -162,7 +162,8 @@ export function applyDoctrineUtterance(
     return {
       rules: next,
       permanence: "temporary",
-      speak: "Just today I'll hold sales work until payroll is finished. That doesn't change the standing rule.",
+      // Name the operator's own reason only when they gave it.
+      speak: `Just today I'll hold sales work${/\bpayroll\b/i.test(utterance) ? " until payroll is finished" : ""}. That doesn't change the standing rule.`,
     };
   }
   const confront = /\b(?:if i )?move the same .{0,40}(\d+|three|3) times\b/i.exec(utterance);
@@ -470,6 +471,26 @@ export function morningChiefOfStaffBrief(input: {
   }
   if (!lines.length) return "Nothing on the board needs you before you start operating. I'll keep watch.";
   return lines.slice(0, 5).join(" ");
+}
+
+/**
+ * Growth motions an operator's "no sales today" holds: prospect and account
+ * work. Recovery of lapsed customers is not held; the board keeps scheduling
+ * it on a held day, and every other planner follows the same rule.
+ */
+export const SALES_HOLD_MOTIONS: ReadonlySet<string> = new Set([
+  "commercial_follow_up",
+  "account_acquisition",
+  "territory_expansion",
+]);
+
+export function isSalesHoldMotion(motion: string | null | undefined): boolean {
+  return motion != null && SALES_HOLD_MOTIONS.has(motion);
+}
+
+/** True when the operator held sales through `businessDate` (inclusive). */
+export function salesHeldOn(rules: Pick<DoctrineRules, "skipSalesUntil">, businessDate: string): boolean {
+  return rules.skipSalesUntil != null && businessDate <= rules.skipSalesUntil;
 }
 
 export function whyPushingSales(skipSales: boolean): string {

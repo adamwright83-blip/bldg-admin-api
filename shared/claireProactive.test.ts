@@ -12,6 +12,8 @@ import {
   interruptForSalesFollowUp,
   isDormantEligible,
   isRelationshipCooling,
+  isSalesHoldMotion,
+  salesHeldOn,
   morningChiefOfStaffBrief,
   overloadJudgment,
   prioritizeRecoveries,
@@ -213,6 +215,19 @@ describe("Adam doctrine — avoidance, software, gumball, prepare, permanence, m
       expect(applied.rules.skipSalesUntil).toBe("2026-09-16");
       expect(applied.rules.avoidanceConfrontAfter).toBe(DEFAULT_DOCTRINE.avoidanceConfrontAfter);
     }
+  });
+
+  it("18b. the sales hold covers prospect and account work through its day, and says only the reason given", () => {
+    const rules = { skipSalesUntil: "2026-09-16" };
+    expect([salesHeldOn(rules, "2026-09-16"), salesHeldOn(rules, "2026-09-17"), salesHeldOn({ skipSalesUntil: null }, "2026-09-16")]).toEqual([true, false, false]);
+    expect(["commercial_follow_up", "account_acquisition", "territory_expansion"].every(isSalesHoldMotion)).toBe(true);
+    // Recovery of lapsed customers is not sales work; the board keeps scheduling it on a held day.
+    expect(["customer_recovery", "retention", "investigation", null].some(isSalesHoldMotion)).toBe(false);
+    const withPayroll = applyDoctrineUtterance(DEFAULT_DOCTRINE, "Just today, don't give me sales work until payroll is finished.", "2026-09-16");
+    expect(withPayroll?.speak).toBe("Just today I'll hold sales work until payroll is finished. That doesn't change the standing rule.");
+    const noReason = applyDoctrineUtterance(DEFAULT_DOCTRINE, "Just today, no sales.", "2026-09-16");
+    expect(noReason && "rules" in noReason && noReason.rules.skipSalesUntil).toBe("2026-09-16");
+    expect(noReason?.speak).toBe("Just today I'll hold sales work. That doesn't change the standing rule.");
   });
 
   it("19. permanence language updates standing doctrine", () => {

@@ -25,6 +25,8 @@ export type RankingContext = {
   openTasks: readonly RankingOpenTask[];
   /** Explicit operator campaign priority when stored on the campaign row. */
   campaignPriorityById?: Record<string, number>;
+  /** Set only when the operator held sales through `businessDate`. */
+  salesHold?: { until: string; reason: string | null } | null;
 };
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {
