@@ -112,6 +112,15 @@ describe("CleanCloud paid evidence authority", () => {
       const receipts = [observed("first", 7, "2026-09-02T18:00:00.000Z"), observed("corrected", 8, "2026-09-03T18:00:00.000Z")];
       expect(currentCleanCloudPaidObservationReceipt(receipts, order)?.id).toBe("corrected");
     });
+    it("is chosen by payment time: the other report's newer receipt does not hide this row's payment", () => {
+      // The Sales row was observed at its Payment Date; the Revenue row, imported later, at its own Paid Date.
+      const receipts = [
+        observed("sales", 7, "2026-09-02T18:00:00.000Z"),
+        observed("revenue", 8, "2026-09-03T18:00:00.000Z", { occurredAt: "2026-09-03T01:40:00.000Z" }),
+      ];
+      expect(currentCleanCloudPaidObservationReceipt(receipts, order)?.id).toBe("sales");
+      expect(currentCleanCloudPaidObservationReceipt(receipts, { ...order, paymentAt: "2026-09-03T01:40:00.000Z" })?.id).toBe("revenue");
+    });
     it("fails closed: another payment time, no import batch, another tenant, an invalid newest receipt", () => {
       expect(currentCleanCloudPaidObservationReceipt([observed("a", 7, "2026-09-02T18:00:00.000Z", { occurredAt: "2026-09-03T17:15:00.000Z" })], order)).toBeNull();
       expect(currentCleanCloudPaidObservationReceipt([observed("a", 7, "2026-09-02T18:00:00.000Z")], { ...order, importBatchId: null })).toBeNull();

@@ -200,17 +200,23 @@ export function cleanCloudPaidObservationReceiptMatches(
  * The receipt for a CleanCloud order's current economic revision, or null.
  *
  * A paid observation is admitted only when the order's economics change
- * (enqueueEconomicSnapshot), so the newest receipt for the order is the one
- * for its current revision, whichever import batch later re-observed the row.
- * A re-sync that changes no money (a customer id filled in, the same file
+ * (enqueueEconomicSnapshot), and it carries the payment time it observed. So
+ * the newest receipt that observed this row's payment time is the one for its
+ * current revision, whichever import batch later re-observed the row. A
+ * re-sync that changes no money (a customer id filled in, the same file
  * imported again) moves the row to a new batch and correctly admits nothing;
  * the import batch is provenance of the latest write, not the payment's
  * identity, so it does not decide which receipt applies.
  *
- * Fail-closed: the newest receipt must pass its admission policy (an older one
- * is never substituted) and must carry the order's own payment time; anything
- * else observed a payment this row does not describe. A row with no import
- * batch is never admitted (no import observed it).
+ * The payment time, not recency alone, selects the receipt: the Sales and the
+ * Revenue report describe one order with their own payment times, and each
+ * import of one admits a receipt for its time. The newest receipt for the
+ * order can therefore be the other report's.
+ *
+ * Fail-closed: the newest receipt for this payment time must pass its
+ * admission policy (an older one is never substituted). No receipt for the
+ * row's payment time means no import observed this payment. A row with no
+ * import batch is never admitted (no import observed it).
  */
 export function currentCleanCloudPaidObservationReceipt(
   receipts: readonly AuthorityReceipt[],
@@ -226,10 +232,12 @@ export function currentCleanCloudPaidObservationReceipt(
         receipt.claimType === "cleancloud_paid_observed" &&
         receipt.subjectType === "cleancloud_order" &&
         receipt.subjectId === expected.subjectId &&
-        receipt.sourceType === "cleancloud_paid_order"
+        receipt.sourceType === "cleancloud_paid_order" &&
+        receipt.occurredAt != null &&
+        Date.parse(receipt.occurredAt) === paymentAt
     )
     .sort((a, b) => b.admittedAt.localeCompare(a.admittedAt) || b.id.localeCompare(a.id))[0];
-  if (!newest?.occurredAt || Date.parse(newest.occurredAt) !== paymentAt) return null;
+  if (!newest) return null;
   try {
     assertAuthorityClaimPolicy(newest);
     return newest;

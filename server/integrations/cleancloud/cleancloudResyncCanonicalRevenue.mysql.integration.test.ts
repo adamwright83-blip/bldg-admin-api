@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
+import { loadCustomerOrderTruth } from "../../geography/customerOrderTruth";
 import { cleancloudBrowserSyncRouter } from "./browserSync/router";
 import { grantGumballProofMembership, provisionGumballCustomerTruthSchema } from "./browserSync/gumballCustomerTruthDbProof";
 import { importCleanCloudPaidOrders } from "./cleancloudPaidOrders";
@@ -146,6 +147,42 @@ describe.skipIf(skip)("CleanCloud re-sync and canonical revenue (real MySQL)", (
     await sync.import(csv({ customerId: "7", total: "55.00" }));
     expect(await receiptsFor(tenantId, "1")).toBe(2);
     expect(counted(await ledgerOf(tenantId))).toEqual([["cleancloud:1", 5500]]);
+  });
+
+  it("an order in both the Sales and the Revenue report keeps its Sales payment counted, whichever imported last", async () => {
+    const tenantId = await tenant();
+    // CleanCloud's Revenue report carries a Paid Date that can differ from the Sales report's Payment Date.
+    await importCleanCloudPaidOrders({
+      csvText: csv({ customerId: "7", placed: "08/20/2026 09:00 AM", paymentDate: "09/02/2026 10:15 AM" }),
+      sourceReportType: "orders_sales",
+      tenantId,
+    });
+    await importCleanCloudPaidOrders({
+      csvText: `${HEADER.replace("Payment Date", "Paid Date")}\n1,08/20/2026 09:00 AM,Example,7,2170 Century Park East,Yes,09/02/2026 06:40 PM,51.00`,
+      sourceReportType: "orders_revenue",
+      tenantId,
+    });
+    // Each report's payment time was observed once.
+    expect(await receiptsFor(tenantId, "1")).toBe(2);
+    const after = await ledgerOf(tenantId);
+    expect(counted(after)).toEqual([["cleancloud:1", 5100]]);
+    expect(unverified(after)).toEqual([]);
+    const truth = (await loadCustomerOrderTruth(tenantId)).filter(r => r.source === "cleancloud");
+    expect(truth.map(r => [r.sourceOrderId, r.paid, r.totalCents])).toEqual([["1", true, 5100]]);
+  });
+
+  it("customer history: a re-synced paid order stays a paid order for the customer", async () => {
+    const tenantId = await tenant();
+    const sync = browserSync(tenantId);
+    await sync.import(csv({ customerId: "" }));
+    const paidOrders = async () =>
+      (await loadCustomerOrderTruth(tenantId)).filter(r => r.source === "cleancloud").map(r => [r.sourceOrderId, r.paid, r.totalCents]);
+    expect(await paidOrders()).toEqual([["1", true, 5100]]);
+    // The same re-export as above: nothing about the money changed, so no receipt is due.
+    await sync.import(csv({ customerId: "7" }));
+    expect(await receiptsFor(tenantId, "1")).toBe(1);
+    // Lapsed/active customers and geography read this; an unpaid order here makes a paying customer look lapsed.
+    expect(await paidOrders()).toEqual([["1", true, 5100]]);
   });
 
   it("a receipt is never applied to a payment it did not observe", async () => {
