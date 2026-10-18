@@ -461,10 +461,11 @@ export async function readStrategicDiagnosisInputs(input: {
       focus: appliedFocus?.area && focus ? { id: appliedFocus.id, area: appliedFocus.area, confirmation: appliedFocus.confirmation } : null,
       method:
         method && (method.population === "lapsed_customers" || method.population === "new_customers")
-          ? { id: method.id, lever: method.lever, population: method.population, area: method.area, statement: method.statement }
+          ? { id: method.id, lever: method.lever, population: method.population, area: method.area, statement: method.statement, outcomeId: method.outcomeId }
           : null,
       unresolvedConflicts: mandate.conflicts.filter(c => c.status === "unresolved").map(c => c.description),
       notes: mandate.uncertainty,
+      constraints: mandate.constraints.map(c => ({ id: c.id, key: c.key, value: c.value, origin: c.origin, statement: c.statement })),
     },
     evidence,
     metrics,
@@ -674,6 +675,14 @@ export async function measureObjectiveFocus(input: {
       .sort((a, b) => b.revenueCents - a.revenueCents)
       .slice(0, 5)
       .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents, identityKey: m.identityId }));
+    focus.dormantMembers = dormant.data.population.members.map(m => ({
+      identityKey: m.matched ? m.identityId : null,
+      name: m.displayName,
+      lastOrderDate: m.lastOrderDate,
+      revenueCents: m.revenueCents,
+      paidOrders: m.orderCount,
+      matched: m.matched,
+    }));
     focus.dormantRef = `objective_area_dormant:${input.tenantId}:${label}:${capturedAt}`;
     evidence.push({
       id: focus.dormantRef,

@@ -51,6 +51,18 @@ export function diagnosisCandidates(
         source: d.id,
         sourceIds: a.evidenceRefs,
       },
+      // The operator's stated method is challenged by evidence. Mission
+      // Director carries it on this work and never ranks the alternative.
+      ...(d.challenge
+        ? [
+            {
+              label: "strategic_challenge",
+              value: d.challenge.id,
+              source: d.id,
+              sourceIds: d.challenge.evidenceAgainst.map(e => e.ref),
+            },
+          ]
+        : []),
     ],
     assumptions: [
       {
