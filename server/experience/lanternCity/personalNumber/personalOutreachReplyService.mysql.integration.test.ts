@@ -6,6 +6,8 @@ import { withUtcTimezone } from "../../../db";
 import { projectCozyRecoverySurfaces } from "../../../../shared/cozyVillagerEvidence";
 import type { CozyCustomerTarget, CozyEncounterMission } from "../../../../shared/cozyVillagerOutreach";
 import { checkCommunicationPermission } from "../../../strategy/communicationPermissionService";
+import { hashIdentityKey, loadDormantContactFacts, permissionForKeys } from "../../../strategy/dormantOutreachGate";
+import { phoneOptOutState } from "../../../messaging/businessLineInbox";
 import { outreachEvidenceFromRow } from "../cozyRecoverySurfaces";
 import {
   createScheduledOutreachDraft,
@@ -287,5 +289,135 @@ describeMysql("personalOutreachReplyService on disposable MySQL", () => {
     });
     expect(perm.allowed).toBe(false);
     expect(perm.permissionStatus).toBe("opted_out");
+    // Every gate an outbound path reads now says opted_out.
+    const anyChannel = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: optOutCustomerId, channel: "any" });
+    expect(anyChannel.permissionStatus).toBe("opted_out");
+    const byPhoneId = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: "phone:2135550177", channel: "sms" });
+    expect(byPhoneId.permissionStatus).toBe("opted_out");
+    const facts = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:30:00.000Z") });
+    expect(facts.readable).toBe(true);
+    expect(permissionForKeys(facts, tenantId, ["phone:2135550177"]).state).toBe("opted_out");
+    expect(await phoneOptOutState(tenantId, "+12135550177")).toBe("opted_out");
+  });
+
+  it("an operator-reported STOP (no phone from the client) reaches Silver Lake's phone-keyed gate", async () => {
+    const stopCustomerId = `cust_opstop_${suffix}`;
+    const phoneDigits = "2135550188";
+    // The customer had opted in before.
+    await sql.execute(
+      `INSERT INTO customer_contact_permissions
+        (tenantId, customerKeyHash, channel, purpose, status, sourceReference, capturedAt, recordedBy)
+       VALUES (?, ?, 'sms', 'win_back_marketing', 'opted_in', 'fixture:prior-consent', ?, 'fixture')`,
+      [tenantId, hashIdentityKey(tenantId, `phone:${phoneDigits}`), new Date("2026-09-01T00:00:00.000Z")]
+    );
+    // The operator's own outreach draft is the server-side record of this customer's phone.
+    await createScheduledOutreachDraft({
+      tenantId,
+      operatorId,
+      customerId: stopCustomerId,
+      customerName: "Jamie Lee",
+      recipientPhone: `+1${phoneDigits}`,
+      originalSuggestedDraft: "Hi Jamie, it's Adam from Laundry Farm.",
+      messageBody: "Hi Jamie, checking in from Laundry Farm.",
+      scheduledFor: "2026-10-17T19:00:00.000Z",
+      timezone: "America/Los_Angeles",
+      slotId: "slot_03",
+      territoryId: "silver-lake",
+      status: "awaiting_sender_setup",
+      deliveryIntent: "immediate",
+      now,
+    });
+    const before = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:39:00.000Z") });
+    expect(permissionForKeys(before, tenantId, [`phone:${phoneDigits}`]).state).toBe("opted_in");
+
+    const saved = await recordPersonalOutreachReply({
+      tenantId,
+      operatorId,
+      customerId: stopCustomerId,
+      customerName: "Jamie Lee",
+      replyText: "STOP",
+      now: new Date("2026-10-17T18:40:00.000Z"),
+    });
+    expect(saved.permissionEffect).toBe("opted_out");
+    expect(saved.rawPhone).toBeNull();
+
+    const after = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:41:00.000Z") });
+    expect(after.readable).toBe(true);
+    expect(permissionForKeys(after, tenantId, [`phone:${phoneDigits}`]).state).toBe("opted_out");
+    expect(await phoneOptOutState(tenantId, `+1${phoneDigits}`)).toBe("opted_out");
+    for (const subjectId of [stopCustomerId, `phone:${phoneDigits}`]) {
+      for (const channel of ["sms", "any"] as const) {
+        const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId, channel });
+        expect(perm.permissionStatus).toBe("opted_out");
+      }
+    }
+  });
+
+  it("an operator-reported STOP blocks every number the operator has for that customer", async () => {
+    const twoPhoneCustomerId = `cust_twophone_${suffix}`;
+    const oldDigits = "2135550191";
+    const currentDigits = "2135550192";
+    for (const [digits, slotId, at] of [
+      [oldDigits, "slot_04", "2026-10-17T20:00:00.000Z"],
+      [currentDigits, "slot_05", "2026-10-17T21:00:00.000Z"],
+    ] as const) {
+      await sql.execute(
+        `INSERT INTO customer_contact_permissions
+          (tenantId, customerKeyHash, channel, purpose, status, sourceReference, capturedAt, recordedBy)
+         VALUES (?, ?, 'sms', 'win_back_marketing', 'opted_in', 'fixture:prior-consent', ?, 'fixture')`,
+        [tenantId, hashIdentityKey(tenantId, `phone:${digits}`), new Date("2026-08-01T00:00:00.000Z")]
+      );
+      await createScheduledOutreachDraft({
+        tenantId,
+        operatorId,
+        customerId: twoPhoneCustomerId,
+        customerName: "Dana Cruz",
+        recipientPhone: `+1${digits}`,
+        originalSuggestedDraft: "Hi Dana, it's Adam from Laundry Farm.",
+        messageBody: `Hi Dana, checking in from Laundry Farm (${slotId}).`,
+        scheduledFor: at,
+        timezone: "America/Los_Angeles",
+        slotId,
+        territoryId: "silver-lake",
+        status: "awaiting_sender_setup",
+        deliveryIntent: "immediate",
+        now,
+      });
+    }
+
+    await recordPersonalOutreachReply({
+      tenantId,
+      operatorId,
+      customerId: twoPhoneCustomerId,
+      customerName: "Dana Cruz",
+      replyText: "STOP",
+      now: new Date("2026-10-17T18:45:00.000Z"),
+    });
+
+    const facts = await loadDormantContactFacts({ tenantId, now: new Date("2026-10-17T18:46:00.000Z") });
+    for (const digits of [oldDigits, currentDigits]) {
+      expect(permissionForKeys(facts, tenantId, [`phone:${digits}`]).state).toBe("opted_out");
+      expect(await phoneOptOutState(tenantId, `+1${digits}`)).toBe("opted_out");
+      const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: `phone:${digits}`, channel: "sms" });
+      expect(perm.permissionStatus).toBe("opted_out");
+    }
+  });
+
+  it("an operator-reported STOP whose phone cannot be found blocks the customer id and says the phone block is missing", async () => {
+    const unknownCustomerId = `cust_nophone_${suffix}`;
+    await expect(
+      recordPersonalOutreachReply({
+        tenantId,
+        operatorId,
+        customerId: unknownCustomerId,
+        customerName: "Robin Park",
+        replyText: "STOP",
+        now: new Date("2026-10-17T18:50:00.000Z"),
+      })
+    ).rejects.toThrow("phone number could not be found");
+    for (const channel of ["sms", "any"] as const) {
+      const perm = await checkCommunicationPermission({ tenantId, subjectType: "customer", subjectId: unknownCustomerId, channel });
+      expect(perm.permissionStatus).toBe("opted_out");
+    }
   });
 });

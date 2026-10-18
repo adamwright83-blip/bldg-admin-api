@@ -7,6 +7,12 @@ import { canCompleteRescue } from "../../shared/spiritHumanRescue";
 import { recordRescueConsequence } from "./rescueMissionService";
 import { requireDurableRescueStore, type RescueMissionStore } from "./rescueMissionStore";
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
+import {
+  customerKeyHashForPhone,
+  optOutKeywordFor,
+  requireDurableBusinessLineInbox,
+  type BusinessLineInboxStore,
+} from "../messaging/businessLineInbox";
 
 export const SPIRIT_HUMAN_INBOUND_SMS_PATH = "/api/spirit-human/twilio/inbound-sms";
 
@@ -28,6 +34,7 @@ export type SpiritHumanInboundSmsDeps = {
   expectedTo?: string;
   nodeEnv?: string;
   store?: RescueMissionStore;
+  inbox?: BusinessLineInboxStore;
   loadAggregates?: (tenantId: string) => Promise<AdminCustomerAggregateDbRow[]>;
   now?: () => Date;
 };
@@ -39,7 +46,7 @@ export async function handleSpiritHumanInboundSms(
     body: Record<string, string>;
   },
   deps: SpiritHumanInboundSmsDeps = {}
-): Promise<{ status: number; persistBody: false }> {
+): Promise<{ status: number; recorded: boolean; optedOut: boolean }> {
   const authToken = (deps.authToken ?? process.env.TWILIO_AUTH_TOKEN ?? "").trim();
   const valid = isValidTwilioWebhook({
     authToken,
@@ -48,7 +55,7 @@ export async function handleSpiritHumanInboundSms(
     body: input.body,
     nodeEnv: deps.nodeEnv ?? process.env.NODE_ENV ?? "development",
   });
-  if (!valid) return { status: 403, persistBody: false };
+  if (!valid) return { status: 403, recorded: false, optedOut: false };
 
   const tenantId = (deps.tenantId ?? process.env.SPIRIT_HUMAN_SMS_TENANT_ID ?? "").trim();
   const expectedTo = (
@@ -59,24 +66,68 @@ export async function handleSpiritHumanInboundSms(
   ).trim();
   if (!tenantId || !expectedTo) {
     console.warn("[SpiritHumanRescue] inbound SMS ignored: explicit tenant/from-number binding is not configured");
-    return { status: 503, persistBody: false };
+    return { status: 503, recorded: false, optedOut: false };
   }
 
   const from = digits(input.body.From);
   const to = digits(input.body.To);
   const messageSid = String(input.body.MessageSid ?? "").trim();
   if (!from || !to || !messageSid || to !== digits(expectedTo)) {
-    return { status: 400, persistBody: false };
+    return { status: 400, recorded: false, optedOut: false };
   }
 
-  const aggregates = await (deps.loadAggregates ?? listAdminCustomerAggregates)(tenantId);
-  const matchingCustomers = aggregates.filter(row => digits(row.phone) === from);
-  const snapshotIds = new Set(
-    matchingCustomers.map(row => strategyCustomerSnapshotId(tenantId, row))
-  );
+  const now = (deps.now ?? (() => new Date()))();
+  const customerKeyHash = customerKeyHashForPhone(tenantId, from);
+  if (!customerKeyHash) return { status: 400, recorded: false, optedOut: false };
+  const keyword = optOutKeywordFor(String(input.body.Body ?? ""), input.body.OptOutType);
+  // Save the reply before anything else can fail. A 500 shows in Twilio's debugger
+  // and the text stays in Twilio's message log for backfill.
+  const inbox = deps.inbox ?? (await requireDurableBusinessLineInbox());
+  const recorded = await inbox.recordInbound({
+    tenantId,
+    providerMessageSid: messageSid,
+    toDigits: to,
+    fromDigits: from,
+    customerKeyHash,
+    body: String(input.body.Body ?? ""),
+    numMedia: Number.parseInt(String(input.body.NumMedia ?? "0"), 10) || 0,
+    optOutKeyword: keyword,
+    receivedAt: now,
+  });
+  if (!recorded) return { status: 500, recorded: false, optedOut: false };
+
+  const loadAggregates = deps.loadAggregates ?? listAdminCustomerAggregates;
+  const snapshotIdsFor = (aggregates: AdminCustomerAggregateDbRow[]) =>
+    new Set(
+      aggregates
+        .filter(row => digits(row.phone) === from)
+        .map(row => strategyCustomerSnapshotId(tenantId, row))
+    );
+  if (keyword === "stop") {
+    // The phone-keyed opt-out does not depend on customer lookup, so it is written
+    // and read back first; a lookup outage cannot drop a STOP.
+    const optOut = { tenantId, customerKeyHash, providerMessageSid: messageSid, capturedAt: now };
+    if (!(await inbox.recordOptOut({ ...optOut, snapshotCustomerIds: [] }))) {
+      return { status: 500, recorded: true, optedOut: false };
+    }
+    let snapshotIds: string[] = [];
+    try {
+      snapshotIds = [...snapshotIdsFor(await loadAggregates(tenantId))];
+    } catch (error) {
+      console.warn(
+        "[BusinessLine] STOP recorded by phone; customer lookup failed, so per-customer consent rows were not added",
+        error instanceof Error ? error.name : "unknown"
+      );
+    }
+    if (snapshotIds.length && !(await inbox.recordOptOut({ ...optOut, snapshotCustomerIds: snapshotIds }))) {
+      return { status: 500, recorded: true, optedOut: false };
+    }
+    return { status: 200, recorded: true, optedOut: true };
+  }
+  const snapshotIds = snapshotIdsFor(await loadAggregates(tenantId));
   if (snapshotIds.size !== 1) {
     console.warn("[SpiritHumanRescue] inbound SMS identity was not uniquely resolvable");
-    return { status: 204, persistBody: false };
+    return { status: 204, recorded: true, optedOut: false };
   }
   const [snapshotCustomerId] = [...snapshotIds];
   const store = deps.store ?? (await requireDurableRescueStore());
@@ -91,7 +142,7 @@ export async function handleSpiritHumanInboundSms(
       (a, b) => Date.parse(b.send.acceptedAt ?? "") - Date.parse(a.send.acceptedAt ?? "")
     );
   const mission = candidates[0];
-  if (!mission) return { status: 204, persistBody: false };
+  if (!mission) return { status: 204, recorded: true, optedOut: false };
 
   await recordRescueConsequence(
     {
@@ -99,11 +150,11 @@ export async function handleSpiritHumanInboundSms(
       missionId: mission.missionId,
       kind: "customer_replied",
       evidenceId: `twilio:${messageSid}`,
-      observedAt: (deps.now ?? (() => new Date()))(),
+      observedAt: now,
     },
     { store }
   );
-  return { status: 200, persistBody: false };
+  return { status: 200, recorded: true, optedOut: false };
 }
 
 export function registerSpiritHumanInboundSmsRoutes(app: Express): void {

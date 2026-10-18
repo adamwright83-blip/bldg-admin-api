@@ -476,6 +476,33 @@ describe("Spirit Human rescue send boundary", () => {
     expect(deps.sendAdapter.attempts).toHaveLength(0);
   });
 
+  for (const [state, reason] of [
+    ["opted_out", "The customer opted out. Nothing was sent."],
+    ["unavailable", "Opt-out status could not be checked. Nothing was sent."],
+  ] as const) {
+    it(`does not send when the phone-keyed opt-out check says ${state}`, async () => {
+      const seen: Array<{ tenantId: string; phone: string }> = [];
+      const deps = depsFor({
+        phoneOptOutCheck: async input => {
+          seen.push(input);
+          return state;
+        },
+      });
+      const created = await instantiateRescueMission(
+        { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+        deps
+      );
+      const failed = await approveAndSendRescue(
+        { tenantId: "tenant-a", operatorUserId: "op-a", missionId: created.missionId, approvedByUserId: "op-a", operatorAuthorizedSend: true },
+        deps
+      );
+      expect(seen).toEqual([{ tenantId: "tenant-a", phone: "3105550101" }]);
+      expect(failed.send.evidenceName).toBe("permission_denied");
+      expect(failed.send.failureReason).toBe(reason);
+      expect(deps.sendAdapter.attempts).toHaveLength(0);
+    });
+  }
+
   it("does not send when communication permission is refused and does not call it a provider rejection", async () => {
     const deps = depsFor({
       permissionCheck: async () => ({

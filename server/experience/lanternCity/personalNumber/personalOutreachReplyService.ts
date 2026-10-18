@@ -57,6 +57,8 @@ import {
 import { normalizeSmsPhone } from "../../../_core/sms";
 import { getDb } from "../../../db";
 import { recordCommunicationPermission } from "../../../strategy/communicationPermissionService";
+import { enforceSmsOptOut } from "../../../messaging/businessLineInbox";
+import { readPersonalOutreachRoster } from "../../../strategy/personalOutreachWrite";
 import { approvedBodyDigest } from "./smsComposeHandoff";
 
 /**
@@ -448,6 +450,49 @@ export function verifyOutboundOutboxMatch(input: {
   return { matched: true, outboxRow: row, alreadyDispatchedIdempotent: false };
 }
 
+/**
+ * Every phone this operator's own records hold for the customer: all their
+ * outreach drafts (including any linked one), and the tenant recovery roster the
+ * village is built from. Never client input. A STOP is enforced on all of them,
+ * so a customer with several numbers is never left opted in on one.
+ */
+async function resolveCustomerPhonesServerSide(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  input: {
+    tenantId: string;
+    operatorId: string;
+    customerId: string;
+    territoryId: string | null;
+    now: Date;
+  }
+): Promise<string[]> {
+  const drafts = await db
+    .select({ phone: scheduledOutreachMessages.recipientPhone })
+    .from(scheduledOutreachMessages)
+    .where(
+      and(
+        eq(scheduledOutreachMessages.tenantId, input.tenantId),
+        eq(scheduledOutreachMessages.operatorId, input.operatorId),
+        eq(scheduledOutreachMessages.customerId, input.customerId)
+      )
+    );
+  const roster = await readPersonalOutreachRoster({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.operatorId,
+    timeZone: "America/Los_Angeles",
+    now: input.now,
+    territoryId: input.territoryId ?? undefined,
+    limit: 50,
+  }).catch(() => null);
+  const rosterPhone = roster?.contacts.find(c => c.identityId === input.customerId)?.phone ?? null;
+  const phones = new Set<string>();
+  for (const raw of [...drafts.map(d => d.phone), rosterPhone]) {
+    const normalized = raw ? normalizeSmsPhone(raw) : null;
+    if (normalized && normalized.replace(/\D/g, "").length >= 11) phones.add(normalized);
+  }
+  return [...phones].sort();
+}
+
 export async function recordMessagingEvidenceEvent(input: {
   tenantId: string;
   operatorId: string;
@@ -729,27 +774,46 @@ export async function recordMessagingEvidenceEvent(input: {
     }
 
     if (prepared.permissionEffect === "opted_out") {
+      // The reply is saved; the STOP is only acknowledged once every consent store an
+      // outbound path reads says opted_out. Otherwise fail loudly so it is retried.
+      // Operator reports never carry a phone (anti-spoofing), so the customer's numbers
+      // come from this operator's own records; never from the client.
+      const enforcementPhones = normalizedPhone
+        ? [normalizedPhone]
+        : resolvedCustomerId
+          ? await resolveCustomerPhonesServerSide(db, {
+              tenantId: input.tenantId,
+              operatorId: input.operatorId,
+              customerId: resolvedCustomerId,
+              territoryId: resolvedTerritoryId,
+              now: observedDate,
+            })
+          : [];
       const subjectIds = [
         resolvedCustomerId,
-        normalizedPhone ? `phone:${normalizedPhone.replace(/\D/g, "").slice(-10)}` : null,
+        ...enforcementPhones.map(phone => `phone:${phone.replace(/\D/g, "").slice(-10)}`),
       ].filter((id): id is string => Boolean(id));
-      for (const subjectId of subjectIds) {
-        await recordCommunicationPermission({
-          tenantId: input.tenantId,
-          subjectType: "customer",
-          subjectId,
-          channel: "sms",
-          status: "opted_out",
-          reason: `Observed SMS opt-out (${input.source}): "${trimmedBody.slice(0, 120)}"`,
-        });
-        await recordCommunicationPermission({
-          tenantId: input.tenantId,
-          subjectType: "customer",
-          subjectId,
-          channel: "any",
-          status: "opted_out",
-          reason: `Observed SMS opt-out (${input.source}): "${trimmedBody.slice(0, 120)}"`,
-        });
+      const enforcementBase = {
+        tenantId: input.tenantId,
+        customerSubjectIds: subjectIds,
+        channels: ["sms", "any"] as const,
+        sourceReference: `${input.source}:${eventId}`,
+        capturedAt: observedDate,
+        recordedBy: `personal_outreach_${input.source}`,
+      };
+      let enforced = await enforceSmsOptOut(db, { ...enforcementBase, phone: null });
+      for (const phone of enforcementPhones) {
+        enforced = (await enforceSmsOptOut(db, { ...enforcementBase, customerSubjectIds: [], phone })) && enforced;
+      }
+      if (!enforced) {
+        throw new Error(
+          "The opt-out reply was saved, but the opt-out could not be verified. Outreach to this customer is not yet blocked; try again."
+        );
+      }
+      if (enforcementPhones.length === 0) {
+        throw new Error(
+          "The opt-out reply was saved and this customer is blocked by customer id, but their phone number could not be found, so the phone-level block was not written. Do not text them; check their contact record."
+        );
       }
     }
 

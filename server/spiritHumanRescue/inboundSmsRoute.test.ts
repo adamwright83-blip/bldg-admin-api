@@ -10,6 +10,7 @@ import {
   SPIRIT_HUMAN_INBOUND_SMS_PATH,
 } from "./inboundSmsRoute";
 import { MemoryRescueMissionStore } from "./rescueMissionStore";
+import { customerKeyHashForPhone, MemoryBusinessLineInbox, optOutKeywordFor } from "../messaging/businessLineInbox";
 
 const AUTH = "test-twilio-token";
 const URL = "https://api.example.test/api/spirit-human/twilio/inbound-sms";
@@ -142,6 +143,7 @@ describe("Spirit Human inbound SMS webhook", () => {
         expectedTo: TO,
         nodeEnv: "production",
         store,
+        inbox: new MemoryBusinessLineInbox(),
         loadAggregates: async () => [rowA, rowB],
       }
     );
@@ -169,6 +171,7 @@ describe("Spirit Human inbound SMS webhook", () => {
         expectedTo: TO,
         nodeEnv: "production",
         store,
+        inbox: new MemoryBusinessLineInbox(),
         loadAggregates: async () => [row],
       }
     );
@@ -195,12 +198,13 @@ describe("Spirit Human inbound SMS webhook", () => {
         expectedTo: TO,
         nodeEnv: "production",
         store,
+        inbox: new MemoryBusinessLineInbox(),
         loadAggregates: async () => [row],
         now: () => new Date("2026-09-18T12:00:00.000Z"),
       }
     );
     expect(result.status).toBe(200);
-    expect(result.persistBody).toBe(false);
+    expect(result.recorded).toBe(true);
     const saved = await store.get("default", "shr_sms");
     expect(saved?.consequences).toEqual([
       {
@@ -211,5 +215,131 @@ describe("Spirit Human inbound SMS webhook", () => {
     ]);
     expect(JSON.stringify(saved)).not.toContain("YES please pick up tomorrow");
     expect(JSON.stringify(saved)).not.toContain("no_response");
+  });
+
+  it("saves every signed reply first, even from a number that is not a customer", async () => {
+    const inbox = new MemoryBusinessLineInbox();
+    const store = new MemoryRescueMissionStore();
+    const { body, signature } = signedBody({ MessageSid: "SMnew", From: "+13105550177", To: TO, Body: "Do you pick up in Echo Park?", NumMedia: "0" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      { authToken: AUTH, tenantId: "default", expectedTo: TO, nodeEnv: "production", store, inbox, loadAggregates: async () => [aggregate()], now: () => new Date("2026-10-17T21:00:00.000Z") }
+    );
+    expect(result).toEqual({ status: 204, recorded: true, optedOut: false });
+    expect([...inbox.messages.values()]).toEqual([
+      {
+        tenantId: "default",
+        providerMessageSid: "SMnew",
+        toDigits: "3105550999",
+        fromDigits: "3105550177",
+        customerKeyHash: customerKeyHashForPhone("default", "+13105550177"),
+        body: "Do you pick up in Echo Park?",
+        numMedia: 0,
+        optOutKeyword: null,
+        receivedAt: new Date("2026-10-17T21:00:00.000Z"),
+      },
+    ]);
+  });
+
+  it("a retried webhook with the same MessageSid is saved once", async () => {
+    const inbox = new MemoryBusinessLineInbox();
+    const { body, signature } = signedBody({ MessageSid: "SMdup", From: FROM, To: TO, Body: "hi" });
+    const deps = { authToken: AUTH, tenantId: "default", expectedTo: TO, nodeEnv: "production", store: new MemoryRescueMissionStore(), inbox, loadAggregates: async () => [aggregate()] };
+    await handleSpiritHumanInboundSms({ signature, urls: [URL], body }, deps);
+    await handleSpiritHumanInboundSms({ signature, urls: [URL], body }, deps);
+    expect(inbox.messages.size).toBe(1);
+  });
+
+  it("returns 500 and records nothing else when the reply cannot be saved", async () => {
+    const row = aggregate();
+    const store = new MemoryRescueMissionStore();
+    await store.save(sentMission(strategyCustomerSnapshotId("default", row)));
+    const inbox = new MemoryBusinessLineInbox();
+    inbox.failInbound = true;
+    const { body, signature } = signedBody({ MessageSid: "SMfail", From: FROM, To: TO, Body: "yes" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      { authToken: AUTH, tenantId: "default", expectedTo: TO, nodeEnv: "production", store, inbox, loadAggregates: async () => [row] }
+    );
+    expect(result).toEqual({ status: 500, recorded: false, optedOut: false });
+    expect((await store.get("default", "shr_sms"))?.consequences).toEqual([]);
+  });
+
+  it("STOP opts the sender out in both consent stores and is not counted as a reply", async () => {
+    const row = aggregate();
+    const snapshot = strategyCustomerSnapshotId("default", row);
+    const store = new MemoryRescueMissionStore();
+    await store.save(sentMission(snapshot));
+    const inbox = new MemoryBusinessLineInbox();
+    const { body, signature } = signedBody({ MessageSid: "SMstop", From: FROM, To: TO, Body: "Stop" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      { authToken: AUTH, tenantId: "default", expectedTo: TO, nodeEnv: "production", store, inbox, loadAggregates: async () => [row], now: () => new Date("2026-10-17T21:00:00.000Z") }
+    );
+    expect(result).toEqual({ status: 200, recorded: true, optedOut: true });
+    expect([...inbox.optOuts.values()]).toEqual([
+      {
+        tenantId: "default",
+        customerKeyHash: customerKeyHashForPhone("default", FROM),
+        snapshotCustomerIds: [snapshot],
+        providerMessageSid: "SMstop",
+        capturedAt: new Date("2026-10-17T21:00:00.000Z"),
+      },
+    ]);
+    expect([...inbox.messages.values()][0]?.optOutKeyword).toBe("stop");
+    expect((await store.get("default", "shr_sms"))?.consequences).toEqual([]);
+  });
+
+  it("returns 500 when the STOP cannot be saved, so it is never silently dropped", async () => {
+    const inbox = new MemoryBusinessLineInbox();
+    inbox.failOptOut = true;
+    const { body, signature } = signedBody({ MessageSid: "SMstop2", From: FROM, To: TO, Body: "UNSUBSCRIBE" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      { authToken: AUTH, tenantId: "default", expectedTo: TO, nodeEnv: "production", store: new MemoryRescueMissionStore(), inbox, loadAggregates: async () => [aggregate()] }
+    );
+    expect(result).toEqual({ status: 500, recorded: true, optedOut: false });
+  });
+
+  it("recognizes Twilio's opt-out keywords exactly, not words inside a sentence", () => {
+    expect(optOutKeywordFor("stop")).toBe("stop");
+    expect(optOutKeywordFor(" STOP. ")).toBe("stop");
+    expect(optOutKeywordFor("Stop all")).toBe("stop");
+    expect(optOutKeywordFor("quit")).toBe("stop");
+    expect(optOutKeywordFor("anything", "STOP")).toBe("stop");
+    expect(optOutKeywordFor("start")).toBe("start");
+    expect(optOutKeywordFor("help")).toBe("help");
+    expect(optOutKeywordFor("Can you stop by tomorrow?")).toBeNull();
+    expect(optOutKeywordFor("yes please pick up")).toBeNull();
+  });
+
+  it("a STOP is recorded by phone even when customer lookup fails", async () => {
+    const inbox = new MemoryBusinessLineInbox();
+    const { body, signature } = signedBody({ MessageSid: "SMstop3", From: FROM, To: TO, Body: "STOP" });
+    const result = await handleSpiritHumanInboundSms(
+      { signature, urls: [URL], body },
+      {
+        authToken: AUTH,
+        tenantId: "default",
+        expectedTo: TO,
+        nodeEnv: "production",
+        store: new MemoryRescueMissionStore(),
+        inbox,
+        loadAggregates: async () => {
+          throw new Error("aggregate read outage");
+        },
+        now: () => new Date("2026-10-17T21:00:00.000Z"),
+      }
+    );
+    expect(result).toEqual({ status: 200, recorded: true, optedOut: true });
+    expect([...inbox.optOuts.values()]).toEqual([
+      {
+        tenantId: "default",
+        customerKeyHash: customerKeyHashForPhone("default", FROM),
+        snapshotCustomerIds: [],
+        providerMessageSid: "SMstop3",
+        capturedAt: new Date("2026-10-17T21:00:00.000Z"),
+      },
+    ]);
   });
 });
