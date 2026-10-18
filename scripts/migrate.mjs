@@ -4651,6 +4651,29 @@ await ensureRequiredIndex(
   ["tenantId", "canonicalOperatorId", "status", "businessDate"],
   "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_operator (tenantId,canonicalOperatorId,status,businessDate)"
 );
+// Stage 1 · 1B: every goal-cycle occurrence decides afresh; an open objective
+// for the same run, selection and business date is reused, not re-minted, and
+// records the latest decision that re-selected it. Additive and nullable. The
+// numbered file is replayed once on fresh databases; here each statement runs
+// only when its column or index is missing, so this boot stays idempotent.
+const [objectiveLatestDecisionColumnDdl, objectiveLatestDecisionIndexDdl] = (
+  await readFile(new URL("../drizzle/0137_goal_cycle_objective_latest_decision.sql", import.meta.url), "utf8")
+)
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean);
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "latestDecisionId",
+  objectiveLatestDecisionColumnDdl
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_latest_decision",
+  ["tenantId", "latestDecisionId"],
+  objectiveLatestDecisionIndexDdl
+);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",
