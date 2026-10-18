@@ -11,8 +11,14 @@ const { sendVendorEmailViaAgentMail } = await import("./agentMailVendorEmailProv
 const { SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
 const { vendorCastingSprintRouter, createVendorCastingSprintRouter } = await import("./vendorCastingSprintRouter");
 
-function context(user: { role: string } | null) {
-  return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
+function context(user: { role: string; openId?: string } | null) {
+  return {
+    user: user ? { id: 1, openId: "operator-admin", ...user, openId: user.openId ?? "operator-admin" } : null,
+    tenantId: "default",
+    req: {},
+    res: {},
+    vendorSession: null,
+  } as never;
 }
 
 const emptySources = { serviceRequests: [], coordinatedRequests: [], residentPlans: [] };

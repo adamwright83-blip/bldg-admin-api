@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createVendorProposalReviewRouter } from "./vendorProposalReviewRouter";
 
 const preview = { versionId: "version-1" } as never;
-function context(user: { role: "admin" | "user" } | null) {
-  return { user, tenantId: "default", req: {}, res: {} } as never;
+function context(user: { role: "admin" | "user"; openId?: string } | null) {
+  return {
+    user: user ? { id: 1, openId: "operator-admin", ...user, openId: user.openId ?? "operator-admin" } : null,
+    tenantId: "default",
+    req: {},
+    res: {},
+  } as never;
 }
 
 describe("internal proposal review router", () => {
