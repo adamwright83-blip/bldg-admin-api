@@ -130,7 +130,8 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
     await panel
       .getByRole("button", { name: "Approve selected", exact: true })
       .click();
-    await expect(panel).toContainText("1 approved item(s) added and verified");
+    // No goal cycle runs in this suite, so the fixture has no goal objective: approval says so instead of claiming verified progress (Stage 1 Phase 3 c).
+    await expect(panel).toContainText("1 approved item(s) added to the Day Line. Not linked to a goal objective");
     let state = await rpc(
       context.request,
       "system.weeklyMission.preparedProposal"
