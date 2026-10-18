@@ -59,6 +59,38 @@ describe("Persistent Growth Operator — Field Event Bridge (Truth Rules & Seams
       expect(dummyActionOutcome.impactClass).toBe("action_verification");
       expect(dummyActionOutcome.monetaryValueCents).toBeNull();
     });
+
+    it("fails closed when caller claims authoritative_external without corroborating external evidence", async () => {
+      const result = await bridgeDriverAction({
+        tenantId: "tenant-mock-field",
+        actorId: "driver-1",
+        objectiveId: "obj-fake-123",
+        evidenceReference: "field_receipt_voice_999",
+        evidenceClass: "authoritative_external",
+        sourceSystem: "driver_cockpit_hud",
+      });
+
+      expect(result.bridged).toBe(false);
+      if (!result.bridged) {
+        expect(["objective_not_found", "authoritative_external_evidence_missing"]).toContain(result.reason);
+      }
+    });
+
+    it("ensures operator testimony defaults to operator_attested and never manufactures revenue or causal success", () => {
+      const attestedActionOutcome = {
+        outcomeKind: "action_verification",
+        impactClass: "action_verification" as const,
+        evidenceClass: "operator_attested" as const,
+        monetaryValueCents: null,
+        epistemicStatus: "verified" as const,
+        evidenceReference: "field_receipt_voice_01",
+        sourceSystem: "driver_cockpit_hud",
+      };
+
+      expect(attestedActionOutcome.evidenceClass).toBe("operator_attested");
+      expect(attestedActionOutcome.impactClass).toBe("action_verification");
+      expect(attestedActionOutcome.monetaryValueCents).toBeNull();
+    });
   });
 
   describe("Rule 1b: Commercial Resolution -> Operational Result (Not Action Verification)", () => {

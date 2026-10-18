@@ -35,6 +35,29 @@ describe("platform authority boundary", () => {
     ).resolves.toBe("legacy-admin-ok");
   });
 
+  it("rejects an admin role whose operator identity is missing", async () => {
+    const base = {
+      req: {} as never,
+      res: {} as never,
+      vendorSession: null,
+      tenantId: "default",
+    };
+    const missing = authorityRouter.createCaller({
+      ...base,
+      user: { role: "admin" } as never,
+    });
+    const blank = authorityRouter.createCaller({
+      ...base,
+      user: { role: "admin", openId: "   " } as never,
+    });
+    await expect(missing.legacyAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(missing.platform()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(missing.generic()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(blank.legacyAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(blank.platform()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(blank.generic()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("rejects demo identities from generic authenticated and platform-only procedures", async () => {
     const staleAdminDemo = caller({
       openId: "goldline-demo:wright-contractors",
