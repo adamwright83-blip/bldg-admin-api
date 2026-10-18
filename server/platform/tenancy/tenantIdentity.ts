@@ -49,17 +49,21 @@ export function legacySharedPasswordOpenIds(env?: OpenIdEnv): ReadonlySet<string
   );
 }
 
+function hasOperatorOpenId(openId: unknown): openId is string {
+  return typeof openId === "string" && openId.trim().length > 0;
+}
+
 /** Shared DRIVER_PASSWORD / ADMIN_PASSWORD identities. Never a dayforge member openId. */
 export function isLegacySharedPasswordOpenId(
-  openId: string,
+  openId: string | null | undefined,
   env?: OpenIdEnv
 ): boolean {
-  if (openId.startsWith("dayforge:")) return false;
+  if (!hasOperatorOpenId(openId) || openId.startsWith("dayforge:")) return false;
   return legacySharedPasswordOpenIds(env).has(openId);
 }
 
-export function isGoldlineDemoOpenId(openId: string): boolean {
-  return openId.startsWith("goldline-demo:");
+export function isGoldlineDemoOpenId(openId: string | null | undefined): boolean {
+  return hasOperatorOpenId(openId) && openId.startsWith("goldline-demo:");
 }
 
 /** Platform authority is never implied by a tenant/demo/shared-password role string. */
@@ -70,6 +74,7 @@ export function isPlatformAdministrator(
   return Boolean(
     user &&
       user.role === "admin" &&
+      hasOperatorOpenId(user.openId) &&
       !isGoldlineDemoOpenId(user.openId) &&
       !isLegacySharedPasswordOpenId(user.openId, env)
   );
