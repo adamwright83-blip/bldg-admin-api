@@ -1,14 +1,14 @@
-import { identityKeysFor } from "../analytics/customerIdentityResolution";
+import { identityKeysFor } from "./customerIdentityResolution";
 import {
   activeCustomerPopulation,
   compareTotals,
   dormantCustomerPopulation,
   eventsInSpan,
   summarizeTotals,
-} from "../analytics/businessMetrics";
-import { CUSTOMER_LOOKBACK_DAYS } from "../analytics/businessQuery";
-import { addDaysYmd, previousPeriod, resolvePeriod } from "../analytics/businessPeriods";
-import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
+} from "./businessMetrics";
+import { CUSTOMER_LOOKBACK_DAYS } from "./businessQuery";
+import { addDaysYmd, previousPeriod, resolvePeriod } from "./businessPeriods";
+import type { PaidOrderEvent } from "./paidOrderLedger";
 import {
   attributeLanternPoint,
   streetIdentity,

@@ -12,14 +12,14 @@ import {
   defaultBusinessQueryDeps,
   runBusinessQuery,
   type BusinessQueryDeps,
-} from "../analytics/businessQuery";
-import { reconcileLedgerSpan } from "../analytics/canonicalRevenue";
-import { identityKeysFor } from "../analytics/customerIdentityResolution";
-import { addDaysYmd, previousPeriod, resolvePeriod } from "../analytics/businessPeriods";
-import { customerTruthDispositionOf } from "../analytics/sourceCoverage";
+} from "./businessQuery";
+import { reconcileLedgerSpan } from "./canonicalRevenue";
+import { identityKeysFor } from "./customerIdentityResolution";
+import { addDaysYmd, previousPeriod, resolvePeriod } from "./businessPeriods";
+import { customerTruthDispositionOf } from "./sourceCoverage";
 import type { ServiceArea } from "../../shared/lanternTerritoryAttribution";
 import type { LanternReportWindowDays, LanternTerritoryReport } from "../../shared/lanternTerritoryReport";
-import { loadCustomerGroups, projectGeographicCustomers } from "./customerOrderTruth";
+import { loadCustomerGroups, projectGeographicCustomers } from "../geography/customerOrderTruth";
 import {
   buildLanternTerritoryReport,
   type ReportCustomer,

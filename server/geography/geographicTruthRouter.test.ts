@@ -4,7 +4,7 @@ vi.mock("./geographicTruthService", () => ({
   getGeographicTruth: mocks.read,
   geocodePendingLocations: vi.fn(),
 }));
-vi.mock("./lanternTerritoryReportService", () => ({
+vi.mock("../analytics/lanternTerritoryReportService", () => ({
   readLanternTerritoryReport: mocks.report,
 }));
 vi.mock("../saas/tenantAccess", async importOriginal => ({

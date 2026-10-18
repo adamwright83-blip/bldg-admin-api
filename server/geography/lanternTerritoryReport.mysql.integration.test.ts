@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Read-only Lantern territory metrics against disposable MySQL.
  *
@@ -14,7 +15,7 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { defaultBusinessQueryDeps, type BusinessQueryDeps } from "../analytics/businessQuery";
 import type { PaidOrderEvent, PaidOrderLedger } from "../analytics/paidOrderLedger";
-import { loadReportGeography, readLanternTerritoryReport } from "./lanternTerritoryReportService";
+import { loadReportGeography, readLanternTerritoryReport } from "../analytics/lanternTerritoryReportService";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeMysql = databaseUrl ? describe : describe.skip;

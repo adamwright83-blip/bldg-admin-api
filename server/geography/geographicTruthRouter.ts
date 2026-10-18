@@ -9,7 +9,7 @@ import {
   geocodePendingLocations,
   getGeographicTruth,
 } from "./geographicTruthService";
-import { readLanternTerritoryReport } from "./lanternTerritoryReportService";
+import { readLanternTerritoryReport } from "../analytics/lanternTerritoryReportService";
 
 export const geographicTruthRouter = router({
   /** Tenant-scoped atlas for the commercial JOYSTICK world. Never accepts a target tenant. */

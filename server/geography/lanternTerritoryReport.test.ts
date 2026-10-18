@@ -11,8 +11,8 @@ import {
   type BusinessQueryDeps,
 } from "../analytics/businessQuery";
 import type { PaidOrderEvent, PaidOrderLedger } from "../analytics/paidOrderLedger";
-import { buildLanternTerritoryReport, type ReportCustomer, type ReportSourceQuality } from "./lanternTerritoryReport";
-import { readLanternTerritoryReport } from "./lanternTerritoryReportService";
+import { buildLanternTerritoryReport, type ReportCustomer, type ReportSourceQuality } from "../analytics/lanternTerritoryReport";
+import { readLanternTerritoryReport } from "../analytics/lanternTerritoryReportService";
 
 const NOW = new Date("2026-10-18T18:00:00.000Z");
 const TZ = "UTC";
