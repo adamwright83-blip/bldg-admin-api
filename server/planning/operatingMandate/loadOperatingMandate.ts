@@ -28,6 +28,8 @@ import { loadOperatorDoctrine } from "../../agents/persistentOperator/operatorDo
 import { applyLineageFilters } from "../../analytics/businessLineage";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { readCanonicalRevenue } from "../../analytics/canonicalRevenue";
+import { salesSourceOutage } from "../../analytics/salesSourceOutage";
+import { customerTruthDispositionOf, loadBusinessSourceCoverage } from "../../analytics/sourceCoverage";
 import { findNeighborhood } from "../../analytics/laNeighborhoods";
 import { addressScope } from "../../claire/business/businessLanguage";
 import { getDb } from "../../db";
@@ -76,6 +78,12 @@ async function countAreaOrders(input: {
   const unknown = Object.fromEntries(input.areas.map(area => [area, null])) as Record<string, number | null>;
   if (!input.areas.length) return unknown;
   try {
+    // A count is evidence of where the business sells only when its customer
+    // truth is current: the same gate an area's call sheet passes before it
+    // states anything about customers. After a failed, stale or missing import
+    // an empty read "is not zero customers", so the count is unknown.
+    const coverage = await loadBusinessSourceCoverage({ tenantId: input.tenantId, now: input.now });
+    if (customerTruthDispositionOf(coverage) !== "current") return unknown;
     const ledger = await readCanonicalRevenue({
       tenantId: input.tenantId,
       from: addDaysYmd(input.businessDate, -(AREA_ORDER_LOOKBACK_DAYS - 1)),
@@ -83,7 +91,7 @@ async function countAreaOrders(input: {
       timeZone: input.timeZone,
       now: input.now,
     });
-    if (ledger.status === "unavailable") return unknown;
+    if (ledger.status === "unavailable" || salesSourceOutage(ledger).length) return unknown;
     return Object.fromEntries(
       input.areas.map(area => {
         const filters = areaLedgerFilters(area);

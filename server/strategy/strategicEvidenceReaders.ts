@@ -26,6 +26,7 @@ import type { VerticalRegistry } from "./verticalTemplates/registry";
 import { readLaundryMatureRepeatCohort } from "./verticalTemplates/laundryCohortReader";
 import { buildStrategySnapshot } from "./snapshotBuilder";
 import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
+import { salesSourceOutage } from "../analytics/salesSourceOutage";
 import { addDaysYmd } from "../analytics/businessPeriods";
 import { identityKeysFor } from "../analytics/customerIdentityResolution";
 import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
@@ -540,27 +541,7 @@ export function summarizeComparablePeriods(
   };
 }
 
-/**
- * Pure: the source conditions that mean sales data is actually missing.
- * A source that loaded but has orders without payment receipts is not an outage.
- */
-export function salesSourceOutage(
-  revenue:
-    | { status: "unavailable"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
-    | { status: "ok"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
-): string[] {
-  const c = revenue.coverage;
-  if (revenue.status === "unavailable") return ["sales sources could not be read"];
-  return [
-    ...(c.cleanCloudStatus && !["fresh", "not_held"].includes(c.cleanCloudStatus)
-      ? [`CleanCloud ${c.cleanCloudStatus}`]
-      : []),
-    ...c.failedSources
-      .filter(s => !c.loadedSources.includes(s))
-      .map(s => `${s} could not be loaded`),
-    ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
-  ];
-}
+export { salesSourceOutage } from "../analytics/salesSourceOutage";
 
 const FOCUS_WINDOW_DAYS = 90;
 

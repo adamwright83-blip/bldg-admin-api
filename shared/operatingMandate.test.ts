@@ -165,15 +165,18 @@ describe("resolveOperatingMandate: focuses", () => {
     expect(m.uncertainty.join(" ")).toMatch(/Silver Lake comes from conversation, not a confirmed goal/);
   });
 
-  it("does not apply a remark about an area the business has no orders in, or with no service area", () => {
+  it("does not apply a remark about an area the business verifiably has no orders in, or with no service area", () => {
     const outside = resolveOperatingMandate(sources({ remarks: [remark("r1", silverLake, "2026-10-01T10:00:00.000Z")], areaOrders: { silver_lake: 0 } }), sha);
     expect(outside.appliedFocusId).toBeNull();
     expect(outside.focuses[0]).toMatchObject({ status: "not_applicable", statusReason: "no_orders_in_area" });
     const online = resolveOperatingMandate(sources({ areaPlanning: false, remarks: [remark("r1", silverLake, "2026-10-01T10:00:00.000Z")], areaOrders: { silver_lake: 7 } }), sha);
     expect(online.appliedFocusId).toBeNull();
     expect(online.focuses[0]).toMatchObject({ status: "not_applicable", statusReason: "no_physical_service_area" });
+    // Orders that could not be read are not absence: the remark stays, marked unknown.
     const unread = resolveOperatingMandate(sources({ remarks: [remark("r1", silverLake, "2026-10-01T10:00:00.000Z")], areaOrders: { silver_lake: null } }), sha);
-    expect(unread.appliedFocusId).toBeNull();
+    expect(unread.appliedFocusId).toBe("daphne_goals:r1");
+    expect(unread.focuses[0]).toMatchObject({ status: "active", statusReason: "area_orders_unknown" });
+    expect(unread.focuses[0]!.uncertainty).toContain("Whether the business has orders in Silver Lake could not be read.");
   });
 
   it("lets a newer confirmed focus override an older remark, and never lets a newer remark replace it", () => {

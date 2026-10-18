@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readCanonicalRevenue } from "../../analytics/canonicalRevenue";
@@ -17,7 +18,8 @@ import { readObjectiveArea } from "../../strategy/strategicEvidenceReaders";
 import { latestStrategicDiagnosis } from "../../strategy/strategicStore";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaultRegistry";
-import { SILVER_LAKE_LEDGER, type WorkThreadTenant } from "../../strategy/workThreadTenant.testSupport";
+import { createWorkThreadTenant, SILVER_LAKE_LEDGER, type WorkThreadTenant } from "../../strategy/workThreadTenant.testSupport";
+import { readWinBackDossier } from "../../strategy/winBackDossier";
 import { loadRankingContext } from "../missionDirector/missionDirectorService";
 
 /**
@@ -389,6 +391,39 @@ describeMysql("operating mandate on MySQL", () => {
     expect(d.objective).toBeUndefined();
     expect(d.actions[0]!.opportunity?.area).toBeNull();
     expect(d.selectedApproach).not.toMatch(/Silver Lake/);
+  }, 300_000);
+
+  it("an outage never hides a remarked area: its call sheet is withheld, not silently dropped", async () => {
+    // The Claire Desk acceptance fixture: a remark about Silver Lake, a CleanCloud
+    // binding whose import failed, and no orders on record at all.
+    const t = await createWorkThreadTenant(sql, { prefix: "bo", focus: "Win back lapsed customers in Silver Lake", now: new Date() });
+    try {
+      await sql.execute(
+        "INSERT INTO cleancloud_browser_sync_bindings (tenantId,id,storeId,storeLabel,createdBy,lastSuccessAt) VALUES (?,?,?,?,?,NULL)",
+        [t.tenantId, randomUUID(), "fixture-store", "Fixture store", "test"]
+      );
+      await sql.execute(
+        "INSERT INTO cleancloud_browser_sync_attempts (id,tenantId,outcome,message,rangeFrom,rangeTo,rowCount) VALUES (?,?,?,?,?,?,?)",
+        [randomUUID(), t.tenantId, "failed", "Fixture import failed", "2026-10-01", "2026-10-14", 0]
+      );
+      // The import failed a few minutes after setup (past the one-minute source-evidence cache).
+      advance(2 * 60_000);
+      // Unknown is not absence: the remark stays, marked as unread.
+      const { mandate } = await mandateOf(t);
+      expect(mandate.focuses.find(f => f.id === mandate.appliedFocusId)).toMatchObject({ area: "silver_lake", status: "active", statusReason: "area_orders_unknown" });
+      // The area's call sheet says it is withheld, and never claims nobody lapsed.
+      expect((await readObjectiveArea({ tenantId: t.tenantId, canonicalOperatorId: t.identity.canonicalOperatorId }))?.label).toBe("Silver Lake");
+      const dossier = await readWinBackDossier({ tenantId: t.tenantId, canonicalOperatorId: t.identity.canonicalOperatorId, timeZone: ZONE, now: new Date() });
+      expect(dossier).toMatchObject({ area: "Silver Lake", lapsedCount: null, emptyMeansNoLapsedCustomers: false, contacts: [] });
+      expect(dossier!.freshness).not.toBe("current");
+      expect(dossier!.withheldReason).toBeTruthy();
+      // Strategy does not plan Silver Lake work on figures it cannot read.
+      const d = (await proposalOf(t)).diagnosis;
+      expect(d.actions[0]!.opportunity?.area ?? null).toBeNull();
+      expect(d.selectedApproach).not.toMatch(/Silver Lake/);
+    } finally {
+      await sql.execute("UPDATE operator_macro_goals SET status = 'closed' WHERE tenantId = ? AND status = 'active'", [t.tenantId]);
+    }
   }, 300_000);
 
   it("7. one sale is evidence for both goals it advances, recorded once and counted once", async () => {
