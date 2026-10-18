@@ -5537,5 +5537,17 @@ await assertRequiredColumns("personal_outreach_replies", [
   "reported_at",
   "created_at",
 ]);
+// 0140: obligations are keyed by (tenantId, id); an id is unique only within a
+// tenant. Rows, ids and references are unchanged. Applied once, verified after.
+{
+  const [tenantKeyDdl] = await readSqlStatements("../drizzle/0140_claire_proactive_obligations_tenant_key.sql");
+  const label = "claire_proactive_obligations primary key (tenantId, id)";
+  const primary = await getIndexColumns("claire_proactive_obligations", "PRIMARY");
+  if (primary.join(",") === "tenantId,id") console.log("→ already exists, skipping:", label);
+  else await runRequired(tenantKeyDdl, label);
+  const verified = await getIndexColumns("claire_proactive_obligations", "PRIMARY");
+  if (verified.join(",") !== "tenantId,id")
+    throw new Error(`claire_proactive_obligations primary key is (${verified.join(", ")}); expected (tenantId, id)`);
+}
 console.log("\nMigration complete.");
 await conn.end();
