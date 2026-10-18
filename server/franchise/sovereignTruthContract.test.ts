@@ -712,7 +712,105 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(objectiveRes.lineageKind).toBe("objective");
     expect(objectiveRes.itemId).toBe("objective-conquest-1");
     const outcomes = store.get("goal_cycle_outcomes") ?? [];
-    expect(outcomes.some(outcomeRow => outcomeRow.objectiveId === "objective-conquest-1")).toBe(true);
+    const conquestOutcome = outcomes.find(outcomeRow => outcomeRow.objectiveId === "objective-conquest-1");
+    expect(conquestOutcome).toBeDefined();
+    // 1. Authenticated operator records work they completed: durable outcome created
+    // 2. Operator testimony remains operator-attested unless independently corroborated
+    expect(conquestOutcome.evidenceClass).toBe("operator_attested");
+    // 3. Task completion never manufactures customer reactivation, revenue, or causal success
+    expect(conquestOutcome.impactClass).toBe("action_verification");
+    expect(conquestOutcome.outcomeKind).toBe("action_verification");
+    expect(conquestOutcome.monetaryValueCents).toBeNull();
+
+    // 4. A verified external event requires appropriate source evidence; uncorroborated claim fails closed
+    const unverifiedExternalRes = await caller.system.currentDayLine.completeItem({
+      itemId: "objective-conquest-1",
+      evidenceReference: "uncorroborated_field_receipt_99",
+      evidenceClass: "authoritative_external",
+      explanation: "Driver falsely claims external authority",
+    });
+    expect(unverifiedExternalRes.success).toBe(false);
+    if (!unverifiedExternalRes.success) {
+      expect(unverifiedExternalRes.reason).toBe("authoritative_external_evidence_missing");
+    }
+
+    // 5. A verified external event succeeds when backed by appropriate source evidence
+    store.set("authority_receipts", [
+      {
+        id: "auth-receipt-external-01",
+        tenantId: "default",
+        claimType: "payment_verified",
+        subjectType: "order",
+        subjectId: "order-99",
+        sourceType: "stripe_payment_intent",
+        sourceRef: "pi_external_verified_01",
+        actorType: "system",
+        actorId: null,
+        evidenceClass: "authoritative_external",
+        verificationClass: "VERIFIED",
+        admissionPolicy: "native_stripe_payment_v1",
+        occurredAt: now,
+        admittedAt: now,
+        metadataJson: null,
+        idempotencyKey: "payment:order-99",
+      },
+    ]);
+
+    store.set("goal_cycle_objectives", [
+      ...(store.get("goal_cycle_objectives") ?? []),
+      {
+        tenantId: "default",
+        id: "objective-conquest-2",
+        goalRunId: "run-positive-completion",
+        cycleId: "cycle-positive-completion",
+        decisionId: "decision-conquest-2",
+        canonicalOperatorId: "tenant:default:operator:admin-owner-user",
+        operatorUserId: "admin-owner-user",
+        selectionKind: "obligation",
+        selectedRef: "ref-2",
+        title: "Verify external payment",
+        description: "Payment verification",
+        executionType: "mission",
+        authority: "HUMAN_EXECUTION",
+        status: "presented",
+        businessDate,
+        windowStart: "08:00",
+        windowEnd: "17:00",
+        loadoutJson: [],
+        evidenceRefsJson: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    ranking.push({
+      workId: "objective-conquest-2",
+      title: "Verify external payment",
+      objective: "Payment verification",
+      completionCondition: "Payment verified",
+      eligible: true,
+      executionType: "mission" as const,
+      sourceRefs: [
+        {
+          sourceKind: "unfinished_growth_work" as const,
+          sourceType: "goal_cycle_objective",
+          sourceId: "objective-conquest-2",
+        },
+      ],
+    });
+
+    const externalRes = await caller.system.currentDayLine.completeItem({
+      itemId: "objective-conquest-2",
+      evidenceReference: "authority_receipts:auth-receipt-external-01",
+      evidenceClass: "authoritative_external",
+      explanation: "Corroborated by verified Stripe payment receipt",
+    });
+    expect(externalRes.success).toBe(true);
+    expect(externalRes.lineageKind).toBe("objective");
+    const outcomesAfter = store.get("goal_cycle_outcomes") ?? [];
+    const corroboratedOutcome = outcomesAfter.find(o => o.objectiveId === "objective-conquest-2");
+    expect(corroboratedOutcome).toBeDefined();
+    expect(corroboratedOutcome?.evidenceClass).toBe("authoritative_external");
 
     const commitmentRes = await caller.system.currentDayLine.completeItem({
       itemId: "commit-morning-door-tags",

@@ -129,6 +129,7 @@ export const currentDayLineRouter = router({
           })
           .optional(),
         evidenceReference: z.string().trim().min(1),
+        evidenceClass: z.enum(["authoritative_external", "operator_attested"]).optional(),
         sourceSystem: z.string().optional(),
         explanation: z.string().optional(),
       })
@@ -228,6 +229,7 @@ export const currentDayLineRouter = router({
           actorId: identity.canonicalOpenId,
           objectiveId,
           evidenceReference: input.evidenceReference,
+          evidenceClass: input.evidenceClass,
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
           // A Day Line objective is action verification. visit_completed is the
           // commercial-mission contract and refuses a completion with no mission.
@@ -269,6 +271,7 @@ export const currentDayLineRouter = router({
           actorId: identity.dayDirectorActorId,
           commitmentId,
           evidenceReference: input.evidenceReference,
+          evidenceClass: input.evidenceClass,
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
           explanation: input.explanation ?? `Day Director commitment completed via HUD: ${commitmentId}`,
         }).catch(() => ({ bridged: false as const, reason: "no_linked_objective" as const }));
@@ -299,6 +302,7 @@ export const currentDayLineRouter = router({
           actorId: identity.canonicalOpenId,
           ...(Number.isFinite(numericMissionId) ? { missionId: numericMissionId } : {}),
           evidenceReference: input.evidenceReference,
+          evidenceClass: input.evidenceClass,
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
           explanation: input.explanation ?? `Campaign work completion attempt via HUD: ${campaignId}`,
           metadata: { campaignId },
