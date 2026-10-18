@@ -1,24 +1,13 @@
 /* LEGACY DAYFORGE COMPATIBILITY: historical SaaS SQL table names retained for the production schema; current product is JOYSTICK. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
-import { randomUUID } from "node:crypto";
-import mysql, { type Pool } from "mysql2/promise";
+import mysql from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone } from "date-fns-tz";
 import { workThreadCandidateId } from "../../../shared/workThread";
-import { currentDayLineRouter } from "../../planning/dayline/currentDayLineRouter";
-import { respondToStrategicProposal } from "../../strategy/strategicApproval";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
-import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaultRegistry";
-import {
-  createWorkThreadTenant,
-  SILVER_LAKE_LEDGER,
-  type WorkThreadTenant,
-} from "../../strategy/workThreadTenant.testSupport";
 import { sweepObservationBridges } from "./autonomousWorkerService";
 import { bridgeCommitmentCompletion } from "./commitmentExecutionBridge";
-import { decideGoalCycle } from "./decisionEngine";
-import { GoalCycleStore } from "./goalCycleStore";
 import { createIsolatedGoalCycleDb } from "./goalCycleIsolatedDb.testSupport";
-import { defaultGoalCycleOccurrenceDeps, runGoalCycleOccurrence, type GoalCycleOccurrenceDeps } from "./goalCycleOccurrence";
+import { advance, at, createGoalLoopHarness, DAY, HOUR, startLosAngelesMorning, today, ZONE } from "./goalLoopHarness.testSupport";
 import { readObservationBridgeBacklog } from "./observationBridgeStore";
 
 /**
@@ -35,40 +24,22 @@ import { readObservationBridgeBacklog } from "./observationBridgeStore";
  * Angeles, so every component reads one clock.
  */
 const describeMysql = process.env.DATABASE_URL ? describe : describe.skip;
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const ZONE = "America/Los_Angeles";
-
-function nextMorningInLosAngeles(): Date {
-  const now = new Date();
-  const nine = fromZonedTime(`${formatInTimeZone(now, ZONE, "yyyy-MM-dd")}T09:00:00`, ZONE);
-  return nine.getTime() > now.getTime() ? nine : fromZonedTime(`${formatInTimeZone(new Date(now.getTime() + DAY), ZONE, "yyyy-MM-dd")}T09:00:00`, ZONE);
-}
-/** Moves the clock forward to a local date and time; never backwards. */
-const at = (date: string, time = "09:00:00") => {
-  const target = fromZonedTime(`${date}T${time}`, ZONE);
-  if (target.getTime() > Date.now()) vi.setSystemTime(target);
-};
-const advance = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms));
-const today = () => formatInTimeZone(new Date(), ZONE, "yyyy-MM-dd");
 
 describeMysql("approved commitment → execution → observation on MySQL", () => {
   let sql: mysql.Connection;
   let iso: Awaited<ReturnType<typeof createIsolatedGoalCycleDb>>;
-  let queue: Pool;
+  let loop: ReturnType<typeof createGoalLoopHarness>;
   const previousKey = process.env.ANTHROPIC_API_KEY;
 
   beforeAll(async () => {
     process.env.ANTHROPIC_API_KEY = "";
     sql = await mysql.createConnection(process.env.DATABASE_URL!);
     iso = await createIsolatedGoalCycleDb(process.env.DATABASE_URL!);
-    queue = iso.pool;
+    loop = createGoalLoopHarness(sql, iso);
   }, 120_000);
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
-    vi.setSystemTime(nextMorningInLosAngeles());
-  });
-  afterEach(() => {
+  beforeEach(() => startLosAngelesMorning());
+  afterEach(async () => {
+    await loop.retireTenants();
     vi.useRealTimers();
   });
   afterAll(async () => {
@@ -78,86 +49,15 @@ describeMysql("approved commitment → execution → observation on MySQL", () =
     await iso?.drop();
   });
 
-  async function tenant() {
-    const t = await createWorkThreadTenant(sql, { prefix: "c", focus: "Maximize sales in Silver Lake", now: new Date() });
-    await t.importLedger(SILVER_LAKE_LEDGER, new Date());
-    await iso.insertRun({ id: t.run.id, tenantId: t.tenantId, canonicalOperatorId: t.identity.canonicalOperatorId, operatorUserId: t.openId, verticalKey: "laundry_fluff_fold" });
-    const store = new GoalCycleStore(queue, { perTenantConcurrency: 4 });
-    await store.ensureLiveScheduledTick({ tenantId: t.tenantId, goalRunId: t.run.id });
-    return { t, store };
-  }
-
-  function occurrenceDeps(t: WorkThreadTenant): GoalCycleOccurrenceDeps {
-    const production = defaultGoalCycleOccurrenceDeps({ registry: defaultVerticalRegistry, appointmentStore: undefined as never });
-    return {
-      ...production,
-      evaluateRun: async () => ({
-        run: { id: t.run.id, status: "active", operatorUserId: t.openId, nextEvaluationAt: new Date(Date.now() + HOUR) },
-        completed: false,
-        observation: null,
-      }),
-      prepare: async () => {
-        await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone });
-      },
-      decide: input => decideGoalCycle({ ...input, registry: defaultVerticalRegistry }),
-    };
-  }
-
-  async function runOccurrence(t: WorkThreadTenant, store: GoalCycleStore) {
-    await queue.execute(
-      "UPDATE goal_cycle_requests SET availableAt = DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 SECOND) WHERE tenantId = ? AND goalRunId = ? AND status = 'queued'",
-      [t.tenantId, t.run.id]
-    );
-    const step = await store.claimNextStep({ leaseOwner: `c-${randomUUID()}`, leaseMs: 60_000 });
-    if (!step || step.tenantId !== t.tenantId) throw new Error("This run's occurrence was not the one due");
-    await store.markRunning(step);
-    const result = await runGoalCycleOccurrence({ tenantId: step.tenantId, runId: step.goalRunId, cycleId: step.id }, occurrenceDeps(t));
-    await store.completeStep(step, result);
-    return result;
-  }
-
-  /** The operator approves the strategy recommendation in the current proposal. */
-  async function approveStrategy(t: WorkThreadTenant) {
-    // The current proposal, as the operator's screen would load it (a weekend plans next week).
-    const proposal = await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone });
-    const item = proposal.items.find(i => i.planId.startsWith("strategic_diagnosis:"));
-    if (!item) throw new Error(`No strategy recommendation to approve: ${proposal.uncertainty.join(" | ")}`);
-    const approved = await respondToStrategicProposal({
-      identity: t.identity, proposalId: proposal.id, revision: proposal.revision,
-      action: "approve", itemIds: [item.id], source: "authenticated_app",
-    });
-    expect(approved.failedItems).toEqual([]);
-    return { item, commitmentId: approved.actionIds[0]!, unbound: approved.unboundItems };
-  }
-
-  function dayLine(t: WorkThreadTenant) {
-    return currentDayLineRouter.createCaller({ tenantId: t.tenantId, user: { id: t.userId, openId: t.openId, role: "user", name: "Op" }, req: undefined, res: undefined, vendorSession: null } as never);
-  }
-
-  /** The operator marks the commitment done from today's Day Line, as the cockpit does. */
-  async function completeOnDayLine(t: WorkThreadTenant, commitmentId: string, extra: { evidenceClass?: "authoritative_external" | "operator_attested"; evidenceReference?: string } = {}) {
-    const line = await dayLine(t).today();
-    const item = line.items.find(i => i.id.endsWith(`:${commitmentId}`) || i.lineage?.commitmentId === commitmentId);
-    if (!item) throw new Error(`Commitment ${commitmentId} is not on today's Day Line`);
-    return dayLine(t).completeItem({
-      itemId: item.id,
-      lineage: item.lineage,
-      evidenceReference: extra.evidenceReference ?? `voice_incab_receipt_${randomUUID().slice(0, 8)}`,
-      sourceSystem: "driver_cockpit_hud",
-      ...(extra.evidenceClass ? { evidenceClass: extra.evidenceClass } : {}),
-    }) as Promise<{ success: boolean; goalEvidence?: { status: string; reason?: string; message: string; objectiveId?: string; evidenceClass?: string; observation?: { status: string; windowStart: string; windowEnd: string | null; targets: Array<{ identityKey: string }> } } }>;
-  }
-
-  const rows = async (query: string, params: unknown[]) => (await sql.execute<mysql.RowDataPacket[]>(query, params))[0];
-  const outcomesOf = (tenantId: string) =>
-    rows("SELECT id, objectiveId, outcomeKind, impactClass, epistemicStatus, evidenceClass, evidenceReference, monetaryValueCents, metadataJson FROM goal_cycle_outcomes WHERE tenantId = ? ORDER BY createdAt, id", [tenantId]);
-  const metadataOf = async (tenantId: string, commitmentId: string) => {
-    const [row] = await rows("SELECT metadataJson FROM day_director_commitments WHERE tenantId = ? AND id = ?", [tenantId, commitmentId]);
-    return typeof row!.metadataJson === "string" ? JSON.parse(row!.metadataJson) : row!.metadataJson;
-  };
+  const tenant = () => loop.tenant({ prefix: "c" });
+  const runOccurrence: ReturnType<typeof createGoalLoopHarness>["runOccurrence"] = (t, store) => loop.runOccurrence(t, store);
+  const approveStrategy: ReturnType<typeof createGoalLoopHarness>["approveStrategy"] = t => loop.approveStrategy(t);
+  const completeOnDayLine: ReturnType<typeof createGoalLoopHarness>["completeOnDayLine"] = (t, id, extra) => loop.completeOnDayLine(t, id, extra);
+  const rows: ReturnType<typeof createGoalLoopHarness>["rows"] = (query, params) => loop.rows(query, params);
+  const outcomesOf = (tenantId: string) => loop.outcomesOf(tenantId);
+  const metadataOf = (tenantId: string, commitmentId: string) => loop.metadataOf(tenantId, commitmentId);
+  const obligationOf = (tenantId: string, sourceKey: string) => loop.obligationOf(tenantId, sourceKey);
   const objectiveOf = async (tenantId: string, id: string) => (await rows("SELECT id, status, workThreadId FROM goal_cycle_objectives WHERE tenantId = ? AND id = ?", [tenantId, id]))[0];
-  const obligationOf = async (tenantId: string, sourceKey: string) =>
-    (await rows("SELECT status, attemptCount, lastError, resultJson FROM observation_bridge_obligations WHERE tenantId = ? AND sourceKey = ?", [tenantId, sourceKey]))[0];
 
   it("binds completion to the approved objective as operator testimony, attaches the targeted customer's paid order once, and the next decision learns from it", async () => {
     const { t, store } = await tenant();

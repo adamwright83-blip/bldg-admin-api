@@ -106,6 +106,31 @@ export const persistentOperatorRouter = router({
       }
     }),
 
+  /**
+   * Observation-bridge backlog (Phase 2 · Slices C and D): source events that
+   * have not reached their goal objective, by status, the oldest still
+   * retrying, and the ones that need a person. Read-only.
+   */
+  observationBacklog: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        const identity = await requireEffectiveOperatorIdentityForTenant({
+          callerUser: ctx.user,
+          callerTenantId: ctx.tenantId,
+          targetTenantId: input?.targetTenantId,
+          subsystem: "persistent_operator.observation_backlog",
+        });
+        const { readObservationBridgeBacklog, listObservationObligationsNeedingAttention } = await import("./observationBridgeStore");
+        return {
+          ...(await readObservationBridgeBacklog({ tenantId: identity.tenantId })),
+          attention: await listObservationObligationsNeedingAttention({ tenantId: identity.tenantId }),
+        };
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
+
   operationReceipt: legacyDayforgeTenantOperatorProcedure
     .input(z.object({ decisionId: z.string().uuid() }))
     .query(({ ctx, input }) =>

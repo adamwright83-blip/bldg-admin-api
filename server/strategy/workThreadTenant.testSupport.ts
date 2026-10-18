@@ -150,6 +150,15 @@ export async function createWorkThreadTenant(
     }
   };
 
+  /**
+   * A later export carries corrected fields for orders already on record (same
+   * order ids), e.g. a customer id CleanCloud filled in afterwards. Columns:
+   * order id, placed, customer, customer id, address, paid, payment date, total.
+   */
+  const amendLedger = (match: (line: readonly string[]) => boolean, change: (line: string[]) => string[]) => {
+    for (const entry of ledger) if (match(entry.line)) entry.line = change([...entry.line]);
+  };
+
   /** The operator tells the Day Line to do something (an authenticated direct instruction). */
   const instruct = async (title: string, businessDate: string) => {
     const stored = (await dayDirector.accept({
@@ -169,5 +178,5 @@ export async function createWorkThreadTenant(
     return stored.id;
   };
 
-  return { tenantId, openId, userId, identity, run, zone, focusOn, importLedger, instruct, dayDirector };
+  return { tenantId, openId, userId, identity, run, verticalKey: "laundry_fluff_fold", zone, focusOn, importLedger, amendLedger, instruct, dayDirector };
 }
