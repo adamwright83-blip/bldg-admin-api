@@ -35,11 +35,11 @@ function declaredProcedures(source: string): string[] {
 }
 
 describe("Sales Intel administration is admin-only", () => {
-  it("gates every ingestion and corpus procedure on adminProcedure", () => {
+  it("gates every ingestion and corpus procedure on the legacy admin role", () => {
     const procedures = declaredProcedures(salesIntelRouterSource);
     expect(procedures.length).toBeGreaterThan(0);
     for (const procedure of procedures) {
-      expect(procedure.endsWith(":adminProcedure")).toBe(true);
+      expect(procedure.endsWith(":legacyAdminRoleProcedure")).toBe(true);
     }
   });
 
@@ -69,7 +69,7 @@ describe("Sales Intel administration is admin-only", () => {
       "forSource",
     ]) {
       expect(salesIntelRouterSource).toMatch(
-        new RegExp(`${name}:\\s*adminProcedure`)
+        new RegExp(`${name}:\\s*legacyAdminRoleProcedure`)
       );
     }
   });
@@ -81,11 +81,24 @@ describe("Sales Intel administration is admin-only", () => {
     expect(salesIntelRouterSource).not.toMatch(/protectedProcedure/);
   });
 
-  it("keeps adminProcedure itself restricted to the platform admin role", () => {
-    // The gate that makes all of the above meaningful.
+  it("keeps the Sales Intel gate on an admin role with an operator identity", () => {
     expect(trpcSource).toMatch(
-      /export const adminProcedure[\s\S]{0,240}ctx\.user\.role !== "admin"/
+      /export const legacyAdminRoleProcedure[\s\S]{0,500}ctx\.user\.role !== "admin"/
     );
+    expect(trpcSource).toMatch(
+      /export const legacyAdminRoleProcedure[\s\S]{0,500}ctx\.user\.openId\.trim\(\)\.length === 0/
+    );
+    expect(trpcSource).toMatch(
+      /export const adminProcedure[\s\S]{0,240}isPlatformAdministrator\(ctx\.user\)/
+    );
+    const identity = readFileSync(
+      resolve(import.meta.dirname, "..", "platform", "tenancy", "tenantIdentity.ts"),
+      "utf8"
+    );
+    expect(identity).toMatch(
+      /function isPlatformAdministrator[\s\S]{0,400}user\.role === "admin"/
+    );
+    expect(identity).toMatch(/hasOperatorOpenId\(user\.openId\)/);
   });
 });
 

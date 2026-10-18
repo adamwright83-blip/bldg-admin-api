@@ -54,7 +54,12 @@ const requireUser = t.middleware(async opts => {
   }
   // Demo bypass sessions are tenant-demo credentials, not generic legacy
   // platform sessions. They must enter through explicit tenant procedures.
-  if (isGoldlineDemoOpenId(ctx.user.openId)) {
+  // A role with no operator id is not an operator.
+  if (
+    typeof ctx.user.openId !== "string" ||
+    ctx.user.openId.trim().length === 0 ||
+    isGoldlineDemoOpenId(ctx.user.openId)
+  ) {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
   return next({ ctx: { ...ctx, user: ctx.user } });
@@ -73,6 +78,8 @@ export const legacyAdminRoleProcedure = baseProcedure.use(
     if (
       !ctx.user ||
       ctx.user.role !== "admin" ||
+      typeof ctx.user.openId !== "string" ||
+      ctx.user.openId.trim().length === 0 ||
       isGoldlineDemoOpenId(ctx.user.openId)
     ) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
