@@ -364,6 +364,19 @@ function rankOne(input: {
 
   if (candidate.sourceKind === "strategy_diagnosis") {
     factors.push(factor("evidence_linked_strategy", candidate.observedSignals.find(s => s.label === "strategic_driver")?.value ?? null, candidate.provenance.sourceIds.join(","), 100, "low"));
+    // A challenge to the operator's stated method is carried, not scored:
+    // the operator decides between the approaches, Mission Director does not.
+    const challenge = candidate.observedSignals.find(s => s.label === "strategic_challenge");
+    if (challenge)
+      factors.push(
+        factor(
+          "strategic_challenge",
+          challenge.value,
+          "strategic diagnosis: an evidence-backed alternative is prepared for the operator to decide on; it does not change this ranking",
+          0,
+          "low"
+        )
+      );
   }
 
   factors.push(

@@ -8,6 +8,7 @@ import type {
   StrategyOption,
 } from "../../shared/strategicIntelligence";
 import { outcomeContribution } from "../../shared/operatingMandate";
+import { prepareStrategicChallenge, type EvidencePlanView } from "./strategicChallenge";
 import {
   normalizeAreaKey,
   workThreadOpportunityKey,
@@ -53,6 +54,15 @@ export type DiagnosisInput = {
     dormant: number | null;
     dormantRef: string | null;
     dormantTop: Array<{ name: string; lastOrderDate: string | null; revenueCents: number; identityKey?: string | null }>;
+    /** Every lapsed customer the area query returned (up to its limit), for a prepared cohort. */
+    dormantMembers?: Array<{
+      identityKey: string | null;
+      name: string;
+      lastOrderDate: string | null;
+      revenueCents: number;
+      paidOrders: number;
+      matched: boolean;
+    }>;
     figuresVerified: boolean;
     /** Confirmed by the operator, or only mentioned in conversation (never a goal either way). */
     confirmation?: "confirmed" | "inferred";
@@ -78,9 +88,19 @@ export type DiagnosisMandate = {
     population: "lapsed_customers" | "new_customers";
     area: string | null;
     statement: string;
+    /** The confirmed goal it was stated for; null for the business as a whole. */
+    outcomeId?: string | null;
   } | null;
   unresolvedConflicts: string[];
   notes: string[];
+  /** Operator doctrine: confirmed operator values and system defaults, each with its source. */
+  constraints?: Array<{
+    id: string;
+    key: string;
+    value: number | string | null;
+    origin: "operator_doctrine" | "system_default";
+    statement: string;
+  }>;
 };
 
 /** Win-back contacts are judged on replies and orders in this many days after contact. */
@@ -264,7 +284,14 @@ export function assembleStrategicDiagnosis(
   const hardConstraint = ["contribution", "cash_flow", "capacity"].includes(driver);
   const method = input.mandate?.method ?? null;
   const focusKey = input.focus ? normalizeAreaKey(input.focus.area) : null;
-  const methodHeld = Boolean(method && (input.sourceGaps || hardConstraint));
+  const methodHeldReason = !method
+    ? null
+    : input.sourceGaps
+      ? "sales data is incomplete"
+      : hardConstraint
+        ? `the business has a ${driver.replace("_", " ")} constraint`
+        : null;
+  const methodHeld = Boolean(methodHeldReason);
   const methodFitsFocus = Boolean(method && input.focus && (method.area === null || method.area === focusKey));
   const focusPlan =
     input.focus && !input.sourceGaps && !hardConstraint
@@ -470,6 +497,43 @@ export function assembleStrategicDiagnosis(
       ? { workThreadId: input.workThreadIds[workThreadOpportunityKey(opportunity)] }
       : {}),
   };
+  // An evidence-backed challenge to the stated method, or why there is none.
+  const evidencePlan: EvidencePlanView | null =
+    method && methodFitsFocus && focusPlan && input.focus
+      ? (() => {
+          const plan = planForObjective(input.focus!, aov, byId, null);
+          return { driver: plan.driver, chosen: plan.chosen, population: plan.driver === "retention" ? "lapsed_customers" : "new_customers" };
+        })()
+      : null;
+  const challenge = input.mandate
+    ? prepareStrategicChallenge({
+        verticalKey: input.verticalKey,
+        mandate: input.mandate,
+        focus: input.focus ?? null,
+        focusKey,
+        methodHeldReason,
+        methodFitsFocus,
+        revisitingFailedHypothesis,
+        evidencePlan,
+        outcomes: input.outcomes,
+        byId,
+        metrics: input.metrics,
+        workThreadIds: input.workThreadIds,
+        methodOpportunity: methodApplied ? opportunity : null,
+        observationWindowDays: RECOVERY_OBSERVATION_DAYS,
+      })
+    : null;
+  // Confirmed constraints come first for the diagnosis's own options too: an
+  // alternative they rule out is shown as unavailable, never as a next step.
+  if (challenge && "abstained" in challenge && challenge.abstained.reason === "constraint_precludes_alternative" && evidencePlan) {
+    const ruledOut = options.find(o => o.id !== options[0]!.id && o.approach === evidencePlan.chosen);
+    if (ruledOut)
+      Object.assign(ruledOut, {
+        eligible: false,
+        reason: `Not available under your rules: ${challenge.abstained.detail}`,
+        nextMeasurableAction: "None while your rule applies.",
+      });
+  }
   const marketLabels = input.market.territories.map(t => t.label);
   const d: StrategicDiagnosis = {
     id: "",
@@ -497,6 +561,8 @@ export function assembleStrategicDiagnosis(
           },
         }
       : {}),
+    ...(challenge && "challenge" in challenge ? { challenge: challenge.challenge } : {}),
+    ...(challenge && "abstained" in challenge ? { challengeAbstained: challenge.abstained } : {}),
     currentCondition:
       (focusPlan ? `${focusPlan.condition} ` : "") +
       (input.goal.current == null
@@ -563,9 +629,7 @@ export function assembleStrategicDiagnosis(
         : industry.limitations),
       ...observed.missing.map(m => `${m} is unmeasured.`),
       ...(focusPlan ? focusPlan.uncertainty : []),
-      ...(method && methodHeld
-        ? [`Your stated approach (${method.statement}) is on hold: ${input.sourceGaps ? "sales data is incomplete" : `the business has a ${driver.replace("_", " ")} constraint`}.`]
-        : []),
+      ...(method && methodHeldReason ? [`Your stated approach (${method.statement}) is on hold: ${methodHeldReason}.`] : []),
       ...(method && !methodHeld && input.focus && !methodFitsFocus
         ? [`Your stated approach (${method.statement}) is for a different area than the current focus, ${input.focus.area}; confirm which applies.`]
         : []),

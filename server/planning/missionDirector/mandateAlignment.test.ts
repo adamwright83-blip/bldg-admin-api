@@ -66,4 +66,16 @@ describe("Mission Director goal alignment from the operating mandate", () => {
     const context: RankingContext = { ...base, macroGoal: null, outcomes: [silverLake] };
     expect(alignment(context, recovery)).toMatchObject({ value: false, effect: 0 });
   });
+
+  it("carries a strategic challenge on the challenged work without changing its score or adding the alternative", () => {
+    const context: RankingContext = { ...base, macroGoal: { metricKey: "active_customers", targetValue: 50, objective: customers.statement }, outcomes: [customers] };
+    const plain = candidate("work_thread:method", { motion: "account_acquisition", scopeArea: "silver_lake", observedSignals: [{ label: "strategic_driver", value: "acquisition", source: "d", sourceIds: [] }] });
+    const challenged = { ...plain, observedSignals: [...plain.observedSignals, { label: "strategic_challenge", value: "challenge_abc", source: "d", sourceIds: ["objective_area_dormant:t"] }] };
+    const rank = (work: WeeklyGrowthCandidate) => rankMissionDirectorWork({ candidates: [work], campaigns: [], campaignPrepReady: {}, context, pockets: [] }).ranking;
+    const [without] = rank(plain);
+    const [withChallenge] = rank(challenged);
+    expect(withChallenge!.score).toBe(without!.score);
+    expect(withChallenge!.factors.find(f => f.name === "strategic_challenge")).toMatchObject({ value: "challenge_abc", effect: 0 });
+    expect(rank(challenged)).toHaveLength(1);
+  });
 });

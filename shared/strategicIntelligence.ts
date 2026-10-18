@@ -110,6 +110,79 @@ export type StrategyOption = {
   uncertainty?: string;
   nextMeasurableAction?: string;
 };
+/** One customer in a prepared cohort, read from the business's own paid orders. */
+export type StrategicCohortMember = {
+  identityKey: string;
+  displayName: string;
+  lastOrderDate: string | null;
+  paidOrders: number;
+  revenueCents: number;
+};
+
+/**
+ * An evidence-backed challenge to the operator's stated method (Phase 2 ·
+ * Slice E). Raised only when recorded evidence favors a different approach
+ * for the same goal and that approach survives the operator's confirmed
+ * constraints. It is a prepared comparison, never a decision: Claire contacts
+ * no one, spends nothing and changes no approach without the operator.
+ */
+export type StrategicChallenge = {
+  /** Deterministic: the method, the alternative and the cohort it rests on. */
+  id: string;
+  status: "raised";
+  statedMethod: {
+    id: string;
+    statement: string;
+    lever: BusinessDriver;
+    population: string;
+    area: string | null;
+  };
+  /** The confirmed goal the stated method is meant to move. */
+  outcome: { id: string; statement: string } | null;
+  /** The Work Thread the stated method is pursued in. */
+  workThreadId: string | null;
+  /** The challenge in one sentence, from observed facts only. */
+  claim: string;
+  /** Recorded evidence for the stated method, and for the alternative (against the method). */
+  evidenceFor: Array<{ ref: string; statement: string }>;
+  evidenceAgainst: Array<{ ref: string; statement: string }>;
+  uncertainty: string[];
+  alternative: {
+    approach: string;
+    opportunity: StrategyOpportunity;
+    /** An open thread already pursuing the alternative, if one exists; none is opened for it. */
+    workThreadId: string | null;
+    cohort: {
+      /** How the cohort was read: the query, its definition and when. */
+      basis: string;
+      sourceRef: string;
+      members: StrategicCohortMember[];
+      /** Customers the alternative leaves out, and why (operator rules first). */
+      exclusions: Array<{ identityKey: string | null; displayName: string; reason: string; constraintRef: string | null }>;
+    };
+    nextMeasurableAction: string;
+  };
+  autonomy: {
+    /** What Claire prepared on her own: reads and drafts only. */
+    preparedWithoutApproval: string[];
+    /** What happens only if the operator approves it. */
+    requiresApproval: string[];
+  };
+};
+
+/** Why a stated method was not challenged. Abstaining is the default. */
+export type StrategicChallengeAbstention = {
+  reason:
+    | "method_matches_evidence"
+    | "method_on_hold"
+    | "insufficient_evidence"
+    | "constraint_precludes_alternative"
+    | "alternative_contradicted";
+  detail: string;
+  /** Confirmed operator constraints that decided it, when one did. */
+  constraintRefs: string[];
+};
+
 /** The operating mandate a diagnosis was prepared under (Phase 2 · Slice B). */
 export type StrategicDiagnosisMandate = {
   revision: string;
@@ -131,6 +204,10 @@ export type StrategicDiagnosis = {
    */
   objective?: { statement: string; area: string; confirmation?: "confirmed" | "inferred" };
   mandate?: StrategicDiagnosisMandate;
+  /** Present when the operator stated a method and the evidence favors another approach. */
+  challenge?: StrategicChallenge;
+  /** Present when the operator stated a method and it was not challenged, with why. */
+  challengeAbstained?: StrategicChallengeAbstention;
   id: string;
   schemaVersion: 1;
   doctrineVersion: string;

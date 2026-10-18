@@ -712,6 +712,12 @@ export async function decideGoalCycle(input: {
       selectedWorkServesOutcomeIds: servedOutcomeIds(mandate, choice.selectedCandidate),
       unresolvedConflicts: mandate.conflicts.filter(c => c.status === "unresolved").map(c => c.id),
     },
+    // An evidence-backed challenge to the operator's stated method travels
+    // with the selected work; the operator, not this decision, settles it.
+    strategicChallenge: (() => {
+      const signal = choice.selectedCandidate?.observedSignals.find(s => s.label === "strategic_challenge");
+      return signal ? { status: "raised", id: String(signal.value) } : { status: "none" };
+    })(),
   };
 
   const execution =

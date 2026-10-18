@@ -32,6 +32,7 @@ import { workThreadCandidateId, workThreadOpportunityKey } from "../../shared/wo
 import {
   resolveCandidateWorkThread,
   resolveWorkThread,
+  findOpenWorkThread,
 } from "../agents/persistentOperator/workThreadStore";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { dayDirectorCommitments } from "../../drizzle/schema";
@@ -85,6 +86,12 @@ async function resolveDiagnosisWorkThreads(
       now,
     });
     ids[workThreadOpportunityKey(action.opportunity)] = thread.id;
+  }
+  // A challenge's alternative names the thread already pursuing it, if one is
+  // open. None is opened for it: the alternative is a comparison, not work.
+  if (d.challenge) {
+    const open = await findOpenWorkThread({ tenantId: identity.tenantId, opportunity: d.challenge.alternative.opportunity });
+    if (open) ids[workThreadOpportunityKey(d.challenge.alternative.opportunity)] = open.id;
   }
   return ids;
 }
@@ -177,6 +184,9 @@ export async function refreshStrategicDiagnosis(input: {
       uncertainty: d.uncertainty,
       mandate: d.mandate ? fromMandate : null,
       objective: d.objective ?? null,
+      // A challenge is identified by what it rests on; volatile evidence refs are not part of it.
+      challenge: d.challenge?.id ?? null,
+      challengeAbstained: d.challengeAbstained ?? null,
     });
   };
   if (
@@ -200,17 +210,22 @@ const LIMITATION_LINE = /^\d{4}-\d{2}-\d{2}: /;
  * mints new ones); dates, titles, objectives, types, timing and constraints are not.
  */
 export function proposalDecisionUnchanged(
-  current: Pick<StrategicPlanningProposal, "businessDate" | "expiresAt" | "items" | "constraints" | "uncertainty">,
+  current: Pick<StrategicPlanningProposal, "businessDate" | "expiresAt" | "items" | "constraints" | "uncertainty"> & {
+    diagnosis?: Pick<StrategicDiagnosis, "challenge">;
+  },
   next: {
     businessDate: string;
     items: StrategicPlanningProposal["items"];
     constraints: string[];
     limitations: string[];
+    /** The open challenge to the operator's stated method, if any: a different one is a different decision. */
+    challengeId?: string | null;
   },
   now: Date
 ): boolean {
   if (current.businessDate !== next.businessDate) return false;
   if (Date.parse(current.expiresAt) <= now.getTime()) return false;
+  if ((current.diagnosis?.challenge?.id ?? null) !== (next.challengeId ?? null)) return false;
   const decision = (items: StrategicPlanningProposal["items"]) =>
     canonicalJsonStringify(
       items.map(i => ({
@@ -396,7 +411,7 @@ export async function prepareStrategicProposal(input: {
   if (
     current &&
     !closedGeneration &&
-    proposalDecisionUnchanged(current, { businessDate, items, constraints, limitations }, now)
+    proposalDecisionUnchanged(current, { businessDate, items, constraints, limitations, challengeId: diagnosis.challenge?.id ?? null }, now)
   )
     return current;
   const revision = createHash("sha256")
