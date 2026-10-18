@@ -16,7 +16,7 @@ suite("Claire conversation and verified work on disposable MySQL", () => {
   let sql: mysql.Connection;
   const tenantId = `claire-repair-${randomUUID().slice(0, 8)}`;
   const owner = { tenantId, operatorUserId: "repair-operator", surface: "voice" as const };
-  const scope = { tenantId, dayDirectorActorId: "1", conversationKey: `repair:${tenantId}` };
+  const scope = { tenantId, dayDirectorActorId: "1", operatorUserId: "repair-operator", conversationKey: `repair:${tenantId}` };
   const clock = briefingClock(new Date("2026-10-16T00:30:00Z"), "America/Los_Angeles");
   const quote = "Before I leave work, create the Laundry Farm landing page and Instagram ad. The ad says pickup tomorrow, twenty pounds free.";
   const parsed = () => validateModelBriefing({ items: [{ kind: "new_work", title: "Create Laundry Farm landing page and Instagram ad", quote,

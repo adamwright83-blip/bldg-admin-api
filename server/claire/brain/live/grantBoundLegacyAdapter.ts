@@ -113,6 +113,7 @@ async function commitParsed(input: {
   const result = await commitBriefing(reconciled, {
     tenantId: input.tenantId,
     dayDirectorActorId: input.dayDirectorActorId,
+    operatorUserId: input.operatorUserId,
     conversationKey: input.conversationKey,
     vehicleId: input.operatorUserId,
   });

@@ -27,6 +27,11 @@ import {
 import { getDb } from "../../db";
 import { invokeLLM } from "../../_core/llm";
 import { ENV } from "../../_core/env";
+import {
+  admissionRecord,
+  assertDayLineAdmission,
+  type DayLineAdmission,
+} from "./dayLineAdmission";
 
 const proposalSchema = {
   name: "day_director_commitment",
@@ -362,9 +367,9 @@ export async function acceptProposalWithReceipt(input: {
   actorIds?: readonly string[];
   businessDate: string;
   proposal: DayDirectorProposal;
+  /** Required. The operator's approval or instruction; anything else is refused. */
+  admission: DayLineAdmission;
 }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
   const actorIds = [...new Set(
     [input.actorId, ...(input.actorIds ?? [])]
       .map(actorId => actorId.trim())
@@ -372,6 +377,17 @@ export async function acceptProposalWithReceipt(input: {
   )];
   if (actorIds.length === 0) throw new Error("Day Director actor identity is required");
   const businessDate = input.proposal.targetBusinessDate ?? input.businessDate;
+  // Admission is checked before anything is read or written, so a refused
+  // write cannot touch an existing row either.
+  const admission = await assertDayLineAdmission({
+    tenantId: input.tenantId,
+    actorIds,
+    businessDate,
+    proposal: input.proposal,
+    admission: input.admission,
+  });
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const command = input.proposal.command ?? emptyCommandMetadata();
   const metadataJson = {
     prerequisites: input.proposal.prerequisites,
@@ -384,6 +400,7 @@ export async function acceptProposalWithReceipt(input: {
     ...(input.proposal.strategicApproval ? { strategicApproval: input.proposal.strategicApproval } : {}),
     ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
     ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
+    dayLineAdmission: admissionRecord(admission),
   };
 
   const existingRows = await db

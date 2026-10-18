@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
 import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
+import { operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
 import {
   rescheduleCommercialFollowUp,
   scheduleCommercialFollowUp,
@@ -157,6 +158,12 @@ export async function commitAccountFollowUp(
         missingDetails: [],
         detailNote: pending.note ? `Operator report, hearsay kept as hearsay: ${pending.note}` : null,
       },
+      // Reached only after the operator said yes to this exact follow-up.
+      admission: operatorInstructionAdmission({
+        operatorUserId: input.operatorUserId,
+        surface: "claire_turn",
+        sourceRef: `account-follow-up:${pending.requestId}`,
+      }),
     });
     const storedId =
       accepted.stored && typeof accepted.stored === "object" && "id" in accepted.stored

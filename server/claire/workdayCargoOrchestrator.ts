@@ -11,6 +11,7 @@ import { UNKNOWN_CARGO_IDENTITY } from "../../shared/claireWorkdayCommand";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { confirmCargo, deliverCustodyToCustomer, proposeCargo } from "../goldlineCargo/cargoService";
 import { acceptProposal, completeDayDirectorCommitment, updateDayDirectorCommitment } from "../planning/dayDirector/dayDirectorService";
+import type { DayLineAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { detectUnknownCargoIdentity } from "./workdayCommandLanguage";
 import { classifyDayDirectorKind } from "./workdayCommandKind";
 
@@ -57,6 +58,8 @@ export async function confirmLinkedVehicleWork(input: {
   transcript: string;
   place?: string | null;
   confirmed: boolean;
+  /** The operator's instruction that confirmed this work; passed to the Day Line write. */
+  admission: DayLineAdmission;
 }): Promise<LinkedVehicleWorkResult> {
   const receipts: MutationReceipt[] = [];
   if (!input.confirmed) {
@@ -144,6 +147,7 @@ export async function confirmLinkedVehicleWork(input: {
         detailNote: unknown ? `${UNKNOWN_CARGO_IDENTITY}${input.place ? ` · ${input.place}` : ""}` : null,
         command,
       },
+      admission: input.admission,
     });
     const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
     if (!id) throw new Error("Day Line item was not persisted");

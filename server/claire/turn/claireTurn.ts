@@ -1801,6 +1801,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const acceptResult = await acceptSalesInsightChallenge({
         tenantId: input.tenantId,
         actorId: input.dayDirectorActorId,
+        operatorUserId: input.operatorUserId,
         businessDate: today,
         artifact: challengeArtifact,
         operatorUtterance: utterance,
@@ -1892,6 +1893,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const result = await deps.commit(pending, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
+        operatorUserId: input.operatorUserId,
         conversationKey: input.conversationKey,
         vehicleId: input.operatorUserId,
       });
@@ -2006,6 +2008,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         {
           tenantId: input.tenantId,
           actorId: input.dayDirectorActorId,
+          operatorUserId: input.operatorUserId,
           businessDate: today,
           utterance: pendingDecision,
           state,
@@ -2266,6 +2269,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
+        operatorUserId: input.operatorUserId,
         conversationKey: input.conversationKey,
         vehicleId: input.operatorUserId,
       }
@@ -2420,6 +2424,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const result = await deps.commit(reconciled, {
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
+        operatorUserId: input.operatorUserId,
         conversationKey: input.conversationKey,
         vehicleId: input.operatorUserId,
       });
@@ -2460,7 +2465,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   ) {
     commitmentTried = true;
     const turn = await deps.commitment(
-      { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
+      { tenantId: input.tenantId, actorId: input.dayDirectorActorId, operatorUserId: input.operatorUserId, businessDate: today, utterance, state, conversationId: input.conversationKey },
       { confirmPlan: deps.confirmPlan }
     );
     if (turn.kind !== "not_applicable") {
@@ -2503,7 +2508,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   ) {
     commitmentTried = true;
     const turn = await deps.commitment(
-      { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
+      { tenantId: input.tenantId, actorId: input.dayDirectorActorId, operatorUserId: input.operatorUserId, businessDate: today, utterance, state, conversationId: input.conversationKey },
       { confirmPlan: deps.confirmPlan }
     );
     if (turn.kind !== "not_applicable") {

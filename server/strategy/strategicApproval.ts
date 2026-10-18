@@ -12,6 +12,7 @@ import {
   acceptProposalWithReceipt,
   getDayDirectorState,
 } from "../planning/dayDirector/dayDirectorService";
+import { strategicApprovalAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { proposalItemExecutionWindow } from "../../shared/weeklyMissionReadiness";
 import { formatInTimeZone } from "date-fns-tz";
@@ -148,6 +149,7 @@ export async function respondToStrategicProposal(
           executionType: item.executionType,
           strategicApproval: approved,
         },
+        admission: strategicApprovalAdmission(approved),
       });
       if (!result.stored?.id) throw new Error("No authoritative write receipt");
       // A separate canonical read validates identity, content, and exact approval lineage.
