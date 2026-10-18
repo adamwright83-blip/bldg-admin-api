@@ -279,6 +279,10 @@ export async function respondToStrategicProposal(
             // The commitment is one execution of the thread: later work that
             // continues it (and its outcomes) stays on the same opportunity.
             ...(item.workThreadId ? { workThread: { id: item.workThreadId } } : {}),
+            // What will be observed once it is done: whose paid orders, for how long.
+            ...(item.customerTargets?.length || item.observationWindowDays
+              ? { observationPlan: { targets: item.customerTargets ?? [], windowDays: item.observationWindowDays ?? null } }
+              : {}),
           },
         })
         .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));

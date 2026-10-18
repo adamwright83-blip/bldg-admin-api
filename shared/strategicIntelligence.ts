@@ -80,7 +80,15 @@ export type StrategyAction = {
   opportunity?: StrategyOpportunity;
   /** The durable Work Thread the opportunity resolved to when the diagnosis was prepared. */
   workThreadId?: string;
+  /**
+   * The customers this action names, by analytical identity key. They belong
+   * to this action and its execution, never to the thread's identity.
+   */
+  targets?: StrategyActionTarget[];
+  /** Days after execution in which a target's paid order is observed as this action's result. */
+  observationWindowDays?: number;
 };
+export type StrategyActionTarget = { identityKey: string; displayName: string };
 export type StrategyOption = {
   id: string;
   approach: string;
@@ -164,6 +172,10 @@ export type StrategicProposalItem = {
   evidenceRefs: string[];
   /** The durable Work Thread this item continues; absent on pre-thread proposals and unresolved work. */
   workThreadId?: string;
+  /** The customers this item names (strategy items only); observed after execution. */
+  customerTargets?: StrategyActionTarget[];
+  /** Days after execution in which those customers' paid orders count as this item's result. */
+  observationWindowDays?: number;
 };
 export type StrategicPlanningProposal = {
   id: string;

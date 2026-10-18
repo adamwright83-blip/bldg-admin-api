@@ -33,6 +33,12 @@ import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaul
 import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
+import {
+  COMMITMENT_COMPLETION_SOURCE,
+  commitmentCompletionHandler,
+  enqueueCompletedCommitmentObligations,
+} from "./commitmentExecutionBridge";
+import { drainObservationBridgeObligations, type ObservationBridgeHandler } from "./observationBridgeStore";
 import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
@@ -407,6 +413,34 @@ export async function sweepUnpropagatedConquestWins(input: {
   return { processedCount, errors };
 }
 
+/** Observation-bridge handlers by source kind. */
+export function observationBridgeHandlers(): Partial<Record<string, ObservationBridgeHandler>> {
+  return { [COMMITMENT_COMPLETION_SOURCE]: commitmentCompletionHandler };
+}
+
+/** Completed commitments look back this far for a missing obligation. */
+const COMMITMENT_RECONCILIATION_DAYS = 30;
+
+/**
+ * Reconcile observation bridges: completed, approved commitments get their
+ * obligation if a crash or another completion path skipped it, then due
+ * obligations are retried. Per-item errors are returned, never swallowed.
+ */
+export async function sweepObservationBridges(input: { leaseOwner: string; now?: Date; limit?: number }) {
+  const now = input.now ?? new Date();
+  const discovered = await enqueueCompletedCommitmentObligations({
+    since: new Date(now.getTime() - COMMITMENT_RECONCILIATION_DAYS * 86_400_000),
+    now,
+  });
+  const drained = await drainObservationBridgeObligations({
+    handlers: observationBridgeHandlers(),
+    leaseOwner: input.leaseOwner,
+    limit: input.limit ?? 25,
+    now,
+  });
+  return { discovered: discovered.enqueued, ...drained };
+}
+
 export function startAutonomousPersistentOperatorWorkers(
   options: AutonomousWorkerOptions = {}
 ): () => Promise<void> {
@@ -480,6 +514,18 @@ export function startAutonomousPersistentOperatorWorkers(
     if (learningSweeperActive) return;
     learningSweeperActive = true;
     try {
+      // Step 0: Durable observation bridges (completed commitments → their goal objective)
+      const bridges = await sweepObservationBridges({ leaseOwner: `${leaseOwner}:observation-bridge` });
+      if (bridges.attempted > 0 || bridges.discovered > 0) {
+        console.info(
+          `[AutonomousWorkers] Observation bridges: ${bridges.discovered} discovered, ${bridges.attempted} attempted`,
+          bridges.byStatus
+        );
+      }
+      for (const error of bridges.errors) {
+        console.warn("[AutonomousWorkers] Observation bridge will retry", error);
+      }
+
       // Step A: Sweep unbridged parking-lot debriefs into outcomes
       const debriefResult = await sweepUnbridgedParkingLotDebriefs();
       if (debriefResult.processedCount > 0) {

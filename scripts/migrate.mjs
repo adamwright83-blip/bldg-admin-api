@@ -4696,6 +4696,15 @@ await ensureRequiredIndex(
   ["tenantId", "workThreadId", "createdAt"],
   "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_work_thread (tenantId,workThreadId,createdAt)"
 );
+// Phase 2 · Slices C and D: durable observation-bridge obligations. A failed
+// bridge from a completed commitment or a paid order is owned by a row with
+// its status, error and next attempt, never only a "deferred" log line.
+await applyIdempotentSqlFile("../drizzle/0138_observation_bridge_obligations.sql", "Observation bridge obligations");
+await assertRequiredColumns("observation_bridge_obligations", [
+  "id", "tenantId", "sourceKind", "sourceKey", "status", "payloadJson", "resultJson",
+  "attemptCount", "nextAttemptAt", "leaseOwner", "leaseExpiresAt", "lastError",
+  "resolvedAt", "createdAt", "updatedAt",
+]);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",

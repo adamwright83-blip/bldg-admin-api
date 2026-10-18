@@ -23,6 +23,12 @@ import {
   transitionObjectiveStatus,
   type PersistentGrowthObjective,
 } from "./objectiveStore";
+import { identityKeysFor } from "../../analytics/customerIdentityResolution";
+import {
+  findObservedAttemptForPaidOrder,
+  recordAttemptObservationResult,
+  type ObservedAttemptMatch,
+} from "./commitmentExecutionBridge";
 import {
   bindEconomicOutcome,
   recordGoalCycleOutcome,
@@ -552,6 +558,13 @@ export async function bridgeCleanCloudPaidOrder(
   }
 
   let matchedObjective: PersistentGrowthObjective | null = null;
+  const observedAt =
+    input.paidDateUtc instanceof Date
+      ? input.paidDateUtc
+      : typeof input.paidDateUtc === "string"
+        ? new Date(input.paidDateUtc)
+        : new Date();
+  let attempt: Extract<ObservedAttemptMatch, { status: "matched" }> | null = null;
 
   if (input.objectiveId?.trim()) {
     try {
@@ -570,6 +583,39 @@ export async function bridgeCleanCloudPaidOrder(
       };
     }
   } else {
+    // An executed attempt that targeted this customer, inside its observation
+    // window, owns the order's observation (Phase 2 · Slice C). Attempts on
+    // more than one objective fail closed.
+    const observed = await findObservedAttemptForPaidOrder({
+      tenantId: input.tenantId,
+      identityKeys: identityKeysFor({
+        phone: input.customerPhone,
+        email: input.customerEmail,
+        cleancloudCustomerId: input.cleancloudCustomerId,
+      }),
+      paidAt: observedAt,
+    });
+    if (observed.status === "ambiguous") {
+      return {
+        bridged: false,
+        reason: "ambiguous_lineage",
+        candidateObjectiveIds: observed.objectiveIds,
+        message: `Paid order #${input.cleancloudOrderId} answers ${observed.commitmentIds.length} executed attempts on different objectives; failed closed for review.`,
+      };
+    }
+    if (observed.status === "matched") {
+      attempt = observed;
+      matchedObjective = await getGoalCycleObjective({ tenantId: input.tenantId, objectiveId: observed.objectiveId });
+      if (!matchedObjective) {
+        return {
+          bridged: false,
+          reason: "objective_not_found",
+          message: `Attempt ${observed.commitmentId} points at objective '${observed.objectiveId}', which no longer exists`,
+        };
+      }
+    }
+  }
+  if (!matchedObjective) {
     // Deterministic matching ONLY:
     const candidates = await findDeterministicObjectivesForCleanCloudOrder(input);
 
@@ -595,12 +641,6 @@ export async function bridgeCleanCloudPaidOrder(
   }
 
   const evidenceReference = `orders:cleancloud:${input.cleancloudOrderId.trim()}`;
-  const observedAt =
-    input.paidDateUtc instanceof Date
-      ? input.paidDateUtc
-      : typeof input.paidDateUtc === "string"
-        ? new Date(input.paidDateUtc)
-        : new Date();
 
   const cleanCloudEvidence = await findCleanCloudPaidObservationReceipt({
     tenantId: input.tenantId,
@@ -632,9 +672,34 @@ export async function bridgeCleanCloudPaidOrder(
       cleancloudCustomerId: input.cleancloudCustomerId ?? null,
       sourceFileName: input.sourceFileName ?? null,
       ...input.metadata,
+      ...(attempt
+        ? {
+            // A contacted customer paid inside the attempt's window: a verified
+            // result on this work, not proof that the contact caused it.
+            attribution: {
+              kind: "contacted_customer_paid_within_window",
+              causal: false,
+              attemptCommitmentId: attempt.commitmentId,
+              workThreadId: attempt.workThreadId,
+              identityKey: attempt.identityKey,
+              windowStart: attempt.windowStart,
+              windowEnd: attempt.windowEnd,
+            },
+          }
+        : {}),
       authorityReceiptId: cleanCloudEvidence.id,
     },
   });
+  if (attempt) {
+    await recordAttemptObservationResult({
+      tenantId: input.tenantId,
+      commitmentId: attempt.commitmentId,
+      identityKey: attempt.identityKey,
+      evidenceReference,
+      outcomeId: bound.outcome.id,
+      observedAt,
+    });
+  }
 
   const deltas = await listGoalCycleLearnedDeltas({
     tenantId: input.tenantId,
