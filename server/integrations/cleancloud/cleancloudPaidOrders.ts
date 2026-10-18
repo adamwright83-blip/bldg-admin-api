@@ -165,7 +165,7 @@ export function parseCleanCloudPacificDate(value: unknown): Date | null {
     const meridiem = meridiemRaw?.toUpperCase();
     if (meridiem === "PM" && hour < 12) hour += 12;
     if (meridiem === "AM" && hour === 12) hour = 0;
-    const localIso = `${yearRaw}-${String(Number(monthRaw)).padStart(2, "0")}-${String(Number(dayRaw)).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${minuteRaw}:00`;
+    const localIso = `${yearRaw}-${String(Number(monthRaw)).padStart(2, "0")}-${String(Number(dayRaw)).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(Number(minuteRaw)).padStart(2, "0")}:00`;
     return fromZonedTime(localIso, PACIFIC_TIME_ZONE);
   }
 
