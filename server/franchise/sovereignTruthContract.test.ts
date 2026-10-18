@@ -204,6 +204,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetDbForTesting();
     resetDayLineDepsForTesting();
   });
@@ -442,7 +443,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(insertedRows.get("goal_cycle_requests")?.length).toBe(1);
   });
 
-  it("verifies Day Line completion: objective completion creates durable outcome, commitment completion updates status", async () => {
+  it("keeps an unranked objective and an undesignated commitment off today's Day Line", async () => {
     const { store } = setupTestFranchiseDb();
 
     store.set("users", [
@@ -507,6 +508,10 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
+    setDayLineDepsForTesting({
+      planForDate: async () => ({ outcome: { status: "no_plan" } } as any),
+    });
+
     const caller = appRouter.createCaller({
       user: {
         id: 1,
@@ -520,12 +525,184 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       res: { clearCookie: () => {} } as any,
     });
 
-    // 1. Verify Day Line surfaces both items
     const todayLine = await caller.system.currentDayLine.today();
-    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(true);
-    expect(todayLine.items.some(i => i.id === "commit-morning-door-tags")).toBe(true);
+    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(false);
+    expect(todayLine.items.some(i => i.id === "commit-morning-door-tags")).toBe(false);
 
-    // 2. Complete Objective: succeeds with durable outcome
+    await expect(
+      caller.system.currentDayLine.completeItem({
+        itemId: "objective-conquest-1",
+        evidenceReference: "field_receipt_voice_01",
+        explanation: "Driver confirmed completed at Argyle House",
+      })
+    ).rejects.toThrow("is not present on today's authoritative Day Line");
+
+    const outcomes = store.get("goal_cycle_outcomes") ?? [];
+    expect(outcomes.some(o => o.objectiveId === "objective-conquest-1")).toBe(false);
+    const commitments = store.get("day_director_commitments") ?? [];
+    expect(commitments.find(c => c.id === "commit-morning-door-tags")?.status).toBe("open");
+  });
+
+  it("verifies Day Line completion: objective completion creates durable outcome, commitment completion updates status", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-18T20:00:00.000Z"));
+    const businessDate = "2026-10-18";
+    const now = new Date("2026-10-18T20:00:00.000Z");
+    const { store } = setupTestFranchiseDb();
+
+    store.set("users", [
+      {
+        id: 1,
+        tenantId: "default",
+        openId: "admin-owner-user",
+        role: "admin",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("dayforge_saas_memberships", [
+      {
+        tenantId: "default",
+        userOpenId: "admin-owner-user",
+        role: "owner",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("goal_cycle_objectives", [
+      {
+        tenantId: "default",
+        id: "objective-conquest-1",
+        goalRunId: "run-1",
+        cycleId: "cycle-1",
+        decisionId: "decision-1",
+        canonicalOperatorId: "tenant:default:operator:admin-owner-user",
+        operatorUserId: "admin-owner-user",
+        selectionKind: "obligation",
+        selectedRef: "ref-1",
+        title: "Conquest Argyle House",
+        description: "Visit building",
+        executionType: "mission",
+        authority: "HUMAN_EXECUTION",
+        status: "presented",
+        businessDate,
+        windowStart: "08:00",
+        windowEnd: "17:00",
+        loadoutJson: [],
+        evidenceRefsJson: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("day_director_commitments", [
+      {
+        tenantId: "default",
+        id: "commit-morning-door-tags",
+        actorId: "1",
+        businessDate,
+        status: "open",
+        title: "Franklin corridor door tags",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const ranking = [
+      {
+        workId: "objective-conquest-1",
+        title: "Conquest Argyle House",
+        objective: "Visit building",
+        completionCondition: "Driver confirms the visit",
+        eligible: true,
+        executionType: "mission" as const,
+        sourceRefs: [
+          {
+            sourceKind: "unfinished_growth_work" as const,
+            sourceType: "goal_cycle_objective",
+            sourceId: "objective-conquest-1",
+          },
+        ],
+      },
+      {
+        workId: "commit-morning-door-tags",
+        title: "Franklin corridor door tags",
+        objective: "Place the door tags",
+        completionCondition: "Door tags placed on the Franklin corridor",
+        eligible: true,
+        executionType: "challenge" as const,
+        sourceRefs: [
+          {
+            sourceKind: "unfinished_growth_work" as const,
+            sourceType: "day_director_commitment",
+            sourceId: "commit-morning-door-tags",
+          },
+        ],
+      },
+    ];
+    const outcome = {
+      status: "planned" as const,
+      workPlan: { status: "ranked" as const, ranking },
+    };
+    store.set("mission_director_plans", [
+      {
+        id: "plan-positive-completion",
+        tenantId: "default",
+        operatorId: "1",
+        businessDate,
+        stableKey: "plan-positive-completion",
+        revision: 1,
+        inputFingerprint: "ranked-objective-and-commitment",
+        outcomeJson: outcome,
+        usageOutcome: null,
+        createdAt: now,
+      },
+    ]);
+
+    setDayLineDepsForTesting({
+      planForDate: async () => ({ outcome } as any),
+      listCampaigns: async () => [],
+      getDayDirectorState: async () => ({
+        processingLocation: null,
+        dismissedPromptKeys: [],
+        intelligenceAvailable: false,
+        commitments: [
+          {
+            id: "commit-morning-door-tags",
+            businessDate,
+            title: "Franklin corridor door tags",
+            status: "open",
+            sourceText: "Franklin corridor door tags",
+            command: {
+              role: "primary",
+              designatedAt: "2026-10-18T15:00:00.000Z",
+            },
+            operatorMission: {
+              completionCondition: "Door tags placed on the Franklin corridor",
+            },
+          },
+        ],
+      } as any),
+    });
+
+    const caller = appRouter.createCaller({
+      user: {
+        id: 1,
+        openId: "admin-owner-user",
+        name: "Admin User",
+        email: "admin@test.com",
+        role: "admin",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(item => item.id === "objective-conquest-1")).toBe(true);
+    expect(todayLine.items.some(item => item.id === "commit-morning-door-tags")).toBe(true);
+    expect(todayLine.designated?.id).toBe("commit-morning-door-tags");
+
     const objectiveRes = await caller.system.currentDayLine.completeItem({
       itemId: "objective-conquest-1",
       evidenceReference: "field_receipt_voice_01",
@@ -534,12 +711,107 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(objectiveRes.success).toBe(true);
     expect(objectiveRes.lineageKind).toBe("objective");
     expect(objectiveRes.itemId).toBe("objective-conquest-1");
-
-    // Verify durable outcome created in goal_cycle_outcomes
     const outcomes = store.get("goal_cycle_outcomes") ?? [];
-    expect(outcomes.some(o => o.objectiveId === "objective-conquest-1")).toBe(true);
+    const conquestOutcome = outcomes.find(outcomeRow => outcomeRow.objectiveId === "objective-conquest-1");
+    expect(conquestOutcome).toBeDefined();
+    // 1. Authenticated operator records work they completed: durable outcome created
+    // 2. Operator testimony remains operator-attested unless independently corroborated
+    expect(conquestOutcome.evidenceClass).toBe("operator_attested");
+    // 3. Task completion never manufactures customer reactivation, revenue, or causal success
+    expect(conquestOutcome.impactClass).toBe("action_verification");
+    expect(conquestOutcome.outcomeKind).toBe("action_verification");
+    expect(conquestOutcome.monetaryValueCents).toBeNull();
 
-    // 3. Complete Commitment: succeeds with durable mutation
+    // 4. A verified external event requires appropriate source evidence; uncorroborated claim fails closed
+    const unverifiedExternalRes = await caller.system.currentDayLine.completeItem({
+      itemId: "objective-conquest-1",
+      evidenceReference: "uncorroborated_field_receipt_99",
+      evidenceClass: "authoritative_external",
+      explanation: "Driver falsely claims external authority",
+    });
+    expect(unverifiedExternalRes.success).toBe(false);
+    if (!unverifiedExternalRes.success) {
+      expect(unverifiedExternalRes.reason).toBe("authoritative_external_evidence_missing");
+    }
+
+    // 5. A verified external event succeeds when backed by appropriate source evidence
+    store.set("authority_receipts", [
+      {
+        id: "auth-receipt-external-01",
+        tenantId: "default",
+        claimType: "payment_verified",
+        subjectType: "order",
+        subjectId: "order-99",
+        sourceType: "stripe_payment_intent",
+        sourceRef: "pi_external_verified_01",
+        actorType: "system",
+        actorId: null,
+        evidenceClass: "authoritative_external",
+        verificationClass: "VERIFIED",
+        admissionPolicy: "native_stripe_payment_v1",
+        occurredAt: now,
+        admittedAt: now,
+        metadataJson: null,
+        idempotencyKey: "payment:order-99",
+      },
+    ]);
+
+    store.set("goal_cycle_objectives", [
+      ...(store.get("goal_cycle_objectives") ?? []),
+      {
+        tenantId: "default",
+        id: "objective-conquest-2",
+        goalRunId: "run-positive-completion",
+        cycleId: "cycle-positive-completion",
+        decisionId: "decision-conquest-2",
+        canonicalOperatorId: "tenant:default:operator:admin-owner-user",
+        operatorUserId: "admin-owner-user",
+        selectionKind: "obligation",
+        selectedRef: "ref-2",
+        title: "Verify external payment",
+        description: "Payment verification",
+        executionType: "mission",
+        authority: "HUMAN_EXECUTION",
+        status: "presented",
+        businessDate,
+        windowStart: "08:00",
+        windowEnd: "17:00",
+        loadoutJson: [],
+        evidenceRefsJson: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    ranking.push({
+      workId: "objective-conquest-2",
+      title: "Verify external payment",
+      objective: "Payment verification",
+      completionCondition: "Payment verified",
+      eligible: true,
+      executionType: "mission" as const,
+      sourceRefs: [
+        {
+          sourceKind: "unfinished_growth_work" as const,
+          sourceType: "goal_cycle_objective",
+          sourceId: "objective-conquest-2",
+        },
+      ],
+    });
+
+    const externalRes = await caller.system.currentDayLine.completeItem({
+      itemId: "objective-conquest-2",
+      evidenceReference: "authority_receipts:auth-receipt-external-01",
+      evidenceClass: "authoritative_external",
+      explanation: "Corroborated by verified Stripe payment receipt",
+    });
+    expect(externalRes.success).toBe(true);
+    expect(externalRes.lineageKind).toBe("objective");
+    const outcomesAfter = store.get("goal_cycle_outcomes") ?? [];
+    const corroboratedOutcome = outcomesAfter.find(o => o.objectiveId === "objective-conquest-2");
+    expect(corroboratedOutcome).toBeDefined();
+    expect(corroboratedOutcome?.evidenceClass).toBe("authoritative_external");
+
     const commitmentRes = await caller.system.currentDayLine.completeItem({
       itemId: "commit-morning-door-tags",
       evidenceReference: "field_receipt_voice_02",
@@ -548,11 +820,8 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(commitmentRes.success).toBe(true);
     expect(commitmentRes.lineageKind).toBe("commitment");
     expect(commitmentRes.itemId).toBe("commit-morning-door-tags");
-
-    // Verify commitment status updated to completed in day_director_commitments
     const commitments = store.get("day_director_commitments") ?? [];
-    const updatedCommitment = commitments.find(c => c.id === "commit-morning-door-tags");
-    expect(updatedCommitment?.status).toBe("completed");
+    expect(commitments.find(row => row.id === "commit-morning-door-tags")?.status).toBe("completed");
   });
 
   it("enforces campaign completion truth: generic assertion fails closed without required domain evidence", async () => {
@@ -683,6 +952,23 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
+    setDayLineDepsForTesting({
+      planForDate: async () => ({
+        outcome: {
+          status: "planned",
+          ranking: [{ campaignId: "camp-lineage-probe" }],
+        },
+      } as any),
+      listCampaigns: async () => [
+        {
+          campaignId: "camp-lineage-probe",
+          title: "Lineage probe",
+          objective: "Stay on the ranked line",
+          completionCondition: "Ranked work only",
+        } as any,
+      ],
+    });
+
     const caller = appRouter.createCaller({
       user: {
         id: 1,
@@ -704,14 +990,18 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       })
     ).rejects.toThrow("Item 'unregistered-phantom-stop' is not present on today's authoritative Day Line");
 
-    // 2. Forged client lineage (claiming an objective is a campaign) is rejected
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(i => i.id === "camp-lineage-probe")).toBe(true);
+    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(false);
+
+    // 2. Forged client lineage (claiming ranked campaign work is an objective) is rejected
     await expect(
       caller.system.currentDayLine.completeItem({
-        itemId: "objective-conquest-1",
-        lineage: { kind: "campaign" },
+        itemId: "camp-lineage-probe",
+        lineage: { kind: "objective" },
         evidenceReference: "fake_proof",
       })
-    ).rejects.toThrow("Lineage conflict: client declared 'campaign' but authoritative Day Line item is 'objective'");
+    ).rejects.toThrow("Lineage conflict: client declared 'objective' but authoritative Day Line item is 'campaign'");
   });
 
   it("enforces platform-admin cross-tenant operator resolution: default admin inspects Austin operator without mutating admin user", async () => {

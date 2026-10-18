@@ -20,6 +20,17 @@ export function resolveCandidateCompletionLineage(
     };
   }
 
+  const objective = sourceRefs.find(
+    ref => ref.sourceType === "goal_cycle_objective"
+  );
+  if (objective) {
+    return {
+      kind: "objective",
+      sourceReference: `goal_cycle_objectives:${objective.sourceId}`,
+      objectiveId: objective.sourceId,
+    };
+  }
+
   const campaign = sourceRefs.find(
     ref => ref.sourceKind === "campaign_library"
   );

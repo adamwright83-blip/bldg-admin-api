@@ -7,6 +7,48 @@ import {
   sendEarlyOutreachDraft,
 } from "./scheduledOutreachService";
 
+vi.mock("../../strategy/personalOutreachWrite", async () => {
+  const actual = await vi.importActual<typeof import("../../strategy/personalOutreachWrite")>(
+    "../../strategy/personalOutreachWrite"
+  );
+  return {
+    ...actual,
+    readPersonalOutreachRoster: vi.fn(async () => ({
+      area: "Silver Lake",
+      freshness: "current",
+      lapsedCount: 2,
+      emptyMeansNoLapsedCustomers: false,
+      withheldReason: null,
+      contacts: [
+        {
+          identityId: "cust_stable_1",
+          name: "Mei Lin",
+          phone: "+12135550141",
+          daysSinceLastOrder: 34,
+          paidOrders: 14,
+          lifetimeCents: 62400,
+          lastOrderDate: "2026-09-10",
+          lastOrderSummary: "Wash & Fold 32 lbs",
+          smsConsent: "unknown" as const,
+          blocks: [],
+        },
+        {
+          identityId: "cust_stable_2",
+          name: "Barnaby Hayes",
+          phone: "+12135550142",
+          daysSinceLastOrder: 48,
+          paidOrders: 8,
+          lifetimeCents: 38200,
+          lastOrderDate: "2026-08-27",
+          lastOrderSummary: "Standard Wash & Fold",
+          smsConsent: "unknown" as const,
+          blocks: [],
+        },
+      ],
+    })),
+  };
+});
+
 vi.mock("../../strategy/winBackDossier", () => ({
   readWinBackDossier: vi.fn(async () => ({
     area: "Silver Lake",

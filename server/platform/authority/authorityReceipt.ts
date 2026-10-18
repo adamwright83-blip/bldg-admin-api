@@ -324,6 +324,62 @@ export async function getAuthorityReceiptById(input: {
   );
 }
 
+export async function findAuthoritativeExternalReceipt(input: {
+  tenantId: string;
+  evidenceReference: string;
+}): Promise<AuthorityReceipt | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const ref = input.evidenceReference.trim();
+  const receiptId = ref.startsWith("authority_receipts:")
+    ? ref.slice("authority_receipts:".length).trim()
+    : ref;
+
+  const [byId] = await db
+    .select()
+    .from(authorityReceipts)
+    .where(
+      and(
+        eq(authorityReceipts.tenantId, input.tenantId),
+        eq(authorityReceipts.id, receiptId),
+        eq(authorityReceipts.evidenceClass, "authoritative_external"),
+        eq(authorityReceipts.verificationClass, "VERIFIED")
+      )
+    )
+    .limit(1);
+  if (byId) return toReceipt(byId);
+
+  const [bySourceRef] = await db
+    .select()
+    .from(authorityReceipts)
+    .where(
+      and(
+        eq(authorityReceipts.tenantId, input.tenantId),
+        eq(authorityReceipts.sourceRef, ref),
+        eq(authorityReceipts.evidenceClass, "authoritative_external"),
+        eq(authorityReceipts.verificationClass, "VERIFIED")
+      )
+    )
+    .limit(1);
+  if (bySourceRef) return toReceipt(bySourceRef);
+
+  const [byIdempotency] = await db
+    .select()
+    .from(authorityReceipts)
+    .where(
+      and(
+        eq(authorityReceipts.tenantId, input.tenantId),
+        eq(authorityReceipts.idempotencyKey, ref),
+        eq(authorityReceipts.evidenceClass, "authoritative_external"),
+        eq(authorityReceipts.verificationClass, "VERIFIED")
+      )
+    )
+    .limit(1);
+  if (byIdempotency) return toReceipt(byIdempotency);
+
+  return null;
+}
+
 
 export type PaymentAuthorityExpectation = {
   tenantId: string;

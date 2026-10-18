@@ -29,6 +29,7 @@ vi.mock("@/lib/trpc", () => ({
 import { CustomerHostApp } from "./CustomerHostApp";
 import { JoystickApiHostRefused, WwwGojoystickRedirect } from "./JoystickHostFrames";
 import { PreservedLaundryHost } from "./PreservedLaundryHost";
+import { TenantProvider } from "@/hooks/useTenant";
 import JoystickLanding from "@/pages/JoystickLanding";
 
 function setLocation(url: string) {
@@ -36,6 +37,7 @@ function setLocation(url: string) {
   vi.stubGlobal("window", {
     location: {
       hostname: parsed.hostname,
+      host: parsed.host,
       pathname: parsed.pathname,
       search: parsed.search,
       hash: parsed.hash,
@@ -98,7 +100,10 @@ describe("JOYSTICK host render contract", () => {
 
   it("keeps laundry hosts off the JOYSTICK marketing and admin shells", () => {
     setLocation("https://laundrybutler.bldg.chat/");
-    const butler = renderToStaticMarkup(createElement(PreservedLaundryHost));
+    // App mounts this host inside TenantProvider. The public homepage reads the brand from that context.
+    const butler = renderToStaticMarkup(
+      createElement(TenantProvider, null, createElement(PreservedLaundryHost))
+    );
     expect(butler).toContain("Laundry Butler");
     expect(butler).not.toContain("HOW JOYSTICK WORKS");
     expect(butler).not.toContain("Admin Sign In");

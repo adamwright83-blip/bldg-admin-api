@@ -19,6 +19,7 @@ describe("weekly growth candidate contract", () => {
       "proactive_obligation",
       "customer_recovery",
       "campaign_library",
+      "strategy_diagnosis",
     ]);
     expect(WEEKLY_GROWTH_MOTIONS).toContain("continue_existing");
     expect(WEEKLY_GROWTH_MOTIONS).toContain("reputation");

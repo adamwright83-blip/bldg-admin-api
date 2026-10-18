@@ -148,7 +148,7 @@ describe("Laundry Butler welcome handoff", () => {
 
   it("keeps orderId-only token generation admin-authorized", () => {
     const source = readFileSync(resolve("server/routers.ts"), "utf8");
-    expect(source).toMatch(/generatePortalToken:\s*adminProcedure/);
+    expect(source).toMatch(/generatePortalToken:\s*legacyAdminRoleProcedure/);
     expect(source).not.toMatch(/generatePortalToken:\s*publicProcedure/);
   });
 });

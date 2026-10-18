@@ -23,6 +23,22 @@ describe("candidate Day Line completion lineage", () => {
     });
   });
 
+  it("routes a ranked persistent objective through the objective completion contract", () => {
+    expect(
+      resolveCandidateCompletionLineage([
+        {
+          sourceKind: "unfinished_growth_work",
+          sourceType: "goal_cycle_objective",
+          sourceId: "objective-conquest-1",
+        },
+      ])
+    ).toEqual({
+      kind: "objective",
+      sourceReference: "goal_cycle_objectives:objective-conquest-1",
+      objectiveId: "objective-conquest-1",
+    });
+  });
+
   it("routes a campaign candidate through the existing campaign evidence contract", () => {
     expect(
       resolveCandidateCompletionLineage([

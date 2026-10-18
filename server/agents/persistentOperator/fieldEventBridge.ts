@@ -11,8 +11,12 @@ import {
 import { getDb } from "../../db";
 import { admitCompletedCommercialVisit } from "../../platform/authority/actionCompletionAdmission";
 import { admitCommercialFieldObservation } from "../../platform/authority/fieldObservationAdmission";
-import { findAuthorityReceiptForSubject } from "../../platform/authority/authorityReceipt";
+import {
+  findAuthorityReceiptForSubject,
+  findAuthoritativeExternalReceipt,
+} from "../../platform/authority/authorityReceipt";
 import { findCleanCloudPaidObservationReceipt } from "../../integrations/cleancloud/cleancloudPaidEvidence";
+import type { GoldlineEvidenceClass } from "../../../shared/goldlineTruthContract";
 import {
   getGoalCycleObjective,
   listGoalCycleObjectives,
@@ -41,6 +45,7 @@ export type BridgeDriverActionInput = {
   commitmentId?: string | null;
   stopId?: string | null;
   evidenceReference: string;
+  evidenceClass?: GoldlineEvidenceClass;
   sourceSystem?: string;
   outcomeKind?: string;
   explanation?: string | null;
@@ -61,7 +66,8 @@ export type BridgeDriverActionResult =
         | "unrelated_stop"
         | "ambiguous_lineage"
         | "objective_not_found"
-        | "already_completed";
+        | "already_completed"
+        | "authoritative_external_evidence_missing";
       candidateObjectiveIds?: string[];
       message: string;
     };
@@ -175,11 +181,29 @@ export async function bridgeDriverAction(
         })
       : null;
 
+  const externalEvidence = await findAuthoritativeExternalReceipt({
+    tenantId: input.tenantId,
+    evidenceReference: input.evidenceReference,
+  });
+
+  if (input.evidenceClass === "authoritative_external" && !externalEvidence) {
+    return {
+      bridged: false,
+      reason: "authoritative_external_evidence_missing",
+      message: `Evidence reference '${input.evidenceReference}' does not validate a persisted authoritative external event. Operator testimony cannot be promoted to authoritative_external without corroborating external evidence.`,
+    };
+  }
+
+  const resolvedEvidenceClass: GoldlineEvidenceClass = externalEvidence
+    ? "authoritative_external"
+    : (input.evidenceClass ?? "operator_attested");
+
   // Action verification: verifies work was done, never awards money
   const verification = await verifyObjectiveExecution({
     tenantId: input.tenantId,
     objectiveId: matchedObjective.id,
     evidenceReference: input.evidenceReference,
+    evidenceClass: resolvedEvidenceClass,
     sourceSystem: input.sourceSystem ?? "dayforge_field",
     outcomeKind: effectiveOutcomeKind,
     explanation:
@@ -191,6 +215,7 @@ export async function bridgeDriverAction(
       ...(input.metadata ?? {}),
       ...(input.missionId != null ? { missionId: input.missionId } : {}),
       ...(actionAuthority ? { authorityReceiptId: actionAuthority.id } : {}),
+      ...(externalEvidence ? { authorityReceiptId: externalEvidence.id } : {}),
     },
   });
 
