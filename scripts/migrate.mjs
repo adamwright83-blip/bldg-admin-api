@@ -4705,6 +4705,14 @@ await assertRequiredColumns("observation_bridge_obligations", [
   "attemptCount", "nextAttemptAt", "leaseOwner", "leaseExpiresAt", "lastError",
   "resolvedAt", "createdAt", "updatedAt",
 ]);
+// Phase 2 · Slice B: operator decisions that settle the operating mandate
+// (which goal comes first, a confirmed or dismissed focus, a stated method).
+await applyIdempotentSqlFile("../drizzle/0139_operating_mandate_decisions.sql", "Operating mandate decisions");
+await assertRequiredColumns("operating_mandate_decisions", [
+  "id", "tenantId", "canonicalOperatorId", "kind", "subjectKey", "payloadJson", "status",
+  "activeSlot", "supersedesId", "supersededById", "decidedByOpenId", "source", "decidedAt",
+  "createdAt", "updatedAt",
+]);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",

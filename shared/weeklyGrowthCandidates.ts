@@ -147,6 +147,11 @@ export type WeeklyGrowthCandidate = {
   workThreadId?: string;
   /** Records grouped into this candidate named different threads; no thread is guessed. */
   conflictingWorkThreadIds?: string[];
+  /**
+   * The neighborhood this work is in (a normalized area key), when its source
+   * scopes it. Work without one is never credited to a goal limited to an area.
+   */
+  scopeArea?: string;
 };
 
 export type WeeklyGrowthSourceReport =

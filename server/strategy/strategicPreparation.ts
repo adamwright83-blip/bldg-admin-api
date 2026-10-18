@@ -467,7 +467,14 @@ export function buildWeeklyProductionPlan(input: {
   const used = new Set(input.items.map(i => i.businessDate));
   const buffer = input.planDates.filter(date => !used.has(date));
   return {
-    objective: d.objective?.statement ?? d.goal.statement,
+    // A remark from conversation shapes where the work happens; it is never
+    // presented as the operator's objective in place of their confirmed goal.
+    objective:
+      d.objective && d.objective.confirmation !== "inferred"
+        ? d.objective.statement
+        : d.objective
+          ? `${d.goal.statement} (starting in ${d.objective.area})`
+          : d.goal.statement,
     outcomes: [action?.leadingIndicator, ...d.successMeasures].filter((x): x is string => Boolean(x)).slice(0, 3),
     evidence: selected?.observedBasis ?? d.currentCondition,
     sequence: input.items.map(i => ({

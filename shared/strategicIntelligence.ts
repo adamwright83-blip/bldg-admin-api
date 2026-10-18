@@ -110,9 +110,27 @@ export type StrategyOption = {
   uncertainty?: string;
   nextMeasurableAction?: string;
 };
+/** The operating mandate a diagnosis was prepared under (Phase 2 · Slice B). */
+export type StrategicDiagnosisMandate = {
+  revision: string;
+  /** Active goals the recommended work moves (a ranking-policy judgment, not a forecast). */
+  servesOutcomeIds: string[];
+  /** The confirmed primary goal, or the only active goal. Null when several are active and none is first. */
+  leadingOutcomeId: string | null;
+  primaryOutcomeId: string | null;
+  focus: { id: string; area: string; confirmation: "confirmed" | "inferred" } | null;
+  statedMethodId: string | null;
+  /** Whether the operator's stated method set the recommendation. */
+  methodApplied: boolean;
+};
+
 export type StrategicDiagnosis = {
-  /** The operator's stated objective this diagnosis serves, when one exists. */
-  objective?: { statement: string; area: string };
+  /**
+   * The area focus this diagnosis plans around, when one applies. Inferred
+   * means it was only mentioned in conversation; it is never a confirmed goal.
+   */
+  objective?: { statement: string; area: string; confirmation?: "confirmed" | "inferred" };
+  mandate?: StrategicDiagnosisMandate;
   id: string;
   schemaVersion: 1;
   doctrineVersion: string;

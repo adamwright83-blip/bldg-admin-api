@@ -14,9 +14,11 @@ import {
   type LedgerCustomer,
   type WorkThreadTenant,
 } from "../../strategy/workThreadTenant.testSupport";
+import { setActiveMacroGoal } from "../../claire/macroGoalService";
 import { decideGoalCycle } from "./decisionEngine";
 import { GoalCycleStore } from "./goalCycleStore";
 import { defaultGoalCycleOccurrenceDeps, runGoalCycleOccurrence, type GoalCycleOccurrenceDeps } from "./goalCycleOccurrence";
+import { activateMacroGoalRun } from "./macroGoalRuns";
 
 /**
  * The operator's goal loop on real MySQL for Phase 2 tests: a seeded tenant,
@@ -80,13 +82,46 @@ export function createGoalLoopHarness(sql: mysql.Connection, iso: { pool: Pool; 
     return { t, store };
   }
 
+  /**
+   * The operator sets another goal through the store the goal routers use (an
+   * additional goal, or an explicit replacement), and its run is activated and
+   * queued the way the goal bootstrap does it.
+   */
+  async function addGoal(
+    t: WorkThreadTenant,
+    store: GoalCycleStore,
+    goal: { objective: string; metricKey: string; targetValue: number; unit: string; replacesGoalId?: string },
+    options: { activate?: boolean } = { activate: true }
+  ) {
+    const saved = await setActiveMacroGoal({
+      tenantId: t.tenantId,
+      operatorUserId: t.openId,
+      ...goal,
+      targetDate: null,
+      source: "operator_attested",
+      sourceNote: "Goal loop test",
+    });
+    if (options.activate === false) return { goal: saved, run: null };
+    const run = await activateMacroGoalRun({
+      tenantId: t.tenantId,
+      identity: t.identity,
+      verticalKey: t.verticalKey,
+      policyVersion: "v1",
+      registry: defaultVerticalRegistry,
+      goal: saved,
+    });
+    await iso.insertRun({ id: run.id, tenantId: t.tenantId, canonicalOperatorId: t.identity.canonicalOperatorId, operatorUserId: t.openId, verticalKey: t.verticalKey });
+    await store.ensureLiveScheduledTick({ tenantId: t.tenantId, goalRunId: run.id });
+    return { goal: saved, run };
+  }
+
   /** Production occurrence wiring; only the goal metric read is stubbed (as in the 1B occurrence test). */
-  function occurrenceDeps(t: WorkThreadTenant): GoalCycleOccurrenceDeps {
+  function occurrenceDeps(t: WorkThreadTenant, runId: string = t.run.id): GoalCycleOccurrenceDeps {
     const production = defaultGoalCycleOccurrenceDeps({ registry: defaultVerticalRegistry, appointmentStore: undefined as never });
     return {
       ...production,
       evaluateRun: async () => ({
-        run: { id: t.run.id, status: "active", operatorUserId: t.openId, nextEvaluationAt: new Date(Date.now() + HOUR) },
+        run: { id: runId, status: "active", operatorUserId: t.openId, nextEvaluationAt: new Date(Date.now() + HOUR) },
         completed: false,
         observation: null,
       }),
@@ -99,17 +134,17 @@ export function createGoalLoopHarness(sql: mysql.Connection, iso: { pool: Pool; 
   }
 
   /** One worker step by hand: this run's next occurrence becomes due, is claimed, run and completed. */
-  async function runOccurrence(t: WorkThreadTenant, store: GoalCycleStore) {
+  async function runOccurrence(t: WorkThreadTenant, store: GoalCycleStore, runId: string = t.run.id) {
     await queue.execute(
       "UPDATE goal_cycle_requests SET availableAt = DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 SECOND) WHERE tenantId = ? AND goalRunId = ? AND status = 'queued'",
-      [t.tenantId, t.run.id]
+      [t.tenantId, runId]
     );
     const step = await store.claimNextStep({ leaseOwner: `loop-${randomUUID()}`, leaseMs: 60_000 });
-    if (!step || step.tenantId !== t.tenantId) throw new Error("This run's occurrence was not the one due");
+    if (!step || step.tenantId !== t.tenantId || step.goalRunId !== runId) throw new Error("This run's occurrence was not the one due");
     await store.markRunning(step);
-    const result = await runGoalCycleOccurrence({ tenantId: step.tenantId, runId: step.goalRunId, cycleId: step.id }, occurrenceDeps(t));
+    const result = await runGoalCycleOccurrence({ tenantId: step.tenantId, runId: step.goalRunId, cycleId: step.id }, occurrenceDeps(t, runId));
     await store.completeStep(step, result);
-    return result;
+    return { ...result, cycleId: step.id };
   }
 
   /** The operator approves the strategy recommendation in the current proposal (as the screen loads it; a weekend plans next week). */
@@ -165,5 +200,5 @@ export function createGoalLoopHarness(sql: mysql.Connection, iso: { pool: Pool; 
   const obligationOf = async (tenantId: string, sourceKey: string) =>
     (await rows("SELECT sourceKind, status, attemptCount, lastError, resultJson FROM observation_bridge_obligations WHERE tenantId = ? AND sourceKey = ?", [tenantId, sourceKey]))[0];
 
-  return { rows, json, tenant, retireTenants, runOccurrence, approveStrategy, dayLine, completeOnDayLine, executeStrategyAttempt, metadataOf, outcomesOf, obligationOf };
+  return { rows, json, tenant, retireTenants, addGoal, runOccurrence, approveStrategy, dayLine, completeOnDayLine, executeStrategyAttempt, metadataOf, outcomesOf, obligationOf };
 }

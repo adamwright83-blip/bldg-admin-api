@@ -34,7 +34,15 @@ import { explainMissionPlan } from "./explainPlan";
 import { computePrepReadiness } from "./prepReadiness";
 import { rankMissionDirectorWork } from "./rankableWork";
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
-import type { RankingContext, RankingOpenTask, RankingOutcomeLesson } from "./missionRank";
+import {
+  MANDATE_ALIGNMENT_POLICY_VERSION,
+  usesMandateAlignment,
+  type RankingContext,
+  type RankingOpenTask,
+  type RankingOutcome,
+  type RankingOutcomeLesson,
+} from "./missionRank";
+import { loadOperatingMandateForOperatorIds } from "../operatingMandate/loadOperatingMandate";
 import type { MissionDirectorPlan, MissionPlanOutcome } from "./missionDirectorTypes";
 
 function fingerprint(value: unknown): string {
@@ -133,22 +141,40 @@ export async function loadRankingContext(input: {
   tenantId: string;
   operatorUserIds: readonly string[];
   businessDate: string;
+  timeZone?: string;
 }): Promise<RankingContext> {
   let macroGoal: RankingContext["macroGoal"] = null;
-  try {
-    const goal = await getActiveMacroGoalForOperators({
-      tenantId: input.tenantId,
-      operatorUserIds: input.operatorUserIds,
-    });
-    if (goal) {
-      macroGoal = {
-        metricKey: goal.metricKey,
-        targetValue: Number(goal.targetValue),
-        objective: goal.objective,
-      };
+  let outcomes: RankingOutcome[] | undefined;
+  let mandateRevision: string | null = null;
+  // The operating mandate's goals: every active one, the confirmed primary (or
+  // the only goal) as the goal work is addressed to, none picked by recency.
+  const mandate = await loadOperatingMandateForOperatorIds({
+    tenantId: input.tenantId,
+    operatorUserIds: input.operatorUserIds,
+    timeZone: input.timeZone,
+  }).catch(() => null);
+  if (mandate) {
+    mandateRevision = mandate.revision;
+    outcomes = mandate.outcomes.map(o => ({ id: o.id, metricKey: o.baseMetricKey, area: o.area, primary: o.primary, statement: o.statement }));
+    const leading = mandate.outcomes.find(o => o.id === mandate.leadingOutcome?.id);
+    macroGoal = leading ? { metricKey: leading.metricKey, targetValue: leading.target, objective: leading.statement } : null;
+  } else {
+    // An operator with no canonical identity keeps the single-goal read.
+    try {
+      const goal = await getActiveMacroGoalForOperators({
+        tenantId: input.tenantId,
+        operatorUserIds: input.operatorUserIds,
+      });
+      if (goal) {
+        macroGoal = {
+          metricKey: goal.metricKey,
+          targetValue: Number(goal.targetValue),
+          objective: goal.objective,
+        };
+      }
+    } catch {
+      macroGoal = null;
     }
-  } catch {
-    macroGoal = null;
   }
   const db = await getDb();
   const openTasks: RankingOpenTask[] = [];
@@ -189,7 +215,13 @@ export async function loadRankingContext(input: {
     }
   }
   const outcomeLessons = db ? await loadOutcomeLessons(db, input) : [];
-  return { businessDate: input.businessDate, macroGoal, openTasks, outcomeLessons };
+  return {
+    businessDate: input.businessDate,
+    macroGoal,
+    ...(outcomes ? { outcomes, mandateRevision } : {}),
+    openTasks,
+    outcomeLessons,
+  };
 }
 
 export function legacyCampaignCompatibilityCandidates<T extends { campaignId: string }>(
@@ -252,6 +284,17 @@ export function computePlanningFingerprint(input: {
       policyVersion: GOAL_CONTRIBUTION_POLICY_VERSION,
       businessDate: input.rankingContext.businessDate,
       macroGoal: input.rankingContext.macroGoal,
+      // Only the goals ranking reads, and only when it reads them (several
+      // goals, or an area goal): one business-wide goal keeps its fingerprint,
+      // and a mandate change ranking ignores never re-plans.
+      ...(usesMandateAlignment(input.rankingContext)
+        ? {
+            mandateAlignment: {
+              policyVersion: MANDATE_ALIGNMENT_POLICY_VERSION,
+              outcomes: (input.rankingContext.outcomes ?? []).map(o => [o.id, o.metricKey, o.area, o.primary]),
+            },
+          }
+        : {}),
       openTasks: input.rankingContext.openTasks.map(task => ({
         id: task.id ?? null,
         taskType: task.taskType,
@@ -408,6 +451,7 @@ export async function computeMissionPlan(input: {
     tenantId: input.tenantId,
     operatorUserIds,
     businessDate: input.businessDate,
+    timeZone,
   });
   let candidateFeed: Awaited<ReturnType<typeof loadWeeklyGrowthCandidates>> | null = null;
   let candidateFeedFailure: string | null = null;

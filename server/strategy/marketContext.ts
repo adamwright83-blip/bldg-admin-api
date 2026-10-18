@@ -70,6 +70,14 @@ export async function resolveTenantVerticalKey(
   // The legacy tenants are Laundry Farm itself, a wash/fold business.
   return laundry || isLegacyDayforgeTenant(tenantId) ? "laundry_fluff_fold" : "generic";
 }
+/**
+ * Whether a vertical serves customers in physical places. An online business
+ * has no service area, so a neighborhood never focuses its strategy.
+ */
+export function strategyMarketMode(verticalKey: string): "online" | "unresolved" {
+  return verticalKey === "software" ? "online" : "unresolved";
+}
+
 export async function loadStrategyMarketContext(
   tenantId: string,
   verticalKey: string,
@@ -79,7 +87,7 @@ export async function loadStrategyMarketContext(
   if (!db) throw new Error("Database unavailable");
   const result: StrategyMarketContext = {
     tenantId,
-    mode: verticalKey === "software" ? "online" : "unresolved",
+    mode: strategyMarketMode(verticalKey),
     territories: [],
     observations: [],
     limitations: [],
