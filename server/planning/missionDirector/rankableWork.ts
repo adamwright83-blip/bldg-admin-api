@@ -12,8 +12,46 @@ import type {
   RankFactor,
   TimePocket,
 } from "../../../shared/missionDirector";
+import { NON_PRIMARY_OUTCOME_WEIGHT, outcomeContribution } from "../../../shared/operatingMandate";
 import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
-import type { RankingContext, RankingOpenTask } from "./missionRank";
+import {
+  MANDATE_ALIGNMENT_POLICY_VERSION,
+  usesMandateAlignment,
+  type RankingContext,
+  type RankingOpenTask,
+} from "./missionRank";
+
+/**
+ * How directly work moves the operator's goals. With several goals (or one
+ * limited to an area) every goal counts: a goal limited to an area only for
+ * work in that area, and a goal not confirmed as first at a reduced weight
+ * while another is. The strongest alignment is the factor; none is invented.
+ */
+function mandateAlignment(context: RankingContext, candidate: WeeklyGrowthCandidate): RankFactor {
+  const outcomes = context.outcomes ?? [];
+  const hasPrimary = outcomes.some(o => o.primary);
+  let best: { outcome: (typeof outcomes)[number]; tier: string; reason: string; effect: number; weighted: boolean } | null = null;
+  for (const outcome of outcomes) {
+    const contribution = outcomeContribution(
+      { baseMetricKey: outcome.metricKey, area: outcome.area },
+      { motion: candidate.motion, area: candidate.scopeArea ?? null }
+    );
+    if (!contribution) continue;
+    const weighted = hasPrimary && !outcome.primary;
+    const effect = Math.round(contribution.effect * (weighted ? NON_PRIMARY_OUTCOME_WEIGHT : 1));
+    if (!best || effect > best.effect || (effect === best.effect && outcome.primary && !best.outcome.primary))
+      best = { outcome, tier: contribution.tier, reason: contribution.reason, effect, weighted };
+  }
+  if (!best)
+    return factor("macro_goal_alignment", false, `${MANDATE_ALIGNMENT_POLICY_VERSION}: no active goal covers this work's area`, 0, "high");
+  return factor(
+    "macro_goal_alignment",
+    `${best.outcome.metricKey}${best.outcome.area ? `@${best.outcome.area}` : ""}:${candidate.motion}:${best.tier}${best.weighted ? ":not_primary" : ""}`,
+    `${MANDATE_ALIGNMENT_POLICY_VERSION}: ${best.reason}${best.weighted ? "; another goal is confirmed as first" : ""} (${best.outcome.id})`,
+    best.effect,
+    "high"
+  );
+}
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {
   emergency: 400,
@@ -288,15 +326,17 @@ function rankOne(input: {
     ? goalContribution(input.context.macroGoal.metricKey, candidate.motion)
     : null;
   factors.push(
-    factor(
-      "macro_goal_alignment",
-      contribution ? `${input.context.macroGoal!.metricKey}:${candidate.motion}:${contribution.tier}` : false,
-      contribution
-        ? `${GOAL_CONTRIBUTION_POLICY_VERSION}: ${contribution.reason}`
-        : "no active macro goal",
-      contribution?.effect ?? 0,
-      input.context.macroGoal ? "high" : "unknown"
-    )
+    usesMandateAlignment(input.context)
+      ? mandateAlignment(input.context, candidate)
+      : factor(
+          "macro_goal_alignment",
+          contribution ? `${input.context.macroGoal!.metricKey}:${candidate.motion}:${contribution.tier}` : false,
+          contribution
+            ? `${GOAL_CONTRIBUTION_POLICY_VERSION}: ${contribution.reason}`
+            : "no active macro goal",
+          contribution?.effect ?? 0,
+          input.context.macroGoal ? "high" : "unknown"
+        )
   );
 
   const lessons = (input.context.outcomeLessons ?? []).filter(lesson =>

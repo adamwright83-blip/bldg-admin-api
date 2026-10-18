@@ -160,8 +160,12 @@ export async function refreshStrategicDiagnosis(input: {
   const workThreadIds = await resolveDiagnosisWorkThreads(diagnosis, input.identity, now);
   if (Object.keys(workThreadIds).length)
     diagnosis = assembleStrategicDiagnosis({ ...facts, workThreadIds }, registry);
-  const content = (d: typeof diagnosis) =>
-    canonicalJsonStringify({
+  const content = (d: typeof diagnosis) => {
+    // What the diagnosis took from the operating mandate. The mandate's own
+    // revision moves with every commitment and thread, so it is left out.
+    const { revision: _revision, ...fromMandate } = d.mandate ?? { revision: "" };
+    void _revision;
+    return canonicalJsonStringify({
       verticalKey: d.verticalKey,
       doctrineVersion: d.doctrineVersion,
       goal: d.goal,
@@ -171,7 +175,10 @@ export async function refreshStrategicDiagnosis(input: {
       diagnosis: d.diagnosis,
       outcomes: d.outcomeRefs,
       uncertainty: d.uncertainty,
+      mandate: d.mandate ? fromMandate : null,
+      objective: d.objective ?? null,
     });
+  };
   if (
     prior &&
     now.getTime() >= Date.parse(prior.generatedAt) &&
@@ -467,7 +474,14 @@ export function buildWeeklyProductionPlan(input: {
   const used = new Set(input.items.map(i => i.businessDate));
   const buffer = input.planDates.filter(date => !used.has(date));
   return {
-    objective: d.objective?.statement ?? d.goal.statement,
+    // A remark from conversation shapes where the work happens; it is never
+    // presented as the operator's objective in place of their confirmed goal.
+    objective:
+      d.objective && d.objective.confirmation !== "inferred"
+        ? d.objective.statement
+        : d.objective
+          ? `${d.goal.statement} (starting in ${d.objective.area})`
+          : d.goal.statement,
     outcomes: [action?.leadingIndicator, ...d.successMeasures].filter((x): x is string => Boolean(x)).slice(0, 3),
     evidence: selected?.observedBasis ?? d.currentCondition,
     sequence: input.items.map(i => ({

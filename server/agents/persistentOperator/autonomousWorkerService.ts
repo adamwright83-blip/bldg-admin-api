@@ -44,7 +44,8 @@ import {
   enqueueUnbridgedPaidOrderObligations,
   paidOrderObservationHandler,
 } from "./paidOrderObservationBridge";
-import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
+import { activateMacroGoalRun } from "./macroGoalRuns";
+import { normalizeMacroGoalRow } from "../../planning/macroGoalStore";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
 import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
@@ -126,15 +127,17 @@ export async function ensureAutonomousGoalBootstrap(input: {
 
       if (!targetRunId) {
         const verticalKey = await resolveTenantVerticalKey(goal.tenantId);
-        let template;
-        try { template = registry.get(verticalKey); } catch { continue; }
-        if (!template.metricCatalog.some(metric => metric.metricKey === goal.metricKey)) continue;
-        const activated = await activateCurrentMacroGoalRun({
+        // The vertical must measure this goal's metric (and its area scope, if any).
+        try { registry.resolveMetric(verticalKey, goal.metricKey); } catch { continue; }
+        // Every active goal gets its own run. Several goals can be active at
+        // once; activating "the most recent goal" here left the others unpursued.
+        const activated = await activateMacroGoalRun({
           tenantId: goal.tenantId,
           identity: resolution.identity,
           verticalKey,
           policyVersion: "v1",
           registry,
+          goal: normalizeMacroGoalRow(goal),
         });
         if (activated) {
           targetRunId = activated.id;

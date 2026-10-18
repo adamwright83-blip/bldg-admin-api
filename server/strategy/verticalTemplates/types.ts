@@ -12,6 +12,12 @@ export type VerticalMetricDefinition = {
   metricKey: string;
   /** Server-owned reader identity. Shared/client templates never carry callbacks. */
   authoritativeReaderId: string;
+  /**
+   * Reader for the same metric over the tenant's own orders in one area, when
+   * the vertical can measure it. Without one, an area-scoped goal on this
+   * metric is refused rather than measured business-wide.
+   */
+  areaScopedReaderId?: string;
 };
 
 export type VerticalCampaignSeed = {

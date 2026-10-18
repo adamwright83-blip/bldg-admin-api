@@ -22,6 +22,7 @@ export function diagnosisCandidates(
     // Pre-thread diagnoses keep their diagnosis-scoped id.
     id: a.workThreadId ? workThreadCandidateId(a.workThreadId) : `${d.id}:${a.id}`,
     ...(a.workThreadId ? { workThreadId: a.workThreadId } : {}),
+    ...(a.opportunity?.kind === "strategy_opportunity" && a.opportunity.area ? { scopeArea: a.opportunity.area } : {}),
     sourceKind: "strategy_diagnosis",
     motion: a.motion,
     title: a.title,

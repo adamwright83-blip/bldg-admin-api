@@ -7,6 +7,7 @@ import type {
   StrategyMarketContext,
   StrategyOption,
 } from "../../shared/strategicIntelligence";
+import { outcomeContribution } from "../../shared/operatingMandate";
 import {
   normalizeAreaKey,
   workThreadOpportunityKey,
@@ -53,11 +54,33 @@ export type DiagnosisInput = {
     dormantRef: string | null;
     dormantTop: Array<{ name: string; lastOrderDate: string | null; revenueCents: number; identityKey?: string | null }>;
     figuresVerified: boolean;
+    /** Confirmed by the operator, or only mentioned in conversation (never a goal either way). */
+    confirmation?: "confirmed" | "inferred";
   };
   /** Sources current, but some orders are not payment-verified: figures are usable as recorded, never as confirmed. */
   recordedFigures?: { evidenceRef: string; description: string };
   /** Durable Work Thread ids already resolved for this diagnosis's opportunities, by opportunity key. */
   workThreadIds?: Readonly<Record<string, string>>;
+  /** The resolved operating mandate (Phase 2 · Slice B): which goals, focus and stated method apply. */
+  mandate?: DiagnosisMandate;
+};
+
+export type DiagnosisMandate = {
+  revision: string;
+  outcomes: Array<{ id: string; statement: string; metricKey: string; baseMetricKey: string; area: string | null; primary: boolean }>;
+  leadingOutcomeId: string | null;
+  primaryOutcomeId: string | null;
+  focus: { id: string; area: string; confirmation: "confirmed" | "inferred" } | null;
+  /** The operator's stated method for the leading goal (or the business). */
+  method: {
+    id: string;
+    lever: BusinessDriver;
+    population: "lapsed_customers" | "new_customers";
+    area: string | null;
+    statement: string;
+  } | null;
+  unresolvedConflicts: string[];
+  notes: string[];
 };
 
 /** Win-back contacts are judged on replies and orders in this many days after contact. */
@@ -234,17 +257,29 @@ export function assembleStrategicDiagnosis(
     support = [sourceGap.evidenceRef];
     diagnosis = `Sales data is incomplete: ${sourceGap.description}. Recorded figures cannot show whether sales fell or the data stopped arriving, so no growth driver can be isolated until the source is restored.`;
   }
-  // The operator's stated objective outranks generic triage unless the business
-  // has a hard constraint (negative contribution, cash, capacity) or data outage.
+  // The operator's focus outranks generic triage unless the business has a
+  // hard constraint (negative contribution, cash, capacity) or data outage. So
+  // does their stated method: it chooses how the focus is pursued (or, with no
+  // focus and no area, the business-wide lever), never over a hard constraint.
+  const hardConstraint = ["contribution", "cash_flow", "capacity"].includes(driver);
+  const method = input.mandate?.method ?? null;
+  const focusKey = input.focus ? normalizeAreaKey(input.focus.area) : null;
+  const methodHeld = Boolean(method && (input.sourceGaps || hardConstraint));
+  const methodFitsFocus = Boolean(method && input.focus && (method.area === null || method.area === focusKey));
   const focusPlan =
-    input.focus && !input.sourceGaps && !["contribution", "cash_flow", "capacity"].includes(driver)
-      ? planForObjective(input.focus, aov, byId)
+    input.focus && !input.sourceGaps && !hardConstraint
+      ? planForObjective(input.focus, aov, byId, methodFitsFocus ? method : null)
       : null;
+  const businessMethod = method && !methodHeld && !input.focus && method.area === null ? method : null;
   if (focusPlan) {
     driver = focusPlan.driver;
     diagnosis = focusPlan.diagnosis;
     support = focusPlan.support;
+  } else if (businessMethod) {
+    driver = businessMethod.lever;
+    diagnosis = `You chose this approach: ${businessMethod.statement}. ${diagnosis}`;
   }
+  const methodApplied = Boolean(method && !methodHeld && (focusPlan ? methodFitsFocus : businessMethod));
   // The opportunity is fixed before a contradicted hypothesis turns the action
   // into a review: re-examining the same lever is a tactic within one thread.
   // Only structured scope enters it; wording and the customers named this hour do not.
@@ -256,7 +291,9 @@ export function assembleStrategicDiagnosis(
       ? "sales_source"
       : focusPlan
         ? focusPlan.driver === "retention" ? "lapsed_customers" : "new_customers"
-        : driver === "retention"
+        : businessMethod
+          ? businessMethod.population
+          : driver === "retention"
           ? dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1
             ? "lapsed_customers"
             : "first_purchase_customers"
@@ -379,16 +416,25 @@ export function assembleStrategicDiagnosis(
     Object.assign(options[0]!, focusPlan.chosenFields, { eligible: true });
     Object.assign(options[1]!, focusPlan.altFields);
   }
+  const motion: StrategyAction["motion"] =
+    driver === "retention"
+      ? "retention"
+      : driver === "acquisition"
+        ? "account_acquisition"
+        : "investigation";
+  // The goals this work moves. With a confirmed primary (or one goal) the work
+  // is addressed to it; otherwise to every goal it serves, never to a remark.
+  const mandateOutcomes = input.mandate?.outcomes ?? [];
+  const servesOutcomeIds = mandateOutcomes
+    .filter(o => (outcomeContribution(o, { motion, area: opportunity.area })?.tier ?? "none") !== "none")
+    .map(o => o.id);
+  const leadingOutcome = mandateOutcomes.find(o => o.id === input.mandate?.leadingOutcomeId) ?? null;
+  const addressedOutcomes = leadingOutcome ? [leadingOutcome] : mandateOutcomes.filter(o => servesOutcomeIds.includes(o.id));
   const action: StrategyAction = {
     id: `strategy-${driver}`,
     title: chosen,
     driver,
-    motion:
-      driver === "retention"
-        ? "retention"
-        : driver === "acquisition"
-          ? "account_acquisition"
-          : "investigation",
+    motion,
     hypothesis:
       driver === "investigation"
         ? "Resolving missing driver evidence will distinguish the competing explanations."
@@ -402,7 +448,13 @@ export function assembleStrategicDiagnosis(
       : recovery
       ? "Consented recovery contacts prepared; replies and orders recorded."
       : "Eligible source records reviewed and missing fields resolved.",
-    intendedOutcome: `A defensible next experiment toward: ${input.focus?.statement ?? input.goal.statement}`,
+    intendedOutcome: `A defensible next experiment toward: ${
+      input.mandate
+        ? addressedOutcomes.length
+          ? addressedOutcomes.map(o => o.statement).join("; ")
+          : input.goal.statement
+        : input.focus?.statement ?? input.goal.statement
+    }`,
     evidenceRefs: support,
     reviewCondition:
       "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
@@ -429,7 +481,22 @@ export function assembleStrategicDiagnosis(
     businessDate: input.businessDate,
     generatedAt: input.now.toISOString(),
     goal: input.goal,
-    ...(input.focus ? { objective: { statement: input.focus.statement, area: input.focus.area } } : {}),
+    ...(input.focus
+      ? { objective: { statement: input.focus.statement, area: input.focus.area, ...(input.focus.confirmation ? { confirmation: input.focus.confirmation } : {}) } }
+      : {}),
+    ...(input.mandate
+      ? {
+          mandate: {
+            revision: input.mandate.revision,
+            servesOutcomeIds,
+            leadingOutcomeId: input.mandate.leadingOutcomeId,
+            primaryOutcomeId: input.mandate.primaryOutcomeId,
+            focus: input.mandate.focus,
+            statedMethodId: method?.id ?? null,
+            methodApplied,
+          },
+        }
+      : {}),
     currentCondition:
       (focusPlan ? `${focusPlan.condition} ` : "") +
       (input.goal.current == null
@@ -477,7 +544,9 @@ export function assembleStrategicDiagnosis(
     actions: [action],
     successMeasures: [
       action.leadingIndicator,
-      `Track ${input.goal.metricKey} from the same authoritative reader; assess contribution separately.`,
+      input.mandate && !leadingOutcome && mandateOutcomes.length > 1
+        ? `Track each goal from its own authoritative reader (${mandateOutcomes.map(o => o.metricKey).join(", ")}); assess contribution separately.`
+        : `Track ${input.goal.metricKey} from the same authoritative reader; assess contribution separately.`,
     ],
     revisionTrigger: action.reviewCondition,
     uncertainty: [
@@ -494,6 +563,13 @@ export function assembleStrategicDiagnosis(
         : industry.limitations),
       ...observed.missing.map(m => `${m} is unmeasured.`),
       ...(focusPlan ? focusPlan.uncertainty : []),
+      ...(method && methodHeld
+        ? [`Your stated approach (${method.statement}) is on hold: ${input.sourceGaps ? "sales data is incomplete" : `the business has a ${driver.replace("_", " ")} constraint`}.`]
+        : []),
+      ...(method && !methodHeld && input.focus && !methodFitsFocus
+        ? [`Your stated approach (${method.statement}) is for a different area than the current focus, ${input.focus.area}; confirm which applies.`]
+        : []),
+      ...(input.mandate ? [...input.mandate.unresolvedConflicts, ...input.mandate.notes] : []),
       ...(recordedUsable ? [`${input.recordedFigures!.description}.`] : []),
       ...(contribution == null
         ? [
@@ -627,8 +703,17 @@ function enrichOptions(
 
 type Focus = NonNullable<DiagnosisInput["focus"]>;
 
-/** Pure: competing options for the operator's neighborhood objective, from observed figures only. */
-export function planForObjective(focus: Focus, businessAov: number | null, byId: Map<string, unknown>) {
+/**
+ * Pure: competing options for the operator's neighborhood focus, from observed
+ * figures only. A stated method chooses the approach; the evidence-preferred
+ * one, if different, stays as the alternative with the evidence for it.
+ */
+export function planForObjective(
+  focus: Focus,
+  businessAov: number | null,
+  byId: Map<string, unknown>,
+  method: { population: "lapsed_customers" | "new_customers"; statement: string } | null = null
+) {
   const area = focus.area;
   const unverified = focus.figuresVerified ? "" : " (recorded; not all orders payment-verified)";
   const change =
@@ -644,7 +729,10 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
       : `${area} sales could not be measured.`;
   const dormantLine =
     focus.dormant != null ? ` ${focus.dormant} ${area} customers who ordered before have not ordered in the last 60 days.` : "";
-  const condition = `Your objective: ${focus.statement}. ${salesLine}${dormantLine}`;
+  const condition =
+    focus.confirmation === "inferred"
+      ? `You mentioned: ${focus.statement} (not a confirmed goal). ${salesLine}${dormantLine}`
+      : `Your objective: ${focus.statement}. ${salesLine}${dormantLine}`;
   const support = [focus.evidenceRef, focus.salesRef, focus.dormantRef].filter(
     (r): r is string => Boolean(r && byId.has(r))
   );
@@ -654,6 +742,36 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
       ? "Order value is unmeasured, so no sales arithmetic is stated."
       : `${n} returning order${n === 1 ? "" : "s"} at the ${area} average of ${dollars(areaAov)} is about ${dollars(n * areaAov)} in recorded sales (arithmetic, not a forecast).`;
   const outreach = `Find new ${area} customers through building and door outreach`;
+  if (method?.population === "new_customers" && focus.dormant != null && focus.dormant > 0) {
+    // The operator chose new customers; winning back lapsed ones stays the alternative, with its evidence.
+    const n = Math.min(5, focus.dormant);
+    return {
+      driver: "acquisition" as BusinessDriver,
+      condition,
+      support,
+      diagnosis: `You chose to find new ${area} customers. ${focus.dormant} lapsed ${area} customers are also on record; winning some back is kept as the alternative.`,
+      chosen: outreach,
+      alternative: `Win back lapsed ${area} customers`,
+      leadingIndicator: "Outreach logged; new orders recorded.",
+      targets: [] as Array<{ identityKey: string; displayName: string }>,
+      observationWindowDays: undefined as number | undefined,
+      uncertainty: [profit, `Your stated approach: ${method.statement}. Conversion of new buildings or doors is unmeasured.`],
+      chosenFields: {
+        observedBasis: condition,
+        reason: `Your stated approach: ${method.statement}.`,
+        expectedBenefit: `Each new ${area} order is worth about ${areaAov == null ? "an unmeasured amount" : dollars(areaAov)}.`,
+        uncertainty: "Conversion is unmeasured.",
+        nextMeasurableAction: `Pick one ${area} building and log outreach and responses this week.`,
+      },
+      altFields: {
+        observedBasis: condition,
+        reason: `Not chosen because you asked for new customers. The evidence for it: ${focus.dormant} lapsed ${area} customers already know the service, and no acquisition spend is needed.`,
+        expectedBenefit: `If ${n} return once: ${worth(n)}`,
+        uncertainty: `Return rate is unobserved. ${profit}`,
+        nextMeasurableAction: `Contact the ${n} highest-spending lapsed ${area} customers with a return offer you approve; record replies and orders within ${RECOVERY_OBSERVATION_DAYS} days.`,
+      },
+    };
+  }
   if (focus.dormant != null && focus.dormant > 0) {
     const n = Math.min(5, focus.dormant);
     const names = focus.dormantTop.slice(0, n).map(c => c.name).filter(Boolean);
@@ -694,7 +812,9 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
     driver: "acquisition" as BusinessDriver,
     condition,
     support,
-    diagnosis: `${salesLine} No lapsed ${area} customers are recorded, so growth has to come from new customers.`,
+    diagnosis: `${salesLine} No lapsed ${area} customers are recorded, so growth has to come from new customers.${
+      method?.population === "lapsed_customers" ? ` Your stated approach (${method.statement}) has no one to contact yet.` : ""
+    }`,
     chosen: outreach,
     alternative: `Raise order frequency of current ${area} customers`,
     leadingIndicator: "Outreach logged; new orders recorded.",

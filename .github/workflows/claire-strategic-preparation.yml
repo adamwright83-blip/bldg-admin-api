@@ -7,6 +7,7 @@ on:
       - "server/claire/**"
       - "server/planning/**"
       - "shared/strategic*"
+      - "shared/operatingMandate*"
       - "shared/claireRoleFeedback.ts"
       - "client/src/App.tsx"
       - "e2e/claire-acceptance/**"
@@ -72,6 +73,7 @@ jobs:
           server/agents/persistentOperator
           server/claire/brain server/claire/weeklyMission server/claire/turn
           server/agents/daphne/explicitPreferenceCorrection.test.ts shared/strategicProposalControl.test.ts shared/daphneMissionPresentation.test.ts
+          shared/operatingMandate.test.ts
       - name: Production boot migrations and idempotent second boot
         env:
           DATABASE_URL: mysql://root:disposable_claire@127.0.0.1:3306/claire_acceptance

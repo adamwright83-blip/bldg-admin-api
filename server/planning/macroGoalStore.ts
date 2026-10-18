@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { operatorMacroGoals, type OperatorMacroGoal } from "../../drizzle/schema";
+import { assertOutcomeMetricKey } from "../../shared/operatingMandate";
 import { getDb } from "../db";
 
 export const GOAL_METRIC_TYPES = [
@@ -37,6 +38,13 @@ export type SetActiveMacroGoalInput = {
   secondaryTargets?: SecondaryTarget[];
   source: MacroGoalSource;
   sourceNote: string;
+  /**
+   * An explicit replacement: this active goal of the same operator is
+   * superseded by the new one even when it measures a different metric. A new
+   * goal on a different metric without it is an additional goal, not a
+   * replacement.
+   */
+  replacesGoalId?: string | null;
 };
 
 const inMemoryGoals = new Map<string, OperatorMacroGoal[]>();
@@ -59,6 +67,11 @@ export type MacroGoalPersistence = {
     input: SetActiveMacroGoalInput & { id: string }
   ): Promise<OperatorMacroGoal>;
 };
+
+/** A stored goal row as a MacroGoal (numeric target, parsed secondary targets). */
+export function normalizeMacroGoalRow(row: OperatorMacroGoal): MacroGoal {
+  return normalize(row)!;
+}
 
 function normalize(row: OperatorMacroGoal | null): MacroGoal | null {
   if (!row) return null;
@@ -136,11 +149,15 @@ export const databaseMacroGoalPersistence: MacroGoalPersistence = {
         throw new Error("Database unavailable");
       }
       const list = inMemoryGoals.get(tenantId) ?? [];
+      const replaced = input.replacesGoalId
+        ? list.find(c => c.id === input.replacesGoalId && c.operatorUserId === operatorUserId && c.status === "active")
+        : null;
+      if (input.replacesGoalId && !replaced) throw new Error("The goal to replace is not an active goal of this operator");
       for (const candidate of list) {
         if (
           candidate.tenantId === tenantId &&
           candidate.operatorUserId === operatorUserId &&
-          candidate.metricKey === input.metricKey &&
+          (candidate.metricKey === input.metricKey || candidate === replaced) &&
           candidate.status === "active"
         ) {
           candidate.status = "superseded";
@@ -187,6 +204,23 @@ export const databaseMacroGoalPersistence: MacroGoalPersistence = {
             "Macro goal invariant violated: multiple active scoped goals"
           );
         }
+        const [replaced] = input.replacesGoalId
+          ? await tx
+              .select({ id: operatorMacroGoals.id })
+              .from(operatorMacroGoals)
+              .where(
+                and(
+                  eq(operatorMacroGoals.tenantId, tenantId),
+                  eq(operatorMacroGoals.operatorUserId, operatorUserId),
+                  eq(operatorMacroGoals.id, input.replacesGoalId),
+                  eq(operatorMacroGoals.status, "active")
+                )
+              )
+              .for("update")
+          : [];
+        if (input.replacesGoalId && !replaced) {
+          throw new Error("The goal to replace is not an active goal of this operator");
+        }
         await tx.insert(operatorMacroGoals).values({
           id: input.id,
           tenantId,
@@ -208,6 +242,18 @@ export const databaseMacroGoalPersistence: MacroGoalPersistence = {
             .update(operatorMacroGoals)
             .set({ status: "superseded", supersededById: input.id })
             .where(and(eq(operatorMacroGoals.id, existing[0].id), scope));
+        }
+        if (replaced && replaced.id !== existing[0]?.id) {
+          await tx
+            .update(operatorMacroGoals)
+            .set({ status: "superseded", supersededById: input.id })
+            .where(
+              and(
+                eq(operatorMacroGoals.tenantId, tenantId),
+                eq(operatorMacroGoals.id, replaced.id),
+                eq(operatorMacroGoals.status, "active")
+              )
+            );
         }
         const [saved] = await tx
           .select()
@@ -264,6 +310,43 @@ export async function getActiveMacroGoalForOperators(
   return goals[0] ?? null;
 }
 
+/**
+ * Every active goal of an operator family (several may be active at once),
+ * plus the most recent superseded or closed ones, for the operating mandate.
+ * Nothing here picks a "current" goal.
+ */
+export async function listMacroGoalsForOperators(input: {
+  tenantId: string;
+  operatorUserIds: readonly string[];
+  historyLimit?: number;
+}): Promise<MacroGoal[]> {
+  const tenantId = input.tenantId.trim();
+  const operatorUserIds = [...new Set(input.operatorUserIds.map(id => id.trim()).filter(Boolean))];
+  if (!tenantId) throw new Error("Macro goal read requires tenant authority");
+  if (!operatorUserIds.length) return [];
+  const db = await getDb();
+  if (!db) {
+    if (!allowInMemoryMacroGoalFallback()) throw new Error("Database unavailable");
+    return (inMemoryGoals.get(tenantId) ?? [])
+      .filter(goal => operatorUserIds.includes(goal.operatorUserId))
+      .map(goal => normalize(goal)!);
+  }
+  const operators = and(
+    eq(operatorMacroGoals.tenantId, tenantId),
+    inArray(operatorMacroGoals.operatorUserId, operatorUserIds)
+  );
+  const [active, history] = await Promise.all([
+    db.select().from(operatorMacroGoals).where(and(operators, eq(operatorMacroGoals.status, "active"))),
+    db
+      .select()
+      .from(operatorMacroGoals)
+      .where(and(operators, ne(operatorMacroGoals.status, "active")))
+      .orderBy(desc(operatorMacroGoals.updatedAt), desc(operatorMacroGoals.id))
+      .limit(input.historyLimit ?? 10),
+  ]);
+  return [...active, ...history].map(goal => normalize(goal)!);
+}
+
 export async function setActiveMacroGoal(
   input: SetActiveMacroGoalInput,
   persistence: MacroGoalPersistence = databaseMacroGoalPersistence
@@ -271,6 +354,8 @@ export async function setActiveMacroGoal(
   if (!Number.isFinite(input.targetValue)) {
     throw new Error("targetValue must be finite");
   }
+  // An area-scoped goal must be one something can measure, or its run could never be judged.
+  assertOutcomeMetricKey(input.metricKey);
   return normalize(
     await persistence.replaceActive({ ...input, id: randomUUID() })
   )!;

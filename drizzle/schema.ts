@@ -7914,6 +7914,46 @@ export const observationBridgeObligations = mysqlTable(
 
 export type ObservationBridgeObligationRow = typeof observationBridgeObligations.$inferSelect;
 
+/**
+ * Phase 2 · Slice B: operator decisions that settle the operating mandate.
+ * Append-only; one decision in force per subject (`activeSlot` 1, NULL once superseded).
+ */
+export const operatingMandateDecisions = mysqlTable(
+  "operating_mandate_decisions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    subjectKey: varchar("subjectKey", { length: 191 }).notNull(),
+    payloadJson: json("payloadJson").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    activeSlot: tinyint("activeSlot").default(1),
+    supersedesId: varchar("supersedesId", { length: 36 }),
+    supersededById: varchar("supersededById", { length: 36 }),
+    decidedByOpenId: varchar("decidedByOpenId", { length: 128 }).notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    decidedAt: timestamp("decidedAt", { fsp: 3 }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeUnique: uniqueIndex("uq_operating_mandate_decisions_active").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.subjectKey,
+      table.activeSlot
+    ),
+    operatorIdx: index("idx_operating_mandate_decisions_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.decidedAt
+    ),
+  })
+);
+
+export type OperatingMandateDecisionRow = typeof operatingMandateDecisions.$inferSelect;
+
 export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
 export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;
 

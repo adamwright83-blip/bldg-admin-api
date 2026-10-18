@@ -46,13 +46,19 @@ describeMysql("goal-cycle occurrence policy gate on MySQL", () => {
       await sql.execute("INSERT INTO dayforge_saas_entitlements (tenantId,entitlementKey,source,enabled) VALUES (?,?,'manual',true)", [tenantId, PERSISTENT_OPERATOR_ENTITLEMENT]);
     }
     const runId = randomUUID();
+    // A run always pursues one of the operator's active goals (Phase 2 · Slice B).
+    const goalId = randomUUID();
+    await sql.execute(
+      "INSERT INTO operator_macro_goals (id,tenantId,operatorUserId,objective,metricKey,targetValue,unit,source,sourceNote,status) VALUES (?,?,?,'Get to 50 active customers','active_customers',50,'customers','operator_attested','cycle test','active')",
+      [goalId, tenantId, operator]
+    );
     await sql.execute(
       `INSERT INTO macro_goal_runs
         (id, tenantId, canonicalOperatorId, operatorUserId, macroGoalId, verticalKey,
          status, goalSnapshotJson, metricKey, targetValue, unit, baselinePrecision,
          baselineCoverage, policyVersion)
        VALUES (?, ?, ?, ?, ?, 'laundry_fluff_fold', ?, '{}', 'active_customers', 50, 'customers', 'exact', 'complete', 'v1')`,
-      [runId, tenantId, `tenant:${tenantId}:operator:${operator}`, operator, randomUUID(), options.runStatus ?? "active"]
+      [runId, tenantId, `tenant:${tenantId}:operator:${operator}`, operator, goalId, options.runStatus ?? "active"]
     );
     return { tenantId, operator, runId };
   }
