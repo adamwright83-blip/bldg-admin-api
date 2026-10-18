@@ -68,7 +68,7 @@ function integrate(
     { native: NativeOrderRow[]; cleancloud: CleanCloudOrderRow[] }
   >,
   fail = false,
-  proof: "admitted" | "missing" | "unavailable" = "admitted"
+  proof: "admitted" | "missing" | "cleancloud-missing" | "unavailable" = "admitted"
 ) {
   return vi
     .spyOn(canonical, "readCanonicalRevenue")
@@ -87,6 +87,9 @@ function integrate(
       // The owning reader executes its real payment filters, deduplication,
       // calendar bounds, count and coverage logic; only source IO is replaced.
       const admitted = withFixturePaymentAuthority(loaders);
+      if (proof === "missing" || proof === "cleancloud-missing") {
+        admitted.cleancloudAuthority = async () => [];
+      }
       if (proof === "missing") admitted.paymentAuthority = async () => [];
       if (proof === "unavailable") admitted.paymentAuthority = async () => { throw new Error("authority unavailable"); };
       return actualRead({ ...input, loaders: admitted, coverage: null });
@@ -330,10 +333,18 @@ describe("Home payment proof availability", () => {
     const home=await getAdminDashboardSummary({tenantId:"tenant-a"});
     expect(home).toMatchObject({revenueToday:null,revenueWeek:null,revenueMonth:null,paidOrderCountMonth:null,avgOrderValueMonth:null,revenuePeriods:{month:{precision:"unavailable",recordedCents:null}}});
   });
-  it("qualifies held-out missing proof rather than claiming exact calendar zero", async () => {
+  it("keeps missing payment proof out of recorded calendar revenue", async () => {
     integrate({"tenant-a":{native:[native(1,"85.80")],cleancloud:[cleancloud("orders_sales")]}},false,"missing");
     const home=await getAdminDashboardSummary({tenantId:"tenant-a"});
     expect(home?.revenuePeriods?.month).toMatchObject({recordedCents:0,statedExactCents:null,precision:"recorded_only"});
     expect(home?.revenuePeriods?.month.coverage.failedSources).toEqual(expect.arrayContaining(["laundry_butler","cleancloud"]));
+  });
+  it("keeps CleanCloud cents out of Home when CleanCloud payment evidence is missing", async () => {
+    integrate({"tenant-a":{native:[native(1,"85.80")],cleancloud:[cleancloud("orders_sales")]}},false,"cleancloud-missing");
+    const home=await getAdminDashboardSummary({tenantId:"tenant-a"});
+    expect(home?.revenuePeriods?.month.recordedCents).toBe(8580);
+    expect(home?.revenuePeriods?.month.statedExactCents).toBeNull();
+    expect(home?.revenuePeriods?.month.precision).toBe("recorded_only");
+    expect(home?.revenuePeriods?.month.coverage.failedSources).toContain("cleancloud");
   });
 });
