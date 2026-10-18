@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GoalCycleStore } from "./goalCycleStore";
+import { GoalCycleWorker } from "./goalCycleWorker";
+import { runGoalCycleStep, type GoalCycleStepDeps } from "./goalCycleStep";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -309,5 +311,198 @@ describe.skipIf(!DATABASE_URL)("goal cycle store — real MySQL", () => {
     const claimed = claims.filter(Boolean);
     expect(claimed).toHaveLength(1);
     expect(claimed[0]).toMatchObject({ id: queued.id });
+  });
+
+  // Stage 1 1D: the supervisor only keeps one live tick; preparation lives in the leased step.
+
+  const liveTicks = (runId: string) =>
+    rows<RowDataPacket>(
+      "SELECT id, status, idempotencyKey, availableAt FROM goal_cycle_requests WHERE goalRunId = ? AND triggerType = 'scheduled_tick' AND status IN ('queued','retry_scheduled','leased','running')",
+      [runId]
+    );
+
+  it("the supervisor replaces a dead-lettered tick with one new tick and never revives it", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool);
+    const dead = await store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: runId,
+      triggerType: "scheduled_tick",
+      triggerSourceReference: "autonomous_supervisor:heartbeat",
+      idempotencyKey: `scheduled_tick:${runId}`,
+      availableAt: new Date(Date.now() - 1_000),
+      maxAttempts: 1,
+    });
+    const step = await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 });
+    expect(step?.id).toBe(dead.id);
+    await store.markRunning(step!);
+    expect(await store.failStep(step!, new Error("source outage"), 10)).toBe("dead_letter");
+    expect(await liveTicks(runId)).toHaveLength(0);
+
+    const ensure = () =>
+      store.ensureLiveScheduledTick({
+        tenantId: "tenant-a",
+        goalRunId: runId,
+        triggerSourceReference: "autonomous_supervisor:heartbeat",
+      });
+    const first = await ensure();
+    expect(first).toMatchObject({ created: true, reason: "created" });
+    // Every later sweep finds the live tick; no extra rows accumulate.
+    for (let sweep = 0; sweep < 3; sweep++) {
+      expect(await ensure()).toEqual({ id: first.id, created: false, reason: "live_tick_exists" });
+    }
+
+    const ticks = await rows<RowDataPacket>(
+      "SELECT id, status, idempotencyKey FROM goal_cycle_requests WHERE goalRunId = ? AND triggerType = 'scheduled_tick'",
+      [runId]
+    );
+    expect(ticks).toHaveLength(2);
+    expect(ticks.find(tick => tick.id === dead.id)?.status).toBe("dead_letter");
+    expect(ticks.find(tick => tick.id === first.id)).toMatchObject({
+      status: "queued",
+      idempotencyKey: `scheduled_tick:${runId}:after:${dead.id}`,
+    });
+    const [deadLetter] = await rows<RowDataPacket>(
+      "SELECT requestId FROM goal_cycle_dead_letters WHERE requestId = ?",
+      [dead.id]
+    );
+    expect(deadLetter?.requestId).toBe(dead.id);
+  });
+
+  it("overlapping supervisors create exactly one tick between them", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        new GoalCycleStore(pool).ensureLiveScheduledTick({
+          tenantId: "tenant-a",
+          goalRunId: runId,
+          triggerSourceReference: `autonomous_supervisor:replica-${index}`,
+        })
+      )
+    );
+    expect(results.filter(result => result.created)).toHaveLength(1);
+    expect(await liveTicks(runId)).toHaveLength(1);
+  });
+
+  it("the supervisor does not schedule a paused run", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a", status: "paused" });
+    const store = new GoalCycleStore(pool);
+    expect(
+      await store.ensureLiveScheduledTick({
+        tenantId: "tenant-a",
+        goalRunId: runId,
+        triggerSourceReference: "autonomous_supervisor:heartbeat",
+      })
+    ).toEqual({ id: null, created: false, reason: "run_not_active" });
+    expect(await liveTicks(runId)).toHaveLength(0);
+  });
+
+  it("an event cycle's completion moves the live tick earlier instead of adding a second", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool);
+    const tick = await store.ensureLiveScheduledTick({
+      tenantId: "tenant-a",
+      goalRunId: runId,
+      triggerSourceReference: "autonomous_supervisor:heartbeat",
+      availableAt: new Date(Date.now() + 7_200_000),
+    });
+    await store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: runId,
+      triggerType: "human_result",
+      triggerSourceReference: "operator:debrief:1",
+      idempotencyKey: "human:debrief:1",
+      availableAt: new Date(Date.now() - 1_000),
+    });
+    const step = await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 });
+    expect(step?.triggerType).toBe("human_result");
+    await store.markRunning(step!);
+    const nextEvaluationAt = new Date(Date.now() + 3_600_000);
+    expect(await store.completeStep(step!, { nextEvaluationAt: nextEvaluationAt.toISOString() })).toBe(true);
+
+    const live = await liveTicks(runId);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.id).toBe(tick.id);
+    expect(new Date(live[0]!.availableAt).getTime()).toBeLessThan(Date.now() + 3_700_000);
+  });
+
+  it("a failure inside the leased step is retried through failStep, keeping the cycle id", async () => {
+    const runId = await insertRun({ tenantId: "tenant-a" });
+    const store = new GoalCycleStore(pool);
+    const queued = await store.enqueue({
+      tenantId: "tenant-a",
+      goalRunId: runId,
+      triggerType: "human_result",
+      triggerSourceReference: "operator:debrief:2",
+      idempotencyKey: "human:debrief:2",
+      availableAt: new Date(Date.now() - 1_000),
+    });
+    let attempts = 0;
+    const prepare = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("model timeout while preparing");
+      return { id: "proposal-1" };
+    });
+    const decide = vi.fn(async (input: { cycleId: string }) => ({
+      decision: { id: `decision-${input.cycleId}`, selectionKind: "wait", selectedRef: null, selectedReasonCode: "NO_ELIGIBLE_WORK" },
+      created: true,
+      objective: null,
+    }));
+    const deps = {
+      registry: {} as never,
+      appointmentStore: {} as never,
+      evaluateRun: async () => ({
+        run: {
+          id: runId,
+          status: "active",
+          canonicalOperatorId: "canonical:tenant-a",
+          operatorUserId: "operator:tenant-a",
+          nextEvaluationAt: new Date(Date.now() + 3_600_000),
+        },
+        completed: false,
+        observation: null,
+      }),
+      evaluatePolicy: async () => ({
+        status: "allowed",
+        authority: "automatic",
+        exactAction: "persistent_operator.goal_cycle.prepare",
+        riskClass: "INTERNAL_REVERSIBLE",
+      }),
+      resolveIdentity: async () => ({ ok: true, identity: {} }),
+      resolveTimeZone: async () => "America/Los_Angeles",
+      prepare,
+      scheduleCall: async () => ({ scheduled: false }),
+      decide,
+    } as unknown as GoalCycleStepDeps;
+    const worker = new GoalCycleWorker(
+      store,
+      { leaseOwner: "worker-retry", leaseMs: 5_000, pollMs: 20, concurrency: 1, retryBaseMs: 10 },
+      input => runGoalCycleStep(input, deps)
+    );
+    void worker.start();
+    try {
+      for (let i = 0; i < 200; i++) {
+        const [row] = await rows<RowDataPacket>("SELECT status FROM goal_cycle_requests WHERE id = ?", [queued.id]);
+        if (row?.status === "completed") break;
+        await wait(25);
+      }
+    } finally {
+      await worker.stop();
+    }
+    const history = await rows<RowDataPacket>(
+      "SELECT eventType FROM goal_cycle_history WHERE requestId = ? ORDER BY id",
+      [queued.id]
+    );
+    expect(history.map(event => event.eventType)).toEqual([
+      "cycle.queued",
+      "cycle.leased",
+      "cycle.retry_scheduled",
+      "cycle.leased",
+      "cycle.completed",
+    ]);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    // The retry is the same occurrence: one decision, under the request's own id.
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledWith(expect.objectContaining({ cycleId: queued.id }));
   });
 });

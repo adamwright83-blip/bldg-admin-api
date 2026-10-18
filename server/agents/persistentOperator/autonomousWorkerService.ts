@@ -17,12 +17,11 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
-import { and, desc, eq, inArray, like, lt, ne, or } from "drizzle-orm";
+import { and, desc, eq, like, lt, ne, or } from "drizzle-orm";
 import {
   commercialMissionEvents,
   goalCycleObjectives,
   goalCycleOutcomes,
-  goalCycleRequests,
   macroGoalRuns,
   operatorMacroGoals,
 } from "../../../drizzle/schema";
@@ -30,17 +29,14 @@ import { getDb } from "../../db";
 import { getDefaultGoalCyclePool, GoalCycleStore } from "./goalCycleStore";
 import { GoalCycleWorker } from "./goalCycleWorker";
 import { runGoalCycleStep } from "./goalCycleStep";
-import { evaluateGoalCyclePreparePolicy } from "./goalCyclePolicy";
 import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
 import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
 import { resolveCanonicalOperatorIdentity } from "./identity";
-import { scheduleAuthorizedStrategicCall } from "./strategicCallAuthorization";
-import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
-import { ensureSundayPlanningAppointment, resolveOperatorTimeZone } from "./operatorAppointmentPolicy";
+import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
 
 export type AutonomousWorkerOptions = {
   enabled?: boolean;
@@ -51,35 +47,43 @@ export type AutonomousWorkerOptions = {
   bootstrapIntervalMs?: number;
 };
 
+export type AutonomousGoalBootstrapResult = {
+  goals: number;
+  activatedRunIds: string[];
+  createdTickIds: string[];
+  errors: Array<{ tenantId: string; goalId: string; error: string }>;
+};
+
+/**
+ * Supervisor sweep. For each active operator goal it ensures an active macro-goal
+ * run and exactly one live scheduled tick, and nothing else: preparation and call
+ * scheduling happen only inside the leased goal-cycle step (runGoalCycleStep), where
+ * a failure is retried through failStep instead of being logged and lost. A failure
+ * for one goal is recorded and the sweep moves on to the next.
+ */
 export async function ensureAutonomousGoalBootstrap(input: {
-  store: GoalCycleStore;
-  appointmentStore: OperatorAppointmentStore;
+  store: Pick<GoalCycleStore, "ensureLiveScheduledTick">;
   registry?: typeof defaultVerticalRegistry;
-}): Promise<void> {
+}): Promise<AutonomousGoalBootstrapResult> {
+  const result: AutonomousGoalBootstrapResult = {
+    goals: 0,
+    activatedRunIds: [],
+    createdTickIds: [],
+    errors: [],
+  };
   const db = await getDb();
-  if (!db) return;
+  if (!db) return result;
   const registry = input.registry ?? defaultVerticalRegistry;
 
-  // 1. Ensure Sunday planning appointment for the configured owner
-  try {
-    const appt = await ensureSundayPlanningAppointment({ store: input.appointmentStore });
-    if (appt?.created) {
-      console.info(`[AutonomousWorkers] Scheduled Sunday weekly planning appointment (${appt.id})`);
-    }
-  } catch (err) {
-    console.warn("[AutonomousWorkers] Sunday planning appointment check deferred:", err);
-  }
+  const activeGoals = await db
+    .select()
+    .from(operatorMacroGoals)
+    .where(eq(operatorMacroGoals.status, "active"));
 
-  // 2. Discover active operator macro goals and ensure active macro_goal_runs + cycle requests
-  try {
-    const activeGoals = await db
-      .select()
-      .from(operatorMacroGoals)
-      .where(eq(operatorMacroGoals.status, "active"));
-
-    for (const goal of activeGoals) {
-      if (!goal.tenantId || !goal.operatorUserId) continue;
-
+  for (const goal of activeGoals) {
+    if (!goal.tenantId || !goal.operatorUserId) continue;
+    result.goals += 1;
+    try {
       const resolution = await resolveCanonicalOperatorIdentity({
         tenantId: goal.tenantId,
         subsystem: "autonomous_goal_bootstrap",
@@ -87,25 +91,6 @@ export async function ensureAutonomousGoalBootstrap(input: {
       });
       if (!resolution.ok) continue;
 
-      // Preparation succeeds independently of outbound permission or reader support,
-      // but only where the goal-cycle action policy allows Claire to prepare.
-      const timeZone = await resolveOperatorTimeZone(goal.tenantId);
-      if (!timeZone) continue;
-      const preparePolicy = await evaluateGoalCyclePreparePolicy({
-        tenantId: goal.tenantId,
-        run: {
-          status: "active",
-          canonicalOperatorId: resolution.identity.canonicalOperatorId,
-          operatorUserId: goal.operatorUserId,
-        },
-      });
-      if (preparePolicy.status === "allowed") {
-        await prepareStrategicProposal({ identity: resolution.identity, timeZone }).then(proposal => scheduleAuthorizedStrategicCall({ identity: resolution.identity, timeZone, proposalId: proposal.id, store: input.appointmentStore })).catch(error => {
-          console.warn("[AutonomousWorkers] Strategy preparation failed", { tenantId: goal.tenantId, reason: error instanceof Error ? error.message : String(error) });
-        });
-      }
-
-      // Check if an active macro_goal_run exists
       const [existingRun] = await db
         .select()
         .from(macroGoalRuns)
@@ -134,6 +119,7 @@ export async function ensureAutonomousGoalBootstrap(input: {
         });
         if (activated) {
           targetRunId = activated.id;
+          result.activatedRunIds.push(activated.id);
           console.info(
             `[AutonomousWorkers] Activated macro goal run ${targetRunId} for tenant ${goal.tenantId} (${goal.metricKey}: ${activated.baselineValue} -> ${activated.targetValue})`
           );
@@ -141,40 +127,42 @@ export async function ensureAutonomousGoalBootstrap(input: {
       }
 
       if (targetRunId) {
-        // Check if an active/queued cycle request already exists
-        const [activeCycle] = await db
-          .select({ id: goalCycleRequests.id, status: goalCycleRequests.status })
-          .from(goalCycleRequests)
-          .where(
-            and(
-              eq(goalCycleRequests.tenantId, goal.tenantId),
-              eq(goalCycleRequests.goalRunId, targetRunId),
-              // A running cycle is live too; missing it here enqueued a duplicate tick on every restart mid-cycle.
-              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leased", "running"])
-            )
-          )
-          .limit(1);
-
-        if (!activeCycle) {
-          // If no active or queued cycle request exists, enqueue an autonomous scheduled tick
-          const enqueued = await input.store.enqueue({
-            tenantId: goal.tenantId,
-            goalRunId: targetRunId,
-            triggerType: "scheduled_tick",
-            triggerSourceReference: "autonomous_supervisor:heartbeat",
-            idempotencyKey: `auto_tick:${targetRunId}:${new Date().toISOString().slice(0, 13)}`,
-            availableAt: new Date(),
-          });
-          if (enqueued.created) {
-            console.info(
-              `[AutonomousWorkers] Enqueued autonomous goal cycle ${enqueued.id} for run ${targetRunId}`
-            );
-          }
+        const tick = await input.store.ensureLiveScheduledTick({
+          tenantId: goal.tenantId,
+          goalRunId: targetRunId,
+          triggerSourceReference: "autonomous_supervisor:heartbeat",
+        });
+        if (tick.created && tick.id) {
+          result.createdTickIds.push(tick.id);
+          console.info(
+            `[AutonomousWorkers] Enqueued autonomous goal cycle ${tick.id} for run ${targetRunId}`
+          );
         }
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.errors.push({ tenantId: goal.tenantId, goalId: goal.id, error: message });
+      console.warn("[AutonomousWorkers] Goal bootstrap failed for one goal; continuing", {
+        tenantId: goal.tenantId,
+        goalId: goal.id,
+        reason: message,
+      });
+    }
+  }
+  return result;
+}
+
+/** Keeps the Sunday weekly planning appointment scheduled. The appointment worker executes it under its own lease. */
+export async function ensureOperatorAppointmentSchedule(input: {
+  appointmentStore: OperatorAppointmentStore;
+}): Promise<void> {
+  try {
+    const appt = await ensureSundayPlanningAppointment({ store: input.appointmentStore });
+    if (appt?.created) {
+      console.info(`[AutonomousWorkers] Scheduled Sunday weekly planning appointment (${appt.id})`);
     }
   } catch (err) {
-    console.warn("[AutonomousWorkers] Error during goal bootstrap:", err);
+    console.warn("[AutonomousWorkers] Sunday planning appointment check deferred:", err);
   }
 }
 
@@ -527,20 +515,28 @@ export function startAutonomousPersistentOperatorWorkers(
 
   // 4. Initial Bootstrap & Periodic Goal/Appointment Sync
   const bootstrapIntervalMs = options.bootstrapIntervalMs ?? 300_000;
+  // One sweep at a time in this process; other replicas are fenced by the run row lock.
+  let bootstrapActive = false;
+  const runBootstrap = async () => {
+    if (bootstrapActive) return;
+    bootstrapActive = true;
+    try {
+      await ensureOperatorAppointmentSchedule({ appointmentStore: operatorAppointmentStore });
+      await ensureAutonomousGoalBootstrap({ store: goalCycleStore });
+    } catch (err) {
+      console.warn("[AutonomousWorkers] Error during goal bootstrap:", err);
+    } finally {
+      bootstrapActive = false;
+    }
+  };
   const bootstrapInitialTimer = setTimeout(() => {
-    void ensureAutonomousGoalBootstrap({
-      store: goalCycleStore,
-      appointmentStore: operatorAppointmentStore,
-    });
+    void runBootstrap();
     void sweepUnbridgedParkingLotDebriefs();
     void sweepUnpropagatedConquestWins();
   }, 5_000);
 
   const bootstrapIntervalTimer = setInterval(() => {
-    void ensureAutonomousGoalBootstrap({
-      store: goalCycleStore,
-      appointmentStore: operatorAppointmentStore,
-    });
+    void runBootstrap();
   }, bootstrapIntervalMs);
 
   // Start durable poll loops
