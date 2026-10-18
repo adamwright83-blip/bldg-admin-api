@@ -5,6 +5,7 @@ import {
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
 import { getGoalCycleObjective } from "../agents/persistentOperator/objectiveStore";
+import { interpretStoredOutcome } from "../agents/persistentOperator/outcomeInterpretation";
 import { loadStrategicDiagnosis } from "./strategicStore";
 import { getDb } from "../db";
 import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
@@ -372,15 +373,15 @@ export async function readStrategicDiagnosisInputs(input: {
       originating &&
       objective?.canonicalOperatorId === identity.canonicalOperatorId
     ) {
-      // The existing outcome authority supplies the result. A completed task or
-      // revenue event alone cannot prove the hypothesized mechanism worked.
-      const contradicted = /failed|blocked|hypothesis_contradicted/.test(
-        row.outcomeKind
-      );
+      // The shared outcome reading (also used by learning and the proof
+      // scoreboard). "supported" is a verified revenue or conversion result on
+      // this objective: consistent with the approach, never proof the mechanism
+      // caused it. A completed task alone stays inconclusive.
+      const interpretation = interpretStoredOutcome(row).result;
       outcomes.push({
         id: row.id,
         actionDriver: originating.primaryConstraint,
-        result: contradicted ? "contradicted" : "inconclusive",
+        result: interpretation === "supported" || interpretation === "contradicted" ? interpretation : "inconclusive",
         evidenceRef: ref,
       });
     }
