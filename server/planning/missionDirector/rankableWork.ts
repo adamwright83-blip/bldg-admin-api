@@ -379,6 +379,7 @@ function rankOne(input: {
     sourceKind: candidate.sourceKind,
     motion: candidate.motion,
     sourceRefs: candidate.sourceRefs,
+    ...(candidate.workThreadId ? { workThreadId: candidate.workThreadId } : {}),
     score,
     confidence,
     executionType: execution.executionType,
@@ -407,6 +408,7 @@ function selectionFrom(
     sourceKind: evidence.sourceKind,
     motion: evidence.motion,
     sourceRefs: evidence.sourceRefs,
+    ...(evidence.workThreadId ? { workThreadId: evidence.workThreadId } : {}),
     executionType: evidence.executionType,
     rankEvidence: evidence,
   };

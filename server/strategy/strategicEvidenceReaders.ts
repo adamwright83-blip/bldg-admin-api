@@ -5,6 +5,7 @@ import {
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
 import { getGoalCycleObjective } from "../agents/persistentOperator/objectiveStore";
+import { getWorkThread } from "../agents/persistentOperator/workThreadStore";
 import { interpretStoredOutcome } from "../agents/persistentOperator/outcomeInterpretation";
 import { loadStrategicDiagnosis } from "./strategicStore";
 import { getDb } from "../db";
@@ -365,12 +366,19 @@ export async function readStrategicDiagnosisInputs(input: {
       tenantId: identity.tenantId,
       objectiveId: row.objectiveId,
     });
-    const diagnosisId = objective?.selectedRef.split(":strategy-")[0];
+    // The lever an outcome speaks to: its objective's strategy Work Thread or,
+    // for a pre-thread objective, the diagnosis its old candidate id named.
+    const thread = objective?.workThreadId
+      ? await getWorkThread({ tenantId: identity.tenantId, threadId: objective.workThreadId })
+      : null;
+    const threadLever = thread?.opportunity.kind === "strategy_opportunity" ? thread.opportunity.lever : null;
+    const diagnosisId = threadLever ? undefined : objective?.selectedRef.split(":strategy-")[0];
     const originating = diagnosisId?.startsWith("diagnosis_")
       ? await loadStrategicDiagnosis(identity, diagnosisId)
       : null;
+    const actionDriver = threadLever ?? originating?.primaryConstraint ?? null;
     if (
-      originating &&
+      actionDriver &&
       objective?.canonicalOperatorId === identity.canonicalOperatorId
     ) {
       // The shared outcome reading (also used by learning and the proof
@@ -380,7 +388,7 @@ export async function readStrategicDiagnosisInputs(input: {
       const interpretation = interpretStoredOutcome(row).result;
       outcomes.push({
         id: row.id,
-        actionDriver: originating.primaryConstraint,
+        actionDriver,
         result: interpretation === "supported" || interpretation === "contradicted" ? interpretation : "inconclusive",
         evidenceRef: ref,
       });

@@ -54,6 +54,8 @@ async function attachApprovedObjective(
     tenantId: string;
     canonicalOperatorId: string;
     selectedRef: string;
+    /** The item's durable Work Thread: its open objective is found by thread, whatever selection presented it. */
+    workThreadId?: string;
     businessDate: string;
     statusReason: string;
   }
@@ -65,7 +67,9 @@ async function attachApprovedObjective(
       and(
         eq(goalCycleObjectives.tenantId, input.tenantId),
         eq(goalCycleObjectives.canonicalOperatorId, input.canonicalOperatorId),
-        eq(goalCycleObjectives.selectedRef, input.selectedRef),
+        input.workThreadId
+          ? eq(goalCycleObjectives.workThreadId, input.workThreadId)
+          : eq(goalCycleObjectives.selectedRef, input.selectedRef),
         inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
       )
     )
@@ -257,6 +261,7 @@ export async function respondToStrategicProposal(
         tenantId: p.tenantId,
         canonicalOperatorId: p.canonicalOperatorId,
         selectedRef: item.candidateId,
+        ...(item.workThreadId ? { workThreadId: item.workThreadId } : {}),
         businessDate: item.businessDate,
         statusReason: `Exact proposal approval ${firstApproval.id}; canonical commitment ${row.id}`,
       });
@@ -271,6 +276,9 @@ export async function respondToStrategicProposal(
             ...(item.missionType ? { missionType: item.missionType } : {}),
             ...(label ? { scheduleLabel: label } : {}),
             objectiveLineage,
+            // The commitment is one execution of the thread: later work that
+            // continues it (and its outcomes) stays on the same opportunity.
+            ...(item.workThreadId ? { workThread: { id: item.workThreadId } } : {}),
           },
         })
         .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));

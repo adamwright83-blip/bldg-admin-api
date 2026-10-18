@@ -7,6 +7,11 @@ import type {
   StrategyMarketContext,
   StrategyOption,
 } from "../../shared/strategicIntelligence";
+import {
+  normalizeAreaKey,
+  workThreadOpportunityKey,
+  type StrategyOpportunity,
+} from "../../shared/workThread";
 import type { VerticalRegistry } from "./verticalTemplates/registry";
 import {
   STRATEGY_DOCTRINE_VERSION,
@@ -51,6 +56,8 @@ export type DiagnosisInput = {
   };
   /** Sources current, but some orders are not payment-verified: figures are usable as recorded, never as confirmed. */
   recordedFigures?: { evidenceRef: string; description: string };
+  /** Durable Work Thread ids already resolved for this diagnosis's opportunities, by opportunity key. */
+  workThreadIds?: Readonly<Record<string, string>>;
 };
 
 export function assembleStrategicDiagnosis(
@@ -235,6 +242,26 @@ export function assembleStrategicDiagnosis(
     diagnosis = focusPlan.diagnosis;
     support = focusPlan.support;
   }
+  // The opportunity is fixed before a contradicted hypothesis turns the action
+  // into a review: re-examining the same lever is a tactic within one thread.
+  // Only structured scope enters it; wording and the customers named this hour do not.
+  const opportunity: StrategyOpportunity = {
+    kind: "strategy_opportunity",
+    verticalKey: input.verticalKey,
+    lever: driver,
+    population: sourceGap
+      ? "sales_source"
+      : focusPlan
+        ? focusPlan.driver === "retention" ? "lapsed_customers" : "new_customers"
+        : driver === "retention"
+          ? dormant != null && dormant > 0 && salesChange != null && salesChange <= -0.1
+            ? "lapsed_customers"
+            : "first_purchase_customers"
+          : driver === "acquisition"
+            ? "new_customers"
+            : "business",
+    area: focusPlan ? normalizeAreaKey(input.focus!.area) : null,
+  };
   const contradicted = input.outcomes.filter(
     o =>
       o.result === "contradicted" &&
@@ -377,6 +404,10 @@ export function assembleStrategicDiagnosis(
     reviewCondition:
       "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
     territoryId: null,
+    opportunity,
+    ...(input.workThreadIds?.[workThreadOpportunityKey(opportunity)]
+      ? { workThreadId: input.workThreadIds[workThreadOpportunityKey(opportunity)] }
+      : {}),
   };
   const marketLabels = input.market.territories.map(t => t.label);
   const d: StrategicDiagnosis = {

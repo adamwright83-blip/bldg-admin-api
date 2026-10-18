@@ -38,6 +38,12 @@ export type GoalCycleDecisionDraft = {
   sourceCoverage: unknown;
   loadout: ExecutionIntelligenceItem[];
   experiment: unknown | null;
+  /**
+   * The durable Work Thread the selected work belongs to (Phase 2 · Slice A).
+   * Omitted, not null, when there is none, so pre-thread drafts fingerprint
+   * exactly as before.
+   */
+  workThreadId?: string;
 };
 
 export type GoalCycleDecisionRecord = GoalCycleDecisionDraft & {
@@ -137,6 +143,7 @@ function toRecord(
     sourceCoverage: row.sourceCoverageJson,
     loadout: loadout(row.loadoutJson),
     experiment: row.experimentJson ?? null,
+    ...(row.workThreadId ? { workThreadId: row.workThreadId } : {}),
     decisionFingerprint: row.decisionFingerprint,
     createdAt: row.createdAt.toISOString(),
   };
@@ -252,6 +259,7 @@ export async function appendGoalCycleDecision(
       sourceCoverageJson: draft.sourceCoverage,
       loadoutJson: draft.loadout,
       experimentJson: draft.experiment,
+      workThreadId: draft.workThreadId ?? null,
       decisionFingerprint: fingerprint,
     });
   } catch (error) {

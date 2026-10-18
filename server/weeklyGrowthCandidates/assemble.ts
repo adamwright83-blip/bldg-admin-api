@@ -462,6 +462,9 @@ function toCandidate(
   });
   const id = stableId(input.tenantId, group);
   const storedExecutionType = group.find(record => record.storedExecutionType)?.storedExecutionType ?? null;
+  // One named thread carries over; records that name different threads are
+  // reported as a conflict and no thread is chosen for them.
+  const workThreadIds = [...new Set(group.map(record => record.workThreadId).filter((value): value is string => Boolean(value)))].sort();
   const candidate: WeeklyGrowthCandidate = {
     id,
     sourceKind,
@@ -470,6 +473,8 @@ function toCandidate(
     objective: content.objective || content.title,
     alreadyInFlight,
     ...(storedExecutionType ? { storedExecutionType } : {}),
+    ...(workThreadIds.length === 1 ? { workThreadId: workThreadIds[0] } : {}),
+    ...(workThreadIds.length > 1 ? { conflictingWorkThreadIds: workThreadIds } : {}),
     observedDueDate: dueDate,
     sourceRefs: sourceRefs(group),
     provenance: {

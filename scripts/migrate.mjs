@@ -4665,6 +4665,37 @@ await ensureRequiredIndex(
   ["tenantId", "latestDecisionId"],
   "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_latest_decision (tenantId,latestDecisionId)"
 );
+// Phase 2 · Slice A: durable Work Thread identity. One table plus a nullable
+// thread id on decisions and objectives. Additive; existing rows stay
+// unthreaded and keep the 1B same-day reuse rule.
+await applyIdempotentSqlFile("../drizzle/0137_work_threads.sql", "Work threads");
+await assertRequiredColumns("work_threads", [
+  "id", "tenantId", "opportunityKey", "opportunityKeyHash", "generation", "openSlot",
+  "status", "kind", "opportunityJson", "title", "createdByOperatorId", "firstSourceRef",
+  "lastSourceRef", "lastObservedAt", "closedReason", "closedAt", "createdAt", "updatedAt",
+]);
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_objectives ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_work_thread",
+  ["tenantId", "workThreadId", "status"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_work_thread (tenantId,workThreadId,status)"
+);
+await ensureRequiredColumn(
+  "goal_cycle_decisions",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_decisions ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_work_thread",
+  ["tenantId", "workThreadId", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_work_thread (tenantId,workThreadId,createdAt)"
+);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",

@@ -1,5 +1,6 @@
 import type { StrategicDiagnosis } from "../../shared/strategicIntelligence";
 import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates";
+import { workThreadCandidateId } from "../../shared/workThread";
 import { resolveCanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import { latestStrategicDiagnosis } from "./strategicStore";
 
@@ -16,7 +17,11 @@ export function diagnosisCandidates(
   )
     return [];
   return d.actions.map(a => ({
-    id: `${d.id}:${a.id}`,
+    // The Work Thread is the candidate's identity, so an hourly re-diagnosis
+    // (a new diagnosis id) is the same candidate, objective and lessons.
+    // Pre-thread diagnoses keep their diagnosis-scoped id.
+    id: a.workThreadId ? workThreadCandidateId(a.workThreadId) : `${d.id}:${a.id}`,
+    ...(a.workThreadId ? { workThreadId: a.workThreadId } : {}),
     sourceKind: "strategy_diagnosis",
     motion: a.motion,
     title: a.title,

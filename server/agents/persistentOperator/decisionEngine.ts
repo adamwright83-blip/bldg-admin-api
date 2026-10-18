@@ -43,6 +43,15 @@ import {
   materializeGoalCycleObjective,
   type PersistentGrowthObjective,
 } from "./objectiveStore";
+import { resolveCandidateWorkThread, type WorkThreadResolution } from "./workThreadStore";
+
+/** How the decision's Work Thread was established, recorded in sourceCoverage. */
+function workThreadCoverage(resolution: WorkThreadResolution | null) {
+  if (!resolution) return { status: "not_applicable" as const };
+  return resolution.status === "resolved"
+    ? { status: "resolved" as const, id: resolution.thread.id, generation: resolution.thread.generation }
+    : { status: "unresolved" as const, reason: resolution.reason, references: resolution.references };
+}
 
 type CycleChoice = {
   selectionKind: GoalCycleSelectionKind;
@@ -575,6 +584,26 @@ export async function decideGoalCycle(input: {
     };
   }
 
+  const choice = selectDeterministicCycleChoice({
+    weeklyIntentLocked: weeklyIntent !== null,
+    candidates: feed?.candidates ?? [],
+    obligations: openObligations,
+    dueObligations,
+    missionDirectorPlan: plan,
+  });
+
+  // The selected work's durable Work Thread. A reference that cannot be
+  // verified leaves the decision unthreaded, with the reason, rather than
+  // attaching it to a guessed thread.
+  const workThread = choice.selectedCandidate
+    ? await resolveCandidateWorkThread({
+        tenantId: input.tenantId,
+        candidate: choice.selectedCandidate,
+        canonicalOperatorId: run.canonicalOperatorId,
+        now,
+      })
+    : null;
+
   const sourceCoverage = {
     tenantTimeZone: { status: "available", timeZone },
     weeklyIntent: {
@@ -587,15 +616,8 @@ export async function decideGoalCycle(input: {
     missionDirector: missionDirectorCoverage,
     actionPolicy: input.actionPolicy,
     channelReadiness: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+    workThread: workThreadCoverage(workThread),
   };
-
-  const choice = selectDeterministicCycleChoice({
-    weeklyIntentLocked: weeklyIntent !== null,
-    candidates: feed?.candidates ?? [],
-    obligations: openObligations,
-    dueObligations,
-    missionDirectorPlan: plan,
-  });
 
   const execution =
     choice.selectedCandidate
@@ -670,6 +692,7 @@ export async function decideGoalCycle(input: {
     sourceCoverage,
     loadout,
     experiment: null,
+    ...(workThread?.status === "resolved" ? { workThreadId: workThread.thread.id } : {}),
   });
 
   let objective: PersistentGrowthObjective | null = null;
