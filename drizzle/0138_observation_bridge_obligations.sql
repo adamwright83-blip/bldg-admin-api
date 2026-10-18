@@ -7,6 +7,9 @@
 -- idempotent, so a crash at any point replays safely.
 --
 -- status: bridged | pending | unresolved_identity | unrelated | ambiguous_review | rejected
+--
+-- No table options: it is compared with Day Director and CleanCloud tables
+-- that take the database's charset and collation, so it takes them too.
 CREATE TABLE IF NOT EXISTS `observation_bridge_obligations` (
   `id` varchar(36) NOT NULL,
   `tenantId` varchar(64) NOT NULL,
@@ -27,4 +30,4 @@ CREATE TABLE IF NOT EXISTS `observation_bridge_obligations` (
   UNIQUE KEY `uq_observation_bridge_source` (`tenantId`, `sourceKind`, `sourceKey`),
   KEY `idx_observation_bridge_due` (`status`, `nextAttemptAt`),
   KEY `idx_observation_bridge_tenant_status` (`tenantId`, `status`, `updatedAt`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
