@@ -2,8 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { createFirstRealProposalBootstrapRouter } from "./firstRealProposalBootstrapRouter";
 
-function context(user: { id: number; role: "admin" | "user" } | null) {
-  return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
+function context(user: { id: number; role: "admin" | "user"; openId?: string } | null) {
+  return {
+    user: user ? { openId: "operator-admin", ...user, openId: user.openId ?? "operator-admin" } : null,
+    tenantId: "default",
+    req: {},
+    res: {},
+    vendorSession: null,
+  } as never;
 }
 
 function stores() {
