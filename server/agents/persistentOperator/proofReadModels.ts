@@ -8,6 +8,7 @@ import {
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { optionalReceiptRows } from "./operationReceipt";
+import { interpretStoredOutcome } from "./outcomeInterpretation";
 import {
   getGoalCycleLearnedDelta,
   listGoalCycleLearnedDeltas,
@@ -210,13 +211,14 @@ export async function getAuthoritativeScoreboard(input: {
       o.status === "action_attempted"
   ).length;
 
-  const successfulOutcomesCount = outcomes.filter(
-    o => o.epistemicStatus === "verified" && !o.outcomeKind.includes("failed") && !o.outcomeKind.includes("blocked")
+  // Shared reading with learning and diagnosis: a contradicted hypothesis is a
+  // failure here, never a success.
+  const interpreted = outcomes.map(o => interpretStoredOutcome(o).result);
+  const successfulOutcomesCount = interpreted.filter(
+    result => result === "supported" || result === "inconclusive"
   ).length;
 
-  const failedOutcomesCount = outcomes.filter(
-    o => o.epistemicStatus === "rejected" || o.outcomeKind.includes("failed") || o.outcomeKind.includes("blocked")
-  ).length;
+  const failedOutcomesCount = interpreted.filter(result => result === "contradicted").length;
 
   const unresolvedOutcomesCount = outcomes.filter(
     o => o.epistemicStatus === "unverified" || o.epistemicStatus === "disputed"

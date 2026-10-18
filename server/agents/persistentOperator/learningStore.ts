@@ -18,6 +18,7 @@ import {
 } from "./outcomeStore";
 import { getGoalCycleDecision } from "./decisionStore";
 import { getGoalCycleObjective } from "./objectiveStore";
+import { interpretGoalCycleOutcome } from "./outcomeInterpretation";
 
 export const LEARNING_KINDS = [
   "doctrine_weight",
@@ -372,6 +373,36 @@ function deriveDeterministicLearning(
         verifiedRevenueCents: 0,
       };
 
+  // A contradicted result is read first, so no revenue, delivery or loadout
+  // path below can ever boost work whose hypothesis was contradicted.
+  const interpretation = interpretGoalCycleOutcome(outcome);
+  if (interpretation.result === "contradicted") {
+    const newFailures = priorFailures + 1;
+    const newWeight = Math.max(0.2, Number((priorWeight - 0.25).toFixed(2)));
+    const constrained = newFailures >= 2;
+    const what =
+      interpretation.basis === "outcome_reports_contradiction" && outcome.outcomeKind.includes("contradicted")
+        ? "Hypothesis contradicted"
+        : "Execution failure";
+
+    return {
+      learningKind: "execution_constraint",
+      targetKey,
+      deltaType: "suppress",
+      beforeState,
+      afterState: {
+        doctrineWeight: newWeight,
+        constrained,
+        failureCount: newFailures,
+        interpretation: interpretation.result,
+        interpretationBasis: interpretation.basis,
+        reason: outcome.explanation ?? "Action execution blocked or failed",
+      },
+      explanation: `${what} recorded for '${targetKey}' (failures: ${newFailures}); constrained doctrine weight ${priorWeight.toFixed(2)} -> ${newWeight.toFixed(2)}${constrained ? " [constrained: active]" : ""}.`,
+      confidence: "high",
+    };
+  }
+
   if (outcome.impactClass === "commercial_revenue" && outcome.monetaryValueCents != null) {
     const newSampleSize = priorSampleSize + 1;
     const newRevenueCents = priorRevenueCents + outcome.monetaryValueCents;
@@ -422,27 +453,6 @@ function deriveDeterministicLearning(
       },
       explanation: `Action execution verified via ${outcome.sourceSystem} (deliveries: ${newDeliveries}, n=${newSampleSize}); reinforced channel affinity for '${targetKey}' weight ${priorWeight.toFixed(2)} -> ${newWeight.toFixed(2)}.`,
       confidence,
-    };
-  }
-
-  if (outcome.epistemicStatus === "rejected" || outcome.outcomeKind.includes("failed") || outcome.outcomeKind.includes("blocked")) {
-    const newFailures = priorFailures + 1;
-    const newWeight = Math.max(0.2, Number((priorWeight - 0.25).toFixed(2)));
-    const constrained = newFailures >= 2;
-
-    return {
-      learningKind: "execution_constraint",
-      targetKey,
-      deltaType: "suppress",
-      beforeState,
-      afterState: {
-        doctrineWeight: newWeight,
-        constrained,
-        failureCount: newFailures,
-        reason: outcome.explanation ?? "Action execution blocked or failed",
-      },
-      explanation: `Execution failure recorded for '${targetKey}' (failures: ${newFailures}); constrained doctrine weight ${priorWeight.toFixed(2)} -> ${newWeight.toFixed(2)}${constrained ? " [constrained: active]" : ""}.`,
-      confidence: "high",
     };
   }
 
