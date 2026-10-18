@@ -211,10 +211,12 @@ describe("canonical payment Authority Receipt admission", () => {
   });
   it.each([
     { sourceType: "stripe_payment_intent" },
-    { sourceRef: "cleancloud-import:8:603" },
+    // A receipt that observed a different payment time is not this order's payment.
+    { occurredAt: "2026-10-04T19:00:00.000Z" },
+    { occurredAt: null },
     { subjectType: "order" },
   ] as Partial<AuthorityReceipt>[])(
-    "rejects wrong CleanCloud source/import/subject %j",
+    "rejects wrong CleanCloud source/payment/subject %j",
     async extra => {
       expect(
         await read(loaders([], [cloud], e => receipt(e, extra)))
@@ -225,6 +227,27 @@ describe("canonical payment Authority Receipt admission", () => {
       });
     }
   );
+  it("keeps an order counted when a later import that changed no money moved it to a new batch", async () => {
+    // The receipt was admitted by import 7; a re-sync that only filled in a
+    // customer id moved the row to import 8 and, correctly, admitted nothing.
+    expect(
+      await read(
+        loaders([], [{ ...cloud, importBatchId: 8, cleancloudCustomerId: "7" }], e =>
+          receipt(e, { sourceRef: "cleancloud-import:7:603" })
+        )
+      )
+    ).toMatchObject({ recordedCents: 73739, exactIncludedOrderCount: 1 });
+  });
+  it("never substitutes an older receipt when the newest one fails its policy", async () => {
+    const source = loaders([], [cloud]);
+    source.cleancloudAuthority = vi.fn(async ({ expectations }) =>
+      expectations.flatMap(e => [
+        { ...receipt(e), id: "auth-old", admittedAt: "2026-10-01T00:00:00.000Z" },
+        { ...receipt(e), id: "auth-new", admittedAt: "2026-10-06T00:00:00.000Z", verificationClass: "ATTESTED" as never },
+      ])
+    );
+    expect(await read(source)).toMatchObject({ recordedCents: 0, precision: "recorded_only" });
+  });
   it("does not invent an import reference when selected CleanCloud row has no batch", async () => {
     expect(
       await read(
