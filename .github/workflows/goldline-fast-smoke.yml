@@ -255,6 +255,7 @@ jobs:
           server/spiritHumanRescue/inboundSmsRoute.test.ts
           server/messaging/businessLineInbox.test.ts
           server/claire/proactive/boardService.noDayLine.test.ts
+          server/claire/proactive/boardService.noDayLine.recovery.test.ts
           server/experience/lanternCity/personalNumber/personalOutreachReplyService.test.ts
           shared/cozyVillagerEvidence.test.ts
           server/_core/sms.test.ts

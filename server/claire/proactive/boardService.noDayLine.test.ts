@@ -9,7 +9,7 @@ const obligationMocks = vi.hoisted(() => ({
   backfillPersistentOperatorCommercialFollowUpRef: vi.fn(async () => undefined),
 }));
 const dayDirectorMocks = vi.hoisted(() => ({
-  acceptProposalWithReceipt: vi.fn(),
+  acceptProposalWithReceipt: vi.fn(async () => ({ stored: { id: "would-be-commitment" } })),
   moveDayDirectorCommitment: vi.fn(),
 }));
 
