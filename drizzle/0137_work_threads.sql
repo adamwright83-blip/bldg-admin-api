@@ -7,6 +7,8 @@
 -- `openSlot` is 1 while the thread is open and NULL once it closes, so a key has
 -- at most one open thread; closing frees the key for a new generation (a new
 -- initiative) instead of reopening history.
+-- No table options: like the goal-cycle tables it is compared with, it takes
+-- the database's charset and collation.
 CREATE TABLE IF NOT EXISTS `work_threads` (
   `id` varchar(36) NOT NULL,
   `tenantId` varchar(64) NOT NULL,
@@ -30,4 +32,4 @@ CREATE TABLE IF NOT EXISTS `work_threads` (
   UNIQUE KEY `uq_work_threads_open` (`tenantId`, `opportunityKeyHash`, `openSlot`),
   UNIQUE KEY `uq_work_threads_generation` (`tenantId`, `opportunityKeyHash`, `generation`),
   KEY `idx_work_threads_tenant_status` (`tenantId`, `status`, `updatedAt`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
